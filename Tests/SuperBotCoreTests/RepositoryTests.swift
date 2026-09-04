@@ -48,13 +48,27 @@ final class RepositoryTests: XCTestCase {
     }
 
     func testRenameDoesNotMoveWorkspace() throws {
-        let created = try repository.createAgent(named: "Research Bot")
+        let created = try repository.createAgent(
+            named: "Research Bot",
+            harnessIdentifier: "codex",
+            modelIdentifier: "gpt-test",
+            reasoningEffort: "high"
+        )
         let originalDirectory = repository.directory(for: created.agent)
-        let renamed = try repository.renameAgent(created.agent, to: "Evidence Bot")
+        let renamed = try repository.updateAgent(
+            created.agent,
+            displayName: "Evidence Bot",
+            harnessIdentifier: "codex",
+            modelIdentifier: "gpt-test-2",
+            reasoningEffort: "medium"
+        )
 
         XCTAssertEqual(renamed.id, created.agent.id)
         XCTAssertEqual(repository.directory(for: renamed), originalDirectory)
         XCTAssertEqual(try repository.loadAgents().first?.displayName, "Evidence Bot")
+        XCTAssertEqual(try repository.loadAgents().first?.harnessIdentifier, "codex")
+        XCTAssertEqual(try repository.loadAgents().first?.modelIdentifier, "gpt-test-2")
+        XCTAssertEqual(try repository.loadAgents().first?.reasoningEffort, "medium")
     }
 
     func testGroupAndTranscriptRoundTrip() throws {

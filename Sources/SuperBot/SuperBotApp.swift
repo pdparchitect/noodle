@@ -147,8 +147,18 @@ struct RootView: View {
             }
 
             ToolbarItem(placement: .primaryAction) {
-                HarnessStatusLabel()
+                if let conversation = store.selectedConversation,
+                   conversation.kind == .direct,
+                   let agent = store.participants(for: conversation).first {
+                    Button {
+                        store.agentBeingEdited = agent
+                    } label: {
+                        Label("Edit Bot", systemImage: "slider.horizontal.3")
+                    }
+                    .help("Edit Bot")
+                }
             }
+
         }
         .sheet(item: $store.creationSheet) { sheet in
             switch sheet {
@@ -160,8 +170,8 @@ struct RootView: View {
                     .environment(store)
             }
         }
-        .sheet(item: $store.agentBeingRenamed) { agent in
-            RenameBotSheet(agent: agent)
+        .sheet(item: $store.agentBeingEdited) { agent in
+            EditBotSheet(agent: agent)
                 .environment(store)
         }
         .alert(
@@ -184,59 +194,14 @@ struct RootView: View {
             }
         }
         .task {
+            store.startAgents()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 store.refreshTranscripts()
             }
         }
-        .onDisappear {
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
             store.runtime.stopAll()
         }
-    }
-}
-
-private struct HarnessStatusLabel: View {
-    @Environment(SuperBotStore.self) private var store
-
-    var body: some View {
-        Menu {
-            ForEach(store.runtime.installations) { installation in
-                Label {
-                    VStack(alignment: .leading) {
-                        Text(installation.provider.displayName)
-                        Text(installation.detail)
-                    }
-                } icon: {
-                    Image(systemName: installation.provider.symbolName)
-                }
-            }
-            Divider()
-            Button("Rescan Harnesses", systemImage: "arrow.clockwise") {
-                store.runtime.refresh(agents: store.agents)
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Circle().fill(statusColor).frame(width: 7, height: 7)
-                Text(statusText)
-                    .font(.system(size: 11.5, weight: .medium))
-            }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.quaternary.opacity(0.45), in: Capsule())
-        }
-        .menuStyle(.borderlessButton)
-        .help("Show automatically detected harnesses")
-    }
-
-    private var statusText: String {
-        if store.runtime.readyCount > 0 { return "\(store.runtime.readyCount) ACP ready" }
-        if !store.runtime.availableInstallations.isEmpty { return "Harnesses found" }
-        return "No harnesses found"
-    }
-
-    private var statusColor: Color {
-        if store.runtime.readyCount > 0 { return .green }
-        return store.runtime.availableInstallations.isEmpty ? .red : .orange
     }
 }

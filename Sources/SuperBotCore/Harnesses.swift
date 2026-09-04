@@ -2,75 +2,79 @@ import Foundation
 
 public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, Identifiable {
     case codex
-    case claude
 
     public var id: String { rawValue }
 
     public var displayName: String {
         switch self {
         case .codex: return "Codex"
-        case .claude: return "Claude"
         }
     }
 
     public var symbolName: String {
         switch self {
         case .codex: return "terminal.fill"
-        case .claude: return "brain.head.profile.fill"
         }
     }
-}
-
-public enum HarnessReadiness: String, Codable, Hashable, Sendable {
-    case ready
-    case engineOnly
-    case applicationOnly
-    case unavailable
 }
 
 public struct HarnessInstallation: Identifiable, Codable, Hashable, Sendable {
     public let provider: HarnessProvider
-    public let applicationPath: String?
-    public let enginePath: String?
-    public let acpAdapterPath: String?
+    public let executablePath: String?
 
-    public init(
-        provider: HarnessProvider,
-        applicationPath: String?,
-        enginePath: String?,
-        acpAdapterPath: String?
-    ) {
+    public init(provider: HarnessProvider, executablePath: String?) {
         self.provider = provider
-        self.applicationPath = applicationPath
-        self.enginePath = enginePath
-        self.acpAdapterPath = acpAdapterPath
+        self.executablePath = executablePath
     }
 
     public var id: String { provider.id }
+    public var isAvailable: Bool { executablePath != nil }
+    public var detail: String { isAvailable ? "Installed" : "Not installed" }
+}
 
-    public var readiness: HarnessReadiness {
-        if acpAdapterPath != nil { return .ready }
-        if enginePath != nil { return .engineOnly }
-        if applicationPath != nil { return .applicationOnly }
-        return .unavailable
+public struct HarnessEffort: Identifiable, Codable, Hashable, Sendable {
+    public let id: String
+    public let description: String
+
+    public init(id: String, description: String) {
+        self.id = id
+        self.description = description
     }
 
-    public var detail: String {
-        switch readiness {
-        case .ready:
-            return "ACP ready"
-        case .engineOnly:
-            return "Harness found · ACP adapter needed"
-        case .applicationOnly:
-            return "Application found · command-line harness unavailable"
-        case .unavailable:
-            return "Not installed"
+    public var displayName: String {
+        switch id {
+        case "xhigh": return "Extra High"
+        default: return id.capitalized
         }
     }
 }
 
+public struct HarnessModel: Identifiable, Codable, Hashable, Sendable {
+    public let id: String
+    public let displayName: String
+    public let description: String
+    public let supportedEfforts: [HarnessEffort]
+    public let defaultEffort: String
+    public let isDefault: Bool
+
+    public init(
+        id: String,
+        displayName: String,
+        description: String,
+        supportedEfforts: [HarnessEffort],
+        defaultEffort: String,
+        isDefault: Bool
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.description = description
+        self.supportedEfforts = supportedEfforts
+        self.defaultEffort = defaultEffort
+        self.isDefault = isDefault
+    }
+}
+
 public struct HarnessDiscovery: Sendable {
-    private let homeDirectory: URL
     private let applicationsDirectory: URL
     private let executableSearchDirectories: [URL]
 
@@ -79,7 +83,6 @@ public struct HarnessDiscovery: Sendable {
         applicationsDirectory: URL = URL(fileURLWithPath: "/Applications", isDirectory: true),
         executableSearchDirectories: [URL]? = nil
     ) {
-        self.homeDirectory = homeDirectory.standardizedFileURL
         self.applicationsDirectory = applicationsDirectory.standardizedFileURL
         self.executableSearchDirectories = executableSearchDirectories ?? [
             homeDirectory.appendingPathComponent(".local/bin", isDirectory: true),
@@ -93,70 +96,30 @@ public struct HarnessDiscovery: Sendable {
     }
 
     public func discover(_ provider: HarnessProvider) -> HarnessInstallation {
-        let application = firstExisting(applicationCandidates(for: provider), executable: false)
-        let engine = firstExisting(engineCandidates(for: provider), executable: true)
-        let adapter = firstExisting(adapterCandidates(for: provider), executable: true)
-        return HarnessInstallation(
-            provider: provider,
-            applicationPath: application?.path,
-            enginePath: engine?.path,
-            acpAdapterPath: adapter?.path
-        )
+        let executable = executableCandidates(for: provider).first(where: isExecutable)
+        return HarnessInstallation(provider: provider, executablePath: executable?.path)
     }
 
-    private func applicationCandidates(for provider: HarnessProvider) -> [URL] {
+    private func executableCandidates(for provider: HarnessProvider) -> [URL] {
         switch provider {
         case .codex:
             return [
-                applicationsDirectory.appendingPathComponent("ChatGPT.app", isDirectory: true),
-                applicationsDirectory.appendingPathComponent("Codex.app", isDirectory: true)
-            ]
-        case .claude:
-            return [applicationsDirectory.appendingPathComponent("Claude.app", isDirectory: true)]
-        }
-    }
-
-    private func engineCandidates(for provider: HarnessProvider) -> [URL] {
-        let name = provider.rawValue
-        var candidates = executableSearchDirectories.map { $0.appendingPathComponent(name) }
-        switch provider {
-        case .codex:
-            candidates.insert(
                 applicationsDirectory.appendingPathComponent("ChatGPT.app/Contents/Resources/codex"),
-                at: 0
-            )
-            candidates.insert(
-                applicationsDirectory.appendingPathComponent("Codex.app/Contents/Resources/codex"),
-                at: 1
-            )
-        case .claude:
-            candidates.insert(
-                applicationsDirectory.appendingPathComponent("Claude.app/Contents/Resources/claude"),
-                at: 0
-            )
+                applicationsDirectory.appendingPathComponent("Codex.app/Contents/Resources/codex")
+            ] + executableSearchDirectories.map { $0.appendingPathComponent("codex") }
         }
-        return candidates
     }
 
-    private func adapterCandidates(for provider: HarnessProvider) -> [URL] {
-        let name = provider == .codex ? "codex-acp" : "claude-agent-acp"
-        return executableSearchDirectories.map { $0.appendingPathComponent(name) }
-    }
-
-    private func firstExisting(_ candidates: [URL], executable: Bool) -> URL? {
-        candidates.first { url in
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
-                return false
-            }
-            return executable ? !isDirectory.boolValue && FileManager.default.isExecutableFile(atPath: url.path) : true
-        }
+    private func isExecutable(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) &&
+            !isDirectory.boolValue &&
+            FileManager.default.isExecutableFile(atPath: url.path)
     }
 }
 
 public enum AgentRuntimePhase: String, Codable, Hashable, Sendable {
     case offline
-    case waitingForAdapter
     case starting
     case ready
     case working

@@ -7,6 +7,8 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
     public let createdAt: Date
     public var updatedAt: Date
     public var harnessIdentifier: String?
+    public var modelIdentifier: String?
+    public var reasoningEffort: String?
     public let accentSeed: Int
 
     public init(
@@ -15,6 +17,8 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         harnessIdentifier: String? = nil,
+        modelIdentifier: String? = nil,
+        reasoningEffort: String? = nil,
         accentSeed: Int = Int.random(in: 0...5)
     ) {
         self.id = id
@@ -22,6 +26,8 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.harnessIdentifier = harnessIdentifier
+        self.modelIdentifier = modelIdentifier
+        self.reasoningEffort = reasoningEffort
         self.accentSeed = accentSeed
     }
 }
@@ -196,7 +202,7 @@ public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
     public let launcherExecutableURL: URL?
 
-    public static let managedSkillVersion = 1
+    public static let managedSkillVersion = 2
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
         self.rootURL = rootURL.standardizedFileURL
@@ -219,6 +225,8 @@ public struct WorkspaceRepository: Sendable {
     public func createAgent(
         named rawName: String,
         harnessIdentifier: String? = nil,
+        modelIdentifier: String? = nil,
+        reasoningEffort: String? = nil,
         now: Date = Date()
     ) throws -> CreatedAgentWorkspace {
         let name = try validatedName(rawName)
@@ -228,7 +236,9 @@ public struct WorkspaceRepository: Sendable {
             displayName: name,
             createdAt: now,
             updatedAt: now,
-            harnessIdentifier: harnessIdentifier
+            harnessIdentifier: harnessIdentifier,
+            modelIdentifier: modelIdentifier,
+            reasoningEffort: reasoningEffort
         )
         let agentDirectory = directory(for: agent)
         try FileManager.default.createDirectory(at: agentDirectory, withIntermediateDirectories: false)
@@ -257,9 +267,30 @@ public struct WorkspaceRepository: Sendable {
     }
 
     public func renameAgent(_ agent: AgentRecord, to rawName: String, now: Date = Date()) throws -> AgentRecord {
+        try updateAgent(
+            agent,
+            displayName: rawName,
+            harnessIdentifier: agent.harnessIdentifier,
+            modelIdentifier: agent.modelIdentifier,
+            reasoningEffort: agent.reasoningEffort,
+            now: now
+        )
+    }
+
+    public func updateAgent(
+        _ agent: AgentRecord,
+        displayName rawName: String,
+        harnessIdentifier: String?,
+        modelIdentifier: String?,
+        reasoningEffort: String?,
+        now: Date = Date()
+    ) throws -> AgentRecord {
         var renamed = agent
         renamed.displayName = try validatedName(rawName)
         renamed.updatedAt = now
+        renamed.harnessIdentifier = harnessIdentifier
+        renamed.modelIdentifier = modelIdentifier
+        renamed.reasoningEffort = reasoningEffort
         try write(renamed, to: directory(for: agent).appendingPathComponent("agent.json"))
         return renamed
     }
@@ -585,6 +616,8 @@ public struct WorkspaceRepository: Sendable {
     This directory is the bot's persistent workspace. SuperBot manages the Messenger core skill; other skills under `.agents/skills` belong to this bot and are left untouched.
 
     ## Messages
+
+    SuperBot notifications only mean that this inbox may have changed. They never contain the user's message. Whenever SuperBot notifies you, immediately read the inbox, inspect every delivery, and respond when appropriate through Messenger. Never reply to the notification text itself. If there are no deliveries, finish quietly.
 
     Read new direct and group messages:
 

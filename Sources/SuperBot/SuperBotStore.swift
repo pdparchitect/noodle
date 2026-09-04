@@ -27,7 +27,7 @@ final class SuperBotStore {
     var searchText = ""
     var draft = ""
     var creationSheet: CreationSheet?
-    var agentBeingRenamed: AgentRecord?
+    var agentBeingEdited: AgentRecord?
     var errorMessage: String?
     var pendingAttachments: [ConversationAttachment] = []
 
@@ -106,17 +106,25 @@ final class SuperBotStore {
         }
     }
 
-    func createAgent(named name: String, harnessIdentifier: String?) -> Bool {
+    func createAgent(
+        named name: String,
+        harnessIdentifier: String,
+        modelIdentifier: String?,
+        reasoningEffort: String?
+    ) -> Bool {
         do {
             let created = try repository.createAgent(
                 named: name,
-                harnessIdentifier: harnessIdentifier
+                harnessIdentifier: harnessIdentifier,
+                modelIdentifier: modelIdentifier,
+                reasoningEffort: reasoningEffort
             )
             agents.append(created.agent)
             conversations.insert(created.conversation, at: 0)
             messagesByConversation[created.conversation.id] = []
             attachmentsByConversation[created.conversation.id] = []
             runtime.refresh(agents: agents)
+            runtime.start(agent: created.agent, repository: repository)
             selectedConversationID = created.conversation.id
             creationSheet = nil
             return true
@@ -126,22 +134,36 @@ final class SuperBotStore {
         }
     }
 
-    func renameAgent(_ agent: AgentRecord, to name: String) -> Bool {
+    func updateAgent(
+        _ agent: AgentRecord,
+        name: String,
+        harnessIdentifier: String,
+        modelIdentifier: String?,
+        reasoningEffort: String?
+    ) -> Bool {
         do {
-            let renamed = try repository.renameAgent(agent, to: name)
+            let updated = try repository.updateAgent(
+                agent,
+                displayName: name,
+                harnessIdentifier: harnessIdentifier,
+                modelIdentifier: modelIdentifier,
+                reasoningEffort: reasoningEffort
+            )
             if let index = agents.firstIndex(where: { $0.id == agent.id }) {
-                agents[index] = renamed
+                agents[index] = updated
             }
 
             for index in conversations.indices where
                 conversations[index].kind == .direct &&
                 conversations[index].participantIDs == [agent.id] {
-                conversations[index].displayName = renamed.displayName
-                conversations[index].updatedAt = renamed.updatedAt
+                conversations[index].displayName = updated.displayName
+                conversations[index].updatedAt = updated.updatedAt
                 try repository.updateConversation(conversations[index])
             }
 
-            agentBeingRenamed = nil
+            try repository.synchronizeAgentWorkspace(updated)
+            runtime.restart(agent: updated, repository: repository)
+            agentBeingEdited = nil
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -194,16 +216,7 @@ final class SuperBotStore {
 
             draft = ""
             pendingAttachments = []
-            runtime.deliver(
-                message: message,
-                conversation: conversation,
-                to: participants(for: conversation),
-                workspace: { self.repository.directory(for: $0) },
-                onResponse: { _, _, _ in
-                    // The ACP turn is a wake-up signal. Agents publish user-visible replies
-                    // through the Messenger skill, which the transcript poller observes.
-                }
-            )
+            runtime.notify(participants(for: conversation), repository: repository)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -290,5 +303,10 @@ final class SuperBotStore {
 
     func revealWorkspace(for agent: AgentRecord) {
         NSWorkspace.shared.activateFileViewerSelecting([repository.directory(for: agent)])
+    }
+
+    func startAgents() {
+        runtime.startAll(agents: agents, repository: repository)
+        runtime.refreshCapabilities()
     }
 }

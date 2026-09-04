@@ -14,47 +14,54 @@ final class HarnessDiscoveryTests: XCTestCase {
         try? FileManager.default.removeItem(at: root)
     }
 
-    func testDiscoverySeparatesHarnessPresenceFromACPReadiness() throws {
+    func testDiscoveryFindsBundledCodexExecutable() throws {
         let applications = root.appendingPathComponent("Applications", isDirectory: true)
-        let binaries = root.appendingPathComponent("bin", isDirectory: true)
         let codex = applications.appendingPathComponent("ChatGPT.app/Contents/Resources/codex")
         try FileManager.default.createDirectory(at: codex.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: binaries, withIntermediateDirectories: true)
         XCTAssertTrue(FileManager.default.createFile(atPath: codex.path, contents: Data()))
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codex.path)
-
-        let discovery = HarnessDiscovery(
-            homeDirectory: root,
-            applicationsDirectory: applications,
-            executableSearchDirectories: [binaries]
-        )
-        let engineOnly = discovery.discover(.codex)
-        XCTAssertEqual(engineOnly.readiness, .engineOnly)
-        XCTAssertEqual(engineOnly.enginePath, codex.path)
-
-        let adapter = binaries.appendingPathComponent("codex-acp")
-        XCTAssertTrue(FileManager.default.createFile(atPath: adapter.path, contents: Data()))
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: adapter.path)
-
-        let ready = discovery.discover(.codex)
-        XCTAssertEqual(ready.readiness, .ready)
-        XCTAssertEqual(ready.acpAdapterPath, adapter.path)
-    }
-
-    func testDesktopApplicationWithoutCLIIsNotReportedAsReady() throws {
-        let applications = root.appendingPathComponent("Applications", isDirectory: true)
-        let claude = applications.appendingPathComponent("Claude.app", isDirectory: true)
-        try FileManager.default.createDirectory(at: claude, withIntermediateDirectories: true)
 
         let result = HarnessDiscovery(
             homeDirectory: root,
             applicationsDirectory: applications,
             executableSearchDirectories: []
-        ).discover(.claude)
+        ).discover(.codex)
 
-        XCTAssertEqual(result.readiness, .applicationOnly)
-        XCTAssertEqual(result.applicationPath, claude.path)
-        XCTAssertNil(result.enginePath)
-        XCTAssertNil(result.acpAdapterPath)
+        XCTAssertTrue(result.isAvailable)
+        XCTAssertEqual(result.executablePath, codex.path)
+        XCTAssertEqual(result.detail, "Installed")
+    }
+
+    func testDiscoveryDoesNotTreatApplicationAloneAsHarness() throws {
+        let applications = root.appendingPathComponent("Applications", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: applications.appendingPathComponent("ChatGPT.app"),
+            withIntermediateDirectories: true
+        )
+
+        let result = HarnessDiscovery(
+            homeDirectory: root,
+            applicationsDirectory: applications,
+            executableSearchDirectories: []
+        ).discover(.codex)
+
+        XCTAssertFalse(result.isAvailable)
+        XCTAssertNil(result.executablePath)
+        XCTAssertEqual(result.detail, "Not installed")
+    }
+
+    func testHarnessModelCarriesItsOwnEffortChoices() {
+        let model = HarnessModel(
+            id: "gpt-test",
+            displayName: "GPT Test",
+            description: "Test model",
+            supportedEfforts: [HarnessEffort(id: "low", description: "Fast")],
+            defaultEffort: "low",
+            isDefault: true
+        )
+
+        XCTAssertEqual(model.supportedEfforts.first?.displayName, "Low")
+        XCTAssertEqual(model.defaultEffort, "low")
+        XCTAssertTrue(model.isDefault)
     }
 }

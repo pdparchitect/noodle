@@ -6,12 +6,14 @@ struct NewBotSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var selectedHarnessIdentifier = HarnessProvider.codex.rawValue
+    @State private var selectedModelIdentifier = ""
+    @State private var selectedEffort = ""
     @FocusState private var nameFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             sheetHeader(title: "New Bot", createTitle: "Create") {
-                _ = store.createAgent(named: name, harnessIdentifier: selectedHarnessIdentifier)
+                create()
             }
 
             Divider()
@@ -25,12 +27,7 @@ struct NewBotSheet: View {
                             .font(.system(size: 14))
                             .focused($nameFocused)
                             .onSubmit {
-                                if canCreate {
-                                    _ = store.createAgent(
-                                        named: name,
-                                        harnessIdentifier: selectedHarnessIdentifier
-                                    )
-                                }
+                                if canCreate { create() }
                             }
                         Text("You can rename this bot later without changing its workspace location.")
                             .font(.caption)
@@ -38,26 +35,11 @@ struct NewBotSheet: View {
                     }
                 }
 
-                GroupBox("Harness") {
-                    Picker("Harness", selection: $selectedHarnessIdentifier) {
-                        ForEach(store.runtime.availableInstallations) { installation in
-                            Text(installation.provider.displayName)
-                                .tag(installation.provider.rawValue)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-
-                    if let installation = store.runtime.installations.first(where: {
-                        $0.provider.rawValue == selectedHarnessIdentifier
-                    }) {
-                        Label(installation.detail, systemImage: installation.provider.symbolName)
-                            .font(.caption)
-                            .foregroundStyle(installation.readiness == .ready ? .green : .secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, 6)
-                    }
-                }
+                AgentConfigurationFields(
+                    selectedHarnessIdentifier: $selectedHarnessIdentifier,
+                    selectedModelIdentifier: $selectedModelIdentifier,
+                    selectedEffort: $selectedEffort
+                )
 
                 GroupBox {
                     Label {
@@ -79,19 +61,27 @@ struct NewBotSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 500, height: 365)
+        .frame(width: 520, height: 500)
         .onAppear {
             nameFocused = true
-            if !store.runtime.availableInstallations.contains(where: {
-                $0.provider.rawValue == selectedHarnessIdentifier
-            }), let first = store.runtime.availableInstallations.first {
-                selectedHarnessIdentifier = first.provider.rawValue
-            }
+            store.runtime.refreshCapabilities()
         }
     }
 
     private var canCreate: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            store.runtime.availableInstallations.contains {
+                $0.provider.rawValue == selectedHarnessIdentifier
+            }
+    }
+
+    private func create() {
+        _ = store.createAgent(
+            named: name,
+            harnessIdentifier: selectedHarnessIdentifier,
+            modelIdentifier: selectedModelIdentifier.nilIfEmpty,
+            reasoningEffort: selectedEffort.nilIfEmpty
+        )
     }
 
     private func sheetHeader(title: String, createTitle: String, action: @escaping () -> Void) -> some View {
@@ -111,47 +101,182 @@ struct NewBotSheet: View {
     }
 }
 
-struct RenameBotSheet: View {
+struct EditBotSheet: View {
     @Environment(SuperBotStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let agent: AgentRecord
     @State private var name: String
+    @State private var selectedHarnessIdentifier: String
+    @State private var selectedModelIdentifier: String
+    @State private var selectedEffort: String
     @FocusState private var nameFocused: Bool
 
     init(agent: AgentRecord) {
         self.agent = agent
         _name = State(initialValue: agent.displayName)
+        _selectedHarnessIdentifier = State(initialValue: agent.harnessIdentifier ?? HarnessProvider.codex.rawValue)
+        _selectedModelIdentifier = State(initialValue: agent.modelIdentifier ?? "")
+        _selectedEffort = State(initialValue: agent.reasoningEffort ?? "")
     }
 
     var body: some View {
-        VStack(spacing: 18) {
-            BotAvatar(agent: agent, size: 64)
-            Text("Rename Bot").font(.headline)
-            TextField("Bot name", text: $name)
-                .textFieldStyle(.roundedBorder)
-                .focused($nameFocused)
-                .onSubmit(rename)
-
+        VStack(spacing: 0) {
             HStack {
                 Button("Cancel") { dismiss() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.blue)
                 Spacer()
-                Button("Rename", action: rename)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Text("Edit Bot").font(.headline)
+                Spacer()
+                Button("Save", action: save)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(canSave ? Color.blue : .secondary)
+                    .disabled(!canSave)
             }
+            .padding(16)
+
+            Divider()
+
+            VStack(spacing: 18) {
+                HStack(spacing: 14) {
+                    BotAvatar(agent: agent, size: 64)
+                    TextField("Bot name", text: $name)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($nameFocused)
+                        .onSubmit { if canSave { save() } }
+                }
+
+                AgentConfigurationFields(
+                    selectedHarnessIdentifier: $selectedHarnessIdentifier,
+                    selectedModelIdentifier: $selectedModelIdentifier,
+                    selectedEffort: $selectedEffort
+                )
+
+                Text("Saving restarts this bot with the selected Codex model. Its workspace and conversation history stay unchanged.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Spacer()
+            }
+            .padding(20)
         }
-        .padding(22)
-        .frame(width: 390)
+        .frame(width: 520, height: 430)
         .onAppear {
             nameFocused = true
+            store.runtime.refreshCapabilities()
         }
     }
 
-    private func rename() {
-        if store.renameAgent(agent, to: name) {
+    private var canSave: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            store.runtime.availableInstallations.contains {
+                $0.provider.rawValue == selectedHarnessIdentifier
+            }
+    }
+
+    private func save() {
+        if store.updateAgent(
+            agent,
+            name: name,
+            harnessIdentifier: selectedHarnessIdentifier,
+            modelIdentifier: selectedModelIdentifier.nilIfEmpty,
+            reasoningEffort: selectedEffort.nilIfEmpty
+        ) {
             dismiss()
         }
     }
+}
+
+private struct AgentConfigurationFields: View {
+    @Environment(SuperBotStore.self) private var store
+    @Binding var selectedHarnessIdentifier: String
+    @Binding var selectedModelIdentifier: String
+    @Binding var selectedEffort: String
+
+    private var models: [HarnessModel] {
+        store.runtime.models(for: selectedHarnessIdentifier)
+    }
+
+    private var selectedModel: HarnessModel? {
+        models.first { $0.id == selectedModelIdentifier }
+    }
+
+    var body: some View {
+        GroupBox("Agent Runtime") {
+            VStack(alignment: .leading, spacing: 12) {
+                Picker("Harness", selection: $selectedHarnessIdentifier) {
+                    ForEach(store.runtime.availableInstallations) { installation in
+                        Label(installation.provider.displayName, systemImage: installation.provider.symbolName)
+                            .tag(installation.provider.rawValue)
+                    }
+                }
+
+                Divider()
+
+                Picker("Model", selection: $selectedModelIdentifier) {
+                    Text("Codex default").tag("")
+                    ForEach(models) { model in
+                        Text(model.displayName).tag(model.id)
+                    }
+                }
+                .disabled(store.runtime.isLoadingCapabilities)
+
+                Picker("Effort", selection: $selectedEffort) {
+                    Text("Model default").tag("")
+                    ForEach(selectedModel?.supportedEfforts ?? []) { effort in
+                        Text(effort.displayName).tag(effort.id)
+                    }
+                }
+                .disabled(selectedModel == nil)
+
+                capabilityDetail
+            }
+            .padding(.top, 4)
+        }
+        .onChange(of: selectedHarnessIdentifier) { _, _ in
+            selectedModelIdentifier = ""
+            selectedEffort = ""
+        }
+        .onChange(of: selectedModelIdentifier) { _, newValue in
+            guard let model = models.first(where: { $0.id == newValue }) else {
+                selectedEffort = ""
+                return
+            }
+            if !model.supportedEfforts.contains(where: { $0.id == selectedEffort }) {
+                selectedEffort = model.defaultEffort
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var capabilityDetail: some View {
+        if store.runtime.isLoadingCapabilities {
+            HStack(spacing: 7) {
+                ProgressView().controlSize(.small)
+                Text("Reading models from Codex…")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        } else if let provider = HarnessProvider(rawValue: selectedHarnessIdentifier),
+                  let error = store.runtime.capabilityErrors[provider] {
+            Label(error, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        } else if let selectedModel, !selectedModel.description.isEmpty {
+            Text(selectedModel.description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            Text("Models and effort levels are reported directly by the selected harness.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
 struct NewGroupSheet: View {

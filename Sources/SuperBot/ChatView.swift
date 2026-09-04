@@ -158,7 +158,7 @@ private struct ConversationStartView: View {
 
             runtimeStatus
 
-            Text("Messages and attachments live in this conversation. SuperBot wakes each participating bot through its own ACP process.")
+            Text("Messages and attachments live in this conversation. SuperBot notifies each participating bot, which checks its own inbox and replies here.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -180,21 +180,21 @@ private struct ConversationStartView: View {
         let participants = store.participants(for: conversation)
         let snapshots = participants.map { store.runtime.snapshot(for: $0.id) }
         let ready = snapshots.filter { $0.phase == .ready || $0.phase == .working }.count
-        let waiting = snapshots.filter { $0.phase == .waitingForAdapter }.count
+        let failed = snapshots.filter { $0.phase == .failed }.count
 
         return Label {
-            if waiting > 0 {
-                Text("\(waiting) bot\(waiting == 1 ? "" : "s") waiting for an ACP adapter")
+            if failed > 0 {
+                Text("\(failed) bot\(failed == 1 ? "" : "s") needs attention")
             } else if ready == participants.count, !participants.isEmpty {
                 Text("All bot processes ready")
             } else {
-                Text("Workspaces ready · processes start with the first message")
+                Text("Starting bot processes")
             }
         } icon: {
-            Image(systemName: waiting > 0 ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+            Image(systemName: failed > 0 ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
         }
         .font(.system(size: 12, weight: .medium))
-        .foregroundStyle(waiting > 0 ? .orange : .green)
+        .foregroundStyle(failed > 0 ? .orange : .green)
     }
 }
 

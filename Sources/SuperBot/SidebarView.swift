@@ -16,8 +16,8 @@ struct SidebarView: View {
                             .tag(conversation.id)
                             .contextMenu {
                                 if let agent = store.participants(for: conversation).first {
-                                    Button("Rename Bot") {
-                                        store.agentBeingRenamed = agent
+                                    Button("Edit Bot") {
+                                        store.agentBeingEdited = agent
                                     }
                                     Button("Show Workspace in Finder") {
                                         store.revealWorkspace(for: agent)
@@ -125,7 +125,6 @@ private struct ConversationRow: View {
         let phases = store.participants(for: conversation).map { store.runtime.snapshot(for: $0.id).phase }
         if phases.contains(.working) { return .blue }
         if phases.contains(.failed) { return .red }
-        if phases.contains(.waitingForAdapter) { return .orange }
         if !phases.isEmpty, phases.allSatisfy({ $0 == .ready }) { return .green }
         return .gray
     }
