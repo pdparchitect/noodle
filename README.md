@@ -18,7 +18,7 @@ SuperBot is a native macOS messenger and launcher for local coding agents. Bots 
 - Bundle a separately signed, minimal `messenger` command for every harness
 - Expose a native “Send SuperBot Command” App Intent to Spotlight and Shortcuts
 - Observe Messenger replies in the open conversation without relaunching the app
-- Show native macOS notifications for new bot replies while SuperBot is unfocused, hidden, minimized, or has no open window
+- Show native macOS notifications with the sending bot's avatar while SuperBot is unfocused, hidden, minimized, or has no open window
 
 Codex is the first implemented harness. SuperBot finds the Codex executable bundled with ChatGPT or Codex, speaks its native App Server protocol internally, and keeps that implementation behind the provider-neutral `start`, `stop`, and `notify` runtime boundary. ACP is not used.
 
