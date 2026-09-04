@@ -110,29 +110,10 @@ struct MessageBubble: View {
                         Button {
                             previewedAttachment = attachment
                         } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: attachmentSymbol(attachment))
-                                    .font(.system(size: 18, weight: .medium))
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(attachment.originalFilename)
-                                        .font(.system(size: 11.5, weight: .semibold))
-                                        .lineLimit(1)
-                                    Text(ByteCountFormatter.string(
-                                        fromByteCount: attachment.byteCount,
-                                        countStyle: .file
-                                    ))
-                                    .font(.system(size: 9.5))
-                                    .opacity(0.72)
-                                }
-                                Spacer(minLength: 3)
-                                Image(systemName: "eye.circle")
-                                    .font(.system(size: 13))
-                                    .opacity(0.75)
-                            }
-                            .foregroundStyle(.white)
-                            .padding(8)
-                            .frame(minWidth: 190, maxWidth: 280)
-                            .background(.white.opacity(0.13), in: RoundedRectangle(cornerRadius: 10))
+                            AttachmentInlinePreview(
+                                attachment: attachment,
+                                fileURL: store.attachmentFileURL(attachment)
+                            )
                         }
                         .buttonStyle(.plain)
                         .help("Quick Look Attachment")
@@ -179,11 +160,4 @@ struct MessageBubble: View {
         }
     }
 
-    private func attachmentSymbol(_ attachment: ConversationAttachment) -> String {
-        if attachment.mediaType.hasPrefix("image/") { return "photo.fill" }
-        if attachment.mediaType == "application/pdf" { return "doc.richtext.fill" }
-        if attachment.mediaType.hasPrefix("audio/") { return "waveform" }
-        if attachment.mediaType.hasPrefix("video/") { return "film.fill" }
-        return "doc.fill"
-    }
 }
