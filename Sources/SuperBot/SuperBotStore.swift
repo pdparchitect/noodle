@@ -238,7 +238,15 @@ final class SuperBotStore {
     }
 
     func removePendingAttachment(_ attachment: ConversationAttachment) {
-        pendingAttachments.removeAll { $0.id == attachment.id }
+        do {
+            try repository.removeAttachment(attachment)
+            pendingAttachments.removeAll { $0.id == attachment.id }
+            attachmentsByConversation[attachment.conversationID, default: []].removeAll {
+                $0.id == attachment.id
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     func revealAttachment(_ attachment: ConversationAttachment) {

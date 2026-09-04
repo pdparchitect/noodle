@@ -72,11 +72,17 @@ private struct ConversationRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            ConversationAvatar(
-                participants: store.participants(for: conversation),
-                isGroup: conversation.kind == .group,
-                size: 42
-            )
+            ZStack(alignment: .bottomTrailing) {
+                ConversationAvatar(
+                    participants: store.participants(for: conversation),
+                    isGroup: conversation.kind == .group,
+                    size: 42
+                )
+                Circle()
+                    .fill(runtimeColor)
+                    .frame(width: 10, height: 10)
+                    .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -113,5 +119,14 @@ private struct ConversationRow: View {
         } else {
             conversation.updatedAt.formatted(date: .abbreviated, time: .omitted)
         }
+    }
+
+    private var runtimeColor: Color {
+        let phases = store.participants(for: conversation).map { store.runtime.snapshot(for: $0.id).phase }
+        if phases.contains(.working) { return .blue }
+        if phases.contains(.failed) { return .red }
+        if phases.contains(.waitingForAdapter) { return .orange }
+        if !phases.isEmpty, phases.allSatisfy({ $0 == .ready }) { return .green }
+        return .gray
     }
 }

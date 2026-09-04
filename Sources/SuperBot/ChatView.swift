@@ -1,10 +1,12 @@
 import SwiftUI
 import SuperBotCore
+import UniformTypeIdentifiers
 
 struct ChatView: View {
     @Environment(SuperBotStore.self) private var store
     let conversation: BotConversation
     @FocusState private var composerFocused: Bool
+    @State private var choosingAttachments = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -14,6 +16,18 @@ struct ChatView: View {
                 .padding(.bottom, 11)
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.28))
+        .fileImporter(
+            isPresented: $choosingAttachments,
+            allowedContentTypes: [.data],
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case .success(let urls):
+                urls.forEach(store.importAttachment)
+            case .failure(let error):
+                store.errorMessage = error.localizedDescription
+            }
+        }
     }
 
     private var transcript: some View {
@@ -42,51 +56,77 @@ struct ChatView: View {
     }
 
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            Image(systemName: "terminal")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 30, height: 30)
-                .background(.quaternary.opacity(0.35), in: Circle())
-
-            HStack(alignment: .bottom, spacing: 7) {
-                TextField(
-                    composerPrompt,
-                    text: Binding(
-                        get: { store.draft },
-                        set: { store.draft = $0 }
-                    ),
-                    axis: .vertical
-                )
-                .textFieldStyle(.plain)
-                .font(.system(size: 14))
-                .lineLimit(1...6)
-                .focused($composerFocused)
-                .onSubmit(store.sendDraft)
-                .padding(.leading, 5)
-                .padding(.vertical, 6)
-
-                if store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Image(systemName: "arrow.up.circle")
-                        .font(.system(size: 22))
-                        .foregroundStyle(.tertiary)
-                        .frame(width: 27, height: 27)
-                } else {
-                    Button(action: store.sendDraft) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 23))
-                            .foregroundStyle(Color.accentColor)
-                            .frame(width: 27, height: 27)
+        VStack(alignment: .leading, spacing: 7) {
+            if !store.pendingAttachments.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 7) {
+                        ForEach(store.pendingAttachments) { attachment in
+                            PendingAttachmentChip(attachment: attachment) {
+                                store.removePendingAttachment(attachment)
+                            }
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .help("Send Command")
+                    .padding(.horizontal, 38)
                 }
             }
-            .padding(.horizontal, 7)
-            .frame(minHeight: 32)
-            .background(.quaternary.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(.separator.opacity(0.6)))
+
+            HStack(alignment: .bottom, spacing: 8) {
+                Button {
+                    choosingAttachments = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30, height: 30)
+                        .background(.quaternary.opacity(0.35), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .help("Add Attachment")
+
+                HStack(alignment: .bottom, spacing: 7) {
+                    TextField(
+                        composerPrompt,
+                        text: Binding(
+                            get: { store.draft },
+                            set: { store.draft = $0 }
+                        ),
+                        axis: .vertical
+                    )
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 14))
+                    .lineLimit(1...6)
+                    .focused($composerFocused)
+                    .onSubmit(store.sendDraft)
+                    .padding(.leading, 5)
+                    .padding(.vertical, 6)
+
+                    if cannotSend {
+                        Image(systemName: "arrow.up.circle")
+                            .font(.system(size: 22))
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 27, height: 27)
+                    } else {
+                        Button(action: store.sendDraft) {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 23))
+                                .foregroundStyle(Color.accentColor)
+                                .frame(width: 27, height: 27)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Send Message")
+                    }
+                }
+                .padding(.horizontal, 7)
+                .frame(minHeight: 32)
+                .background(.quaternary.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(.separator.opacity(0.6)))
+            }
         }
+    }
+
+    private var cannotSend: Bool {
+        store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            store.pendingAttachments.isEmpty
     }
 
     private var composerPrompt: String {
@@ -116,11 +156,9 @@ private struct ConversationStartView: View {
                     .multilineTextAlignment(.center)
             }
 
-            Label("Workspace ready", systemImage: "checkmark.circle.fill")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.green)
+            runtimeStatus
 
-            Text("Commands are saved in this conversation and will be routed when a local harness is connected.")
+            Text("Messages and attachments live in this conversation. SuperBot wakes each participating bot through its own ACP process.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -136,6 +174,54 @@ private struct ConversationStartView: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var runtimeStatus: some View {
+        let participants = store.participants(for: conversation)
+        let snapshots = participants.map { store.runtime.snapshot(for: $0.id) }
+        let ready = snapshots.filter { $0.phase == .ready || $0.phase == .working }.count
+        let waiting = snapshots.filter { $0.phase == .waitingForAdapter }.count
+
+        return Label {
+            if waiting > 0 {
+                Text("\(waiting) bot\(waiting == 1 ? "" : "s") waiting for an ACP adapter")
+            } else if ready == participants.count, !participants.isEmpty {
+                Text("All bot processes ready")
+            } else {
+                Text("Workspaces ready · processes start with the first message")
+            }
+        } icon: {
+            Image(systemName: waiting > 0 ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+        }
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(waiting > 0 ? .orange : .green)
+    }
+}
+
+private struct PendingAttachmentChip: View {
+    let attachment: ConversationAttachment
+    let remove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "doc.fill")
+                .foregroundStyle(.blue)
+            Text(attachment.originalFilename)
+                .lineLimit(1)
+            Button(action: remove) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Remove Attachment")
+        }
+        .font(.caption)
+        .padding(.leading, 9)
+        .padding(.trailing, 5)
+        .padding(.vertical, 6)
+        .background(.quaternary.opacity(0.35), in: Capsule())
+        .overlay(Capsule().stroke(.separator.opacity(0.45)))
+        .frame(maxWidth: 260)
     }
 }
 

@@ -20,6 +20,11 @@ if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.app-
     exit 1
 fi
 
+if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.files.user-selected.read-only</key><true/>'; then
+    print -u2 "User-selected read-only file entitlement is missing."
+    exit 1
+fi
+
 if otool -L "$app/Contents/MacOS/SuperBot" | grep -Eq '/opt/homebrew|/usr/local'; then
     print -u2 "The app links against a mutable external dependency."
     exit 1

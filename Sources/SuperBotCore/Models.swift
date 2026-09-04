@@ -393,6 +393,18 @@ public struct WorkspaceRepository: Sendable {
             .appendingPathComponent(attachment.storedFilename)
     }
 
+    public func removeAttachment(_ attachment: ConversationAttachment) throws {
+        let file = attachmentFileURL(attachment)
+        let metadata = attachmentsDirectory(conversationID: attachment.conversationID)
+            .appendingPathComponent("\(attachment.id.uuidString.lowercased()).json")
+        if FileManager.default.fileExists(atPath: file.path) {
+            try FileManager.default.removeItem(at: file)
+        }
+        if FileManager.default.fileExists(atPath: metadata.path) {
+            try FileManager.default.removeItem(at: metadata)
+        }
+    }
+
     public func latestMessages(for agentID: UUID, consuming: Bool = true) throws -> [MessengerDelivery] {
         guard try loadAgents().contains(where: { $0.id == agentID }) else {
             throw WorkspaceError.missingAgent(agentID)

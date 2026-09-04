@@ -116,10 +116,44 @@ struct MessageBubble: View {
             }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
-                Text(message.body)
-                    .font(.system(size: 14))
-                    .foregroundStyle(.white)
-                    .textSelection(.enabled)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(message.body)
+                        .font(.system(size: 14))
+                        .foregroundStyle(.white)
+                        .textSelection(.enabled)
+
+                    ForEach(store.attachments(for: message)) { attachment in
+                        Button {
+                            store.revealAttachment(attachment)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: attachmentSymbol(attachment))
+                                    .font(.system(size: 18, weight: .medium))
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(attachment.originalFilename)
+                                        .font(.system(size: 11.5, weight: .semibold))
+                                        .lineLimit(1)
+                                    Text(ByteCountFormatter.string(
+                                        fromByteCount: attachment.byteCount,
+                                        countStyle: .file
+                                    ))
+                                    .font(.system(size: 9.5))
+                                    .opacity(0.72)
+                                }
+                                Spacer(minLength: 3)
+                                Image(systemName: "arrow.forward.circle")
+                                    .font(.system(size: 13))
+                                    .opacity(0.75)
+                            }
+                            .foregroundStyle(.white)
+                            .padding(8)
+                            .frame(minWidth: 190, maxWidth: 280)
+                            .background(.white.opacity(0.13), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Show Attachment in Finder")
+                    }
+                }
                     .padding(.horizontal, 13)
                     .padding(.vertical, 8)
                     .background(
@@ -147,5 +181,13 @@ struct MessageBubble: View {
         case .delivered: return "Delivered"
         case .failed: return "Not delivered"
         }
+    }
+
+    private func attachmentSymbol(_ attachment: ConversationAttachment) -> String {
+        if attachment.mediaType.hasPrefix("image/") { return "photo.fill" }
+        if attachment.mediaType == "application/pdf" { return "doc.richtext.fill" }
+        if attachment.mediaType.hasPrefix("audio/") { return "waveform" }
+        if attachment.mediaType.hasPrefix("video/") { return "film.fill" }
+        return "doc.fill"
     }
 }
