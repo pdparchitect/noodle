@@ -113,6 +113,7 @@ struct RootView: View {
         } detail: {
             if let conversation = store.selectedConversation {
                 ChatView(conversation: conversation)
+                    .id(conversation.id)
             } else {
                 WelcomeView()
             }
@@ -136,14 +137,6 @@ struct RootView: View {
                     Label("Create", systemImage: "square.and.pencil")
                 }
                 .help("Create Bot or Group")
-            }
-
-            ToolbarItem(placement: .principal) {
-                if let conversation = store.selectedConversation {
-                    ConversationToolbarLabel(conversation: conversation)
-                } else {
-                    Text("SuperBot").font(.headline)
-                }
             }
 
             ToolbarItem(placement: .primaryAction) {

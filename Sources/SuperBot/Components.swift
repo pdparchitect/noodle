@@ -72,31 +72,6 @@ struct ConversationAvatar: View {
     }
 }
 
-struct ConversationToolbarLabel: View {
-    @Environment(SuperBotStore.self) private var store
-    let conversation: BotConversation
-
-    var body: some View {
-        VStack(spacing: 2) {
-            ConversationAvatar(
-                participants: store.participants(for: conversation),
-                isGroup: conversation.kind == .group,
-                size: 36
-            )
-
-            HStack(spacing: 3) {
-                Text(store.title(for: conversation))
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .lineLimit(1)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 7.5, weight: .bold))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(minWidth: 150)
-    }
-}
-
 struct MessageBubble: View {
     @Environment(SuperBotStore.self) private var store
     let message: ChatMessage

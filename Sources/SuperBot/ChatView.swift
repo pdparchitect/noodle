@@ -46,8 +46,9 @@ struct ChatView: View {
                 .padding(.top, 30)
                 .padding(.bottom, 8)
             }
-            .onChange(of: store.messages(for: conversation).count) { _, _ in
-                guard let lastID = store.messages(for: conversation).last?.id else { return }
+            .defaultScrollAnchor(.bottom)
+            .onChange(of: store.messages(for: conversation).last?.id) { _, lastID in
+                guard let lastID else { return }
                 withAnimation(.snappy) {
                     proxy.scrollTo(lastID, anchor: .bottom)
                 }
