@@ -103,6 +103,43 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(loadedMessage.delivery, .queued)
     }
 
+    func testDeleteGroupRemovesTranscriptAndAttachmentsWithoutDeletingBots() throws {
+        let first = try repository.createAgent(named: "Research Bot")
+        let second = try repository.createAgent(named: "Build Bot")
+        let group = try repository.createGroup(
+            named: "Launch Room",
+            participantIDs: [first.agent.id, second.agent.id],
+            existingAgents: [first.agent, second.agent]
+        )
+        let source = root.appendingPathComponent("brief.txt")
+        try Data("ship it".utf8).write(to: source)
+        _ = try repository.importAttachment(from: source, into: group.id, mediaType: "text/plain")
+
+        try repository.deleteConversation(id: group.id)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repository.conversationDirectory(id: group.id).path))
+        XCTAssertEqual(try repository.loadAgents().count, 2)
+        XCTAssertFalse(try repository.loadConversations().contains(where: { $0.id == group.id }))
+    }
+
+    func testDeleteAgentRemovesWorkspaceAndDirectChatAndLeavesGroups() throws {
+        let first = try repository.createAgent(named: "Research Bot")
+        let second = try repository.createAgent(named: "Build Bot")
+        let group = try repository.createGroup(
+            named: "Launch Room",
+            participantIDs: [first.agent.id, second.agent.id],
+            existingAgents: [first.agent, second.agent]
+        )
+
+        try repository.deleteAgent(first.agent)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repository.directory(for: first.agent).path))
+        XCTAssertFalse(try repository.loadConversations().contains(where: { $0.id == first.conversation.id }))
+        XCTAssertEqual(try repository.loadAgents().map(\.id), [second.agent.id])
+        let survivingGroup = try XCTUnwrap(try repository.loadConversations().first(where: { $0.id == group.id }))
+        XCTAssertEqual(survivingGroup.participantIDs, [second.agent.id])
+    }
+
     func testAttachmentIsOwnedByConversation() throws {
         let created = try repository.createAgent(named: "Media Bot")
         let source = root.appendingPathComponent("brief.txt")

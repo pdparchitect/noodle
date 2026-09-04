@@ -28,6 +28,7 @@ final class SuperBotStore {
     var draft = ""
     var creationSheet: CreationSheet?
     var agentBeingEdited: AgentRecord?
+    var groupBeingEdited: BotConversation?
     var errorMessage: String?
     var pendingAttachments: [ConversationAttachment] = []
 
@@ -192,6 +193,49 @@ final class SuperBotStore {
             errorMessage = error.localizedDescription
             return false
         }
+    }
+
+    @discardableResult
+    func delete(_ conversation: BotConversation) -> Bool {
+        let agent = conversation.kind == .direct
+            ? participants(for: conversation).first
+            : nil
+
+        if let agent {
+            runtime.stop(agentID: agent.id)
+        }
+
+        do {
+            if let agent {
+                try repository.deleteAgent(agent)
+            } else {
+                try repository.deleteConversation(id: conversation.id)
+            }
+
+            if selectedConversationID == conversation.id {
+                selectedConversationID = nil
+                draft = ""
+                pendingAttachments = []
+            }
+            reload()
+            agentBeingEdited = nil
+            groupBeingEdited = nil
+            return true
+        } catch {
+            if let agent {
+                runtime.start(agent: agent, repository: repository)
+            }
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func deletionMessage(for conversation: BotConversation) -> String {
+        let name = title(for: conversation)
+        if conversation.kind == .direct {
+            return "\u{201c}\(name)\u{201d}, its workspace, and its direct conversation will be permanently deleted. It will also be removed from every group. This cannot be undone."
+        }
+        return "\u{201c}\(name)\u{201d}, its messages, and its attachments will be permanently deleted. The bots in the group will not be deleted. This cannot be undone."
     }
 
     func sendDraft() {

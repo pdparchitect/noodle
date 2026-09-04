@@ -147,15 +147,23 @@ struct RootView: View {
             }
 
             ToolbarItem(placement: .primaryAction) {
-                if let conversation = store.selectedConversation,
-                   conversation.kind == .direct,
-                   let agent = store.participants(for: conversation).first {
-                    Button {
-                        store.agentBeingEdited = agent
-                    } label: {
-                        Label("Edit Bot", systemImage: "slider.horizontal.3")
+                if let conversation = store.selectedConversation {
+                    if conversation.kind == .direct,
+                       let agent = store.participants(for: conversation).first {
+                        Button {
+                            store.agentBeingEdited = agent
+                        } label: {
+                            Label("Edit Bot", systemImage: "slider.horizontal.3")
+                        }
+                        .help("Edit Bot")
+                    } else if conversation.kind == .group {
+                        Button {
+                            store.groupBeingEdited = conversation
+                        } label: {
+                            Label("Group Info", systemImage: "info.circle")
+                        }
+                        .help("Group Info")
                     }
-                    .help("Edit Bot")
                 }
             }
 
@@ -172,6 +180,10 @@ struct RootView: View {
         }
         .sheet(item: $store.agentBeingEdited) { agent in
             EditBotSheet(agent: agent)
+                .environment(store)
+        }
+        .sheet(item: $store.groupBeingEdited) { conversation in
+            GroupInfoSheet(conversation: conversation)
                 .environment(store)
         }
         .alert(

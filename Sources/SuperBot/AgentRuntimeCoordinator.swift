@@ -168,6 +168,11 @@ final class AgentRuntimeCoordinator {
         }
     }
 
+    func stop(agentID: UUID) {
+        processes.removeValue(forKey: agentID)?.stop()
+        snapshots.removeValue(forKey: agentID)
+    }
+
     func stopAll() {
         capabilityProbe?.stop()
         capabilityProbe = nil

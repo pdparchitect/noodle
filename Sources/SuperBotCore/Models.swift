@@ -502,6 +502,33 @@ public struct WorkspaceRepository: Sendable {
         try write(conversation, to: file)
     }
 
+    public func deleteConversation(id: UUID) throws {
+        let directory = conversationDirectory(id: id)
+        guard FileManager.default.fileExists(atPath: directory.path) else {
+            throw WorkspaceError.missingConversation(id)
+        }
+        try FileManager.default.removeItem(at: directory)
+    }
+
+    public func deleteAgent(_ agent: AgentRecord) throws {
+        let directory = directory(for: agent)
+        guard FileManager.default.fileExists(atPath: directory.path) else {
+            throw WorkspaceError.missingAgent(agent.id)
+        }
+
+        for conversation in try loadConversations() where conversation.participantIDs.contains(agent.id) {
+            if conversation.kind == .direct {
+                try deleteConversation(id: conversation.id)
+            } else {
+                var updated = conversation
+                updated.participantIDs.removeAll { $0 == agent.id }
+                try updateConversation(updated)
+            }
+        }
+
+        try FileManager.default.removeItem(at: directory)
+    }
+
     public func loadAgents() throws -> [AgentRecord] {
         try prepare()
         return try loadChildren(from: agentsURL, filename: "agent.json", as: AgentRecord.self)

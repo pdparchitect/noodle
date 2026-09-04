@@ -109,6 +109,7 @@ struct EditBotSheet: View {
     @State private var selectedHarnessIdentifier: String
     @State private var selectedModelIdentifier: String
     @State private var selectedEffort: String
+    @State private var confirmingDeletion = false
     @FocusState private var nameFocused: Bool
 
     init(agent: AgentRecord) {
@@ -158,13 +159,41 @@ struct EditBotSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Spacer()
+
+                Divider()
+
+                Button("Delete Bot\u{2026}", role: .destructive) {
+                    confirmingDeletion = true
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(20)
         }
-        .frame(width: 520, height: 430)
+        .frame(width: 520, height: 490)
         .onAppear {
             nameFocused = true
             store.runtime.refreshCapabilities()
+        }
+        .confirmationDialog(
+            "Delete Bot?",
+            isPresented: $confirmingDeletion,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Bot", role: .destructive) {
+                guard let conversation = directConversation else { return }
+                if store.delete(conversation) { dismiss() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let conversation = directConversation {
+                Text(store.deletionMessage(for: conversation))
+            }
+        }
+    }
+
+    private var directConversation: BotConversation? {
+        store.conversations.first {
+            $0.kind == .direct && $0.participantIDs == [agent.id]
         }
     }
 
@@ -184,6 +213,81 @@ struct EditBotSheet: View {
             reasoningEffort: selectedEffort.nilIfEmpty
         ) {
             dismiss()
+        }
+    }
+}
+
+struct GroupInfoSheet: View {
+    @Environment(SuperBotStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    let conversation: BotConversation
+    @State private var confirmingDeletion = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button("Done") { dismiss() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.blue)
+                Spacer()
+                Text("Group Info").font(.headline)
+                Spacer()
+                Color.clear.frame(width: 34, height: 1)
+            }
+            .padding(16)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 14) {
+                    ConversationAvatar(
+                        participants: store.participants(for: conversation),
+                        isGroup: true,
+                        size: 64
+                    )
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(conversation.displayName)
+                            .font(.title3.weight(.semibold))
+                        Text("\(store.participants(for: conversation).count) bots")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                GroupBox("Bots") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(store.participants(for: conversation)) { agent in
+                            HStack(spacing: 9) {
+                                BotAvatar(agent: agent, size: 28)
+                                Text(agent.displayName)
+                                Spacer()
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Spacer()
+                Divider()
+
+                Button("Delete Group\u{2026}", role: .destructive) {
+                    confirmingDeletion = true
+                }
+            }
+            .padding(20)
+        }
+        .frame(width: 460, height: 420)
+        .confirmationDialog(
+            "Delete Group?",
+            isPresented: $confirmingDeletion,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Group", role: .destructive) {
+                if store.delete(conversation) { dismiss() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(store.deletionMessage(for: conversation))
         }
     }
 }
