@@ -38,7 +38,7 @@ Capability enumeration is harness-specific and private. The Codex driver calls `
 
 ## Agent workspace and managed skills
 
-Every bot directory is named with an opaque UUID. `AGENTS.md` contains provider-neutral guidance, while `CLAUDE.md` is a relative symlink to the same instructions. The managed Messenger skill consists of:
+Every bot directory is named with an opaque UUID. `AGENTS.md` is the canonical instruction file: its Backstory section is user-authored and its marked runtime section is refreshed by SuperBot. `CLAUDE.md` is a relative symlink to the same instructions. Legacy `instructions.md` content is migrated into `AGENTS.md` and the obsolete file is removed. The managed Messenger skill consists of:
 
 - `.agents/skills/messenger/SKILL.md`
 - `.agents/skills/messenger/messenger`, a symlink to the running SuperBot executable

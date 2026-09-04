@@ -11,6 +11,7 @@ struct NewBotSheet: View {
     @State private var selectedHarnessIdentifier = HarnessProvider.codex.rawValue
     @State private var selectedModelIdentifier = ""
     @State private var selectedEffort = ""
+    @State private var backstory = ""
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -44,12 +45,14 @@ struct NewBotSheet: View {
                     selectedEffort: $selectedEffort
                 )
 
+                BotBackstoryEditor(backstory: $backstory)
+
                 GroupBox {
                     Label {
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Private app workspace")
                                 .font(.system(size: 12.5, weight: .semibold))
-                            Text("SuperBot creates an opaque UUID folder containing agent.json, instructions.md, and memory.md.")
+                            Text("SuperBot creates an opaque UUID folder containing agent.json, AGENTS.md, and memory.md.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -64,7 +67,7 @@ struct NewBotSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 520, height: 500)
+        .frame(width: 520, height: 650)
         .onAppear {
             nameFocused = true
             store.runtime.refreshCapabilities()
@@ -83,7 +86,8 @@ struct NewBotSheet: View {
             named: name,
             harnessIdentifier: selectedHarnessIdentifier,
             modelIdentifier: selectedModelIdentifier.nilIfEmpty,
-            reasoningEffort: selectedEffort.nilIfEmpty
+            reasoningEffort: selectedEffort.nilIfEmpty,
+            backstory: backstory
         )
     }
 
@@ -112,6 +116,7 @@ struct EditBotSheet: View {
     @State private var selectedHarnessIdentifier: String
     @State private var selectedModelIdentifier: String
     @State private var selectedEffort: String
+    @State private var backstory = ""
     @State private var avatarSymbolName: String?
     @State private var avatarColorIndex: Int
     @State private var avatarImageData: Data?
@@ -178,6 +183,8 @@ struct EditBotSheet: View {
                     selectedEffort: $selectedEffort
                 )
 
+                BotBackstoryEditor(backstory: $backstory)
+
                 Text("Saving restarts this bot with the selected Codex model. Its workspace and conversation history stay unchanged.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -196,9 +203,10 @@ struct EditBotSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 520, height: 490)
+        .frame(width: 520, height: 640)
         .onAppear {
             nameFocused = true
+            backstory = store.backstory(for: agent)
             store.runtime.refreshCapabilities()
         }
         .sheet(isPresented: $editingAvatar) {
@@ -258,9 +266,49 @@ struct EditBotSheet: View {
             reasoningEffort: selectedEffort.nilIfEmpty,
             avatarSymbolName: avatarSymbolName,
             avatarColorIndex: avatarColorIndex,
-            avatarImageData: avatarImageData
+            avatarImageData: avatarImageData,
+            backstory: backstory
         ) {
             dismiss()
+        }
+    }
+}
+
+private struct BotBackstoryEditor: View {
+    @Binding var backstory: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Backstory")
+                .font(.caption.weight(.semibold))
+
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.secondary.opacity(0.1))
+
+                if backstory.isEmpty {
+                    Text("Describe who this bot is, its role, tone, or priorities…")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 8)
+                        .allowsHitTesting(false)
+                }
+
+                TextEditor(text: $backstory)
+                    .font(.system(size: 13))
+                    .scrollContentBackground(.hidden)
+                    .padding(4)
+            }
+            .frame(height: 96)
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.secondary.opacity(0.18))
+            }
+
+            Text("Saved as this bot’s editable Backstory in AGENTS.md.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }

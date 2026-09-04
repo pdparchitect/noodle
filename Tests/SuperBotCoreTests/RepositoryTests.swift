@@ -29,7 +29,7 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(directory.lastPathComponent, created.agent.id.uuidString.lowercased())
         XCTAssertFalse(directory.lastPathComponent.contains("build"))
         XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("agent.json").path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("instructions.md").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("instructions.md").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("memory.md").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("AGENTS.md").path))
         XCTAssertEqual(
@@ -53,6 +53,8 @@ final class RepositoryTests: XCTestCase {
             encoding: .utf8
         )
         XCTAssertTrue(agentsGuide.contains("tools.exec_command"))
+        XCTAssertTrue(agentsGuide.contains("## Backstory"))
+        XCTAssertTrue(agentsGuide.contains("<!-- superbot:managed:start -->"))
         XCTAssertTrue(agentsGuide.contains("--get-latest --inline-images"))
         XCTAssertTrue(agentsGuide.contains("max_output_tokens: 250000"))
         XCTAssertTrue(agentsGuide.contains("image(visual.dataURL"))
@@ -69,6 +71,76 @@ final class RepositoryTests: XCTestCase {
         XCTAssertTrue(messengerGuide.contains("named participant roster"))
         XCTAssertFalse(messengerGuide.contains("superbot_get_latest"))
         XCTAssertEqual(created.conversation.participantIDs, [created.agent.id])
+    }
+
+    func testBackstoryIsStoredInAgentsFileAndSurvivesSynchronization() throws {
+        let created = try repository.createAgent(named: "Story Bot")
+        let directory = repository.directory(for: created.agent)
+        let agentsFile = directory.appendingPathComponent("AGENTS.md")
+
+        try repository.updateAgentBackstory(
+            created.agent,
+            backstory: "You are a pragmatic release engineer. Keep answers short and decisive."
+        )
+        try repository.synchronizeAgentWorkspace(created.agent)
+
+        XCTAssertEqual(
+            try repository.loadAgentBackstory(created.agent),
+            "You are a pragmatic release engineer. Keep answers short and decisive."
+        )
+        let contents = try String(contentsOf: agentsFile, encoding: .utf8)
+        XCTAssertTrue(contents.contains("You are a pragmatic release engineer"))
+        XCTAssertTrue(contents.contains("## SuperBot Runtime"))
+        XCTAssertTrue(contents.contains("--get-latest --inline-images"))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: directory.appendingPathComponent("instructions.md").path
+        ))
+    }
+
+    func testLegacyInstructionsMigrateIntoAgentsFile() throws {
+        let created = try repository.createAgent(named: "Legacy Bot")
+        let directory = repository.directory(for: created.agent)
+        let agentsFile = directory.appendingPathComponent("AGENTS.md")
+        let legacyFile = directory.appendingPathComponent("instructions.md")
+        try FileManager.default.removeItem(at: agentsFile)
+        try "# Instructions\n\nYou are a careful research librarian.\n".write(
+            to: legacyFile,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        try repository.synchronizeAgentWorkspace(created.agent)
+
+        XCTAssertEqual(
+            try repository.loadAgentBackstory(created.agent),
+            "You are a careful research librarian."
+        )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyFile.path))
+        XCTAssertTrue(
+            try String(contentsOf: agentsFile, encoding: .utf8)
+                .contains("You are a careful research librarian.")
+        )
+    }
+
+    func testExistingCustomAgentsFileMigratesAsBackstory() throws {
+        let created = try repository.createAgent(named: "Custom Bot")
+        let directory = repository.directory(for: created.agent)
+        let agentsFile = directory.appendingPathComponent("AGENTS.md")
+        try "You are an experienced product designer.\nPrefer direct, visual explanations.\n".write(
+            to: agentsFile,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        try repository.synchronizeAgentWorkspace(created.agent)
+
+        XCTAssertEqual(
+            try repository.loadAgentBackstory(created.agent),
+            "You are an experienced product designer.\nPrefer direct, visual explanations."
+        )
+        let contents = try String(contentsOf: agentsFile, encoding: .utf8)
+        XCTAssertTrue(contents.contains("## Backstory"))
+        XCTAssertTrue(contents.contains("## SuperBot Runtime"))
     }
 
     func testRenameDoesNotMoveWorkspace() throws {

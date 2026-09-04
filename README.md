@@ -5,6 +5,7 @@ SuperBot is a native macOS messenger and launcher for local coding agents. Bots 
 ## What works now
 
 - Create and edit UUID-backed bots
+- Give each bot an editable backstory stored canonically in `AGENTS.md`
 - Explicitly assign one of the installed, supported harnesses to each bot
 - Read the live model catalogue and model-specific effort levels from Codex
 - Maintain one persistent Codex App Server process and thread per bot
@@ -30,9 +31,8 @@ Library/Application Support/SuperBot/
 ├── Agents/
 │   └── <agent-uuid>/
 │       ├── agent.json
-│       ├── instructions.md
 │       ├── memory.md
-│       ├── AGENTS.md
+│       ├── AGENTS.md (editable backstory + managed runtime guidance)
 │       ├── CLAUDE.md -> AGENTS.md
 │       └── .agents/
 │           ├── inbox.json
@@ -52,6 +52,8 @@ Library/Application Support/SuperBot/
 ```
 
 Display names never participate in filesystem paths. Managed core-skill files are versioned explicitly; custom bot skills are outside that managed set and are preserved during synchronization.
+
+`AGENTS.md` is the single source of truth for bot instructions. SuperBot preserves the user-authored Backstory section while refreshing its marked runtime section. Older `instructions.md` content is migrated into the Backstory section and the obsolete file is removed.
 
 ## Messenger command
 

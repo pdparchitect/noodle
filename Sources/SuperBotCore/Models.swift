@@ -290,7 +290,7 @@ public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
     public let launcherExecutableURL: URL?
 
-    public static let managedSkillVersion = 9
+    public static let managedSkillVersion = 10
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
         self.rootURL = rootURL.standardizedFileURL
@@ -315,6 +315,7 @@ public struct WorkspaceRepository: Sendable {
         harnessIdentifier: String? = nil,
         modelIdentifier: String? = nil,
         reasoningEffort: String? = nil,
+        backstory: String = "",
         now: Date = Date()
     ) throws -> CreatedAgentWorkspace {
         let name = try validatedName(rawName)
@@ -331,16 +332,12 @@ public struct WorkspaceRepository: Sendable {
         let agentDirectory = directory(for: agent)
         try FileManager.default.createDirectory(at: agentDirectory, withIntermediateDirectories: false)
         try write(agent, to: agentDirectory.appendingPathComponent("agent.json"))
-        try "# Instructions\n\n".write(
-            to: agentDirectory.appendingPathComponent("instructions.md"),
-            atomically: true,
-            encoding: .utf8
-        )
         try "# Memory\n\n".write(
             to: agentDirectory.appendingPathComponent("memory.md"),
             atomically: true,
             encoding: .utf8
         )
+        try updateAgentBackstory(agent, backstory: backstory)
         try synchronizeAgentWorkspace(agent)
 
         let conversation = BotConversation(
@@ -483,8 +480,18 @@ public struct WorkspaceRepository: Sendable {
             .appendingPathComponent("messenger", isDirectory: true)
         try FileManager.default.createDirectory(at: messengerDirectory, withIntermediateDirectories: true)
 
+        let backstory = try loadAgentBackstory(agent)
         let agentsFile = directory.appendingPathComponent("AGENTS.md")
-        try Self.agentsInstructions.write(to: agentsFile, atomically: true, encoding: .utf8)
+        try Self.renderedAgentInstructions(backstory: backstory).write(
+            to: agentsFile,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let legacyInstructionsFile = directory.appendingPathComponent("instructions.md")
+        if FileManager.default.fileExists(atPath: legacyInstructionsFile.path) {
+            try FileManager.default.removeItem(at: legacyInstructionsFile)
+        }
 
         let claudeFile = directory.appendingPathComponent("CLAUDE.md")
         try replaceSymlink(at: claudeFile, destinationPath: "AGENTS.md")
@@ -507,6 +514,49 @@ public struct WorkspaceRepository: Sendable {
             ]
         )
         try write(manifest, to: agentsDirectory.appendingPathComponent("managed-skills.json"))
+    }
+
+    public func loadAgentBackstory(_ agent: AgentRecord) throws -> String {
+        let directory = directory(for: agent)
+        guard FileManager.default.fileExists(atPath: directory.path) else {
+            throw WorkspaceError.missingAgent(agent.id)
+        }
+
+        let agentsFile = directory.appendingPathComponent("AGENTS.md")
+        if let contents = try? String(contentsOf: agentsFile, encoding: .utf8) {
+            if let backstory = Self.backstory(fromManagedInstructions: contents) {
+                return backstory
+            }
+            if !Self.looksLikeLegacyManagedInstructions(contents) {
+                return Self.normalizedLegacyBackstory(contents)
+            }
+        }
+
+        let legacyInstructionsFile = directory.appendingPathComponent("instructions.md")
+        guard FileManager.default.fileExists(atPath: legacyInstructionsFile.path) else {
+            return ""
+        }
+        let legacy = try String(contentsOf: legacyInstructionsFile, encoding: .utf8)
+        return Self.normalizedLegacyBackstory(legacy)
+    }
+
+    public func updateAgentBackstory(_ agent: AgentRecord, backstory: String) throws {
+        let directory = directory(for: agent)
+        guard FileManager.default.fileExists(atPath: directory.path) else {
+            throw WorkspaceError.missingAgent(agent.id)
+        }
+
+        let agentsFile = directory.appendingPathComponent("AGENTS.md")
+        try Self.renderedAgentInstructions(backstory: backstory).write(
+            to: agentsFile,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let legacyInstructionsFile = directory.appendingPathComponent("instructions.md")
+        if FileManager.default.fileExists(atPath: legacyInstructionsFile.path) {
+            try FileManager.default.removeItem(at: legacyInstructionsFile)
+        }
     }
 
     public func importAttachment(
@@ -858,10 +908,56 @@ public struct WorkspaceRepository: Sendable {
         return try operation()
     }
 
-    private static let agentsInstructions = """
-    # SuperBot Agent
+    private static let managedInstructionsStart = "<!-- superbot:managed:start -->"
+    private static let managedInstructionsEnd = "<!-- superbot:managed:end -->"
 
-    This directory is the bot's persistent workspace. SuperBot manages the Messenger core skill; other skills under `.agents/skills` belong to this bot and are left untouched.
+    private static func renderedAgentInstructions(backstory: String) -> String {
+        let normalizedBackstory = backstory.trimmingCharacters(in: .whitespacesAndNewlines)
+        return """
+        # SuperBot Agent
+
+        ## Backstory
+
+        \(normalizedBackstory)
+
+        \(managedInstructionsStart)
+        \(managedAgentInstructions)
+        \(managedInstructionsEnd)
+        """
+    }
+
+    private static func backstory(fromManagedInstructions contents: String) -> String? {
+        guard let heading = contents.range(of: "## Backstory"),
+              let managedStart = contents.range(
+                of: managedInstructionsStart,
+                range: heading.upperBound..<contents.endIndex
+              ) else { return nil }
+        return String(contents[heading.upperBound..<managedStart.lowerBound])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func normalizedLegacyBackstory(_ contents: String) -> String {
+        var lines = contents.components(separatedBy: .newlines)
+        if let firstContentIndex = lines.firstIndex(where: {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }), lines[firstContentIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            .caseInsensitiveCompare("# Instructions") == .orderedSame {
+            lines.remove(at: firstContentIndex)
+        }
+        return lines.joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func looksLikeLegacyManagedInstructions(_ contents: String) -> Bool {
+        contents.contains("# SuperBot Agent") &&
+            contents.contains("## Messages") &&
+            contents.contains("--get-latest")
+    }
+
+    private static let managedAgentInstructions = """
+    ## SuperBot Runtime
+
+    This directory is the bot's persistent workspace. The Backstory section above is this bot's user-authored instructions. SuperBot manages the runtime section and Messenger core skill; other skills under `.agents/skills` belong to this bot and are left untouched.
 
     ## Messages
 

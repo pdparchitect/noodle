@@ -153,8 +153,17 @@ final class AgentRuntimeCoordinator {
         }
     }
 
-    func restart(agent: AgentRecord, repository: WorkspaceRepository) {
+    func restart(
+        agent: AgentRecord,
+        repository: WorkspaceRepository,
+        resetThread: Bool = false
+    ) {
         processes.removeValue(forKey: agent.id)?.stop()
+        if resetThread {
+            let stateURL = repository.directory(for: agent)
+                .appendingPathComponent(".agents/codex-runtime.json")
+            try? FileManager.default.removeItem(at: stateURL)
+        }
         start(agent: agent, repository: repository)
     }
 

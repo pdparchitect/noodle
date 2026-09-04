@@ -120,14 +120,16 @@ final class SuperBotStore {
         named name: String,
         harnessIdentifier: String,
         modelIdentifier: String?,
-        reasoningEffort: String?
+        reasoningEffort: String?,
+        backstory: String
     ) -> Bool {
         do {
             let created = try repository.createAgent(
                 named: name,
                 harnessIdentifier: harnessIdentifier,
                 modelIdentifier: modelIdentifier,
-                reasoningEffort: reasoningEffort
+                reasoningEffort: reasoningEffort,
+                backstory: backstory
             )
             agents.append(created.agent)
             conversations.insert(created.conversation, at: 0)
@@ -153,9 +155,11 @@ final class SuperBotStore {
         reasoningEffort: String?,
         avatarSymbolName: String?,
         avatarColorIndex: Int,
-        avatarImageData: Data?
+        avatarImageData: Data?,
+        backstory: String
     ) -> Bool {
         do {
+            let previousBackstory = try repository.loadAgentBackstory(agent)
             let updated = try repository.updateAgent(
                 agent,
                 displayName: name,
@@ -178,14 +182,28 @@ final class SuperBotStore {
                 try repository.updateConversation(conversations[index])
             }
 
+            try repository.updateAgentBackstory(updated, backstory: backstory)
             try repository.synchronizeAgentWorkspace(updated)
-            runtime.restart(agent: updated, repository: repository)
+            runtime.restart(
+                agent: updated,
+                repository: repository,
+                resetThread: previousBackstory != backstory.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
             agentBeingEdited = nil
             refreshAppShortcuts()
             return true
         } catch {
             errorMessage = error.localizedDescription
             return false
+        }
+    }
+
+    func backstory(for agent: AgentRecord) -> String {
+        do {
+            return try repository.loadAgentBackstory(agent)
+        } catch {
+            errorMessage = error.localizedDescription
+            return ""
         }
     }
 
