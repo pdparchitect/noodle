@@ -720,14 +720,6 @@ private struct AgentConfigurationFields: View {
             Label(error, systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(.orange)
-        } else if let selectedModel, !selectedModel.description.isEmpty {
-            Text(selectedModel.description)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else {
-            Text("Models and effort levels are reported directly by the selected harness.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 }
