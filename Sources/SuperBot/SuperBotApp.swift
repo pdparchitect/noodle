@@ -177,7 +177,7 @@ struct RootView: View {
                         Button {
                             store.groupBeingEdited = conversation
                         } label: {
-                            Label("Group Info", systemImage: "info.circle")
+                            Label("Group Info", systemImage: "slider.horizontal.3")
                         }
                         .help("Group Info")
                     }
