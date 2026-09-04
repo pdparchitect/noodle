@@ -184,7 +184,11 @@ private struct ConversationStartView: View {
 
         return Label {
             if failed > 0 {
-                Text("\(failed) bot\(failed == 1 ? "" : "s") needs attention")
+                if participants.count == 1, let snapshot = snapshots.first(where: { $0.phase == .failed }) {
+                    Text(snapshot.detail)
+                } else {
+                    Text("\(failed) bot\(failed == 1 ? "" : "s") needs attention")
+                }
             } else if ready == participants.count, !participants.isEmpty {
                 Text("All bot processes ready")
             } else {

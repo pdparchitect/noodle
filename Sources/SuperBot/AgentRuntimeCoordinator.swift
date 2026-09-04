@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Observation
 import SuperBotCore
@@ -188,6 +189,7 @@ private final class CodexAgentProcess {
     }
 
     private struct PersistedState: Codable {
+        let version: Int
         let threadID: String
     }
 
@@ -197,6 +199,7 @@ private final class CodexAgentProcess {
     private let conversationsURL: URL
     private let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
     private let stateURL: URL
+    private let repository: WorkspaceRepository
 
     private var process: Process?
     private var input: FileHandle?
@@ -226,8 +229,10 @@ private final class CodexAgentProcess {
         self.conversationsURL = conversationsURL
         self.onSnapshot = onSnapshot
         stateURL = workspaceURL.appendingPathComponent(".agents/codex-runtime.json")
+        repository = WorkspaceRepository(rootURL: conversationsURL.deletingLastPathComponent())
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
-        threadID = Self.loadState(from: stateURL)?.threadID
+        let state = Self.loadState(from: stateURL)
+        threadID = state?.version == Self.runtimeVersion ? state?.threadID : nil
     }
 
     func start() {
@@ -250,6 +255,7 @@ private final class CodexAgentProcess {
             var environment = ProcessInfo.processInfo.environment
             environment["SUPERBOT_AGENT_ID"] = configuration.id.uuidString.lowercased()
             environment["SUPERBOT_WORKSPACE"] = workspaceURL.path
+            environment["CODEX_HOME"] = HostEnvironment.codexHome.path
             child.environment = environment
 
             outputPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
@@ -281,7 +287,7 @@ private final class CodexAgentProcess {
                     "title": "SuperBot",
                     "version": "0.3.0"
                 ],
-                "capabilities": [:]
+                "capabilities": ["experimentalApi": true]
             ])
         } catch {
             fail(error.localizedDescription)
@@ -338,6 +344,13 @@ private final class CodexAgentProcess {
     }
 
     private func handle(_ message: [String: Any]) {
+        if message["method"] as? String == "item/tool/call",
+           let requestID = message["id"],
+           let params = message["params"] as? [String: Any] {
+            handleDynamicToolCall(requestID: requestID, params: params)
+            return
+        }
+
         if let id = Self.integerID(message["id"]),
            let purpose = purposes.removeValue(forKey: id) {
             if let error = message["error"] as? [String: Any] {
@@ -394,7 +407,8 @@ private final class CodexAgentProcess {
             "approvalPolicy": "never",
             "sandbox": "workspace-write",
             "serviceName": "superbot",
-            "developerInstructions": Self.developerInstructions
+            "developerInstructions": Self.developerInstructions,
+            "dynamicTools": Self.dynamicTools
         ]
         if let model = configuration.modelIdentifier { params["model"] = model }
 
@@ -443,6 +457,53 @@ private final class CodexAgentProcess {
         }
     }
 
+    private func handleDynamicToolCall(requestID: Any, params: [String: Any]) {
+        do {
+            let tool = params["tool"] as? String ?? ""
+            let output: String
+            switch tool {
+            case "superbot_get_latest":
+                let deliveries = try repository.latestMessages(
+                    for: configuration.id,
+                    consuming: true
+                )
+                output = try Self.jsonString(deliveries)
+            case "superbot_send":
+                let arguments = params["arguments"] as? [String: Any] ?? [:]
+                guard let rawConversationID = arguments["conversationID"] as? String,
+                      let conversationID = UUID(uuidString: rawConversationID),
+                      let body = arguments["body"] as? String else {
+                    throw DynamicToolError.invalidArguments
+                }
+                let message = try repository.sendAgentMessage(
+                    agentID: configuration.id,
+                    conversationID: conversationID,
+                    body: body
+                )
+                output = try Self.jsonString(message)
+            default:
+                throw DynamicToolError.unknownTool(tool)
+            }
+            try respondToDynamicTool(requestID: requestID, success: true, text: output)
+        } catch {
+            try? respondToDynamicTool(
+                requestID: requestID,
+                success: false,
+                text: error.localizedDescription
+            )
+        }
+    }
+
+    private func respondToDynamicTool(requestID: Any, success: Bool, text: String) throws {
+        try send([
+            "id": requestID,
+            "result": [
+                "contentItems": [["type": "inputText", "text": text]],
+                "success": success
+            ]
+        ])
+    }
+
     private func request(_ purpose: RequestPurpose, method: String, params: [String: Any]) throws {
         let id = nextRequestID
         nextRequestID += 1
@@ -464,7 +525,9 @@ private final class CodexAgentProcess {
         do {
             let directory = stateURL.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try JSONEncoder().encode(PersistedState(threadID: threadID)).write(to: stateURL, options: .atomic)
+            try JSONEncoder().encode(
+                PersistedState(version: Self.runtimeVersion, threadID: threadID)
+            ).write(to: stateURL, options: .atomic)
         } catch {
             fail("Could not save Codex thread: \(error.localizedDescription)")
         }
@@ -496,8 +559,62 @@ private final class CodexAgentProcess {
     }
 
     private static let developerInstructions = """
-    You are a continuously running SuperBot agent. A SuperBot event is only a notification that your inbox changed; it never contains the user's message. Whenever notified, run ./.agents/skills/messenger/messenger --get-latest, inspect every returned delivery, and respond when appropriate using ./.agents/skills/messenger/messenger --send. Do not answer the notification text itself. If the inbox is empty, finish quietly.
+    You are a continuously running SuperBot agent. A SuperBot event is only a notification that your inbox changed; it never contains the user's message. Whenever notified, your first action must be calling superbot_get_latest. Inspect every returned delivery and respond when appropriate by calling superbot_send. Never use shell commands, MCP tools, node_repl, or file editing for messaging. Do not answer the notification text itself. If the inbox is empty, finish quietly.
     """
+
+    private static let runtimeVersion = 2
+
+    private static let dynamicTools: [[String: Any]] = [
+        [
+            "type": "function",
+            "name": "superbot_get_latest",
+            "description": "Read and consume every unread direct or group message for this bot. This must be the first action after every SuperBot inbox-changed event.",
+            "inputSchema": [
+                "type": "object",
+                "properties": [:],
+                "additionalProperties": false
+            ]
+        ],
+        [
+            "type": "function",
+            "name": "superbot_send",
+            "description": "Send this bot's reply to a SuperBot conversation.",
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "conversationID": [
+                        "type": "string",
+                        "description": "Conversation UUID returned by superbot_get_latest."
+                    ],
+                    "body": [
+                        "type": "string",
+                        "description": "The reply text to post."
+                    ]
+                ],
+                "required": ["conversationID", "body"],
+                "additionalProperties": false
+            ]
+        ]
+    ]
+
+    private static func jsonString<Value: Encodable>(_ value: Value) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return String(decoding: try encoder.encode(value), as: UTF8.self)
+    }
+
+    private enum DynamicToolError: LocalizedError {
+        case invalidArguments
+        case unknownTool(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidArguments: return "The Messenger tool arguments are invalid."
+            case .unknownTool(let name): return "Unknown SuperBot tool: \(name)"
+            }
+        }
+    }
 }
 
 @MainActor
@@ -527,6 +644,9 @@ private final class CodexCapabilityProbe {
             child.standardInput = inputPipe
             child.standardOutput = outputPipe
             child.standardError = errorPipe
+            var environment = ProcessInfo.processInfo.environment
+            environment["CODEX_HOME"] = HostEnvironment.codexHome.path
+            child.environment = environment
 
             outputPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
                 let data = handle.availableData
@@ -656,5 +776,16 @@ private final class CodexCapabilityProbe {
         let message: String
         init(_ message: String) { self.message = message }
         var errorDescription: String? { message }
+    }
+}
+
+private enum HostEnvironment {
+    static var codexHome: URL {
+        if let entry = getpwuid(getuid()), let pointer = entry.pointee.pw_dir {
+            return URL(fileURLWithPath: String(cString: pointer), isDirectory: true)
+                .appendingPathComponent(".codex", isDirectory: true)
+        }
+        return URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+            .appendingPathComponent(".codex", isDirectory: true)
     }
 }

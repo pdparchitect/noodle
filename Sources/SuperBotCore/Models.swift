@@ -202,7 +202,7 @@ public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
     public let launcherExecutableURL: URL?
 
-    public static let managedSkillVersion = 2
+    public static let managedSkillVersion = 3
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
         self.rootURL = rootURL.standardizedFileURL
@@ -617,7 +617,7 @@ public struct WorkspaceRepository: Sendable {
 
     ## Messages
 
-    SuperBot notifications only mean that this inbox may have changed. They never contain the user's message. Whenever SuperBot notifies you, immediately read the inbox, inspect every delivery, and respond when appropriate through Messenger. Never reply to the notification text itself. If there are no deliveries, finish quietly.
+    SuperBot notifications only mean that this inbox may have changed. They never contain the user's message. Whenever SuperBot notifies you, immediately call the harness-provided `superbot_get_latest` tool, inspect every delivery, and respond when appropriate with `superbot_send`. Never reply to the notification text itself. If there are no deliveries, finish quietly.
 
     Read new direct and group messages:
 
@@ -640,7 +640,11 @@ public struct WorkspaceRepository: Sendable {
 
     # Messenger
 
-    Run `./.agents/skills/messenger/messenger --get-latest` to receive unread messages as JSON. Each delivery includes the conversation, message, and linked attachment metadata.
+    In Codex, call `superbot_get_latest` to receive unread messages as JSON. Each delivery includes the conversation, message, and linked attachment metadata. Reply with `superbot_send` using the conversation UUID and response body.
+
+    The bundled command-line helper remains available to harnesses that use shell commands:
+
+    `./.agents/skills/messenger/messenger --get-latest`
 
     Reply with `./.agents/skills/messenger/messenger --send --conversation <uuid> --body <text>`. The executable identifies this bot from the opaque workspace path. Do not edit SuperBot's conversation JSON directly.
     """

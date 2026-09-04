@@ -9,37 +9,32 @@ The original references are preserved beside it as `superbot-architecture.png` a
 flowchart TB
     UI[SuperBot Messages UI]
     STORE[Conversation store]
-    CODEX[Codex ACP adapter]
-    CLAUDE[Claude ACP adapter]
-    A[Bot A process]
-    B[Bot B process]
+    CODEX[Codex native driver]
+    A[Bot A: App Server process + thread]
+    B[Bot B: App Server process + thread]
     AW[Bot A UUID workspace]
     BW[Bot B UUID workspace]
 
     UI <--> STORE
-    UI -->|ACP wake-up| A
-    UI -->|ACP wake-up| B
+    UI -->|notify| A
+    UI -->|notify| B
     CODEX --> A
-    CLAUDE --> B
-    A <-->|messenger JSON| AW
-    B <-->|messenger JSON| BW
+    CODEX --> B
+    A <-->|get_latest / send| STORE
+    B <-->|get_latest / send| STORE
+    A <--> AW
+    B <--> BW
     AW <--> STORE
     BW <--> STORE
 ```
 
-The number of processes follows the number of bots, not the number of conversations. Two bots participating in two group chats still produce two harness processes. Each process may own several ACP sessions, one per conversation.
+The number of processes follows the number of bots, not the number of conversations. Two bots participating in two group chats still produce two harness processes. Each Codex process owns one persistent thread and reads every direct or group conversation that includes its bot UUID.
 
 ## Harness discovery
 
-Discovery has three distinct layers:
+SuperBot advertises only harnesses for which it has a complete native driver. The first driver looks for the executable bundled inside `ChatGPT.app` or `Codex.app`, followed by conventional local binary directories. Finding a desktop application without its executable does not make a harness selectable.
 
-1. Desktop application presence, such as `ChatGPT.app` or `Claude.app`.
-2. Command-line engine presence, such as the bundled Codex executable.
-3. ACP adapter presence, such as `codex-acp` or `claude-agent-acp`.
-
-Only the third state is launch-ready. This matters because the detected Codex CLI currently exposes its own app-server protocol rather than a native ACP endpoint. The installed Claude desktop app likewise does not expose a Claude CLI at the sketched resource path. SuperBot reports these facts instead of inferring compatibility from an app bundle name.
-
-ACP uses JSON-RPC over a persistent subprocess transport. A normal turn initializes the connection, creates or restores a session, sends `session/prompt`, and receives `session/update` notifications. SuperBot's runtime owns a single subprocess dictionary keyed by bot UUID, while that process owns a conversation-to-session dictionary. See the [official ACP overview](https://agentclientprotocol.com/protocol/overview).
+Capability enumeration is harness-specific and private. The Codex driver calls `model/list`, converts the result into provider-neutral model and effort records, and presents those choices when creating or editing a bot. No ACP adapter or readiness layer exists.
 
 ## Agent workspace and managed skills
 
@@ -51,7 +46,7 @@ Every bot directory is named with an opaque UUID. `AGENTS.md` contains provider-
 
 On app updates, SuperBot refreshes only paths declared in that manifest. Skills created elsewhere under `.agents/skills` remain bot-owned and are not removed.
 
-The executable determines the bot from the symlink's containing UUID workspace. `--get-latest` returns unread messages across all conversations containing that bot and advances per-conversation offsets in `.agents/inbox.json`. A bot never receives its own replies back as unread work.
+Codex receives two thread-scoped dynamic tools from SuperBot. `superbot_get_latest` returns unread messages across all conversations containing that bot and advances per-conversation offsets in `.agents/inbox.json`. `superbot_send` validates the conversation and writes the agent reply. A bot never receives its own replies back as unread work. The bundled command-line helper exposes the same repository operations for future harness drivers that prefer shell commands.
 
 ## Message and attachment ownership
 
@@ -64,12 +59,14 @@ Message array mutation is guarded by a per-conversation filesystem lock and writ
 Sending a user message has two effects:
 
 1. Persist the message and attachments to the conversation.
-2. Wake every participating bot through its existing ACP process, creating the process only if that bot does not already have one.
+2. Call `notify` on every participating bot through its existing process, creating the process only if that bot does not already have one.
 
-The ACP prompt is a notification to inspect Messenger rather than a second copy of the user's message. This keeps the conversation store authoritative and gives every provider the same retrieval contract. A group chat fans the wake-up out to its participant bot UUIDs; it never creates a group-specific harness process.
+The Codex driver translates `notify` into an inbox-changed event with no message body. Codex must call `superbot_get_latest`, decide what to do, and publish replies with `superbot_send`. This keeps the conversation store authoritative and gives every provider the same retrieval contract. A group chat fans the notification out to participant bot UUIDs; it never creates a group-specific harness process. Notifications coalesce while a bot is already working.
+
+At application startup, SuperBot starts every configured bot and resumes its stored Codex thread. At application termination, it stops every child process. Creating or editing a bot starts or restarts only that bot.
 
 ## Security
 
-SuperBot keeps App Sandbox enabled. Attachment import uses the native file importer and the `com.apple.security.files.user-selected.read-only` entitlement. Imported data is copied into the conversation before access ends.
+SuperBot keeps App Sandbox enabled. Attachment import uses the native file importer and the `com.apple.security.files.user-selected.read-only` entitlement. Imported data is copied into the conversation before access ends. Codex requires outgoing client networking and a temporary home-relative read/write exception limited to `/.codex/`; the driver explicitly sets `CODEX_HOME` to that directory so the sandbox does not redirect Codex to an unauthenticated container-local home.
 
-No all-files, temporary-exception, Apple Events, device, personal-data, or incoming-network entitlement is present. The current bundle contains no third-party runtime library or helper. Before an ACP adapter is shipped or installed, its code-signing, sandbox inheritance, authentication storage, and outbound-network requirements must be verified as a separate boundary.
+There is no broad home-directory, Apple Events, device, personal-data, or incoming-network entitlement. The minimal bundled Messenger helper is signed separately without application entitlements and operates only within the bot workspace and conversation roots supplied by the runtime.

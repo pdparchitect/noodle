@@ -4,16 +4,19 @@ SuperBot is a native macOS messenger and launcher for local coding agents. Bots 
 
 ## What works now
 
-- Create and rename UUID-backed bots
-- Assign Codex or Claude as a bot's harness provider
-- Automatically distinguish an installed desktop app, a command-line engine, and an ACP adapter
-- Maintain one ACP subprocess per bot, with separate ACP sessions for every direct or group conversation
+- Create and edit UUID-backed bots
+- Explicitly assign one of the installed, supported harnesses to each bot
+- Read the live model catalogue and model-specific effort levels from Codex
+- Maintain one persistent Codex App Server process and thread per bot
+- Start every configured bot with SuperBot and stop every bot when SuperBot terminates
+- Notify bots without copying message bodies into the harness event
+- Let Codex read and reply through two private SuperBot tools: `superbot_get_latest` and `superbot_send`
 - Persist direct chats, group chats, unread inbox cursors, and linked attachments
 - Install and update the managed Messenger skill without touching a bot's other skills
-- Use the `SuperBot` executable as both the macOS application and the agent-local `messenger` command
+- Bundle a separately signed, minimal `messenger` command for shell-oriented future harnesses
 - Observe Messenger replies in the open conversation without relaunching the app
 
-SuperBot intentionally does not treat an ordinary CLI as ACP-compatible. On the current machine it finds Codex at `/Applications/ChatGPT.app/Contents/Resources/codex`, while the installed Claude desktop app does not expose a Claude CLI. A provider becomes runnable only when its ACP adapter is also discoverable (`codex-acp` or `claude-agent-acp`).
+Codex is the first implemented harness. SuperBot finds the Codex executable bundled with ChatGPT or Codex, speaks its native App Server protocol internally, and keeps that implementation behind the provider-neutral `start`, `stop`, and `notify` runtime boundary. ACP is not used.
 
 ## Durable layout
 
@@ -34,7 +37,7 @@ Library/Application Support/SuperBot/
 │           └── skills/
 │               ├── messenger/
 │               │   ├── SKILL.md
-│               │   └── messenger -> SuperBot.app/Contents/MacOS/SuperBot
+│               │   └── messenger -> SuperBot.app/Contents/Helpers/messenger
 │               └── <bot-owned-skills>/
 └── Conversations/
     └── <conversation-uuid>/
@@ -58,7 +61,7 @@ From inside a bot workspace:
 ./.agents/skills/messenger/messenger --send --conversation <uuid> --body "Reply text"
 ```
 
-The command infers the bot UUID and SuperBot repository root from its symlink location. Results are JSON so any harness can consume them without provider-specific parsing.
+The command can infer the bot UUID and SuperBot repository root from its symlink location or from the private runtime environment. Results are JSON so future shell-oriented harnesses can consume them without provider-specific parsing. Codex uses the equivalent native tools and does not launch this helper.
 
 ## Build, launch, and test
 
@@ -79,11 +82,13 @@ Set `SUPERBOT_SIGNING_IDENTITY` when a non-ad-hoc signing identity is required.
 
 ## Security boundary
 
-The finished app has exactly two sandbox entitlements:
+The finished app keeps App Sandbox enabled with these narrowly scoped entitlements:
 
 - App Sandbox
 - User-selected file read access, used only to import attachments
+- Outgoing network client access, required by Codex
+- A home-relative read/write exception restricted to `~/.codex/`, allowing the Codex child to use the user's existing login and persistent thread state
 
-There is no broad filesystem, automation, camera, microphone, contacts, incoming network, or personal-data entitlement. ACP subprocess execution remains gated on a separately detected adapter instead of silently running an incompatible binary.
+There is no broad home-folder, automation, camera, microphone, contacts, incoming-network, or personal-data entitlement. SuperBot explicitly points Codex at `~/.codex` but never copies or parses the credentials itself. The bundled Messenger helper is separately signed without the application entitlements.
 
 See [docs/architecture.md](docs/architecture.md) for the process and data flow.

@@ -36,6 +36,11 @@ if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.netw
     exit 1
 fi
 
+if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key><array><string>/.codex/</string></array>'; then
+    print -u2 "The narrow Codex state-directory exception is missing or broader than expected."
+    exit 1
+fi
+
 if otool -L "$app/Contents/MacOS/SuperBot" | grep -Eq '/opt/homebrew|/usr/local'; then
     print -u2 "The app links against a mutable external dependency."
     exit 1

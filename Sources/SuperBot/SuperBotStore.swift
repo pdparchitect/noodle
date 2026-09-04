@@ -204,7 +204,7 @@ final class SuperBotStore {
             conversationID: conversation.id,
             author: .user,
             body: messageBody,
-            delivery: .queued,
+            delivery: .delivered,
             attachmentIDs: pendingAttachments.map(\.id)
         )
 
