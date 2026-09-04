@@ -47,7 +47,7 @@ struct ChatView: View {
                 }
                 .padding(.horizontal, 15)
                 .padding(.top, 30)
-                .padding(.bottom, 8)
+                .padding(.bottom, 20)
             }
             .defaultScrollAnchor(.bottom)
             .onChange(of: store.messages(for: conversation).last?.id) { _, lastID in
