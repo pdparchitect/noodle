@@ -1,45 +1,72 @@
 # SuperBot
 
-SuperBot is a native macOS workspace for creating local bots and talking to them through a Messages-style interface. Each bot has a stable opaque identifier, a private folder in the application's Application Support directory, and a direct conversation. Bots can be renamed without moving their workspace. Two or more bots can also be invited into a shared group conversation.
+SuperBot is a native macOS messenger and launcher for local coding agents. Bots have stable private workspaces, direct and group conversations, managed skills, conversation-owned attachments, and one long-lived harness process per bot.
 
-This first stage deliberately stops at the local boundary: commands and transcripts are persisted, while harness routing remains visibly disconnected until the installed harness locations and invocation contracts are configured.
+## What works now
 
-## Current capabilities
+- Create and rename UUID-backed bots
+- Assign Codex or Claude as a bot's harness provider
+- Automatically distinguish an installed desktop app, a command-line engine, and an ACP adapter
+- Maintain one ACP subprocess per bot, with separate ACP sessions for every direct or group conversation
+- Persist direct chats, group chats, unread inbox cursors, and linked attachments
+- Install and update the managed Messenger skill without touching a bot's other skills
+- Use the `SuperBot` executable as both the macOS application and the agent-local `messenger` command
+- Observe Messenger replies in the open conversation without relaunching the app
 
-- Create and rename bots
-- UUID-backed bot workspaces independent of display names
-- Native macOS sidebar, search, selection, toolbar, and split-view resizing
-- Direct bot conversations
-- Multi-bot group conversations
-- Durable local transcripts and queued commands
-- Reveal a bot's workspace in Finder
-- Clear harness connection state without fabricated replies
+SuperBot intentionally does not treat an ordinary CLI as ACP-compatible. On the current machine it finds Codex at `/Applications/ChatGPT.app/Contents/Resources/codex`, while the installed Claude desktop app does not expose a Claude CLI. A provider becomes runnable only when its ACP adapter is also discoverable (`codex-acp` or `claude-agent-acp`).
 
-## Workspace layout
+## Durable layout
 
-When sandboxed, macOS maps Application Support into SuperBot's private container. The logical structure is:
+In the signed sandboxed app, macOS places this hierarchy inside SuperBot's Application Support container:
 
 ```text
 Library/Application Support/SuperBot/
 ├── Agents/
-│   └── <uuid>/
+│   └── <agent-uuid>/
 │       ├── agent.json
 │       ├── instructions.md
-│       └── memory.md
+│       ├── memory.md
+│       ├── AGENTS.md
+│       ├── CLAUDE.md -> AGENTS.md
+│       └── .agents/
+│           ├── inbox.json
+│           ├── managed-skills.json
+│           └── skills/
+│               ├── messenger/
+│               │   ├── SKILL.md
+│               │   └── messenger -> SuperBot.app/Contents/MacOS/SuperBot
+│               └── <bot-owned-skills>/
 └── Conversations/
-    └── <uuid>/
+    └── <conversation-uuid>/
         ├── conversation.json
-        └── messages.json
+        ├── messages.json
+        └── Attachments/
+            ├── <attachment-uuid>.json
+            └── <attachment-uuid>.<extension>
 ```
 
-The folder key is never derived from the bot's display name.
+Display names never participate in filesystem paths. Managed core-skill files are versioned explicitly; custom bot skills are outside that managed set and are preserved during synchronization.
 
-## Build and launch
+## Messenger command
+
+From inside a bot workspace:
+
+```sh
+./.agents/skills/messenger/messenger --get-latest
+./.agents/skills/messenger/messenger --get-latest --peek
+./.agents/skills/messenger/messenger --list-conversations
+./.agents/skills/messenger/messenger --send --conversation <uuid> --body "Reply text"
+```
+
+The command infers the bot UUID and SuperBot repository root from its symlink location. Results are JSON so any harness can consume them without provider-specific parsing.
+
+## Build, launch, and test
 
 Requirements: macOS 15 or later and full Xcode.
 
 ```sh
 scripts/build-and-launch.sh
+Tests/smoke-test.sh
 ```
 
 The signed application is written to `.build/SuperBot.app`. To install it in `/Applications`:
@@ -48,16 +75,15 @@ The signed application is written to `.build/SuperBot.app`. To install it in `/A
 scripts/install-app.sh
 ```
 
-Set `SUPERBOT_SIGNING_IDENTITY` to a signing identity when needed. The default is an ad-hoc local signature.
-
-## Test
-
-```sh
-Tests/smoke-test.sh
-```
-
-The test suite verifies opaque workspace creation, rename stability, group persistence, transcript round-trips, the final app signature, App Sandbox entitlements, and dynamic-library linkage.
+Set `SUPERBOT_SIGNING_IDENTITY` when a non-ad-hoc signing identity is required.
 
 ## Security boundary
 
-SuperBot currently has only the App Sandbox entitlement. It has no network, user-selected file, automation, camera, microphone, contacts, or personal-data access. Harness integration will require an explicit design for discovering and invoking approved local executables without weakening this boundary.
+The finished app has exactly two sandbox entitlements:
+
+- App Sandbox
+- User-selected file read access, used only to import attachments
+
+There is no broad filesystem, automation, camera, microphone, contacts, incoming network, or personal-data entitlement. ACP subprocess execution remains gated on a separately detected adapter instead of silently running an incompatible binary.
+
+See [docs/architecture.md](docs/architecture.md) for the process and data flow.
