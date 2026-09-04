@@ -19,6 +19,17 @@ if [[ ! -x "$app/Contents/Helpers/messenger" ]]; then
     exit 1
 fi
 
+intent_metadata="$app/Contents/Resources/Metadata.appintents/extract.actionsdata"
+if [[ ! -f "$intent_metadata" ]]; then
+    print -u2 "App Intents metadata is missing from the bundle."
+    exit 1
+fi
+
+if ! grep -q 'SendSuperBotCommandIntent' "$intent_metadata"; then
+    print -u2 "The Send SuperBot Command intent is missing from App Intents metadata."
+    exit 1
+fi
+
 entitlements="$(codesign -d --entitlements :- "$app" 2>/dev/null)"
 compact_entitlements="$(print -r -- "$entitlements" | tr -d '[:space:]')"
 if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.app-sandbox</key><true/>'; then

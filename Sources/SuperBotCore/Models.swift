@@ -687,6 +687,30 @@ public struct WorkspaceRepository: Sendable {
         return message
     }
 
+    public func sendUserMessage(
+        conversationID: UUID,
+        body: String,
+        attachmentIDs: [UUID] = [],
+        now: Date = Date()
+    ) throws -> ChatMessage {
+        let text = try validatedName(body)
+        guard var conversation = try loadConversations().first(where: { $0.id == conversationID }) else {
+            throw WorkspaceError.missingConversation(conversationID)
+        }
+        let message = ChatMessage(
+            conversationID: conversationID,
+            author: .user,
+            body: text,
+            createdAt: now,
+            delivery: .delivered,
+            attachmentIDs: attachmentIDs
+        )
+        try append(message)
+        conversation.updatedAt = now
+        try updateConversation(conversation)
+        return message
+    }
+
     public func updateConversation(_ conversation: BotConversation) throws {
         let file = conversationDirectory(id: conversation.id).appendingPathComponent("conversation.json")
         try write(conversation, to: file)

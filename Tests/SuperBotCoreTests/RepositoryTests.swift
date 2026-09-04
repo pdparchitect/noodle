@@ -290,6 +290,29 @@ final class RepositoryTests: XCTestCase {
         ))
     }
 
+    func testSendUserMessagePersistsCommandAndUpdatesConversation() throws {
+        let created = try repository.createAgent(named: "Build Bot")
+        let sentAt = Date(timeIntervalSince1970: 1_780_000_000)
+
+        let message = try repository.sendUserMessage(
+            conversationID: created.conversation.id,
+            body: "Run the release build.",
+            now: sentAt
+        )
+
+        XCTAssertEqual(message.author, .user)
+        XCTAssertEqual(message.body, "Run the release build.")
+        XCTAssertEqual(message.delivery, .delivered)
+        XCTAssertEqual(
+            try repository.loadMessages(conversationID: created.conversation.id),
+            [message]
+        )
+        XCTAssertEqual(
+            try repository.loadConversations().first?.updatedAt,
+            sentAt
+        )
+    }
+
     func testMessengerDeliveryIncludesAbsoluteAttachmentPath() throws {
         let created = try repository.createAgent(named: "Vision Bot")
         let source = root.appendingPathComponent("reference.png")

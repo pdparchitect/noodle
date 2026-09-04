@@ -7,6 +7,8 @@ import UniformTypeIdentifiers
 @MainActor
 @Observable
 final class SuperBotStore {
+    private(set) static var active: SuperBotStore?
+
     enum CreationSheet: Identifiable {
         case bot
         case group
@@ -54,6 +56,7 @@ final class SuperBotStore {
         }
 
         reload()
+        Self.active = self
     }
 
     var selectedConversation: BotConversation? {
@@ -100,6 +103,7 @@ final class SuperBotStore {
                 }
             )
             runtime.refresh(agents: agents)
+            refreshAppShortcuts()
 
             if let selectedConversationID,
                conversations.contains(where: { $0.id == selectedConversationID }) {
@@ -132,6 +136,7 @@ final class SuperBotStore {
             runtime.start(agent: created.agent, repository: repository)
             selectedConversationID = created.conversation.id
             creationSheet = nil
+            refreshAppShortcuts()
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -175,6 +180,7 @@ final class SuperBotStore {
             try repository.synchronizeAgentWorkspace(updated)
             runtime.restart(agent: updated, repository: repository)
             agentBeingEdited = nil
+            refreshAppShortcuts()
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -194,6 +200,7 @@ final class SuperBotStore {
             attachmentsByConversation[conversation.id] = []
             selectedConversationID = conversation.id
             creationSheet = nil
+            refreshAppShortcuts()
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -213,6 +220,7 @@ final class SuperBotStore {
                 conversations.sort { $0.updatedAt > $1.updatedAt }
             }
             groupBeingEdited = nil
+            refreshAppShortcuts()
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -269,21 +277,16 @@ final class SuperBotStore {
         guard !body.isEmpty || !pendingAttachments.isEmpty else { return }
         let messageBody = body.isEmpty ? "Sent \(pendingAttachments.count) attachment\(pendingAttachments.count == 1 ? "" : "s")" : body
 
-        let message = ChatMessage(
-            conversationID: conversation.id,
-            author: .user,
-            body: messageBody,
-            delivery: .delivered,
-            attachmentIDs: pendingAttachments.map(\.id)
-        )
-
         do {
-            try repository.append(message)
+            let message = try repository.sendUserMessage(
+                conversationID: conversation.id,
+                body: messageBody,
+                attachmentIDs: pendingAttachments.map(\.id)
+            )
             messagesByConversation[conversation.id, default: []].append(message)
 
             if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
                 conversations[index].updatedAt = message.createdAt
-                try repository.updateConversation(conversations[index])
                 conversations.sort { $0.updatedAt > $1.updatedAt }
             }
 
@@ -293,6 +296,24 @@ final class SuperBotStore {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    @discardableResult
+    func sendCommand(_ command: String, to conversationID: UUID) throws -> ChatMessage {
+        guard let conversation = conversations.first(where: { $0.id == conversationID }) else {
+            throw WorkspaceError.missingConversation(conversationID)
+        }
+        let message = try repository.sendUserMessage(
+            conversationID: conversation.id,
+            body: command
+        )
+        messagesByConversation[conversation.id, default: []].append(message)
+        if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
+            conversations[index].updatedAt = message.createdAt
+            conversations.sort { $0.updatedAt > $1.updatedAt }
+        }
+        runtime.notify(participants(for: conversation), repository: repository)
+        return message
     }
 
     func messages(for conversation: BotConversation) -> [ChatMessage] {
@@ -360,6 +381,10 @@ final class SuperBotStore {
         conversation.participantIDs.compactMap { id in
             agents.first(where: { $0.id == id })
         }
+    }
+
+    private func refreshAppShortcuts() {
+        SuperBotShortcuts.updateAppShortcutParameters()
     }
 
     func title(for conversation: BotConversation) -> String {

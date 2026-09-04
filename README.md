@@ -10,10 +10,11 @@ SuperBot is a native macOS messenger and launcher for local coding agents. Bots 
 - Maintain one persistent Codex App Server process and thread per bot
 - Start every configured bot with SuperBot and stop every bot when SuperBot terminates
 - Notify bots without copying message bodies into the harness event
-- Let Codex read and reply through two private SuperBot tools: `superbot_get_latest` and `superbot_send`
+- Let Codex read and reply through the bundled Messenger CLI
 - Persist direct chats, group chats, unread inbox cursors, and linked attachments
 - Install and update the managed Messenger skill without touching a bot's other skills
-- Bundle a separately signed, minimal `messenger` command for shell-oriented future harnesses
+- Bundle a separately signed, minimal `messenger` command for every harness
+- Expose a native “Send SuperBot Command” App Intent to Spotlight and Shortcuts
 - Observe Messenger replies in the open conversation without relaunching the app
 
 Codex is the first implemented harness. SuperBot finds the Codex executable bundled with ChatGPT or Codex, speaks its native App Server protocol internally, and keeps that implementation behind the provider-neutral `start`, `stop`, and `notify` runtime boundary. ACP is not used.
@@ -61,7 +62,13 @@ From inside a bot workspace:
 ./.agents/skills/messenger/messenger --send --conversation <uuid> --body "Reply text"
 ```
 
-The command can infer the bot UUID and SuperBot repository root from its symlink location or from the private runtime environment. Results are JSON so future shell-oriented harnesses can consume them without provider-specific parsing. Every delivered attachment includes its absolute copied-file path so a harness can open it directly. Codex uses the equivalent native tools and does not launch this helper.
+The command can infer the bot UUID and SuperBot repository root from its symlink location or from the private runtime environment. Results are JSON so harnesses can consume them without provider-specific parsing. Every delivered attachment includes its absolute copied-file path so a harness can open it directly. Codex runs this CLI through its programmatic command bridge; it does not receive private SuperBot messaging tools.
+
+## Quick send with Spotlight and Shortcuts
+
+Install and launch the signed app once, then press Command-Space and search for **Send SuperBot Command**. Choose any current bot or group, enter the command, and macOS delivers it without bringing SuperBot to the foreground. The same action is available in the Shortcuts app for custom keyboard shortcuts, menu-bar shortcuts, and automations.
+
+Bot and group suggestions update after creation, rename, membership changes, and deletion. An App Intent command follows the same path as the composer: SuperBot persists a normal user message and notifies every participating bot.
 
 ## Build, launch, and test
 
@@ -72,13 +79,13 @@ scripts/build-and-launch.sh
 Tests/smoke-test.sh
 ```
 
-The signed application is written to `.build/SuperBot.app`. To install it in `/Applications`:
+The signed application is written to `.build/SuperBot.app`. To install it in `/Applications` and register its App Intent:
 
 ```sh
 scripts/install-app.sh
 ```
 
-Set `SUPERBOT_SIGNING_IDENTITY` when a non-ad-hoc signing identity is required.
+The build automatically uses the first installed Apple Development identity so macOS can index App Intents. Set `SUPERBOT_SIGNING_IDENTITY` to override that choice, or set it to `-` explicitly for an ad-hoc build.
 
 ## Security boundary
 

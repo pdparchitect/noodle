@@ -16,7 +16,14 @@ let package = Package(
         .target(name: "SuperBotCore"),
         .executableTarget(
             name: "SuperBot",
-            dependencies: ["SuperBotCore"]
+            dependencies: ["SuperBotCore"],
+            swiftSettings: [
+                .unsafeFlags([
+                    "-emit-const-values",
+                    "-Xfrontend", "-const-gather-protocols-file",
+                    "-Xfrontend", "Support/AppIntentsProtocols.json"
+                ])
+            ]
         ),
         .executableTarget(
             name: "SuperBotMessenger",

@@ -21,6 +21,13 @@ fi
 
 swift build --disable-sandbox --package-path "$project_root" --configuration "$configuration" >&2
 bin_path="$(swift build --disable-sandbox --package-path "$project_root" --configuration "$configuration" --show-bin-path)"
+developer_dir="$(xcode-select -p)"
+toolchain_dir="$developer_dir/Toolchains/XcodeDefault.xctoolchain"
+sdk_root="$(xcrun --sdk macosx --show-sdk-path)"
+xcode_build_version="$(xcodebuild -version | awk '/Build version/ { print $3 }')"
+target_arch="$(uname -m)"
+intent_source_list="$build_root/SuperBot.AppIntentSources"
+intent_const_values_list="$build_root/SuperBot.AppIntentConstValues"
 
 rm -rf "$app"
 mkdir -p "$contents/MacOS" "$contents/Resources" "$contents/Helpers"
@@ -34,7 +41,37 @@ xcrun actool "$asset_catalog" \
     --app-icon AppIcon \
     --output-partial-info-plist "$build_root/asset-info.plist" >/dev/null
 
-signing_identity="${SUPERBOT_SIGNING_IDENTITY:--}"
+find "$project_root/Sources/SuperBot" -type f -name '*.swift' -print | LC_ALL=C sort > "$intent_source_list"
+find "$bin_path/SuperBot.build" -type f -name '*.swiftconstvalues' -print | LC_ALL=C sort > "$intent_const_values_list"
+xcrun appintentsmetadataprocessor \
+    --toolchain-dir "$toolchain_dir" \
+    --module-name SuperBot \
+    --sdk-root "$sdk_root" \
+    --xcode-version "$xcode_build_version" \
+    --platform-family macOS \
+    --deployment-target 15.0 \
+    --bundle-identifier com.pdparchitect.superbot \
+    --output "$contents/Resources" \
+    --target-triple "$target_arch-apple-macos15.0" \
+    --binary-file "$bin_path/SuperBot" \
+    --source-file-list "$intent_source_list" \
+    --swift-const-vals-list "$intent_const_values_list" \
+    --force \
+    --compile-time-extraction \
+    --deployment-aware-processing \
+    --validate-assistant-intents \
+    --no-app-shortcuts-localization
+test -f "$contents/Resources/Metadata.appintents/extract.actionsdata"
+
+signing_identity="${SUPERBOT_SIGNING_IDENTITY:-}"
+if [[ -z "$signing_identity" ]]; then
+    signing_identity="$(security find-identity -v -p codesigning \
+        | awk -F '"' '/Apple Development:/ { print $2; exit }')"
+fi
+if [[ -z "$signing_identity" ]]; then
+    signing_identity="-"
+    print -u2 "No Apple Development identity found; using ad-hoc signing. App Intents may not be indexed until the app is signed with a development identity."
+fi
 codesign --force --options runtime --timestamp=none \
     --sign "$signing_identity" "$contents/Helpers/messenger"
 codesign --force --options runtime --timestamp=none \

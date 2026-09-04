@@ -46,7 +46,7 @@ Every bot directory is named with an opaque UUID. `AGENTS.md` contains provider-
 
 On app updates, SuperBot refreshes only paths declared in that manifest. Skills created elsewhere under `.agents/skills` remain bot-owned and are not removed.
 
-Codex receives two thread-scoped dynamic tools from SuperBot. `superbot_get_latest` returns unread messages across all conversations containing that bot and advances per-conversation offsets in `.agents/inbox.json`. Linked attachments are projected into delivery records containing an `absolutePath` to the copied conversation-owned payload, allowing the harness to open the exact file without reconstructing storage paths. `superbot_send` validates the conversation and writes the agent reply. A bot never receives its own replies back as unread work. The bundled command-line helper exposes the same repository operations for future harness drivers that prefer shell commands.
+Codex receives only an inbox-changed notification from SuperBot. It then runs `messenger --get-latest --inline-images` through its programmatic command bridge, which returns unread messages across all conversations containing that bot and advances per-conversation offsets in `.agents/inbox.json`. Linked attachments include an `absolutePath` to the copied conversation-owned payload and inline visual data for image inspection. The bot replies with `messenger --send`. A bot never receives its own replies back as unread work, and no private SuperBot messaging tools are injected into the harness.
 
 ## Message and attachment ownership
 
@@ -61,7 +61,9 @@ Sending a user message has two effects:
 1. Persist the message and attachments to the conversation.
 2. Call `notify` on every participating bot through its existing process, creating the process only if that bot does not already have one.
 
-The Codex driver translates `notify` into an inbox-changed event with no message body. Codex must call `superbot_get_latest`, decide what to do, and publish replies with `superbot_send`. This keeps the conversation store authoritative and gives every provider the same retrieval contract. A group chat fans the notification out to participant bot UUIDs; it never creates a group-specific harness process. Notifications coalesce while a bot is already working.
+The Codex driver translates `notify` into an inbox-changed event with no message body. Codex must run the Messenger CLI, decide what to do, and publish replies through that CLI. This keeps the conversation store authoritative and gives every provider the same retrieval contract. A group chat fans the notification out to participant bot UUIDs; it never creates a group-specific harness process. Notifications coalesce while a bot is already working.
+
+The native `SendSuperBotCommandIntent` is another producer of ordinary user messages. Spotlight or Shortcuts resolves a bot or group through an `AppEntity` query, writes the message through the repository, and calls the same runtime `notify` boundary as the in-app composer. App Shortcut parameters are refreshed whenever the conversation catalogue changes.
 
 At application startup, SuperBot starts every configured bot and resumes its stored Codex thread. At application termination, it stops every child process. Creating or editing a bot starts or restarts only that bot.
 
