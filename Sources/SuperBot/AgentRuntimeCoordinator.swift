@@ -144,7 +144,6 @@ final class AgentRuntimeCoordinator {
                 agent: agent,
                 executableURL: URL(fileURLWithPath: executablePath),
                 workspaceURL: repository.directory(for: agent),
-                conversationsURL: repository.conversationsURL,
                 onSnapshot: { [weak self] snapshot in
                     self?.snapshots[snapshot.agentID] = snapshot
                 }
@@ -201,7 +200,6 @@ private final class CodexAgentProcess {
     let configuration: AgentRecord
     private let executableURL: URL
     private let workspaceURL: URL
-    private let conversationsURL: URL
     private let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
     private let stateURL: URL
 
@@ -224,13 +222,11 @@ private final class CodexAgentProcess {
         agent: AgentRecord,
         executableURL: URL,
         workspaceURL: URL,
-        conversationsURL: URL,
         onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void
     ) {
         configuration = agent
         self.executableURL = executableURL
         self.workspaceURL = workspaceURL
-        self.conversationsURL = conversationsURL
         self.onSnapshot = onSnapshot
         stateURL = workspaceURL.appendingPathComponent(".agents/codex-runtime.json")
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
@@ -434,9 +430,8 @@ private final class CodexAgentProcess {
             "cwd": workspaceURL.path,
             "approvalPolicy": "never",
             "sandboxPolicy": [
-                "type": "workspaceWrite",
-                "writableRoots": [workspaceURL.path, conversationsURL.path],
-                "networkAccess": false
+                "type": "externalSandbox",
+                "networkAccess": "restricted"
             ]
         ]
         if let model = configuration.modelIdentifier { params["model"] = model }
@@ -507,10 +502,10 @@ private final class CodexAgentProcess {
     }
 
     private static let developerInstructions = """
-    You are a continuously running SuperBot agent. A SuperBot event is only a notification that your inbox changed; it never contains the user's message. Whenever notified, your first action must be running the bundled Messenger CLI through Codex's programmatic bridge: `const r = await tools.exec_command({cmd: "./.agents/skills/messenger/messenger --get-latest --inline-images", max_output_tokens: 250000}); if (r.exit_code !== 0) throw new Error(r.output); const payload = JSON.parse(r.output); text(payload.deliveries); for (const visual of payload.images) image(visual.dataURL, "original");`. Every delivery explicitly identifies you in `me`, provides a named `participants` roster where your handle is `me`, and annotates the message `sender` with a `user`, `me`, `bot`, or `system` handle. Use these identities instead of guessing from UUIDs. The CLI includes attached images directly as visual inputs, so inspect them without calling a local image viewer. Every attachment also includes its exact `absolutePath` for non-visual file work. Run get-latest only once for each notification because it consumes the inbox. Reply with the Messenger CLI using `--send`, the conversation UUID, and `--body-base64`; encode a UTF-8 reply safely with `const bytes = new TextEncoder().encode(body); let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte); const encoded = btoa(binary);` and pass only `encoded` to the command. Never edit SuperBot's conversation files directly. Do not answer the notification text itself. If the inbox is empty, finish quietly.
+    You are a continuously running SuperBot agent. A SuperBot event is only a notification that your inbox changed; it never contains the user's message. Whenever notified, your first action must be running the bundled Messenger CLI through Codex's programmatic bridge: `const r = await tools.exec_command({cmd: "./.agents/skills/messenger/messenger --get-latest --inline-images", max_output_tokens: 250000}); if (r.exit_code !== 0) throw new Error(r.output); const payload = JSON.parse(r.output); text(payload.deliveries); for (const visual of payload.images) image(visual.dataURL, "original");`. Every delivery explicitly identifies you in `me`, provides a named `participants` roster where your handle is `me`, and annotates the message `sender` with a `user`, `me`, `bot`, or `system` handle. Use these identities instead of guessing from UUIDs. The CLI includes attached images directly as visual inputs, so inspect them without calling a local image viewer. Every attachment also includes its exact `absolutePath` for non-visual file work. Run get-latest only once for each notification because it consumes the inbox. Reply with the Messenger CLI using `--send`, the conversation UUID, and `--body-percent-encoded`; encode a UTF-8 reply with `const encoded = encodeURIComponent(body).replaceAll("'", "%27");` and pass it as a single-quoted command argument. Never edit SuperBot's conversation files directly. Do not answer the notification text itself. If the inbox is empty, finish quietly.
     """
 
-    private static let runtimeVersion = 7
+    private static let runtimeVersion = 8
 }
 
 @MainActor

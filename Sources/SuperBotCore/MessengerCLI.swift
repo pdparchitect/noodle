@@ -157,6 +157,12 @@ public enum MessengerCLI {
         }
 
         private static func messageBody(in arguments: [String]) throws -> String? {
+            if let encoded = option("--body-percent-encoded", in: arguments) {
+                guard let body = encoded.removingPercentEncoding else {
+                    throw MessengerCLIError.invalidArguments
+                }
+                return body
+            }
             if let encoded = option("--body-base64", in: arguments) {
                 guard let data = Data(base64Encoded: encoded),
                       let body = String(data: data, encoding: .utf8) else {
@@ -174,6 +180,7 @@ public enum MessengerCLI {
       messenger --get-latest [--peek] [--inline-images]
       messenger --list-conversations
       messenger --send --conversation <uuid> --body <text>
+      messenger --send --conversation <uuid> --body-percent-encoded <percent-encoded-utf8>
       messenger --send --conversation <uuid> --body-base64 <utf8-base64>
 
     The command normally discovers the bot from its symlink path. For diagnostics, append

@@ -56,11 +56,14 @@ final class RepositoryTests: XCTestCase {
         XCTAssertTrue(agentsGuide.contains("--get-latest --inline-images"))
         XCTAssertTrue(agentsGuide.contains("max_output_tokens: 250000"))
         XCTAssertTrue(agentsGuide.contains("image(visual.dataURL"))
+        XCTAssertTrue(agentsGuide.contains("--body-percent-encoded"))
+        XCTAssertFalse(agentsGuide.contains("TextEncoder"))
         XCTAssertTrue(agentsGuide.contains("named `participants`"))
         XCTAssertFalse(agentsGuide.contains("superbot_get_latest"))
         XCTAssertTrue(messengerGuide.contains("tools.exec_command"))
         XCTAssertTrue(messengerGuide.contains("--get-latest --inline-images"))
         XCTAssertTrue(messengerGuide.contains("max_output_tokens: 250000"))
+        XCTAssertTrue(messengerGuide.contains("--body-percent-encoded"))
         XCTAssertTrue(messengerGuide.contains("named participant roster"))
         XCTAssertFalse(messengerGuide.contains("superbot_get_latest"))
         XCTAssertEqual(created.conversation.participantIDs, [created.agent.id])
@@ -357,12 +360,15 @@ final class RepositoryTests: XCTestCase {
         let second = MessengerCLI.run(arguments: [command.path, "--get-latest"])
         XCTAssertEqual(try decode([MessengerDelivery].self, from: second.standardOutput).count, 0)
 
-        let replyBody = "The workspace bridge is ready. ✓"
+        let replyBody = "The workspace bridge is ready — it's Unicode-safe. ✓"
+        let encodedReplyBody = replyBody.addingPercentEncoding(
+            withAllowedCharacters: .alphanumerics
+        )!
         let reply = MessengerCLI.run(arguments: [
             command.path,
             "--send",
             "--conversation", created.conversation.id.uuidString,
-            "--body-base64", Data(replyBody.utf8).base64EncodedString()
+            "--body-percent-encoded", encodedReplyBody
         ])
         XCTAssertEqual(reply.exitCode, 0)
         let sent = try decode(ChatMessage.self, from: reply.standardOutput)
