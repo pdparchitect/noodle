@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import SwiftUI
 import SuperBotCore
 
@@ -6,6 +7,14 @@ import SuperBotCore
 struct SuperBotApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var store = SuperBotStore()
+
+    init() {
+        guard MessengerCLI.shouldHandle() else { return }
+        let result = MessengerCLI.run()
+        Self.write(result.standardOutput, to: .standardOutput)
+        Self.write(result.standardError, to: .standardError)
+        Darwin.exit(result.exitCode)
+    }
 
     var body: some Scene {
         WindowGroup("SuperBot") {
@@ -38,6 +47,11 @@ struct SuperBotApp: App {
                 .keyboardShortcut("f", modifiers: .command)
             }
         }
+    }
+
+    private static func write(_ value: String, to handle: FileHandle) {
+        guard !value.isEmpty, let data = value.data(using: .utf8) else { return }
+        try? handle.write(contentsOf: data)
     }
 }
 

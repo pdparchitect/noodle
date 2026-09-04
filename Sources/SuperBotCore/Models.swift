@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
@@ -75,6 +76,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public let body: String
     public let createdAt: Date
     public var delivery: MessageDelivery
+    public var attachmentIDs: [UUID]?
 
     public init(
         id: UUID = UUID(),
@@ -82,7 +84,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         author: MessageAuthor,
         body: String,
         createdAt: Date = Date(),
-        delivery: MessageDelivery
+        delivery: MessageDelivery,
+        attachmentIDs: [UUID] = []
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -90,6 +93,71 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.body = body
         self.createdAt = createdAt
         self.delivery = delivery
+        self.attachmentIDs = attachmentIDs.isEmpty ? nil : attachmentIDs
+    }
+
+    public var attachments: [UUID] { attachmentIDs ?? [] }
+}
+
+public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public let conversationID: UUID
+    public let originalFilename: String
+    public let storedFilename: String
+    public let mediaType: String
+    public let byteCount: Int64
+    public let createdAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        conversationID: UUID,
+        originalFilename: String,
+        storedFilename: String,
+        mediaType: String,
+        byteCount: Int64,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.conversationID = conversationID
+        self.originalFilename = originalFilename
+        self.storedFilename = storedFilename
+        self.mediaType = mediaType
+        self.byteCount = byteCount
+        self.createdAt = createdAt
+    }
+}
+
+public struct AgentInbox: Codable, Hashable, Sendable {
+    public var conversationOffsets: [String: Int]
+
+    public init(conversationOffsets: [String: Int] = [:]) {
+        self.conversationOffsets = conversationOffsets
+    }
+}
+
+public struct MessengerDelivery: Codable, Hashable, Sendable {
+    public let conversation: BotConversation
+    public let message: ChatMessage
+    public let attachments: [ConversationAttachment]
+
+    public init(
+        conversation: BotConversation,
+        message: ChatMessage,
+        attachments: [ConversationAttachment]
+    ) {
+        self.conversation = conversation
+        self.message = message
+        self.attachments = attachments
+    }
+}
+
+public struct ManagedSkillManifest: Codable, Hashable, Sendable {
+    public let version: Int
+    public let managedPaths: [String]
+
+    public init(version: Int, managedPaths: [String]) {
+        self.version = version
+        self.managedPaths = managedPaths
     }
 }
 
@@ -101,7 +169,10 @@ public struct CreatedAgentWorkspace: Sendable {
 public enum WorkspaceError: LocalizedError, Equatable {
     case emptyName
     case missingAgent(UUID)
+    case missingConversation(UUID)
     case insufficientGroupParticipants
+    case invalidAgentDirectory
+    case invalidAttachment
 
     public var errorDescription: String? {
         switch self {
@@ -109,17 +180,27 @@ public enum WorkspaceError: LocalizedError, Equatable {
             return "Enter a name."
         case .missingAgent:
             return "One of the selected bots no longer exists."
+        case .missingConversation:
+            return "The selected conversation no longer exists."
         case .insufficientGroupParticipants:
             return "Choose at least two bots for a group."
+        case .invalidAgentDirectory:
+            return "The Messenger command is not inside a valid bot workspace."
+        case .invalidAttachment:
+            return "The selected attachment could not be imported."
         }
     }
 }
 
 public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
+    public let launcherExecutableURL: URL?
 
-    public init(rootURL: URL) {
+    public static let managedSkillVersion = 1
+
+    public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
         self.rootURL = rootURL.standardizedFileURL
+        self.launcherExecutableURL = launcherExecutableURL?.standardizedFileURL
     }
 
     public var agentsURL: URL {
@@ -153,6 +234,7 @@ public struct WorkspaceRepository: Sendable {
             atomically: true,
             encoding: .utf8
         )
+        try synchronizeAgentWorkspace(agent)
 
         let conversation = BotConversation(
             displayName: name,
@@ -201,9 +283,166 @@ public struct WorkspaceRepository: Sendable {
 
     public func append(_ message: ChatMessage) throws {
         let file = conversationDirectory(id: message.conversationID).appendingPathComponent("messages.json")
-        var messages = (try? read([ChatMessage].self, from: file)) ?? []
-        messages.append(message)
-        try write(messages, to: file)
+        try withConversationLock(message.conversationID) {
+            var messages = (try? read([ChatMessage].self, from: file)) ?? []
+            messages.append(message)
+            try write(messages, to: file)
+        }
+    }
+
+    public func synchronizeAgentWorkspaces(_ agents: [AgentRecord]) throws {
+        for agent in agents {
+            try synchronizeAgentWorkspace(agent)
+        }
+    }
+
+    public func synchronizeAgentWorkspace(_ agent: AgentRecord) throws {
+        let directory = directory(for: agent)
+        guard FileManager.default.fileExists(atPath: directory.path) else {
+            throw WorkspaceError.missingAgent(agent.id)
+        }
+
+        let agentsDirectory = directory.appendingPathComponent(".agents", isDirectory: true)
+        let messengerDirectory = agentsDirectory
+            .appendingPathComponent("skills", isDirectory: true)
+            .appendingPathComponent("messenger", isDirectory: true)
+        try FileManager.default.createDirectory(at: messengerDirectory, withIntermediateDirectories: true)
+
+        let agentsFile = directory.appendingPathComponent("AGENTS.md")
+        try Self.agentsInstructions.write(to: agentsFile, atomically: true, encoding: .utf8)
+
+        let claudeFile = directory.appendingPathComponent("CLAUDE.md")
+        try replaceSymlink(at: claudeFile, destinationPath: "AGENTS.md")
+
+        let skillFile = messengerDirectory.appendingPathComponent("SKILL.md")
+        try Self.messengerSkill.write(to: skillFile, atomically: true, encoding: .utf8)
+
+        if let launcherExecutableURL {
+            let command = messengerDirectory.appendingPathComponent("messenger")
+            try replaceSymlink(at: command, destinationPath: launcherExecutableURL.path)
+        }
+
+        let manifest = ManagedSkillManifest(
+            version: Self.managedSkillVersion,
+            managedPaths: [
+                "AGENTS.md",
+                "CLAUDE.md",
+                ".agents/skills/messenger/SKILL.md",
+                ".agents/skills/messenger/messenger"
+            ]
+        )
+        try write(manifest, to: agentsDirectory.appendingPathComponent("managed-skills.json"))
+    }
+
+    public func importAttachment(
+        from sourceURL: URL,
+        into conversationID: UUID,
+        mediaType: String,
+        now: Date = Date()
+    ) throws -> ConversationAttachment {
+        guard try loadConversations().contains(where: { $0.id == conversationID }) else {
+            throw WorkspaceError.missingConversation(conversationID)
+        }
+        let values = try sourceURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+        guard values.isRegularFile == true else { throw WorkspaceError.invalidAttachment }
+
+        let attachmentID = UUID()
+        let attachment = ConversationAttachment(
+            id: attachmentID,
+            conversationID: conversationID,
+            originalFilename: sourceURL.lastPathComponent,
+            storedFilename: storedAttachmentName(id: attachmentID, originalFilename: sourceURL.lastPathComponent),
+            mediaType: mediaType,
+            byteCount: Int64(values.fileSize ?? 0),
+            createdAt: now
+        )
+        let directory = attachmentsDirectory(conversationID: conversationID)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(
+            at: sourceURL,
+            to: directory.appendingPathComponent(attachment.storedFilename)
+        )
+        try write(attachment, to: directory.appendingPathComponent("\(attachment.id.uuidString.lowercased()).json"))
+        return attachment
+    }
+
+    public func loadAttachments(conversationID: UUID) throws -> [ConversationAttachment] {
+        let directory = attachmentsDirectory(conversationID: conversationID)
+        guard FileManager.default.fileExists(atPath: directory.path) else { return [] }
+        return try FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        .filter { $0.pathExtension == "json" }
+        .map { try read(ConversationAttachment.self, from: $0) }
+        .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    public func attachmentFileURL(_ attachment: ConversationAttachment) -> URL {
+        attachmentsDirectory(conversationID: attachment.conversationID)
+            .appendingPathComponent(attachment.storedFilename)
+    }
+
+    public func latestMessages(for agentID: UUID, consuming: Bool = true) throws -> [MessengerDelivery] {
+        guard try loadAgents().contains(where: { $0.id == agentID }) else {
+            throw WorkspaceError.missingAgent(agentID)
+        }
+        let conversations = try loadConversations().filter { $0.participantIDs.contains(agentID) }
+        let inboxFile = directory(forAgentID: agentID).appendingPathComponent(".agents/inbox.json")
+        var inbox = (try? read(AgentInbox.self, from: inboxFile)) ?? AgentInbox()
+        var deliveries: [MessengerDelivery] = []
+
+        for conversation in conversations {
+            let messages = try loadMessages(conversationID: conversation.id)
+            let key = conversation.id.uuidString.lowercased()
+            let offset = min(inbox.conversationOffsets[key, default: 0], messages.count)
+            let attachments = try loadAttachments(conversationID: conversation.id)
+            let byID = Dictionary(uniqueKeysWithValues: attachments.map { ($0.id, $0) })
+
+            for message in messages.dropFirst(offset) {
+                if case .agent(let authorID) = message.author, authorID == agentID { continue }
+                deliveries.append(
+                    MessengerDelivery(
+                        conversation: conversation,
+                        message: message,
+                        attachments: message.attachments.compactMap { byID[$0] }
+                    )
+                )
+            }
+            if consuming { inbox.conversationOffsets[key] = messages.count }
+        }
+
+        if consuming { try write(inbox, to: inboxFile) }
+        return deliveries.sorted { $0.message.createdAt < $1.message.createdAt }
+    }
+
+    public func sendAgentMessage(
+        agentID: UUID,
+        conversationID: UUID,
+        body: String,
+        now: Date = Date()
+    ) throws -> ChatMessage {
+        let name = try validatedName(body)
+        guard try loadAgents().contains(where: { $0.id == agentID }) else {
+            throw WorkspaceError.missingAgent(agentID)
+        }
+        guard let conversation = try loadConversations().first(where: { $0.id == conversationID }),
+              conversation.participantIDs.contains(agentID) else {
+            throw WorkspaceError.missingConversation(conversationID)
+        }
+        let message = ChatMessage(
+            conversationID: conversationID,
+            author: .agent(agentID),
+            body: name,
+            createdAt: now,
+            delivery: .delivered
+        )
+        try append(message)
+        var updated = conversation
+        updated.updatedAt = now
+        try updateConversation(updated)
+        return message
     }
 
     public func updateConversation(_ conversation: BotConversation) throws {
@@ -230,11 +469,19 @@ public struct WorkspaceRepository: Sendable {
     }
 
     public func directory(for agent: AgentRecord) -> URL {
-        agentsURL.appendingPathComponent(agent.id.uuidString.lowercased(), isDirectory: true)
+        directory(forAgentID: agent.id)
+    }
+
+    public func directory(forAgentID id: UUID) -> URL {
+        agentsURL.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true)
     }
 
     public func conversationDirectory(id: UUID) -> URL {
         conversationsURL.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true)
+    }
+
+    public func attachmentsDirectory(conversationID: UUID) -> URL {
+        conversationDirectory(id: conversationID).appendingPathComponent("Attachments", isDirectory: true)
     }
 
     private func createConversationFiles(_ conversation: BotConversation) throws {
@@ -243,6 +490,10 @@ public struct WorkspaceRepository: Sendable {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
         try write(conversation, to: directory.appendingPathComponent("conversation.json"))
         try write([ChatMessage](), to: directory.appendingPathComponent("messages.json"))
+        try FileManager.default.createDirectory(
+            at: attachmentsDirectory(conversationID: conversation.id),
+            withIntermediateDirectories: true
+        )
     }
 
     private func validatedName(_ rawName: String) throws -> String {
@@ -283,4 +534,60 @@ public struct WorkspaceRepository: Sendable {
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(type, from: Data(contentsOf: url))
     }
+
+    private func replaceSymlink(at url: URL, destinationPath: String) throws {
+        if FileManager.default.fileExists(atPath: url.path) ||
+            (try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)) != nil {
+            try FileManager.default.removeItem(at: url)
+        }
+        try FileManager.default.createSymbolicLink(atPath: url.path, withDestinationPath: destinationPath)
+    }
+
+    private func storedAttachmentName(id: UUID, originalFilename: String) -> String {
+        let suffix = URL(fileURLWithPath: originalFilename).pathExtension
+        return id.uuidString.lowercased() + (suffix.isEmpty ? "" : ".\(suffix)")
+    }
+
+    private func withConversationLock<Value>(_ id: UUID, operation: () throws -> Value) throws -> Value {
+        let lockURL = conversationDirectory(id: id).appendingPathComponent(".messages.lock")
+        let descriptor = Darwin.open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        guard descriptor >= 0 else { throw POSIXError(.EIO) }
+        defer { Darwin.close(descriptor) }
+        guard flock(descriptor, LOCK_EX) == 0 else { throw POSIXError(.EIO) }
+        defer { flock(descriptor, LOCK_UN) }
+        return try operation()
+    }
+
+    private static let agentsInstructions = """
+    # SuperBot Agent
+
+    This directory is the bot's persistent workspace. SuperBot manages the Messenger core skill; other skills under `.agents/skills` belong to this bot and are left untouched.
+
+    ## Messages
+
+    Read new direct and group messages:
+
+    ```sh
+    ./.agents/skills/messenger/messenger --get-latest
+    ```
+
+    Reply to a conversation:
+
+    ```sh
+    ./.agents/skills/messenger/messenger --send --conversation <conversation-uuid> --body "Your response"
+    ```
+    """
+
+    private static let messengerSkill = """
+    ---
+    name: messenger
+    description: Read and reply to this bot's SuperBot direct and group conversations.
+    ---
+
+    # Messenger
+
+    Run `./.agents/skills/messenger/messenger --get-latest` to receive unread messages as JSON. Each delivery includes the conversation, message, and linked attachment metadata.
+
+    Reply with `./.agents/skills/messenger/messenger --send --conversation <uuid> --body <text>`. The executable identifies this bot from the opaque workspace path. Do not edit SuperBot's conversation JSON directly.
+    """
 }

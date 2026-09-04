@@ -39,7 +39,8 @@ final class SuperBotStore {
                 in: .userDomainMask
             ).first!
             self.repository = WorkspaceRepository(
-                rootURL: applicationSupport.appendingPathComponent("SuperBot", isDirectory: true)
+                rootURL: applicationSupport.appendingPathComponent("SuperBot", isDirectory: true),
+                launcherExecutableURL: Bundle.main.executableURL
             )
         }
 
@@ -77,6 +78,7 @@ final class SuperBotStore {
         do {
             try repository.prepare()
             agents = try repository.loadAgents()
+            try repository.synchronizeAgentWorkspaces(agents)
             conversations = try repository.loadConversations()
             messagesByConversation = try Dictionary(
                 uniqueKeysWithValues: conversations.map {
