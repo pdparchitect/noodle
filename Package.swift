@@ -9,12 +9,17 @@ let package = Package(
     ],
     products: [
         .library(name: "SuperBotCore", targets: ["SuperBotCore"]),
-        .executable(name: "SuperBot", targets: ["SuperBot"])
+        .executable(name: "SuperBot", targets: ["SuperBot"]),
+        .executable(name: "SuperBotMessenger", targets: ["SuperBotMessenger"])
     ],
     targets: [
         .target(name: "SuperBotCore"),
         .executableTarget(
             name: "SuperBot",
+            dependencies: ["SuperBotCore"]
+        ),
+        .executableTarget(
+            name: "SuperBotMessenger",
             dependencies: ["SuperBotCore"]
         ),
         .testTarget(

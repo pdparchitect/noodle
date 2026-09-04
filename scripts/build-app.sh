@@ -23,8 +23,9 @@ swift build --disable-sandbox --package-path "$project_root" --configuration "$c
 bin_path="$(swift build --disable-sandbox --package-path "$project_root" --configuration "$configuration" --show-bin-path)"
 
 rm -rf "$app"
-mkdir -p "$contents/MacOS" "$contents/Resources"
+mkdir -p "$contents/MacOS" "$contents/Resources" "$contents/Helpers"
 cp "$bin_path/SuperBot" "$contents/MacOS/SuperBot"
+cp "$bin_path/SuperBotMessenger" "$contents/Helpers/messenger"
 cp "$project_root/Support/Info.plist" "$contents/Info.plist"
 xcrun actool "$asset_catalog" \
     --compile "$contents/Resources" \
@@ -34,7 +35,9 @@ xcrun actool "$asset_catalog" \
     --output-partial-info-plist "$build_root/asset-info.plist" >/dev/null
 
 signing_identity="${SUPERBOT_SIGNING_IDENTITY:--}"
-codesign --force --deep --options runtime --timestamp=none \
+codesign --force --options runtime --timestamp=none \
+    --sign "$signing_identity" "$contents/Helpers/messenger"
+codesign --force --options runtime --timestamp=none \
     --entitlements "$entitlements" \
     --sign "$signing_identity" "$app"
 codesign --verify --deep --strict --verbose=2 "$app"

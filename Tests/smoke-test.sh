@@ -12,6 +12,12 @@ swift test --disable-sandbox --package-path "$project_root"
 app="$(SUPERBOT_BUILD_CONFIGURATION=debug "$project_root/scripts/build-app.sh")"
 
 codesign --verify --deep --strict --verbose=2 "$app"
+codesign --verify --strict --verbose=2 "$app/Contents/Helpers/messenger"
+
+if [[ ! -x "$app/Contents/Helpers/messenger" ]]; then
+    print -u2 "Bundled Messenger helper is missing or not executable."
+    exit 1
+fi
 
 entitlements="$(codesign -d --entitlements :- "$app" 2>/dev/null)"
 compact_entitlements="$(print -r -- "$entitlements" | tr -d '[:space:]')"
@@ -25,8 +31,18 @@ if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.file
     exit 1
 fi
 
+if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.network.client</key><true/>'; then
+    print -u2 "Outgoing network entitlement is missing."
+    exit 1
+fi
+
 if otool -L "$app/Contents/MacOS/SuperBot" | grep -Eq '/opt/homebrew|/usr/local'; then
     print -u2 "The app links against a mutable external dependency."
+    exit 1
+fi
+
+if otool -L "$app/Contents/Helpers/messenger" | grep -Eq '/opt/homebrew|/usr/local'; then
+    print -u2 "The Messenger helper links against a mutable external dependency."
     exit 1
 fi
 

@@ -160,6 +160,25 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(sent.delivery, .delivered)
     }
 
+    func testMessengerCanUseRuntimeWorkspaceEnvironment() throws {
+        let created = try repository.createAgent(named: "Environment Bot")
+        let incoming = ChatMessage(
+            conversationID: created.conversation.id,
+            author: .user,
+            body: "Wake up",
+            delivery: .queued
+        )
+        try repository.append(incoming)
+
+        let result = MessengerCLI.run(
+            arguments: ["messenger", "--get-latest"],
+            environment: ["SUPERBOT_WORKSPACE": repository.directory(for: created.agent).path]
+        )
+
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertEqual(try decode([MessengerDelivery].self, from: result.standardOutput).count, 1)
+    }
+
     private func decode<Value: Decodable>(_ type: Value.Type, from string: String) throws -> Value {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

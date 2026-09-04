@@ -42,9 +42,13 @@ final class SuperBotStore {
                 for: .applicationSupportDirectory,
                 in: .userDomainMask
             ).first!
+            let bundledMessenger = Bundle.main.bundleURL
+                .appendingPathComponent("Contents/Helpers/messenger")
             self.repository = WorkspaceRepository(
                 rootURL: applicationSupport.appendingPathComponent("SuperBot", isDirectory: true),
-                launcherExecutableURL: Bundle.main.executableURL
+                launcherExecutableURL: FileManager.default.isExecutableFile(atPath: bundledMessenger.path)
+                    ? bundledMessenger
+                    : Bundle.main.executableURL
             )
         }
 

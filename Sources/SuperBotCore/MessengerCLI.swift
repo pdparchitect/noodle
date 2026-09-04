@@ -19,9 +19,12 @@ public enum MessengerCLI {
             arguments.dropFirst().first == "messenger"
     }
 
-    public static func run(arguments: [String] = CommandLine.arguments) -> MessengerCommandResult {
+    public static func run(
+        arguments: [String] = CommandLine.arguments,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> MessengerCommandResult {
         do {
-            let invocation = try Invocation(arguments: arguments)
+            let invocation = try Invocation(arguments: arguments, environment: environment)
             let repository = WorkspaceRepository(rootURL: invocation.repositoryRoot)
 
             switch invocation.action {
@@ -68,7 +71,7 @@ public enum MessengerCLI {
         let agentID: UUID
         let action: Action
 
-        init(arguments: [String]) throws {
+        init(arguments: [String], environment: [String: String]) throws {
             guard let executable = arguments.first else { throw WorkspaceError.invalidAgentDirectory }
             var values = Array(arguments.dropFirst())
             if values.first == "messenger" { values.removeFirst() }
@@ -76,7 +79,10 @@ public enum MessengerCLI {
             let explicitDirectory = Self.option("--agent-directory", in: values).map {
                 URL(fileURLWithPath: $0, isDirectory: true)
             }
-            let agentDirectory = try explicitDirectory ?? Self.agentDirectory(from: executable)
+            let environmentDirectory = environment["SUPERBOT_WORKSPACE"].map {
+                URL(fileURLWithPath: $0, isDirectory: true)
+            }
+            let agentDirectory = try explicitDirectory ?? environmentDirectory ?? Self.agentDirectory(from: executable)
             guard let id = UUID(uuidString: agentDirectory.lastPathComponent) else {
                 throw WorkspaceError.invalidAgentDirectory
             }
@@ -107,7 +113,12 @@ public enum MessengerCLI {
         }
 
         private static func agentDirectory(from executable: String) throws -> URL {
-            let executableURL = URL(fileURLWithPath: executable)
+            let currentDirectory = URL(
+                fileURLWithPath: FileManager.default.currentDirectoryPath,
+                isDirectory: true
+            )
+            let executableURL = URL(fileURLWithPath: executable, relativeTo: currentDirectory)
+                .standardizedFileURL
             guard executableURL.lastPathComponent == "messenger" else {
                 throw WorkspaceError.invalidAgentDirectory
             }
