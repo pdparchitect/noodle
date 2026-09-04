@@ -141,17 +141,45 @@ public struct AgentInbox: Codable, Hashable, Sendable {
     }
 }
 
+public enum MessengerHandle: String, Codable, Hashable, Sendable {
+    case user
+    case me
+    case bot
+    case system
+}
+
+public struct MessengerIdentity: Codable, Hashable, Sendable {
+    public let handle: MessengerHandle
+    public let agentID: UUID?
+    public let displayName: String
+
+    public init(handle: MessengerHandle, agentID: UUID? = nil, displayName: String) {
+        self.handle = handle
+        self.agentID = agentID
+        self.displayName = displayName
+    }
+}
+
 public struct MessengerDelivery: Codable, Hashable, Sendable {
+    public let me: MessengerIdentity
     public let conversation: BotConversation
+    public let participants: [MessengerIdentity]
+    public let sender: MessengerIdentity
     public let message: ChatMessage
     public let attachments: [ConversationAttachment]
 
     public init(
+        me: MessengerIdentity,
         conversation: BotConversation,
+        participants: [MessengerIdentity],
+        sender: MessengerIdentity,
         message: ChatMessage,
         attachments: [ConversationAttachment]
     ) {
+        self.me = me
         self.conversation = conversation
+        self.participants = participants
+        self.sender = sender
         self.message = message
         self.attachments = attachments
     }
@@ -475,9 +503,12 @@ public struct WorkspaceRepository: Sendable {
     }
 
     public func latestMessages(for agentID: UUID, consuming: Bool = true) throws -> [MessengerDelivery] {
-        guard try loadAgents().contains(where: { $0.id == agentID }) else {
+        let agents = try loadAgents()
+        guard let readingAgent = agents.first(where: { $0.id == agentID }) else {
             throw WorkspaceError.missingAgent(agentID)
         }
+        let agentsByID = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, $0) })
+        let me = MessengerIdentity(handle: .me, agentID: agentID, displayName: readingAgent.displayName)
         let conversations = try loadConversations().filter { $0.participantIDs.contains(agentID) }
         let inboxFile = directory(forAgentID: agentID).appendingPathComponent(".agents/inbox.json")
         var inbox = (try? read(AgentInbox.self, from: inboxFile)) ?? AgentInbox()
@@ -489,12 +520,40 @@ public struct WorkspaceRepository: Sendable {
             let offset = min(inbox.conversationOffsets[key, default: 0], messages.count)
             let attachments = try loadAttachments(conversationID: conversation.id)
             let byID = Dictionary(uniqueKeysWithValues: attachments.map { ($0.id, $0) })
+            let participants = conversation.participantIDs.map { participantID in
+                if participantID == agentID { return me }
+                return MessengerIdentity(
+                    handle: .bot,
+                    agentID: participantID,
+                    displayName: agentsByID[participantID]?.displayName ?? "Unknown Bot"
+                )
+            }
 
             for message in messages.dropFirst(offset) {
                 if case .agent(let authorID) = message.author, authorID == agentID { continue }
+                let sender: MessengerIdentity
+                switch message.author {
+                case .user:
+                    sender = MessengerIdentity(handle: .user, displayName: "User")
+                case .agent(let authorID):
+                    if authorID == agentID {
+                        sender = me
+                    } else {
+                        sender = MessengerIdentity(
+                            handle: .bot,
+                            agentID: authorID,
+                            displayName: agentsByID[authorID]?.displayName ?? "Unknown Bot"
+                        )
+                    }
+                case .system:
+                    sender = MessengerIdentity(handle: .system, displayName: "SuperBot")
+                }
                 deliveries.append(
                     MessengerDelivery(
+                        me: me,
                         conversation: conversation,
+                        participants: participants,
+                        sender: sender,
                         message: message,
                         attachments: message.attachments.compactMap { byID[$0] }
                     )
@@ -682,7 +741,7 @@ public struct WorkspaceRepository: Sendable {
 
     ## Messages
 
-    SuperBot notifications only mean that this inbox may have changed. They never contain the user's message. In Codex, immediately invoke the harness-provided tool through the programmatic bridge and forward its complete return value: `const deliveries = await tools.superbot_get_latest({}); text(deliveries);`. Inspect every JSON delivery and respond when appropriate with `const sent = await tools.superbot_send({conversationID: "<uuid>", body: "<reply>"}); text(sent);`. SuperBot tools return their payload directly; never inspect `result.content`. Never reply to the notification text itself. If there are no deliveries, finish quietly.
+    SuperBot notifications only mean that this inbox may have changed. They never contain the user's message. In Codex, immediately invoke the harness-provided tool through the programmatic bridge and forward its complete return value: `const deliveries = await tools.superbot_get_latest({}); text(deliveries);`. Every delivery names `me`, lists the conversation's named `participants`, and annotates the message `sender` with a `user`, `me`, `bot`, or `system` handle. Inspect every JSON delivery and respond when appropriate with `const sent = await tools.superbot_send({conversationID: "<uuid>", body: "<reply>"}); text(sent);`. SuperBot tools return their payload directly; never inspect `result.content`. Never reply to the notification text itself. If there are no deliveries, finish quietly.
 
     Read new direct and group messages:
 
@@ -705,7 +764,7 @@ public struct WorkspaceRepository: Sendable {
 
     # Messenger
 
-    In Codex, invoke `superbot_get_latest` through the programmatic bridge and forward its complete return value with `text(deliveries)`: `const deliveries = await tools.superbot_get_latest({}); text(deliveries);`. Each delivery includes the conversation, message, and linked attachment metadata. Reply with `const sent = await tools.superbot_send({conversationID: "<uuid>", body: "<reply>"}); text(sent);`. SuperBot tools return their payload directly; never inspect `result.content`.
+    In Codex, invoke `superbot_get_latest` through the programmatic bridge and forward its complete return value with `text(deliveries)`: `const deliveries = await tools.superbot_get_latest({}); text(deliveries);`. Each delivery includes `me`, a named participant roster, an explicitly annotated sender (`user`, `me`, `bot`, or `system`), the message, and linked attachment metadata. Reply with `const sent = await tools.superbot_send({conversationID: "<uuid>", body: "<reply>"}); text(sent);`. SuperBot tools return their payload directly; never inspect `result.content`.
 
     The bundled command-line helper remains available to harnesses that use shell commands:
 

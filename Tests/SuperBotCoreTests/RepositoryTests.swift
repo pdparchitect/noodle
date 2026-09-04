@@ -53,8 +53,10 @@ final class RepositoryTests: XCTestCase {
             encoding: .utf8
         )
         XCTAssertTrue(agentsGuide.contains("text(deliveries)"))
+        XCTAssertTrue(agentsGuide.contains("named `participants`"))
         XCTAssertTrue(agentsGuide.contains("never inspect `result.content`"))
         XCTAssertTrue(messengerGuide.contains("text(deliveries)"))
+        XCTAssertTrue(messengerGuide.contains("named participant roster"))
         XCTAssertTrue(messengerGuide.contains("never inspect `result.content`"))
         XCTAssertEqual(created.conversation.participantIDs, [created.agent.id])
     }
@@ -285,6 +287,49 @@ final class RepositoryTests: XCTestCase {
         let sent = try decode(ChatMessage.self, from: reply.standardOutput)
         XCTAssertEqual(sent.author, .agent(created.agent.id))
         XCTAssertEqual(sent.delivery, .delivered)
+    }
+
+    func testMessengerDeliveryIdentifiesMeParticipantsAndEachSender() throws {
+        let buildBot = try repository.createAgent(named: "Build Bot")
+        let bob = try repository.createAgent(named: "Bob")
+        let group = try repository.createGroup(
+            named: "The war room",
+            participantIDs: [buildBot.agent.id, bob.agent.id],
+            existingAgents: [buildBot.agent, bob.agent]
+        )
+        try repository.append(ChatMessage(
+            conversationID: group.id,
+            author: .user,
+            body: "Who is here?",
+            delivery: .delivered
+        ))
+        _ = try repository.sendAgentMessage(
+            agentID: bob.agent.id,
+            conversationID: group.id,
+            body: "Bob is here."
+        )
+
+        let deliveries = try repository.latestMessages(for: buildBot.agent.id, consuming: false)
+        XCTAssertEqual(deliveries.count, 2)
+        XCTAssertEqual(
+            deliveries.first?.me,
+            MessengerIdentity(handle: .me, agentID: buildBot.agent.id, displayName: "Build Bot")
+        )
+
+        let participants = try XCTUnwrap(deliveries.first?.participants)
+        XCTAssertTrue(participants.contains(
+            MessengerIdentity(handle: .me, agentID: buildBot.agent.id, displayName: "Build Bot")
+        ))
+        XCTAssertTrue(participants.contains(
+            MessengerIdentity(handle: .bot, agentID: bob.agent.id, displayName: "Bob")
+        ))
+        XCTAssertEqual(
+            deliveries.map(\.sender),
+            [
+                MessengerIdentity(handle: .user, displayName: "User"),
+                MessengerIdentity(handle: .bot, agentID: bob.agent.id, displayName: "Bob")
+            ]
+        )
     }
 
     func testMessengerCanUseRuntimeWorkspaceEnvironment() throws {
