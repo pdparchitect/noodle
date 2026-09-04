@@ -32,20 +32,9 @@ struct BotAvatar: View {
                 Circle()
                     .fill(LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing))
 
-                if let symbolName = agent.avatarSymbolName {
-                    Image(systemName: symbolName)
-                        .font(.system(size: size * 0.38, weight: .semibold))
-                        .foregroundStyle(.white)
-                } else {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: size * 0.33, weight: .bold))
-                        .foregroundStyle(.white)
-
-                    Text(agent.displayName.prefix(1).uppercased())
-                        .font(.system(size: size * 0.26, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .offset(y: size * 0.24)
-                }
+                Image(systemName: agent.avatarSymbolName ?? "sparkles")
+                    .font(.system(size: size * 0.38, weight: .semibold))
+                    .foregroundStyle(.white)
             }
         }
         .frame(width: size, height: size)

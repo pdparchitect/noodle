@@ -279,8 +279,8 @@ private struct BotIconEditor: View {
     @State private var isLoadingPhoto = false
     @State private var photoError: String?
 
-    private let symbols: [String?] = [
-        nil,
+    private let symbols = [
+        "sparkles",
         "bolt.fill",
         "brain.head.profile",
         "hammer.fill",
@@ -304,7 +304,7 @@ private struct BotIconEditor: View {
         _symbolName = symbolName
         _colorIndex = colorIndex
         _imageData = imageData
-        _editedSymbolName = State(initialValue: symbolName.wrappedValue)
+        _editedSymbolName = State(initialValue: symbolName.wrappedValue ?? "sparkles")
         _editedColorIndex = State(initialValue: colorIndex.wrappedValue)
         _editedImageData = State(initialValue: imageData.wrappedValue)
     }
@@ -402,13 +402,8 @@ private struct BotIconEditor: View {
                                                 ? Color.accentColor
                                                 : Color.secondary.opacity(0.14)
                                         )
-                                    if let symbol {
-                                        Image(systemName: symbol)
-                                            .font(.system(size: 18, weight: .semibold))
-                                    } else {
-                                        Text(previewInitial)
-                                            .font(.system(size: 18, weight: .bold, design: .rounded))
-                                    }
+                                    Image(systemName: symbol)
+                                        .font(.system(size: 18, weight: .semibold))
                                 }
                                 .foregroundStyle(
                                     isSelected(symbol) ? Color.white : Color.primary
@@ -416,7 +411,7 @@ private struct BotIconEditor: View {
                                 .frame(height: 42)
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel(symbol ?? "Monogram")
+                            .accessibilityLabel(symbol)
                         }
                     }
                     .padding(8)
@@ -431,11 +426,6 @@ private struct BotIconEditor: View {
             guard let item else { return }
             Task { await loadPhoto(item) }
         }
-    }
-
-    private var previewInitial: String {
-        let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.first.map { String($0).uppercased() } ?? "B"
     }
 
     private var normalizedColorIndex: Int {
