@@ -1,37 +1,55 @@
 import SwiftUI
 import SuperBotCore
 
+enum BotAvatarPalette {
+    static let gradients: [[Color]] = [
+        [.blue, .cyan],
+        [.purple, .pink],
+        [.orange, .yellow],
+        [.mint, .teal],
+        [.indigo, .blue],
+        [.pink, .orange]
+    ]
+}
+
 struct BotAvatar: View {
     let agent: AgentRecord
     let size: CGFloat
 
     private var palette: [Color] {
-        let palettes: [[Color]] = [
-            [.blue, .cyan],
-            [.purple, .pink],
-            [.orange, .yellow],
-            [.mint, .teal],
-            [.indigo, .blue],
-            [.pink, .orange]
-        ]
-        return palettes[abs(agent.accentSeed) % palettes.count]
+        let index = agent.avatarColorIndex ?? agent.accentSeed
+        return BotAvatarPalette.gradients[abs(index) % BotAvatarPalette.gradients.count]
     }
 
     var body: some View {
         ZStack {
-            Circle()
-                .fill(LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing))
+            if let data = agent.avatarImageData,
+               let image = NSImage(data: data) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Circle()
+                    .fill(LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing))
 
-            Image(systemName: "sparkles")
-                .font(.system(size: size * 0.33, weight: .bold))
-                .foregroundStyle(.white)
+                if let symbolName = agent.avatarSymbolName {
+                    Image(systemName: symbolName)
+                        .font(.system(size: size * 0.38, weight: .semibold))
+                        .foregroundStyle(.white)
+                } else {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: size * 0.33, weight: .bold))
+                        .foregroundStyle(.white)
 
-            Text(agent.displayName.prefix(1).uppercased())
-                .font(.system(size: size * 0.26, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-                .offset(y: size * 0.24)
+                    Text(agent.displayName.prefix(1).uppercased())
+                        .font(.system(size: size * 0.26, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .offset(y: size * 0.24)
+                }
+            }
         }
         .frame(width: size, height: size)
+        .clipShape(Circle())
         .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
         .accessibilityHidden(true)
     }

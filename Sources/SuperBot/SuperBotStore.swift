@@ -144,7 +144,10 @@ final class SuperBotStore {
         name: String,
         harnessIdentifier: String,
         modelIdentifier: String?,
-        reasoningEffort: String?
+        reasoningEffort: String?,
+        avatarSymbolName: String?,
+        avatarColorIndex: Int,
+        avatarImageData: Data?
     ) -> Bool {
         do {
             let updated = try repository.updateAgent(
@@ -152,7 +155,10 @@ final class SuperBotStore {
                 displayName: name,
                 harnessIdentifier: harnessIdentifier,
                 modelIdentifier: modelIdentifier,
-                reasoningEffort: reasoningEffort
+                reasoningEffort: reasoningEffort,
+                avatarSymbolName: avatarSymbolName,
+                avatarColorIndex: avatarColorIndex,
+                avatarImageData: avatarImageData
             )
             if let index = agents.firstIndex(where: { $0.id == agent.id }) {
                 agents[index] = updated
