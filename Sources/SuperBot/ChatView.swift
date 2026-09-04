@@ -1,3 +1,4 @@
+import QuickLook
 import SwiftUI
 import SuperBotCore
 import UniformTypeIdentifiers
@@ -7,6 +8,8 @@ struct ChatView: View {
     let conversation: BotConversation
     @FocusState private var composerFocused: Bool
     @State private var choosingAttachments = false
+    @State private var selectedAttachmentID: UUID?
+    @State private var previewedAttachmentURL: URL?
     private let transcriptBottomID = "transcript-bottom"
 
     var body: some View {
@@ -32,6 +35,11 @@ struct ChatView: View {
                 store.errorMessage = error.localizedDescription
             }
         }
+        .quickLookPreview($previewedAttachmentURL)
+        .onChange(of: conversation.id) { _, _ in
+            selectedAttachmentID = nil
+            previewedAttachmentURL = nil
+        }
     }
 
     private var transcript: some View {
@@ -42,7 +50,14 @@ struct ChatView: View {
                         .padding(.bottom, 14)
 
                     ForEach(store.messages(for: conversation)) { message in
-                        MessageBubble(message: message)
+                        MessageBubble(
+                            message: message,
+                            selectedAttachmentID: $selectedAttachmentID,
+                            previewAttachment: { attachment in
+                                selectedAttachmentID = attachment.id
+                                previewedAttachmentURL = store.attachmentFileURL(attachment)
+                            }
+                        )
                             .id(message.id)
                     }
 

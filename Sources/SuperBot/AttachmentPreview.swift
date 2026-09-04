@@ -1,4 +1,3 @@
-import QuickLookUI
 import QuickLookThumbnailing
 import SwiftUI
 import SuperBotCore
@@ -16,9 +15,13 @@ extension ConversationAttachment {
 struct AttachmentInlinePreview: View {
     let attachment: ConversationAttachment
     let fileURL: URL
+    let isSelected: Bool
+    let select: () -> Void
+    let preview: () -> Void
 
     @State private var thumbnail: NSImage?
     @State private var thumbnailUnavailable = false
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -62,16 +65,40 @@ struct AttachmentInlinePreview: View {
                     .font(.system(size: 13))
                     .opacity(0.75)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(.primary)
             .padding(8)
         }
         .frame(width: 260)
-        .background(.white.opacity(0.13))
+        .background(Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(.white.opacity(0.08))
+                .stroke(
+                    isSelected ? Color.accentColor : Color(nsColor: .separatorColor),
+                    lineWidth: isSelected ? 2 : 1
+                )
         }
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .focusable()
+        .focused($isFocused)
+        .onTapGesture(count: 2) {
+            isFocused = true
+            select()
+            preview()
+        }
+        .onTapGesture {
+            isFocused = true
+            select()
+        }
+        .onKeyPress(.space) {
+            select()
+            preview()
+            return .handled
+        }
+        .help("Select, then press Space or double-click to preview")
+        .accessibilityLabel("Attachment \(attachment.originalFilename)")
+        .accessibilityHint("Press Space or double-click to preview")
+        .accessibilityAddTraits(.isButton)
         .task(id: fileURL) {
             await loadThumbnail()
         }
@@ -110,77 +137,4 @@ struct AttachmentInlinePreview: View {
 @MainActor
 private enum AttachmentThumbnailCache {
     static let shared = NSCache<NSURL, NSImage>()
-}
-
-struct AttachmentPreviewPopover: View {
-    @Environment(\.dismiss) private var dismiss
-
-    let attachment: ConversationAttachment
-    let fileURL: URL
-    let showInFinder: () -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Image(systemName: attachment.previewSymbolName)
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 24)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(attachment.originalFilename)
-                        .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(1)
-                    Text(ByteCountFormatter.string(
-                        fromByteCount: attachment.byteCount,
-                        countStyle: .file
-                    ))
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-                }
-
-                Spacer(minLength: 12)
-
-                Button("Show in Finder", systemImage: "folder") {
-                    showInFinder()
-                }
-                .controlSize(.small)
-
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Close Preview")
-            }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 11)
-
-            Divider()
-
-            QuickLookPreview(fileURL: fileURL)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(width: 620, height: 480)
-        .background(Color(nsColor: .windowBackgroundColor))
-    }
-
-}
-
-private struct QuickLookPreview: NSViewRepresentable {
-    let fileURL: URL
-
-    func makeNSView(context: Context) -> QLPreviewView {
-        let preview = QLPreviewView(frame: .zero, style: .normal)!
-        preview.autostarts = true
-        return preview
-    }
-
-    func updateNSView(_ preview: QLPreviewView, context: Context) {
-        preview.previewItem = fileURL as NSURL
-        preview.refreshPreviewItem()
-    }
 }

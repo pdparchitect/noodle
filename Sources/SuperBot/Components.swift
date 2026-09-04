@@ -82,7 +82,8 @@ struct ConversationAvatar: View {
 struct MessageBubble: View {
     @Environment(SuperBotStore.self) private var store
     let message: ChatMessage
-    @State private var previewedAttachment: ConversationAttachment?
+    @Binding var selectedAttachmentID: UUID?
+    let previewAttachment: (ConversationAttachment) -> Void
 
     private var isUser: Bool {
         if case .user = message.author { return true }
@@ -99,37 +100,35 @@ struct MessageBubble: View {
             }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(message.body)
-                        .font(.system(size: 12.5))
-                        .lineSpacing(2)
-                        .foregroundStyle(.white)
-                        .textSelection(.enabled)
-
-                    ForEach(store.attachments(for: message)) { attachment in
-                        Button {
-                            previewedAttachment = attachment
-                        } label: {
-                            AttachmentInlinePreview(
-                                attachment: attachment,
-                                fileURL: store.attachmentFileURL(attachment)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .help("Quick Look Attachment")
-                        .contextMenu {
-                            Button("Show in Finder", systemImage: "folder") {
-                                store.revealAttachment(attachment)
-                            }
-                        }
-                    }
-                }
+                Text(message.body)
+                    .font(.system(size: 12.5))
+                    .lineSpacing(2)
+                    .foregroundStyle(.white)
+                    .textSelection(.enabled)
                     .padding(.horizontal, 13)
                     .padding(.vertical, 8)
                     .background(
                         isUser ? Color.accentColor : Color(nsColor: .controlBackgroundColor),
                         in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                     )
+
+                ForEach(store.attachments(for: message)) { attachment in
+                    AttachmentInlinePreview(
+                        attachment: attachment,
+                        fileURL: store.attachmentFileURL(attachment),
+                        isSelected: selectedAttachmentID == attachment.id,
+                        select: { selectedAttachmentID = attachment.id },
+                        preview: { previewAttachment(attachment) }
+                    )
+                    .contextMenu {
+                        Button("Quick Look", systemImage: "eye") {
+                            previewAttachment(attachment)
+                        }
+                        Button("Show in Finder", systemImage: "folder") {
+                            store.revealAttachment(attachment)
+                        }
+                    }
+                }
 
                 if isUser {
                     Text(deliveryLabel)
@@ -142,13 +141,6 @@ struct MessageBubble: View {
             if !isUser { Spacer(minLength: 120) }
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))
-        .popover(item: $previewedAttachment, arrowEdge: isUser ? .trailing : .leading) { attachment in
-            AttachmentPreviewPopover(
-                attachment: attachment,
-                fileURL: store.attachmentFileURL(attachment),
-                showInFinder: { store.revealAttachment(attachment) }
-            )
-        }
     }
 
     private var deliveryLabel: String {
