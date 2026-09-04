@@ -10,6 +10,9 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
     public var modelIdentifier: String?
     public var reasoningEffort: String?
     public let accentSeed: Int
+    public var avatarSymbolName: String?
+    public var avatarColorIndex: Int?
+    public var avatarImageData: Data?
 
     public init(
         id: UUID = UUID(),
@@ -19,7 +22,10 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
         harnessIdentifier: String? = nil,
         modelIdentifier: String? = nil,
         reasoningEffort: String? = nil,
-        accentSeed: Int = Int.random(in: 0...5)
+        accentSeed: Int = Int.random(in: 0...5),
+        avatarSymbolName: String? = nil,
+        avatarColorIndex: Int? = nil,
+        avatarImageData: Data? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -29,6 +35,9 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
         self.modelIdentifier = modelIdentifier
         self.reasoningEffort = reasoningEffort
         self.accentSeed = accentSeed
+        self.avatarSymbolName = avatarSymbolName
+        self.avatarColorIndex = avatarColorIndex
+        self.avatarImageData = avatarImageData
     }
 }
 
@@ -301,6 +310,9 @@ public struct WorkspaceRepository: Sendable {
             harnessIdentifier: agent.harnessIdentifier,
             modelIdentifier: agent.modelIdentifier,
             reasoningEffort: agent.reasoningEffort,
+            avatarSymbolName: agent.avatarSymbolName,
+            avatarColorIndex: agent.avatarColorIndex,
+            avatarImageData: agent.avatarImageData,
             now: now
         )
     }
@@ -311,6 +323,9 @@ public struct WorkspaceRepository: Sendable {
         harnessIdentifier: String?,
         modelIdentifier: String?,
         reasoningEffort: String?,
+        avatarSymbolName: String? = nil,
+        avatarColorIndex: Int? = nil,
+        avatarImageData: Data? = nil,
         now: Date = Date()
     ) throws -> AgentRecord {
         var renamed = agent
@@ -319,6 +334,9 @@ public struct WorkspaceRepository: Sendable {
         renamed.harnessIdentifier = harnessIdentifier
         renamed.modelIdentifier = modelIdentifier
         renamed.reasoningEffort = reasoningEffort
+        renamed.avatarSymbolName = avatarSymbolName
+        renamed.avatarColorIndex = avatarColorIndex
+        renamed.avatarImageData = avatarImageData
         try write(renamed, to: directory(for: agent).appendingPathComponent("agent.json"))
         return renamed
     }
