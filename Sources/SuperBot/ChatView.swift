@@ -195,14 +195,6 @@ private struct ConversationStartView: View {
                     .multilineTextAlignment(.center)
             }
 
-            runtimeStatus
-
-            Text("Messages and attachments live in this conversation. SuperBot notifies each participating bot, which checks its own inbox and replies here.")
-                .font(.system(size: 12.5))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 430)
-
             if conversation.kind == .direct,
                let agent = store.participants(for: conversation).first {
                 Button("Show Bot Workspace") {
@@ -213,31 +205,6 @@ private struct ConversationStartView: View {
             }
         }
         .frame(maxWidth: .infinity)
-    }
-
-    private var runtimeStatus: some View {
-        let participants = store.participants(for: conversation)
-        let snapshots = participants.map { store.runtime.snapshot(for: $0.id) }
-        let ready = snapshots.filter { $0.phase == .ready || $0.phase == .working }.count
-        let failed = snapshots.filter { $0.phase == .failed }.count
-
-        return Label {
-            if failed > 0 {
-                if participants.count == 1, let snapshot = snapshots.first(where: { $0.phase == .failed }) {
-                    Text(snapshot.detail)
-                } else {
-                    Text("\(failed) bot\(failed == 1 ? "" : "s") needs attention")
-                }
-            } else if ready == participants.count, !participants.isEmpty {
-                Text("All bot processes ready")
-            } else {
-                Text("Starting bot processes")
-            }
-        } icon: {
-            Image(systemName: failed > 0 ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-        }
-        .font(.system(size: 12, weight: .medium))
-        .foregroundStyle(failed > 0 ? .orange : .green)
     }
 }
 
