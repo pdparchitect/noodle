@@ -111,7 +111,7 @@ struct MessageBubble: View {
             VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
                 VStack(alignment: .leading, spacing: 7) {
                     Text(message.body)
-                        .font(.system(size: 14))
+                        .font(.system(size: 12.5))
                         .foregroundStyle(.white)
                         .textSelection(.enabled)
 
