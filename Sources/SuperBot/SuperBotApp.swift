@@ -2,6 +2,7 @@ import AppKit
 import Darwin
 import SwiftUI
 import SuperBotCore
+import UserNotifications
 
 @main
 struct SuperBotApp: App {
@@ -15,7 +16,9 @@ struct SuperBotApp: App {
             Self.write(result.standardError, to: .standardError)
             Darwin.exit(result.exitCode)
         }
-        _store = State(initialValue: SuperBotStore())
+        let store = SuperBotStore()
+        store.startMonitoring()
+        _store = State(initialValue: store)
     }
 
     var body: some Scene {
@@ -61,6 +64,11 @@ struct SuperBotApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        SuperBotNotifications.configure(delegate: self)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        SuperBotStore.active?.stopMonitoring()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -71,10 +79,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        Task { @MainActor in
+            completionHandler(
+                SuperBotNotifications.shouldPresentActivity ? [.banner, .sound] : []
+            )
+        }
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let rawID = response.notification.request.content.userInfo[
+            SuperBotNotifications.conversationIDKey
+        ] as? String
+
+        Task { @MainActor in
+            if let rawID, let conversationID = UUID(uuidString: rawID) {
+                NotificationCenter.default.post(
+                    name: .openConversation,
+                    object: conversationID
+                )
+            }
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.windows.first?.makeKeyAndOrderFront(nil)
+            completionHandler()
+        }
+    }
+}
+
 extension Notification.Name {
     static let newBot = Notification.Name("SuperBot.newBot")
     static let newGroup = Notification.Name("SuperBot.newGroup")
     static let focusSearch = Notification.Name("SuperBot.focusSearch")
+    static let openConversation = Notification.Name("SuperBot.openConversation")
 }
 
 private struct WindowConfiguration: NSViewRepresentable {
@@ -221,15 +266,12 @@ struct RootView: View {
                 store.creationSheet = .group
             }
         }
-        .task {
-            store.startAgents()
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                store.refreshTranscripts()
+        .onReceive(NotificationCenter.default.publisher(for: .openConversation)) { notification in
+            guard let conversationID = notification.object as? UUID,
+                  store.conversations.contains(where: { $0.id == conversationID }) else {
+                return
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
-            store.runtime.stopAll()
+            store.selectedConversationID = conversationID
         }
     }
 }

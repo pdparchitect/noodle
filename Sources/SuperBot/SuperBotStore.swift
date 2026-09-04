@@ -36,6 +36,7 @@ final class SuperBotStore {
 
     let repository: WorkspaceRepository
     let runtime = AgentRuntimeCoordinator()
+    private var transcriptRefreshTask: Task<Void, Never>?
 
     init(repository: WorkspaceRepository? = nil) {
         if let repository {
@@ -362,6 +363,11 @@ final class SuperBotStore {
 
     func refreshTranscripts() {
         do {
+            let knownMessageIDs = Set(
+                messagesByConversation.values.flatMap { messages in
+                    messages.map(\.id)
+                }
+            )
             let latestConversations = try repository.loadConversations()
             var latestMessages: [UUID: [ChatMessage]] = [:]
             var latestAttachments: [UUID: [ConversationAttachment]] = [:]
@@ -369,9 +375,19 @@ final class SuperBotStore {
                 latestMessages[conversation.id] = try repository.loadMessages(conversationID: conversation.id)
                 latestAttachments[conversation.id] = try repository.loadAttachments(conversationID: conversation.id)
             }
+            let newAgentMessages = latestMessages.values
+                .flatMap { $0 }
+                .filter { message in
+                    guard !knownMessageIDs.contains(message.id) else { return false }
+                    if case .agent = message.author { return true }
+                    return false
+                }
+                .sorted { $0.createdAt < $1.createdAt }
+
             if latestConversations != conversations { conversations = latestConversations }
             if latestMessages != messagesByConversation { messagesByConversation = latestMessages }
             if latestAttachments != attachmentsByConversation { attachmentsByConversation = latestAttachments }
+            postNotifications(for: newAgentMessages)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -385,6 +401,23 @@ final class SuperBotStore {
 
     private func refreshAppShortcuts() {
         SuperBotShortcuts.updateAppShortcutParameters()
+    }
+
+    private func postNotifications(for messages: [ChatMessage]) {
+        guard SuperBotNotifications.shouldPresentActivity else { return }
+
+        for message in messages {
+            guard case .agent(let agentID) = message.author,
+                  let agent = agents.first(where: { $0.id == agentID }),
+                  let conversation = conversations.first(where: { $0.id == message.conversationID }) else {
+                continue
+            }
+            SuperBotNotifications.post(
+                message: message,
+                from: agent,
+                in: conversation
+            )
+        }
     }
 
     func title(for conversation: BotConversation) -> String {
@@ -406,5 +439,23 @@ final class SuperBotStore {
     func startAgents() {
         runtime.startAll(agents: agents, repository: repository)
         runtime.refreshCapabilities()
+    }
+
+    func startMonitoring() {
+        guard transcriptRefreshTask == nil else { return }
+        startAgents()
+        transcriptRefreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { break }
+                self?.refreshTranscripts()
+            }
+        }
+    }
+
+    func stopMonitoring() {
+        transcriptRefreshTask?.cancel()
+        transcriptRefreshTask = nil
+        runtime.stopAll()
     }
 }

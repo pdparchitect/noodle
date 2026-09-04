@@ -94,7 +94,7 @@ struct SendSuperBotCommandIntent: AppIntent {
         let store = SuperBotStore.active ?? SuperBotStore(
             repository: SuperBotIntentEnvironment.repository()
         )
-        store.startAgents()
+        store.startMonitoring()
         try store.sendCommand(text, to: conversationID)
         return .result(dialog: "Sent to \(conversation.name).")
     }

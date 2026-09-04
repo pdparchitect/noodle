@@ -65,10 +65,10 @@ The Codex driver translates `notify` into an inbox-changed event with no message
 
 The native `SendSuperBotCommandIntent` is another producer of ordinary user messages. Spotlight or Shortcuts resolves a bot or group through an `AppEntity` query, writes the message through the repository, and calls the same runtime `notify` boundary as the in-app composer. App Shortcut parameters are refreshed whenever the conversation catalogue changes.
 
-At application startup, SuperBot starts every configured bot and resumes its stored Codex thread. At application termination, it stops every child process. Creating or editing a bot starts or restarts only that bot.
+At application startup, SuperBot starts every configured bot and resumes its stored Codex thread. Transcript monitoring belongs to the application lifetime rather than a SwiftUI window, so it continues after the window is closed. A newly observed agent message produces a local macOS notification only when SuperBot is not active or has no visible, non-minimized window; clicking it reopens the matching conversation. At application termination, SuperBot cancels monitoring and stops every child process. Creating or editing a bot starts or restarts only that bot.
 
 ## Security
 
 SuperBot keeps App Sandbox enabled. Attachment import uses the native file importer and the `com.apple.security.files.user-selected.read-only` entitlement. Imported data is copied into the conversation before access ends. Codex requires outgoing client networking and a temporary home-relative read/write exception limited to `/.codex/`; the driver explicitly sets `CODEX_HOME` to that directory so the sandbox does not redirect Codex to an unauthenticated container-local home.
 
-There is no broad home-directory, Apple Events, device, personal-data, or incoming-network entitlement. The minimal bundled Messenger helper is signed separately without application entitlements and operates only within the bot workspace and conversation roots supplied by the runtime.
+Local notifications use the User Notifications framework and require the user's runtime approval, but no additional entitlement. There is no broad home-directory, Apple Events, device, personal-data, or incoming-network entitlement. The minimal bundled Messenger helper is signed separately without application entitlements and operates only within the bot workspace and conversation roots supplied by the runtime.
