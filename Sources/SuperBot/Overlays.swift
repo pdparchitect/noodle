@@ -566,7 +566,7 @@ struct GroupInfoSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 460, height: 420)
+        .frame(width: 460, height: 500)
         .confirmationDialog(
             "Delete Group?",
             isPresented: $confirmingDeletion,
