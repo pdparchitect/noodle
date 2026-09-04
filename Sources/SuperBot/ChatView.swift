@@ -16,6 +16,9 @@ struct ChatView: View {
                 .padding(.bottom, 11)
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.28))
+        .overlay(alignment: .top) {
+            conversationHeaderShadow
+        }
         .fileImporter(
             isPresented: $choosingAttachments,
             allowedContentTypes: [.data],
@@ -136,6 +139,38 @@ struct ChatView: View {
     }
 
     private var composerControlHeight: CGFloat { 32 }
+
+    private var conversationHeaderShadow: some View {
+        Rectangle()
+            .fill(.ultraThinMaterial)
+            .overlay {
+                LinearGradient(
+                    stops: [
+                        .init(color: .black.opacity(0.24), location: 0),
+                        .init(color: .black.opacity(0.10), location: 0.5),
+                        .init(color: .clear, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .mask {
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black.opacity(0.88), location: 0.55),
+                        .init(color: .clear, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .frame(height: 88)
+            .shadow(color: .black.opacity(0.24), radius: 14, y: 5)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
 }
 
 private struct ConversationStartView: View {
