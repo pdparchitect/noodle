@@ -6,14 +6,16 @@ import SuperBotCore
 @main
 struct SuperBotApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var store = SuperBotStore()
+    @State private var store: SuperBotStore
 
     init() {
-        guard MessengerCLI.shouldHandle() else { return }
-        let result = MessengerCLI.run()
-        Self.write(result.standardOutput, to: .standardOutput)
-        Self.write(result.standardError, to: .standardError)
-        Darwin.exit(result.exitCode)
+        if MessengerCLI.shouldHandle() {
+            let result = MessengerCLI.run()
+            Self.write(result.standardOutput, to: .standardOutput)
+            Self.write(result.standardError, to: .standardError)
+            Darwin.exit(result.exitCode)
+        }
+        _store = State(initialValue: SuperBotStore())
     }
 
     var body: some Scene {
