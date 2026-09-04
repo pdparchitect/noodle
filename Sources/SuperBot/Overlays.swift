@@ -190,6 +190,8 @@ struct EditBotSheet: View {
                 Button("Delete Bot\u{2026}", role: .destructive) {
                     confirmingDeletion = true
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(20)
@@ -563,6 +565,8 @@ struct GroupInfoSheet: View {
                 Button("Delete Group\u{2026}", role: .destructive) {
                     confirmingDeletion = true
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
             }
             .padding(20)
         }
