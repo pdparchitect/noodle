@@ -7,6 +7,7 @@ struct ChatView: View {
     let conversation: BotConversation
     @FocusState private var composerFocused: Bool
     @State private var choosingAttachments = false
+    private let transcriptBottomID = "transcript-bottom"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -44,17 +45,42 @@ struct ChatView: View {
                         MessageBubble(message: message)
                             .id(message.id)
                     }
+
+                    Color.clear
+                        .frame(height: 20)
+                        .id(transcriptBottomID)
                 }
                 .padding(.horizontal, 15)
                 .padding(.top, 30)
-                .padding(.bottom, 20)
             }
             .defaultScrollAnchor(.bottom)
+            .onAppear {
+                scrollTranscriptToBottom(using: proxy, animated: false)
+            }
+            .onChange(of: conversation.id) { _, _ in
+                scrollTranscriptToBottom(using: proxy, animated: false)
+            }
             .onChange(of: store.messages(for: conversation).last?.id) { _, lastID in
-                guard let lastID else { return }
+                guard lastID != nil else { return }
+                scrollTranscriptToBottom(using: proxy, animated: true)
+            }
+        }
+    }
+
+    private func scrollTranscriptToBottom(using proxy: ScrollViewProxy, animated: Bool) {
+        DispatchQueue.main.async {
+            if animated {
                 withAnimation(.snappy) {
-                    proxy.scrollTo(lastID, anchor: .bottom)
+                    proxy.scrollTo(transcriptBottomID, anchor: .bottom)
                 }
+            } else {
+                proxy.scrollTo(transcriptBottomID, anchor: .bottom)
+            }
+
+            // A newly inserted message can finish measuring after the first scroll.
+            // Reassert the true transcript end once that layout has settled.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                proxy.scrollTo(transcriptBottomID, anchor: .bottom)
             }
         }
     }
