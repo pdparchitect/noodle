@@ -169,13 +169,35 @@ public struct MessengerIdentity: Codable, Hashable, Sendable {
     }
 }
 
+public struct MessengerAttachment: Codable, Hashable, Sendable {
+    public let id: UUID
+    public let conversationID: UUID
+    public let originalFilename: String
+    public let storedFilename: String
+    public let mediaType: String
+    public let byteCount: Int64
+    public let createdAt: Date
+    public let absolutePath: String
+
+    public init(attachment: ConversationAttachment, absolutePath: String) {
+        id = attachment.id
+        conversationID = attachment.conversationID
+        originalFilename = attachment.originalFilename
+        storedFilename = attachment.storedFilename
+        mediaType = attachment.mediaType
+        byteCount = attachment.byteCount
+        createdAt = attachment.createdAt
+        self.absolutePath = absolutePath
+    }
+}
+
 public struct MessengerDelivery: Codable, Hashable, Sendable {
     public let me: MessengerIdentity
     public let conversation: BotConversation
     public let participants: [MessengerIdentity]
     public let sender: MessengerIdentity
     public let message: ChatMessage
-    public let attachments: [ConversationAttachment]
+    public let attachments: [MessengerAttachment]
 
     public init(
         me: MessengerIdentity,
@@ -183,7 +205,7 @@ public struct MessengerDelivery: Codable, Hashable, Sendable {
         participants: [MessengerIdentity],
         sender: MessengerIdentity,
         message: ChatMessage,
-        attachments: [ConversationAttachment]
+        attachments: [MessengerAttachment]
     ) {
         self.me = me
         self.conversation = conversation
@@ -239,7 +261,7 @@ public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
     public let launcherExecutableURL: URL?
 
-    public static let managedSkillVersion = 4
+    public static let managedSkillVersion = 5
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
         self.rootURL = rootURL.standardizedFileURL
@@ -573,7 +595,13 @@ public struct WorkspaceRepository: Sendable {
                         participants: participants,
                         sender: sender,
                         message: message,
-                        attachments: message.attachments.compactMap { byID[$0] }
+                        attachments: message.attachments.compactMap { attachmentID in
+                            guard let attachment = byID[attachmentID] else { return nil }
+                            return MessengerAttachment(
+                                attachment: attachment,
+                                absolutePath: attachmentFileURL(attachment).standardizedFileURL.path
+                            )
+                        }
                     )
                 )
             }
@@ -759,7 +787,7 @@ public struct WorkspaceRepository: Sendable {
 
     ## Messages
 
-    SuperBot notifications only mean that this inbox may have changed. They never contain the user's message. In Codex, immediately invoke the harness-provided tool through the programmatic bridge and forward its complete return value: `const deliveries = await tools.superbot_get_latest({}); text(deliveries);`. Every delivery names `me`, lists the conversation's named `participants`, and annotates the message `sender` with a `user`, `me`, `bot`, or `system` handle. Inspect every JSON delivery and respond when appropriate with `const sent = await tools.superbot_send({conversationID: "<uuid>", body: "<reply>"}); text(sent);`. SuperBot tools return their payload directly; never inspect `result.content`. Never reply to the notification text itself. If there are no deliveries, finish quietly.
+    SuperBot notifications only mean that this inbox may have changed. They never contain the user's message. In Codex, immediately invoke the harness-provided tool through the programmatic bridge and forward its complete return value: `const deliveries = await tools.superbot_get_latest({}); text(deliveries);`. Every delivery names `me`, lists the conversation's named `participants`, and annotates the message `sender` with a `user`, `me`, `bot`, or `system` handle. Every linked attachment includes an `absolutePath`; use that exact path with local file or image inspection tools whenever the message refers to an attachment. Inspect every JSON delivery and respond when appropriate with `const sent = await tools.superbot_send({conversationID: "<uuid>", body: "<reply>"}); text(sent);`. SuperBot tools return their payload directly; never inspect `result.content`. Never reply to the notification text itself. If there are no deliveries, finish quietly.
 
     Read new direct and group messages:
 
@@ -782,7 +810,7 @@ public struct WorkspaceRepository: Sendable {
 
     # Messenger
 
-    In Codex, invoke `superbot_get_latest` through the programmatic bridge and forward its complete return value with `text(deliveries)`: `const deliveries = await tools.superbot_get_latest({}); text(deliveries);`. Each delivery includes `me`, a named participant roster, an explicitly annotated sender (`user`, `me`, `bot`, or `system`), the message, and linked attachment metadata. Reply with `const sent = await tools.superbot_send({conversationID: "<uuid>", body: "<reply>"}); text(sent);`. SuperBot tools return their payload directly; never inspect `result.content`.
+    In Codex, invoke `superbot_get_latest` through the programmatic bridge and forward its complete return value with `text(deliveries)`: `const deliveries = await tools.superbot_get_latest({}); text(deliveries);`. Each delivery includes `me`, a named participant roster, an explicitly annotated sender (`user`, `me`, `bot`, or `system`), the message, and linked attachments. Every attachment includes an `absolutePath`; use that exact path with the harness's local file or image inspection tools whenever the message refers to an attachment. Reply with `const sent = await tools.superbot_send({conversationID: "<uuid>", body: "<reply>"}); text(sent);`. SuperBot tools return their payload directly; never inspect `result.content`.
 
     The bundled command-line helper remains available to harnesses that use shell commands:
 

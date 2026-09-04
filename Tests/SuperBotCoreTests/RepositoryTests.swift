@@ -282,6 +282,39 @@ final class RepositoryTests: XCTestCase {
         ))
     }
 
+    func testMessengerDeliveryIncludesAbsoluteAttachmentPath() throws {
+        let created = try repository.createAgent(named: "Vision Bot")
+        let source = root.appendingPathComponent("reference.png")
+        try Data("image bytes".utf8).write(to: source)
+        let attachment = try repository.importAttachment(
+            from: source,
+            into: created.conversation.id,
+            mediaType: "image/png"
+        )
+        try repository.append(ChatMessage(
+            conversationID: created.conversation.id,
+            author: .user,
+            body: "What is in this image?",
+            delivery: .delivered,
+            attachmentIDs: [attachment.id]
+        ))
+
+        let command = repository.directory(for: created.agent)
+            .appendingPathComponent(".agents/skills/messenger/messenger")
+        let result = MessengerCLI.run(arguments: [command.path, "--get-latest", "--peek"])
+        XCTAssertEqual(result.exitCode, 0)
+        let delivery = try XCTUnwrap(
+            decode([MessengerDelivery].self, from: result.standardOutput).first
+        )
+        let deliveredAttachment = try XCTUnwrap(delivery.attachments.first)
+        let expectedURL = repository.attachmentFileURL(attachment).standardizedFileURL
+
+        XCTAssertEqual(deliveredAttachment.absolutePath, expectedURL.path)
+        XCTAssertEqual(deliveredAttachment.originalFilename, "reference.png")
+        XCTAssertTrue(deliveredAttachment.absolutePath.hasPrefix("/"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: deliveredAttachment.absolutePath))
+    }
+
     func testMessengerConsumesUnreadMessagesAndCanReply() throws {
         let created = try repository.createAgent(named: "Messenger Bot")
         let command = repository.directory(for: created.agent)

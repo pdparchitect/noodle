@@ -46,11 +46,11 @@ Every bot directory is named with an opaque UUID. `AGENTS.md` contains provider-
 
 On app updates, SuperBot refreshes only paths declared in that manifest. Skills created elsewhere under `.agents/skills` remain bot-owned and are not removed.
 
-Codex receives two thread-scoped dynamic tools from SuperBot. `superbot_get_latest` returns unread messages across all conversations containing that bot and advances per-conversation offsets in `.agents/inbox.json`. `superbot_send` validates the conversation and writes the agent reply. A bot never receives its own replies back as unread work. The bundled command-line helper exposes the same repository operations for future harness drivers that prefer shell commands.
+Codex receives two thread-scoped dynamic tools from SuperBot. `superbot_get_latest` returns unread messages across all conversations containing that bot and advances per-conversation offsets in `.agents/inbox.json`. Linked attachments are projected into delivery records containing an `absolutePath` to the copied conversation-owned payload, allowing the harness to open the exact file without reconstructing storage paths. `superbot_send` validates the conversation and writes the agent reply. A bot never receives its own replies back as unread work. The bundled command-line helper exposes the same repository operations for future harness drivers that prefer shell commands.
 
 ## Message and attachment ownership
 
-Conversation metadata, messages, attachment metadata, and copied payloads share one conversation directory. Messages link attachments by UUID; attachment filenames on disk use UUIDs rather than untrusted original names. The original filename and MIME type remain metadata for display and harness consumption.
+Conversation metadata, messages, attachment metadata, and copied payloads share one conversation directory. Messages link attachments by UUID; attachment filenames on disk use UUIDs rather than untrusted original names. The original filename and MIME type remain persistent metadata for display. Messenger delivery derives the payload's standardized absolute path at read time, so the path is never guessed or stored as stale metadata.
 
 Message array mutation is guarded by a per-conversation filesystem lock and written atomically, allowing the app and multiple bot processes to post safely into a group transcript. The open app refreshes transcripts so replies written by the Messenger command appear without relaunching.
 

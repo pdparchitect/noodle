@@ -61,7 +61,7 @@ From inside a bot workspace:
 ./.agents/skills/messenger/messenger --send --conversation <uuid> --body "Reply text"
 ```
 
-The command can infer the bot UUID and SuperBot repository root from its symlink location or from the private runtime environment. Results are JSON so future shell-oriented harnesses can consume them without provider-specific parsing. Codex uses the equivalent native tools and does not launch this helper.
+The command can infer the bot UUID and SuperBot repository root from its symlink location or from the private runtime environment. Results are JSON so future shell-oriented harnesses can consume them without provider-specific parsing. Every delivered attachment includes its absolute copied-file path so a harness can open it directly. Codex uses the equivalent native tools and does not launch this helper.
 
 ## Build, launch, and test
 
