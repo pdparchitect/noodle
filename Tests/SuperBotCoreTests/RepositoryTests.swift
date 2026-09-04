@@ -57,6 +57,7 @@ final class RepositoryTests: XCTestCase {
         XCTAssertTrue(agentsGuide.contains("max_output_tokens: 250000"))
         XCTAssertTrue(agentsGuide.contains("image(visual.dataURL"))
         XCTAssertTrue(agentsGuide.contains("--body-percent-encoded"))
+        XCTAssertTrue(agentsGuide.contains("--attach <file-path>"))
         XCTAssertFalse(agentsGuide.contains("TextEncoder"))
         XCTAssertTrue(agentsGuide.contains("named `participants`"))
         XCTAssertFalse(agentsGuide.contains("superbot_get_latest"))
@@ -64,6 +65,7 @@ final class RepositoryTests: XCTestCase {
         XCTAssertTrue(messengerGuide.contains("--get-latest --inline-images"))
         XCTAssertTrue(messengerGuide.contains("max_output_tokens: 250000"))
         XCTAssertTrue(messengerGuide.contains("--body-percent-encoded"))
+        XCTAssertTrue(messengerGuide.contains("--attach <file-path>"))
         XCTAssertTrue(messengerGuide.contains("named participant roster"))
         XCTAssertFalse(messengerGuide.contains("superbot_get_latest"))
         XCTAssertEqual(created.conversation.participantIDs, [created.agent.id])
@@ -398,6 +400,76 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(sent.author, .agent(created.agent.id))
         XCTAssertEqual(sent.delivery, .delivered)
         XCTAssertEqual(sent.body, replyBody)
+    }
+
+    func testMessengerCanSendMultipleFilesFromBotWorkspace() throws {
+        let sender = try repository.createAgent(named: "Build Bot")
+        let recipient = try repository.createAgent(named: "Review Bot")
+        let group = try repository.createGroup(
+            named: "Delivery Room",
+            participantIDs: [sender.agent.id, recipient.agent.id],
+            existingAgents: [sender.agent, recipient.agent]
+        )
+        let workspace = repository.directory(for: sender.agent)
+        let report = workspace.appendingPathComponent("report.txt")
+        let chart = workspace.appendingPathComponent("chart.png")
+        try Data("finished report".utf8).write(to: report)
+        try Data("image bytes".utf8).write(to: chart)
+        let command = workspace.appendingPathComponent(".agents/skills/messenger/messenger")
+
+        let result = MessengerCLI.run(arguments: [
+            command.path,
+            "--send",
+            "--conversation", group.id.uuidString,
+            "--attach", report.path,
+            "--attach", chart.path
+        ])
+
+        XCTAssertEqual(result.exitCode, 0)
+        let sent = try decode(ChatMessage.self, from: result.standardOutput)
+        XCTAssertEqual(sent.author, .agent(sender.agent.id))
+        XCTAssertEqual(sent.body, "Sent 2 attachments")
+        XCTAssertEqual(sent.attachments.count, 2)
+
+        let attachments = try repository.loadAttachments(conversationID: group.id)
+        let attachmentsByName = Dictionary(uniqueKeysWithValues: attachments.map {
+            ($0.originalFilename, $0)
+        })
+        XCTAssertEqual(Set(attachmentsByName.keys), ["report.txt", "chart.png"])
+        XCTAssertEqual(attachmentsByName["report.txt"]?.mediaType, "text/plain")
+        XCTAssertEqual(attachmentsByName["chart.png"]?.mediaType, "image/png")
+        let reportAttachment = try XCTUnwrap(attachmentsByName["report.txt"])
+        XCTAssertEqual(
+            try String(contentsOf: repository.attachmentFileURL(reportAttachment), encoding: .utf8),
+            "finished report"
+        )
+
+        let delivery = try XCTUnwrap(
+            repository.latestMessages(for: recipient.agent.id, consuming: false).first
+        )
+        XCTAssertEqual(delivery.sender.displayName, "Build Bot")
+        XCTAssertEqual(delivery.attachments.map(\.originalFilename), ["report.txt", "chart.png"])
+    }
+
+    func testMessengerRollsBackAttachmentsWhenAnyFileCannotBeImported() throws {
+        let created = try repository.createAgent(named: "Build Bot")
+        let workspace = repository.directory(for: created.agent)
+        let validFile = workspace.appendingPathComponent("result.txt")
+        try Data("result".utf8).write(to: validFile)
+        let command = workspace.appendingPathComponent(".agents/skills/messenger/messenger")
+
+        let result = MessengerCLI.run(arguments: [
+            command.path,
+            "--send",
+            "--conversation", created.conversation.id.uuidString,
+            "--body", "Results",
+            "--attach", validFile.path,
+            "--attach", workspace.appendingPathComponent("missing.txt").path
+        ])
+
+        XCTAssertEqual(result.exitCode, 2)
+        XCTAssertTrue(try repository.loadAttachments(conversationID: created.conversation.id).isEmpty)
+        XCTAssertTrue(try repository.loadMessages(conversationID: created.conversation.id).isEmpty)
     }
 
     func testMessengerDeliveryIdentifiesMeParticipantsAndEachSender() throws {

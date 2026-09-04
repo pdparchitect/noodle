@@ -61,9 +61,10 @@ From inside a bot workspace:
 ./.agents/skills/messenger/messenger --get-latest --peek
 ./.agents/skills/messenger/messenger --list-conversations
 ./.agents/skills/messenger/messenger --send --conversation <uuid> --body "Reply text"
+./.agents/skills/messenger/messenger --send --conversation <uuid> --body "Files attached" --attach ./report.pdf --attach ./chart.png
 ```
 
-The command can infer the bot UUID and SuperBot repository root from its symlink location or from the private runtime environment. Results are JSON so harnesses can consume them without provider-specific parsing. Every delivered attachment includes its absolute copied-file path so a harness can open it directly. Codex runs this CLI through its programmatic command bridge; it does not receive private SuperBot messaging tools.
+The command can infer the bot UUID and SuperBot repository root from its symlink location or from the private runtime environment. Results are JSON so harnesses can consume them without provider-specific parsing. Every delivered attachment includes its absolute copied-file path so a harness can open it directly. A bot sends files with a repeatable `--attach <file-path>` option; relative paths resolve from its workspace, and SuperBot copies each file into conversation-owned storage before linking it to the reply. Reply text is optional when at least one attachment is supplied. Codex runs this CLI through its programmatic command bridge; it does not receive private SuperBot messaging tools.
 
 ## Quick send with Spotlight and Shortcuts
 

@@ -290,7 +290,7 @@ public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
     public let launcherExecutableURL: URL?
 
-    public static let managedSkillVersion = 8
+    public static let managedSkillVersion = 9
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
         self.rootURL = rootURL.standardizedFileURL
@@ -663,6 +663,7 @@ public struct WorkspaceRepository: Sendable {
         agentID: UUID,
         conversationID: UUID,
         body: String,
+        attachmentIDs: [UUID] = [],
         now: Date = Date()
     ) throws -> ChatMessage {
         let name = try validatedName(body)
@@ -673,12 +674,18 @@ public struct WorkspaceRepository: Sendable {
               conversation.participantIDs.contains(agentID) else {
             throw WorkspaceError.missingConversation(conversationID)
         }
+        let availableAttachmentIDs = Set(try loadAttachments(conversationID: conversationID).map(\.id))
+        guard Set(attachmentIDs).count == attachmentIDs.count,
+              Set(attachmentIDs).isSubset(of: availableAttachmentIDs) else {
+            throw WorkspaceError.invalidAttachment
+        }
         let message = ChatMessage(
             conversationID: conversationID,
             author: .agent(agentID),
             body: name,
             createdAt: now,
-            delivery: .delivered
+            delivery: .delivered,
+            attachmentIDs: attachmentIDs
         )
         try append(message)
         var updated = conversation
@@ -858,7 +865,7 @@ public struct WorkspaceRepository: Sendable {
 
     ## Messages
 
-    SuperBot notifications only mean that this inbox may have changed. They never contain the user's message. In Codex, immediately run the bundled Messenger CLI through the programmatic bridge: `const r = await tools.exec_command({cmd: "./.agents/skills/messenger/messenger --get-latest --inline-images", max_output_tokens: 250000}); if (r.exit_code !== 0) throw new Error(r.output); const payload = JSON.parse(r.output); text(payload.deliveries); for (const visual of payload.images) image(visual.dataURL, "original");`. Every delivery names `me`, lists the conversation's named `participants`, and annotates the message `sender` with a `user`, `me`, `bot`, or `system` handle. Images attached to unread messages arrive directly from the CLI as visual inputs, so inspect them without calling a local image viewer. Every attachment also includes its exact `absolutePath` for non-visual file work. Run the get-latest command only once for each notification because it consumes the inbox. Reply through the Messenger CLI using `--send`, the conversation UUID, and `--body-percent-encoded`; create the argument with `encodeURIComponent(body).replaceAll("'", "%27")`. Never reply to the notification text itself. If there are no deliveries, finish quietly.
+    SuperBot notifications only mean that this inbox may have changed. They never contain the user's message. In Codex, immediately run the bundled Messenger CLI through the programmatic bridge: `const r = await tools.exec_command({cmd: "./.agents/skills/messenger/messenger --get-latest --inline-images", max_output_tokens: 250000}); if (r.exit_code !== 0) throw new Error(r.output); const payload = JSON.parse(r.output); text(payload.deliveries); for (const visual of payload.images) image(visual.dataURL, "original");`. Every delivery names `me`, lists the conversation's named `participants`, and annotates the message `sender` with a `user`, `me`, `bot`, or `system` handle. Images attached to unread messages arrive directly from the CLI as visual inputs, so inspect them without calling a local image viewer. Every attachment also includes its exact `absolutePath` for non-visual file work. Run the get-latest command only once for each notification because it consumes the inbox. Reply through the Messenger CLI using `--send`, the conversation UUID, and `--body-percent-encoded`; create the argument with `encodeURIComponent(body).replaceAll("'", "%27")`. Add a repeatable `--attach <file-path>` option to send files you created; reply text is optional when a file is attached. Never reply to the notification text itself. If there are no deliveries, finish quietly.
 
     Read new direct and group messages:
 
@@ -870,6 +877,12 @@ public struct WorkspaceRepository: Sendable {
 
     ```sh
     ./.agents/skills/messenger/messenger --send --conversation <conversation-uuid> --body "Your response"
+    ```
+
+    Reply with files created in this workspace:
+
+    ```sh
+    ./.agents/skills/messenger/messenger --send --conversation <conversation-uuid> --body "The requested files" --attach ./report.pdf --attach ./chart.png
     ```
     """
 
@@ -887,6 +900,6 @@ public struct WorkspaceRepository: Sendable {
 
     `./.agents/skills/messenger/messenger --get-latest --inline-images`
 
-    Reply with `./.agents/skills/messenger/messenger --send --conversation <uuid> --body-percent-encoded <percent-encoded-utf8>`. In Codex, create the encoded value with `encodeURIComponent(body).replaceAll("'", "%27")` and pass it as a single-quoted command argument. The executable identifies this bot from the opaque workspace path. Do not edit SuperBot's conversation JSON directly.
+    Reply with `./.agents/skills/messenger/messenger --send --conversation <uuid> --body-percent-encoded <percent-encoded-utf8>`. In Codex, create the encoded value with `encodeURIComponent(body).replaceAll("'", "%27")` and pass it as a single-quoted command argument. Add `--attach <file-path>` once for each file the bot should send. Relative paths resolve from the bot's workspace, files are copied into the conversation, and the body is optional when at least one attachment is supplied. The executable identifies this bot from the opaque workspace path. Do not edit SuperBot's conversation JSON directly.
     """
 }

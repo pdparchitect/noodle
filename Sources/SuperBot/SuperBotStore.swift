@@ -323,8 +323,8 @@ final class SuperBotStore {
 
     func attachments(for message: ChatMessage) -> [ConversationAttachment] {
         let all = attachmentsByConversation[message.conversationID, default: []]
-        let ids = Set(message.attachments)
-        return all.filter { ids.contains($0.id) }
+        let byID = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
+        return message.attachments.compactMap { byID[$0] }
     }
 
     func importAttachment(from url: URL) {

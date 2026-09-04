@@ -1,4 +1,5 @@
 import Foundation
+import UniformTypeIdentifiers
 
 public struct MessengerCommandResult: Sendable {
     public let exitCode: Int32
@@ -57,13 +58,31 @@ public enum MessengerCLI {
                     .filter { $0.participantIDs.contains(invocation.agentID) }
                 return .json(conversations)
 
-            case .send(let conversationID, let body):
-                let message = try repository.sendAgentMessage(
-                    agentID: invocation.agentID,
-                    conversationID: conversationID,
-                    body: body
-                )
-                return .json(message)
+            case .send(let conversationID, let body, let attachmentURLs):
+                var importedAttachments: [ConversationAttachment] = []
+                do {
+                    for sourceURL in attachmentURLs {
+                        let mediaType = UTType(filenameExtension: sourceURL.pathExtension)?.preferredMIMEType
+                            ?? "application/octet-stream"
+                        importedAttachments.append(try repository.importAttachment(
+                            from: sourceURL,
+                            into: conversationID,
+                            mediaType: mediaType
+                        ))
+                    }
+                    let message = try repository.sendAgentMessage(
+                        agentID: invocation.agentID,
+                        conversationID: conversationID,
+                        body: body,
+                        attachmentIDs: importedAttachments.map(\.id)
+                    )
+                    return .json(message)
+                } catch {
+                    for attachment in importedAttachments {
+                        try? repository.removeAttachment(attachment)
+                    }
+                    throw error
+                }
 
             case .help:
                 return MessengerCommandResult(exitCode: 0, standardOutput: help + "\n")
@@ -79,7 +98,7 @@ public enum MessengerCLI {
     private enum Action {
         case getLatest(consumes: Bool, includesInlineImages: Bool)
         case listConversations
-        case send(conversationID: UUID, body: String)
+        case send(conversationID: UUID, body: String, attachmentURLs: [URL])
         case help
     }
 
@@ -122,11 +141,31 @@ public enum MessengerCLI {
                 action = .listConversations
             } else if values.contains("--send") {
                 guard let rawConversation = Self.option("--conversation", in: values),
-                      let conversationID = UUID(uuidString: rawConversation),
-                      let body = try Self.messageBody(in: values) else {
+                      let conversationID = UUID(uuidString: rawConversation) else {
                     throw MessengerCLIError.invalidArguments
                 }
-                action = .send(conversationID: conversationID, body: body)
+                let currentDirectory = URL(
+                    fileURLWithPath: FileManager.default.currentDirectoryPath,
+                    isDirectory: true
+                )
+                let attachmentURLs = try Self.options("--attach", in: values).map {
+                    URL(fileURLWithPath: $0, relativeTo: currentDirectory).standardizedFileURL
+                }
+                let suppliedBody = try Self.messageBody(in: values)
+                let body: String
+                if let suppliedBody,
+                   !suppliedBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    body = suppliedBody
+                } else if !attachmentURLs.isEmpty {
+                    body = "Sent \(attachmentURLs.count) attachment\(attachmentURLs.count == 1 ? "" : "s")"
+                } else {
+                    throw MessengerCLIError.invalidArguments
+                }
+                action = .send(
+                    conversationID: conversationID,
+                    body: body,
+                    attachmentURLs: attachmentURLs
+                )
             } else {
                 throw MessengerCLIError.invalidArguments
             }
@@ -156,6 +195,17 @@ public enum MessengerCLI {
             return arguments[index + 1]
         }
 
+        private static func options(_ name: String, in arguments: [String]) throws -> [String] {
+            var values: [String] = []
+            for index in arguments.indices where arguments[index] == name {
+                guard arguments.indices.contains(index + 1) else {
+                    throw MessengerCLIError.invalidArguments
+                }
+                values.append(arguments[index + 1])
+            }
+            return values
+        }
+
         private static func messageBody(in arguments: [String]) throws -> String? {
             if let encoded = option("--body-percent-encoded", in: arguments) {
                 guard let body = encoded.removingPercentEncoding else {
@@ -182,6 +232,7 @@ public enum MessengerCLI {
       messenger --send --conversation <uuid> --body <text>
       messenger --send --conversation <uuid> --body-percent-encoded <percent-encoded-utf8>
       messenger --send --conversation <uuid> --body-base64 <utf8-base64>
+      messenger --send --conversation <uuid> [--body <text>] --attach <file-path> [--attach <file-path> ...]
 
     The command normally discovers the bot from its symlink path. For diagnostics, append
     --agent-directory <absolute-agent-workspace-path>.
