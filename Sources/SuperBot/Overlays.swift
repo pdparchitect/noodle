@@ -5,12 +5,13 @@ struct NewBotSheet: View {
     @Environment(SuperBotStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
+    @State private var selectedHarnessIdentifier = HarnessProvider.codex.rawValue
     @FocusState private var nameFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             sheetHeader(title: "New Bot", createTitle: "Create") {
-                _ = store.createAgent(named: name)
+                _ = store.createAgent(named: name, harnessIdentifier: selectedHarnessIdentifier)
             }
 
             Divider()
@@ -24,11 +25,37 @@ struct NewBotSheet: View {
                             .font(.system(size: 14))
                             .focused($nameFocused)
                             .onSubmit {
-                                if canCreate { _ = store.createAgent(named: name) }
+                                if canCreate {
+                                    _ = store.createAgent(
+                                        named: name,
+                                        harnessIdentifier: selectedHarnessIdentifier
+                                    )
+                                }
                             }
                         Text("You can rename this bot later without changing its workspace location.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                }
+
+                GroupBox("Harness") {
+                    Picker("Harness", selection: $selectedHarnessIdentifier) {
+                        ForEach(store.runtime.availableInstallations) { installation in
+                            Text(installation.provider.displayName)
+                                .tag(installation.provider.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+
+                    if let installation = store.runtime.installations.first(where: {
+                        $0.provider.rawValue == selectedHarnessIdentifier
+                    }) {
+                        Label(installation.detail, systemImage: installation.provider.symbolName)
+                            .font(.caption)
+                            .foregroundStyle(installation.readiness == .ready ? .green : .secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 6)
                     }
                 }
 
@@ -52,8 +79,15 @@ struct NewBotSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 500, height: 275)
-        .onAppear { nameFocused = true }
+        .frame(width: 500, height: 365)
+        .onAppear {
+            nameFocused = true
+            if !store.runtime.availableInstallations.contains(where: {
+                $0.provider.rawValue == selectedHarnessIdentifier
+            }), let first = store.runtime.availableInstallations.first {
+                selectedHarnessIdentifier = first.provider.rawValue
+            }
+        }
     }
 
     private var canCreate: Bool {

@@ -181,20 +181,60 @@ struct RootView: View {
                 store.creationSheet = .group
             }
         }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                store.refreshTranscripts()
+            }
+        }
+        .onDisappear {
+            store.runtime.stopAll()
+        }
     }
 }
 
 private struct HarnessStatusLabel: View {
+    @Environment(SuperBotStore.self) private var store
+
     var body: some View {
-        HStack(spacing: 6) {
-            Circle().fill(.orange).frame(width: 7, height: 7)
-            Text("Harnesses not connected")
-                .font(.system(size: 11.5, weight: .medium))
+        Menu {
+            ForEach(store.runtime.installations) { installation in
+                Label {
+                    VStack(alignment: .leading) {
+                        Text(installation.provider.displayName)
+                        Text(installation.detail)
+                    }
+                } icon: {
+                    Image(systemName: installation.provider.symbolName)
+                }
+            }
+            Divider()
+            Button("Rescan Harnesses", systemImage: "arrow.clockwise") {
+                store.runtime.refresh(agents: store.agents)
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Circle().fill(statusColor).frame(width: 7, height: 7)
+                Text(statusText)
+                    .font(.system(size: 11.5, weight: .medium))
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.quaternary.opacity(0.45), in: Capsule())
         }
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(.quaternary.opacity(0.45), in: Capsule())
-        .help("Harness locations have not been configured")
+        .menuStyle(.borderlessButton)
+        .help("Show automatically detected harnesses")
+    }
+
+    private var statusText: String {
+        if store.runtime.readyCount > 0 { return "\(store.runtime.readyCount) ACP ready" }
+        if !store.runtime.availableInstallations.isEmpty { return "Harnesses found" }
+        return "No harnesses found"
+    }
+
+    private var statusColor: Color {
+        if store.runtime.readyCount > 0 { return .green }
+        return store.runtime.availableInstallations.isEmpty ? .red : .orange
     }
 }

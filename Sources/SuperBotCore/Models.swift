@@ -216,11 +216,20 @@ public struct WorkspaceRepository: Sendable {
         try FileManager.default.createDirectory(at: conversationsURL, withIntermediateDirectories: true)
     }
 
-    public func createAgent(named rawName: String, now: Date = Date()) throws -> CreatedAgentWorkspace {
+    public func createAgent(
+        named rawName: String,
+        harnessIdentifier: String? = nil,
+        now: Date = Date()
+    ) throws -> CreatedAgentWorkspace {
         let name = try validatedName(rawName)
         try prepare()
 
-        let agent = AgentRecord(displayName: name, createdAt: now, updatedAt: now)
+        let agent = AgentRecord(
+            displayName: name,
+            createdAt: now,
+            updatedAt: now,
+            harnessIdentifier: harnessIdentifier
+        )
         let agentDirectory = directory(for: agent)
         try FileManager.default.createDirectory(at: agentDirectory, withIntermediateDirectories: false)
         try write(agent, to: agentDirectory.appendingPathComponent("agent.json"))

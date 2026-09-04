@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import Observation
 import SuperBotCore
+import UniformTypeIdentifiers
 
 @MainActor
 @Observable
@@ -21,14 +22,17 @@ final class SuperBotStore {
     private(set) var agents: [AgentRecord] = []
     private(set) var conversations: [BotConversation] = []
     private(set) var messagesByConversation: [UUID: [ChatMessage]] = [:]
+    private(set) var attachmentsByConversation: [UUID: [ConversationAttachment]] = [:]
     var selectedConversationID: UUID?
     var searchText = ""
     var draft = ""
     var creationSheet: CreationSheet?
     var agentBeingRenamed: AgentRecord?
     var errorMessage: String?
+    var pendingAttachments: [ConversationAttachment] = []
 
     let repository: WorkspaceRepository
+    let runtime = AgentRuntimeCoordinator()
 
     init(repository: WorkspaceRepository? = nil) {
         if let repository {
@@ -85,6 +89,12 @@ final class SuperBotStore {
                     ($0.id, try repository.loadMessages(conversationID: $0.id))
                 }
             )
+            attachmentsByConversation = try Dictionary(
+                uniqueKeysWithValues: conversations.map {
+                    ($0.id, try repository.loadAttachments(conversationID: $0.id))
+                }
+            )
+            runtime.refresh(agents: agents)
 
             if let selectedConversationID,
                conversations.contains(where: { $0.id == selectedConversationID }) {
@@ -96,12 +106,17 @@ final class SuperBotStore {
         }
     }
 
-    func createAgent(named name: String) -> Bool {
+    func createAgent(named name: String, harnessIdentifier: String?) -> Bool {
         do {
-            let created = try repository.createAgent(named: name)
+            let created = try repository.createAgent(
+                named: name,
+                harnessIdentifier: harnessIdentifier
+            )
             agents.append(created.agent)
             conversations.insert(created.conversation, at: 0)
             messagesByConversation[created.conversation.id] = []
+            attachmentsByConversation[created.conversation.id] = []
+            runtime.refresh(agents: agents)
             selectedConversationID = created.conversation.id
             creationSheet = nil
             return true
@@ -143,6 +158,7 @@ final class SuperBotStore {
             )
             conversations.insert(conversation, at: 0)
             messagesByConversation[conversation.id] = []
+            attachmentsByConversation[conversation.id] = []
             selectedConversationID = conversation.id
             creationSheet = nil
             return true
@@ -155,13 +171,15 @@ final class SuperBotStore {
     func sendDraft() {
         guard let conversation = selectedConversation else { return }
         let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !body.isEmpty else { return }
+        guard !body.isEmpty || !pendingAttachments.isEmpty else { return }
+        let messageBody = body.isEmpty ? "Sent \(pendingAttachments.count) attachment\(pendingAttachments.count == 1 ? "" : "s")" : body
 
         let message = ChatMessage(
             conversationID: conversation.id,
             author: .user,
-            body: body,
-            delivery: .queued
+            body: messageBody,
+            delivery: .queued,
+            attachmentIDs: pendingAttachments.map(\.id)
         )
 
         do {
@@ -175,6 +193,17 @@ final class SuperBotStore {
             }
 
             draft = ""
+            pendingAttachments = []
+            runtime.deliver(
+                message: message,
+                conversation: conversation,
+                to: participants(for: conversation),
+                workspace: { self.repository.directory(for: $0) },
+                onResponse: { _, _, _ in
+                    // The ACP turn is a wake-up signal. Agents publish user-visible replies
+                    // through the Messenger skill, which the transcript poller observes.
+                }
+            )
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -182,6 +211,55 @@ final class SuperBotStore {
 
     func messages(for conversation: BotConversation) -> [ChatMessage] {
         messagesByConversation[conversation.id, default: []]
+    }
+
+    func attachments(for message: ChatMessage) -> [ConversationAttachment] {
+        let all = attachmentsByConversation[message.conversationID, default: []]
+        let ids = Set(message.attachments)
+        return all.filter { ids.contains($0.id) }
+    }
+
+    func importAttachment(from url: URL) {
+        guard let conversation = selectedConversation else { return }
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let mediaType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+            let attachment = try repository.importAttachment(
+                from: url,
+                into: conversation.id,
+                mediaType: mediaType
+            )
+            attachmentsByConversation[conversation.id, default: []].append(attachment)
+            pendingAttachments.append(attachment)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func removePendingAttachment(_ attachment: ConversationAttachment) {
+        pendingAttachments.removeAll { $0.id == attachment.id }
+    }
+
+    func revealAttachment(_ attachment: ConversationAttachment) {
+        NSWorkspace.shared.activateFileViewerSelecting([repository.attachmentFileURL(attachment)])
+    }
+
+    func refreshTranscripts() {
+        do {
+            let latestConversations = try repository.loadConversations()
+            var latestMessages: [UUID: [ChatMessage]] = [:]
+            var latestAttachments: [UUID: [ConversationAttachment]] = [:]
+            for conversation in latestConversations {
+                latestMessages[conversation.id] = try repository.loadMessages(conversationID: conversation.id)
+                latestAttachments[conversation.id] = try repository.loadAttachments(conversationID: conversation.id)
+            }
+            if latestConversations != conversations { conversations = latestConversations }
+            if latestMessages != messagesByConversation { messagesByConversation = latestMessages }
+            if latestAttachments != attachmentsByConversation { attachmentsByConversation = latestAttachments }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     func participants(for conversation: BotConversation) -> [AgentRecord] {
