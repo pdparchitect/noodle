@@ -39,6 +39,7 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .searchable(text: $store.searchText, placement: .sidebar, prompt: "Search")
+        .controlSize(.large)
         .searchFocused($searchIsFocused)
         .overlay {
             if store.conversations.isEmpty {
