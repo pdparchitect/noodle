@@ -413,8 +413,10 @@ final class RepositoryTests: XCTestCase {
         let workspace = repository.directory(for: sender.agent)
         let report = workspace.appendingPathComponent("report.txt")
         let chart = workspace.appendingPathComponent("chart.png")
+        let brief = workspace.appendingPathComponent("brief.pdf")
         try Data("finished report".utf8).write(to: report)
         try Data("image bytes".utf8).write(to: chart)
+        try Data("%PDF-1.7 test document".utf8).write(to: brief)
         let command = workspace.appendingPathComponent(".agents/skills/messenger/messenger")
 
         let result = MessengerCLI.run(arguments: [
@@ -422,22 +424,24 @@ final class RepositoryTests: XCTestCase {
             "--send",
             "--conversation", group.id.uuidString,
             "--attach", report.path,
-            "--attach", chart.path
+            "--attach", chart.path,
+            "--attach", brief.path
         ])
 
         XCTAssertEqual(result.exitCode, 0)
         let sent = try decode(ChatMessage.self, from: result.standardOutput)
         XCTAssertEqual(sent.author, .agent(sender.agent.id))
-        XCTAssertEqual(sent.body, "Sent 2 attachments")
-        XCTAssertEqual(sent.attachments.count, 2)
+        XCTAssertEqual(sent.body, "Sent 3 attachments")
+        XCTAssertEqual(sent.attachments.count, 3)
 
         let attachments = try repository.loadAttachments(conversationID: group.id)
         let attachmentsByName = Dictionary(uniqueKeysWithValues: attachments.map {
             ($0.originalFilename, $0)
         })
-        XCTAssertEqual(Set(attachmentsByName.keys), ["report.txt", "chart.png"])
+        XCTAssertEqual(Set(attachmentsByName.keys), ["report.txt", "chart.png", "brief.pdf"])
         XCTAssertEqual(attachmentsByName["report.txt"]?.mediaType, "text/plain")
         XCTAssertEqual(attachmentsByName["chart.png"]?.mediaType, "image/png")
+        XCTAssertEqual(attachmentsByName["brief.pdf"]?.mediaType, "application/pdf")
         let reportAttachment = try XCTUnwrap(attachmentsByName["report.txt"])
         XCTAssertEqual(
             try String(contentsOf: repository.attachmentFileURL(reportAttachment), encoding: .utf8),
@@ -448,7 +452,10 @@ final class RepositoryTests: XCTestCase {
             repository.latestMessages(for: recipient.agent.id, consuming: false).first
         )
         XCTAssertEqual(delivery.sender.displayName, "Build Bot")
-        XCTAssertEqual(delivery.attachments.map(\.originalFilename), ["report.txt", "chart.png"])
+        XCTAssertEqual(
+            delivery.attachments.map(\.originalFilename),
+            ["report.txt", "chart.png", "brief.pdf"]
+        )
     }
 
     func testMessengerRollsBackAttachmentsWhenAnyFileCannotBeImported() throws {

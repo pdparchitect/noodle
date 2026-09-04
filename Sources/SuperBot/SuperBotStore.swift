@@ -358,7 +358,11 @@ final class SuperBotStore {
     }
 
     func revealAttachment(_ attachment: ConversationAttachment) {
-        NSWorkspace.shared.activateFileViewerSelecting([repository.attachmentFileURL(attachment)])
+        NSWorkspace.shared.activateFileViewerSelecting([attachmentFileURL(attachment)])
+    }
+
+    func attachmentFileURL(_ attachment: ConversationAttachment) -> URL {
+        repository.attachmentFileURL(attachment)
     }
 
     func refreshTranscripts() {

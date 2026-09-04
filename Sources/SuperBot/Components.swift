@@ -82,6 +82,7 @@ struct ConversationAvatar: View {
 struct MessageBubble: View {
     @Environment(SuperBotStore.self) private var store
     let message: ChatMessage
+    @State private var previewedAttachment: ConversationAttachment?
 
     private var isUser: Bool {
         if case .user = message.author { return true }
@@ -107,7 +108,7 @@ struct MessageBubble: View {
 
                     ForEach(store.attachments(for: message)) { attachment in
                         Button {
-                            store.revealAttachment(attachment)
+                            previewedAttachment = attachment
                         } label: {
                             HStack(spacing: 8) {
                                 Image(systemName: attachmentSymbol(attachment))
@@ -124,7 +125,7 @@ struct MessageBubble: View {
                                     .opacity(0.72)
                                 }
                                 Spacer(minLength: 3)
-                                Image(systemName: "arrow.forward.circle")
+                                Image(systemName: "eye.circle")
                                     .font(.system(size: 13))
                                     .opacity(0.75)
                             }
@@ -134,7 +135,12 @@ struct MessageBubble: View {
                             .background(.white.opacity(0.13), in: RoundedRectangle(cornerRadius: 10))
                         }
                         .buttonStyle(.plain)
-                        .help("Show Attachment in Finder")
+                        .help("Quick Look Attachment")
+                        .contextMenu {
+                            Button("Show in Finder", systemImage: "folder") {
+                                store.revealAttachment(attachment)
+                            }
+                        }
                     }
                 }
                     .padding(.horizontal, 13)
@@ -155,6 +161,13 @@ struct MessageBubble: View {
             if !isUser { Spacer(minLength: 120) }
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))
+        .popover(item: $previewedAttachment, arrowEdge: isUser ? .trailing : .leading) { attachment in
+            AttachmentPreviewPopover(
+                attachment: attachment,
+                fileURL: store.attachmentFileURL(attachment),
+                showInFinder: { store.revealAttachment(attachment) }
+            )
+        }
     }
 
     private var deliveryLabel: String {
