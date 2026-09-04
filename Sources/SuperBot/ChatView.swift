@@ -80,6 +80,7 @@ struct ChatView: View {
                         .foregroundStyle(.secondary)
                         .frame(width: 30, height: 30)
                         .background(.quaternary.opacity(0.35), in: Circle())
+                        .frame(width: composerControlHeight, height: composerControlHeight)
                 }
                 .buttonStyle(.plain)
                 .help("Add Attachment")
@@ -118,7 +119,7 @@ struct ChatView: View {
                     }
                 }
                 .padding(.horizontal, 7)
-                .frame(minHeight: 32)
+                .frame(minHeight: composerControlHeight)
                 .background(.quaternary.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 16).stroke(.separator.opacity(0.6)))
             }
@@ -133,6 +134,8 @@ struct ChatView: View {
     private var composerPrompt: String {
         "Message \(store.title(for: conversation))"
     }
+
+    private var composerControlHeight: CGFloat { 32 }
 }
 
 private struct ConversationStartView: View {
