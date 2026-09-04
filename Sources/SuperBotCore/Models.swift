@@ -202,7 +202,7 @@ public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
     public let launcherExecutableURL: URL?
 
-    public static let managedSkillVersion = 3
+    public static let managedSkillVersion = 4
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
         self.rootURL = rootURL.standardizedFileURL
@@ -644,7 +644,7 @@ public struct WorkspaceRepository: Sendable {
 
     ## Messages
 
-    SuperBot notifications only mean that this inbox may have changed. They never contain the user's message. Whenever SuperBot notifies you, immediately call the harness-provided `superbot_get_latest` tool, inspect every delivery, and respond when appropriate with `superbot_send`. Never reply to the notification text itself. If there are no deliveries, finish quietly.
+    SuperBot notifications only mean that this inbox may have changed. They never contain the user's message. In Codex, immediately invoke the harness-provided tool through the programmatic bridge and forward its complete return value: `const deliveries = await tools.superbot_get_latest({}); text(deliveries);`. Inspect every JSON delivery and respond when appropriate with `const sent = await tools.superbot_send({conversationID: "<uuid>", body: "<reply>"}); text(sent);`. SuperBot tools return their payload directly; never inspect `result.content`. Never reply to the notification text itself. If there are no deliveries, finish quietly.
 
     Read new direct and group messages:
 
@@ -667,7 +667,7 @@ public struct WorkspaceRepository: Sendable {
 
     # Messenger
 
-    In Codex, call `superbot_get_latest` to receive unread messages as JSON. Each delivery includes the conversation, message, and linked attachment metadata. Reply with `superbot_send` using the conversation UUID and response body.
+    In Codex, invoke `superbot_get_latest` through the programmatic bridge and forward its complete return value with `text(deliveries)`: `const deliveries = await tools.superbot_get_latest({}); text(deliveries);`. Each delivery includes the conversation, message, and linked attachment metadata. Reply with `const sent = await tools.superbot_send({conversationID: "<uuid>", body: "<reply>"}); text(sent);`. SuperBot tools return their payload directly; never inspect `result.content`.
 
     The bundled command-line helper remains available to harnesses that use shell commands:
 

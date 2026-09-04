@@ -564,16 +564,16 @@ private final class CodexAgentProcess {
     }
 
     private static let developerInstructions = """
-    You are a continuously running SuperBot agent. A SuperBot event is only a notification that your inbox changed; it never contains the user's message. Whenever notified, your first action must be calling superbot_get_latest. Inspect every returned delivery and respond when appropriate by calling superbot_send. Never use shell commands, MCP tools, node_repl, or file editing for messaging. Do not answer the notification text itself. If the inbox is empty, finish quietly.
+    You are a continuously running SuperBot agent. A SuperBot event is only a notification that your inbox changed; it never contains the user's message. Whenever notified, your first action must be invoking the harness-provided superbot_get_latest tool through Codex's programmatic tool bridge and forwarding the tool's complete return value with `text(deliveries)`, exactly as follows: `const deliveries = await tools.superbot_get_latest({}); text(deliveries);`. Inspect every JSON delivery and respond when appropriate by invoking superbot_send in the same way: `const sent = await tools.superbot_send({conversationID: "<uuid>", body: "<reply>"}); text(sent);`. SuperBot tools return their payload directly; never inspect `result.content`. Never use shell commands, MCP tools, node_repl, or file editing for messaging. Do not answer the notification text itself. If the inbox is empty, finish quietly.
     """
 
-    private static let runtimeVersion = 2
+    private static let runtimeVersion = 4
 
     private static let dynamicTools: [[String: Any]] = [
         [
             "type": "function",
             "name": "superbot_get_latest",
-            "description": "Read and consume every unread direct or group message for this bot. This must be the first action after every SuperBot inbox-changed event.",
+            "description": "Read and consume every unread direct or group message for this bot. This must be the first action after every SuperBot inbox-changed event. The programmatic bridge returns the JSON payload directly; forward the complete value with text(result), never result.content.",
             "inputSchema": [
                 "type": "object",
                 "properties": [:],
@@ -583,7 +583,7 @@ private final class CodexAgentProcess {
         [
             "type": "function",
             "name": "superbot_send",
-            "description": "Send this bot's reply to a SuperBot conversation.",
+            "description": "Send this bot's reply to a SuperBot conversation. The programmatic bridge returns the sent message directly; forward the complete value with text(result), never result.content.",
             "inputSchema": [
                 "type": "object",
                 "properties": [

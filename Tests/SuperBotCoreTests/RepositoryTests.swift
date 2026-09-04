@@ -44,6 +44,18 @@ final class RepositoryTests: XCTestCase {
             ),
             launcher.path
         )
+        let agentsGuide = try String(
+            contentsOf: directory.appendingPathComponent("AGENTS.md"),
+            encoding: .utf8
+        )
+        let messengerGuide = try String(
+            contentsOf: directory.appendingPathComponent(".agents/skills/messenger/SKILL.md"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(agentsGuide.contains("text(deliveries)"))
+        XCTAssertTrue(agentsGuide.contains("never inspect `result.content`"))
+        XCTAssertTrue(messengerGuide.contains("text(deliveries)"))
+        XCTAssertTrue(messengerGuide.contains("never inspect `result.content`"))
         XCTAssertEqual(created.conversation.participantIDs, [created.agent.id])
     }
 
