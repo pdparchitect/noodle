@@ -52,12 +52,17 @@ final class RepositoryTests: XCTestCase {
             contentsOf: directory.appendingPathComponent(".agents/skills/messenger/SKILL.md"),
             encoding: .utf8
         )
-        XCTAssertTrue(agentsGuide.contains("text(deliveries)"))
+        XCTAssertTrue(agentsGuide.contains("tools.exec_command"))
+        XCTAssertTrue(agentsGuide.contains("--get-latest --inline-images"))
+        XCTAssertTrue(agentsGuide.contains("max_output_tokens: 250000"))
+        XCTAssertTrue(agentsGuide.contains("image(visual.dataURL"))
         XCTAssertTrue(agentsGuide.contains("named `participants`"))
-        XCTAssertTrue(agentsGuide.contains("never inspect `result.content`"))
-        XCTAssertTrue(messengerGuide.contains("text(deliveries)"))
+        XCTAssertFalse(agentsGuide.contains("superbot_get_latest"))
+        XCTAssertTrue(messengerGuide.contains("tools.exec_command"))
+        XCTAssertTrue(messengerGuide.contains("--get-latest --inline-images"))
+        XCTAssertTrue(messengerGuide.contains("max_output_tokens: 250000"))
         XCTAssertTrue(messengerGuide.contains("named participant roster"))
-        XCTAssertTrue(messengerGuide.contains("never inspect `result.content`"))
+        XCTAssertFalse(messengerGuide.contains("superbot_get_latest"))
         XCTAssertEqual(created.conversation.participantIDs, [created.agent.id])
     }
 
@@ -313,6 +318,23 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(deliveredAttachment.originalFilename, "reference.png")
         XCTAssertTrue(deliveredAttachment.absolutePath.hasPrefix("/"))
         XCTAssertTrue(FileManager.default.fileExists(atPath: deliveredAttachment.absolutePath))
+        XCTAssertEqual(
+            try repository.inlineImageDataURL(for: deliveredAttachment),
+            "data:image/png;base64,aW1hZ2UgYnl0ZXM="
+        )
+
+        let inlineResult = MessengerCLI.run(arguments: [
+            command.path, "--get-latest", "--peek", "--inline-images"
+        ])
+        XCTAssertEqual(inlineResult.exitCode, 0)
+        let payload = try decode(MessengerInboxPayload.self, from: inlineResult.standardOutput)
+        XCTAssertEqual(payload.deliveries.count, 1)
+        XCTAssertEqual(payload.images, [MessengerInlineImage(
+            attachmentID: attachment.id,
+            originalFilename: "reference.png",
+            mediaType: "image/png",
+            dataURL: "data:image/png;base64,aW1hZ2UgYnl0ZXM="
+        )])
     }
 
     func testMessengerConsumesUnreadMessagesAndCanReply() throws {
@@ -335,16 +357,18 @@ final class RepositoryTests: XCTestCase {
         let second = MessengerCLI.run(arguments: [command.path, "--get-latest"])
         XCTAssertEqual(try decode([MessengerDelivery].self, from: second.standardOutput).count, 0)
 
+        let replyBody = "The workspace bridge is ready. ✓"
         let reply = MessengerCLI.run(arguments: [
             command.path,
             "--send",
             "--conversation", created.conversation.id.uuidString,
-            "--body", "The workspace bridge is ready."
+            "--body-base64", Data(replyBody.utf8).base64EncodedString()
         ])
         XCTAssertEqual(reply.exitCode, 0)
         let sent = try decode(ChatMessage.self, from: reply.standardOutput)
         XCTAssertEqual(sent.author, .agent(created.agent.id))
         XCTAssertEqual(sent.delivery, .delivered)
+        XCTAssertEqual(sent.body, replyBody)
     }
 
     func testMessengerDeliveryIdentifiesMeParticipantsAndEachSender() throws {

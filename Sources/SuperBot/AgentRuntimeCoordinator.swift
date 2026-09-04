@@ -204,7 +204,6 @@ private final class CodexAgentProcess {
     private let conversationsURL: URL
     private let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
     private let stateURL: URL
-    private let repository: WorkspaceRepository
 
     private var process: Process?
     private var input: FileHandle?
@@ -234,7 +233,6 @@ private final class CodexAgentProcess {
         self.conversationsURL = conversationsURL
         self.onSnapshot = onSnapshot
         stateURL = workspaceURL.appendingPathComponent(".agents/codex-runtime.json")
-        repository = WorkspaceRepository(rootURL: conversationsURL.deletingLastPathComponent())
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
         let state = Self.loadState(from: stateURL)
         threadID = state?.version == Self.runtimeVersion ? state?.threadID : nil
@@ -349,13 +347,6 @@ private final class CodexAgentProcess {
     }
 
     private func handle(_ message: [String: Any]) {
-        if message["method"] as? String == "item/tool/call",
-           let requestID = message["id"],
-           let params = message["params"] as? [String: Any] {
-            handleDynamicToolCall(requestID: requestID, params: params)
-            return
-        }
-
         if let id = Self.integerID(message["id"]),
            let purpose = purposes.removeValue(forKey: id) {
             if let error = message["error"] as? [String: Any] {
@@ -412,8 +403,7 @@ private final class CodexAgentProcess {
             "approvalPolicy": "never",
             "sandbox": "workspace-write",
             "serviceName": "superbot",
-            "developerInstructions": Self.developerInstructions,
-            "dynamicTools": Self.dynamicTools
+            "developerInstructions": Self.developerInstructions
         ]
         if let model = configuration.modelIdentifier { params["model"] = model }
 
@@ -460,53 +450,6 @@ private final class CodexAgentProcess {
             notificationPending = true
             fail(error.localizedDescription)
         }
-    }
-
-    private func handleDynamicToolCall(requestID: Any, params: [String: Any]) {
-        do {
-            let tool = params["tool"] as? String ?? ""
-            let output: String
-            switch tool {
-            case "superbot_get_latest":
-                let deliveries = try repository.latestMessages(
-                    for: configuration.id,
-                    consuming: true
-                )
-                output = try Self.jsonString(deliveries)
-            case "superbot_send":
-                let arguments = params["arguments"] as? [String: Any] ?? [:]
-                guard let rawConversationID = arguments["conversationID"] as? String,
-                      let conversationID = UUID(uuidString: rawConversationID),
-                      let body = arguments["body"] as? String else {
-                    throw DynamicToolError.invalidArguments
-                }
-                let message = try repository.sendAgentMessage(
-                    agentID: configuration.id,
-                    conversationID: conversationID,
-                    body: body
-                )
-                output = try Self.jsonString(message)
-            default:
-                throw DynamicToolError.unknownTool(tool)
-            }
-            try respondToDynamicTool(requestID: requestID, success: true, text: output)
-        } catch {
-            try? respondToDynamicTool(
-                requestID: requestID,
-                success: false,
-                text: error.localizedDescription
-            )
-        }
-    }
-
-    private func respondToDynamicTool(requestID: Any, success: Bool, text: String) throws {
-        try send([
-            "id": requestID,
-            "result": [
-                "contentItems": [["type": "inputText", "text": text]],
-                "success": success
-            ]
-        ])
     }
 
     private func request(_ purpose: RequestPurpose, method: String, params: [String: Any]) throws {
@@ -564,62 +507,10 @@ private final class CodexAgentProcess {
     }
 
     private static let developerInstructions = """
-    You are a continuously running SuperBot agent. A SuperBot event is only a notification that your inbox changed; it never contains the user's message. Whenever notified, your first action must be invoking the harness-provided superbot_get_latest tool through Codex's programmatic tool bridge and forwarding the tool's complete return value with `text(deliveries)`, exactly as follows: `const deliveries = await tools.superbot_get_latest({}); text(deliveries);`. Every delivery explicitly identifies you in `me`, provides a named `participants` roster where your handle is `me`, and annotates the message `sender` with a `user`, `me`, `bot`, or `system` handle. Use these identities instead of guessing from UUIDs. Every linked attachment includes an `absolutePath`; when a message refers to an attachment, use that exact path with your local file or image inspection tools before replying. Inspect every JSON delivery and respond when appropriate by invoking superbot_send in the same way: `const sent = await tools.superbot_send({conversationID: "<uuid>", body: "<reply>"}); text(sent);`. SuperBot tools return their payload directly; never inspect `result.content`. Never use shell commands, MCP tools, node_repl, or file editing for messaging. Do not answer the notification text itself. If the inbox is empty, finish quietly.
+    You are a continuously running SuperBot agent. A SuperBot event is only a notification that your inbox changed; it never contains the user's message. Whenever notified, your first action must be running the bundled Messenger CLI through Codex's programmatic bridge: `const r = await tools.exec_command({cmd: "./.agents/skills/messenger/messenger --get-latest --inline-images", max_output_tokens: 250000}); if (r.exit_code !== 0) throw new Error(r.output); const payload = JSON.parse(r.output); text(payload.deliveries); for (const visual of payload.images) image(visual.dataURL, "original");`. Every delivery explicitly identifies you in `me`, provides a named `participants` roster where your handle is `me`, and annotates the message `sender` with a `user`, `me`, `bot`, or `system` handle. Use these identities instead of guessing from UUIDs. The CLI includes attached images directly as visual inputs, so inspect them without calling a local image viewer. Every attachment also includes its exact `absolutePath` for non-visual file work. Run get-latest only once for each notification because it consumes the inbox. Reply with the Messenger CLI using `--send`, the conversation UUID, and `--body-base64`; encode a UTF-8 reply safely with `const bytes = new TextEncoder().encode(body); let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte); const encoded = btoa(binary);` and pass only `encoded` to the command. Never edit SuperBot's conversation files directly. Do not answer the notification text itself. If the inbox is empty, finish quietly.
     """
 
-    private static let runtimeVersion = 5
-
-    private static let dynamicTools: [[String: Any]] = [
-        [
-            "type": "function",
-            "name": "superbot_get_latest",
-            "description": "Read and consume every unread direct or group message for this bot. Each delivery explicitly identifies this bot as me, provides a named participant roster, annotates the sender as user, me, bot, or system, and gives every attachment an absolutePath that local file and image tools can open. This must be the first action after every SuperBot inbox-changed event. The programmatic bridge returns the JSON payload directly; forward the complete value with text(result), never result.content.",
-            "inputSchema": [
-                "type": "object",
-                "properties": [:],
-                "additionalProperties": false
-            ]
-        ],
-        [
-            "type": "function",
-            "name": "superbot_send",
-            "description": "Send this bot's reply to a SuperBot conversation. The programmatic bridge returns the sent message directly; forward the complete value with text(result), never result.content.",
-            "inputSchema": [
-                "type": "object",
-                "properties": [
-                    "conversationID": [
-                        "type": "string",
-                        "description": "Conversation UUID returned by superbot_get_latest."
-                    ],
-                    "body": [
-                        "type": "string",
-                        "description": "The reply text to post."
-                    ]
-                ],
-                "required": ["conversationID", "body"],
-                "additionalProperties": false
-            ]
-        ]
-    ]
-
-    private static func jsonString<Value: Encodable>(_ value: Value) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        return String(decoding: try encoder.encode(value), as: UTF8.self)
-    }
-
-    private enum DynamicToolError: LocalizedError {
-        case invalidArguments
-        case unknownTool(String)
-
-        var errorDescription: String? {
-            switch self {
-            case .invalidArguments: return "The Messenger tool arguments are invalid."
-            case .unknownTool(let name): return "Unknown SuperBot tool: \(name)"
-            }
-        }
-    }
+    private static let runtimeVersion = 7
 }
 
 @MainActor

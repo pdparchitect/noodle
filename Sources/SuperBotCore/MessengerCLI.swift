@@ -28,11 +28,28 @@ public enum MessengerCLI {
             let repository = WorkspaceRepository(rootURL: invocation.repositoryRoot)
 
             switch invocation.action {
-            case .getLatest(let consumes):
+            case .getLatest(let consumes, let includesInlineImages):
                 let deliveries = try repository.latestMessages(
                     for: invocation.agentID,
                     consuming: consumes
                 )
+                if includesInlineImages {
+                    var includedIDs = Set<UUID>()
+                    let images = deliveries
+                        .flatMap(\.attachments)
+                        .compactMap { attachment -> MessengerInlineImage? in
+                            guard includedIDs.insert(attachment.id).inserted,
+                                  let dataURL = try? repository.inlineImageDataURL(for: attachment)
+                            else { return nil }
+                            return MessengerInlineImage(
+                                attachmentID: attachment.id,
+                                originalFilename: attachment.originalFilename,
+                                mediaType: attachment.mediaType,
+                                dataURL: dataURL
+                            )
+                        }
+                    return .json(MessengerInboxPayload(deliveries: deliveries, images: images))
+                }
                 return .json(deliveries)
 
             case .listConversations:
@@ -60,7 +77,7 @@ public enum MessengerCLI {
     }
 
     private enum Action {
-        case getLatest(consumes: Bool)
+        case getLatest(consumes: Bool, includesInlineImages: Bool)
         case listConversations
         case send(conversationID: UUID, body: String)
         case help
@@ -97,13 +114,16 @@ public enum MessengerCLI {
             if values.contains("--help") || values.contains("-h") || values.isEmpty {
                 action = .help
             } else if values.contains("--get-latest") {
-                action = .getLatest(consumes: !values.contains("--peek"))
+                action = .getLatest(
+                    consumes: !values.contains("--peek"),
+                    includesInlineImages: values.contains("--inline-images")
+                )
             } else if values.contains("--list-conversations") {
                 action = .listConversations
             } else if values.contains("--send") {
                 guard let rawConversation = Self.option("--conversation", in: values),
                       let conversationID = UUID(uuidString: rawConversation),
-                      let body = Self.option("--body", in: values) else {
+                      let body = try Self.messageBody(in: values) else {
                     throw MessengerCLIError.invalidArguments
                 }
                 action = .send(conversationID: conversationID, body: body)
@@ -135,14 +155,26 @@ public enum MessengerCLI {
             }
             return arguments[index + 1]
         }
+
+        private static func messageBody(in arguments: [String]) throws -> String? {
+            if let encoded = option("--body-base64", in: arguments) {
+                guard let data = Data(base64Encoded: encoded),
+                      let body = String(data: data, encoding: .utf8) else {
+                    throw MessengerCLIError.invalidArguments
+                }
+                return body
+            }
+            return option("--body", in: arguments)
+        }
     }
 
     private static let help = """
     SuperBot Messenger
 
-      messenger --get-latest [--peek]
+      messenger --get-latest [--peek] [--inline-images]
       messenger --list-conversations
       messenger --send --conversation <uuid> --body <text>
+      messenger --send --conversation <uuid> --body-base64 <utf8-base64>
 
     The command normally discovers the bot from its symlink path. For diagnostics, append
     --agent-directory <absolute-agent-workspace-path>.

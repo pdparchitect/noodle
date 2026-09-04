@@ -216,6 +216,35 @@ public struct MessengerDelivery: Codable, Hashable, Sendable {
     }
 }
 
+public struct MessengerInlineImage: Codable, Hashable, Sendable {
+    public let attachmentID: UUID
+    public let originalFilename: String
+    public let mediaType: String
+    public let dataURL: String
+
+    public init(
+        attachmentID: UUID,
+        originalFilename: String,
+        mediaType: String,
+        dataURL: String
+    ) {
+        self.attachmentID = attachmentID
+        self.originalFilename = originalFilename
+        self.mediaType = mediaType
+        self.dataURL = dataURL
+    }
+}
+
+public struct MessengerInboxPayload: Codable, Hashable, Sendable {
+    public let deliveries: [MessengerDelivery]
+    public let images: [MessengerInlineImage]
+
+    public init(deliveries: [MessengerDelivery], images: [MessengerInlineImage]) {
+        self.deliveries = deliveries
+        self.images = images
+    }
+}
+
 public struct ManagedSkillManifest: Codable, Hashable, Sendable {
     public let version: Int
     public let managedPaths: [String]
@@ -261,7 +290,7 @@ public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
     public let launcherExecutableURL: URL?
 
-    public static let managedSkillVersion = 5
+    public static let managedSkillVersion = 7
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
         self.rootURL = rootURL.standardizedFileURL
@@ -530,6 +559,24 @@ public struct WorkspaceRepository: Sendable {
             .appendingPathComponent(attachment.storedFilename)
     }
 
+    public func inlineImageDataURL(for attachment: MessengerAttachment) throws -> String? {
+        guard attachment.mediaType.lowercased().hasPrefix("image/") else { return nil }
+
+        let directory = attachmentsDirectory(conversationID: attachment.conversationID)
+            .standardizedFileURL
+        let file = directory.appendingPathComponent(attachment.storedFilename)
+            .standardizedFileURL
+        let deliveredFile = URL(fileURLWithPath: attachment.absolutePath)
+            .standardizedFileURL
+        guard file.deletingLastPathComponent() == directory,
+              file == deliveredFile else {
+            throw WorkspaceError.invalidAttachment
+        }
+
+        let data = try Data(contentsOf: file, options: .mappedIfSafe)
+        return "data:\(attachment.mediaType);base64,\(data.base64EncodedString())"
+    }
+
     public func removeAttachment(_ attachment: ConversationAttachment) throws {
         let file = attachmentFileURL(attachment)
         let metadata = attachmentsDirectory(conversationID: attachment.conversationID)
@@ -787,7 +834,7 @@ public struct WorkspaceRepository: Sendable {
 
     ## Messages
 
-    SuperBot notifications only mean that this inbox may have changed. They never contain the user's message. In Codex, immediately invoke the harness-provided tool through the programmatic bridge and forward its complete return value: `const deliveries = await tools.superbot_get_latest({}); text(deliveries);`. Every delivery names `me`, lists the conversation's named `participants`, and annotates the message `sender` with a `user`, `me`, `bot`, or `system` handle. Every linked attachment includes an `absolutePath`; use that exact path with local file or image inspection tools whenever the message refers to an attachment. Inspect every JSON delivery and respond when appropriate with `const sent = await tools.superbot_send({conversationID: "<uuid>", body: "<reply>"}); text(sent);`. SuperBot tools return their payload directly; never inspect `result.content`. Never reply to the notification text itself. If there are no deliveries, finish quietly.
+    SuperBot notifications only mean that this inbox may have changed. They never contain the user's message. In Codex, immediately run the bundled Messenger CLI through the programmatic bridge: `const r = await tools.exec_command({cmd: "./.agents/skills/messenger/messenger --get-latest --inline-images", max_output_tokens: 250000}); if (r.exit_code !== 0) throw new Error(r.output); const payload = JSON.parse(r.output); text(payload.deliveries); for (const visual of payload.images) image(visual.dataURL, "original");`. Every delivery names `me`, lists the conversation's named `participants`, and annotates the message `sender` with a `user`, `me`, `bot`, or `system` handle. Images attached to unread messages arrive directly from the CLI as visual inputs, so inspect them without calling a local image viewer. Every attachment also includes its exact `absolutePath` for non-visual file work. Run the get-latest command only once for each notification because it consumes the inbox. Reply through the Messenger CLI using `--send`, the conversation UUID, and `--body-base64`. Never reply to the notification text itself. If there are no deliveries, finish quietly.
 
     Read new direct and group messages:
 
@@ -810,12 +857,12 @@ public struct WorkspaceRepository: Sendable {
 
     # Messenger
 
-    In Codex, invoke `superbot_get_latest` through the programmatic bridge and forward its complete return value with `text(deliveries)`: `const deliveries = await tools.superbot_get_latest({}); text(deliveries);`. Each delivery includes `me`, a named participant roster, an explicitly annotated sender (`user`, `me`, `bot`, or `system`), the message, and linked attachments. Every attachment includes an `absolutePath`; use that exact path with the harness's local file or image inspection tools whenever the message refers to an attachment. Reply with `const sent = await tools.superbot_send({conversationID: "<uuid>", body: "<reply>"}); text(sent);`. SuperBot tools return their payload directly; never inspect `result.content`.
+    In Codex, run the bundled CLI through the programmatic bridge: `const r = await tools.exec_command({cmd: "./.agents/skills/messenger/messenger --get-latest --inline-images", max_output_tokens: 250000}); if (r.exit_code !== 0) throw new Error(r.output); const payload = JSON.parse(r.output); text(payload.deliveries); for (const visual of payload.images) image(visual.dataURL, "original");`. Each delivery includes `me`, a named participant roster, an explicitly annotated sender (`user`, `me`, `bot`, or `system`), the message, and linked attachments. The CLI includes attached images as visual inputs; inspect those without calling a local image viewer. Every attachment also includes its exact `absolutePath` for non-visual file work. Run get-latest only once for each notification because it consumes the inbox.
 
     The bundled command-line helper remains available to harnesses that use shell commands:
 
-    `./.agents/skills/messenger/messenger --get-latest`
+    `./.agents/skills/messenger/messenger --get-latest --inline-images`
 
-    Reply with `./.agents/skills/messenger/messenger --send --conversation <uuid> --body <text>`. The executable identifies this bot from the opaque workspace path. Do not edit SuperBot's conversation JSON directly.
+    Reply with `./.agents/skills/messenger/messenger --send --conversation <uuid> --body-base64 <utf8-base64>`. The executable identifies this bot from the opaque workspace path. Do not edit SuperBot's conversation JSON directly.
     """
 }
