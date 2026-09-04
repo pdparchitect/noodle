@@ -103,6 +103,7 @@ private struct WindowConfiguration: NSViewRepresentable {
 struct RootView: View {
     @Environment(SuperBotStore.self) private var store
     @State private var columnVisibility = NavigationSplitViewVisibility.all
+    @State private var isFileDropTargeted = false
 
     var body: some View {
         @Bindable var store = store
@@ -119,6 +120,29 @@ struct RootView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        .dropDestination(for: URL.self) { urls, _ in
+            guard store.selectedConversation != nil else { return false }
+
+            var importedURLs = Set<URL>()
+            for url in urls {
+                let standardizedURL = url.standardizedFileURL
+                if importedURLs.insert(standardizedURL).inserted {
+                    store.importAttachment(from: standardizedURL)
+                }
+            }
+            return !importedURLs.isEmpty
+        } isTargeted: { isTargeted in
+            isFileDropTargeted = isTargeted
+        }
+        .overlay {
+            if isFileDropTargeted, store.selectedConversation != nil {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(Color.accentColor, lineWidth: 2)
+                    .padding(5)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar {
             ToolbarItem(placement: .navigation) {
