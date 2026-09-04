@@ -1,0 +1,117 @@
+import SwiftUI
+import SuperBotCore
+
+struct SidebarView: View {
+    @Environment(SuperBotStore.self) private var store
+    @FocusState private var searchIsFocused: Bool
+
+    var body: some View {
+        @Bindable var store = store
+
+        List(selection: $store.selectedConversationID) {
+            if !store.directConversations.isEmpty {
+                Section("Bots") {
+                    ForEach(store.directConversations) { conversation in
+                        ConversationRow(conversation: conversation)
+                            .tag(conversation.id)
+                            .contextMenu {
+                                if let agent = store.participants(for: conversation).first {
+                                    Button("Rename Bot") {
+                                        store.agentBeingRenamed = agent
+                                    }
+                                    Button("Show Workspace in Finder") {
+                                        store.revealWorkspace(for: agent)
+                                    }
+                                }
+                            }
+                    }
+                }
+            }
+
+            if !store.groupConversations.isEmpty {
+                Section("Groups") {
+                    ForEach(store.groupConversations) { conversation in
+                        ConversationRow(conversation: conversation)
+                            .tag(conversation.id)
+                    }
+                }
+            }
+        }
+        .listStyle(.sidebar)
+        .searchable(text: $store.searchText, placement: .sidebar, prompt: "Search")
+        .searchFocused($searchIsFocused)
+        .overlay {
+            if store.conversations.isEmpty {
+                ContentUnavailableView {
+                    Label("No Bots Yet", systemImage: "bubble.left.and.bubble.right")
+                } description: {
+                    Text("Create a bot to start a conversation.")
+                } actions: {
+                    Button("Create Bot") {
+                        store.creationSheet = .bot
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding(24)
+            } else if store.filteredConversations.isEmpty {
+                ContentUnavailableView.search(text: store.searchText)
+            }
+        }
+        .onChange(of: store.selectedConversationID) { _, _ in
+            store.draft = ""
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
+            searchIsFocused = true
+        }
+    }
+}
+
+private struct ConversationRow: View {
+    @Environment(SuperBotStore.self) private var store
+    let conversation: BotConversation
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ConversationAvatar(
+                participants: store.participants(for: conversation),
+                isGroup: conversation.kind == .group,
+                size: 42
+            )
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(store.title(for: conversation))
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .lineLimit(1)
+
+                    Spacer(minLength: 4)
+
+                    Text(timestamp)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.tertiary)
+                }
+
+                Text(store.preview(for: conversation))
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(height: 66)
+        .contentShape(Rectangle())
+        .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10))
+        .listRowSeparator(.visible, edges: .bottom)
+        .listRowSeparatorTint(Color.primary.opacity(0.12))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(store.title(for: conversation)), \(store.preview(for: conversation))")
+    }
+
+    private var timestamp: String {
+        if Calendar.current.isDateInToday(conversation.updatedAt) {
+            conversation.updatedAt.formatted(date: .omitted, time: .shortened)
+        } else {
+            conversation.updatedAt.formatted(date: .abbreviated, time: .omitted)
+        }
+    }
+}
