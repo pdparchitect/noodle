@@ -221,18 +221,31 @@ struct GroupInfoSheet: View {
     @Environment(SuperBotStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let conversation: BotConversation
+    @State private var selectedIDs: Set<UUID>
     @State private var confirmingDeletion = false
+
+    init(conversation: BotConversation) {
+        self.conversation = conversation
+        _selectedIDs = State(initialValue: Set(conversation.participantIDs))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("Done") { dismiss() }
+                Button("Cancel") { dismiss() }
                     .buttonStyle(.plain)
                     .foregroundStyle(.blue)
                 Spacer()
                 Text("Group Info").font(.headline)
                 Spacer()
-                Color.clear.frame(width: 34, height: 1)
+                Button("Save") {
+                    if store.updateGroup(conversation, participantIDs: selectedIDs) {
+                        dismiss()
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(canSave ? Color.blue : .secondary)
+                .disabled(!canSave)
             }
             .padding(16)
 
@@ -241,31 +254,37 @@ struct GroupInfoSheet: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(spacing: 14) {
                     ConversationAvatar(
-                        participants: store.participants(for: conversation),
+                        participants: selectedBots,
                         isGroup: true,
                         size: 64
                     )
                     VStack(alignment: .leading, spacing: 4) {
                         Text(conversation.displayName)
                             .font(.title3.weight(.semibold))
-                        Text("\(store.participants(for: conversation).count) bots")
+                        Text("\(selectedIDs.count) bots")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
 
                 GroupBox("Bots") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(store.participants(for: conversation)) { agent in
-                            HStack(spacing: 9) {
+                    List(store.agents) { agent in
+                        Toggle(isOn: selectionBinding(for: agent.id)) {
+                            HStack(spacing: 10) {
                                 BotAvatar(agent: agent, size: 28)
                                 Text(agent.displayName)
-                                Spacer()
                             }
                         }
+                        .toggleStyle(.checkbox)
+                        .padding(.vertical, 3)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .listStyle(.inset)
+                    .frame(minHeight: 150)
                 }
+
+                Text("Choose at least two bots. Membership changes apply to future messages.")
+                    .font(.caption)
+                    .foregroundStyle(selectedIDs.count >= 2 ? Color.secondary : Color.red)
 
                 Spacer()
                 Divider()
@@ -289,6 +308,27 @@ struct GroupInfoSheet: View {
         } message: {
             Text(store.deletionMessage(for: conversation))
         }
+    }
+
+    private var selectedBots: [AgentRecord] {
+        store.agents.filter { selectedIDs.contains($0.id) }
+    }
+
+    private var canSave: Bool {
+        selectedIDs.count >= 2 && selectedIDs != Set(conversation.participantIDs)
+    }
+
+    private func selectionBinding(for id: UUID) -> Binding<Bool> {
+        Binding(
+            get: { selectedIDs.contains(id) },
+            set: { isSelected in
+                if isSelected {
+                    selectedIDs.insert(id)
+                } else {
+                    selectedIDs.remove(id)
+                }
+            }
+        )
     }
 }
 

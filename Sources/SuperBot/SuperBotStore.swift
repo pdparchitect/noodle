@@ -195,6 +195,25 @@ final class SuperBotStore {
         }
     }
 
+    func updateGroup(_ conversation: BotConversation, participantIDs: Set<UUID>) -> Bool {
+        do {
+            let updated = try repository.updateGroupParticipants(
+                conversationID: conversation.id,
+                participantIDs: Array(participantIDs),
+                existingAgents: agents
+            )
+            if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
+                conversations[index] = updated
+                conversations.sort { $0.updatedAt > $1.updatedAt }
+            }
+            groupBeingEdited = nil
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     @discardableResult
     func delete(_ conversation: BotConversation) -> Bool {
         let agent = conversation.kind == .direct

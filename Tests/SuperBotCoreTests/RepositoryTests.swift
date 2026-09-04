@@ -115,6 +115,84 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(loadedMessage.delivery, .queued)
     }
 
+    func testUpdateGroupMembershipPreservesHistoryAndStartsNewMemberAtCurrentEnd() throws {
+        let first = try repository.createAgent(named: "Research Bot")
+        let second = try repository.createAgent(named: "Build Bot")
+        let third = try repository.createAgent(named: "Review Bot")
+        let agents = [first.agent, second.agent, third.agent]
+        let group = try repository.createGroup(
+            named: "Launch Room",
+            participantIDs: [first.agent.id, second.agent.id],
+            existingAgents: agents
+        )
+        let historical = ChatMessage(
+            conversationID: group.id,
+            author: .user,
+            body: "Earlier context",
+            delivery: .delivered
+        )
+        try repository.append(historical)
+
+        let updated = try repository.updateGroupParticipants(
+            conversationID: group.id,
+            participantIDs: [second.agent.id, third.agent.id],
+            existingAgents: agents
+        )
+
+        XCTAssertEqual(Set(updated.participantIDs), [second.agent.id, third.agent.id])
+        let preservedHistory = try repository.loadMessages(conversationID: group.id)
+        XCTAssertEqual(preservedHistory.map(\.id), [historical.id])
+        XCTAssertEqual(preservedHistory.map(\.body), ["Earlier context"])
+        XCTAssertTrue(try repository.latestMessages(for: first.agent.id).isEmpty)
+        XCTAssertTrue(try repository.latestMessages(for: third.agent.id).isEmpty)
+
+        let fresh = ChatMessage(
+            conversationID: group.id,
+            author: .user,
+            body: "New context",
+            delivery: .delivered
+        )
+        try repository.append(fresh)
+
+        XCTAssertEqual(
+            try repository.latestMessages(for: third.agent.id).map(\.message.body),
+            ["New context"]
+        )
+    }
+
+    func testUpdateGroupMembershipRequiresTwoKnownBots() throws {
+        let first = try repository.createAgent(named: "Research Bot")
+        let second = try repository.createAgent(named: "Build Bot")
+        let agents = [first.agent, second.agent]
+        let group = try repository.createGroup(
+            named: "Launch Room",
+            participantIDs: [first.agent.id, second.agent.id],
+            existingAgents: agents
+        )
+
+        XCTAssertThrowsError(
+            try repository.updateGroupParticipants(
+                conversationID: group.id,
+                participantIDs: [first.agent.id],
+                existingAgents: agents
+            )
+        ) { error in
+            XCTAssertEqual(error as? WorkspaceError, .insufficientGroupParticipants)
+        }
+
+        XCTAssertThrowsError(
+            try repository.updateGroupParticipants(
+                conversationID: group.id,
+                participantIDs: [first.agent.id, UUID()],
+                existingAgents: agents
+            )
+        ) { error in
+            guard case .missingAgent = error as? WorkspaceError else {
+                return XCTFail("Expected a missing agent error")
+            }
+        }
+    }
+
     func testDeleteGroupRemovesTranscriptAndAttachmentsWithoutDeletingBots() throws {
         let first = try repository.createAgent(named: "Research Bot")
         let second = try repository.createAgent(named: "Build Bot")

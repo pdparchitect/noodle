@@ -321,6 +321,44 @@ public struct WorkspaceRepository: Sendable {
         return conversation
     }
 
+    public func updateGroupParticipants(
+        conversationID: UUID,
+        participantIDs: [UUID],
+        existingAgents: [AgentRecord],
+        now: Date = Date()
+    ) throws -> BotConversation {
+        guard var conversation = try loadConversations().first(where: {
+            $0.id == conversationID && $0.kind == .group
+        }) else {
+            throw WorkspaceError.missingConversation(conversationID)
+        }
+
+        let uniqueIDs = Array(Set(participantIDs))
+        guard uniqueIDs.count >= 2 else { throw WorkspaceError.insufficientGroupParticipants }
+
+        let knownIDs = Set(existingAgents.map(\.id))
+        guard Set(uniqueIDs).isSubset(of: knownIDs) else {
+            throw WorkspaceError.missingAgent(uniqueIDs.first(where: { !knownIDs.contains($0) }) ?? UUID())
+        }
+
+        let addedIDs = Set(uniqueIDs).subtracting(conversation.participantIDs)
+        if !addedIDs.isEmpty {
+            let messageCount = try loadMessages(conversationID: conversation.id).count
+            let conversationKey = conversation.id.uuidString.lowercased()
+            for agentID in addedIDs {
+                let inboxFile = directory(forAgentID: agentID).appendingPathComponent(".agents/inbox.json")
+                var inbox = (try? read(AgentInbox.self, from: inboxFile)) ?? AgentInbox()
+                inbox.conversationOffsets[conversationKey] = messageCount
+                try write(inbox, to: inboxFile)
+            }
+        }
+
+        conversation.participantIDs = uniqueIDs.sorted { $0.uuidString < $1.uuidString }
+        conversation.updatedAt = now
+        try updateConversation(conversation)
+        return conversation
+    }
+
     public func append(_ message: ChatMessage) throws {
         let file = conversationDirectory(id: message.conversationID).appendingPathComponent("messages.json")
         try withConversationLock(message.conversationID) {
