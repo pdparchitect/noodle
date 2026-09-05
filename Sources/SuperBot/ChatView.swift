@@ -192,6 +192,12 @@ private struct TranscriptViewport: Equatable {
     var isAtBottom = true
 }
 
+private struct TranscriptGeometry: Equatable {
+    let viewport: TranscriptViewport
+    let contentHeight: CGFloat
+    let containerHeight: CGFloat
+}
+
 private struct ConversationTranscript: View {
     @Environment(SuperBotStore.self) private var store
     let conversation: BotConversation
@@ -201,6 +207,7 @@ private struct ConversationTranscript: View {
     @State private var position: ScrollPosition
     @State private var viewport: TranscriptViewport
     @State private var followsLatest: Bool
+    @State private var userIsScrolling = false
 
     init(
         conversation: BotConversation,
@@ -246,22 +253,47 @@ private struct ConversationTranscript: View {
         .defaultScrollAnchor(.bottom, for: .initialOffset)
         .defaultScrollAnchor(followsLatest ? .bottom : .top, for: .sizeChanges)
         .defaultScrollAnchor(.top, for: .alignment)
-        .onScrollGeometryChange(for: TranscriptViewport.self) { geometry in
+        .onScrollGeometryChange(for: TranscriptGeometry.self) { geometry in
             let bottom = max(0, geometry.contentSize.height + geometry.contentInsets.bottom - geometry.containerSize.height)
-            return TranscriptViewport(
-                offset: max(0, geometry.contentOffset.y),
-                isAtBottom: geometry.contentOffset.y >= bottom - 2
+            return TranscriptGeometry(
+                viewport: TranscriptViewport(
+                    // ScrollPosition(y:) is measured from the inset-adjusted
+                    // top. Geometry's raw offset starts at -contentInsets.top.
+                    // Restoring the raw value subtracts the toolbar inset on
+                    // every round trip through another conversation.
+                    offset: max(0, geometry.contentOffset.y + geometry.contentInsets.top),
+                    isAtBottom: geometry.contentOffset.y >= bottom - 2
+                ),
+                contentHeight: geometry.contentSize.height,
+                containerHeight: geometry.containerSize.height
             )
         } action: { _, updated in
-            viewport = updated
-            if position.isPositionedByUser {
-                followsLatest = updated.isAtBottom
-                saveViewport(updated)
+            viewport = updated.viewport
+            // isPositionedByUser stays true after a gesture ends. It must not
+            // turn a later message/thumbnail resize into an apparent scroll away.
+            if userIsScrolling {
+                followsLatest = updated.viewport.isAtBottom
+                saveViewport(updated.viewport)
+            } else if followsLatest && !updated.viewport.isAtBottom {
+                position.scrollTo(edge: .bottom)
             }
         }
-        .onDisappear {
-            saveViewport(TranscriptViewport(offset: viewport.offset, isAtBottom: followsLatest))
+        .onScrollPhaseChange { _, phase in
+            userIsScrolling = phase != .idle && phase != .animating
         }
+        .onChange(of: store.messages(for: conversation).last?.id) { _, _ in
+            let last = store.messages(for: conversation).last
+            if last?.author == .user {
+                followsLatest = true
+                saveViewport(TranscriptViewport(offset: viewport.offset, isAtBottom: true))
+            }
+            if followsLatest && !userIsScrolling {
+                position.scrollTo(edge: .bottom)
+            }
+        }
+        // Save only actual user scrolling (above), never teardown geometry.
+        // During a conversation switch the outgoing scroll view can receive
+        // a resized viewport; recording it would corrupt its saved position.
     }
 }
 
