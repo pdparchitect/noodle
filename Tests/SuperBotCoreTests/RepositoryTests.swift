@@ -211,6 +211,24 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(loaded.avatarImageData, photo)
     }
 
+    func testUnreadConversationIDsPersistAndCanBeCleared() throws {
+        let first = try repository.createAgent(named: "Build Bot")
+        let second = try repository.createAgent(named: "Review Bot")
+        let unread = Set([first.conversation.id, second.conversation.id])
+
+        try repository.saveUnreadConversationIDs(unread)
+        XCTAssertEqual(try repository.loadUnreadConversationIDs(), unread)
+
+        try repository.saveUnreadConversationIDs([second.conversation.id])
+        XCTAssertEqual(
+            try repository.loadUnreadConversationIDs(),
+            [second.conversation.id]
+        )
+
+        try repository.saveUnreadConversationIDs([])
+        XCTAssertTrue(try repository.loadUnreadConversationIDs().isEmpty)
+    }
+
     func testGroupAndTranscriptRoundTrip() throws {
         let first = try repository.createAgent(named: "Research Bot")
         let second = try repository.createAgent(named: "Build Bot")

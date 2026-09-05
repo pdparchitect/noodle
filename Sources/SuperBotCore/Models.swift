@@ -305,9 +305,29 @@ public struct WorkspaceRepository: Sendable {
         rootURL.appendingPathComponent("Conversations", isDirectory: true)
     }
 
+    private var conversationStateURL: URL {
+        rootURL.appendingPathComponent("conversation-state.json")
+    }
+
     public func prepare() throws {
         try FileManager.default.createDirectory(at: agentsURL, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: conversationsURL, withIntermediateDirectories: true)
+    }
+
+    public func loadUnreadConversationIDs() throws -> Set<UUID> {
+        guard FileManager.default.fileExists(atPath: conversationStateURL.path) else {
+            return []
+        }
+        return try read(ConversationReadState.self, from: conversationStateURL)
+            .unreadConversationIDs
+    }
+
+    public func saveUnreadConversationIDs(_ ids: Set<UUID>) throws {
+        try prepare()
+        try write(
+            ConversationReadState(unreadConversationIDs: ids),
+            to: conversationStateURL
+        )
     }
 
     public func createAgent(
@@ -1004,4 +1024,14 @@ public struct WorkspaceRepository: Sendable {
 
     Reply with `./.agents/skills/messenger/messenger --send --conversation <uuid> --body-percent-encoded <percent-encoded-utf8>`. In Codex, create the encoded value with `encodeURIComponent(body).replaceAll("'", "%27")` and pass it as a single-quoted command argument. Add `--attach <file-path>` once for each file the bot should send. Relative paths resolve from the bot's workspace, files are copied into the conversation, and the body is optional when at least one attachment is supplied. The executable identifies this bot from the opaque workspace path. Do not edit SuperBot's conversation JSON directly.
     """
+}
+
+private struct ConversationReadState: Codable {
+    let version: Int
+    let unreadConversationIDs: Set<UUID>
+
+    init(unreadConversationIDs: Set<UUID>) {
+        version = 1
+        self.unreadConversationIDs = unreadConversationIDs
+    }
 }

@@ -25,6 +25,7 @@ final class SuperBotStore {
     private(set) var conversations: [BotConversation] = []
     private(set) var messagesByConversation: [UUID: [ChatMessage]] = [:]
     private(set) var attachmentsByConversation: [UUID: [ConversationAttachment]] = [:]
+    private(set) var unreadConversationIDs: Set<UUID> = []
     var selectedConversationID: UUID?
     var searchText = ""
     var draft = ""
@@ -103,6 +104,12 @@ final class SuperBotStore {
                     ($0.id, try repository.loadAttachments(conversationID: $0.id))
                 }
             )
+            let knownConversationIDs = Set(conversations.map(\.id))
+            let storedUnreadIDs = try repository.loadUnreadConversationIDs()
+            unreadConversationIDs = storedUnreadIDs.intersection(knownConversationIDs)
+            if unreadConversationIDs != storedUnreadIDs {
+                try repository.saveUnreadConversationIDs(unreadConversationIDs)
+            }
             runtime.refresh(agents: agents)
             refreshAppShortcuts()
 
@@ -345,6 +352,21 @@ final class SuperBotStore {
         messagesByConversation[conversation.id, default: []]
     }
 
+    func hasUnreadMessages(in conversation: BotConversation) -> Bool {
+        unreadConversationIDs.contains(conversation.id)
+    }
+
+    func markConversationRead(_ conversationID: UUID?) {
+        guard let conversationID,
+              unreadConversationIDs.remove(conversationID) != nil else { return }
+        persistUnreadConversationIDs()
+    }
+
+    func markSelectedConversationReadIfVisible() {
+        guard !SuperBotNotifications.shouldPresentActivity else { return }
+        markConversationRead(selectedConversationID)
+    }
+
     func attachments(for message: ChatMessage) -> [ConversationAttachment] {
         let all = attachmentsByConversation[message.conversationID, default: []]
         let byID = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
@@ -415,6 +437,7 @@ final class SuperBotStore {
             if latestConversations != conversations { conversations = latestConversations }
             if latestMessages != messagesByConversation { messagesByConversation = latestMessages }
             if latestAttachments != attachmentsByConversation { attachmentsByConversation = latestAttachments }
+            registerUnreadMessages(newAgentMessages)
             postNotifications(for: newAgentMessages)
         } catch {
             errorMessage = error.localizedDescription
@@ -429,6 +452,32 @@ final class SuperBotStore {
 
     private func refreshAppShortcuts() {
         SuperBotShortcuts.updateAppShortcutParameters()
+    }
+
+    private func registerUnreadMessages(_ messages: [ChatMessage]) {
+        guard !messages.isEmpty else { return }
+
+        var updated = unreadConversationIDs
+        let isViewingSelectedConversation = !SuperBotNotifications.shouldPresentActivity
+        for message in messages {
+            if isViewingSelectedConversation && message.conversationID == selectedConversationID {
+                updated.remove(message.conversationID)
+            } else {
+                updated.insert(message.conversationID)
+            }
+        }
+
+        guard updated != unreadConversationIDs else { return }
+        unreadConversationIDs = updated
+        persistUnreadConversationIDs()
+    }
+
+    private func persistUnreadConversationIDs() {
+        do {
+            try repository.saveUnreadConversationIDs(unreadConversationIDs)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func postNotifications(for messages: [ChatMessage]) {

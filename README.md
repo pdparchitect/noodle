@@ -13,6 +13,7 @@ SuperBot is a native macOS messenger and launcher for local coding agents. Bots 
 - Notify bots without copying message bodies into the harness event
 - Let Codex read and reply through the bundled Messenger CLI
 - Persist direct chats, group chats, unread inbox cursors, and linked attachments
+- Show durable unread indicators for conversations with unseen bot replies
 - Accept any regular file attachment, show selectable inline thumbnails outside the message bubble, and open Quick Look-compatible files—including PDFs—with Space or a double-click
 - Install and update the managed Messenger skill without touching a bot's other skills
 - Bundle a separately signed, minimal `messenger` command for every harness
@@ -28,6 +29,7 @@ In the signed sandboxed app, macOS places this hierarchy inside SuperBot's Appli
 
 ```text
 Library/Application Support/SuperBot/
+├── conversation-state.json (durable unread conversation markers)
 ├── Agents/
 │   └── <agent-uuid>/
 │       ├── agent.json

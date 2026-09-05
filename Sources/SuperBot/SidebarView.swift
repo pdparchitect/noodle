@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SuperBotCore
 
@@ -58,8 +59,15 @@ struct SidebarView: View {
                 ContentUnavailableView.search(text: store.searchText)
             }
         }
-        .onChange(of: store.selectedConversationID) { _, _ in
+        .onChange(of: store.selectedConversationID) { _, conversationID in
             store.draft = ""
+            store.markConversationRead(conversationID)
+        }
+        .onAppear {
+            store.markSelectedConversationReadIfVisible()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            store.markSelectedConversationReadIfVisible()
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
             searchIsFocused = true
@@ -73,6 +81,12 @@ private struct ConversationRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
+            Circle()
+                .fill(Color.accentColor)
+                .frame(width: 8, height: 8)
+                .opacity(store.hasUnreadMessages(in: conversation) ? 1 : 0)
+                .accessibilityHidden(true)
+
             ZStack(alignment: .bottomTrailing) {
                 ConversationAvatar(
                     participants: store.participants(for: conversation),
@@ -111,7 +125,7 @@ private struct ConversationRow: View {
         .listRowSeparator(.visible, edges: .bottom)
         .listRowSeparatorTint(Color.primary.opacity(0.12))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(store.title(for: conversation)), \(store.preview(for: conversation))")
+        .accessibilityLabel(accessibilityLabel)
     }
 
     private var timestamp: String {
@@ -128,5 +142,10 @@ private struct ConversationRow: View {
         if phases.contains(.failed) { return .red }
         if !phases.isEmpty, phases.allSatisfy({ $0 == .ready }) { return .green }
         return .gray
+    }
+
+    private var accessibilityLabel: String {
+        let unread = store.hasUnreadMessages(in: conversation) ? "Unread, " : ""
+        return "\(unread)\(store.title(for: conversation)), \(store.preview(for: conversation))"
     }
 }
