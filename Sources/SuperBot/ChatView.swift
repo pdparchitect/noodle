@@ -20,6 +20,14 @@ struct ChatView: View {
                 .padding(.bottom, 11)
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.28))
+        .background {
+            let background = store.background(for: conversation)
+            if !background.isDefault {
+                ConversationBackgroundView(background: background,
+                    imageURL: store.repository.backgroundImageURL(background, conversationID: conversation.id))
+                    .ignoresSafeArea()
+            }
+        }
         .overlay(alignment: .top) {
             conversationHeaderShadow
         }

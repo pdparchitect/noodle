@@ -32,6 +32,8 @@ final class SuperBotStore {
     var creationSheet: CreationSheet?
     var agentBeingEdited: AgentRecord?
     var groupBeingEdited: BotConversation?
+    var backgroundBeingEdited: BotConversation?
+    private(set) var backgrounds: [UUID: ConversationBackground] = [:]
     var errorMessage: String?
     var pendingAttachments: [ConversationAttachment] = []
     var composerIsFocused = false
@@ -97,6 +99,9 @@ final class SuperBotStore {
             agents = try repository.loadAgents()
             try repository.synchronizeAgentWorkspaces(agents)
             conversations = try repository.loadConversations()
+            backgrounds = Dictionary(uniqueKeysWithValues: conversations.map {
+                ($0.id, (try? repository.loadBackground(conversationID: $0.id)) ?? ConversationBackground())
+            })
             messagesByConversation = try Dictionary(
                 uniqueKeysWithValues: conversations.map {
                     ($0.id, try repository.loadMessages(conversationID: $0.id))
@@ -614,6 +619,20 @@ final class SuperBotStore {
                                        author: .user, emoji: emoji, present: false)
             refreshTranscripts()
         } catch { errorMessage = error.localizedDescription }
+    }
+
+    func background(for conversation: BotConversation?) -> ConversationBackground {
+        guard let id = conversation?.id else { return ConversationBackground() }
+        return backgrounds[id] ?? ConversationBackground()
+    }
+
+    func setBackground(_ background: ConversationBackground, imageData: Data?, for conversation: BotConversation) async throws {
+        let repository = repository
+        let saved = try await Task.detached {
+            if let imageData { return try repository.setBackground(conversationID: conversation.id, imageData: imageData) }
+            return try repository.setBackground(conversationID: conversation.id, preset: background.preset)
+        }.value
+        backgrounds[conversation.id] = saved
     }
 
     func changeReaction(_ emoji: String, to replacement: String, on message: ChatMessage) {

@@ -230,6 +230,10 @@ struct EditBotSheet: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
+                if let conversation = directConversation {
+                    ConversationBackgroundSettingsRow(conversation: conversation)
+                }
+
                 Spacer()
 
                 Divider()
@@ -243,7 +247,7 @@ struct EditBotSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 520, height: 640)
+        .frame(width: 520, height: 710)
         .onAppear {
             nameFocused = true
             backstory = store.backstory(for: agent)
@@ -637,6 +641,8 @@ struct GroupInfoSheet: View {
                     .font(.caption)
                     .foregroundStyle(selectedIDs.count >= 2 ? Color.secondary : Color.red)
 
+                ConversationBackgroundSettingsRow(conversation: conversation)
+
                 Spacer()
                 Divider()
 
@@ -648,7 +654,7 @@ struct GroupInfoSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 460, height: 500)
+        .frame(width: 460, height: 560)
         .confirmationDialog(
             "Delete Group?",
             isPresented: $confirmingDeletion,

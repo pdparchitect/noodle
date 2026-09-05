@@ -24,6 +24,7 @@ struct SidebarView: View {
                                         store.revealWorkspace(for: agent)
                                     }
                                 }
+                                Button("Change Background…") { store.backgroundBeingEdited = conversation }
                             }
                     }
                 }
@@ -36,12 +37,21 @@ struct SidebarView: View {
                             .tag(conversation.id)
                             .contextMenu {
                                 Button("Edit Group…") { store.groupBeingEdited = conversation }
+                                Button("Change Background…") { store.backgroundBeingEdited = conversation }
                             }
                     }
                 }
             }
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(store.background(for: store.selectedConversation).isDefault ? .automatic : .hidden)
+        .background {
+            if let conversation = store.selectedConversation, !store.background(for: conversation).isDefault {
+                ConversationBackgroundView(background: store.background(for: conversation),
+                    imageURL: store.repository.backgroundImageURL(store.background(for: conversation), conversationID: conversation.id))
+                    .blur(radius: 24).overlay(Color.black.opacity(0.45)).ignoresSafeArea()
+            }
+        }
         .searchable(text: $store.searchText, placement: .sidebar, prompt: "Search")
         .controlSize(.large)
         .searchFocused($searchIsFocused)

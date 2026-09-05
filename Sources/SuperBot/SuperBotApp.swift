@@ -270,6 +270,9 @@ struct RootView: View {
             GroupInfoSheet(conversation: conversation)
                 .environment(store)
         }
+        .sheet(item: $store.backgroundBeingEdited) { conversation in
+            ConversationBackgroundSheet(conversation: conversation).environment(store)
+        }
         .alert(
             "SuperBot",
             isPresented: Binding(
