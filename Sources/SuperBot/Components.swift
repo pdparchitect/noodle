@@ -121,6 +121,10 @@ struct MessageBubble: View {
                         preview: { previewAttachment(attachment) }
                     )
                     .contextMenu {
+                        Button("Copy", systemImage: "doc.on.doc") {
+                            store.copyAttachment(attachment)
+                        }
+                        Divider()
                         Button("Quick Look", systemImage: "eye") {
                             previewAttachment(attachment)
                         }

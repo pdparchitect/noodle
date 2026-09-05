@@ -62,12 +62,28 @@ struct SuperBotApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var attachmentPasteMonitor: Any?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         SuperBotNotifications.configure(delegate: self)
+        attachmentPasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+            guard event.charactersIgnoringModifiers?.lowercased() == "v",
+                  modifiers == .command || modifiers == .control,
+                  let store = SuperBotStore.active,
+                  store.composerIsFocused,
+                  store.importAttachmentsFromPasteboard() else {
+                return event
+            }
+            return nil
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if let attachmentPasteMonitor {
+            NSEvent.removeMonitor(attachmentPasteMonitor)
+        }
         SuperBotStore.active?.stopMonitoring()
     }
 

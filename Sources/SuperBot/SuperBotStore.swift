@@ -34,6 +34,7 @@ final class SuperBotStore {
     var groupBeingEdited: BotConversation?
     var errorMessage: String?
     var pendingAttachments: [ConversationAttachment] = []
+    var composerIsFocused = false
 
     let repository: WorkspaceRepository
     let runtime = AgentRuntimeCoordinator()
@@ -412,6 +413,61 @@ final class SuperBotStore {
         }
     }
 
+    func importAttachmentsFromPasteboard() -> Bool {
+        guard let conversationID = selectedConversation?.id else { return false }
+        let pasteboard = NSPasteboard.general
+
+        if pasteboard.availableType(from: [.fileURL]) != nil,
+           let values = pasteboard.readObjects(
+               forClasses: [NSURL.self],
+               options: [.urlReadingFileURLsOnly: true]
+           ) as? [NSURL],
+           !values.isEmpty {
+            var imported = false
+            for value in values {
+                do {
+                    try importAttachment(from: value as URL, into: conversationID)
+                    imported = true
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+            return imported
+        }
+
+        if let pngData = pasteboard.data(forType: .png) {
+            do {
+                try importAttachment(
+                    data: pngData,
+                    originalFilename: "Pasted Image.png",
+                    mediaType: "image/png",
+                    into: conversationID
+                )
+                return true
+            } catch {
+                errorMessage = error.localizedDescription
+                return false
+            }
+        }
+
+        if let tiffData = pasteboard.data(forType: .tiff) {
+            do {
+                try importAttachment(
+                    data: tiffData,
+                    originalFilename: "Pasted Image.tiff",
+                    mediaType: "image/tiff",
+                    into: conversationID
+                )
+                return true
+            } catch {
+                errorMessage = error.localizedDescription
+                return false
+            }
+        }
+
+        return false
+    }
+
     private func importAttachment(from url: URL, into conversationID: UUID) throws {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
@@ -455,6 +511,31 @@ final class SuperBotStore {
 
     func revealAttachment(_ attachment: ConversationAttachment) {
         NSWorkspace.shared.activateFileViewerSelecting([attachmentFileURL(attachment)])
+    }
+
+    func copyAttachment(_ attachment: ConversationAttachment) {
+        let url = attachmentFileURL(attachment)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+
+        if attachment.mediaType.hasPrefix("image/"),
+           let image = NSImage(contentsOf: url),
+           let tiffData = image.tiffRepresentation,
+           let bitmap = NSBitmapImageRep(data: tiffData),
+           let pngData = bitmap.representation(using: .png, properties: [:]) {
+            let item = NSPasteboardItem()
+            item.setString(url.absoluteString, forType: .fileURL)
+            item.setData(pngData, forType: .png)
+            item.setData(tiffData, forType: .tiff)
+            if pasteboard.writeObjects([item]) { return }
+            pasteboard.clearContents()
+        }
+
+        if pasteboard.writeObjects([url as NSURL]) {
+            return
+        }
+
+        errorMessage = "The attachment could not be copied."
     }
 
     func attachmentFileURL(_ attachment: ConversationAttachment) -> URL {

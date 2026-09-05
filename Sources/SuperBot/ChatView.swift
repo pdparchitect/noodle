@@ -170,6 +170,12 @@ struct ChatView: View {
                 .overlay(RoundedRectangle(cornerRadius: 16).stroke(.separator.opacity(0.6)))
             }
         }
+        .onChange(of: composerFocused) { _, isFocused in
+            store.composerIsFocused = isFocused
+        }
+        .onDisappear {
+            store.composerIsFocused = false
+        }
     }
 
     private var cannotSend: Bool {
@@ -257,6 +263,7 @@ private struct ConversationStartView: View {
 }
 
 private struct PendingAttachmentChip: View {
+    @Environment(SuperBotStore.self) private var store
     let attachment: ConversationAttachment
     let preview: () -> Void
     let remove: () -> Void
@@ -290,6 +297,14 @@ private struct PendingAttachmentChip: View {
         .background(.quaternary.opacity(0.35), in: Capsule())
         .overlay(Capsule().stroke(.separator.opacity(0.45)))
         .frame(maxWidth: 260)
+        .contextMenu {
+            Button("Copy", systemImage: "doc.on.doc") {
+                store.copyAttachment(attachment)
+            }
+            Divider()
+            Button("Quick Look", systemImage: "eye", action: preview)
+            Button("Remove Attachment", systemImage: "xmark", role: .destructive, action: remove)
+        }
     }
 }
 
