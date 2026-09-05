@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import UniformTypeIdentifiers
 
 public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
     public let id: UUID
@@ -975,6 +976,34 @@ public struct WorkspaceRepository: Sendable {
         conversation.updatedAt = now
         try updateConversation(conversation)
         return message
+    }
+
+    /// Queue retries reuse the request UUID, so restarting after delivery never sends twice.
+    public func sendSharedMessage(_ request: SharedRequest, files: [URL]) throws -> ChatMessage {
+        guard var conversation = try loadConversations().first(where: { $0.id == request.conversationID }),
+              request.filenames.count == files.count else { throw SharedInboxError.invalidRequest }
+        return try withConversationLock(conversation.id) {
+            var messages = try loadMessages(conversationID: conversation.id)
+            if let existing = messages.first(where: { $0.id == request.id }) { return existing }
+            var imported: [ConversationAttachment] = []
+            do {
+                for file in files {
+                    imported.append(try importAttachment(from: file, into: conversation.id,
+                        mediaType: UTType(filenameExtension: file.pathExtension)?.preferredMIMEType ?? "application/octet-stream"))
+                }
+                let message = ChatMessage(id: request.id, conversationID: conversation.id, author: .user,
+                    body: request.body.isEmpty ? "Sent \(files.count) attachment\(files.count == 1 ? "" : "s")" : request.body,
+                    delivery: .queued, attachmentIDs: imported.map(\.id))
+                messages.append(message)
+                try write(messages, to: conversationDirectory(id: conversation.id).appendingPathComponent("messages.json"))
+                conversation.updatedAt = message.createdAt
+                try? updateConversation(conversation)
+                return message
+            } catch {
+                for attachment in imported { try? removeAttachment(attachment) }
+                throw error
+            }
+        }
     }
 
     public func updateConversation(_ conversation: BotConversation) throws {

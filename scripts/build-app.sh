@@ -43,6 +43,12 @@ intent_const_values_list="$build_root/SuperBot.AppIntentConstValues"
 
 rm -rf "$app"
 mkdir -p "$contents/MacOS" "$contents/Resources" "$contents/Helpers"
+share_extension="$contents/PlugIns/SuperBotShare.appex"
+mkdir -p "$share_extension/Contents/MacOS"
+cp "$bin_path/SuperBotShareExtension" "$share_extension/Contents/MacOS/SuperBotShareExtension"
+cp "$project_root/Support/ShareExtension-Info.plist" "$share_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$share_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$share_extension/Contents/Info.plist"
 cp "$bin_path/SuperBot" "$contents/MacOS/SuperBot"
 cp "$bin_path/SuperBotMessenger" "$contents/Helpers/messenger"
 cp "$project_root/Support/Info.plist" "$contents/Info.plist"
@@ -98,8 +104,26 @@ fi
 
 codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/messenger"
+team_id="$(codesign -dv --verbose=4 "$contents/Helpers/messenger" 2>&1 | awk -F= '/^TeamIdentifier=/ { print $2 }')"
+if [[ ! "$team_id" =~ '^[A-Z0-9]{10}$' ]]; then
+    print -u2 "Sharing requires an Apple Development or Developer ID identity with a team identifier."
+    exit 1
+fi
+shared_group="$team_id.com.pdparchitect.superbot.sharing"
+resolved_entitlements="$build_root/SuperBot.resolved.entitlements"
+share_entitlements="$build_root/ShareExtension.resolved.entitlements"
+cp "$entitlements" "$resolved_entitlements"
+cp "$project_root/Support/ShareExtension.entitlements" "$share_entitlements"
+for file in "$resolved_entitlements" "$share_entitlements"; do
+    /usr/libexec/PlistBuddy -c "Set :com.apple.security.application-groups:0 $shared_group" "$file"
+done
+for file in "$contents/Info.plist" "$share_extension/Contents/Info.plist"; do
+    /usr/libexec/PlistBuddy -c "Add :SuperBotSharedGroup string $shared_group" "$file"
+done
 codesign --force --options runtime "$timestamp_option" \
-    --entitlements "$entitlements" \
+    --entitlements "$share_entitlements" --sign "$signing_identity" "$share_extension"
+codesign --force --options runtime "$timestamp_option" \
+    --entitlements "$resolved_entitlements" \
     --sign "$signing_identity" "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
 

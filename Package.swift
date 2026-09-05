@@ -14,9 +14,16 @@ let package = Package(
     ],
     targets: [
         .target(name: "SuperBotCore"),
+        .target(name: "SuperBotSharing", dependencies: ["SuperBotCore"]),
+        .executableTarget(
+            name: "SuperBotShareExtension",
+            dependencies: ["SuperBotSharing"],
+            swiftSettings: [.unsafeFlags(["-parse-as-library", "-application-extension"])],
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]
+        ),
         .executableTarget(
             name: "SuperBot",
-            dependencies: ["SuperBotCore"],
+            dependencies: ["SuperBotCore", "SuperBotSharing"],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",

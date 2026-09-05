@@ -42,14 +42,16 @@ fi
 codesign --verify --deep --strict --verbose=2 "$app"
 app_entitlements="$(codesign -d --entitlements :- "$app" 2>/dev/null | tr -d '[:space:]')"
 entitlement_count="$(print -r -- "$app_entitlements" | grep -o '<key>' | wc -l | tr -d '[:space:]')"
-if [[ "$entitlement_count" != "4" ]] \
+if [[ "$entitlement_count" != "5" ]] \
     || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.app-sandbox</key><true/>' \
     || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.files.user-selected.read-only</key><true/>' \
     || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.network.client</key><true/>' \
     || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key><array><string>/.codex/</string></array>'; then
-    print -u2 "The signed app's sandbox entitlements do not match the reviewed four-key policy."
+    print -u2 "The signed app's sandbox entitlements do not match the reviewed five-key policy."
     exit 1
 fi
+
+"$project_root/scripts/verify-sharing.sh" "$app"
 
 helper_entitlements="$(codesign -d --entitlements :- "$app/Contents/Helpers/messenger" 2>/dev/null)"
 if print -r -- "$helper_entitlements" | grep -q '<key>'; then

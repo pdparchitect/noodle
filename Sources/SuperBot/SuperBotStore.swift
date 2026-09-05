@@ -39,6 +39,8 @@ final class SuperBotStore {
     let repository: WorkspaceRepository
     let runtime = AgentRuntimeCoordinator()
     private var transcriptRefreshTask: Task<Void, Never>?
+    private var isProcessingShares = false
+    private var failedShareIDs: Set<UUID> = []
 
     init(repository: WorkspaceRepository? = nil) {
         if let repository {
@@ -629,6 +631,39 @@ final class SuperBotStore {
 
     private func refreshAppShortcuts() {
         SuperBotShortcuts.updateAppShortcutParameters()
+        publishShareDestinations()
+    }
+
+    func publishShareDestinations() {
+        guard let inbox = try? SharedInbox.configured() else { return }
+        try? inbox.saveDestinations(conversations.map {
+            ShareDestination(id: $0.id, name: title(for: $0), isGroup: $0.kind == .group)
+        }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending })
+    }
+
+    func processSharedInbox() async {
+        guard !isProcessingShares, let inbox = try? SharedInbox.configured() else { return }
+        isProcessingShares = true
+        defer { isProcessingShares = false }
+        let repository = repository
+        do {
+            let pending = try await Task.detached { try inbox.pending() }.value
+            for request in pending where !failedShareIDs.contains(request.id) {
+                do {
+                    let message = try await Task.detached {
+                        try repository.sendSharedMessage(request, files: inbox.files(for: request))
+                    }.value
+                    refreshTranscripts()
+                    if let conversation = conversations.first(where: { $0.id == message.conversationID }) {
+                        runtime.notify(participants(for: conversation), repository: repository)
+                    }
+                    try await Task.detached { try inbox.acknowledge(request.id) }.value
+                } catch {
+                    failedShareIDs.insert(request.id)
+                    errorMessage = "Could not deliver a shared item: \(error.localizedDescription) The item is retained for retry when SuperBot restarts."
+                }
+            }
+        } catch { errorMessage = "Could not read shared items: \(error.localizedDescription)" }
     }
 
     private func notifyGroupParticipants(for messages: [ChatMessage]) {
@@ -717,6 +752,7 @@ final class SuperBotStore {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled else { break }
                 self?.refreshTranscripts()
+                await self?.processSharedInbox()
             }
         }
     }

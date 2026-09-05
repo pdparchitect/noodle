@@ -69,9 +69,12 @@ struct SuperBotApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var attachmentPasteMonitor: Any?
+    private let services = SuperBotServices()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        NSApp.servicesProvider = services
+        NSUpdateDynamicServices()
         SuperBotNotifications.configure(delegate: self)
         attachmentPasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
@@ -91,6 +94,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSEvent.removeMonitor(attachmentPasteMonitor)
         }
         SuperBotStore.active?.stopMonitoring()
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard urls.contains(where: { $0.scheme == "superbot" && $0.host == "shared" }) else { return }
+        Task { await SuperBotStore.active?.processSharedInbox() }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

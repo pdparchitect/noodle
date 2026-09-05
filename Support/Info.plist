@@ -32,5 +32,29 @@
     <string>Copyright © 2026 Petko D. Petkov</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>CFBundleURLTypes</key>
+    <array><dict>
+        <key>CFBundleURLName</key><string>com.pdparchitect.superbot.sharing</string>
+        <key>CFBundleURLSchemes</key><array><string>superbot</string></array>
+    </dict></array>
+    <key>NSServices</key>
+    <array>
+        <dict>
+            <key>NSMenuItem</key><dict><key>default</key><string>Send to Agent…</string></dict>
+            <key>NSMessage</key><string>sendToAgent</string>
+            <key>NSPortName</key><string>SuperBot</string>
+            <key>NSSendFileTypes</key><array><string>public.data</string></array>
+            <key>NSSendTypes</key><array><string>public.file-url</string></array>
+            <key>NSRequiredContext</key><dict/>
+        </dict>
+        <dict>
+            <key>NSMenuItem</key><dict><key>default</key><string>Ask Agent…</string></dict>
+            <key>NSMessage</key><string>sendToAgent</string>
+            <key>NSPortName</key><string>SuperBot</string>
+            <key>NSUserData</key><string>ask</string>
+            <key>NSSendTypes</key><array><string>public.utf8-plain-text</string><string>public.url</string></array>
+            <key>NSRequiredContext</key><dict/>
+        </dict>
+    </array>
 </dict>
 </plist>

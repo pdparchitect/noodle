@@ -46,8 +46,8 @@ fi
 entitlements="$(codesign -d --entitlements :- "$app" 2>/dev/null)"
 compact_entitlements="$(print -r -- "$entitlements" | tr -d '[:space:]')"
 entitlement_count="$(print -r -- "$compact_entitlements" | grep -o '<key>' | wc -l | tr -d '[:space:]')"
-if [[ "$entitlement_count" != "4" ]]; then
-    print -u2 "The app must contain exactly the four reviewed sandbox entitlements."
+if [[ "$entitlement_count" != "5" ]]; then
+    print -u2 "The app must contain exactly the five reviewed sandbox entitlements."
     exit 1
 fi
 if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.app-sandbox</key><true/>'; then
@@ -81,3 +81,4 @@ if otool -L "$app/Contents/Helpers/messenger" | grep -Eq '/opt/homebrew|/usr/loc
 fi
 
 print "SuperBot smoke tests passed"
+"$project_root/scripts/verify-sharing.sh" "$app"
