@@ -11,6 +11,13 @@ export SWIFTPM_MODULECACHE_OVERRIDE="$module_cache"
 swift test --disable-sandbox --package-path "$project_root"
 app="$(SUPERBOT_BUILD_CONFIGURATION=debug "$project_root/scripts/build-app.sh")"
 
+expected_version="$(tr -d '[:space:]' < "$project_root/VERSION")"
+actual_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
+if [[ "$actual_version" != "$expected_version" ]]; then
+    print -u2 "Built app version $actual_version does not match VERSION ($expected_version)."
+    exit 1
+fi
+
 codesign --verify --deep --strict --verbose=2 "$app"
 codesign --verify --strict --verbose=2 "$app/Contents/Helpers/messenger"
 

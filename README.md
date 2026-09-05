@@ -94,6 +94,28 @@ scripts/install-app.sh
 
 The build automatically uses the first installed Apple Development identity so macOS can index App Intents. Set `SUPERBOT_SIGNING_IDENTITY` to override that choice, or set it to `-` explicitly for an ad-hoc build.
 
+## Releases
+
+The root `VERSION` file is the canonical application version. Swift Package Manager describes the package and deployment target, but it does not provide a macOS app marketing version. The build copies `VERSION` into `CFBundleShortVersionString` and uses the Git commit count locally or the GitHub Actions run number for `CFBundleVersion`.
+
+To publish a release, update `VERSION`, commit the change, and run:
+
+```sh
+scripts/create-release-tag.sh
+```
+
+The script creates and pushes a matching `vX.Y.Z` tag. GitHub Actions then builds with the hardened runtime, signs the helper and app independently with Developer ID Application, submits the app to Apple's notary service, staples the ticket, verifies Gatekeeper acceptance, and publishes a ZIP plus SHA-256 checksum on GitHub Releases.
+
+The release workflow reads signing material only from encrypted GitHub Actions secrets:
+
+- `MACOS_CERTIFICATE_P12`
+- `MACOS_CERTIFICATE_PASSWORD`
+- `APP_STORE_CONNECT_API_KEY_P8`
+- `APP_STORE_CONNECT_KEY_ID`
+- `APP_STORE_CONNECT_ISSUER_ID`
+
+No certificate, private key, password, or notarization credential belongs in the repository.
+
 ## Security boundary
 
 The finished app keeps App Sandbox enabled with these narrowly scoped entitlements:

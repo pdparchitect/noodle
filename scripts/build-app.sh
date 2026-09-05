@@ -3,12 +3,24 @@ set -euo pipefail
 
 project_root="${0:A:h:h}"
 configuration="${SUPERBOT_BUILD_CONFIGURATION:-release}"
+version="$(tr -d '[:space:]' < "$project_root/VERSION")"
+build_number="${SUPERBOT_BUILD_NUMBER:-$(git -C "$project_root" rev-list --count HEAD 2>/dev/null || print 1)}"
 build_root="$project_root/.build"
 app="$build_root/SuperBot.app"
 contents="$app/Contents"
 module_cache="$build_root/module-cache"
 entitlements="$project_root/Support/SuperBot.entitlements"
 asset_catalog="$project_root/Support/Assets.xcassets"
+
+if [[ ! "$version" =~ '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$' ]]; then
+    print -u2 "VERSION must contain a semantic version such as 1.2.3."
+    exit 1
+fi
+
+if [[ ! "$build_number" =~ '^[1-9][0-9]*$' ]]; then
+    print -u2 "SUPERBOT_BUILD_NUMBER must be a positive integer."
+    exit 1
+fi
 
 mkdir -p "$module_cache"
 export CLANG_MODULE_CACHE_PATH="$module_cache"
@@ -34,6 +46,8 @@ mkdir -p "$contents/MacOS" "$contents/Resources" "$contents/Helpers"
 cp "$bin_path/SuperBot" "$contents/MacOS/SuperBot"
 cp "$bin_path/SuperBotMessenger" "$contents/Helpers/messenger"
 cp "$project_root/Support/Info.plist" "$contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$contents/Info.plist"
 xcrun actool "$asset_catalog" \
     --compile "$contents/Resources" \
     --platform macosx \
@@ -72,9 +86,19 @@ if [[ -z "$signing_identity" ]]; then
     signing_identity="-"
     print -u2 "No Apple Development identity found; using ad-hoc signing. App Intents may not be indexed until the app is signed with a development identity."
 fi
-codesign --force --options runtime --timestamp=none \
+if [[ "${SUPERBOT_REQUIRE_DEVELOPER_ID:-0}" == "1" && "$signing_identity" != Developer\ ID\ Application:* ]]; then
+    print -u2 "A Developer ID Application signing identity is required for a public release."
+    exit 1
+fi
+
+timestamp_option="--timestamp=none"
+if [[ "${SUPERBOT_CODESIGN_TIMESTAMP:-0}" == "1" ]]; then
+    timestamp_option="--timestamp"
+fi
+
+codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/messenger"
-codesign --force --options runtime --timestamp=none \
+codesign --force --options runtime "$timestamp_option" \
     --entitlements "$entitlements" \
     --sign "$signing_identity" "$app"
 codesign --verify --deep --strict --verbose=2 "$app"

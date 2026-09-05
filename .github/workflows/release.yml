@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source and LFS assets
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Validate release version
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
+            print -u2 "Tag $GITHUB_REF_NAME does not match VERSION v$version"
+            exit 1
+          fi
+          print "SUPERBOT_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Import Developer ID certificate
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/superbot-signing.keychain-db"
+          certificate="$RUNNER_TEMP/superbot-signing.p12"
+          keychain_password="$(openssl rand -base64 32)"
+          print -rn -- "$MACOS_CERTIFICATE_P12" | base64 --decode > "$certificate"
+          chmod 600 "$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security list-keychains -d user -s "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"
+          identity="$(security find-identity -v -p codesigning "$keychain" | awk -F '"' '/Developer ID Application:/ { print $2; exit }')"
+          if [[ -z "$identity" ]]; then
+            print -u2 "The imported archive does not contain a Developer ID Application identity."
+            exit 1
+          fi
+          print "SUPERBOT_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+
+      - name: Prepare notarization key
+        env:
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/AuthKey_$APP_STORE_CONNECT_KEY_ID.p8"
+          print -rn -- "$APP_STORE_CONNECT_API_KEY_P8" > "$key"
+          chmod 600 "$key"
+          print "APPLE_API_KEY_PATH=$key" >> "$GITHUB_ENV"
+          print "APPLE_API_KEY_ID=$APP_STORE_CONNECT_KEY_ID" >> "$GITHUB_ENV"
+          print "APPLE_API_ISSUER_ID=$APP_STORE_CONNECT_ISSUER_ID" >> "$GITHUB_ENV"
+
+      - name: Build, sign, notarize, and package
+        shell: zsh {0}
+        run: scripts/package-release.sh "$GITHUB_REF_NAME"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: zsh {0}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/SuperBot-$SUPERBOT_VERSION-macOS.zip" \
+            "dist/SuperBot-$SUPERBOT_VERSION-macOS.zip.sha256" \
+            --verify-tag \
+            --generate-notes \
+            --title "SuperBot $SUPERBOT_VERSION"

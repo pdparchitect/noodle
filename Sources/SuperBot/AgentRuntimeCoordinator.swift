@@ -3,6 +3,10 @@ import Foundation
 import Observation
 import SuperBotCore
 
+private let superBotAppVersion = Bundle.main.object(
+    forInfoDictionaryKey: "CFBundleShortVersionString"
+) as? String ?? "development"
+
 @MainActor
 @Observable
 final class AgentRuntimeCoordinator {
@@ -293,7 +297,7 @@ private final class CodexAgentProcess {
                 "clientInfo": [
                     "name": "superbot",
                     "title": "SuperBot",
-                    "version": "0.3.0"
+                    "version": superBotAppVersion
                 ],
                 "capabilities": ["experimentalApi": true]
             ])
@@ -570,7 +574,7 @@ private final class CodexCapabilityProbe {
                 "method": "initialize",
                 "id": 1,
                 "params": [
-                    "clientInfo": ["name": "superbot", "title": "SuperBot", "version": "0.3.0"],
+                    "clientInfo": ["name": "superbot", "title": "SuperBot", "version": superBotAppVersion],
                     "capabilities": [:]
                 ]
             ])
