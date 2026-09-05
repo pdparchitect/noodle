@@ -1,7 +1,30 @@
 import AppKit
+import CoreTransferable
+import PhotosUI
 import SwiftUI
 import SuperBotCore
 import UniformTypeIdentifiers
+
+/// Photos providers don't necessarily vend generic public.data. Negotiate an
+/// image explicitly, and read temporary files inside the transfer's lifetime.
+private struct BackgroundPhoto: Transferable {
+    let data: Data
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(importedContentType: .image) { data in
+            guard data.count <= 50 * 1024 * 1024 else { throw ConversationBackgroundError.invalidImage }
+            return BackgroundPhoto(data: data)
+        }
+        FileRepresentation(importedContentType: .image) { received in
+            let url = received.file
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+            guard size <= 50 * 1024 * 1024 else { throw ConversationBackgroundError.invalidImage }
+            return BackgroundPhoto(data: try Data(contentsOf: url))
+        }
+    }
+}
 
 /// One window-sized wallpaper. Load its replacement before fading so image-backed
 /// conversations never flash the default canvas during a switch.
@@ -132,6 +155,8 @@ struct ConversationBackgroundSheet: View {
     @State private var imageData: Data?
     @State private var image: NSImage?
     @State private var choosingImage = false
+    @State private var choosingPhoto = false
+    @State private var photoSelection: PhotosPickerItem?
     @State private var busy = false
     @State private var failure: String?
 
@@ -171,7 +196,16 @@ struct ConversationBackgroundSheet: View {
                 }
             }
             HStack {
-                Button("Choose Image…", systemImage: "photo") { choosingImage = true }
+                Menu {
+                    Button("Choose File…", systemImage: "folder") { choosingImage = true }
+                    Button("Photos Library…", systemImage: "photo.on.rectangle") {
+                        photoSelection = nil
+                        choosingPhoto = true
+                    }
+                } label: {
+                    Label("Choose Image…", systemImage: "photo")
+                }
+                .fixedSize()
                 if !selected.isDefault {
                     Button("Remove Background") { selected = ConversationBackground(); imageData = nil; image = nil }
                 }
@@ -195,16 +229,45 @@ struct ConversationBackgroundSheet: View {
                             guard size <= 50 * 1024 * 1024 else { throw ConversationBackgroundError.invalidImage }
                             return try Data(contentsOf: url)
                         }.value
-                        guard let preview = NSImage(data: data) else { throw ConversationBackgroundError.invalidImage }
-                        imageData = data; image = preview
-                        selected = ConversationBackground(imageFilename: "preview")
-                        failure = nil
+                        try useImage(data)
                     } catch { failure = error.localizedDescription }
                     busy = false
                 }
             case .failure(let error): failure = error.localizedDescription
             }
         }
+        .photosPicker(isPresented: $choosingPhoto, selection: $photoSelection,
+            matching: .images, preferredItemEncoding: .current)
+        .task(id: photoSelection) {
+            guard let photoSelection else { return }
+            busy = true
+            failure = nil
+            defer { busy = false }
+            do {
+                guard let photo = try await photoSelection.loadTransferable(type: BackgroundPhoto.self) else {
+                    throw ConversationBackgroundError.invalidImage
+                }
+                guard !Task.isCancelled else { return }
+                try useImage(photo.data)
+            } catch {
+                guard !Task.isCancelled else { return }
+                if let imageError = error as? ConversationBackgroundError {
+                    failure = imageError.localizedDescription
+                } else {
+                    failure = "Photos couldn’t provide this image. If it’s in iCloud, open it in Photos and let it download, then try again. You can also use Choose Image → Choose File."
+                }
+            }
+        }
+    }
+
+    private func useImage(_ data: Data) throws {
+        guard data.count <= 50 * 1024 * 1024, let preview = NSImage(data: data) else {
+            throw ConversationBackgroundError.invalidImage
+        }
+        imageData = data
+        image = preview
+        selected = ConversationBackground(imageFilename: "preview")
+        failure = nil
     }
 
     private func choice(_ title: String, background: ConversationBackground) -> some View {
@@ -217,7 +280,14 @@ struct ConversationBackgroundSheet: View {
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected == background ? Color.accentColor : .clear, lineWidth: 2))
                 Text(title).font(.caption)
             }
-        }.buttonStyle(.plain).disabled(busy)
+            // The wallpaper artwork intentionally ignores input. Give the
+            // enclosing label its own hit area, including the swatch and gaps.
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityValue(selected == background ? "Selected" : "Not selected")
+        .disabled(busy)
     }
 }
 
