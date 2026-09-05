@@ -140,13 +140,32 @@ struct MessageContextMenu: NSViewRepresentable {
 
     private final class HoverEmojiButton: NSButton {
         private var hoverTrackingArea: NSTrackingArea?
-        @objc dynamic var hoverScale: CGFloat = 1 {
-            didSet { needsDisplay = true }
+        private let emojiLayer = CATextLayer()
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            wantsLayer = true
+            emojiLayer.alignmentMode = .center
+            layer?.addSublayer(emojiLayer)
         }
 
-        override class func defaultAnimation(forKey key: NSAnimatablePropertyKey) -> Any? {
-            if key == "hoverScale" { return CABasicAnimation() }
-            return super.defaultAnimation(forKey: key)
+        required init?(coder: NSCoder) { nil }
+
+        override func layout() {
+            super.layout()
+            // Keep the hit area and layout fixed; only the rendered glyph scales.
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            emojiLayer.contentsScale = window?.backingScaleFactor ?? 2
+            emojiLayer.string = NSAttributedString(string: title, attributes: [.font: font ?? .systemFont(ofSize: 22)])
+            emojiLayer.bounds = CGRect(x: 0, y: 0, width: bounds.width, height: 30)
+            emojiLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
+            CATransaction.commit()
+        }
+
+        override func viewDidChangeBackingProperties() {
+            super.viewDidChangeBackingProperties()
+            needsLayout = true
         }
 
         override func updateTrackingAreas() {
@@ -158,26 +177,32 @@ struct MessageContextMenu: NSViewRepresentable {
             hoverTrackingArea = area
         }
 
-        override func mouseEntered(with event: NSEvent) { animateScale(to: 1.18) }
+        override func mouseEntered(with event: NSEvent) { animateScale(to: 1.12) }
         override func mouseExited(with event: NSEvent) { animateScale(to: 1) }
 
         private func animateScale(to value: CGFloat) {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.12
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                animator().hoverScale = value
+            let current = emojiLayer.presentation()?.transform ?? emojiLayer.transform
+            let target = CATransform3DMakeScale(value, value, 1)
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            emojiLayer.transform = target
+            CATransaction.commit()
+
+            guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+                emojiLayer.removeAnimation(forKey: "hover")
+                return
             }
+            let animation = CABasicAnimation(keyPath: "transform")
+            // Reverse from the visible scale, not the previous target, on rapid pointer movement.
+            animation.fromValue = NSValue(caTransform3D: current)
+            animation.toValue = NSValue(caTransform3D: target)
+            animation.duration = 0.18
+            animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            emojiLayer.add(animation, forKey: "hover")
         }
 
         override func draw(_ dirtyRect: NSRect) {
-            NSGraphicsContext.saveGraphicsState()
-            let transform = NSAffineTransform()
-            transform.translateX(by: bounds.midX, yBy: bounds.midY)
-            transform.scale(by: hoverScale)
-            transform.translateX(by: -bounds.midX, yBy: -bounds.midY)
-            transform.concat()
-            super.draw(bounds)
-            NSGraphicsContext.restoreGraphicsState()
+            // The cached text layer draws the emoji, without per-frame AppKit redraws.
         }
     }
 }
