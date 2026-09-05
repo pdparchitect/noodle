@@ -18,6 +18,7 @@ fi
 : "${APPLE_API_KEY_PATH:?Set APPLE_API_KEY_PATH to an App Store Connect API private key.}"
 : "${APPLE_API_KEY_ID:?Set APPLE_API_KEY_ID.}"
 : "${APPLE_API_ISSUER_ID:?Set APPLE_API_ISSUER_ID.}"
+: "${SPARKLE_PRIVATE_KEY_PATH:?Set SPARKLE_PRIVATE_KEY_PATH to the update-signing key file.}"
 
 if [[ "$SUPERBOT_SIGNING_IDENTITY" != Developer\ ID\ Application:* ]]; then
     print -u2 "SUPERBOT_SIGNING_IDENTITY must be a Developer ID Application identity."
@@ -28,7 +29,7 @@ rm -rf "$dist" "$project_root/.release"
 mkdir -p "$dist" "$project_root/.release"
 
 export SUPERBOT_BUILD_CONFIGURATION=release
-export SUPERBOT_BUILD_NUMBER="${SUPERBOT_BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-$(git -C "$project_root" rev-list --count HEAD)}}"
+export SUPERBOT_BUILD_NUMBER="$version"
 export SUPERBOT_CODESIGN_TIMESTAMP=1
 export SUPERBOT_REQUIRE_DEVELOPER_ID=1
 app="$("$project_root/scripts/build-app.sh")"
@@ -42,16 +43,17 @@ fi
 codesign --verify --deep --strict --verbose=2 "$app"
 app_entitlements="$(codesign -d --entitlements :- "$app" 2>/dev/null | tr -d '[:space:]')"
 entitlement_count="$(print -r -- "$app_entitlements" | grep -o '<key>' | wc -l | tr -d '[:space:]')"
-if [[ "$entitlement_count" != "5" ]] \
+if [[ "$entitlement_count" != "6" ]] \
     || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.app-sandbox</key><true/>' \
     || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.files.user-selected.read-only</key><true/>' \
     || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.network.client</key><true/>' \
     || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key><array><string>/.codex/</string></array>'; then
-    print -u2 "The signed app's sandbox entitlements do not match the reviewed five-key policy."
+    print -u2 "The signed app's sandbox entitlements do not match the reviewed six-key policy."
     exit 1
 fi
 
 "$project_root/scripts/verify-sharing.sh" "$app"
+zsh "$project_root/scripts/verify-updater.sh" "$app"
 
 helper_entitlements="$(codesign -d --entitlements :- "$app/Contents/Helpers/messenger" 2>/dev/null)"
 if print -r -- "$helper_entitlements" | grep -q '<key>'; then
@@ -81,5 +83,20 @@ ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
     cd "$dist"
     shasum -a 256 "${archive:t}" > "${archive:t}.sha256"
 )
+
+# Sign the final stapled archive and the feed. Never change either after this step.
+"$project_root/.build/artifacts/sparkle/Sparkle/bin/generate_appcast" \
+    --ed-key-file "$SPARKLE_PRIVATE_KEY_PATH" \
+    --download-url-prefix "https://github.com/pdparchitect/superbot/releases/download/$expected_tag/" \
+    --full-release-notes-url "https://github.com/pdparchitect/superbot/releases/tag/$expected_tag" \
+    --maximum-deltas 0 \
+    "$dist"
+test -s "$dist/appcast.xml"
+grep -q 'sparkle:edSignature=' "$dist/appcast.xml"
+"$project_root/.build/artifacts/sparkle/Sparkle/bin/sign_update" \
+    --ed-key-file "$SPARKLE_PRIVATE_KEY_PATH" --verify "$dist/appcast.xml"
+archive_signature="$(xmllint --xpath 'string(//enclosure/@*[local-name()="edSignature"])' "$dist/appcast.xml")"
+"$project_root/.build/artifacts/sparkle/Sparkle/bin/sign_update" \
+    --ed-key-file "$SPARKLE_PRIVATE_KEY_PATH" --verify "$archive" "$archive_signature"
 
 print "$archive"

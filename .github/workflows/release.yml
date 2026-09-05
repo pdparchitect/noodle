@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: superbot-release
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: macos-26
@@ -75,6 +79,21 @@ jobs:
           print "APPLE_API_KEY_ID=$APP_STORE_CONNECT_KEY_ID" >> "$GITHUB_ENV"
           print "APPLE_API_ISSUER_ID=$APP_STORE_CONNECT_ISSUER_ID" >> "$GITHUB_ENV"
 
+      - name: Prepare update-signing key
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          : "${SPARKLE_PRIVATE_KEY:?Missing SPARKLE_PRIVATE_KEY secret}"
+          umask 077
+          key="$RUNNER_TEMP/superbot-update.key"
+          print -rn -- "$SPARKLE_PRIVATE_KEY" > "$key"
+          print "SPARKLE_PRIVATE_KEY_PATH=$key" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: swift test --disable-sandbox
+
       - name: Build, sign, notarize, and package
         shell: zsh {0}
         run: scripts/package-release.sh "$GITHUB_REF_NAME"
@@ -84,9 +103,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: zsh {0}
         run: |
+          set -euo pipefail
+          # Keep the previous latest feed available until all new assets are uploaded.
           gh release create "$GITHUB_REF_NAME" \
             "dist/SuperBot-$SUPERBOT_VERSION-macOS.zip" \
             "dist/SuperBot-$SUPERBOT_VERSION-macOS.zip.sha256" \
+            "dist/appcast.xml" \
+            --draft \
             --verify-tag \
             --generate-notes \
             --title "SuperBot $SUPERBOT_VERSION"
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest
+
+      - name: Remove temporary signing material
+        if: always()
+        shell: zsh {0}
+        run: |
+          rm -f "$RUNNER_TEMP/superbot-update.key" "$RUNNER_TEMP/superbot-signing.p12"
+          if [[ -n "${APPLE_API_KEY_PATH:-}" ]]; then rm -f "$APPLE_API_KEY_PATH"; fi
+          if [[ -f "$RUNNER_TEMP/superbot-signing.keychain-db" ]]; then
+            security delete-keychain "$RUNNER_TEMP/superbot-signing.keychain-db"
+          fi
