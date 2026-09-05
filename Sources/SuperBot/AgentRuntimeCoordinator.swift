@@ -16,14 +16,58 @@ final class AgentRuntimeCoordinator {
     private(set) var isLoadingCapabilities = false
     private(set) var isRefreshingInstallations = false
     private(set) var snapshots: [UUID: AgentRuntimeSnapshot] = [:]
+    private(set) var heartbeatConfiguration: AgentHeartbeatConfiguration
+
+    @ObservationIgnored private var heartbeatScheduler: AgentHeartbeatScheduler
+    private let defaults: UserDefaults
 
     private let discovery: HarnessDiscovery
     private var processes: [UUID: CodexAgentProcess] = [:]
     private var capabilityProbe: CodexCapabilityProbe?
 
-    init(discovery: HarnessDiscovery = HarnessDiscovery()) {
+    init(discovery: HarnessDiscovery = HarnessDiscovery(), defaults: UserDefaults = .standard) {
         self.discovery = discovery
+        self.defaults = defaults
+        let configuration = AgentHeartbeatConfiguration.load(from: defaults)
+        heartbeatConfiguration = configuration
+        heartbeatScheduler = AgentHeartbeatScheduler(configuration: configuration)
         installations = discovery.discover()
+    }
+
+    func configureHeartbeats(enabled: Bool? = nil, intervalMinutes: Int? = nil) {
+        applyHeartbeatConfiguration(AgentHeartbeatConfiguration(
+            isEnabled: enabled ?? heartbeatConfiguration.isEnabled,
+            intervalMinutes: intervalMinutes ?? heartbeatConfiguration.intervalMinutes,
+            disabledAgentIDs: heartbeatConfiguration.disabledAgentIDs
+        ))
+    }
+
+    func setHeartbeatEnabled(_ enabled: Bool, for agentID: UUID) {
+        var disabled = heartbeatConfiguration.disabledAgentIDs
+        if enabled { disabled.remove(agentID) } else { disabled.insert(agentID) }
+        applyHeartbeatConfiguration(AgentHeartbeatConfiguration(
+            isEnabled: heartbeatConfiguration.isEnabled,
+            intervalMinutes: heartbeatConfiguration.intervalMinutes,
+            disabledAgentIDs: disabled
+        ))
+    }
+
+    private func applyHeartbeatConfiguration(_ configuration: AgentHeartbeatConfiguration) {
+        heartbeatScheduler.configure(configuration, at: Date())
+        heartbeatConfiguration = configuration
+        configuration.save(to: defaults)
+    }
+
+    func recordActivity(for agentID: UUID) {
+        heartbeatScheduler.recordActivity(for: agentID, at: Date())
+    }
+
+    func checkHeartbeats() {
+        let readyIDs = Set(processes.filter { $0.value.canReceiveHeartbeat }.map(\.key))
+        for id in heartbeatScheduler.takeDueHeartbeats(readyAgentIDs: readyIDs, at: Date()) {
+            // Do not start offline/failed bots or enqueue a heartbeat behind real work.
+            processes[id]?.heartbeat()
+        }
     }
 
     var availableInstallations: [HarnessInstallation] {
@@ -69,6 +113,7 @@ final class AgentRuntimeCoordinator {
         let liveIDs = Set(agents.map(\.id))
         for id in processes.keys where !liveIDs.contains(id) {
             processes.removeValue(forKey: id)?.stop()
+            heartbeatScheduler.remove(id)
         }
 
         for agent in agents {
@@ -164,7 +209,13 @@ final class AgentRuntimeCoordinator {
                 executableURL: URL(fileURLWithPath: executablePath),
                 workspaceURL: repository.directory(for: agent),
                 onSnapshot: { [weak self] snapshot in
+                    if self?.snapshots[snapshot.agentID]?.phase != snapshot.phase {
+                        self?.recordActivity(for: snapshot.agentID)
+                    }
                     self?.snapshots[snapshot.agentID] = snapshot
+                },
+                onActivity: { [weak self] in
+                    self?.recordActivity(for: agent.id)
                 }
             )
             processes[agent.id] = process
@@ -188,6 +239,7 @@ final class AgentRuntimeCoordinator {
 
     func notify(_ agents: [AgentRecord], repository: WorkspaceRepository) {
         for agent in agents {
+            recordActivity(for: agent.id)
             if processes[agent.id] == nil {
                 start(agent: agent, repository: repository)
             }
@@ -198,6 +250,7 @@ final class AgentRuntimeCoordinator {
     func stop(agentID: UUID) {
         processes.removeValue(forKey: agentID)?.stop()
         snapshots.removeValue(forKey: agentID)
+        heartbeatScheduler.remove(agentID)
     }
 
     func stopAll() {
@@ -205,6 +258,7 @@ final class AgentRuntimeCoordinator {
         capabilityProbe = nil
         processes.values.forEach { $0.stop() }
         processes.removeAll()
+        heartbeatScheduler = AgentHeartbeatScheduler(configuration: heartbeatConfiguration)
         snapshots = snapshots.mapValues {
             AgentRuntimeSnapshot(agentID: $0.agentID, phase: .offline, detail: "Stopped")
         }
@@ -229,6 +283,7 @@ private final class CodexAgentProcess {
     private let executableURL: URL
     private let workspaceURL: URL
     private let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
+    private let onActivity: @MainActor () -> Void
     private let stateURL: URL
 
     private var process: Process?
@@ -252,12 +307,14 @@ private final class CodexAgentProcess {
         agent: AgentRecord,
         executableURL: URL,
         workspaceURL: URL,
-        onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void
+        onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void,
+        onActivity: @escaping @MainActor () -> Void
     ) {
         configuration = agent
         self.executableURL = executableURL
         self.workspaceURL = workspaceURL
         self.onSnapshot = onSnapshot
+        self.onActivity = onActivity
         stateURL = workspaceURL.appendingPathComponent(".agents/codex-runtime.json")
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
         let state = Self.loadState(from: stateURL)
@@ -352,6 +409,16 @@ private final class CodexAgentProcess {
         sendPendingNotificationIfPossible()
     }
 
+    var canReceiveHeartbeat: Bool {
+        process?.isRunning == true && snapshot.phase == .ready
+            && !turnIsActive && !notificationPending && threadID != nil
+    }
+
+    func heartbeat() {
+        guard canReceiveHeartbeat else { return }
+        startTurn(reason: .heartbeat)
+    }
+
     private func didTerminate(status: Int32) {
         process = nil
         input = nil
@@ -368,6 +435,11 @@ private final class CodexAgentProcess {
 
     private func handle(_ message: [String: Any]) {
         guard !intentionallyStopped, process != nil else { return }
+        let eventMethod = message["method"] as? String ?? ""
+        if message["id"] != nil || eventMethod.hasPrefix("item/")
+            || eventMethod.hasPrefix("turn/") || eventMethod == "thread/tokenUsage/updated" {
+            onActivity()
+        }
         if let id = Self.integerID(message["id"]),
            let purpose = purposes.removeValue(forKey: id) {
             if let error = message["error"] as? [String: Any] {
@@ -397,7 +469,7 @@ private final class CodexAgentProcess {
                 sendPendingNotificationIfPossible()
             case .startTurn:
                 turnIsActive = true
-                update(.working, "Checking for new messages")
+                update(.working, snapshot.detail)
             }
             return
         }
@@ -443,14 +515,19 @@ private final class CodexAgentProcess {
     private func sendPendingNotificationIfPossible() {
         guard notificationPending, !turnIsActive,
               snapshot.phase == .ready,
-              let threadID else { return }
+              threadID != nil else { return }
         notificationPending = false
+        startTurn(reason: .inboxChanged)
+    }
+
+    private func startTurn(reason: AgentWakeReason) {
+        guard let threadID else { return }
 
         var params: [String: Any] = [
             "threadId": threadID,
             "input": [[
                 "type": "text",
-                "text": "<superbot-event type=\"inbox-changed\" />"
+                "text": reason.eventText
             ]],
             "cwd": workspaceURL.path,
             "approvalPolicy": "never",
@@ -465,9 +542,10 @@ private final class CodexAgentProcess {
         do {
             try request(.startTurn, method: "turn/start", params: params)
             turnIsActive = true
-            update(.working, "Checking for new messages")
+            onActivity()
+            update(.working, reason == .heartbeat ? "Heartbeat: checking for follow-up work" : "Checking for new messages")
         } catch {
-            notificationPending = true
+            if reason == .inboxChanged { notificationPending = true }
             fail(error.localizedDescription)
         }
     }
@@ -532,8 +610,9 @@ private final class CodexAgentProcess {
     }
 
     private static let developerInstructions = """
+    \(AgentWakeReason.heartbeatInstructions)
     Messenger also supports `--react --conversation <uuid> --message <message-uuid> --emoji '👀'` and `--unreact` to remove your own emoji. Use reactions when useful for acknowledgement, progress, completion, or feedback, keeping progress indicators accurate. `--list-messages --conversation <uuid>` reads history including your own messages and current reactions without consuming the inbox. Inbox deliveries with `reactionChange` are feedback on the referenced message, not a new instruction to repeat it. The change's `sender` names the reactor; `emoji` and `removed` describe the update. Do not reply to every reaction or create acknowledgement loops.
-    You are a continuously running SuperBot agent. A SuperBot event is only a notification that your inbox changed; it never contains the user's message. Whenever notified, your first action must be running the bundled Messenger CLI through Codex's programmatic bridge: `const r = await tools.exec_command({cmd: "./.agents/skills/messenger/messenger --get-latest --inline-images", max_output_tokens: 250000}); if (r.exit_code !== 0) throw new Error(r.output); const payload = JSON.parse(r.output); text(payload.deliveries); for (const visual of payload.images) image(visual.dataURL, "original");`. Every delivery explicitly identifies you in `me`, provides a named `participants` roster where your handle is `me`, and annotates the message `sender` with a `user`, `me`, `bot`, or `system` handle. Use these identities instead of guessing from UUIDs. The CLI includes attached images directly as visual inputs, so inspect them without calling a local image viewer. Every attachment also includes its exact `absolutePath` for non-visual file work. Run get-latest only once for each notification because it consumes the inbox. Reply with the Messenger CLI using `--send`, the conversation UUID, and `--body-percent-encoded`; encode a UTF-8 reply with `const encoded = encodeURIComponent(body).replaceAll("'", "%27");` and pass it as a single-quoted command argument. To send files you created, add a repeatable `--attach <file-path>` option; the body is optional when at least one file is attached. Never edit SuperBot's conversation files directly. Do not answer the notification text itself. If the inbox is empty, finish quietly.
+    You are a continuously running SuperBot agent. An `inbox-changed` event is a notification that your inbox changed; it never contains the user's message. Whenever notified, your first action must be running the bundled Messenger CLI through Codex's programmatic bridge: `const r = await tools.exec_command({cmd: "./.agents/skills/messenger/messenger --get-latest --inline-images", max_output_tokens: 250000}); if (r.exit_code !== 0) throw new Error(r.output); const payload = JSON.parse(r.output); text(payload.deliveries); for (const visual of payload.images) image(visual.dataURL, "original");`. Every delivery explicitly identifies you in `me`, provides a named `participants` roster where your handle is `me`, and annotates the message `sender` with a `user`, `me`, `bot`, or `system` handle. Use these identities instead of guessing from UUIDs. The CLI includes attached images directly as visual inputs, so inspect them without calling a local image viewer. Every attachment also includes its exact `absolutePath` for non-visual file work. Run get-latest only once for each notification because it consumes the inbox. Reply with the Messenger CLI using `--send`, the conversation UUID, and `--body-percent-encoded`; encode a UTF-8 reply with `const encoded = encodeURIComponent(body).replaceAll("'", "%27");` and pass it as a single-quoted command argument. To send files you created, add a repeatable `--attach <file-path>` option; the body is optional when at least one file is attached. Never edit SuperBot's conversation files directly. Do not answer the notification text itself. If the inbox is empty on an `inbox-changed` event, finish quietly. For a `heartbeat` event, follow the heartbeat instructions above.
     """
 
     private static let runtimeVersion = 9

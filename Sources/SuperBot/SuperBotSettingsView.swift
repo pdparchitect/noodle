@@ -12,8 +12,51 @@ struct SuperBotSettingsView: View {
                 .tabItem {
                     Label("Updates", systemImage: "arrow.triangle.2.circlepath")
                 }
+            HeartbeatsSettingsView()
+                .tabItem {
+                    Label("Heartbeats", systemImage: "waveform.path.ecg")
+                }
         }
         .frame(width: 580, height: 380)
+    }
+}
+
+private struct HeartbeatsSettingsView: View {
+    @Environment(SuperBotStore.self) private var store
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Wake idle agents", isOn: Binding(
+                    get: { store.runtime.heartbeatConfiguration.isEnabled },
+                    set: { store.runtime.configureHeartbeats(enabled: $0) }
+                ))
+                Stepper(value: Binding(
+                    get: { store.runtime.heartbeatConfiguration.intervalMinutes },
+                    set: { store.runtime.configureHeartbeats(intervalMinutes: $0) }
+                ), in: 1...1_440) {
+                    Text("After \(store.runtime.heartbeatConfiguration.intervalMinutes) minutes without activity")
+                }
+                .disabled(!store.runtime.heartbeatConfiguration.isEnabled)
+            } footer: {
+                Text("Each bot has its own timer. Incoming messages, replies, reactions, and agent work reset it. Heartbeats wait until the agent is idle and only run while SuperBot is open. Changing these settings starts a fresh interval.")
+            }
+            if !store.agents.isEmpty {
+                Section("Bots") {
+                    ForEach(store.agents) { agent in
+                        Toggle(agent.displayName, isOn: Binding(
+                            get: { !store.runtime.heartbeatConfiguration.disabledAgentIDs.contains(agent.id) },
+                            set: { store.runtime.setHeartbeatEnabled($0, for: agent.id) }
+                        ))
+                    }
+                }
+                .disabled(!store.runtime.heartbeatConfiguration.isEnabled)
+            }
+            Text("A heartbeat starts an agent turn and may use tokens. Agents should stay quiet unless they have useful work or an update.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .formStyle(.grouped)
     }
 }
 

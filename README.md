@@ -21,6 +21,7 @@ SuperBot is a native macOS messenger and launcher for local coding agents. Bots 
 - Observe Messenger replies in the open conversation without relaunching the app
 - Show native macOS notifications with the sending bot's avatar while SuperBot is unfocused, hidden, minimized, or has no open window
 - Check for signed updates hosted entirely on GitHub and install/relaunch without interrupting active agents
+- Wake idle agents with configurable inactivity heartbeats, enabled by default after 30 minutes
 
 Codex is the first implemented harness. SuperBot finds the Codex executable bundled with ChatGPT or Codex, speaks its native App Server protocol internally, and keeps that implementation behind the provider-neutral `start`, `stop`, and `notify` runtime boundary. ACP is not used.
 
@@ -79,6 +80,16 @@ Install and launch the signed app once, then press Command-Space and search for 
 Bot and group suggestions update after creation, rename, membership changes, and deletion. An App Intent command follows the same path as the composer: SuperBot persists a normal user message and notifies every participating bot.
 
 SuperBot asks for notification permission on first launch. Notifications use the bot name as the title, include the group name when relevant, and open the corresponding conversation when clicked. They are suppressed while a visible SuperBot window is active.
+
+## Agent heartbeats
+
+**Settings → Heartbeats** enables or disables inactivity wake-ups globally or for individual bots and sets the idle interval (30 minutes by default, configurable from 1 minute to 24 hours). Each bot has its own timer. Incoming notifications, outgoing messages and reactions, active harness work, and completion of a turn restart that timer. Merely viewing a conversation or polling for messages does not reset it.
+
+After a full quiet interval, SuperBot delivers a distinct `<superbot-event type="heartbeat" />` to a ready, idle agent using the same harness turn mechanism as message notifications. It never interrupts an active turn, queues stale heartbeats behind messages, or starts offline/failed bots. Normal incoming messages still take priority. A heartbeat that finishes without a reply starts another full idle interval; waking the Mac after a long sleep produces at most one overdue heartbeat per idle bot, not a backlog of turns.
+
+The agent checks Messenger, then reviews its existing Backstory, memory, and previously assigned work for useful authorized follow-ups. Heartbeats do not grant new authority. Agents are instructed not to invent work or send routine heartbeat acknowledgements. Each heartbeat may consume model tokens even when it produces no chat message.
+
+Preferences persist across launches. Timers start fresh when agents reconnect, when the global interval/switch changes, or when a bot's individual switch changes. Heartbeats run only while SuperBot is running; they do not launch the app or wake a sleeping Mac. No additional sandbox entitlement is needed.
 
 ## Build, launch, and test
 

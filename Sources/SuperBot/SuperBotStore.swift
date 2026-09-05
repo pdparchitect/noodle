@@ -587,9 +587,15 @@ final class SuperBotStore {
             if latestConversations != conversations { conversations = latestConversations }
             if latestMessages != messagesByConversation { messagesByConversation = latestMessages }
             if latestAttachments != attachmentsByConversation { attachmentsByConversation = latestAttachments }
+            for message in newAgentMessages {
+                if case .agent(let id) = message.author { runtime.recordActivity(for: id) }
+            }
             notifyGroupParticipants(for: newAgentMessages)
             let reactionChanges = latestMessages.values.flatMap { $0 }
                 .flatMap { $0.reactionChanges ?? [] }.filter { !knownReactionIDs.contains($0.id) }
+            for change in reactionChanges {
+                if case .agent(let id) = change.author { runtime.recordActivity(for: id) }
+            }
             let reactionRecipientIDs = Set(reactionChanges.flatMap { change in
                 (latestConversations.first { $0.id == change.conversationID }?.participantIDs ?? [])
                     .filter { change.author != .agent($0) }
@@ -782,6 +788,8 @@ final class SuperBotStore {
                 guard !Task.isCancelled else { break }
                 self?.refreshTranscripts()
                 await self?.processSharedInbox()
+                guard !Task.isCancelled else { break }
+                self?.runtime.checkHeartbeats()
             }
         }
     }
