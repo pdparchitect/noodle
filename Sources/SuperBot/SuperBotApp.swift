@@ -193,6 +193,17 @@ struct RootView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        .background {
+            let conversation = store.selectedConversation
+            let background = store.background(for: conversation)
+            ConversationWallpaper(background: background, imageURL: conversation.flatMap {
+                store.repository.backgroundImageURL(background, conversationID: $0.id)
+            })
+            .overlay(alignment: .top) {
+                ConversationWindowHeaderShade()
+            }
+            .ignoresSafeArea()
+        }
         .onDrop(
             of: AttachmentTransfer.dropContentTypes,
             isTargeted: $isFileDropTargeted

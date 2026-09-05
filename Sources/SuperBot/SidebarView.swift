@@ -44,14 +44,8 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .scrollContentBackground(store.background(for: store.selectedConversation).isDefault ? .automatic : .hidden)
-        .background {
-            if let conversation = store.selectedConversation, !store.background(for: conversation).isDefault {
-                ConversationBackgroundView(background: store.background(for: conversation),
-                    imageURL: store.repository.backgroundImageURL(store.background(for: conversation), conversationID: conversation.id))
-                    .blur(radius: 24).overlay(Color.black.opacity(0.45)).ignoresSafeArea()
-            }
-        }
+        .scrollContentBackground(.hidden)
+        .background(Color.black.opacity(0.24).ignoresSafeArea())
         .searchable(text: $store.searchText, placement: .sidebar, prompt: "Search")
         .controlSize(.large)
         .searchFocused($searchIsFocused)

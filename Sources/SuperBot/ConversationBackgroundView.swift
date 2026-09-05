@@ -3,6 +3,81 @@ import SwiftUI
 import SuperBotCore
 import UniformTypeIdentifiers
 
+/// One window-sized wallpaper. Load its replacement before fading so image-backed
+/// conversations never flash the default canvas during a switch.
+struct ConversationWallpaper: View {
+    let background: ConversationBackground
+    var imageURL: URL?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var displayed = Layer(request: Request(background: ConversationBackground()))
+
+    private struct Request: Equatable {
+        let background: ConversationBackground
+        var imageURL: URL?
+    }
+
+    private struct Layer: Identifiable {
+        let id = UUID()
+        let request: Request
+        var image: NSImage?
+    }
+
+    var body: some View {
+        let request = Request(background: background, imageURL: imageURL)
+        ZStack {
+            Color(nsColor: .textBackgroundColor)
+            ConversationBackgroundView(background: displayed.request.background, previewImage: displayed.image)
+                .id(displayed.id)
+                .transition(.opacity)
+                .zIndex(1)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .task(id: request) {
+            guard request != displayed.request else { return }
+            let image: NSImage?
+            if let url = request.imageURL {
+                image = await Task.detached { NSImage(contentsOf: url) }.value
+            } else {
+                image = nil
+            }
+            guard !Task.isCancelled else { return }
+            // Keep this transaction local to the wallpaper, not the transcript.
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+                displayed = Layer(request: request, image: image)
+            }
+        }
+    }
+}
+
+/// An edge-to-edge fade on the wallpaper, underneath both split-view columns.
+/// It must not wash over sidebar content or stop at the conversation boundary.
+struct ConversationWindowHeaderShade: View {
+    var body: some View {
+        Rectangle()
+            .fill(.ultraThinMaterial)
+            .overlay {
+                LinearGradient(stops: [
+                    .init(color: .black.opacity(0.24), location: 0),
+                    .init(color: .black.opacity(0.10), location: 0.5),
+                    .init(color: .clear, location: 1)
+                ], startPoint: .top, endPoint: .bottom)
+            }
+            .mask {
+                LinearGradient(stops: [
+                    .init(color: .black, location: 0),
+                    .init(color: .black.opacity(0.88), location: 0.55),
+                    .init(color: .clear, location: 1)
+                ], startPoint: .top, endPoint: .bottom)
+            }
+            .frame(height: 88)
+            .shadow(color: .black.opacity(0.24), radius: 14, y: 5)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
 struct ConversationBackgroundView: View {
     let background: ConversationBackground
     var imageURL: URL?
