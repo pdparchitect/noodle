@@ -24,62 +24,22 @@ struct AttachmentInlinePreview: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            ZStack {
-                Color.black.opacity(0.16)
-
-                if let thumbnail {
-                    Image(nsImage: thumbnail)
-                        .resizable()
-                        .scaledToFit()
-                        .padding(5)
-                        .transition(.opacity)
-                } else {
-                    Image(systemName: attachment.previewSymbolName)
-                        .font(.system(size: 38, weight: .light))
-                        .foregroundStyle(.white.opacity(thumbnailUnavailable ? 0.72 : 0.42))
-                }
+        Group {
+            if attachment.mediaType.hasPrefix("image/") {
+                imagePreview
+            } else {
+                documentPreview
             }
-            .frame(height: 150)
-            .accessibilityHidden(true)
-
-            HStack(spacing: 8) {
-                Image(systemName: attachment.previewSymbolName)
-                    .font(.system(size: 16, weight: .medium))
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(attachment.originalFilename)
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .lineLimit(1)
-                    Text(ByteCountFormatter.string(
-                        fromByteCount: attachment.byteCount,
-                        countStyle: .file
-                    ))
-                    .font(.system(size: 9.5))
-                    .opacity(0.72)
-                }
-
-                Spacer(minLength: 3)
-
-                Image(systemName: "eye.circle")
-                    .font(.system(size: 13))
-                    .opacity(0.75)
-            }
-            .foregroundStyle(.primary)
-            .padding(8)
         }
-        .frame(width: 260)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(
-                    isSelected ? Color.accentColor : Color(nsColor: .separatorColor),
-                    lineWidth: isSelected ? 2 : 1
-                )
-        }
-        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .scaleEffect(isSelected ? 1.01 : 1)
+        .shadow(
+            color: isSelected ? Color.accentColor.opacity(0.55) : .clear,
+            radius: 7
+        )
+        .animation(.easeOut(duration: 0.12), value: isSelected)
         .focusable()
+        .focusEffectDisabled()
         .focused($isFocused)
         .onTapGesture(count: 2) {
             isFocused = true
@@ -102,6 +62,82 @@ struct AttachmentInlinePreview: View {
         .task(id: fileURL) {
             await loadThumbnail()
         }
+    }
+
+    private var imagePreview: some View {
+        ZStack {
+            Color.black.opacity(0.12)
+
+            if let thumbnail {
+                Image(nsImage: thumbnail)
+                    .resizable()
+                    .scaledToFit()
+                    .transition(.opacity)
+            } else {
+                Image(systemName: attachment.previewSymbolName)
+                    .font(.system(size: 42, weight: .light))
+                    .foregroundStyle(.secondary.opacity(thumbnailUnavailable ? 0.8 : 0.45))
+            }
+        }
+        .frame(width: imagePreviewSize.width, height: imagePreviewSize.height)
+        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .accessibilityHidden(true)
+    }
+
+    private var documentPreview: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            ZStack {
+                Color.black.opacity(0.16)
+
+                if let thumbnail {
+                    Image(nsImage: thumbnail)
+                        .resizable()
+                        .scaledToFit()
+                        .padding(6)
+                        .transition(.opacity)
+                } else {
+                    Image(systemName: attachment.previewSymbolName)
+                        .font(.system(size: 38, weight: .light))
+                        .foregroundStyle(.white.opacity(thumbnailUnavailable ? 0.72 : 0.42))
+                }
+            }
+            .frame(width: 280, height: 165)
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .accessibilityHidden(true)
+
+            HStack(spacing: 8) {
+                Image(systemName: attachment.previewSymbolName)
+                    .font(.system(size: 16, weight: .medium))
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(attachment.originalFilename)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .lineLimit(1)
+                    Text(ByteCountFormatter.string(
+                        fromByteCount: attachment.byteCount,
+                        countStyle: .file
+                    ))
+                    .font(.system(size: 9.5))
+                    .opacity(0.72)
+                }
+
+                Spacer(minLength: 3)
+            }
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 2)
+        }
+        .frame(width: 280)
+    }
+
+    private var imagePreviewSize: CGSize {
+        guard let thumbnail, thumbnail.size.width > 0, thumbnail.size.height > 0 else {
+            return CGSize(width: 300, height: 200)
+        }
+        let scale = min(300 / thumbnail.size.width, 240 / thumbnail.size.height)
+        return CGSize(
+            width: max(120, thumbnail.size.width * scale),
+            height: max(120, thumbnail.size.height * scale)
+        )
     }
 
     @MainActor
