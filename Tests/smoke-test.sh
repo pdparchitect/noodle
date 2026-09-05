@@ -21,6 +21,12 @@ fi
 codesign --verify --deep --strict --verbose=2 "$app"
 codesign --verify --strict --verbose=2 "$app/Contents/Helpers/messenger"
 
+helper_entitlements="$(codesign -d --entitlements :- "$app/Contents/Helpers/messenger" 2>/dev/null)"
+if print -r -- "$helper_entitlements" | grep -q '<key>'; then
+    print -u2 "The Messenger helper must not inherit application entitlements."
+    exit 1
+fi
+
 if [[ ! -x "$app/Contents/Helpers/messenger" ]]; then
     print -u2 "Bundled Messenger helper is missing or not executable."
     exit 1
@@ -39,6 +45,11 @@ fi
 
 entitlements="$(codesign -d --entitlements :- "$app" 2>/dev/null)"
 compact_entitlements="$(print -r -- "$entitlements" | tr -d '[:space:]')"
+entitlement_count="$(print -r -- "$compact_entitlements" | grep -o '<key>' | wc -l | tr -d '[:space:]')"
+if [[ "$entitlement_count" != "4" ]]; then
+    print -u2 "The app must contain exactly the four reviewed sandbox entitlements."
+    exit 1
+fi
 if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.app-sandbox</key><true/>'; then
     print -u2 "App Sandbox entitlement is missing."
     exit 1

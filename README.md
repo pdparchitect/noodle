@@ -104,12 +104,10 @@ To publish a release, update `VERSION`, commit the change, and run:
 scripts/create-release-tag.sh
 ```
 
-The script creates and pushes a matching `vX.Y.Z` tag. GitHub Actions then builds with the hardened runtime, signs the helper and app independently with Developer ID Application, submits the app to Apple's notary service, staples the ticket, verifies Gatekeeper acceptance, and publishes a ZIP plus SHA-256 checksum on GitHub Releases.
+The script creates and pushes a matching `vX.Y.Z` tag. GitHub Actions then asks Xcode to perform automatic Developer ID cloud signing, submits the result to Apple's notary service, staples the ticket, verifies Gatekeeper acceptance, and publishes a ZIP plus SHA-256 checksum on GitHub Releases. No exportable signing-certificate private key is stored in GitHub.
 
 The release workflow reads signing material only from encrypted GitHub Actions secrets:
 
-- `MACOS_CERTIFICATE_P12`
-- `MACOS_CERTIFICATE_PASSWORD`
 - `APP_STORE_CONNECT_API_KEY_P8`
 - `APP_STORE_CONNECT_KEY_ID`
 - `APP_STORE_CONNECT_ISSUER_ID`
