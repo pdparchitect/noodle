@@ -121,6 +121,9 @@ final class SuperBotStore {
         harnessIdentifier: String,
         modelIdentifier: String?,
         reasoningEffort: String?,
+        avatarSymbolName: String?,
+        avatarColorIndex: Int,
+        avatarImageData: Data?,
         backstory: String
     ) -> Bool {
         do {
@@ -129,6 +132,9 @@ final class SuperBotStore {
                 harnessIdentifier: harnessIdentifier,
                 modelIdentifier: modelIdentifier,
                 reasoningEffort: reasoningEffort,
+                avatarSymbolName: avatarSymbolName,
+                avatarColorIndex: avatarColorIndex,
+                avatarImageData: avatarImageData,
                 backstory: backstory
             )
             agents.append(created.agent)

@@ -12,6 +12,10 @@ struct NewBotSheet: View {
     @State private var selectedModelIdentifier = ""
     @State private var selectedEffort = ""
     @State private var backstory = ""
+    @State private var avatarSymbolName: String? = "sparkles"
+    @State private var avatarColorIndex = Int.random(in: BotAvatarPalette.gradients.indices)
+    @State private var avatarImageData: Data?
+    @State private var editingAvatar = false
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -24,7 +28,22 @@ struct NewBotSheet: View {
 
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 14) {
-                    BotPreview(name: name)
+                    Button {
+                        editingAvatar = true
+                    } label: {
+                        ZStack(alignment: .bottomTrailing) {
+                            BotAvatar(agent: previewAgent, size: 64)
+                            Image(systemName: "pencil.circle.fill")
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, Color.accentColor)
+                                .font(.system(size: 21))
+                                .background(.background, in: Circle())
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help("Change Bot Icon")
+                    .accessibilityLabel("Change Bot Icon")
+
                     VStack(alignment: .leading, spacing: 5) {
                         TextField("Bot name", text: $name)
                             .textFieldStyle(.roundedBorder)
@@ -72,6 +91,14 @@ struct NewBotSheet: View {
             nameFocused = true
             store.runtime.refreshCapabilities()
         }
+        .sheet(isPresented: $editingAvatar) {
+            BotIconEditor(
+                name: name,
+                symbolName: $avatarSymbolName,
+                colorIndex: $avatarColorIndex,
+                imageData: $avatarImageData
+            )
+        }
     }
 
     private var canCreate: Bool {
@@ -87,7 +114,20 @@ struct NewBotSheet: View {
             harnessIdentifier: selectedHarnessIdentifier,
             modelIdentifier: selectedModelIdentifier.nilIfEmpty,
             reasoningEffort: selectedEffort.nilIfEmpty,
+            avatarSymbolName: avatarSymbolName,
+            avatarColorIndex: avatarColorIndex,
+            avatarImageData: avatarImageData,
             backstory: backstory
+        )
+    }
+
+    private var previewAgent: AgentRecord {
+        AgentRecord(
+            displayName: name.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "Bot",
+            accentSeed: avatarColorIndex,
+            avatarSymbolName: avatarSymbolName,
+            avatarColorIndex: avatarColorIndex,
+            avatarImageData: avatarImageData
         )
     }
 
@@ -796,26 +836,5 @@ struct NewGroupSheet: View {
                 }
             }
         )
-    }
-}
-
-private struct BotPreview: View {
-    let name: String
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
-            Image(systemName: "sparkles")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(.white)
-            if let first = name.trimmingCharacters(in: .whitespacesAndNewlines).first {
-                Text(String(first).uppercased())
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .offset(y: 18)
-            }
-        }
-        .frame(width: 64, height: 64)
     }
 }

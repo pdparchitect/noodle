@@ -192,6 +192,25 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(renamed.avatarImageData, photo)
     }
 
+    func testAvatarPreferencesPersistWhenAgentIsCreated() throws {
+        let photo = Data([0xFF, 0xD8, 0xFF, 0xD9])
+        let created = try repository.createAgent(
+            named: "Design Bot",
+            avatarSymbolName: "paintbrush.fill",
+            avatarColorIndex: 4,
+            avatarImageData: photo
+        )
+
+        XCTAssertEqual(created.agent.avatarSymbolName, "paintbrush.fill")
+        XCTAssertEqual(created.agent.avatarColorIndex, 4)
+        XCTAssertEqual(created.agent.avatarImageData, photo)
+
+        let loaded = try XCTUnwrap(try repository.loadAgents().first)
+        XCTAssertEqual(loaded.avatarSymbolName, "paintbrush.fill")
+        XCTAssertEqual(loaded.avatarColorIndex, 4)
+        XCTAssertEqual(loaded.avatarImageData, photo)
+    }
+
     func testGroupAndTranscriptRoundTrip() throws {
         let first = try repository.createAgent(named: "Research Bot")
         let second = try repository.createAgent(named: "Build Bot")

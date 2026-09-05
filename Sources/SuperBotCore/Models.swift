@@ -315,6 +315,9 @@ public struct WorkspaceRepository: Sendable {
         harnessIdentifier: String? = nil,
         modelIdentifier: String? = nil,
         reasoningEffort: String? = nil,
+        avatarSymbolName: String? = nil,
+        avatarColorIndex: Int? = nil,
+        avatarImageData: Data? = nil,
         backstory: String = "",
         now: Date = Date()
     ) throws -> CreatedAgentWorkspace {
@@ -327,7 +330,10 @@ public struct WorkspaceRepository: Sendable {
             updatedAt: now,
             harnessIdentifier: harnessIdentifier,
             modelIdentifier: modelIdentifier,
-            reasoningEffort: reasoningEffort
+            reasoningEffort: reasoningEffort,
+            avatarSymbolName: avatarSymbolName,
+            avatarColorIndex: avatarColorIndex,
+            avatarImageData: avatarImageData
         )
         let agentDirectory = directory(for: agent)
         try FileManager.default.createDirectory(at: agentDirectory, withIntermediateDirectories: false)
