@@ -14,6 +14,7 @@ final class AgentRuntimeCoordinator {
     private(set) var modelsByProvider: [HarnessProvider: [HarnessModel]] = [:]
     private(set) var capabilityErrors: [HarnessProvider: String] = [:]
     private(set) var isLoadingCapabilities = false
+    private(set) var isRefreshingInstallations = false
     private(set) var snapshots: [UUID: AgentRuntimeSnapshot] = [:]
 
     private let discovery: HarnessDiscovery
@@ -27,6 +28,20 @@ final class AgentRuntimeCoordinator {
 
     var availableInstallations: [HarnessInstallation] {
         installations.filter(\.isAvailable)
+    }
+
+    /// Discovery is shared by Settings and bot configuration. Refreshing the
+    /// catalogue does not restart agents or launch capability-probe processes.
+    func refreshInstallations() async {
+        guard !isRefreshingInstallations else { return }
+        isRefreshingInstallations = true
+        defer { isRefreshingInstallations = false }
+        let discovery = discovery
+        let detected = await Task.detached(priority: .utility) {
+            discovery.discover()
+        }.value
+        guard !Task.isCancelled else { return }
+        installations = detected
     }
 
     func installation(for agent: AgentRecord) -> HarnessInstallation? {

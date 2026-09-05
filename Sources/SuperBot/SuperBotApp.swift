@@ -52,6 +52,12 @@ struct SuperBotApp: App {
                 .keyboardShortcut("f", modifiers: .command)
             }
         }
+
+        Settings {
+            SuperBotSettingsView()
+                .environment(store)
+                .preferredColorScheme(.dark)
+        }
     }
 
     private static func write(_ value: String, to handle: FileHandle) {
