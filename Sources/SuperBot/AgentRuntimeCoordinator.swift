@@ -217,10 +217,12 @@ private final class CodexAgentProcess {
     private let stateURL: URL
 
     private var process: Process?
-    private var input: FileHandle?
+    private var input: ProcessInputWriter?
     private var output: FileHandle?
     private var errors: FileHandle?
-    private var readBuffer = Data()
+    private lazy var outputReader = JSONLineReader { [weak self] message in
+        Task { @MainActor in self?.handle(message) }
+    }
     private var nextRequestID = 1
     private var purposes: [Int: RequestPurpose] = [:]
     private var threadID: String?
@@ -270,14 +272,21 @@ private final class CodexAgentProcess {
             environment["CODEX_HOME"] = HostEnvironment.codexHome.path
             child.environment = environment
 
-            outputPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let reader = outputReader
+            outputPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
-                guard !data.isEmpty else { return }
-                Task { @MainActor in self?.receive(data) }
+                guard !data.isEmpty else {
+                    handle.readabilityHandler = nil
+                    return
+                }
+                reader.receive(data)
             }
             errorPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
                 let data = handle.availableData
-                guard !data.isEmpty else { return }
+                guard !data.isEmpty else {
+                    handle.readabilityHandler = nil
+                    return
+                }
                 let text = String(decoding: data, as: UTF8.self)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else { return }
@@ -289,7 +298,7 @@ private final class CodexAgentProcess {
 
             try child.run()
             process = child
-            input = inputPipe.fileHandleForWriting
+            input = ProcessInputWriter(handle: inputPipe.fileHandleForWriting)
             output = outputPipe.fileHandleForReading
             errors = errorPipe.fileHandleForReading
             update(.starting, "Connecting to Codex")
@@ -342,20 +351,8 @@ private final class CodexAgentProcess {
         }
     }
 
-    private func receive(_ data: Data) {
-        readBuffer.append(data)
-        while let newline = readBuffer.firstIndex(of: 0x0A) {
-            let line = readBuffer.prefix(upTo: newline)
-            readBuffer.removeSubrange(...newline)
-            guard !line.isEmpty,
-                  let message = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else {
-                continue
-            }
-            handle(message)
-        }
-    }
-
     private func handle(_ message: [String: Any]) {
+        guard !intentionallyStopped, process != nil else { return }
         if let id = Self.integerID(message["id"]),
            let purpose = purposes.removeValue(forKey: id) {
             if let error = message["error"] as? [String: Any] {
@@ -474,7 +471,12 @@ private final class CodexAgentProcess {
     private func send(_ object: [String: Any]) throws {
         let data = try JSONSerialization.data(withJSONObject: object)
         guard let input else { throw CocoaError(.fileNoSuchFile) }
-        try input.write(contentsOf: data + Data([0x0A]))
+        input.write(data + Data([0x0A])) { [weak self] error in
+            Task { @MainActor in
+                guard let self, !self.intentionallyStopped else { return }
+                self.fail("Could not communicate with Codex: \(error.localizedDescription)")
+            }
+        }
     }
 
     private func saveState(threadID: String) {
@@ -525,10 +527,12 @@ private final class CodexAgentProcess {
 private final class CodexCapabilityProbe {
     private let executableURL: URL
     private var process: Process?
-    private var input: FileHandle?
+    private var input: ProcessInputWriter?
     private var output: FileHandle?
     private var errors: FileHandle?
-    private var readBuffer = Data()
+    private lazy var outputReader = JSONLineReader { [weak self] message in
+        Task { @MainActor in self?.handle(message) }
+    }
     private var completion: ((Result<[HarnessModel], Error>) -> Void)?
     private var timeoutTask: Task<Void, Never>?
 
@@ -552,12 +556,23 @@ private final class CodexCapabilityProbe {
             environment["CODEX_HOME"] = HostEnvironment.codexHome.path
             child.environment = environment
 
-            outputPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let reader = outputReader
+            outputPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
-                guard !data.isEmpty else { return }
-                Task { @MainActor in self?.receive(data) }
+                guard !data.isEmpty else {
+                    handle.readabilityHandler = nil
+                    return
+                }
+                reader.receive(data)
             }
-            errorPipe.fileHandleForReading.readabilityHandler = { _ in }
+            // Readiness callbacks must consume bytes, even when diagnostics are
+            // discarded. Otherwise this spins continuously and can fill the pipe,
+            // preventing the child from completing initialization.
+            errorPipe.fileHandleForReading.readabilityHandler = { handle in
+                if handle.availableData.isEmpty {
+                    handle.readabilityHandler = nil
+                }
+            }
             child.terminationHandler = { [weak self] child in
                 Task { @MainActor in
                     guard let self, self.completion != nil else { return }
@@ -567,7 +582,7 @@ private final class CodexCapabilityProbe {
 
             try child.run()
             process = child
-            input = inputPipe.fileHandleForWriting
+            input = ProcessInputWriter(handle: inputPipe.fileHandleForWriting)
             output = outputPipe.fileHandleForReading
             errors = errorPipe.fileHandleForReading
             try send([
@@ -597,39 +612,33 @@ private final class CodexCapabilityProbe {
         tearDown()
     }
 
-    private func receive(_ data: Data) {
-        readBuffer.append(data)
-        while let newline = readBuffer.firstIndex(of: 0x0A) {
-            let line = readBuffer.prefix(upTo: newline)
-            readBuffer.removeSubrange(...newline)
-            guard !line.isEmpty,
-                  let message = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-                  let id = CodexAgentProcess.integerID(message["id"]) else { continue }
-            if let error = message["error"] as? [String: Any] {
-                finish(.failure(ProbeError(error["message"] as? String ?? "Codex capability check failed")))
+    private func handle(_ message: [String: Any]) {
+        guard completion != nil,
+              let id = CodexAgentProcess.integerID(message["id"]) else { return }
+        if let error = message["error"] as? [String: Any] {
+            finish(.failure(ProbeError(error["message"] as? String ?? "Codex capability check failed")))
+            return
+        }
+        if id == 1 {
+            do {
+                try send(["method": "initialized", "params": [:]])
+                try send([
+                    "method": "model/list",
+                    "id": 2,
+                    "params": ["includeHidden": false, "limit": 100]
+                ])
+            } catch {
+                finish(.failure(error))
+            }
+        } else if id == 2 {
+            let result = message["result"] as? [String: Any]
+            let data = result?["data"] as? [[String: Any]] ?? []
+            let models = data.compactMap(Self.parseModel)
+            guard !models.isEmpty else {
+                finish(.failure(ProbeError("Codex returned no available models")))
                 return
             }
-            if id == 1 {
-                do {
-                    try send(["method": "initialized", "params": [:]])
-                    try send([
-                        "method": "model/list",
-                        "id": 2,
-                        "params": ["includeHidden": false, "limit": 100]
-                    ])
-                } catch {
-                    finish(.failure(error))
-                }
-            } else if id == 2 {
-                let result = message["result"] as? [String: Any]
-                let data = result?["data"] as? [[String: Any]] ?? []
-                let models = data.compactMap(Self.parseModel)
-                guard !models.isEmpty else {
-                    finish(.failure(ProbeError("Codex returned no available models")))
-                    return
-                }
-                finish(.success(models))
-            }
+            finish(.success(models))
         }
     }
 
@@ -653,7 +662,11 @@ private final class CodexCapabilityProbe {
     private func send(_ object: [String: Any]) throws {
         let data = try JSONSerialization.data(withJSONObject: object)
         guard let input else { throw CocoaError(.fileNoSuchFile) }
-        try input.write(contentsOf: data + Data([0x0A]))
+        input.write(data + Data([0x0A])) { [weak self] error in
+            Task { @MainActor in
+                self?.finish(.failure(error))
+            }
+        }
     }
 
     private func finish(_ result: Result<[HarnessModel], Error>) {
