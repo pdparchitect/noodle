@@ -1,4 +1,5 @@
 import XCTest
+import UniformTypeIdentifiers
 @testable import SuperBotCore
 
 final class RepositoryTests: XCTestCase {
@@ -399,6 +400,55 @@ final class RepositoryTests: XCTestCase {
         XCTAssertTrue(repository.attachmentFileURL(loaded).path.hasPrefix(
             repository.conversationDirectory(id: created.conversation.id).path
         ))
+    }
+
+    func testAttachmentDataIsCopiedIntoConversationStorage() throws {
+        let created = try repository.createAgent(named: "Clipboard Bot")
+        let imageData = Data([0x89, 0x50, 0x4E, 0x47])
+
+        let attachment = try repository.importAttachment(
+            data: imageData,
+            originalFilename: "../Pasted Image.png",
+            into: created.conversation.id,
+            mediaType: "image/png"
+        )
+
+        XCTAssertEqual(attachment.originalFilename, "Pasted Image.png")
+        XCTAssertEqual(attachment.mediaType, "image/png")
+        XCTAssertEqual(attachment.byteCount, Int64(imageData.count))
+        XCTAssertEqual(try Data(contentsOf: repository.attachmentFileURL(attachment)), imageData)
+    }
+
+    func testAttachmentTransferLoadsPastedImageData() async throws {
+        let imageData = Data([0x89, 0x50, 0x4E, 0x47])
+        let provider = NSItemProvider()
+        provider.suggestedName = "Clipboard Screenshot"
+        provider.registerDataRepresentation(for: .png, visibility: .all) { completion in
+            completion(imageData, nil)
+            return nil
+        }
+
+        let payload = try await AttachmentTransfer.load(provider)
+        guard case .data(let loadedData, let filename, let mediaType) = payload else {
+            return XCTFail("Expected an in-memory attachment")
+        }
+
+        XCTAssertEqual(loadedData, imageData)
+        XCTAssertEqual(filename, "Clipboard Screenshot.png")
+        XCTAssertEqual(mediaType, "image/png")
+    }
+
+    func testAttachmentTransferLoadsCopiedFileURL() async throws {
+        let source = root.appendingPathComponent("copied-report.pdf")
+        try Data("PDF".utf8).write(to: source)
+        let provider = try XCTUnwrap(NSItemProvider(contentsOf: source))
+
+        let payload = try await AttachmentTransfer.load(provider)
+        guard case .file(let loadedURL) = payload else {
+            return XCTFail("Expected a copied file URL")
+        }
+
+        XCTAssertEqual(loadedURL, source.standardizedFileURL)
     }
 
     func testSendUserMessagePersistsCommandAndUpdatesConversation() throws {

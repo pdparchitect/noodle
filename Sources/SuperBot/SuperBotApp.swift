@@ -158,25 +158,18 @@ struct RootView: View {
         } detail: {
             if let conversation = store.selectedConversation {
                 ChatView(conversation: conversation)
-                    .id(conversation.id)
             } else {
                 WelcomeView()
             }
         }
         .navigationSplitViewStyle(.balanced)
-        .dropDestination(for: URL.self) { urls, _ in
-            guard store.selectedConversation != nil else { return false }
-
-            var importedURLs = Set<URL>()
-            for url in urls {
-                let standardizedURL = url.standardizedFileURL
-                if importedURLs.insert(standardizedURL).inserted {
-                    store.importAttachment(from: standardizedURL)
-                }
-            }
-            return !importedURLs.isEmpty
-        } isTargeted: { isTargeted in
-            isFileDropTargeted = isTargeted
+        .onDrop(
+            of: AttachmentTransfer.dropContentTypes,
+            isTargeted: $isFileDropTargeted
+        ) { providers in
+            guard store.selectedConversation != nil, !providers.isEmpty else { return false }
+            store.importAttachments(from: providers)
+            return true
         }
         .overlay {
             if isFileDropTargeted, store.selectedConversation != nil {

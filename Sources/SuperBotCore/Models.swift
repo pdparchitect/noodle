@@ -617,6 +617,41 @@ public struct WorkspaceRepository: Sendable {
         return attachment
     }
 
+    public func importAttachment(
+        data: Data,
+        originalFilename: String,
+        into conversationID: UUID,
+        mediaType: String,
+        now: Date = Date()
+    ) throws -> ConversationAttachment {
+        guard try loadConversations().contains(where: { $0.id == conversationID }) else {
+            throw WorkspaceError.missingConversation(conversationID)
+        }
+
+        let filename = URL(fileURLWithPath: originalFilename).lastPathComponent
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !filename.isEmpty else { throw WorkspaceError.invalidAttachment }
+
+        let attachmentID = UUID()
+        let attachment = ConversationAttachment(
+            id: attachmentID,
+            conversationID: conversationID,
+            originalFilename: filename,
+            storedFilename: storedAttachmentName(id: attachmentID, originalFilename: filename),
+            mediaType: mediaType,
+            byteCount: Int64(data.count),
+            createdAt: now
+        )
+        let directory = attachmentsDirectory(conversationID: conversationID)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try data.write(
+            to: directory.appendingPathComponent(attachment.storedFilename),
+            options: .atomic
+        )
+        try write(attachment, to: directory.appendingPathComponent("\(attachment.id.uuidString.lowercased()).json"))
+        return attachment
+    }
+
     public func loadAttachments(conversationID: UUID) throws -> [ConversationAttachment] {
         let directory = attachmentsDirectory(conversationID: conversationID)
         guard FileManager.default.fileExists(atPath: directory.path) else { return [] }

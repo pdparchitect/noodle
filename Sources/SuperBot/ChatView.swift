@@ -36,6 +36,9 @@ struct ChatView: View {
             }
         }
         .quickLookPreview($previewedAttachmentURL)
+        .onPasteCommand(of: AttachmentTransfer.pasteContentTypes) { providers in
+            store.importAttachments(from: providers)
+        }
         .onChange(of: conversation.id) { _, _ in
             selectedAttachmentID = nil
             previewedAttachmentURL = nil

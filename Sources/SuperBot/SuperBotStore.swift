@@ -374,21 +374,71 @@ final class SuperBotStore {
     }
 
     func importAttachment(from url: URL) {
-        guard let conversation = selectedConversation else { return }
-        let accessed = url.startAccessingSecurityScopedResource()
-        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        guard let conversationID = selectedConversation?.id else { return }
         do {
-            let mediaType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
-            let attachment = try repository.importAttachment(
-                from: url,
-                into: conversation.id,
-                mediaType: mediaType
-            )
-            attachmentsByConversation[conversation.id, default: []].append(attachment)
-            pendingAttachments.append(attachment)
+            try importAttachment(from: url, into: conversationID)
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func importAttachments(from providers: [NSItemProvider]) {
+        guard let conversationID = selectedConversation?.id else { return }
+
+        Task {
+            var firstError: Error?
+            for provider in providers {
+                do {
+                    let payload = try await AttachmentTransfer.load(provider)
+                    guard selectedConversationID == conversationID else { return }
+                    switch payload {
+                    case .file(let url):
+                        try importAttachment(from: url, into: conversationID)
+                    case .data(let data, let originalFilename, let mediaType):
+                        try importAttachment(
+                            data: data,
+                            originalFilename: originalFilename,
+                            mediaType: mediaType,
+                            into: conversationID
+                        )
+                    }
+                } catch {
+                    firstError = firstError ?? error
+                }
+            }
+            if let firstError {
+                errorMessage = firstError.localizedDescription
+            }
+        }
+    }
+
+    private func importAttachment(from url: URL, into conversationID: UUID) throws {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        let mediaType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+        let attachment = try repository.importAttachment(
+            from: url,
+            into: conversationID,
+            mediaType: mediaType
+        )
+        attachmentsByConversation[conversationID, default: []].append(attachment)
+        pendingAttachments.append(attachment)
+    }
+
+    private func importAttachment(
+        data: Data,
+        originalFilename: String,
+        mediaType: String,
+        into conversationID: UUID
+    ) throws {
+        let attachment = try repository.importAttachment(
+            data: data,
+            originalFilename: originalFilename,
+            into: conversationID,
+            mediaType: mediaType
+        )
+        attachmentsByConversation[conversationID, default: []].append(attachment)
+        pendingAttachments.append(attachment)
     }
 
     func removePendingAttachment(_ attachment: ConversationAttachment) {
