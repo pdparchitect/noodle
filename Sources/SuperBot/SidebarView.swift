@@ -34,6 +34,9 @@ struct SidebarView: View {
                     ForEach(store.groupConversations) { conversation in
                         ConversationRow(conversation: conversation)
                             .tag(conversation.id)
+                            .contextMenu {
+                                Button("Edit Group…") { store.groupBeingEdited = conversation }
+                            }
                     }
                 }
             }
