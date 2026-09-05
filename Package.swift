@@ -12,6 +12,9 @@ let package = Package(
         .executable(name: "SuperBot", targets: ["SuperBot"]),
         .executable(name: "SuperBotMessenger", targets: ["SuperBotMessenger"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4")
+    ],
     targets: [
         .target(name: "SuperBotCore"),
         .target(name: "SuperBotSharing", dependencies: ["SuperBotCore"]),
@@ -23,14 +26,15 @@ let package = Package(
         ),
         .executableTarget(
             name: "SuperBot",
-            dependencies: ["SuperBotCore", "SuperBotSharing"],
+            dependencies: ["SuperBotCore", "SuperBotSharing", .product(name: "Sparkle", package: "Sparkle")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",
                     "-Xfrontend", "-const-gather-protocols-file",
                     "-Xfrontend", "Support/AppIntentsProtocols.json"
                 ])
-            ]
+            ],
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
         .executableTarget(
             name: "SuperBotMessenger",

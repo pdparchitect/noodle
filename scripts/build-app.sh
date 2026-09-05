@@ -4,7 +4,7 @@ set -euo pipefail
 project_root="${0:A:h:h}"
 configuration="${SUPERBOT_BUILD_CONFIGURATION:-release}"
 version="$(tr -d '[:space:]' < "$project_root/VERSION")"
-build_number="${SUPERBOT_BUILD_NUMBER:-$(git -C "$project_root" rev-list --count HEAD 2>/dev/null || print 1)}"
+build_number="${SUPERBOT_BUILD_NUMBER:-$version}"
 build_root="$project_root/.build"
 app="$build_root/SuperBot.app"
 contents="$app/Contents"
@@ -12,13 +12,13 @@ module_cache="$build_root/module-cache"
 entitlements="$project_root/Support/SuperBot.entitlements"
 asset_catalog="$project_root/Support/Assets.xcassets"
 
-if [[ ! "$version" =~ '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$' ]]; then
+if [[ ! "$version" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' ]]; then
     print -u2 "VERSION must contain a semantic version such as 1.2.3."
     exit 1
 fi
 
-if [[ ! "$build_number" =~ '^[1-9][0-9]*$' ]]; then
-    print -u2 "SUPERBOT_BUILD_NUMBER must be a positive integer."
+if [[ ! "$build_number" =~ '^[0-9]+(\.[0-9]+){0,2}$' ]]; then
+    print -u2 "SUPERBOT_BUILD_NUMBER must be a numeric bundle version such as 1.2.3."
     exit 1
 fi
 
@@ -43,6 +43,11 @@ intent_const_values_list="$build_root/SuperBot.AppIntentConstValues"
 
 rm -rf "$app"
 mkdir -p "$contents/MacOS" "$contents/Resources" "$contents/Helpers"
+sparkle_source="$build_root/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+sparkle="$contents/Frameworks/Sparkle.framework"
+ditto "$sparkle_source" "$sparkle"
+# The host already has network.client. Sparkle's separate downloader is unnecessary.
+rm -rf "$sparkle/Versions/B/XPCServices/Downloader.xpc"
 share_extension="$contents/PlugIns/SuperBotShare.appex"
 mkdir -p "$share_extension/Contents/MacOS"
 cp "$bin_path/SuperBotShareExtension" "$share_extension/Contents/MacOS/SuperBotShareExtension"
@@ -50,8 +55,17 @@ cp "$project_root/Support/ShareExtension-Info.plist" "$share_extension/Contents/
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$share_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$share_extension/Contents/Info.plist"
 cp "$bin_path/SuperBot" "$contents/MacOS/SuperBot"
+# SwiftPM adds development-only search paths. Keep system and bundle-relative paths.
+otool -l "$contents/MacOS/SuperBot" \
+    | awk '/cmd LC_RPATH/ { found=1; next } found && /path / { print $2; found=0 }' \
+    | while IFS= read -r rpath; do
+        if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain_dir/"* ]]; then
+            install_name_tool -delete_rpath "$rpath" "$contents/MacOS/SuperBot"
+        fi
+    done
 cp "$bin_path/SuperBotMessenger" "$contents/Helpers/messenger"
 cp "$project_root/Support/Info.plist" "$contents/Info.plist"
+cp "$project_root/.build/checkouts/Sparkle/LICENSE" "$contents/Resources/Sparkle-LICENSE.txt"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$contents/Info.plist"
 xcrun actool "$asset_catalog" \
@@ -122,9 +136,19 @@ for file in "$contents/Info.plist" "$share_extension/Contents/Info.plist"; do
 done
 codesign --force --options runtime "$timestamp_option" \
     --entitlements "$share_entitlements" --sign "$signing_identity" "$share_extension"
+# Sign Sparkle inside-out. These installer components are deliberately outside the
+# host's sandbox so they can replace the signed app; no other app permissions change.
+for component in \
+    "$sparkle/Versions/B/XPCServices/Installer.xpc" \
+    "$sparkle/Versions/B/Autoupdate" \
+    "$sparkle/Versions/B/Updater.app" \
+    "$sparkle"; do
+    codesign --force --options runtime "$timestamp_option" --sign "$signing_identity" "$component"
+done
 codesign --force --options runtime "$timestamp_option" \
     --entitlements "$resolved_entitlements" \
     --sign "$signing_identity" "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
+zsh "$project_root/scripts/verify-updater.sh" "$app" >&2
 
 print "$app"

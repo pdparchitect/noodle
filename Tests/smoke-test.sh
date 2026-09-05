@@ -9,12 +9,17 @@ export CLANG_MODULE_CACHE_PATH="$module_cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$module_cache"
 
 swift test --disable-sandbox --package-path "$project_root"
-app="$(SUPERBOT_BUILD_CONFIGURATION=debug "$project_root/scripts/build-app.sh")"
+app="$(SUPERBOT_BUILD_CONFIGURATION="${SUPERBOT_BUILD_CONFIGURATION:-debug}" "$project_root/scripts/build-app.sh")"
 
 expected_version="$(tr -d '[:space:]' < "$project_root/VERSION")"
 actual_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
 if [[ "$actual_version" != "$expected_version" ]]; then
     print -u2 "Built app version $actual_version does not match VERSION ($expected_version)."
+    exit 1
+fi
+actual_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist")"
+if [[ "$actual_build" != "${SUPERBOT_BUILD_NUMBER:-$expected_version}" ]]; then
+    print -u2 "Built app's update version does not match VERSION."
     exit 1
 fi
 
@@ -46,10 +51,11 @@ fi
 entitlements="$(codesign -d --entitlements :- "$app" 2>/dev/null)"
 compact_entitlements="$(print -r -- "$entitlements" | tr -d '[:space:]')"
 entitlement_count="$(print -r -- "$compact_entitlements" | grep -o '<key>' | wc -l | tr -d '[:space:]')"
-if [[ "$entitlement_count" != "5" ]]; then
-    print -u2 "The app must contain exactly the five reviewed sandbox entitlements."
+if [[ "$entitlement_count" != "6" ]]; then
+    print -u2 "The app must contain exactly the six reviewed sandbox entitlements."
     exit 1
 fi
+zsh "$project_root/scripts/verify-updater.sh" "$app"
 if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.app-sandbox</key><true/>'; then
     print -u2 "App Sandbox entitlement is missing."
     exit 1

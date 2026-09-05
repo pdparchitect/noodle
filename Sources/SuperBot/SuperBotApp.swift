@@ -33,6 +33,9 @@ struct SuperBotApp: App {
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesButton()
+            }
             CommandGroup(replacing: .newItem) {
                 Button("New Bot") {
                     NotificationCenter.default.post(name: .newBot, object: nil)
@@ -76,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.servicesProvider = services
         NSUpdateDynamicServices()
         SuperBotNotifications.configure(delegate: self)
+        AppUpdater.shared.start()
         attachmentPasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
             guard event.charactersIgnoringModifiers?.lowercased() == "v",
@@ -87,6 +91,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return nil
         }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Sparkle may skip the postponement callback when resuming a previous install.
+        // Recheck at the actual termination boundary as well.
+        if AppUpdater.shared.isInstallingUpdate && !AppUpdater.shared.canRelaunch {
+            return .terminateCancel
+        }
+        return .terminateNow
     }
 
     func applicationWillTerminate(_ notification: Notification) {

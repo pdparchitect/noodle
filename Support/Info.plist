@@ -32,6 +32,24 @@
     <string>Copyright © 2026 Petko D. Petkov</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>SUFeedURL</key>
+    <string>https://github.com/pdparchitect/superbot/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>1ZT5NrPiDPaQ54iHGSI1a9JIn6kTrmjQvzZRBA9f/sk=</string>
+    <key>SURequireSignedFeed</key>
+    <true/>
+    <key>SUVerifyUpdateBeforeExtraction</key>
+    <true/>
+    <key>SUEnableInstallerLauncherService</key>
+    <true/>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
+    <key>SUAutomaticallyUpdate</key>
+    <false/>
+    <key>SUSendProfileInfo</key>
+    <false/>
     <key>CFBundleURLTypes</key>
     <array><dict>
         <key>CFBundleURLName</key><string>com.pdparchitect.superbot.sharing</string>

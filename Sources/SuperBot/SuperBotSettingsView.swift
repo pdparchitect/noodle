@@ -8,6 +8,10 @@ struct SuperBotSettingsView: View {
                 .tabItem {
                     Label("Harnesses", systemImage: "terminal")
                 }
+            UpdatesSettingsView()
+                .tabItem {
+                    Label("Updates", systemImage: "arrow.triangle.2.circlepath")
+                }
         }
         .frame(width: 580, height: 380)
     }
