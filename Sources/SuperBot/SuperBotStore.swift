@@ -606,6 +606,27 @@ final class SuperBotStore {
         }
     }
 
+    func removeReaction(_ emoji: String, on message: ChatMessage) {
+        do {
+            try repository.setReaction(conversationID: message.conversationID, messageID: message.id,
+                                       author: .user, emoji: emoji, present: false)
+            refreshTranscripts()
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    func changeReaction(_ emoji: String, to replacement: String, on message: ChatMessage) {
+        guard emoji != replacement else { return }
+        do {
+            // Add first so a failed write cannot silently lose the existing reaction.
+            // Idempotent writes preserve an already-present replacement and other people's badges.
+            try repository.setReaction(conversationID: message.conversationID, messageID: message.id,
+                                       author: .user, emoji: replacement, present: true)
+            try repository.setReaction(conversationID: message.conversationID, messageID: message.id,
+                                       author: .user, emoji: emoji, present: false)
+            refreshTranscripts()
+        } catch { errorMessage = error.localizedDescription }
+    }
+
     private func refreshAppShortcuts() {
         SuperBotShortcuts.updateAppShortcutParameters()
     }

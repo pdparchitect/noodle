@@ -796,8 +796,15 @@ final class RepositoryTests: XCTestCase {
         let command = repository.directory(for: first.agent).appendingPathComponent(".agents/skills/messenger/messenger").path
         let args = ["--conversation", group.id.uuidString, "--message", message.id.uuidString, "--emoji", "👀"]
         XCTAssertEqual(MessengerCLI.run(arguments: [command, "--react"] + args).exitCode, 0)
-        let feedback = try repository.latestMessages(for: second.agent.id)
+        let receivingCommand = repository.directory(for: second.agent)
+            .appendingPathComponent(".agents/skills/messenger/messenger").path
+        let inbox = MessengerCLI.run(arguments: [receivingCommand, "--get-latest"])
+        XCTAssertEqual(inbox.exitCode, 0)
+        let feedback = try decode([MessengerDelivery].self, from: inbox.standardOutput)
         XCTAssertEqual(feedback.count, 1)
+        XCTAssertEqual(feedback.first?.message.id, message.id)
+        XCTAssertEqual(feedback.first?.reactionChange?.emoji, "👀")
+        XCTAssertEqual(feedback.first?.reactionChange?.removed, false)
         XCTAssertEqual(feedback.first?.reactionChange?.sender.displayName, "First")
         XCTAssertEqual(feedback.first?.reactionChange?.sender.handle, .bot)
         let history = MessengerCLI.run(arguments: [command, "--list-messages", "--conversation", group.id.uuidString])
@@ -807,7 +814,14 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(deliveries.first?.reactions?.first?.sender.handle, .me)
         XCTAssertEqual(try repository.latestMessages(for: first.agent.id).count, 1, "History must not consume unread messages")
         XCTAssertEqual(MessengerCLI.run(arguments: [command, "--unreact"] + args).exitCode, 0)
-        XCTAssertEqual(try repository.latestMessages(for: second.agent.id).first?.reactionChange?.removed, true)
+        let removal = MessengerCLI.run(arguments: [receivingCommand, "--get-latest"])
+        XCTAssertEqual(removal.exitCode, 0)
+        let removed = try decode([MessengerDelivery].self, from: removal.standardOutput)
+        XCTAssertEqual(removed.first?.reactionChange?.removed, true)
+        XCTAssertEqual(removed.first?.reactionChange?.emoji, "👀")
+        let consumed = MessengerCLI.run(arguments: [receivingCommand, "--get-latest"])
+        XCTAssertEqual(consumed.exitCode, 0)
+        XCTAssertTrue(try decode([MessengerDelivery].self, from: consumed.standardOutput).isEmpty)
         XCTAssertNotEqual(MessengerCLI.run(arguments: [command, "--react", "--unreact"] + args).exitCode, 0)
         XCTAssertNotEqual(MessengerCLI.run(arguments: [command, "--react", "--emoji", "👍"]).exitCode, 0)
     }
