@@ -10,7 +10,7 @@ struct ChatView: View {
     @State private var choosingAttachments = false
     @State private var selectedAttachmentID: UUID?
     @State private var previewedAttachmentURL: URL?
-    private let transcriptBottomID = "transcript-bottom"
+    @State private var transcriptPositions: [UUID: TranscriptViewport] = [:]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,57 +46,17 @@ struct ChatView: View {
     }
 
     private var transcript: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(spacing: 10) {
-                    ConversationStartView(conversation: conversation)
-                        .padding(.bottom, 14)
-
-                    ForEach(store.messages(for: conversation)) { message in
-                        MessageBubble(
-                            message: message,
-                            selectedAttachmentID: $selectedAttachmentID,
-                            previewAttachment: showPreview
-                        )
-                            .id(message.id)
-                    }
-
-                    Color.clear
-                        .frame(height: 20)
-                        .id(transcriptBottomID)
-                }
-                .padding(.horizontal, 15)
-                .padding(.top, 30)
-            }
-            .defaultScrollAnchor(.bottom)
-            .onAppear {
-                scrollTranscriptToBottom(using: proxy, animated: false)
-            }
-            .onChange(of: conversation.id) { _, _ in
-                scrollTranscriptToBottom(using: proxy, animated: false)
-            }
-            .onChange(of: store.messages(for: conversation).last?.id) { _, lastID in
-                guard lastID != nil else { return }
-                scrollTranscriptToBottom(using: proxy, animated: true)
-            }
-        }
-    }
-
-    private func scrollTranscriptToBottom(using proxy: ScrollViewProxy, animated: Bool) {
-        DispatchQueue.main.async {
-            if animated {
-                withAnimation(.snappy) {
-                    proxy.scrollTo(transcriptBottomID, anchor: .bottom)
-                }
-            } else {
-                proxy.scrollTo(transcriptBottomID, anchor: .bottom)
-            }
-
-            // A newly inserted message can finish measuring after the first scroll.
-            // Reassert the true transcript end once that layout has settled.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                proxy.scrollTo(transcriptBottomID, anchor: .bottom)
-            }
+        let id = conversation.id
+        return ConversationTranscript(
+            conversation: conversation,
+            initialViewport: transcriptPositions[id] ?? TranscriptViewport(),
+            selectedAttachmentID: $selectedAttachmentID,
+            previewAttachment: showPreview,
+            saveViewport: { transcriptPositions[id] = $0 }
+        )
+        .id(id)
+        .transaction { transaction in
+            transaction.animation = nil
         }
     }
 
@@ -224,6 +184,84 @@ struct ChatView: View {
             .ignoresSafeArea(edges: .top)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+}
+
+private struct TranscriptViewport: Equatable {
+    var offset: CGFloat = 0
+    var isAtBottom = true
+}
+
+private struct ConversationTranscript: View {
+    @Environment(SuperBotStore.self) private var store
+    let conversation: BotConversation
+    @Binding var selectedAttachmentID: UUID?
+    let previewAttachment: (ConversationAttachment) -> Void
+    let saveViewport: (TranscriptViewport) -> Void
+    @State private var position: ScrollPosition
+    @State private var viewport: TranscriptViewport
+    @State private var followsLatest: Bool
+
+    init(
+        conversation: BotConversation,
+        initialViewport: TranscriptViewport,
+        selectedAttachmentID: Binding<UUID?>,
+        previewAttachment: @escaping (ConversationAttachment) -> Void,
+        saveViewport: @escaping (TranscriptViewport) -> Void
+    ) {
+        self.conversation = conversation
+        _selectedAttachmentID = selectedAttachmentID
+        self.previewAttachment = previewAttachment
+        self.saveViewport = saveViewport
+        _position = State(initialValue: initialViewport.isAtBottom
+            ? ScrollPosition(edge: .bottom)
+            : ScrollPosition(y: initialViewport.offset))
+        _viewport = State(initialValue: initialViewport)
+        _followsLatest = State(initialValue: initialViewport.isAtBottom)
+    }
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            // Measure the actual transcript height on its first layout. Lazy
+            // estimates change as attachment rows enter the viewport and cause
+            // visible corrections when restoring a bottom or pixel offset.
+            VStack(spacing: 10) {
+                ConversationStartView(conversation: conversation)
+                    .padding(.bottom, 14)
+
+                ForEach(store.messages(for: conversation)) { message in
+                    MessageBubble(
+                        message: message,
+                        selectedAttachmentID: $selectedAttachmentID,
+                        previewAttachment: previewAttachment
+                    )
+                }
+
+                Color.clear.frame(height: 20)
+            }
+            .padding(.horizontal, 15)
+            .padding(.top, 30)
+        }
+        .scrollPosition($position)
+        .defaultScrollAnchor(.bottom, for: .initialOffset)
+        .defaultScrollAnchor(followsLatest ? .bottom : .top, for: .sizeChanges)
+        .defaultScrollAnchor(.top, for: .alignment)
+        .onScrollGeometryChange(for: TranscriptViewport.self) { geometry in
+            let bottom = max(0, geometry.contentSize.height + geometry.contentInsets.bottom - geometry.containerSize.height)
+            return TranscriptViewport(
+                offset: max(0, geometry.contentOffset.y),
+                isAtBottom: geometry.contentOffset.y >= bottom - 2
+            )
+        } action: { _, updated in
+            viewport = updated
+            if position.isPositionedByUser {
+                followsLatest = updated.isAtBottom
+                saveViewport(updated)
+            }
+        }
+        .onDisappear {
+            saveViewport(TranscriptViewport(offset: viewport.offset, isAtBottom: followsLatest))
+        }
     }
 }
 

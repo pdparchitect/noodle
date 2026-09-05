@@ -1,4 +1,5 @@
 import QuickLookThumbnailing
+import ImageIO
 import SwiftUI
 import SuperBotCore
 
@@ -18,10 +19,28 @@ struct AttachmentInlinePreview: View {
     let isSelected: Bool
     let select: () -> Void
     let preview: () -> Void
+    private let imagePreviewSize: CGSize
 
     @State private var thumbnail: NSImage?
     @State private var thumbnailUnavailable = false
     @FocusState private var isFocused: Bool
+
+    init(
+        attachment: ConversationAttachment,
+        fileURL: URL,
+        isSelected: Bool,
+        select: @escaping () -> Void,
+        preview: @escaping () -> Void
+    ) {
+        self.attachment = attachment
+        self.fileURL = fileURL
+        self.isSelected = isSelected
+        self.select = select
+        self.preview = preview
+        imagePreviewSize = attachment.mediaType.hasPrefix("image/")
+            ? AttachmentThumbnailCache.previewSize(for: fileURL)
+            : CGSize(width: 300, height: 200)
+    }
 
     var body: some View {
         Group {
@@ -125,17 +144,6 @@ struct AttachmentInlinePreview: View {
         .frame(width: 280)
     }
 
-    private var imagePreviewSize: CGSize {
-        guard let thumbnail, thumbnail.size.width > 0, thumbnail.size.height > 0 else {
-            return CGSize(width: 300, height: 200)
-        }
-        let scale = min(300 / thumbnail.size.width, 240 / thumbnail.size.height)
-        return CGSize(
-            width: max(120, thumbnail.size.width * scale),
-            height: max(120, thumbnail.size.height * scale)
-        )
-    }
-
     @MainActor
     private func loadThumbnail() async {
         let key = fileURL as NSURL
@@ -169,4 +177,26 @@ struct AttachmentInlinePreview: View {
 @MainActor
 private enum AttachmentThumbnailCache {
     static let shared = NSCache<NSURL, NSImage>()
+    private static var previewSizes: [URL: CGSize] = [:]
+
+    static func previewSize(for url: URL) -> CGSize {
+        if let size = previewSizes[url] { return size }
+        var size = CGSize(width: 300, height: 200)
+        // Read dimensions from the header, without decoding pixels. The loading
+        // placeholder and finished thumbnail then occupy exactly the same frame.
+        if let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+           let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+           let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+           let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
+           width.doubleValue > 0, height.doubleValue > 0 {
+            let orientation = (properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1
+            let rotated = (5...8).contains(orientation)
+            let w = CGFloat(rotated ? height.doubleValue : width.doubleValue)
+            let h = CGFloat(rotated ? width.doubleValue : height.doubleValue)
+            let scale = min(300 / w, 240 / h)
+            size = CGSize(width: max(120, w * scale), height: max(120, h * scale))
+        }
+        previewSizes[url] = size
+        return size
+    }
 }
