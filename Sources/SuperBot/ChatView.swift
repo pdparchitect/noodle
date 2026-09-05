@@ -53,10 +53,7 @@ struct ChatView: View {
                         MessageBubble(
                             message: message,
                             selectedAttachmentID: $selectedAttachmentID,
-                            previewAttachment: { attachment in
-                                selectedAttachmentID = attachment.id
-                                previewedAttachmentURL = store.attachmentFileURL(attachment)
-                            }
+                            previewAttachment: showPreview
                         )
                             .id(message.id)
                     }
@@ -106,9 +103,11 @@ struct ChatView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 7) {
                         ForEach(store.pendingAttachments) { attachment in
-                            PendingAttachmentChip(attachment: attachment) {
-                                store.removePendingAttachment(attachment)
-                            }
+                            PendingAttachmentChip(
+                                attachment: attachment,
+                                preview: { showPreview(attachment) },
+                                remove: { store.removePendingAttachment(attachment) }
+                            )
                         }
                     }
                     .padding(.horizontal, 38)
@@ -173,6 +172,11 @@ struct ChatView: View {
     private var cannotSend: Bool {
         store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
             store.pendingAttachments.isEmpty
+    }
+
+    private func showPreview(_ attachment: ConversationAttachment) {
+        selectedAttachmentID = attachment.id
+        previewedAttachmentURL = store.attachmentFileURL(attachment)
     }
 
     private var composerPrompt: String {
@@ -251,14 +255,24 @@ private struct ConversationStartView: View {
 
 private struct PendingAttachmentChip: View {
     let attachment: ConversationAttachment
+    let preview: () -> Void
     let remove: () -> Void
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "doc.fill")
-                .foregroundStyle(.blue)
-            Text(attachment.originalFilename)
-                .lineLimit(1)
+            Button(action: preview) {
+                HStack(spacing: 6) {
+                    Image(systemName: attachment.previewSymbolName)
+                        .foregroundStyle(.blue)
+                    Text(attachment.originalFilename)
+                        .lineLimit(1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Preview Attachment")
+            .accessibilityLabel("Preview (attachment.originalFilename)")
+
             Button(action: remove) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(.secondary)

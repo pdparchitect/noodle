@@ -41,23 +41,19 @@ struct AttachmentInlinePreview: View {
         .focusable()
         .focusEffectDisabled()
         .focused($isFocused)
-        .onTapGesture(count: 2) {
-            isFocused = true
-            select()
-            preview()
-        }
         .onTapGesture {
             isFocused = true
             select()
+            preview()
         }
         .onKeyPress(.space) {
             select()
             preview()
             return .handled
         }
-        .help("Select, then press Space or double-click to preview")
+        .help("Click or press Space to preview")
         .accessibilityLabel("Attachment \(attachment.originalFilename)")
-        .accessibilityHint("Press Space or double-click to preview")
+        .accessibilityHint("Click or press Space to preview")
         .accessibilityAddTraits(.isButton)
         .task(id: fileURL) {
             await loadThumbnail()
