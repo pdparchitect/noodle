@@ -15,6 +15,20 @@ struct ChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             transcript
+                .mask {
+                    // Fade only scrolling messages behind the toolbar. The
+                    // window-wide wallpaper shade stays below the sidebar.
+                    VStack(spacing: 0) {
+                        LinearGradient(stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .white.opacity(0.12), location: 0.45),
+                            .init(color: .white, location: 1)
+                        ], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 88)
+                        Color.white
+                    }
+                    .ignoresSafeArea(edges: .top)
+                }
             composer
                 .padding(.horizontal, 12)
                 .padding(.bottom, 11)
