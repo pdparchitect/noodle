@@ -742,6 +742,121 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(try decode([MessengerDelivery].self, from: result.standardOutput).count, 1)
     }
 
+    func testReactionsPersistAndAreIdempotentPerAuthor() throws {
+        let bot = try repository.createAgent(named: "Reactor")
+        let message = try repository.sendUserMessage(conversationID: bot.conversation.id, body: "Build it")
+        for author in [MessageAuthor.user, .agent(bot.agent.id), .agent(bot.agent.id)] {
+            try repository.setReaction(conversationID: bot.conversation.id, messageID: message.id,
+                                       author: author, emoji: "👍", present: true)
+        }
+        var saved = try XCTUnwrap(repository.loadMessages(conversationID: bot.conversation.id).first)
+        XCTAssertEqual(saved.reactions?.count, 2)
+        XCTAssertEqual(saved.reactionChanges?.count, 2)
+        for _ in 0..<2 {
+            try repository.setReaction(conversationID: bot.conversation.id, messageID: message.id,
+                                       author: .agent(bot.agent.id), emoji: "👍", present: false)
+        }
+        saved = try XCTUnwrap(repository.loadMessages(conversationID: bot.conversation.id).first)
+        XCTAssertEqual(saved.reactions?.map(\.author), [.user])
+        XCTAssertEqual(saved.reactionChanges?.map(\.sequence), [1, 2, 3])
+        XCTAssertEqual(saved.reactionChanges?.last?.removed, true)
+    }
+
+    func testReactionFeedbackOnReadAndOwnMessagesIsDeliveredOnce() throws {
+        let bot = try repository.createAgent(named: "Builder")
+        let sent = try repository.sendAgentMessage(agentID: bot.agent.id,
+                                                  conversationID: bot.conversation.id, body: "Done")
+        XCTAssertTrue(try repository.latestMessages(for: bot.agent.id).isEmpty)
+        let now = Date(timeIntervalSince1970: 1000)
+        for present in [true, false, true] {
+            try repository.setReaction(conversationID: bot.conversation.id, messageID: sent.id,
+                                       author: .user, emoji: "❤️", present: present, now: now)
+            let peek = try repository.latestMessages(for: bot.agent.id, consuming: false)
+            XCTAssertEqual(peek.count, 1)
+            let deliveries = try repository.latestMessages(for: bot.agent.id)
+            XCTAssertEqual(deliveries.count, 1)
+            XCTAssertEqual(deliveries.first?.sender.handle, .me)
+            XCTAssertEqual(deliveries.first?.reactionChange?.sender.handle, .user)
+            XCTAssertEqual(deliveries.first?.reactionChange?.removed, !present)
+            XCTAssertEqual(deliveries.first?.message.id, sent.id)
+            XCTAssertTrue(try repository.latestMessages(for: bot.agent.id).isEmpty)
+        }
+        try repository.setReaction(conversationID: bot.conversation.id, messageID: sent.id,
+                                   author: .agent(bot.agent.id), emoji: "✅", present: true)
+        XCTAssertTrue(try repository.latestMessages(for: bot.agent.id).isEmpty)
+    }
+
+    func testMessengerCLIReactionsAndHistoryIdentifyEachReactor() throws {
+        let first = try repository.createAgent(named: "First")
+        let second = try repository.createAgent(named: "Second")
+        let group = try repository.createGroup(named: "Team", participantIDs: [first.agent.id, second.agent.id],
+                                               existingAgents: [first.agent, second.agent])
+        let message = try repository.sendUserMessage(conversationID: group.id, body: "Start")
+        _ = try repository.latestMessages(for: second.agent.id)
+        let command = repository.directory(for: first.agent).appendingPathComponent(".agents/skills/messenger/messenger").path
+        let args = ["--conversation", group.id.uuidString, "--message", message.id.uuidString, "--emoji", "👀"]
+        XCTAssertEqual(MessengerCLI.run(arguments: [command, "--react"] + args).exitCode, 0)
+        let feedback = try repository.latestMessages(for: second.agent.id)
+        XCTAssertEqual(feedback.count, 1)
+        XCTAssertEqual(feedback.first?.reactionChange?.sender.displayName, "First")
+        XCTAssertEqual(feedback.first?.reactionChange?.sender.handle, .bot)
+        let history = MessengerCLI.run(arguments: [command, "--list-messages", "--conversation", group.id.uuidString])
+        XCTAssertEqual(history.exitCode, 0)
+        let deliveries = try decode([MessengerDelivery].self, from: history.standardOutput)
+        XCTAssertEqual(deliveries.count, 1)
+        XCTAssertEqual(deliveries.first?.reactions?.first?.sender.handle, .me)
+        XCTAssertEqual(try repository.latestMessages(for: first.agent.id).count, 1, "History must not consume unread messages")
+        XCTAssertEqual(MessengerCLI.run(arguments: [command, "--unreact"] + args).exitCode, 0)
+        XCTAssertEqual(try repository.latestMessages(for: second.agent.id).first?.reactionChange?.removed, true)
+        XCTAssertNotEqual(MessengerCLI.run(arguments: [command, "--react", "--unreact"] + args).exitCode, 0)
+        XCTAssertNotEqual(MessengerCLI.run(arguments: [command, "--react", "--emoji", "👍"]).exitCode, 0)
+    }
+
+    func testReactionsRejectInvalidEmojiAndNonparticipants() throws {
+        let first = try repository.createAgent(named: "First")
+        let outsider = try repository.createAgent(named: "Outsider")
+        let message = try repository.sendUserMessage(conversationID: first.conversation.id, body: "Private")
+        for emoji in ["", "hello", "1", "👍👍"] {
+            XCTAssertThrowsError(try repository.setReaction(conversationID: first.conversation.id,
+                messageID: message.id, author: .user, emoji: emoji, present: true))
+        }
+        for emoji in ["👍🏽", "👨‍👩‍👧‍👦", "🇬🇧", "1️⃣", "❤️"] {
+            XCTAssertTrue(MessageReaction.isValidEmoji(emoji), emoji)
+        }
+        XCTAssertThrowsError(try repository.setReaction(conversationID: first.conversation.id,
+            messageID: message.id, author: .agent(outsider.agent.id), emoji: "👍", present: true))
+        XCTAssertThrowsError(try repository.setReaction(conversationID: first.conversation.id,
+            messageID: UUID(), author: .user, emoji: "👍", present: true))
+        XCTAssertThrowsError(try repository.latestMessages(for: outsider.agent.id, in: first.conversation.id, includingRead: true))
+    }
+
+    func testLegacyMessagesAndInboxesDecodeWithoutReactions() throws {
+        let message = ChatMessage(conversationID: UUID(), author: .user, body: "Old", delivery: .delivered)
+        let encoder = JSONEncoder()
+        let encoded = try encoder.encode(message)
+        XCTAssertFalse(String(decoding: encoded, as: UTF8.self).contains("reactions"))
+        XCTAssertNil(try JSONDecoder().decode(ChatMessage.self, from: encoded).reactions)
+        XCTAssertNil(try JSONDecoder().decode(AgentInbox.self, from: Data("{\"conversationOffsets\":{}}".utf8)).reactionOffsets)
+    }
+
+    func testNewGroupMemberDoesNotReceiveHistoricalReactions() throws {
+        let first = try repository.createAgent(named: "First")
+        let second = try repository.createAgent(named: "Second")
+        let third = try repository.createAgent(named: "Third")
+        let group = try repository.createGroup(named: "Team", participantIDs: [first.agent.id, second.agent.id],
+                                               existingAgents: [first.agent, second.agent, third.agent])
+        let message = try repository.sendUserMessage(conversationID: group.id, body: "Before joining")
+        try repository.setReaction(conversationID: group.id, messageID: message.id,
+                                   author: .user, emoji: "👍", present: true)
+        _ = try repository.updateGroupParticipants(conversationID: group.id,
+            participantIDs: [first.agent.id, second.agent.id, third.agent.id],
+            existingAgents: [first.agent, second.agent, third.agent])
+        XCTAssertTrue(try repository.latestMessages(for: third.agent.id).isEmpty)
+        try repository.setReaction(conversationID: group.id, messageID: message.id,
+                                   author: .user, emoji: "✅", present: true)
+        XCTAssertEqual(try repository.latestMessages(for: third.agent.id).first?.reactionChange?.emoji, "✅")
+    }
+
     private func decode<Value: Decodable>(_ type: Value.Type, from string: String) throws -> Value {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

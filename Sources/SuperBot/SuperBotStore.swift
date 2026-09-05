@@ -550,6 +550,8 @@ final class SuperBotStore {
                 }
             )
             let latestConversations = try repository.loadConversations()
+            let knownReactionIDs = Set(messagesByConversation.values.flatMap { $0 }
+                .flatMap { $0.reactionChanges ?? [] }.map(\.id))
             var latestMessages: [UUID: [ChatMessage]] = [:]
             var latestAttachments: [UUID: [ConversationAttachment]] = [:]
             for conversation in latestConversations {
@@ -569,6 +571,15 @@ final class SuperBotStore {
             if latestMessages != messagesByConversation { messagesByConversation = latestMessages }
             if latestAttachments != attachmentsByConversation { attachmentsByConversation = latestAttachments }
             notifyGroupParticipants(for: newAgentMessages)
+            let reactionChanges = latestMessages.values.flatMap { $0 }
+                .flatMap { $0.reactionChanges ?? [] }.filter { !knownReactionIDs.contains($0.id) }
+            let reactionRecipientIDs = Set(reactionChanges.flatMap { change in
+                (latestConversations.first { $0.id == change.conversationID }?.participantIDs ?? [])
+                    .filter { change.author != .agent($0) }
+            })
+            if !reactionRecipientIDs.isEmpty {
+                runtime.notify(agents.filter { reactionRecipientIDs.contains($0.id) }, repository: repository)
+            }
             registerUnreadMessages(newAgentMessages)
             postNotifications(for: newAgentMessages)
         } catch {
@@ -579,6 +590,19 @@ final class SuperBotStore {
     func participants(for conversation: BotConversation) -> [AgentRecord] {
         conversation.participantIDs.compactMap { id in
             agents.first(where: { $0.id == id })
+        }
+    }
+
+    func toggleReaction(_ emoji: String, on message: ChatMessage) {
+        do {
+            let latest = try repository.loadMessages(conversationID: message.conversationID)
+                .first { $0.id == message.id }
+            let hasReaction = latest?.reactions?.contains { $0.author == .user && $0.emoji == emoji } ?? false
+            try repository.setReaction(conversationID: message.conversationID, messageID: message.id,
+                                       author: .user, emoji: emoji, present: !hasReaction)
+            refreshTranscripts()
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 

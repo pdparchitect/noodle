@@ -111,6 +111,13 @@ struct MessageBubble: View {
                         isUser ? Color.accentColor : Color(nsColor: .controlBackgroundColor),
                         in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                     )
+                    .overlay {
+                        reactionContextMenu(attachment: nil)
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        if store.attachments(for: message).isEmpty { cornerReactions }
+                    }
+                    .padding(.top, hasReactions && store.attachments(for: message).isEmpty ? 12 : 0)
 
                 ForEach(store.attachments(for: message)) { attachment in
                     AttachmentInlinePreview(
@@ -120,18 +127,11 @@ struct MessageBubble: View {
                         select: { selectedAttachmentID = attachment.id },
                         preview: { previewAttachment(attachment) }
                     )
-                    .contextMenu {
-                        Button("Copy", systemImage: "doc.on.doc") {
-                            store.copyAttachment(attachment)
-                        }
-                        Divider()
-                        Button("Quick Look", systemImage: "eye") {
-                            previewAttachment(attachment)
-                        }
-                        Button("Show in Finder", systemImage: "folder") {
-                            store.revealAttachment(attachment)
-                        }
+                    .overlay { reactionContextMenu(attachment: attachment) }
+                    .overlay(alignment: .topTrailing) {
+                        if attachment.id == store.attachments(for: message).last?.id { cornerReactions }
                     }
+                    .padding(.top, hasReactions && attachment.id == store.attachments(for: message).last?.id ? 12 : 0)
                 }
 
                 if isUser {
@@ -145,6 +145,75 @@ struct MessageBubble: View {
             if !isUser { Spacer(minLength: 120) }
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private var hasReactions: Bool { !(message.reactions ?? []).isEmpty }
+
+    @ViewBuilder private var cornerReactions: some View {
+        if hasReactions {
+            reactionBadges
+                .fixedSize(horizontal: true, vertical: false)
+                .offset(x: 5, y: -12)
+        }
+    }
+
+    private func reactionContextMenu(attachment: ConversationAttachment?) -> some View {
+        MessageContextMenu(
+            selected: Set((message.reactions ?? []).filter { $0.author == .user }.map(\.emoji)),
+            react: { store.toggleReaction($0, on: message) },
+            copy: {
+                if let attachment { store.copyAttachment(attachment) }
+                else {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(message.body, forType: .string)
+                }
+            },
+            preview: attachment.map { item in { previewAttachment(item) } },
+            reveal: attachment.map { item in { store.revealAttachment(item) } }
+        )
+    }
+
+    private var reactionBadges: some View {
+        let groups = Dictionary(grouping: message.reactions ?? [], by: \.emoji)
+        let emojis = (message.reactions ?? []).map(\.emoji).reduce(into: [String]()) {
+            if !$0.contains($1) { $0.append($1) }
+        }
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 4) { badges(emojis, groups: groups) }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 48))], alignment: .leading, spacing: 4) {
+                badges(emojis, groups: groups)
+            }
+            .frame(maxWidth: 280)
+        }
+    }
+
+    @ViewBuilder private func badges(_ emojis: [String], groups: [String: [MessageReaction]]) -> some View {
+        ForEach(emojis, id: \.self) { emoji in
+            let reactions = groups[emoji] ?? []
+            let isMine = reactions.contains { $0.author == .user }
+            let names = reactions.map { reaction in
+                switch reaction.author {
+                case .user: return "You"
+                case .agent(let id): return store.agents.first { $0.id == id }?.displayName ?? "Bot"
+                case .system: return "SuperBot"
+                }
+            }.joined(separator: ", ")
+            Button { store.toggleReaction(emoji, on: message) } label: {
+                HStack(spacing: 4) {
+                    Text(emoji).font(.system(size: 14))
+                    if reactions.count > 1 {
+                        Text("\(reactions.count)").font(.system(size: 10, weight: .medium))
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(isMine ? Color.accentColor.opacity(0.25) : Color.secondary.opacity(0.15), in: Capsule())
+                .background(.regularMaterial, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("\(emoji) — \(names)\(isMine ? ". Click to remove your reaction." : ". Click to react too.")")
+            .accessibilityLabel("\(emoji), \(names)")
+        }
     }
 
     private var deliveryLabel: String {

@@ -58,6 +58,17 @@ public enum MessengerCLI {
                     .filter { $0.participantIDs.contains(invocation.agentID) }
                 return .json(conversations)
 
+            case .listMessages(let conversationID):
+                return .json(try repository.latestMessages(
+                    for: invocation.agentID, consuming: false, in: conversationID, includingRead: true
+                ))
+
+            case .react(let conversationID, let messageID, let emoji, let present):
+                return .json(try repository.setReaction(
+                    conversationID: conversationID, messageID: messageID,
+                    author: .agent(invocation.agentID), emoji: emoji, present: present
+                ))
+
             case .send(let conversationID, let body, let attachmentURLs):
                 var importedAttachments: [ConversationAttachment] = []
                 do {
@@ -98,6 +109,8 @@ public enum MessengerCLI {
     private enum Action {
         case getLatest(consumes: Bool, includesInlineImages: Bool)
         case listConversations
+        case listMessages(conversationID: UUID)
+        case react(conversationID: UUID, messageID: UUID, emoji: String, present: Bool)
         case send(conversationID: UUID, body: String, attachmentURLs: [URL])
         case help
     }
@@ -139,6 +152,21 @@ public enum MessengerCLI {
                 )
             } else if values.contains("--list-conversations") {
                 action = .listConversations
+            } else if values.contains("--list-messages") {
+                guard let raw = Self.option("--conversation", in: values),
+                      let id = UUID(uuidString: raw) else { throw MessengerCLIError.invalidArguments }
+                action = .listMessages(conversationID: id)
+            } else if values.contains("--react") || values.contains("--unreact") {
+                guard values.contains("--react") != values.contains("--unreact"),
+                      let rawConversation = Self.option("--conversation", in: values),
+                      let conversationID = UUID(uuidString: rawConversation),
+                      let rawMessage = Self.option("--message", in: values),
+                      let messageID = UUID(uuidString: rawMessage),
+                      let emoji = Self.option("--emoji", in: values) else {
+                    throw MessengerCLIError.invalidArguments
+                }
+                action = .react(conversationID: conversationID, messageID: messageID,
+                                emoji: emoji, present: values.contains("--react"))
             } else if values.contains("--send") {
                 guard let rawConversation = Self.option("--conversation", in: values),
                       let conversationID = UUID(uuidString: rawConversation) else {
@@ -229,6 +257,9 @@ public enum MessengerCLI {
 
       messenger --get-latest [--peek] [--inline-images]
       messenger --list-conversations
+      messenger --list-messages --conversation <uuid>
+      messenger --react --conversation <uuid> --message <uuid> --emoji <emoji>
+      messenger --unreact --conversation <uuid> --message <uuid> --emoji <emoji>
       messenger --send --conversation <uuid> --body <text>
       messenger --send --conversation <uuid> --body-percent-encoded <percent-encoded-utf8>
       messenger --send --conversation <uuid> --body-base64 <utf8-base64>
@@ -236,6 +267,9 @@ public enum MessengerCLI {
 
     The command normally discovers the bot from its symlink path. For diagnostics, append
     --agent-directory <absolute-agent-workspace-path>.
+    Reactions are per bot; adding twice is safe. --unreact removes only your reaction.
+    --get-latest includes reactionChange events on previously read messages.
+    --list-messages includes your own messages and current reactions without consuming the inbox.
     """
 }
 

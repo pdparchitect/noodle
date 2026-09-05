@@ -92,6 +92,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public let createdAt: Date
     public var delivery: MessageDelivery
     public var attachmentIDs: [UUID]?
+    public var reactions: [MessageReaction]?
+    public var reactionChanges: [MessageReactionChange]?
 
     public init(
         id: UUID = UUID(),
@@ -112,6 +114,43 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     }
 
     public var attachments: [UUID] { attachmentIDs ?? [] }
+}
+
+public struct MessageReaction: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public let author: MessageAuthor
+    public let emoji: String
+    public let createdAt: Date
+
+    public static func isValidEmoji(_ value: String) -> Bool {
+        value.count == 1 && value.unicodeScalars.contains {
+            ($0.properties.isEmoji && $0.value > 127) || $0.value == 0x20E3
+        }
+    }
+}
+
+public struct MessageReactionChange: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public let conversationID: UUID
+    public let messageID: UUID
+    public let sequence: Int
+    public let author: MessageAuthor
+    public let emoji: String
+    public let removed: Bool
+    public let createdAt: Date
+}
+
+public struct MessengerReaction: Codable, Hashable, Sendable {
+    public let emoji: String
+    public let sender: MessengerIdentity
+}
+
+public struct MessengerReactionChange: Codable, Hashable, Sendable {
+    public let id: UUID
+    public let emoji: String
+    public let removed: Bool
+    public let sender: MessengerIdentity
+    public let createdAt: Date
 }
 
 public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable {
@@ -144,6 +183,7 @@ public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable 
 
 public struct AgentInbox: Codable, Hashable, Sendable {
     public var conversationOffsets: [String: Int]
+    public var reactionOffsets: [String: Int]?
 
     public init(conversationOffsets: [String: Int] = [:]) {
         self.conversationOffsets = conversationOffsets
@@ -198,6 +238,8 @@ public struct MessengerDelivery: Codable, Hashable, Sendable {
     public let sender: MessengerIdentity
     public let message: ChatMessage
     public let attachments: [MessengerAttachment]
+    public var reactions: [MessengerReaction]?
+    public var reactionChange: MessengerReactionChange?
 
     public init(
         me: MessengerIdentity,
@@ -267,6 +309,8 @@ public enum WorkspaceError: LocalizedError, Equatable {
     case insufficientGroupParticipants
     case invalidAgentDirectory
     case invalidAttachment
+    case missingMessage(UUID)
+    case invalidReaction
 
     public var errorDescription: String? {
         switch self {
@@ -282,6 +326,10 @@ public enum WorkspaceError: LocalizedError, Equatable {
             return "The Messenger command is not inside a valid bot workspace."
         case .invalidAttachment:
             return "The selected attachment could not be imported."
+        case .missingMessage:
+            return "The selected message no longer exists."
+        case .invalidReaction:
+            return "Choose a single emoji for the reaction."
         }
     }
 }
@@ -290,7 +338,7 @@ public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
     public let launcherExecutableURL: URL?
 
-    public static let managedSkillVersion = 10
+    public static let managedSkillVersion = 11
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
         self.rootURL = rootURL.standardizedFileURL
@@ -463,12 +511,16 @@ public struct WorkspaceRepository: Sendable {
 
         let addedIDs = Set(uniqueIDs).subtracting(conversation.participantIDs)
         if !addedIDs.isEmpty {
-            let messageCount = try loadMessages(conversationID: conversation.id).count
+            let messages = try loadMessages(conversationID: conversation.id)
+            let messageCount = messages.count
+            let reactionSequence = messages.flatMap { $0.reactionChanges ?? [] }.map(\.sequence).max() ?? 0
             let conversationKey = conversation.id.uuidString.lowercased()
             for agentID in addedIDs {
                 let inboxFile = directory(forAgentID: agentID).appendingPathComponent(".agents/inbox.json")
                 var inbox = (try? read(AgentInbox.self, from: inboxFile)) ?? AgentInbox()
                 inbox.conversationOffsets[conversationKey] = messageCount
+                if inbox.reactionOffsets == nil { inbox.reactionOffsets = [:] }
+                inbox.reactionOffsets?[conversationKey] = reactionSequence
                 try write(inbox, to: inboxFile)
             }
         }
@@ -700,22 +752,42 @@ public struct WorkspaceRepository: Sendable {
         }
     }
 
-    public func latestMessages(for agentID: UUID, consuming: Bool = true) throws -> [MessengerDelivery] {
+    public func latestMessages(
+        for agentID: UUID,
+        consuming: Bool = true,
+        in conversationID: UUID? = nil,
+        includingRead: Bool = false
+    ) throws -> [MessengerDelivery] {
         let agents = try loadAgents()
         guard let readingAgent = agents.first(where: { $0.id == agentID }) else {
             throw WorkspaceError.missingAgent(agentID)
         }
         let agentsByID = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, $0) })
         let me = MessengerIdentity(handle: .me, agentID: agentID, displayName: readingAgent.displayName)
-        let conversations = try loadConversations().filter { $0.participantIDs.contains(agentID) }
+        let conversations = try loadConversations().filter {
+            $0.participantIDs.contains(agentID) && (conversationID == nil || $0.id == conversationID)
+        }
+        if let conversationID, conversations.isEmpty { throw WorkspaceError.missingConversation(conversationID) }
         let inboxFile = directory(forAgentID: agentID).appendingPathComponent(".agents/inbox.json")
         var inbox = (try? read(AgentInbox.self, from: inboxFile)) ?? AgentInbox()
         var deliveries: [MessengerDelivery] = []
 
+        func identity(for author: MessageAuthor) -> MessengerIdentity {
+            switch author {
+            case .user: return MessengerIdentity(handle: .user, displayName: "User")
+            case .agent(let id):
+                return id == agentID ? me : MessengerIdentity(
+                    handle: .bot, agentID: id,
+                    displayName: agentsByID[id]?.displayName ?? "Unknown Bot"
+                )
+            case .system: return MessengerIdentity(handle: .system, displayName: "SuperBot")
+            }
+        }
+
         for conversation in conversations {
             let messages = try loadMessages(conversationID: conversation.id)
             let key = conversation.id.uuidString.lowercased()
-            let offset = min(inbox.conversationOffsets[key, default: 0], messages.count)
+            let offset = includingRead ? 0 : min(inbox.conversationOffsets[key, default: 0], messages.count)
             let attachments = try loadAttachments(conversationID: conversation.id)
             let byID = Dictionary(uniqueKeysWithValues: attachments.map { ($0.id, $0) })
             let participants = conversation.participantIDs.map { participantID in
@@ -727,31 +799,12 @@ public struct WorkspaceRepository: Sendable {
                 )
             }
 
-            for message in messages.dropFirst(offset) {
-                if case .agent(let authorID) = message.author, authorID == agentID { continue }
-                let sender: MessengerIdentity
-                switch message.author {
-                case .user:
-                    sender = MessengerIdentity(handle: .user, displayName: "User")
-                case .agent(let authorID):
-                    if authorID == agentID {
-                        sender = me
-                    } else {
-                        sender = MessengerIdentity(
-                            handle: .bot,
-                            agentID: authorID,
-                            displayName: agentsByID[authorID]?.displayName ?? "Unknown Bot"
-                        )
-                    }
-                case .system:
-                    sender = MessengerIdentity(handle: .system, displayName: "SuperBot")
-                }
-                deliveries.append(
-                    MessengerDelivery(
+            func delivery(for message: ChatMessage) -> MessengerDelivery {
+                var delivery = MessengerDelivery(
                         me: me,
                         conversation: conversation,
                         participants: participants,
-                        sender: sender,
+                        sender: identity(for: message.author),
                         message: message,
                         attachments: message.attachments.compactMap { attachmentID in
                             guard let attachment = byID[attachmentID] else { return nil }
@@ -760,14 +813,90 @@ public struct WorkspaceRepository: Sendable {
                                 absolutePath: attachmentFileURL(attachment).standardizedFileURL.path
                             )
                         }
-                    )
                 )
+                delivery.reactions = (message.reactions ?? []).map {
+                    MessengerReaction(emoji: $0.emoji, sender: identity(for: $0.author))
+                }
+                return delivery
             }
-            if consuming { inbox.conversationOffsets[key] = messages.count }
+
+            for message in messages.dropFirst(offset) {
+                if !includingRead, case .agent(let authorID) = message.author, authorID == agentID { continue }
+                deliveries.append(delivery(for: message))
+            }
+
+            let changes = messages.flatMap { $0.reactionChanges ?? [] }
+            let reactionOffset = inbox.reactionOffsets?[key] ?? 0
+            if !includingRead {
+                let byMessageID = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
+                for change in changes.sorted(by: { $0.sequence < $1.sequence }) where change.sequence > reactionOffset {
+                    if change.author == .agent(agentID) { continue }
+                    guard let message = byMessageID[change.messageID] else { continue }
+                    var item = delivery(for: message)
+                    item.reactionChange = MessengerReactionChange(
+                        id: change.id, emoji: change.emoji, removed: change.removed,
+                        sender: identity(for: change.author), createdAt: change.createdAt
+                    )
+                    deliveries.append(item)
+                }
+            }
+            if consuming && !includingRead {
+                inbox.conversationOffsets[key] = messages.count
+                if inbox.reactionOffsets == nil { inbox.reactionOffsets = [:] }
+                inbox.reactionOffsets?[key] = changes.map(\.sequence).max() ?? 0
+            }
         }
 
-        if consuming { try write(inbox, to: inboxFile) }
-        return deliveries.sorted { $0.message.createdAt < $1.message.createdAt }
+        if consuming && !includingRead { try write(inbox, to: inboxFile) }
+        return deliveries.sorted {
+            ($0.reactionChange?.createdAt ?? $0.message.createdAt) < ($1.reactionChange?.createdAt ?? $1.message.createdAt)
+        }
+    }
+
+    @discardableResult
+    public func setReaction(
+        conversationID: UUID, messageID: UUID, author: MessageAuthor,
+        emoji: String, present: Bool, now: Date = Date()
+    ) throws -> ChatMessage {
+        let emoji = emoji.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard MessageReaction.isValidEmoji(emoji) else {
+            throw WorkspaceError.invalidReaction
+        }
+        guard let conversation = try loadConversations().first(where: { $0.id == conversationID }) else {
+            throw WorkspaceError.missingConversation(conversationID)
+        }
+        switch author {
+        case .user: break
+        case .agent(let id):
+            guard conversation.participantIDs.contains(id), try loadAgents().contains(where: { $0.id == id }) else {
+                throw WorkspaceError.missingAgent(id)
+            }
+        case .system: throw WorkspaceError.invalidReaction
+        }
+        return try withConversationLock(conversationID) {
+            var messages = try loadMessages(conversationID: conversationID)
+            guard let index = messages.firstIndex(where: { $0.id == messageID }) else {
+                throw WorkspaceError.missingMessage(messageID)
+            }
+            var reactions = messages[index].reactions ?? []
+            let existing = reactions.firstIndex { $0.author == author && $0.emoji == emoji }
+            guard present != (existing != nil) else { return messages[index] }
+            if present {
+                reactions.append(MessageReaction(id: UUID(), author: author, emoji: emoji, createdAt: now))
+            } else if let existing {
+                reactions.remove(at: existing)
+            }
+            let sequence = (messages.flatMap { $0.reactionChanges ?? [] }.map(\.sequence).max() ?? 0) + 1
+            let change = MessageReactionChange(
+                id: UUID(), conversationID: conversationID, messageID: messageID,
+                sequence: sequence, author: author, emoji: emoji, removed: !present, createdAt: now
+            )
+            messages[index].reactions = reactions
+            messages[index].reactionChanges = (messages[index].reactionChanges ?? []) + [change]
+            // Persist the badge and its inbox event in the same atomic write.
+            try write(messages, to: conversationDirectory(id: conversationID).appendingPathComponent("messages.json"))
+            return messages[index]
+        }
     }
 
     public func sendAgentMessage(
@@ -1041,6 +1170,8 @@ public struct WorkspaceRepository: Sendable {
 
     ## Messages
 
+    Reactions are lightweight acknowledgements or feedback. Use `./.agents/skills/messenger/messenger --react --conversation <uuid> --message <message-uuid> --emoji '👀'` to add your reaction; use `--unreact` with the same arguments to remove it. For example, 👀 can acknowledge receipt, ⏳ can indicate work in progress, and ✅ can indicate completion; choose reactions only when useful and keep work-status reactions accurate. Adding the same emoji twice is safe. `--list-messages --conversation <uuid>` reads full history, including your own messages and current reactions, without consuming the inbox. A delivery with `reactionChange` is feedback on the referenced message, not a new request to repeat it: its `sender` identifies the reactor, `emoji` identifies the reaction, and `removed` distinguishes removal. Reacting does not notify you of your own event. Other participants are notified; do not create acknowledgement loops or reply to every reaction.
+
     SuperBot notifications only mean that this inbox may have changed. They never contain the user's message. In Codex, immediately run the bundled Messenger CLI through the programmatic bridge: `const r = await tools.exec_command({cmd: "./.agents/skills/messenger/messenger --get-latest --inline-images", max_output_tokens: 250000}); if (r.exit_code !== 0) throw new Error(r.output); const payload = JSON.parse(r.output); text(payload.deliveries); for (const visual of payload.images) image(visual.dataURL, "original");`. Every delivery names `me`, lists the conversation's named `participants`, and annotates the message `sender` with a `user`, `me`, `bot`, or `system` handle. Images attached to unread messages arrive directly from the CLI as visual inputs, so inspect them without calling a local image viewer. Every attachment also includes its exact `absolutePath` for non-visual file work. Run the get-latest command only once for each notification because it consumes the inbox. Reply through the Messenger CLI using `--send`, the conversation UUID, and `--body-percent-encoded`; create the argument with `encodeURIComponent(body).replaceAll("'", "%27")`. Add a repeatable `--attach <file-path>` option to send files you created; reply text is optional when a file is attached. Never reply to the notification text itself. If there are no deliveries, finish quietly.
 
     Read new direct and group messages:
@@ -1069,6 +1200,8 @@ public struct WorkspaceRepository: Sendable {
     ---
 
     # Messenger
+
+    Add an emoji with `./.agents/skills/messenger/messenger --react --conversation <uuid> --message <message-uuid> --emoji '👀'`. Remove only your own emoji using `--unreact` with the same arguments. Adding twice is idempotent. Use any single emoji for acknowledgement, progress, completion, or feedback, and remove outdated progress indicators when finished. `--list-messages --conversation <uuid>` lists history and current named reactions without consuming the inbox, including your own messages. `--get-latest` also delivers `reactionChange` events on already-read messages. The change has a named `sender`, `emoji`, and `removed` flag. The referenced message is context, not a new request: handle feedback appropriately without repeating the original task or creating reaction/reply loops. You do not receive your own reaction events.
 
     In Codex, run the bundled CLI through the programmatic bridge: `const r = await tools.exec_command({cmd: "./.agents/skills/messenger/messenger --get-latest --inline-images", max_output_tokens: 250000}); if (r.exit_code !== 0) throw new Error(r.output); const payload = JSON.parse(r.output); text(payload.deliveries); for (const visual of payload.images) image(visual.dataURL, "original");`. Each delivery includes `me`, a named participant roster, an explicitly annotated sender (`user`, `me`, `bot`, or `system`), the message, and linked attachments. The CLI includes attached images as visual inputs; inspect those without calling a local image viewer. Every attachment also includes its exact `absolutePath` for non-visual file work. Run get-latest only once for each notification because it consumes the inbox.
 
