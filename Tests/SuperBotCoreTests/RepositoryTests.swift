@@ -631,6 +631,48 @@ final class RepositoryTests: XCTestCase {
         )
     }
 
+    func testAgentMessagesNotifyEveryOtherGroupParticipant() throws {
+        let first = try repository.createAgent(named: "First")
+        let second = try repository.createAgent(named: "Second")
+        let third = try repository.createAgent(named: "Third")
+        let group = try repository.createGroup(
+            named: "Team",
+            participantIDs: [first.agent.id, second.agent.id, third.agent.id],
+            existingAgents: [first.agent, second.agent, third.agent]
+        )
+
+        let firstMessage = try repository.sendAgentMessage(
+            agentID: first.agent.id,
+            conversationID: group.id,
+            body: "First update"
+        )
+        let secondMessage = try repository.sendAgentMessage(
+            agentID: second.agent.id,
+            conversationID: group.id,
+            body: "Second update"
+        )
+
+        XCTAssertEqual(
+            try repository.notificationRecipientIDs(for: [firstMessage]),
+            [second.agent.id, third.agent.id]
+        )
+        XCTAssertEqual(
+            try repository.notificationRecipientIDs(for: [firstMessage, secondMessage]),
+            [first.agent.id, second.agent.id, third.agent.id]
+        )
+    }
+
+    func testAgentMessagesDoNotNotifyTheSenderInDirectConversation() throws {
+        let created = try repository.createAgent(named: "Solo")
+        let message = try repository.sendAgentMessage(
+            agentID: created.agent.id,
+            conversationID: created.conversation.id,
+            body: "No self wake"
+        )
+
+        XCTAssertTrue(try repository.notificationRecipientIDs(for: [message]).isEmpty)
+    }
+
     func testMessengerCanUseRuntimeWorkspaceEnvironment() throws {
         let created = try repository.createAgent(named: "Environment Bot")
         let incoming = ChatMessage(

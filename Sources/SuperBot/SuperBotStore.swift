@@ -437,6 +437,7 @@ final class SuperBotStore {
             if latestConversations != conversations { conversations = latestConversations }
             if latestMessages != messagesByConversation { messagesByConversation = latestMessages }
             if latestAttachments != attachmentsByConversation { attachmentsByConversation = latestAttachments }
+            notifyGroupParticipants(for: newAgentMessages)
             registerUnreadMessages(newAgentMessages)
             postNotifications(for: newAgentMessages)
         } catch {
@@ -452,6 +453,20 @@ final class SuperBotStore {
 
     private func refreshAppShortcuts() {
         SuperBotShortcuts.updateAppShortcutParameters()
+    }
+
+    private func notifyGroupParticipants(for messages: [ChatMessage]) {
+        guard !messages.isEmpty else { return }
+
+        do {
+            let recipientIDs = try repository.notificationRecipientIDs(for: messages)
+            let recipients = agents.filter { recipientIDs.contains($0.id) }
+            if !recipients.isEmpty {
+                runtime.notify(recipients, repository: repository)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func registerUnreadMessages(_ messages: [ChatMessage]) {

@@ -770,6 +770,25 @@ public struct WorkspaceRepository: Sendable {
         return message
     }
 
+    public func notificationRecipientIDs(for messages: [ChatMessage]) throws -> Set<UUID> {
+        let conversationsByID = Dictionary(
+            uniqueKeysWithValues: try loadConversations().map { ($0.id, $0) }
+        )
+        var recipientIDs = Set<UUID>()
+
+        for message in messages {
+            guard case .agent(let senderID) = message.author,
+                  let conversation = conversationsByID[message.conversationID],
+                  conversation.kind == .group else { continue }
+
+            recipientIDs.formUnion(
+                conversation.participantIDs.filter { $0 != senderID }
+            )
+        }
+
+        return recipientIDs
+    }
+
     public func sendUserMessage(
         conversationID: UUID,
         body: String,
