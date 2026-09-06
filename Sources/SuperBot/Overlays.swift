@@ -616,30 +616,17 @@ struct GroupInfoSheet: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(conversation.displayName)
                             .font(.title3.weight(.semibold))
-                        Text("\(selectedIDs.count) bots")
+                        Text(selectedIDs.count == 1 ? "1 bot" : "\(selectedIDs.count) bots")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                GroupBox("Bots") {
-                    List(store.agents) { agent in
-                        Toggle(isOn: selectionBinding(for: agent.id)) {
-                            HStack(spacing: 10) {
-                                BotAvatar(agent: agent, size: 28)
-                                Text(agent.displayName)
-                            }
-                        }
-                        .toggleStyle(.checkbox)
-                        .padding(.vertical, 3)
-                    }
-                    .listStyle(.inset)
-                    .frame(minHeight: 150)
-                }
+                GroupMemberPicker(agents: store.agents, selectedIDs: $selectedIDs)
 
-                Text("Choose at least two bots. Membership changes apply to future messages.")
+                Text("Add at least one bot. Membership changes apply to future messages.")
                     .font(.caption)
-                    .foregroundStyle(selectedIDs.count >= 2 ? Color.secondary : Color.red)
+                    .foregroundStyle(!selectedIDs.isEmpty ? Color.secondary : Color.red)
 
                 ConversationBackgroundSettingsRow(conversation: conversation)
 
@@ -674,20 +661,7 @@ struct GroupInfoSheet: View {
     }
 
     private var canSave: Bool {
-        selectedIDs.count >= 2 && selectedIDs != Set(conversation.participantIDs)
-    }
-
-    private func selectionBinding(for id: UUID) -> Binding<Bool> {
-        Binding(
-            get: { selectedIDs.contains(id) },
-            set: { isSelected in
-                if isSelected {
-                    selectedIDs.insert(id)
-                } else {
-                    selectedIDs.remove(id)
-                }
-            }
-        )
+        !selectedIDs.isEmpty && selectedIDs != Set(conversation.participantIDs)
     }
 }
 
@@ -806,19 +780,11 @@ struct NewGroupSheet: View {
                 .focused($nameFocused)
                 .padding(16)
 
-            List(store.agents) { agent in
-                Toggle(isOn: selectionBinding(for: agent.id)) {
-                    HStack(spacing: 10) {
-                        BotAvatar(agent: agent, size: 34)
-                        Text(agent.displayName)
-                    }
-                }
-                .toggleStyle(.checkbox)
-                .padding(.vertical, 4)
-            }
-            .listStyle(.inset)
+            GroupMemberPicker(agents: store.agents, selectedIDs: $selectedIDs)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
 
-            Text("Choose at least two bots")
+            Text("Add at least one bot. You can change the members later.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 14)
@@ -828,19 +794,6 @@ struct NewGroupSheet: View {
     }
 
     private var canCreate: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && selectedIDs.count >= 2
-    }
-
-    private func selectionBinding(for id: UUID) -> Binding<Bool> {
-        Binding(
-            get: { selectedIDs.contains(id) },
-            set: { isSelected in
-                if isSelected {
-                    selectedIDs.insert(id)
-                } else {
-                    selectedIDs.remove(id)
-                }
-            }
-        )
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !selectedIDs.isEmpty
     }
 }

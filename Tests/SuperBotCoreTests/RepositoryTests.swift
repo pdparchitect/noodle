@@ -307,7 +307,7 @@ final class RepositoryTests: XCTestCase {
         )
     }
 
-    func testUpdateGroupMembershipRequiresTwoKnownBots() throws {
+    func testUpdateGroupMembershipRequiresAtLeastOneKnownBot() throws {
         let first = try repository.createAgent(named: "Research Bot")
         let second = try repository.createAgent(named: "Build Bot")
         let agents = [first.agent, second.agent]
@@ -320,12 +320,18 @@ final class RepositoryTests: XCTestCase {
         XCTAssertThrowsError(
             try repository.updateGroupParticipants(
                 conversationID: group.id,
-                participantIDs: [first.agent.id],
+                participantIDs: [],
                 existingAgents: agents
             )
         ) { error in
             XCTAssertEqual(error as? WorkspaceError, .insufficientGroupParticipants)
         }
+
+        let singleMember = try repository.updateGroupParticipants(
+            conversationID: group.id, participantIDs: [first.agent.id], existingAgents: agents
+        )
+        XCTAssertEqual(singleMember.participantIDs, [first.agent.id])
+        XCTAssertEqual(singleMember.kind, .group)
 
         XCTAssertThrowsError(
             try repository.updateGroupParticipants(

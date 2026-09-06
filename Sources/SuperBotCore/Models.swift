@@ -322,7 +322,7 @@ public enum WorkspaceError: LocalizedError, Equatable {
         case .missingConversation:
             return "The selected conversation no longer exists."
         case .insufficientGroupParticipants:
-            return "Choose at least two bots for a group."
+            return "Add at least one bot to the group."
         case .invalidAgentDirectory:
             return "The Messenger command is not inside a valid bot workspace."
         case .invalidAttachment:
@@ -472,7 +472,7 @@ public struct WorkspaceRepository: Sendable {
     ) throws -> BotConversation {
         let name = try validatedName(rawName)
         let uniqueIDs = Array(Set(participantIDs))
-        guard uniqueIDs.count >= 2 else { throw WorkspaceError.insufficientGroupParticipants }
+        guard !uniqueIDs.isEmpty else { throw WorkspaceError.insufficientGroupParticipants }
 
         let knownIDs = Set(existingAgents.map(\.id))
         guard Set(uniqueIDs).isSubset(of: knownIDs) else {
@@ -503,7 +503,7 @@ public struct WorkspaceRepository: Sendable {
         }
 
         let uniqueIDs = Array(Set(participantIDs))
-        guard uniqueIDs.count >= 2 else { throw WorkspaceError.insufficientGroupParticipants }
+        guard !uniqueIDs.isEmpty else { throw WorkspaceError.insufficientGroupParticipants }
 
         let knownIDs = Set(existingAgents.map(\.id))
         guard Set(uniqueIDs).isSubset(of: knownIDs) else {

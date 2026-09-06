@@ -247,7 +247,7 @@ struct RootView: View {
                         store.creationSheet = .group
                     }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
-                    .disabled(store.agents.count < 2)
+                    .disabled(store.agents.isEmpty)
                 } label: {
                     Label("Create", systemImage: "square.and.pencil")
                 }
@@ -312,7 +312,7 @@ struct RootView: View {
             store.creationSheet = .bot
         }
         .onReceive(NotificationCenter.default.publisher(for: .newGroup)) { _ in
-            if store.agents.count >= 2 {
+            if !store.agents.isEmpty {
                 store.creationSheet = .group
             }
         }
