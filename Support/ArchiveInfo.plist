@@ -5,9 +5,9 @@
     <key>ApplicationProperties</key>
     <dict>
         <key>ApplicationPath</key>
-        <string>Applications/SuperBot.app</string>
+        <string>Applications/Noodle.app</string>
         <key>CFBundleIdentifier</key>
-        <string>com.pdparchitect.superbot</string>
+        <string>com.pdparchitect.noodle</string>
         <key>CFBundleShortVersionString</key>
         <string>0.0.0</string>
         <key>CFBundleVersion</key>
@@ -20,8 +20,8 @@
     <key>CreationDate</key>
     <date>2001-01-01T00:00:00Z</date>
     <key>Name</key>
-    <string>SuperBot</string>
+    <string>Noodle</string>
     <key>SchemeName</key>
-    <string>SuperBot</string>
+    <string>Noodle</string>
 </dict>
 </plist>

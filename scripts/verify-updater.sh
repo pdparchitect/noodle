@@ -1,6 +1,6 @@
 #!/bin/zsh
 set -euo pipefail
-app="${1:?Pass the built SuperBot.app path}"
+app="${1:?Pass the built Noodle.app path}"
 sparkle="$app/Contents/Frameworks/Sparkle.framework"
 info="$app/Contents/Info.plist"
 team="$(codesign -dv --verbose=4 "$app" 2>&1 | awk -F= '/^TeamIdentifier=/ { print $2 }')"
@@ -8,11 +8,11 @@ team="$(codesign -dv --verbose=4 "$app" 2>&1 | awk -F= '/^TeamIdentifier=/ { pri
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUEnableInstallerLauncherService' "$info")" == true ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SURequireSignedFeed' "$info")" == true ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUVerifyUpdateBeforeExtraction' "$info")" == true ]]
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$info")" == 'https://github.com/pdparchitect/superbot/releases/latest/download/appcast.xml' ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$info")" == 'https://github.com/pdparchitect/noodle/releases/latest/download/appcast.xml' ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$info")" == '1ZT5NrPiDPaQ54iHGSI1a9JIn6kTrmjQvzZRBA9f/sk=' ]]
 signed="$(codesign -d --entitlements :- "$app" 2>/dev/null | tr -d '[:space:]')"
 print -r -- "$signed" | grep -Fq '<key>com.apple.security.app-sandbox</key><true/>'
-print -r -- "$signed" | grep -Fq '<key>com.apple.security.temporary-exception.mach-lookup.global-name</key><array><string>com.pdparchitect.superbot-spks</string><string>com.pdparchitect.superbot-spki</string></array>'
+print -r -- "$signed" | grep -Fq '<key>com.apple.security.temporary-exception.mach-lookup.global-name</key><array><string>com.pdparchitect.noodle-spks</string><string>com.pdparchitect.noodle-spki</string></array>'
 for component in \
     "$sparkle/Versions/B/XPCServices/Installer.xpc" \
     "$sparkle/Versions/B/Autoupdate" \
@@ -27,7 +27,7 @@ for component in \
         print -u2 "Unexpected entitlement in updater component: $component"; exit 1
     fi
 done
-binary="$app/Contents/MacOS/SuperBot"
+binary="$app/Contents/MacOS/Noodle"
 otool -L "$binary" | grep -Fq '@rpath/Sparkle.framework/Versions/B/Sparkle'
 rpaths="$(otool -l "$binary" | awk '/cmd LC_RPATH/ { found=1; next } found && /path / { print $2; found=0 }')"
 print -r -- "$rpaths" | grep -Fxq '@executable_path/../Frameworks'

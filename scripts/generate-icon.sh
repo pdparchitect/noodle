@@ -32,4 +32,4 @@ do
     sips -z "$size" "$size" "$source_png" --out "$iconset/$filename" >/dev/null
 done
 
-print "Generated the SuperBot AppIcon asset catalog"
+print "Generated the Noodle AppIcon asset catalog"

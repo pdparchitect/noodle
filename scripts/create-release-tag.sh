@@ -15,6 +15,6 @@ if git -C "$project_root" rev-parse "$tag" >/dev/null 2>&1; then
     exit 1
 fi
 
-git -C "$project_root" tag -a "$tag" -m "SuperBot $version"
+git -C "$project_root" tag -a "$tag" -m "Noodle $version"
 git -C "$project_root" push origin main
 git -C "$project_root" push origin "$tag"

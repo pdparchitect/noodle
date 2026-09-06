@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2472.050583506818 2133.6949501266063">
+<title>Noodle original architecture sketch</title>
+<desc>Export of the editable early concept sketch. See architecture.md for the current implementation.</desc>
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto-start-reverse"><path d="M1 1L8 5L1 9" fill="none" stroke="#1e1e1e"/></marker></defs>
+<rect width="100%" height="100%" fill="white"/>
+<rect x="432.27368936280254" y="970.4584636700965" width="376.78608176499256" height="316.47566003518295" rx="24" stroke="#1e1e1e" stroke-width="2"  fill="none"/>
+<text x="454.0242664006073" y="943.0413231563449" fill="#1e1e1e" font-family="Menlo, monospace" font-size="45.17127288728953">
+<tspan x="454.0242664006073" dy="0" textLength="124.22100044004621" lengthAdjust="spacingAndGlyphs">CODEX</tspan>
+</text>
+<rect x="465.0165448874759" y="1060.9634785022863" width="146.0617688432685" height="128.34439520150772" rx="24" stroke="#1e1e1e" stroke-width="2"  fill="none"/>
+<text x="521.5474293091102" y="1132.6356761030402" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="521.5474293091102" dy="0" textLength="33" lengthAdjust="spacingAndGlyphs">ACP</tspan>
+</text>
+<rect x="816.1763730927196" y="399.83764244981285" width="774.8339385410363" height="417.28492146237113" rx="24" stroke="#1e1e1e" stroke-width="2"  fill="none"/>
+<rect x="1063.167866677686" y="734.1604058500816" width="485.4022926133184" height="54.00463053567365" rx="24" stroke="#1e1e1e" stroke-width="2"  fill="none"/>
+<rect x="849.9570664039347" y="425.78822031789605" width="175.52431564975996" height="371.08260714340577" rx="24" stroke="#1e1e1e" stroke-width="2"  fill="none"/>
+<polyline points="1305.769012984325,794.1650363857552 1305.769012984325,997.8963001519369 537.9474293091334,997.8963001519369 537.9474293091334,1054.9634785022863" stroke="#1e1e1e" stroke-width="2"  fill="none" marker-end="url(#arrow)"/>
+<text x="830.7014688999916" y="1032.5885768003573" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="830.7014688999916" dy="0" textLength="451" lengthAdjust="spacingAndGlyphs">NONIFICATION THAT THE USER SENT A MESSAGE</tspan>
+</text>
+<polyline points="620.5667302452784,1292.9341237052722 620.5667302452784,1400.3716663567102 1077.326939040504,1400.3716663567102" stroke="#1e1e1e" stroke-width="2"  fill="none" marker-end="url(#arrow)"/>
+<rect x="1083.326939040504" y="1313.1983115964686" width="393.71117745366064" height="174.5467095204731" rx="24" stroke="#1e1e1e" stroke-width="2"  fill="none"/>
+<text x="1159.1825277673197" y="1407.9716663567087" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="1159.1825277673197" dy="0" textLength="242" lengthAdjust="spacingAndGlyphs">messenger --get-latest</tspan>
+</text>
+<rect x="30.0" y="968.5857261019628" width="376.78608176499256" height="316.47566003518295" rx="24" stroke="#1e1e1e" stroke-width="2"  fill="none"/>
+<rect x="62.742855524644256" y="1059.0907409341526" width="146.0617688432685" height="128.34439520150772" rx="24" stroke="#1e1e1e" stroke-width="2"  fill="none"/>
+<text x="119.27373994627851" y="1130.7629385349064" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="119.27373994627851" dy="0" textLength="33" lengthAdjust="spacingAndGlyphs">ACP</tspan>
+</text>
+<text x="50.32298334053485" y="935.5388930881833" fill="#1e1e1e" font-family="Menlo, monospace" font-size="45.17127288728953">
+<tspan x="50.32298334053485" dy="0" textLength="149.06094360351562" lengthAdjust="spacingAndGlyphs">CLAUDE</tspan>
+</text>
+<polyline points="1222.439254529425,794.1650363857552 1222.439254529425,956.316227149815 117.31050961653818,956.316227149815 117.31050961653818,1013.0927311021369 135.6737399462727,1013.0927311021369 135.6737399462727,1053.0907409341526" stroke="#1e1e1e" stroke-width="2"  fill="none" marker-end="url(#arrow)"/>
+<polyline points="218.29304088253411,1291.061386137153 218.29304088253411,1533.7450211169416 1280.082527767372,1533.7450211169416 1280.082527767372,1493.7450211169416" stroke="#1e1e1e" stroke-width="2"  fill="none" marker-end="url(#arrow)"/>
+<text x="847.2521146170038" y="376.2822741011187" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="847.2521146170038" dy="0" textLength="88" lengthAdjust="spacingAndGlyphs">MESNEGER</tspan>
+</text>
+<rect x="1041.439368714986" y="1215.8257512836644" width="1239.3273519913782" height="774.4489603681068" rx="24" stroke="#1e1e1e" stroke-width="2" stroke-dasharray="8 8" fill="none"/>
+<text x="1052.8213292494765" y="1162.8050735506913" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="1052.8213292494765" dy="0" textLength="264" lengthAdjust="spacingAndGlyphs">AGENT PERSONAL DIRECTORY</tspan>
+<tspan x="1052.8213292494765" dy="25.0" textLength="517" lengthAdjust="spacingAndGlyphs">.agents/skills/messenger/messenger --get-latest</tspan>
+</text>
+<text x="1098.8516122584406" y="1281.0997522543548" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="1098.8516122584406" dy="0" textLength="880" lengthAdjust="spacingAndGlyphs">SYMLINKED to the APPLICATION executable which recognised the agent from the path</tspan>
+</text>
+<rect x="879.310727591539" y="463.68899921135016" width="125.25790767799481" height="34.70759033725335" rx="24" stroke="#1e1e1e" stroke-width="2"  fill="none"/>
+<rect x="875.1023352061748" y="524.237050542426" width="125.25790767799481" height="34.70759033725335" rx="24" stroke="#1e1e1e" stroke-width="2"  fill="none"/>
+<text x="55.211217963922536" y="774.5970081640698" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="55.211217963922536" dy="0" textLength="341" lengthAdjust="spacingAndGlyphs">DETECT THE HARNESS AUTOMATICALY</tspan>
+<tspan x="55.211217963922536" dy="25.0" textLength="561" lengthAdjust="spacingAndGlyphs"> /Applications/ChatGPT.app/Contents/Resources/codex</tspan>
+<tspan x="55.211217963922536" dy="25.0" textLength="242" lengthAdjust="spacingAndGlyphs">claude has the same!!!</tspan>
+</text>
+<text x="1623.551721197" y="483.004887204584" fill="#1e1e1e" font-family="Menlo, monospace" font-size="37.2044937413552">
+<tspan x="1623.551721197" dy="0" textLength="736.6489760788326" lengthAdjust="spacingAndGlyphs">ONE AGENT PROCESS FOR AGENT INSTANCE</tspan>
+<tspan x="1623.551721197" dy="46.505617176694" textLength="757.111447636578" lengthAdjust="spacingAndGlyphs">SO THAT IF I HAVE 2 AGENT AND 2 GORUP</tspan>
+<tspan x="1623.551721197" dy="46.505617176694" textLength="634.3366182901058" lengthAdjust="spacingAndGlyphs">CHATS THAT IS 2 AGENT PROCESSES</tspan>
+<tspan x="1623.551721197" dy="46.505617176694" ></tspan>
+<tspan x="1623.551721197" dy="46.505617176694" textLength="716.1865045210873" lengthAdjust="spacingAndGlyphs">THE AGENT IS SIMPLY ABLE TO SEE ITS</tspan>
+<tspan x="1623.551721197" dy="46.505617176694" textLength="818.498862309814" lengthAdjust="spacingAndGlyphs">MESSAGES AND WE ARE SIMPLY COMMUNICATION</tspan>
+<tspan x="1623.551721197" dy="46.505617176694" textLength="511.56178894363376" lengthAdjust="spacingAndGlyphs">THE NOTIFICATIONS VIA ACP</tspan>
+</text>
+<text x="1136.6019391512673" y="1655.9756886905016" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="1136.6019391512673" dy="0" textLength="22" lengthAdjust="spacingAndGlyphs">./</tspan>
+</text>
+<text x="1136.6019391512673" y="1690.9756886905016" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="1136.6019391512673" dy="0" textLength="99" lengthAdjust="spacingAndGlyphs">./.agents</tspan>
+</text>
+<text x="1136.6019391512673" y="1725.9756886905016" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="1136.6019391512673" dy="0" textLength="176" lengthAdjust="spacingAndGlyphs">./.agents/skills</tspan>
+</text>
+<text x="1136.6019391512673" y="1760.9756886905016" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="1136.6019391512673" dy="0" textLength="231" lengthAdjust="spacingAndGlyphs">./.agents/skills/test</tspan>
+</text>
+<text x="1136.6019391512673" y="1795.9756886905016" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="1136.6019391512673" dy="0" textLength="330" lengthAdjust="spacingAndGlyphs">./.agents/skills/test/SKILL.md</tspan>
+</text>
+<text x="1136.6019391512673" y="1830.9756886905016" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="1136.6019391512673" dy="0" textLength="286" lengthAdjust="spacingAndGlyphs">./.agents/skills/messenger</tspan>
+</text>
+<text x="1136.6019391512673" y="1865.9756886905016" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="1136.6019391512673" dy="0" textLength="121" lengthAdjust="spacingAndGlyphs">./AGENTS.md</tspan>
+</text>
+<text x="1548.0491242306307" y="1578.0406001614508" fill="#1e1e1e" font-family="Menlo, monospace" font-size="26.180591030974746">
+<tspan x="1548.0491242306307" dy="0" textLength="619.1564331054688" lengthAdjust="spacingAndGlyphs">THE APP SHOULD BE ABLE TO MANAGE THE SKILLS</tspan>
+<tspan x="1548.0491242306307" dy="32.72573878871843" textLength="590.3584594726562" lengthAdjust="spacingAndGlyphs">AVAILABLE TO THE AGENT BUT ALSO KEEP THEM</tspan>
+<tspan x="1548.0491242306307" dy="32.72573878871843" textLength="590.3584594726562" lengthAdjust="spacingAndGlyphs">UP TO DATE IF THE CORE SKILL PACKS CHANGE</tspan>
+<tspan x="1548.0491242306307" dy="32.72573878871843" textLength="331.17669677734375" lengthAdjust="spacingAndGlyphs">AS THE APP GETS UPDATED</tspan>
+</text>
+<text x="1133.0347708484333" y="1901.4656489104673" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="1133.0347708484333" dy="0" textLength="275" lengthAdjust="spacingAndGlyphs">./CLAUDE.md -&gt; @AGENTS.md</tspan>
+</text>
+<rect x="1365.1160530123452" y="463.865400345072" width="189.68823980743764" height="44.81704953616281" rx="24" stroke="#1e1e1e" stroke-width="2"  fill="none"/>
+<rect x="1084.5669134003401" y="553.2665625695008" width="189.68823980743764" height="44.81704953616281" rx="24" stroke="#1e1e1e" stroke-width="2"  fill="none"/>
+<rect x="1330.5715184686414" y="630.718064496592" width="189.68823980743764" height="44.81704953616281" rx="24" stroke="#1e1e1e" stroke-width="2"  fill="none"/>
+<polyline points="1203.4933423632174,393.83764244980557 1203.4933423632174,266.7269671072281 1734.3746081293502,266.7269671072281 1734.3746081293502,139.6162917646434" stroke="#1e1e1e" stroke-width="2"  fill="none" marker-end="url(#arrow)"/>
+<text x="1463.6804804551066" y="57.63101113723825" fill="#1e1e1e" font-family="Menlo, monospace" font-size="27.631011137238243">
+<tspan x="1463.6804804551066" dy="0" textLength="541.588255348528" lengthAdjust="spacingAndGlyphs">ATTACHMENTS AND OTHER BINARY DATA</tspan>
+<tspan x="1463.6804804551066" dy="34.538763921547805" textLength="410.294132839794" lengthAdjust="spacingAndGlyphs">IS STORED INSIDE THE SAME</tspan>
+<tspan x="1463.6804804551066" dy="34.538763921547805" textLength="377.47060221261046" lengthAdjust="spacingAndGlyphs">CONVERSATION AND LINKED</tspan>
+</text>
+<polyline points="1077.326939040504,1444.0794280784976 908.859944495518,1444.0794280784976 908.859944495518,1864.368782162339 741.0374334014487,1864.368782162339" stroke="#1e1e1e" stroke-width="2" stroke-dasharray="8 8" fill="none" marker-end="url(#arrow)"/>
+<rect x="53.479720727715176" y="1625.2581936610295" width="680.9132292227877" height="478.43675646557676" rx="24" stroke="#1e1e1e" stroke-width="2" stroke-dasharray="8 8" fill="none"/>
+<text x="84.98054712556768" y="1591.233318241866" fill="#1e1e1e" font-family="Menlo, monospace" font-size="20">
+<tspan x="84.98054712556768" dy="0" textLength="132" lengthAdjust="spacingAndGlyphs">NOODLE.APP</tspan>
+</text>
+<text x="89.38305355084594" y="1839.1139992122316" fill="#1e1e1e" font-family="Menlo, monospace" font-size="24.714641801516223">
+<tspan x="89.38305355084594" dy="0" textLength="584.5012786058585" lengthAdjust="spacingAndGlyphs">THE SAME BINARY ACTS AS A LAUNCHER BUT ALSO</tspan>
+<tspan x="89.38305355084594" dy="30.89330225189528" textLength="611.6873845875264" lengthAdjust="spacingAndGlyphs">CAN DO THE MESSENGER FNUCTIONALITIES THAT ARE</tspan>
+<tspan x="89.38305355084594" dy="30.89330225189528" textLength="502.942960660855" lengthAdjust="spacingAndGlyphs">LINKED TO THE FOLDERS FOR EACH AGENT </tspan>
+</text>
+</svg>

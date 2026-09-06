@@ -5,17 +5,17 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>SuperBot</string>
+    <string>Noodle</string>
     <key>CFBundleExecutable</key>
-    <string>SuperBot</string>
+    <string>Noodle</string>
     <key>CFBundleIconName</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>com.pdparchitect.superbot</string>
+    <string>com.pdparchitect.noodle</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>SuperBot</string>
+    <string>Noodle</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -33,7 +33,7 @@
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>SUFeedURL</key>
-    <string>https://github.com/pdparchitect/superbot/releases/latest/download/appcast.xml</string>
+    <string>https://github.com/pdparchitect/noodle/releases/latest/download/appcast.xml</string>
     <key>SUPublicEDKey</key>
     <string>1ZT5NrPiDPaQ54iHGSI1a9JIn6kTrmjQvzZRBA9f/sk=</string>
     <key>SURequireSignedFeed</key>
@@ -52,15 +52,15 @@
     <false/>
     <key>CFBundleURLTypes</key>
     <array><dict>
-        <key>CFBundleURLName</key><string>com.pdparchitect.superbot.sharing</string>
-        <key>CFBundleURLSchemes</key><array><string>superbot</string></array>
+        <key>CFBundleURLName</key><string>com.pdparchitect.noodle.sharing</string>
+        <key>CFBundleURLSchemes</key><array><string>noodle</string></array>
     </dict></array>
     <key>NSServices</key>
     <array>
         <dict>
             <key>NSMenuItem</key><dict><key>default</key><string>Send to Agent…</string></dict>
             <key>NSMessage</key><string>sendToAgent</string>
-            <key>NSPortName</key><string>SuperBot</string>
+            <key>NSPortName</key><string>Noodle</string>
             <key>NSSendFileTypes</key><array><string>public.data</string></array>
             <key>NSSendTypes</key><array><string>public.file-url</string></array>
             <key>NSRequiredContext</key><dict/>
@@ -68,7 +68,7 @@
         <dict>
             <key>NSMenuItem</key><dict><key>default</key><string>Ask Agent…</string></dict>
             <key>NSMessage</key><string>sendToAgent</string>
-            <key>NSPortName</key><string>SuperBot</string>
+            <key>NSPortName</key><string>Noodle</string>
             <key>NSUserData</key><string>ask</string>
             <key>NSSendTypes</key><array><string>public.utf8-plain-text</string><string>public.url</string></array>
             <key>NSRequiredContext</key><dict/>

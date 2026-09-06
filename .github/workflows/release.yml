@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: superbot-release
+  group: noodle-release
   cancel-in-progress: false
 
 jobs:
@@ -32,7 +32,7 @@ jobs:
             print -u2 "Tag $GITHUB_REF_NAME does not match VERSION v$version"
             exit 1
           fi
-          print "SUPERBOT_VERSION=$version" >> "$GITHUB_ENV"
+          print "NOODLE_VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Import Developer ID certificate
         env:
@@ -43,8 +43,8 @@ jobs:
           set -euo pipefail
           : "${MACOS_CERTIFICATE_P12:?Missing MACOS_CERTIFICATE_P12 secret}"
           : "${MACOS_CERTIFICATE_PASSWORD:?Missing MACOS_CERTIFICATE_PASSWORD secret}"
-          keychain="$RUNNER_TEMP/superbot-signing.keychain-db"
-          certificate="$RUNNER_TEMP/superbot-signing.p12"
+          keychain="$RUNNER_TEMP/noodle-signing.keychain-db"
+          certificate="$RUNNER_TEMP/noodle-signing.p12"
           keychain_password="$(openssl rand -base64 32)"
           print -rn -- "$MACOS_CERTIFICATE_P12" | base64 --decode > "$certificate"
           chmod 600 "$certificate"
@@ -59,7 +59,7 @@ jobs:
             print -u2 "The imported archive does not contain a Developer ID Application identity."
             exit 1
           fi
-          print "SUPERBOT_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+          print "NOODLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
 
       - name: Prepare notarization key
         env:
@@ -87,7 +87,7 @@ jobs:
           set -euo pipefail
           : "${SPARKLE_PRIVATE_KEY:?Missing SPARKLE_PRIVATE_KEY secret}"
           umask 077
-          key="$RUNNER_TEMP/superbot-update.key"
+          key="$RUNNER_TEMP/noodle-update.key"
           print -rn -- "$SPARKLE_PRIVATE_KEY" > "$key"
           print "SPARKLE_PRIVATE_KEY_PATH=$key" >> "$GITHUB_ENV"
 
@@ -106,21 +106,21 @@ jobs:
           set -euo pipefail
           # Keep the previous latest feed available until all new assets are uploaded.
           gh release create "$GITHUB_REF_NAME" \
-            "dist/SuperBot-$SUPERBOT_VERSION-macOS.zip" \
-            "dist/SuperBot-$SUPERBOT_VERSION-macOS.zip.sha256" \
+            "dist/Noodle-$NOODLE_VERSION-macOS.zip" \
+            "dist/Noodle-$NOODLE_VERSION-macOS.zip.sha256" \
             "dist/appcast.xml" \
             --draft \
             --verify-tag \
             --generate-notes \
-            --title "SuperBot $SUPERBOT_VERSION"
+            --title "Noodle $NOODLE_VERSION"
           gh release edit "$GITHUB_REF_NAME" --draft=false --latest
 
       - name: Remove temporary signing material
         if: always()
         shell: zsh {0}
         run: |
-          rm -f "$RUNNER_TEMP/superbot-update.key" "$RUNNER_TEMP/superbot-signing.p12"
+          rm -f "$RUNNER_TEMP/noodle-update.key" "$RUNNER_TEMP/noodle-signing.p12"
           if [[ -n "${APPLE_API_KEY_PATH:-}" ]]; then rm -f "$APPLE_API_KEY_PATH"; fi
-          if [[ -f "$RUNNER_TEMP/superbot-signing.keychain-db" ]]; then
-            security delete-keychain "$RUNNER_TEMP/superbot-signing.keychain-db"
+          if [[ -f "$RUNNER_TEMP/noodle-signing.keychain-db" ]]; then
+            security delete-keychain "$RUNNER_TEMP/noodle-signing.keychain-db"
           fi

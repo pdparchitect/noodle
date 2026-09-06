@@ -2,7 +2,7 @@
 
 Commands and project paths below are relative to the repository root.
 
-The root `VERSION` file is the canonical stable application version (`X.Y.Z`). Swift Package Manager describes the package and deployment target, but it does not provide a macOS app marketing version. Starting with the updater bootstrap, the build copies `VERSION` into both `CFBundleShortVersionString` and `CFBundleVersion`, so local builds and CI releases use the same ordering. Increase it for every release; never reuse a published version. `SUPERBOT_BUILD_NUMBER` is a local-testing override only; release packaging always uses `VERSION`.
+The root `VERSION` file is the canonical stable application version (`X.Y.Z`). Swift Package Manager describes the package and deployment target, but it does not provide a macOS app marketing version. Starting with the updater bootstrap, the build copies `VERSION` into both `CFBundleShortVersionString` and `CFBundleVersion`, so local builds and CI releases use the same ordering. Increase it for every release; never reuse a published version. `NOODLE_BUILD_NUMBER` is a local-testing override only; release packaging always uses `VERSION`.
 
 To publish a release, update `VERSION`, commit the change, and run:
 
@@ -25,16 +25,16 @@ The `.p12` secret is used only for code signing; the App Store Connect API key i
 
 ### In-app updates
 
-Use **SuperBot → Check for Updates…** or **Settings → Updates**. Automatic daily checks are enabled by default. Automatic download/installation is a separate opt-in setting. Sparkle provides release prompts, progress, signature validation, installation, and relaunch. Restarting is postponed while an agent is starting/working, a message or attachment is unsent, an editor is open, or a shared item is being delivered. An additional termination check protects a resumed installation as well.
+Use **Noodle → Check for Updates…** or **Settings → Updates**. Automatic daily checks are enabled by default. Automatic download/installation is a separate opt-in setting. Sparkle provides release prompts, progress, signature validation, installation, and relaunch. Restarting is postponed while an agent is starting/working, a message or attachment is unsent, an editor is open, or a shared item is being delivered. An additional termination check protects a resumed installation as well.
 
-The app fetches `https://github.com/pdparchitect/superbot/releases/latest/download/appcast.xml`; its enclosures point to versioned ZIP assets in the same GitHub repository. There is no separate server, GitHub Pages site, access token in the app, or custom download service. Only publish stable releases as “latest.” The previous release remains available while CI builds and uploads the next one.
+The app fetches `https://github.com/pdparchitect/noodle/releases/latest/download/appcast.xml`; its enclosures point to versioned ZIP assets in the same GitHub repository. There is no separate server, GitHub Pages site, access token in the app, or custom download service. Only publish stable releases as “latest.” The previous release remains available while CI builds and uploads the next one.
 
-Sparkle is pinned to 2.9.4 in `Package.swift` and `Package.resolved`, from [sparkle-project/Sparkle](https://github.com/sparkle-project/Sparkle). Its complete upstream licence is copied into the signed app's Resources. To regenerate a feed locally without exporting the dedicated Keychain key, use the bundled `generate_appcast --account com.pdparchitect.superbot` tool. Back up the signing key securely: losing it prevents straightforward updates for existing installations. Never rotate the embedded public key without following Sparkle's key-transition procedure.
+Sparkle is pinned to 2.9.4 in `Package.swift` and `Package.resolved`, from [sparkle-project/Sparkle](https://github.com/sparkle-project/Sparkle). Its complete upstream licence is copied into the signed app's Resources. To regenerate a feed locally without exporting the dedicated Keychain key, use the bundled `generate_appcast --account com.pdparchitect.noodle` tool. Back up the signing key securely: losing it prevents straightforward updates for existing installations. Never rotate the embedded public key without following Sparkle's key-transition procedure.
 
 Release assets must be accessible to the app for update checks and downloads to work. While the repository is private, the unauthenticated updater cannot fetch those assets; the app does not embed a GitHub access token.
 
 
 ---
 
-[Documentation](README.md) · [SuperBot](../README.md)
+[Documentation](README.md) · [Noodle](../README.md)
 

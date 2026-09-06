@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-    <key>CFBundleDisplayName</key><string>Send to SuperBot</string>
-    <key>CFBundleName</key><string>Send to SuperBot</string>
-    <key>CFBundleIdentifier</key><string>com.pdparchitect.superbot.share</string>
-    <key>CFBundleExecutable</key><string>SuperBotShareExtension</string>
+    <key>CFBundleDisplayName</key><string>Send to Noodle</string>
+    <key>CFBundleName</key><string>Send to Noodle</string>
+    <key>CFBundleIdentifier</key><string>com.pdparchitect.noodle.share</string>
+    <key>CFBundleExecutable</key><string>NoodleShareExtension</string>
     <key>CFBundlePackageType</key><string>XPC!</string>
     <key>CFBundleShortVersionString</key><string>0.3.0</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>NSExtension</key><dict>
         <key>NSExtensionPointIdentifier</key><string>com.apple.share-services</string>
-        <key>NSExtensionPrincipalClass</key><string>SuperBotShareViewController</string>
+        <key>NSExtensionPrincipalClass</key><string>NoodleShareViewController</string>
         <key>NSExtensionAttributes</key><dict>
             <key>NSExtensionActivationRule</key><dict>
                 <key>NSExtensionActivationSupportsText</key><true/>

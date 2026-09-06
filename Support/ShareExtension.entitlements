@@ -3,5 +3,5 @@
 <plist version="1.0"><dict>
     <key>com.apple.security.app-sandbox</key><true/>
     <key>com.apple.security.application-groups</key>
-    <array><string>$(SuperBotSharedGroup)</string></array>
+    <array><string>$(NoodleSharedGroup)</string></array>
 </dict></plist>

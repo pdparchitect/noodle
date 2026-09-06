@@ -1,8 +1,8 @@
-# SuperBot documentation
+# Noodle documentation
 
-[Back to SuperBot](../README.md)
+[Back to Noodle](../README.md)
 
-- [Using SuperBot](usage.md) — features, groups, notifications, heartbeats, and Settings.
+- [Using Noodle](usage.md) — features, groups, notifications, heartbeats, and Settings.
 - [Development](development.md) — requirements, local builds, signing, installation, and tests.
 - [Storage and Messenger](storage-and-messenger.md) — workspace layout, managed skills, inbox state, and the messaging CLI.
 - [Architecture](architecture.md) — process lifecycle, harness discovery, and message flow.

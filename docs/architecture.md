@@ -1,13 +1,13 @@
-# SuperBot architecture
+# Noodle architecture
 
 This document turns the supplied Excalidraw sketch into explicit product invariants and implementation boundaries.
-The original references are preserved beside it as `superbot-architecture.png` and `superbot-architecture.excalidraw.json`.
+The early concept sketch is preserved as [an editable Excalidraw source](noodle-architecture.excalidraw.json) and [a vector export](noodle-architecture.svg), with current Noodle branding. The sketch is historical; the implementation described below is authoritative.
 
 ## System flow
 
 ```mermaid
 flowchart TB
-    UI[SuperBot Messages UI]
+    UI[Noodle Messages UI]
     STORE[Conversation store]
     CODEX[Codex native driver]
     A[Bot A: App Server process + thread]
@@ -32,21 +32,21 @@ The number of processes follows the number of bots, not the number of conversati
 
 ## Harness discovery
 
-SuperBot advertises only harnesses for which it has a complete native driver. The first driver looks for the executable bundled inside `ChatGPT.app` or `Codex.app`, followed by conventional local binary directories. Finding a desktop application without its executable does not make a harness selectable.
+Noodle advertises only harnesses for which it has a complete native driver. The first driver looks for the executable bundled inside `ChatGPT.app` or `Codex.app`, followed by conventional local binary directories. Finding a desktop application without its executable does not make a harness selectable.
 
 Capability enumeration is harness-specific and private. The Codex driver calls `model/list`, converts the result into provider-neutral model and effort records, and presents those choices when creating or editing a bot. No ACP adapter or readiness layer exists.
 
 ## Agent workspace and managed skills
 
-Every bot directory is named with an opaque UUID. `AGENTS.md` is the canonical instruction file: its Backstory section is user-authored and its marked runtime section is refreshed by SuperBot. `CLAUDE.md` is a relative symlink to the same instructions. Legacy `instructions.md` content is migrated into `AGENTS.md` and the obsolete file is removed. The managed Messenger skill consists of:
+Every bot directory is named with an opaque UUID. `AGENTS.md` is the canonical instruction file: its Backstory section is user-authored and its marked runtime section is refreshed by Noodle. `CLAUDE.md` is a relative symlink to the same instructions. Legacy `instructions.md` content is migrated into `AGENTS.md` and the obsolete file is removed. The managed Messenger skill consists of:
 
 - `.agents/skills/messenger/SKILL.md`
-- `.agents/skills/messenger/messenger`, a symlink to the bundled `SuperBot.app/Contents/Helpers/messenger` executable
+- `.agents/skills/messenger/messenger`, a symlink to the bundled `Noodle.app/Contents/Helpers/messenger` executable
 - `.agents/managed-skills.json`, recording the managed pack version and paths
 
-On app updates, SuperBot refreshes only paths declared in that manifest. Skills created elsewhere under `.agents/skills` remain bot-owned and are not removed.
+On app updates, Noodle refreshes only paths declared in that manifest. Skills created elsewhere under `.agents/skills` remain bot-owned and are not removed.
 
-Codex receives only an inbox-changed notification from SuperBot. It then runs `messenger --get-latest --inline-images` through its programmatic command bridge, which returns unread messages across all conversations containing that bot and advances per-conversation offsets in `.superbot/inbox.json`. Legacy `.agents/inbox.json` is a read-only migration fallback; skill/configuration directories remain protected. Runtime startup peeks for unread deliveries off the main thread and queues a notification without consuming them. Linked attachments include an `absolutePath` to the copied conversation-owned payload and inline visual data for image inspection. The bot replies with `messenger --send`. A bot never receives its own replies back as unread work, and no private SuperBot messaging tools are injected into the harness.
+Codex receives only an inbox-changed notification from Noodle. It then runs `messenger --get-latest --inline-images` through its programmatic command bridge, which returns unread messages across all conversations containing that bot and advances per-conversation offsets in `.noodle/inbox.json`. Legacy `.agents/inbox.json` is a read-only migration fallback; skill/configuration directories remain protected. Runtime startup peeks for unread deliveries off the main thread and queues a notification without consuming them. Linked attachments include an `absolutePath` to the copied conversation-owned payload and inline visual data for image inspection. The bot replies with `messenger --send`. A bot never receives its own replies back as unread work, and no private Noodle messaging tools are injected into the harness.
 
 ## Message and attachment ownership
 
@@ -63,19 +63,19 @@ Sending a user message has two effects:
 
 The Codex driver translates `notify` into an inbox-changed event with no message body. Codex must run the Messenger CLI, decide what to do, and publish replies through that CLI. This keeps the conversation store authoritative and gives every provider the same retrieval contract. A group chat fans the notification out to participant bot UUIDs; it never creates a group-specific harness process. Notifications coalesce while a bot is already working.
 
-The native `SendSuperBotCommandIntent` is another producer of ordinary user messages. Spotlight or Shortcuts resolves a bot or group through an `AppEntity` query, writes the message through the repository, and calls the same runtime `notify` boundary as the in-app composer. App Shortcut parameters are refreshed whenever the conversation catalogue changes.
+The native `SendNoodleCommandIntent` is another producer of ordinary user messages. Spotlight or Shortcuts resolves a bot or group through an `AppEntity` query, writes the message through the repository, and calls the same runtime `notify` boundary as the in-app composer. App Shortcut parameters are refreshed whenever the conversation catalogue changes.
 
-At application startup, SuperBot starts every configured bot and resumes its stored Codex thread. Transcript monitoring belongs to the application lifetime rather than a SwiftUI window, so it continues after the window is closed. A newly observed agent message produces a local macOS notification only when SuperBot is not active or has no visible, non-minimized window; clicking it reopens the matching conversation. At application termination, SuperBot cancels monitoring and stops every child process. Creating or editing a bot starts or restarts only that bot.
+At application startup, Noodle starts every configured bot and resumes its stored Codex thread. Transcript monitoring belongs to the application lifetime rather than a SwiftUI window, so it continues after the window is closed. A newly observed agent message produces a local macOS notification only when Noodle is not active or has no visible, non-minimized window; clicking it reopens the matching conversation. At application termination, Noodle cancels monitoring and stops every child process. Creating or editing a bot starts or restarts only that bot.
 
 ## Security
 
-Restricted bots inherit the app sandbox. Settings → Security can explicitly route an individual bot through a signed `SuperBotAgentHost.xpc` instead. The helper has its own process boundary, runs as the current user without App Sandbox or extra entitlements, and accepts only the main app's exact signing identity/team. The app likewise verifies the helper. Extended mode uses the installed vendor-signed bundled Codex, a validated UUID workspace, and no client-selected shell/arguments/environment. It is off by default; a warning precedes enabling it.
+Restricted bots inherit the app sandbox. Settings → Security can explicitly route an individual bot through a signed `NoodleAgentHost.xpc` instead. The helper has its own process boundary, runs as the current user without App Sandbox or extra entitlements, and accepts only the main app's exact signing identity/team. The app likewise verifies the helper. Extended mode uses the installed vendor-signed bundled Codex, a validated UUID workspace, and no client-selected shell/arguments/environment. It is off by default; a warning precedes enabling it.
 
 Extended shell turns use Codex `workspaceWrite` and `on-request` approvals instead of `externalSandbox`. MCP/browser runtimes are outside this shell boundary and retain their own access controls. Runtime server requests are tracked independently of client request IDs, displayed in chat, and answered only by the user. Command approvals are one-time, filesystem/network grants last only for the turn, and unsupported request formats fail closed. Completion, termination, or revocation clears stale prompts. Heartbeats use the same permission handling and never approve themselves.
 
 Each extended connection owns a managed process group. Switching access stops that group before launching a replacement; disconnecting cleans it up as well. Revocation is persisted before shutdown, and a failure to confirm termination blocks replacement for that bot. Restricted and extended modes store separate private Codex thread IDs, preserving the shared conversation and workspace. Already completed external actions and detached applications are not undone. The fixed compatibility check proves nested sandbox setup, not browser connectivity or user-granted macOS privacy access. See [Security and agent access](security.md) for the exact access disclosure and verification scripts.
 
-SuperBot keeps App Sandbox enabled. Attachment import uses the native file importer and the `com.apple.security.files.user-selected.read-only` entitlement. Imported data is copied into the conversation before access ends. Codex requires outgoing client networking and a temporary home-relative read/write exception limited to `/.codex/`; the driver explicitly sets `CODEX_HOME` to that directory so the sandbox does not redirect Codex to an unauthenticated container-local home.
+Noodle keeps App Sandbox enabled. Attachment import uses the native file importer and the `com.apple.security.files.user-selected.read-only` entitlement. Imported data is copied into the conversation before access ends. Codex requires outgoing client networking and a temporary home-relative read/write exception limited to `/.codex/`; the driver explicitly sets `CODEX_HOME` to that directory so the sandbox does not redirect Codex to an unauthenticated container-local home.
 
 Local notifications use the User Notifications framework and require the user's runtime approval, but no additional entitlement. There is no broad home-directory, Apple Events, device, personal-data, or incoming-network entitlement. The minimal bundled Messenger helper is signed separately without application entitlements and operates only within the bot workspace and conversation roots supplied by the runtime.
 
@@ -83,4 +83,4 @@ See [Storage and Messenger](storage-and-messenger.md) for the on-disk layout and
 
 ---
 
-[Documentation](README.md) · [SuperBot](../README.md)
+[Documentation](README.md) · [Noodle](../README.md)

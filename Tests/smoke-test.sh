@@ -9,7 +9,7 @@ export CLANG_MODULE_CACHE_PATH="$module_cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$module_cache"
 
 swift test --disable-sandbox --package-path "$project_root"
-app="$(SUPERBOT_BUILD_CONFIGURATION="${SUPERBOT_BUILD_CONFIGURATION:-debug}" "$project_root/scripts/build-app.sh")"
+app="$(NOODLE_BUILD_CONFIGURATION="${NOODLE_BUILD_CONFIGURATION:-debug}" "$project_root/scripts/build-app.sh")"
 
 expected_version="$(tr -d '[:space:]' < "$project_root/VERSION")"
 actual_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
@@ -18,7 +18,7 @@ if [[ "$actual_version" != "$expected_version" ]]; then
     exit 1
 fi
 actual_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist")"
-if [[ "$actual_build" != "${SUPERBOT_BUILD_NUMBER:-$expected_version}" ]]; then
+if [[ "$actual_build" != "${NOODLE_BUILD_NUMBER:-$expected_version}" ]]; then
     print -u2 "Built app's update version does not match VERSION."
     exit 1
 fi
@@ -43,8 +43,8 @@ if [[ ! -f "$intent_metadata" ]]; then
     exit 1
 fi
 
-if ! grep -q 'SendSuperBotCommandIntent' "$intent_metadata"; then
-    print -u2 "The Send SuperBot Command intent is missing from App Intents metadata."
+if ! grep -q 'SendNoodleCommandIntent' "$intent_metadata"; then
+    print -u2 "The Send Noodle Command intent is missing from App Intents metadata."
     exit 1
 fi
 
@@ -57,7 +57,7 @@ if [[ "$entitlement_count" != "6" ]]; then
 fi
 zsh "$project_root/scripts/verify-updater.sh" "$app"
 zsh "$project_root/scripts/verify-agent-host.sh" "$app"
-swift "$project_root/Tests/agent-host-startup.swift" "$app/Contents/XPCServices/SuperBotAgentHost.xpc/Contents/MacOS/SuperBotAgentHost"
+swift "$project_root/Tests/agent-host-startup.swift" "$app/Contents/XPCServices/NoodleAgentHost.xpc/Contents/MacOS/NoodleAgentHost"
 if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.app-sandbox</key><true/>'; then
     print -u2 "App Sandbox entitlement is missing."
     exit 1
@@ -78,7 +78,7 @@ if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.temp
     exit 1
 fi
 
-if otool -L "$app/Contents/MacOS/SuperBot" | grep -Eq '/opt/homebrew|/usr/local'; then
+if otool -L "$app/Contents/MacOS/Noodle" | grep -Eq '/opt/homebrew|/usr/local'; then
     print -u2 "The app links against a mutable external dependency."
     exit 1
 fi
@@ -88,5 +88,5 @@ if otool -L "$app/Contents/Helpers/messenger" | grep -Eq '/opt/homebrew|/usr/loc
     exit 1
 fi
 
-print "SuperBot smoke tests passed"
+print "Noodle smoke tests passed"
 "$project_root/scripts/verify-sharing.sh" "$app"

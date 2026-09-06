@@ -3,32 +3,32 @@
 import PackageDescription
 
 let package = Package(
-    name: "SuperBot",
+    name: "Noodle",
     platforms: [
         .macOS(.v15)
     ],
     products: [
-        .library(name: "SuperBotCore", targets: ["SuperBotCore"]),
-        .executable(name: "SuperBot", targets: ["SuperBot"]),
-        .executable(name: "SuperBotMessenger", targets: ["SuperBotMessenger"])
+        .library(name: "NoodleCore", targets: ["NoodleCore"]),
+        .executable(name: "Noodle", targets: ["Noodle"]),
+        .executable(name: "NoodleMessenger", targets: ["NoodleMessenger"])
     ],
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4")
     ],
     targets: [
-        .target(name: "SuperBotAgentBridge"),
-        .executableTarget(name: "SuperBotAgentHost", dependencies: ["SuperBotCore", "SuperBotAgentBridge"]),
-        .target(name: "SuperBotCore"),
-        .target(name: "SuperBotSharing", dependencies: ["SuperBotCore"]),
+        .target(name: "NoodleAgentBridge"),
+        .executableTarget(name: "NoodleAgentHost", dependencies: ["NoodleCore", "NoodleAgentBridge"]),
+        .target(name: "NoodleCore"),
+        .target(name: "NoodleSharing", dependencies: ["NoodleCore"]),
         .executableTarget(
-            name: "SuperBotShareExtension",
-            dependencies: ["SuperBotSharing"],
+            name: "NoodleShareExtension",
+            dependencies: ["NoodleSharing"],
             swiftSettings: [.unsafeFlags(["-parse-as-library", "-application-extension"])],
             linkerSettings: [.unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]
         ),
         .executableTarget(
-            name: "SuperBot",
-            dependencies: ["SuperBotCore", "SuperBotSharing", "SuperBotAgentBridge", .product(name: "Sparkle", package: "Sparkle")],
+            name: "Noodle",
+            dependencies: ["NoodleCore", "NoodleSharing", "NoodleAgentBridge", .product(name: "Sparkle", package: "Sparkle")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",
@@ -39,12 +39,12 @@ let package = Package(
             linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
         .executableTarget(
-            name: "SuperBotMessenger",
-            dependencies: ["SuperBotCore"]
+            name: "NoodleMessenger",
+            dependencies: ["NoodleCore"]
         ),
         .testTarget(
-            name: "SuperBotCoreTests",
-            dependencies: ["SuperBotCore"]
+            name: "NoodleCoreTests",
+            dependencies: ["NoodleCore"]
         )
     ],
     swiftLanguageModes: [.v5]

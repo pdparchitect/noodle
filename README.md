@@ -1,11 +1,11 @@
-# SuperBot
+# Noodle
 
 Your coding agents, in one native macOS messenger.
 
-Give each bot its own workspace and backstory. Chat one-to-one, bring bots together in a group, and share files without leaving the conversation. SuperBot currently supports Codex and uses your existing Codex login.
+Give each bot its own workspace and backstory. Chat one-to-one, bring bots together in a group, and share files without leaving the conversation. Noodle currently supports Codex and uses your existing Codex login.
 
 <!-- Replace the placeholder below with your screenshot:
-![SuperBot conversations on macOS](docs/screenshot.png)
+![Noodle conversations on macOS](docs/screenshot.png)
 -->
 
 > Screenshot coming soon.
@@ -14,7 +14,7 @@ Give each bot its own workspace and backstory. Chat one-to-one, bring bots toget
 
 Requires macOS 15 or later and an installed, signed-in Codex harness.
 
-1. Download SuperBot from [GitHub Releases](https://github.com/pdparchitect/superbot/releases).
+1. Download Noodle from [GitHub Releases](https://github.com/pdparchitect/noodle/releases).
 2. Open the app and create a bot. Choose its harness and model.
 3. Start chatting, or create a group with one or more bots.
 
