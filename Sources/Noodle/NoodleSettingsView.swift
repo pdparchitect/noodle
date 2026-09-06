@@ -15,30 +15,53 @@ struct NoodleSettingsView: View {
     var body: some View {
         @Bindable var store = store
 
-        TabView(selection: $store.selectedSettingsTab) {
+        TabView(selection: $store.selectedSettingsTab.animation(.easeInOut(duration: 0.22))) {
             HarnessesSettingsView()
+                .settingsContentSize()
                 .tabItem {
                     Label("Harnesses", systemImage: "terminal")
                 }
                 .tag(NoodleSettingsTab.harnesses)
             HeartbeatsSettingsView()
+                .settingsContentSize()
                 .tabItem {
                     Label("Heartbeats", systemImage: "waveform.path.ecg")
                 }
                 .tag(NoodleSettingsTab.heartbeats)
             AgentAccessSettingsView()
+                .settingsContentSize()
                 .tabItem { Label("Security", systemImage: "lock.shield") }
                 .tag(NoodleSettingsTab.security)
             UpdatesSettingsView()
+                .settingsContentSize()
                 .tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }
                 .tag(NoodleSettingsTab.updates)
             #if DEBUG
             DeveloperSettingsView()
+                .settingsContentSize()
                 .tabItem { Label("Dev", systemImage: "hammer") }
                 .tag(NoodleSettingsTab.developer)
             #endif
         }
-        .frame(width: 580, height: 380)
+        .modifier(SettingsWindowResizeAnchor())
+    }
+}
+
+private struct SettingsWindowResizeAnchor: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.windowResizeAnchor(.top)
+        } else {
+            content
+        }
+    }
+}
+
+private extension View {
+    func settingsContentSize() -> some View {
+        frame(width: 580)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

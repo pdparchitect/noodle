@@ -62,6 +62,7 @@ struct NoodleApp: App {
                 .environment(store)
                 .preferredColorScheme(.dark)
         }
+        .windowResizability(.contentSize)
     }
 
     private static func write(_ value: String, to handle: FileHandle) {
