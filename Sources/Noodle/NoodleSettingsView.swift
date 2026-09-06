@@ -136,36 +136,34 @@ private struct HarnessesSettingsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Form {
-                Section {
-                    ForEach(store.runtime.installations) { installation in
-                        HarnessInstallationRow(installation: installation, setup: setup) {
-                            Task {
-                                await store.runtime.checkExternalInstallation(installation.provider)
-                                await setup.refresh(store.runtime.installations)
-                            }
+        Form {
+            Section {
+                ForEach(store.runtime.installations) { installation in
+                    HarnessInstallationRow(installation: installation, setup: setup) {
+                        Task {
+                            await store.runtime.checkExternalInstallation(installation.provider)
+                            await setup.refresh(store.runtime.installations)
                         }
                     }
                 }
             }
-            .formStyle(.grouped)
 
-            HStack {
-                Spacer()
-                ProgressView()
-                    .controlSize(.small)
-                    .opacity(showRefreshProgress ? 1 : 0)
-                    .accessibilityLabel("Checking for harnesses")
-                    .accessibilityHidden(!showRefreshProgress)
-                Button("Check Again") {
-                    Task { await refresh() }
+            Section {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .controlSize(.small)
+                        .opacity(showRefreshProgress ? 1 : 0)
+                        .accessibilityLabel("Checking for harnesses")
+                        .accessibilityHidden(!showRefreshProgress)
+                    Button("Check Again") {
+                        Task { await refresh() }
+                    }
+                    .disabled(store.runtime.isRefreshingInstallations || !setup.checking.isEmpty)
                 }
-                .disabled(store.runtime.isRefreshingInstallations || !setup.checking.isEmpty)
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
         }
+        .formStyle(.grouped)
         .task { await refresh() }
         .task(id: isRefreshing) {
             showRefreshProgress = false
