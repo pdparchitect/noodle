@@ -45,13 +45,30 @@ struct NewBotSheet: View {
                     .accessibilityLabel("Change Bot Icon")
 
                     VStack(alignment: .leading, spacing: 5) {
-                        TextField("Bot name", text: $name)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 14))
-                            .focused($nameFocused)
-                            .onSubmit {
-                                if canCreate { create() }
+                        ZStack(alignment: .trailing) {
+                            TextField("Bot name", text: $name)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(size: 14))
+                                .focused($nameFocused)
+                                .onSubmit {
+                                    if canCreate { create() }
+                                }
+
+                            Button {
+                                name = BotNameGenerator.random(excluding: name)
+                                nameFocused = true
+                            } label: {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 22, height: 22)
+                                    .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
+                            .padding(.trailing, 4)
+                            .help("Try Another Name")
+                            .accessibilityLabel("Generate Another Name")
+                        }
                         Text("You can rename this bot later without changing its workspace location.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -664,10 +681,17 @@ private enum BotNameGenerator {
         "Starling", "Thistle", "Tiger", "Willow", "Wren", "Yak", "Zinnia", "Zuzu"
     ]
 
-    static func random() -> String {
-        guard let descriptor = descriptors.randomElement(),
-              let companion = companions.randomElement() else { return "Noodle" }
-        return "\(descriptor) \(companion)"
+    static func random(excluding current: String? = nil) -> String {
+        let current = current?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        for _ in 0..<8 {
+            guard let descriptor = descriptors.randomElement(),
+                  let companion = companions.randomElement() else { return "Noodle" }
+            let candidate = "\(descriptor) \(companion)"
+            if candidate != current { return candidate }
+        }
+
+        return "Noodle"
     }
 }
 
