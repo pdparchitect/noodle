@@ -360,22 +360,3 @@ private struct PendingAttachmentChip: View {
         }
     }
 }
-
-struct WelcomeView: View {
-    @Environment(NoodleStore.self) private var store
-
-    var body: some View {
-        ContentUnavailableView {
-            Label("Create Your First Bot", systemImage: "sparkles")
-        } description: {
-            Text("Each bot gets its own stable workspace and direct conversation.")
-        } actions: {
-            Button("Create Bot") {
-                store.creationSheet = .bot
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-        }
-        .background(Color(nsColor: .textBackgroundColor).opacity(0.28))
-    }
-}

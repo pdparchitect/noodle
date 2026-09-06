@@ -202,7 +202,8 @@ struct RootView: View {
             if let conversation = store.selectedConversation {
                 ChatView(conversation: conversation)
             } else {
-                WelcomeView()
+                Color(nsColor: .textBackgroundColor).opacity(0.28)
+                    .accessibilityHidden(true)
             }
         }
         .navigationSplitViewStyle(.balanced)
