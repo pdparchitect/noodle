@@ -2,16 +2,15 @@
 set -euo pipefail
 
 project_root="${0:A:h:h}"
-build_root="$project_root/.build/icon-generation"
 source_png="$project_root/Support/AppIcon.png"
 iconset="$project_root/Support/Assets.xcassets/AppIcon.appiconset"
 
-mkdir -p "$build_root/module-cache"
-swiftc \
-    -module-cache-path "$build_root/module-cache" \
-    "$project_root/scripts/generate-icon.swift" \
-    -o "$build_root/generate-icon"
-"$build_root/generate-icon" "$source_png"
+# The approved artwork is the source of truth. Only derive catalog sizes here;
+# never redraw or overwrite the master when regenerating the icon.
+if [[ ! -f "$source_png" ]]; then
+    print -u2 "Missing approved icon artwork: $source_png"
+    exit 1
+fi
 
 mkdir -p "$iconset"
 
