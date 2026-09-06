@@ -35,7 +35,7 @@ To test the normal app with no detected harnesses, quit Noodle and launch a debu
 NOODLE_SIMULATE_NO_HARNESSES=1 .build/Noodle.app/Contents/MacOS/Noodle
 ```
 
-This only overrides harness detection, including subsequent refreshes. It adds no UI and does not remove installed binaries, credentials, bots, or conversations. Relaunch without the variable to restore normal detection. The override is compiled out of release builds; they ignore the variable.
+This only overrides harness detection, including subsequent refreshes. Check Installation enables external standalone/CLI detection for the current session; ChatGPT/Codex app-bundled binaries stay excluded. It adds no UI and does not remove installed binaries, credentials, bots, or conversations. Relaunch without the variable to restore normal detection. The override is compiled out of release builds; they ignore the variable.
 
 For distribution builds and GitHub Actions configuration, see [Releases and updates](releases.md).
 

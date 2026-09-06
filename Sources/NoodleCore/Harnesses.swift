@@ -11,11 +11,6 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
         }
     }
 
-    public var symbolName: String {
-        switch self {
-        case .codex: return "terminal.fill"
-        }
-    }
 }
 
 public struct HarnessInstallation: Identifiable, Codable, Hashable, Sendable {
@@ -77,12 +72,14 @@ public struct HarnessModel: Identifiable, Codable, Hashable, Sendable {
 public struct HarnessDiscovery: Sendable {
     private let applicationsDirectory: URL
     private let executableSearchDirectories: [URL]
+    private let standaloneCodexURL: URL
     #if DEBUG
     private let simulateNoHarnesses: Bool
+    private var externalInstallChecks: Set<HarnessProvider> = []
     #endif
 
     public init(
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        homeDirectory: URL = HarnessStorage.userHome,
         applicationsDirectory: URL = URL(fileURLWithPath: "/Applications", isDirectory: true),
         executableSearchDirectories: [URL]? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -91,6 +88,7 @@ public struct HarnessDiscovery: Sendable {
         simulateNoHarnesses = environment["NOODLE_SIMULATE_NO_HARNESSES"] == "1"
         #endif
         self.applicationsDirectory = applicationsDirectory.standardizedFileURL
+        self.standaloneCodexURL = homeDirectory.appendingPathComponent(".codex/packages/standalone/current/bin/codex")
         self.executableSearchDirectories = executableSearchDirectories ?? [
             homeDirectory.appendingPathComponent(".local/bin", isDirectory: true),
             URL(fileURLWithPath: "/opt/homebrew/bin", isDirectory: true),
@@ -106,20 +104,37 @@ public struct HarnessDiscovery: Sendable {
         #if DEBUG
         // Keep the override at discovery so startup, Settings, and refresh agree.
         if simulateNoHarnesses {
-            return HarnessInstallation(provider: provider, executablePath: nil)
+            let executable = externalInstallChecks.contains(provider)
+                ? standaloneCandidates(for: provider).first(where: isExecutable) : nil
+            return HarnessInstallation(provider: provider, executablePath: executable?.path)
         }
         #endif
         let executable = executableCandidates(for: provider).first(where: isExecutable)
         return HarnessInstallation(provider: provider, executablePath: executable?.path)
     }
 
+    #if DEBUG
+    /// Explicitly checking a completed external install never enables app-bundled fallbacks.
+    public mutating func checkExternalInstallationDuringSimulation(_ provider: HarnessProvider) {
+        externalInstallChecks.insert(provider)
+    }
+    #endif
+
     private func executableCandidates(for provider: HarnessProvider) -> [URL] {
         switch provider {
         case .codex:
-            return [
+            return standaloneCandidates(for: provider) + [
                 applicationsDirectory.appendingPathComponent("ChatGPT.app/Contents/Resources/codex"),
                 applicationsDirectory.appendingPathComponent("Codex.app/Contents/Resources/codex")
-            ] + executableSearchDirectories.map { $0.appendingPathComponent("codex") }
+            ]
+        }
+    }
+
+    private func standaloneCandidates(for provider: HarnessProvider) -> [URL] {
+        switch provider {
+        // The package location is accessible through the existing ~/.codex grant,
+        // even when the sandbox cannot traverse the shell's ~/.local/bin symlink.
+        case .codex: return [standaloneCodexURL] + executableSearchDirectories.map { $0.appendingPathComponent("codex") }
         }
     }
 

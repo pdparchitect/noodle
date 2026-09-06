@@ -71,6 +71,13 @@ final class NoodleStore {
         conversations.first(where: { $0.id == selectedConversationID })
     }
 
+    var canCreateBot: Bool { !runtime.availableInstallations.isEmpty }
+
+    func showNewBot() {
+        guard canCreateBot else { return }
+        creationSheet = .bot
+    }
+
     var canRelaunchForUpdate: Bool {
         UpdateReadiness.canRelaunch(
             phases: runtime.snapshots.values.map(\.phase),
@@ -152,6 +159,10 @@ final class NoodleStore {
         avatarImageData: Data?,
         backstory: String
     ) -> Bool {
+        guard runtime.availableInstallations.contains(where: { $0.provider.rawValue == harnessIdentifier }) else {
+            errorMessage = "Set up a supported harness in Settings before creating a bot."
+            return false
+        }
         do {
             let created = try repository.createAgent(
                 named: name,

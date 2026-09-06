@@ -29,7 +29,7 @@ final class AgentRuntimeCoordinator {
     @ObservationIgnored private var heartbeatScheduler: AgentHeartbeatScheduler
     private let defaults: UserDefaults
 
-    private let discovery: HarnessDiscovery
+    private var discovery: HarnessDiscovery
     private var processes: [UUID: CodexAgentProcess] = [:]
     private var capabilityProbe: CodexCapabilityProbe?
 
@@ -142,6 +142,13 @@ final class AgentRuntimeCoordinator {
 
     var availableInstallations: [HarnessInstallation] {
         installations.filter(\.isAvailable)
+    }
+
+    func checkExternalInstallation(_ provider: HarnessProvider) async {
+        #if DEBUG
+        discovery.checkExternalInstallationDuringSimulation(provider)
+        #endif
+        await refreshInstallations()
     }
 
     /// Discovery is shared by Settings and bot configuration. Refreshing the

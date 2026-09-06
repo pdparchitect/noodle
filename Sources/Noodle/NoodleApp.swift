@@ -41,6 +41,7 @@ struct NoodleApp: App {
                     NotificationCenter.default.post(name: .newBot, object: nil)
                 }
                 .keyboardShortcut("n", modifiers: .command)
+                .disabled(!store.canCreateBot)
 
                 Button("New Group") {
                     NotificationCenter.default.post(name: .newGroup, object: nil)
@@ -240,9 +241,10 @@ struct RootView: View {
             ToolbarItem(placement: .navigation) {
                 Menu {
                     Button("New Bot", systemImage: "person.crop.circle.badge.plus") {
-                        store.creationSheet = .bot
+                        store.showNewBot()
                     }
                     .keyboardShortcut("n", modifiers: .command)
+                    .disabled(!store.canCreateBot)
 
                     Button("New Group", systemImage: "person.3.fill") {
                         store.creationSheet = .group
@@ -310,7 +312,7 @@ struct RootView: View {
             Text(store.errorMessage ?? "An unexpected error occurred.")
         }
         .onReceive(NotificationCenter.default.publisher(for: .newBot)) { _ in
-            store.creationSheet = .bot
+            store.showNewBot()
         }
         .onReceive(NotificationCenter.default.publisher(for: .newGroup)) { _ in
             if !store.agents.isEmpty {

@@ -11,21 +11,7 @@ private enum HostPaths {
     }()
 
     static func executable(_ path: String) throws -> URL {
-        // Extended mode supports vendor-signed bundled Codex only, not a mutable
-        // PATH shim. A compromised workspace cannot choose an arbitrary program.
-        let allowed = ["/Applications/ChatGPT.app/Contents/Resources/codex", "/Applications/Codex.app/Contents/Resources/codex"]
-        guard allowed.contains(path) else { throw HostError("Extended access requires Codex bundled with ChatGPT or Codex in Applications.") }
-        let url = URL(fileURLWithPath: path)
-        guard url.resolvingSymlinksInPath().path == path else { throw HostError("Codex must not be a symbolic link.") }
-        var code: SecStaticCode?
-        var requirement: SecRequirement?
-        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess,
-              SecRequirementCreateWithString("anchor apple generic and identifier \"codex\" and certificate leaf[subject.OU] = \"2DC432GLL2\"" as CFString, [], &requirement) == errSecSuccess,
-              let code, let requirement,
-              SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSCheckAllArchitectures), requirement) == errSecSuccess else {
-            throw HostError("Codex's OpenAI signature could not be verified.")
-        }
-        return url
+        try CodexExecutableTrust.executable(at: path, home: home)
     }
 
     static func workspace(_ id: String) throws -> URL {

@@ -48,6 +48,11 @@ if ! grep -q 'SendNoodleCommandIntent' "$intent_metadata"; then
     exit 1
 fi
 
+if ! xcrun assetutil --info "$app/Contents/Resources/Assets.car" | grep -q '"Name" : "CodexHarness"'; then
+    print -u2 "The flat Codex harness vector is missing from the asset catalogue."
+    exit 1
+fi
+
 entitlements="$(codesign -d --entitlements :- "$app" 2>/dev/null)"
 compact_entitlements="$(print -r -- "$entitlements" | tr -d '[:space:]')"
 entitlement_count="$(print -r -- "$compact_entitlements" | grep -o '<key>' | wc -l | tr -d '[:space:]')"

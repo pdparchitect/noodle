@@ -68,7 +68,7 @@ struct SidebarView: View {
                             store.selectedSettingsTab = .harnesses
                             openSettings()
                         } else {
-                            store.creationSheet = .bot
+                            store.showNewBot()
                         }
                     }
                     .buttonStyle(.borderedProminent)

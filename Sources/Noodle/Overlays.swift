@@ -670,7 +670,11 @@ private struct AgentConfigurationFields: View {
             VStack(alignment: .leading, spacing: 12) {
                 Picker("Harness", selection: $selectedHarnessIdentifier) {
                     ForEach(store.runtime.availableInstallations) { installation in
-                        Label(installation.provider.displayName, systemImage: installation.provider.symbolName)
+                        Label {
+                            Text(installation.provider.displayName)
+                        } icon: {
+                            HarnessProviderIcon(provider: installation.provider)
+                        }
                             .tag(installation.provider.rawValue)
                     }
                 }
