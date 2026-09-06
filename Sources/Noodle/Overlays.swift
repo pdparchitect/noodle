@@ -66,11 +66,12 @@ struct NewBotSheet: View {
                             }
                             .buttonStyle(.plain)
                             .padding(.trailing, 4)
-                            .onHover { isHovering in
-                                if isHovering {
-                                    NSCursor.pointingHand.push()
-                                } else {
-                                    NSCursor.pop()
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active:
+                                    NSCursor.pointingHand.set()
+                                case .ended:
+                                    NSCursor.arrow.set()
                                 }
                             }
                             .help("Try Another Name")
