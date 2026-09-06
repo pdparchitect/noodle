@@ -4,7 +4,6 @@ import NoodleCore
 
 struct SidebarView: View {
     @Environment(NoodleStore.self) private var store
-    @Environment(\.openSettings) private var openSettings
     @FocusState private var searchIsFocused: Bool
 
     var body: some View {
@@ -51,30 +50,7 @@ struct SidebarView: View {
         .controlSize(.large)
         .searchFocused($searchIsFocused)
         .overlay {
-            if store.conversations.isEmpty {
-                let needsHarness = store.runtime.availableInstallations.isEmpty
-                ContentUnavailableView {
-                    Label(
-                        needsHarness ? "No Harnesses Detected" : "No Bots Yet",
-                        systemImage: needsHarness ? "terminal" : "bubble.left.and.bubble.right"
-                    )
-                } description: {
-                    Text(needsHarness
-                        ? "Set up a supported harness before creating a bot."
-                        : "Create a bot to start a conversation.")
-                } actions: {
-                    Button(needsHarness ? "Open Settings" : "Create Bot") {
-                        if needsHarness {
-                            store.selectedSettingsTab = .harnesses
-                            openSettings()
-                        } else {
-                            store.showNewBot()
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding(24)
-            } else if store.filteredConversations.isEmpty {
+            if !store.conversations.isEmpty && store.filteredConversations.isEmpty {
                 ContentUnavailableView.search(text: store.searchText)
             }
         }
