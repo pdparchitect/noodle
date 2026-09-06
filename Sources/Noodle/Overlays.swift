@@ -434,36 +434,53 @@ private struct BotIconEditor: View {
                 BotAvatar(agent: previewAgent, size: 104)
                     .padding(.top, 4)
 
-                HStack(spacing: 10) {
-                    Menu {
-                        Button("Choose File…", systemImage: "folder") {
-                            choosingFile = true
-                        }
-                        Button("Photos Library…", systemImage: "photo.on.rectangle") {
-                            photoSelection = nil
-                            choosingPhoto = true
-                        }
-                    } label: {
-                        Label("Choose Image…", systemImage: "photo")
-                    }
+                GroupBox("Image") {
+                    VStack(spacing: 8) {
+                        HStack(spacing: 8) {
+                            Menu {
+                                Button("Choose File…", systemImage: "folder") {
+                                    choosingFile = true
+                                }
+                                Button("Photos Library…", systemImage: "photo.on.rectangle") {
+                                    photoSelection = nil
+                                    choosingPhoto = true
+                                }
+                            } label: {
+                                Label("Choose Image…", systemImage: "photo")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .frame(maxWidth: .infinity)
 
-                    if #available(macOS 15.1, *) {
-                        BotIconImagePlaygroundButton(
-                            sourceImageData: editedImageData
-                        ) { url in
-                            Task { await loadImage(at: url, requiresSecurityScope: false) }
+                            if #available(macOS 15.1, *) {
+                                BotIconImagePlaygroundButton(
+                                    sourceImageData: editedImageData
+                                ) { url in
+                                    Task { await loadImage(at: url, requiresSecurityScope: false) }
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                        }
+
+                        if editedImageData != nil {
+                            Divider()
+
+                            Button {
+                                editedImageData = nil
+                                photoSelection = nil
+                            } label: {
+                                Label("Use Symbol Instead", systemImage: "square.grid.2x2")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+
+                        if isLoadingPhoto {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(maxWidth: .infinity)
                         }
                     }
-
-                    if editedImageData != nil {
-                        Button("Use Generated Icon") {
-                            editedImageData = nil
-                            photoSelection = nil
-                        }
-                        .buttonStyle(.bordered)
-                    }
-
-                    if isLoadingPhoto { ProgressView().controlSize(.small) }
+                    .padding(8)
                 }
 
                 if let photoError {
@@ -692,9 +709,13 @@ private struct BotIconImagePlaygroundButton: View {
     }
 
     private var triggerButton: some View {
-        Button("Create Image…", systemImage: "apple.intelligence") {
+        Button {
             isPresented = true
+        } label: {
+            Label("Create Image…", systemImage: "apple.intelligence")
+                .frame(maxWidth: .infinity)
         }
+        .buttonStyle(.bordered)
     }
 
     @available(macOS 26.4, *)
