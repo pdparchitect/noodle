@@ -66,22 +66,6 @@ struct NewBotSheet: View {
 
                 BotBackstoryEditor(backstory: $backstory)
 
-                GroupBox {
-                    Label {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Private app workspace")
-                                .font(.system(size: 12.5, weight: .semibold))
-                            Text("Noodle creates an opaque UUID folder containing agent.json, AGENTS.md, and memory.md.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } icon: {
-                        Image(systemName: "folder.badge.gearshape")
-                            .foregroundStyle(.blue)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
                 Spacer()
             }
             .padding(20)
