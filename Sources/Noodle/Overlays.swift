@@ -352,9 +352,6 @@ private struct BotBackstoryEditor: View {
                     .strokeBorder(Color.secondary.opacity(0.18))
             }
 
-            Text("Saved as this bot’s editable Backstory in AGENTS.md.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 }
