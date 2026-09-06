@@ -38,8 +38,8 @@ Library/Application Support/SuperBot/
 │       ├── memory.md
 │       ├── AGENTS.md (editable backstory + managed runtime guidance)
 │       ├── CLAUDE.md -> AGENTS.md
+│       ├── .superbot/inbox.json (mutable message/reaction read positions)
 │       └── .agents/
-│           ├── inbox.json
 │           ├── managed-skills.json
 │           └── skills/
 │               ├── messenger/
@@ -93,13 +93,19 @@ Preferences persist across launches. Timers start fresh when agents reconnect, w
 
 ## Optional extended agent access
 
-**Settings → Agent Access** offers an explicit per-bot opt-in. All existing and new bots remain **Restricted** by default. Restricted agents continue to inherit SuperBot's App Sandbox. **Extended** agents run through the separately signed, hardened `SuperBotAgentHost.xpc`, outside that sandbox, as the current user (never root). This removes the inherited sandbox that prevented the browser-control runtime from applying its own sandbox. Browser/computer control still depends on the installed integration and macOS privacy permissions; a successful helper check does not prove browser access.
+**Settings → Security** offers an explicit per-bot opt-in. All existing and new bots remain **Restricted** by default. Restricted agents continue to inherit SuperBot's App Sandbox. **Extended** agents run through the separately signed, hardened `SuperBotAgentHost.xpc`, outside that sandbox, as the current user (never root). This removes the inherited sandbox that prevented the browser-control runtime from applying its own sandbox. Browser/computer control still depends on the installed integration and macOS privacy permissions; a successful helper check does not prove browser access. Startup failures show their error and a **Retry Startup** button in Security. Starting a runtime checks for unread messages without consuming them, recovering pending notifications after a restart.
 
 Enabling extended access displays a warning: tools may access files and signed-in browser sessions beyond the bot workspace. Connected MCP tools have their own permissions and may run outside Codex's shell sandbox; this is not a guarantee of approval before every action. Codex shell turns use `workspaceWrite` (the bot workspace and SuperBot's conversation store), restricted network access, and `on-request` approvals. The app renders command/file/permission requests and user questions in chat, with an orange sidebar indicator. Grants are single-command or current-turn only. Requests expire with their runtime/turn, and unsupported requests cannot be accepted with fabricated consent. Unattended heartbeats never approve requests.
 
 Changing access stops the managed runtime process group before restarting. Restricted and extended modes use separate persisted Codex sessions; the conversation and bot workspace remain unchanged. Turning extended access off persists revocation first. Failed termination prevents an automatic replacement process. External applications already opened, detached services, and previously completed side effects are not undone by revocation. OS privacy grants must be revoked separately in System Settings.
 
-The XPC service accepts only SuperBot's exact signed identity and signing team, and SuperBot verifies the helper's identity. It exposes no arbitrary executable/arguments/environment endpoint; it accepts a bot UUID and validates its existing workspace plus a vendor-signed OpenAI Codex executable bundled in `/Applications/ChatGPT.app` or `/Applications/Codex.app`. PATH-installed Codex remains supported in restricted mode only. Connections closing stop their managed process groups. **Test Extended Runtime** runs only a fixed `sandbox-exec … /usr/bin/true` probe, without enabling a bot, invoking a model, or opening a browser.
+The XPC service accepts only SuperBot's exact signed identity and signing team, and SuperBot verifies the helper's identity. It exposes no arbitrary executable/arguments/environment endpoint; it accepts a bot UUID and validates its existing workspace plus a vendor-signed OpenAI Codex executable bundled in `/Applications/ChatGPT.app` or `/Applications/Codex.app`. PATH-installed Codex remains supported in restricted mode only. Connections closing stop their managed process groups. **Test Extended Runtime**, under **Settings → Dev** in debug builds only, runs a fixed `sandbox-exec … /usr/bin/true` probe, without enabling a bot, invoking a model, or opening a browser. Smoke tests separately verify that a Foundation-launched helper starts in its own process group.
+
+Settings are ordered **Harnesses → Heartbeats → Security → Updates → Dev**. The entire Dev tab is compiled out of release builds. Use `SUPERBOT_BUILD_CONFIGURATION=debug scripts/build-app.sh` for a local development build.
+
+Messenger stores mutable inbox cursors in the bot's `.superbot/inbox.json`, inside its already-writable workspace. Older `.agents/inbox.json` cursors are read as a migration fallback and left untouched; subsequent consumption writes the new location. This keeps Codex's protected skills directory read-only without requiring elevated access just to read messages.
+
+Groups can contain **one or more bots**. New Group and Group Info share an **Add Bots** search picker and a grid of selected avatars with individual remove controls. Saving an empty group is not allowed; removing a member does not delete the bot or conversation history.
 
 ## Build, launch, and test
 

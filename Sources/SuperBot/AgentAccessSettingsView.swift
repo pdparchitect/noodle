@@ -25,20 +25,23 @@ struct AgentAccessSettingsView: View {
                     }
                     .accessibilityLabel("\(agent.displayName), extended access")
                     .disabled(store.runtime.changingAccess.contains(agent.id))
+                    if store.runtime.snapshot(for: agent.id).phase == .failed {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(store.runtime.snapshot(for: agent.id).detail)
+                                .font(.caption).foregroundStyle(.red)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .textSelection(.enabled)
+                            Button("Retry Startup") {
+                                store.runtime.restart(agent: agent, repository: store.repository)
+                            }
+                            .controlSize(.small)
+                            .accessibilityLabel("Retry startup for \(agent.displayName)")
+                            .disabled(store.runtime.changingAccess.contains(agent.id))
+                        }
+                    }
                 }
             } footer: {
                 Text("Extended agents run in a signed helper outside the app sandbox. Codex still restricts shell commands and asks for additional permissions in chat. Connected tools may have their own access, including signed-in browser sessions; not every tool action produces a Codex approval prompt. macOS privacy permissions still apply.")
-            }
-            Section {
-                Button(store.runtime.isCheckingAccess ? "Checking…" : "Test Extended Runtime") {
-                    store.runtime.checkExtendedRuntime()
-                }
-                .disabled(store.runtime.isCheckingAccess)
-                if let result = store.runtime.accessCheckResult {
-                    Text(result).font(.caption).textSelection(.enabled)
-                }
-            } footer: {
-                Text("This runs a fixed compatibility check in the helper. It does not enable any bot, send a message, or access your browser.")
             }
         }
         .formStyle(.grouped)

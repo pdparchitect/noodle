@@ -4,20 +4,22 @@ import SuperBotCore
 struct SuperBotSettingsView: View {
     var body: some View {
         TabView {
-            AgentAccessSettingsView()
-                .tabItem { Label("Agent Access", systemImage: "lock.shield") }
             HarnessesSettingsView()
                 .tabItem {
                     Label("Harnesses", systemImage: "terminal")
-                }
-            UpdatesSettingsView()
-                .tabItem {
-                    Label("Updates", systemImage: "arrow.triangle.2.circlepath")
                 }
             HeartbeatsSettingsView()
                 .tabItem {
                     Label("Heartbeats", systemImage: "waveform.path.ecg")
                 }
+            AgentAccessSettingsView()
+                .tabItem { Label("Security", systemImage: "lock.shield") }
+            UpdatesSettingsView()
+                .tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }
+            #if DEBUG
+            DeveloperSettingsView()
+                .tabItem { Label("Dev", systemImage: "hammer") }
+            #endif
         }
         .frame(width: 580, height: 380)
     }

@@ -46,7 +46,7 @@ Every bot directory is named with an opaque UUID. `AGENTS.md` is the canonical i
 
 On app updates, SuperBot refreshes only paths declared in that manifest. Skills created elsewhere under `.agents/skills` remain bot-owned and are not removed.
 
-Codex receives only an inbox-changed notification from SuperBot. It then runs `messenger --get-latest --inline-images` through its programmatic command bridge, which returns unread messages across all conversations containing that bot and advances per-conversation offsets in `.agents/inbox.json`. Linked attachments include an `absolutePath` to the copied conversation-owned payload and inline visual data for image inspection. The bot replies with `messenger --send`. A bot never receives its own replies back as unread work, and no private SuperBot messaging tools are injected into the harness.
+Codex receives only an inbox-changed notification from SuperBot. It then runs `messenger --get-latest --inline-images` through its programmatic command bridge, which returns unread messages across all conversations containing that bot and advances per-conversation offsets in `.superbot/inbox.json`. Legacy `.agents/inbox.json` is a read-only migration fallback; skill/configuration directories remain protected. Runtime startup peeks for unread deliveries off the main thread and queues a notification without consuming them. Linked attachments include an `absolutePath` to the copied conversation-owned payload and inline visual data for image inspection. The bot replies with `messenger --send`. A bot never receives its own replies back as unread work, and no private SuperBot messaging tools are injected into the harness.
 
 ## Message and attachment ownership
 
@@ -69,7 +69,7 @@ At application startup, SuperBot starts every configured bot and resumes its sto
 
 ## Security
 
-Restricted bots inherit the app sandbox. Settings → Agent Access can explicitly route an individual bot through a signed `SuperBotAgentHost.xpc` instead. The helper has its own process boundary, runs as the current user without App Sandbox or extra entitlements, and accepts only the main app's exact signing identity/team. The app likewise verifies the helper. Extended mode uses the installed vendor-signed bundled Codex, a validated UUID workspace, and no client-selected shell/arguments/environment. It is off by default; a warning precedes enabling it.
+Restricted bots inherit the app sandbox. Settings → Security can explicitly route an individual bot through a signed `SuperBotAgentHost.xpc` instead. The helper has its own process boundary, runs as the current user without App Sandbox or extra entitlements, and accepts only the main app's exact signing identity/team. The app likewise verifies the helper. Extended mode uses the installed vendor-signed bundled Codex, a validated UUID workspace, and no client-selected shell/arguments/environment. It is off by default; a warning precedes enabling it.
 
 Extended shell turns use Codex `workspaceWrite` and `on-request` approvals instead of `externalSandbox`. MCP/browser runtimes are outside this shell boundary and retain their own access controls. Runtime server requests are tracked independently of client request IDs, displayed in chat, and answered only by the user. Command approvals are one-time, filesystem/network grants last only for the turn, and unsupported request formats fail closed. Completion, termination, or revocation clears stale prompts. Heartbeats use the same permission handling and never approve themselves.
 
