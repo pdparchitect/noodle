@@ -665,22 +665,36 @@ private struct BotIconImagePlaygroundButton: View {
     @ViewBuilder
     private var configuredButton: some View {
         if #available(macOS 26.4, *) {
-            imagePlaygroundButton.imagePlaygroundOptions(imagePlaygroundOptions)
+            triggerButton
+                .imagePlaygroundSheet(
+                    isPresented: $isPresented,
+                    sourceImage: sourceImage,
+                    onCompletion: onCompletion
+                )
+                .imagePlaygroundPersonalizationPolicy(.disabled)
+                .imagePlaygroundOptions(imagePlaygroundOptions)
+        } else if #available(macOS 15.4, *) {
+            triggerButton
+                .imagePlaygroundSheet(
+                    isPresented: $isPresented,
+                    sourceImage: sourceImage,
+                    onCompletion: onCompletion
+                )
+                .imagePlaygroundPersonalizationPolicy(.disabled)
         } else {
-            imagePlaygroundButton
+            triggerButton
+                .imagePlaygroundSheet(
+                    isPresented: $isPresented,
+                    sourceImage: sourceImage,
+                    onCompletion: onCompletion
+                )
         }
     }
 
-    private var imagePlaygroundButton: some View {
+    private var triggerButton: some View {
         Button("Create Image…", systemImage: "apple.intelligence") {
             isPresented = true
         }
-        .imagePlaygroundSheet(
-            isPresented: $isPresented,
-            concept: "A friendly helper character with a simple background",
-            sourceImage: sourceImage,
-            onCompletion: onCompletion
-        )
     }
 
     @available(macOS 26.4, *)
