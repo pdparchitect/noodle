@@ -57,6 +57,7 @@ if [[ "$entitlement_count" != "6" ]]; then
 fi
 zsh "$project_root/scripts/verify-updater.sh" "$app"
 zsh "$project_root/scripts/verify-agent-host.sh" "$app"
+swift "$project_root/Tests/agent-host-startup.swift" "$app/Contents/XPCServices/SuperBotAgentHost.xpc/Contents/MacOS/SuperBotAgentHost"
 if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.app-sandbox</key><true/>'; then
     print -u2 "App Sandbox entitlement is missing."
     exit 1

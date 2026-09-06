@@ -46,13 +46,36 @@ private struct HostError: LocalizedError {
     var errorDescription: String? { message }
 }
 
+private func isolateProcessGroup() throws {
+    // Foundation Process already creates a process group on macOS. setsid()
+    // fails with EPERM for its leader, so retain that group or create one
+    // explicitly when invoked by a launcher that does not provide it.
+    if getpgrp() != getpid(), setpgid(0, 0) != 0 {
+        throw HostError("Could not isolate the runtime process group: \(String(cString: strerror(errno)))")
+    }
+    guard getpgrp() == getpid() else { throw HostError("The runtime process group is not isolated.") }
+}
+
+// Fixed startup regression probe: no workspace, credentials, or model access.
+if CommandLine.arguments == [CommandLine.arguments[0], "--check-process-group"] {
+    do {
+        try isolateProcessGroup()
+        print("\(getpid()) \(getpgrp())")
+        exit(0)
+    } catch {
+        fputs("\(error.localizedDescription)\n", stderr)
+        exit(1)
+    }
+}
+
 // The child creates a dedicated process group before starting Codex. Disabling
 // extended access terminates this group, including ordinary tool descendants.
 if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--codex-child" {
     do {
         let executable = try HostPaths.executable(CommandLine.arguments[2])
         let workspace = try HostPaths.workspace(CommandLine.arguments[3])
-        guard setsid() >= 0, chdir(workspace.path) == 0 else { throw HostError("Could not isolate the runtime process group.") }
+        try isolateProcessGroup()
+        guard chdir(workspace.path) == 0 else { throw HostError("Could not open the bot workspace: \(String(cString: strerror(errno)))") }
         let strings: [String] = [executable.path, "app-server"]
         var arguments: [UnsafeMutablePointer<CChar>?] = strings.map { value in value.withCString { strdup($0) } }
         arguments.append(nil)
