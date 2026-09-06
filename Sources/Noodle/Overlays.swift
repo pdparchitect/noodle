@@ -7,7 +7,7 @@ import NoodleCore
 struct NewBotSheet: View {
     @Environment(NoodleStore.self) private var store
     @Environment(\.dismiss) private var dismiss
-    @State private var name = ""
+    @State private var name = BotNameGenerator.random()
     @State private var selectedHarnessIdentifier = HarnessProvider.codex.rawValue
     @State private var selectedModelIdentifier = ""
     @State private var selectedEffort = ""
@@ -72,6 +72,7 @@ struct NewBotSheet: View {
         }
         .frame(width: 520, height: 650)
         .onAppear {
+            if name.isEmpty { name = BotNameGenerator.random() }
             nameFocused = true
             store.runtime.refreshCapabilities()
         }
@@ -718,19 +719,24 @@ private struct AgentConfigurationFields: View {
 
     @ViewBuilder
     private var capabilityDetail: some View {
-        if store.runtime.isLoadingCapabilities {
-            HStack(spacing: 7) {
-                ProgressView().controlSize(.small)
-                Text("Reading models from Codex…")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        } else if let provider = HarnessProvider(rawValue: selectedHarnessIdentifier),
-                  let error = store.runtime.capabilityErrors[provider] {
+        if let provider = HarnessProvider(rawValue: selectedHarnessIdentifier),
+           let error = store.runtime.capabilityErrors[provider] {
             Label(error, systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(.orange)
         }
+    }
+}
+
+private enum BotNameGenerator {
+    private static let names = [
+        "Alba", "Arlo", "Basil", "Cleo", "Cosmo", "Echo",
+        "Juno", "Milo", "Nova", "Orla", "Pip", "Remy",
+        "Sage", "Tali", "Willow", "Ziggy"
+    ]
+
+    static func random() -> String {
+        names.randomElement() ?? "Noodle"
     }
 }
 
