@@ -54,6 +54,7 @@ fi
 
 "$project_root/scripts/verify-sharing.sh" "$app"
 zsh "$project_root/scripts/verify-updater.sh" "$app"
+zsh "$project_root/scripts/verify-agent-host.sh" "$app"
 
 helper_entitlements="$(codesign -d --entitlements :- "$app/Contents/Helpers/messenger" 2>/dev/null)"
 if print -r -- "$helper_entitlements" | grep -q '<key>'; then

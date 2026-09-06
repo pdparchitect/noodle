@@ -16,6 +16,8 @@ let package = Package(
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4")
     ],
     targets: [
+        .target(name: "SuperBotAgentBridge"),
+        .executableTarget(name: "SuperBotAgentHost", dependencies: ["SuperBotCore", "SuperBotAgentBridge"]),
         .target(name: "SuperBotCore"),
         .target(name: "SuperBotSharing", dependencies: ["SuperBotCore"]),
         .executableTarget(
@@ -26,7 +28,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "SuperBot",
-            dependencies: ["SuperBotCore", "SuperBotSharing", .product(name: "Sparkle", package: "Sparkle")],
+            dependencies: ["SuperBotCore", "SuperBotSharing", "SuperBotAgentBridge", .product(name: "Sparkle", package: "Sparkle")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>CFBundleIdentifier</key><string>com.pdparchitect.superbot.agent-host</string>
+    <key>CFBundleExecutable</key><string>SuperBotAgentHost</string>
+    <key>CFBundleName</key><string>SuperBot Agent Host</string>
+    <key>CFBundlePackageType</key><string>XPC!</string>
+    <key>CFBundleShortVersionString</key><string>0.0.0</string>
+    <key>CFBundleVersion</key><string>0</string>
+    <key>XPCService</key><dict><key>ServiceType</key><string>Application</string></dict>
+</dict></plist>

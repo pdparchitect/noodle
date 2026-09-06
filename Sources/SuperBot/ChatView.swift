@@ -29,6 +29,9 @@ struct ChatView: View {
                     }
                     .ignoresSafeArea(edges: .top)
                 }
+            if let request = store.runtime.approvals.first(where: { conversation.participantIDs.contains($0.agentID) }) {
+                AgentApprovalView(request: request).id(request.id)
+            }
             composer
                 .padding(.horizontal, 12)
                 .padding(.bottom, 11)

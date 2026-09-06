@@ -4,6 +4,8 @@ import SuperBotCore
 struct SuperBotSettingsView: View {
     var body: some View {
         TabView {
+            AgentAccessSettingsView()
+                .tabItem { Label("Agent Access", systemImage: "lock.shield") }
             HarnessesSettingsView()
                 .tabItem {
                     Label("Harnesses", systemImage: "terminal")

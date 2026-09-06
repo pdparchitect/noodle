@@ -119,7 +119,7 @@ private struct ConversationRow: View {
                         .foregroundStyle(.tertiary)
                 }
 
-                Text(store.preview(for: conversation))
+                Text(hasPendingApproval ? "Waiting for your approval" : store.preview(for: conversation))
                     .font(.system(size: 12.5))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -144,6 +144,7 @@ private struct ConversationRow: View {
     }
 
     private var runtimeColor: Color {
+        if hasPendingApproval { return .orange }
         let phases = store.participants(for: conversation).map { store.runtime.snapshot(for: $0.id).phase }
         if phases.contains(.working) { return .blue }
         if phases.contains(.failed) { return .red }
@@ -153,6 +154,10 @@ private struct ConversationRow: View {
 
     private var accessibilityLabel: String {
         let unread = store.hasUnreadMessages(in: conversation) ? "Unread, " : ""
-        return "\(unread)\(store.title(for: conversation)), \(store.preview(for: conversation))"
+        return "\(unread)\(store.title(for: conversation)), \(hasPendingApproval ? "Waiting for your approval" : store.preview(for: conversation))"
+    }
+
+    private var hasPendingApproval: Bool {
+        store.runtime.approvals.contains { conversation.participantIDs.contains($0.agentID) }
     }
 }

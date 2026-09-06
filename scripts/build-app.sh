@@ -65,6 +65,19 @@ otool -l "$contents/MacOS/SuperBot" \
     done
 cp "$bin_path/SuperBotMessenger" "$contents/Helpers/messenger"
 cp "$project_root/Support/Info.plist" "$contents/Info.plist"
+agent_host="$contents/XPCServices/SuperBotAgentHost.xpc"
+mkdir -p "$agent_host/Contents/MacOS"
+cp "$bin_path/SuperBotAgentHost" "$agent_host/Contents/MacOS/SuperBotAgentHost"
+otool -l "$agent_host/Contents/MacOS/SuperBotAgentHost" \
+    | awk '/cmd LC_RPATH/ { found=1; next } found && /path / { print $2; found=0 }' \
+    | while IFS= read -r rpath; do
+        if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain_dir/"* ]]; then
+            install_name_tool -delete_rpath "$rpath" "$agent_host/Contents/MacOS/SuperBotAgentHost"
+        fi
+    done
+cp "$project_root/Support/AgentHost-Info.plist" "$agent_host/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$agent_host/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$agent_host/Contents/Info.plist"
 cp "$project_root/.build/checkouts/Sparkle/LICENSE" "$contents/Resources/Sparkle-LICENSE.txt"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$contents/Info.plist"
@@ -124,6 +137,12 @@ if [[ ! "$team_id" =~ '^[A-Z0-9]{10}$' ]]; then
     exit 1
 fi
 shared_group="$team_id.com.pdparchitect.superbot.sharing"
+for file in "$contents/Info.plist" "$agent_host/Contents/Info.plist"; do
+    /usr/libexec/PlistBuddy -c "Add :SuperBotSigningTeam string $team_id" "$file"
+done
+# Explicitly approved opt-in boundary: authenticated, hardened, non-root XPC host.
+# No sandbox inheritance, extra entitlements, or global Mach-service exception.
+codesign --force --options runtime "$timestamp_option" --sign "$signing_identity" "$agent_host"
 resolved_entitlements="$build_root/SuperBot.resolved.entitlements"
 share_entitlements="$build_root/ShareExtension.resolved.entitlements"
 cp "$entitlements" "$resolved_entitlements"
@@ -150,5 +169,6 @@ codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
 zsh "$project_root/scripts/verify-updater.sh" "$app" >&2
+zsh "$project_root/scripts/verify-agent-host.sh" "$app" >&2
 
 print "$app"
