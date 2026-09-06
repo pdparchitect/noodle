@@ -68,6 +68,13 @@ private extension View {
 private struct HeartbeatsSettingsView: View {
     @Environment(NoodleStore.self) private var store
 
+    private static let suggestedIntervals = [5, 10, 15, 30, 45, 60, 120, 240, 480, 720, 1_440]
+
+    private var intervalOptions: [Int] {
+        let current = store.runtime.heartbeatConfiguration.intervalMinutes
+        return Array(Set(Self.suggestedIntervals + [current])).sorted()
+    }
+
     var body: some View {
         Form {
             Section {
@@ -75,12 +82,15 @@ private struct HeartbeatsSettingsView: View {
                     get: { store.runtime.heartbeatConfiguration.isEnabled },
                     set: { store.runtime.configureHeartbeats(enabled: $0) }
                 ))
-                Stepper(value: Binding(
+                Picker("Wake after", selection: Binding(
                     get: { store.runtime.heartbeatConfiguration.intervalMinutes },
                     set: { store.runtime.configureHeartbeats(intervalMinutes: $0) }
-                ), in: 1...1_440) {
-                    Text("After \(store.runtime.heartbeatConfiguration.intervalMinutes) minutes without activity")
+                )) {
+                    ForEach(intervalOptions, id: \.self) { minutes in
+                        Text(intervalLabel(for: minutes)).tag(minutes)
+                    }
                 }
+                .pickerStyle(.menu)
                 .disabled(!store.runtime.heartbeatConfiguration.isEnabled)
             } footer: {
                 Text("Activity resets each bot’s timer.")
@@ -98,6 +108,21 @@ private struct HeartbeatsSettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private func intervalLabel(for minutes: Int) -> String {
+        switch minutes {
+        case 60:
+            "1 hour"
+        case 1_440:
+            "1 day"
+        case let value where value.isMultiple(of: 60):
+            "\(value / 60) hours"
+        case 1:
+            "1 minute"
+        default:
+            "\(minutes) minutes"
+        }
     }
 }
 
