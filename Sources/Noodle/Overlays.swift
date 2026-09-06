@@ -65,12 +65,10 @@ struct NewBotSheet: View {
                 )
 
                 BotBackstoryEditor(backstory: $backstory)
-
-                Spacer()
             }
             .padding(20)
         }
-        .frame(width: 520, height: 650)
+        .frame(width: 520)
         .onAppear {
             if name.isEmpty { name = BotNameGenerator.random() }
             nameFocused = true
@@ -652,91 +650,24 @@ struct GroupInfoSheet: View {
     }
 }
 
-private struct AgentConfigurationFields: View {
-    @Environment(NoodleStore.self) private var store
-    @Binding var selectedHarnessIdentifier: String
-    @Binding var selectedModelIdentifier: String
-    @Binding var selectedEffort: String
-
-    private var models: [HarnessModel] {
-        store.runtime.models(for: selectedHarnessIdentifier)
-    }
-
-    private var selectedModel: HarnessModel? {
-        models.first { $0.id == selectedModelIdentifier }
-    }
-
-    var body: some View {
-        GroupBox("Agent Runtime") {
-            VStack(alignment: .leading, spacing: 12) {
-                Picker("Harness", selection: $selectedHarnessIdentifier) {
-                    ForEach(store.runtime.availableInstallations) { installation in
-                        Label {
-                            Text(installation.provider.displayName)
-                        } icon: {
-                            HarnessProviderIcon(provider: installation.provider)
-                        }
-                            .tag(installation.provider.rawValue)
-                    }
-                }
-
-                Divider()
-
-                Picker("Model", selection: $selectedModelIdentifier) {
-                    Text("Codex default").tag("")
-                    ForEach(models) { model in
-                        Text(model.displayName).tag(model.id)
-                    }
-                }
-                .disabled(store.runtime.isLoadingCapabilities)
-
-                Picker("Effort", selection: $selectedEffort) {
-                    Text("Model default").tag("")
-                    ForEach(selectedModel?.supportedEfforts ?? []) { effort in
-                        Text(effort.displayName).tag(effort.id)
-                    }
-                }
-                .disabled(selectedModel == nil)
-
-                capabilityDetail
-            }
-            .padding(.top, 4)
-        }
-        .onChange(of: selectedHarnessIdentifier) { _, _ in
-            selectedModelIdentifier = ""
-            selectedEffort = ""
-        }
-        .onChange(of: selectedModelIdentifier) { _, newValue in
-            guard let model = models.first(where: { $0.id == newValue }) else {
-                selectedEffort = ""
-                return
-            }
-            if !model.supportedEfforts.contains(where: { $0.id == selectedEffort }) {
-                selectedEffort = model.defaultEffort
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var capabilityDetail: some View {
-        if let provider = HarnessProvider(rawValue: selectedHarnessIdentifier),
-           let error = store.runtime.capabilityErrors[provider] {
-            Label(error, systemImage: "exclamationmark.triangle.fill")
-                .font(.caption)
-                .foregroundStyle(.orange)
-        }
-    }
-}
-
 private enum BotNameGenerator {
-    private static let names = [
-        "Alba", "Arlo", "Basil", "Cleo", "Cosmo", "Echo",
-        "Juno", "Milo", "Nova", "Orla", "Pip", "Remy",
-        "Sage", "Tali", "Willow", "Ziggy"
+    private static let descriptors = [
+        "Amber", "Bright", "Brisk", "Calm", "Clever", "Copper", "Cozy", "Curious",
+        "Daring", "Dusk", "Ember", "Gentle", "Golden", "Happy", "Indigo", "Jolly",
+        "Keen", "Lucky", "Lunar", "Merry", "Mint", "Misty", "Nimble", "Quiet",
+        "Sage", "Silver", "Sunny", "Swift", "Velvet", "Vivid", "Warm", "Wild"
+    ]
+    private static let companions = [
+        "Badger", "Beacon", "Birch", "Comet", "Corgi", "Finch", "Fox", "Gecko",
+        "Heron", "Juniper", "Kite", "Lark", "Lynx", "Maple", "Marlin", "Moth",
+        "Otter", "Panda", "Pebble", "Pixel", "Quill", "Robin", "Sparrow", "Sprout",
+        "Starling", "Thistle", "Tiger", "Willow", "Wren", "Yak", "Zinnia", "Zuzu"
     ]
 
     static func random() -> String {
-        names.randomElement() ?? "Noodle"
+        guard let descriptor = descriptors.randomElement(),
+              let companion = companions.randomElement() else { return "Noodle" }
+        return "\(descriptor) \(companion)"
     }
 }
 
