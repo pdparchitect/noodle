@@ -49,6 +49,7 @@ struct NewBotSheet: View {
                             TextField("Bot name", text: $name)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(size: 14))
+                                .autocorrectionDisabled(false)
                                 .focused($nameFocused)
                                 .onSubmit {
                                     if canCreate { create() }
@@ -214,6 +215,7 @@ struct EditBotSheet: View {
 
                     TextField("Bot name", text: $name)
                         .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled(false)
                         .focused($nameFocused)
                         .onSubmit { if canSave { save() } }
                 }
@@ -344,6 +346,7 @@ private struct BotBackstoryEditor: View {
 
                 TextEditor(text: $backstory)
                     .font(.system(size: 13))
+                    .autocorrectionDisabled(false)
                     .scrollContentBackground(.hidden)
                     .padding(4)
             }
