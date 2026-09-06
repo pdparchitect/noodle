@@ -319,7 +319,9 @@ private struct BotBackstoryEditor: View {
                         .font(.system(size: 13))
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 9)
-                        .padding(.vertical, 8)
+                        // Match the editor's outer inset; the native text view
+                        // contributes its own horizontal line-fragment padding.
+                        .padding(.vertical, 4)
                         .allowsHitTesting(false)
                 }
 
@@ -328,7 +330,7 @@ private struct BotBackstoryEditor: View {
                     .scrollContentBackground(.hidden)
                     .padding(4)
             }
-            .frame(height: 96)
+            .frame(height: 160)
             .overlay {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .strokeBorder(Color.secondary.opacity(0.18))
