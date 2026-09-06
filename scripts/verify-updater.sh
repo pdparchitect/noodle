@@ -10,6 +10,9 @@ team="$(codesign -dv --verbose=4 "$app" 2>&1 | awk -F= '/^TeamIdentifier=/ { pri
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUVerifyUpdateBeforeExtraction' "$info")" == true ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$info")" == 'https://github.com/pdparchitect/noodle/releases/latest/download/appcast.xml' ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$info")" == '1ZT5NrPiDPaQ54iHGSI1a9JIn6kTrmjQvzZRBA9f/sk=' ]]
+if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == "1" ]]; then
+    [[ "$(/usr/libexec/PlistBuddy -c 'Print :NoodleUpdatesEnabled' "$info")" == true ]]
+fi
 signed="$(codesign -d --entitlements :- "$app" 2>/dev/null | tr -d '[:space:]')"
 print -r -- "$signed" | grep -Fq '<key>com.apple.security.app-sandbox</key><true/>'
 print -r -- "$signed" | grep -Fq '<key>com.apple.security.temporary-exception.mach-lookup.global-name</key><array><string>com.pdparchitect.noodle-spks</string><string>com.pdparchitect.noodle-spki</string></array>'

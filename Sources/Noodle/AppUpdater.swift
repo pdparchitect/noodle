@@ -20,7 +20,8 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
     )
 
     func start() {
-        guard !started else { return }
+        guard !started,
+              Bundle.main.object(forInfoDictionaryKey: "NoodleUpdatesEnabled") as? Bool == true else { return }
         started = true
         let updater = controller.updater
         updater.publisher(for: \.canCheckForUpdates).assign(to: &$canCheckForUpdates)
@@ -30,14 +31,16 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
         controller.startUpdater()
     }
 
-    func checkForUpdates() { controller.checkForUpdates(nil) }
+    func checkForUpdates() {
+        if started { controller.checkForUpdates(nil) }
+    }
 
     func setAutomaticChecks(_ enabled: Bool) {
-        controller.updater.automaticallyChecksForUpdates = enabled
+        if started { controller.updater.automaticallyChecksForUpdates = enabled }
     }
 
     func setAutomaticDownloads(_ enabled: Bool) {
-        controller.updater.automaticallyDownloadsUpdates = enabled
+        if started { controller.updater.automaticallyDownloadsUpdates = enabled }
     }
 
     var canRelaunch: Bool { NoodleStore.active?.canRelaunchForUpdate ?? false }

@@ -82,6 +82,11 @@ cp "$project_root/.build/checkouts/Sparkle/LICENSE" "$contents/Resources/Sparkle
 cp "$project_root/Support/Assets.xcassets/CodexHarness.imageset/codex-harness.svg" "$contents/Resources/CodexHarness.svg"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$contents/Info.plist"
+updates_enabled=false
+if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == "1" ]]; then
+    updates_enabled=true
+fi
+/usr/libexec/PlistBuddy -c "Add :NoodleUpdatesEnabled bool $updates_enabled" "$contents/Info.plist"
 xcrun actool "$asset_catalog" \
     --compile "$contents/Resources" \
     --platform macosx \
