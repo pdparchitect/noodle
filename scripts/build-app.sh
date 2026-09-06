@@ -79,6 +79,7 @@ cp "$project_root/Support/AgentHost-Info.plist" "$agent_host/Contents/Info.plist
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$agent_host/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$agent_host/Contents/Info.plist"
 cp "$project_root/.build/checkouts/Sparkle/LICENSE" "$contents/Resources/Sparkle-LICENSE.txt"
+cp "$project_root/Support/Assets.xcassets/CodexHarness.imageset/codex-harness.svg" "$contents/Resources/CodexHarness.svg"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$contents/Info.plist"
 xcrun actool "$asset_catalog" \

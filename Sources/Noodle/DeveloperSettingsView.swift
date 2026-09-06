@@ -14,13 +14,9 @@ struct DeveloperSettingsView: View {
                 if let result = store.runtime.accessCheckResult {
                     Text(result).font(.caption).textSelection(.enabled)
                 }
-            } header: {
-                Text("Runtime Diagnostics")
             } footer: {
-                Text("This checks helper isolation compatibility only, not bot startup or browser access. It does not enable a bot or send a message.")
+                Text("Checks whether extended access is available.")
             }
-            Text("Development build only. This entire tab is excluded from release builds.")
-                .font(.caption).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
     }

@@ -105,8 +105,6 @@ struct UpdatesSettingsView: View {
                     get: { updater.automaticallyDownloads }, set: updater.setAutomaticDownloads
                 ))
                 .disabled(!updater.allowsAutomaticUpdates)
-            } footer: {
-                Text("Updates come directly from GitHub and are verified before installation. Noodle waits for agents to finish and for unsent messages and open editors before restarting.")
             }
             if updater.isWaitingToRelaunch {
                 Label("Update ready. Waiting for agents or unsaved changes…", systemImage: "clock")

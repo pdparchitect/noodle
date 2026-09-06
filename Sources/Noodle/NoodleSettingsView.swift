@@ -25,7 +25,7 @@ struct NoodleSettingsView: View {
             HeartbeatsSettingsView()
                 .settingsContentSize()
                 .tabItem {
-                    Label("Heartbeats", systemImage: "waveform.path.ecg")
+                    Label("Heartbeat", systemImage: "waveform.path.ecg")
                 }
                 .tag(NoodleSettingsTab.heartbeats)
             AgentAccessSettingsView()
@@ -83,7 +83,7 @@ private struct HeartbeatsSettingsView: View {
                 }
                 .disabled(!store.runtime.heartbeatConfiguration.isEnabled)
             } footer: {
-                Text("Each bot has its own timer. Incoming messages, replies, reactions, and agent work reset it. Heartbeats wait until the agent is idle and only run while Noodle is open. Changing these settings starts a fresh interval.")
+                Text("Activity resets each bot’s timer.")
             }
             if !store.agents.isEmpty {
                 Section("Bots") {
@@ -96,9 +96,6 @@ private struct HeartbeatsSettingsView: View {
                 }
                 .disabled(!store.runtime.heartbeatConfiguration.isEnabled)
             }
-            Text("A heartbeat starts an agent turn and may use tokens. Agents should stay quiet unless they have useful work or an update.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
     }
@@ -116,7 +113,7 @@ private struct HarnessesSettingsView: View {
     var body: some View {
         VStack(spacing: 0) {
             Form {
-                Section("Supported Harnesses") {
+                Section {
                     ForEach(store.runtime.installations) { installation in
                         HarnessInstallationRow(installation: installation, setup: setup) {
                             Task {
@@ -227,7 +224,7 @@ private struct HarnessInstallationRow: View {
                         }
                         Button("Open Sign-In Page") { openURL(challenge.url) }
                     }
-                    Text("Enter this code on the sign-in page. Device-code login must be enabled in your ChatGPT account or workspace settings.")
+                    Text("Enter this code on the sign-in page.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else if setup.activity[id] == nil {
                     if !installation.isAvailable {

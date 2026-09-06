@@ -72,7 +72,7 @@ struct NoodleApp: App {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var attachmentPasteMonitor: Any?
     private let services = NoodleServices()
 
@@ -82,6 +82,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSUpdateDynamicServices()
         NoodleNotifications.configure(delegate: self)
         AppUpdater.shared.start()
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
+            self.configureAppMenu()
+        }
         attachmentPasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
             guard event.charactersIgnoringModifiers?.lowercased() == "v",
@@ -93,6 +96,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return nil
         }
+    }
+
+    func applicationDidUpdate(_ notification: Notification) {
+        configureAppMenu()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -121,6 +128,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             sender.windows.first?.makeKeyAndOrderFront(nil)
         }
         return true
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === NSApp.mainMenu?.items.first?.submenu else { return }
+        placeUpdateCommandBelowSettings()
+    }
+
+    private func configureAppMenu() {
+        guard let appMenu = NSApp.mainMenu?.items.first?.submenu else { return }
+        appMenu.delegate = self
+        placeUpdateCommandBelowSettings()
+    }
+
+    private func placeUpdateCommandBelowSettings() {
+        guard let appMenu = NSApp.mainMenu?.items.first?.submenu,
+              let updateItem = appMenu.items.first(where: { $0.title == "Check for Updates…" }),
+              let updateIndex = appMenu.items.firstIndex(of: updateItem),
+              let settingsIndex = appMenu.items.firstIndex(where: { $0.title == "Settings…" }) else { return }
+        guard updateIndex != settingsIndex + 1 else { return }
+        appMenu.removeItem(updateItem)
+        guard let updatedSettingsIndex = appMenu.items.firstIndex(where: { $0.title == "Settings…" }) else { return }
+        appMenu.insertItem(updateItem, at: updatedSettingsIndex + 1)
     }
 }
 

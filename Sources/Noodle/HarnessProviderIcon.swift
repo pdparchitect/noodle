@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import NoodleCore
 
@@ -8,10 +9,19 @@ struct HarnessProviderIcon: View {
     var body: some View {
         switch provider {
         case .codex:
-            Image("CodexHarness")
+            codexImage
                 .resizable()
                 .renderingMode(.template)
                 .scaledToFit()
         }
+    }
+
+    private var codexImage: Image {
+        guard let url = Bundle.main.url(forResource: "CodexHarness", withExtension: "svg"),
+              let image = NSImage(contentsOf: url) else {
+            return Image(systemName: "apple.terminal")
+        }
+        image.isTemplate = true
+        return Image(nsImage: image)
     }
 }
