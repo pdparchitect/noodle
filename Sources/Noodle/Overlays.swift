@@ -65,15 +65,8 @@ struct NewBotSheet: View {
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .background(PointingHandCursorView())
                             .padding(.trailing, 4)
-                            .onContinuousHover { phase in
-                                switch phase {
-                                case .active:
-                                    NSCursor.pointingHand.set()
-                                case .ended:
-                                    NSCursor.arrow.set()
-                                }
-                            }
                             .help("Try Another Name")
                             .accessibilityLabel("Generate Another Name")
                         }
@@ -697,6 +690,27 @@ private enum BotNameGenerator {
         }
 
         return "Noodle"
+    }
+}
+
+private struct PointingHandCursorView: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        PointingHandCursorNSView()
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        nsView.window?.invalidateCursorRects(for: nsView)
+    }
+}
+
+private final class PointingHandCursorNSView: NSView {
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
     }
 }
 
