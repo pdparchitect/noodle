@@ -449,7 +449,6 @@ private struct BotIconEditor: View {
 
                     if #available(macOS 15.1, *) {
                         BotIconImagePlaygroundButton(
-                            name: name,
                             sourceImageData: editedImageData
                         ) { url in
                             Task { await loadImage(at: url, requiresSecurityScope: false) }
@@ -654,30 +653,41 @@ private struct BotIconImagePlaygroundButton: View {
     @Environment(\.supportsImagePlayground) private var supportsImagePlayground
     @State private var isPresented = false
 
-    let name: String
     let sourceImageData: Data?
     let onCompletion: (URL) -> Void
 
     var body: some View {
         if supportsImagePlayground {
-            Button("Create Image…", systemImage: "apple.intelligence") {
-                isPresented = true
-            }
-            .imagePlaygroundSheet(
-                isPresented: $isPresented,
-                concept: imageConcept,
-                sourceImage: sourceImage,
-                onCompletion: onCompletion
-            )
+            configuredButton
         }
     }
 
-    private var imageConcept: String {
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedName.isEmpty {
-            return "A distinctive, friendly avatar for an AI assistant"
+    @ViewBuilder
+    private var configuredButton: some View {
+        if #available(macOS 26.4, *) {
+            imagePlaygroundButton.imagePlaygroundOptions(imagePlaygroundOptions)
+        } else {
+            imagePlaygroundButton
         }
-        return "A distinctive, friendly avatar for \(trimmedName), an AI assistant"
+    }
+
+    private var imagePlaygroundButton: some View {
+        Button("Create Image…", systemImage: "apple.intelligence") {
+            isPresented = true
+        }
+        .imagePlaygroundSheet(
+            isPresented: $isPresented,
+            concept: "A friendly helper character with a simple background",
+            sourceImage: sourceImage,
+            onCompletion: onCompletion
+        )
+    }
+
+    @available(macOS 26.4, *)
+    private var imagePlaygroundOptions: ImagePlaygroundOptions {
+        var options = ImagePlaygroundOptions()
+        options.personalization = .disabled
+        return options
     }
 
     private var sourceImage: Image? {
