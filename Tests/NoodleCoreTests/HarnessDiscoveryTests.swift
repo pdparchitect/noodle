@@ -24,7 +24,8 @@ final class HarnessDiscoveryTests: XCTestCase {
         let result = HarnessDiscovery(
             homeDirectory: root,
             applicationsDirectory: applications,
-            executableSearchDirectories: []
+            executableSearchDirectories: [],
+            environment: [:]
         ).discover(.codex)
 
         XCTAssertTrue(result.isAvailable)
@@ -42,12 +43,52 @@ final class HarnessDiscoveryTests: XCTestCase {
         let result = HarnessDiscovery(
             homeDirectory: root,
             applicationsDirectory: applications,
-            executableSearchDirectories: []
+            executableSearchDirectories: [],
+            environment: [:]
         ).discover(.codex)
 
         XCTAssertFalse(result.isAvailable)
         XCTAssertNil(result.executablePath)
         XCTAssertEqual(result.detail, "Not installed")
+    }
+
+    func testNoHarnessOverrideIsDebugOnlyAndSurvivesRefresh() throws {
+        let executable = root.appendingPathComponent("codex")
+        XCTAssertTrue(FileManager.default.createFile(atPath: executable.path, contents: Data()))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        let discovery = HarnessDiscovery(
+            homeDirectory: root,
+            applicationsDirectory: root,
+            executableSearchDirectories: [root],
+            environment: ["NOODLE_SIMULATE_NO_HARNESSES": "1"]
+        )
+        for _ in 0..<3 {
+            #if DEBUG
+            XCTAssertFalse(discovery.discover(.codex).isAvailable)
+            XCTAssertTrue(discovery.discover().allSatisfy { !$0.isAvailable })
+            #else
+            XCTAssertEqual(discovery.discover(.codex).executablePath, executable.path)
+            XCTAssertTrue(discovery.discover().contains { $0.isAvailable })
+            #endif
+        }
+        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: executable.path))
+    }
+
+    func testNoHarnessOverrideRequiresExplicitOne() throws {
+        let executable = root.appendingPathComponent("codex")
+        XCTAssertTrue(FileManager.default.createFile(atPath: executable.path, contents: Data()))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        for environment in [[:], ["NOODLE_SIMULATE_NO_HARNESSES": "0"],
+                            ["NOODLE_SIMULATE_NO_HARNESSES": "true"],
+                            ["NOODLE_SIMULATE_NO_HARNESSES": ""]] {
+            let discovery = HarnessDiscovery(
+                homeDirectory: root,
+                applicationsDirectory: root,
+                executableSearchDirectories: [root],
+                environment: environment
+            )
+            XCTAssertEqual(discovery.discover(.codex).executablePath, executable.path)
+        }
     }
 
     func testHarnessModelCarriesItsOwnEffortChoices() {

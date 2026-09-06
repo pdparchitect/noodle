@@ -29,10 +29,17 @@ NOODLE_BUILD_CONFIGURATION=debug scripts/build-app.sh
 
 The Dev tab contains **Test Extended Runtime**, a fixed isolation-compatibility probe. It does not start a bot or prove browser access. See [Security and agent access](security.md) for the helper boundary and verification checks.
 
+To test the normal app with no detected harnesses, quit Noodle and launch a debug build with:
+
+```sh
+NOODLE_SIMULATE_NO_HARNESSES=1 .build/Noodle.app/Contents/MacOS/Noodle
+```
+
+This only overrides harness detection, including subsequent refreshes. It adds no UI and does not remove installed binaries, credentials, bots, or conversations. Relaunch without the variable to restore normal detection. The override is compiled out of release builds; they ignore the variable.
+
 For distribution builds and GitHub Actions configuration, see [Releases and updates](releases.md).
 
 
 ---
 
 [Documentation](README.md) · [Noodle](../README.md)
-

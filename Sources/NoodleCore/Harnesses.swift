@@ -77,12 +77,19 @@ public struct HarnessModel: Identifiable, Codable, Hashable, Sendable {
 public struct HarnessDiscovery: Sendable {
     private let applicationsDirectory: URL
     private let executableSearchDirectories: [URL]
+    #if DEBUG
+    private let simulateNoHarnesses: Bool
+    #endif
 
     public init(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         applicationsDirectory: URL = URL(fileURLWithPath: "/Applications", isDirectory: true),
-        executableSearchDirectories: [URL]? = nil
+        executableSearchDirectories: [URL]? = nil,
+        environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
+        #if DEBUG
+        simulateNoHarnesses = environment["NOODLE_SIMULATE_NO_HARNESSES"] == "1"
+        #endif
         self.applicationsDirectory = applicationsDirectory.standardizedFileURL
         self.executableSearchDirectories = executableSearchDirectories ?? [
             homeDirectory.appendingPathComponent(".local/bin", isDirectory: true),
@@ -96,6 +103,12 @@ public struct HarnessDiscovery: Sendable {
     }
 
     public func discover(_ provider: HarnessProvider) -> HarnessInstallation {
+        #if DEBUG
+        // Keep the override at discovery so startup, Settings, and refresh agree.
+        if simulateNoHarnesses {
+            return HarnessInstallation(provider: provider, executablePath: nil)
+        }
+        #endif
         let executable = executableCandidates(for: provider).first(where: isExecutable)
         return HarnessInstallation(provider: provider, executablePath: executable?.path)
     }
