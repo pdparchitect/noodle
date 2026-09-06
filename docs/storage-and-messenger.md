@@ -54,10 +54,11 @@ From inside a bot workspace:
 
 The command can infer the bot UUID and Noodle repository root from its symlink location or from the private runtime environment. Results are JSON so harnesses can consume them without provider-specific parsing. Every delivered attachment includes its absolute copied-file path so a harness can open it directly. A bot sends files with a repeatable `--attach <file-path>` option; relative paths resolve from its workspace, and Noodle copies each file into conversation-owned storage before linking it to the reply. Reply text is optional when at least one attachment is supplied. Codex runs this CLI through its programmatic command bridge; it does not receive private Noodle messaging tools.
 
+Agents can also trigger temporary [chat effects](chat-effects.md), starting with `--effect confetti --conversation <uuid>`. Use `--list-effects` to discover supported effects.
+
 See [Architecture](architecture.md) for the process and data flow.
 
 
 ---
 
 [Documentation](README.md) · [Noodle](../README.md)
-

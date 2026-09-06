@@ -29,6 +29,14 @@ public enum MessengerCLI {
             let repository = WorkspaceRepository(rootURL: invocation.repositoryRoot)
 
             switch invocation.action {
+            case .listEffects:
+                return .json(ConversationEffectKind.allCases.map(\.rawValue))
+
+            case .effect(let conversationID, let kind, let requestID):
+                let event = try repository.sendEffect(agentID: invocation.agentID,
+                    conversationID: conversationID, kind: kind, requestID: requestID)
+                return .json(MessengerEffectReceipt(effect: event))
+
             case .getLatest(let consumes, let includesInlineImages):
                 let deliveries = try repository.latestMessages(
                     for: invocation.agentID,
@@ -107,6 +115,8 @@ public enum MessengerCLI {
     }
 
     private enum Action {
+        case listEffects
+        case effect(conversationID: UUID, kind: String, requestID: UUID)
         case getLatest(consumes: Bool, includesInlineImages: Bool)
         case listConversations
         case listMessages(conversationID: UUID)
@@ -145,6 +155,24 @@ public enum MessengerCLI {
 
             if values.contains("--help") || values.contains("-h") || values.isEmpty {
                 action = .help
+            } else if values.contains("--effect") {
+                let options = try Self.effectOptions(values)
+                guard let rawConversation = options["--conversation"],
+                      let conversationID = UUID(uuidString: rawConversation),
+                      let kind = options["--effect"] else { throw MessengerCLIError.invalidArguments }
+                let requestID: UUID
+                if let rawID = options["--request-id"] {
+                    guard let id = UUID(uuidString: rawID) else { throw MessengerCLIError.invalidArguments }
+                    requestID = id
+                } else { requestID = UUID() }
+                action = .effect(conversationID: conversationID, kind: kind, requestID: requestID)
+            } else if values.contains("--list-effects") {
+                var rest = values
+                rest.removeAll { $0 == "--list-effects" }
+                guard rest.isEmpty || (rest.count == 2 && rest[0] == "--agent-directory") else {
+                    throw MessengerCLIError.invalidArguments
+                }
+                action = .listEffects
             } else if values.contains("--get-latest") {
                 action = .getLatest(
                     consumes: !values.contains("--peek"),
@@ -216,6 +244,21 @@ public enum MessengerCLI {
                 .deletingLastPathComponent() // opaque agent workspace
         }
 
+        private static func effectOptions(_ arguments: [String]) throws -> [String: String] {
+            let allowed: Set<String> = ["--effect", "--conversation", "--request-id", "--agent-directory"]
+            guard arguments.count.isMultiple(of: 2) else { throw MessengerCLIError.invalidArguments }
+            var options: [String: String] = [:]
+            for index in stride(from: 0, to: arguments.count, by: 2) {
+                let key = arguments[index]
+                let value = arguments[index + 1]
+                guard allowed.contains(key), options[key] == nil, !value.hasPrefix("--") else {
+                    throw MessengerCLIError.invalidArguments
+                }
+                options[key] = value
+            }
+            return options
+        }
+
         private static func option(_ name: String, in arguments: [String]) -> String? {
             guard let index = arguments.firstIndex(of: name), arguments.indices.contains(index + 1) else {
                 return nil
@@ -255,6 +298,8 @@ public enum MessengerCLI {
     private static let help = """
     Noodle Messenger
 
+      messenger --list-effects
+      messenger --effect <kind> --conversation <uuid> [--request-id <uuid>]
       messenger --get-latest [--peek] [--inline-images]
       messenger --list-conversations
       messenger --list-messages --conversation <uuid>
@@ -270,7 +315,22 @@ public enum MessengerCLI {
     Reactions are per bot; adding twice is safe. --unreact removes only your reaction.
     --get-latest includes reactionChange events on previously read messages.
     --list-messages includes your own messages and current reactions without consuming the inbox.
+    --effect queues a temporary visual effect in a chat you participate in (currently: confetti).
+    Effects play once in the visible foreground chat, expire after 30 seconds, and respect Reduce Motion.
+    A receipt confirms queuing, not display. Effects do not send messages or wake other agents.
+    Use the same --request-id when retrying; recent IDs are retained for up to five minutes (32 events).
+    Send at most one effect per conversation every two seconds. --list-effects returns supported kind names.
     """
+}
+
+private struct MessengerEffectReceipt: Encodable {
+    let effect: ConversationEffect
+    let status: String
+
+    init(effect: ConversationEffect) {
+        self.effect = effect
+        status = effect.consumedAt != nil ? "consumed" : (effect.expiresAt <= Date() ? "expired" : "queued")
+    }
 }
 
 private enum MessengerCLIError: LocalizedError {
