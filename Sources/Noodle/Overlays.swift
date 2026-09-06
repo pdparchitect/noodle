@@ -66,6 +66,13 @@ struct NewBotSheet: View {
                             }
                             .buttonStyle(.plain)
                             .padding(.trailing, 4)
+                            .onHover { isHovering in
+                                if isHovering {
+                                    NSCursor.pointingHand.push()
+                                } else {
+                                    NSCursor.pop()
+                                }
+                            }
                             .help("Try Another Name")
                             .accessibilityLabel("Generate Another Name")
                         }

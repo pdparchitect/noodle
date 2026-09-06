@@ -92,8 +92,6 @@ private struct HeartbeatsSettingsView: View {
                 }
                 .pickerStyle(.menu)
                 .disabled(!store.runtime.heartbeatConfiguration.isEnabled)
-            } footer: {
-                Text("Activity resets each bot’s timer.")
             }
             if !store.agents.isEmpty {
                 Section("Bots") {
