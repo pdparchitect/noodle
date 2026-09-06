@@ -517,12 +517,11 @@ public struct WorkspaceRepository: Sendable {
             let reactionSequence = messages.flatMap { $0.reactionChanges ?? [] }.map(\.sequence).max() ?? 0
             let conversationKey = conversation.id.uuidString.lowercased()
             for agentID in addedIDs {
-                let inboxFile = directory(forAgentID: agentID).appendingPathComponent(".agents/inbox.json")
-                var inbox = (try? read(AgentInbox.self, from: inboxFile)) ?? AgentInbox()
+                var inbox = try loadInbox(for: agentID)
                 inbox.conversationOffsets[conversationKey] = messageCount
                 if inbox.reactionOffsets == nil { inbox.reactionOffsets = [:] }
                 inbox.reactionOffsets?[conversationKey] = reactionSequence
-                try write(inbox, to: inboxFile)
+                try saveInbox(inbox, for: agentID)
             }
         }
 
@@ -753,6 +752,32 @@ public struct WorkspaceRepository: Sendable {
         }
     }
 
+    private func inboxURL(for agentID: UUID) -> URL {
+        // Mutable messaging state is not skill/configuration data. Codex keeps
+        // .agents read-only even within a writable workspace.
+        directory(forAgentID: agentID).appendingPathComponent(".superbot/inbox.json")
+    }
+
+    private func loadInbox(for agentID: UUID) throws -> AgentInbox {
+        let current = inboxURL(for: agentID)
+        if FileManager.default.fileExists(atPath: current.path) {
+            return try read(AgentInbox.self, from: current)
+        }
+        // Lazy migration: preserve the old cursor (including reaction offsets),
+        // leave its file untouched, and write the new location only on consume.
+        let legacy = directory(forAgentID: agentID).appendingPathComponent(".agents/inbox.json")
+        if FileManager.default.fileExists(atPath: legacy.path) {
+            return try read(AgentInbox.self, from: legacy)
+        }
+        return AgentInbox()
+    }
+
+    private func saveInbox(_ inbox: AgentInbox, for agentID: UUID) throws {
+        let file = inboxURL(for: agentID)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try write(inbox, to: file)
+    }
+
     public func latestMessages(
         for agentID: UUID,
         consuming: Bool = true,
@@ -769,8 +794,7 @@ public struct WorkspaceRepository: Sendable {
             $0.participantIDs.contains(agentID) && (conversationID == nil || $0.id == conversationID)
         }
         if let conversationID, conversations.isEmpty { throw WorkspaceError.missingConversation(conversationID) }
-        let inboxFile = directory(forAgentID: agentID).appendingPathComponent(".agents/inbox.json")
-        var inbox = (try? read(AgentInbox.self, from: inboxFile)) ?? AgentInbox()
+        var inbox = try loadInbox(for: agentID)
         var deliveries: [MessengerDelivery] = []
 
         func identity(for author: MessageAuthor) -> MessengerIdentity {
@@ -848,7 +872,7 @@ public struct WorkspaceRepository: Sendable {
             }
         }
 
-        if consuming && !includingRead { try write(inbox, to: inboxFile) }
+        if consuming && !includingRead { try saveInbox(inbox, for: agentID) }
         return deliveries.sorted {
             ($0.reactionChange?.createdAt ?? $0.message.createdAt) < ($1.reactionChange?.createdAt ?? $1.message.createdAt)
         }

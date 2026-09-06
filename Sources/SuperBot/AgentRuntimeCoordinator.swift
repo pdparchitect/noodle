@@ -294,6 +294,15 @@ final class AgentRuntimeCoordinator {
             )
             processes[agent.id] = process
             process.start()
+            // Recover notifications lost during an app restart or failed launch.
+            // Peek off the main thread; only Messenger may consume the inbox.
+            Task { [weak self, weak process] in
+                let hasUnread = await Task.detached {
+                    (try? repository.latestMessages(for: agent.id, consuming: false).isEmpty == false) ?? false
+                }.value
+                guard let self, let process, self.processes[agent.id] === process else { return }
+                if hasUnread { process.notify() }
+            }
         }
     }
 
@@ -822,7 +831,7 @@ private final class CodexAgentProcess {
     private var accessInstructions: String {
         let mode = extendedAccess
             ? "This bot has user-enabled extended access. Codex still enforces command permissions; request additional access through its approval tools when required. An outstanding approval must wait for the user, including during a heartbeat. Never change your own access mode or approve your own requests."
-            : "This bot is in restricted mode inside SuperBot's macOS App Sandbox. Browser/computer-control runtimes may be unavailable. Do not try to bypass the app sandbox; explain the limitation and direct the user to Settings → Agent Access if the task requires extended access."
+            : "This bot is in restricted mode inside SuperBot's macOS App Sandbox. Browser/computer-control runtimes may be unavailable. Do not try to bypass the app sandbox; explain the limitation and direct the user to Settings → Security if the task requires extended access."
         return mode + " Do not promise browser or connected-tool access merely because a tool is listed. Verify the relevant capability with a safe check before claiming it works; report the actual failure when it does not."
     }
 

@@ -346,6 +346,44 @@ final class RepositoryTests: XCTestCase {
         }
     }
 
+    func testSingleBotGroupSupportsMessagingAndRejectsEmptyMembership() throws {
+        let bot = try repository.createAgent(named: "Solo")
+        let group = try repository.createGroup(named: "Solo workspace", participantIDs: [bot.agent.id, bot.agent.id], existingAgents: [bot.agent])
+        XCTAssertEqual(group.kind, .group)
+        XCTAssertEqual(group.participantIDs, [bot.agent.id])
+        let message = try repository.sendUserMessage(conversationID: group.id, body: "Start here")
+        let peek = try repository.latestMessages(for: bot.agent.id, consuming: false)
+        XCTAssertEqual(peek.map(\.message.id), [message.id])
+        XCTAssertEqual(try repository.latestMessages(for: bot.agent.id).map(\.message.id), [message.id])
+        XCTAssertTrue(try repository.latestMessages(for: bot.agent.id, consuming: false).isEmpty)
+        XCTAssertThrowsError(try repository.createGroup(named: "Empty", participantIDs: [], existingAgents: [bot.agent])) {
+            XCTAssertEqual($0 as? WorkspaceError, .insufficientGroupParticipants)
+        }
+        XCTAssertThrowsError(try repository.createGroup(named: "Unknown", participantIDs: [UUID()], existingAgents: [bot.agent]))
+    }
+
+    func testInboxMigrationPreservesMessageAndReactionCursorsWithoutWritingSkills() throws {
+        let bot = try repository.createAgent(named: "Migrating bot")
+        let group = try repository.createGroup(named: "Solo", participantIDs: [bot.agent.id], existingAgents: [bot.agent])
+        let old = try repository.sendUserMessage(conversationID: group.id, body: "Already read")
+        try repository.setReaction(conversationID: group.id, messageID: old.id, author: .user, emoji: "👍", present: true)
+        _ = try repository.latestMessages(for: bot.agent.id)
+        let directory = repository.directory(for: bot.agent)
+        let current = directory.appendingPathComponent(".superbot/inbox.json")
+        let legacy = directory.appendingPathComponent(".agents/inbox.json")
+        try FileManager.default.moveItem(at: current, to: legacy)
+        let legacyBytes = try Data(contentsOf: legacy)
+        let fresh = try repository.sendUserMessage(conversationID: group.id, body: "Unread")
+        let peek = try repository.latestMessages(for: bot.agent.id, consuming: false)
+        XCTAssertEqual(peek.map(\.message.id), [fresh.id])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: current.path))
+        XCTAssertEqual(try repository.latestMessages(for: bot.agent.id).map(\.message.id), [fresh.id])
+        XCTAssertEqual(try Data(contentsOf: legacy), legacyBytes)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: current.path))
+        // New state takes precedence over the retained legacy snapshot.
+        XCTAssertTrue(try repository.latestMessages(for: bot.agent.id).isEmpty)
+    }
+
     func testDeleteGroupRemovesTranscriptAndAttachmentsWithoutDeletingBots() throws {
         let first = try repository.createAgent(named: "Research Bot")
         let second = try repository.createAgent(named: "Build Bot")
