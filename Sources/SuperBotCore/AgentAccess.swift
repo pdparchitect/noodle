@@ -58,10 +58,25 @@ public struct AgentApprovalRequest: Identifiable {
 
     public var questions: [[String: Any]] { params["questions"] as? [[String: Any]] ?? [] }
     public var isQuestion: Bool { method == "item/tool/requestUserInput" }
+    public var isToolConfirmation: Bool {
+        guard method == "mcpServer/elicitation/request",
+              params["mode"] as? String == "form",
+              let message = params["message"] as? String, !message.isEmpty,
+              let schema = params["requestedSchema"] as? [String: Any],
+              schema["type"] as? String == "object",
+              let properties = schema["properties"] as? [String: Any], properties.isEmpty else { return false }
+        // Only a plain yes/no form can be represented without user-entered data.
+        // Reject constraints/extensions we do not render or understand.
+        guard Set(schema.keys).isSubset(of: ["type", "properties", "required", "$schema"]) else { return false }
+        if let required = schema["required"], !(required is NSNull) {
+            guard let fields = required as? [String], fields.isEmpty else { return false }
+        }
+        return true
+    }
     public var detail: String {
         // Keep complete security-relevant details visible, including exact paths,
         // destinations and stdin. Do not trust a model's reason as the full scope.
-        let keys = ["reason", "command", "kind", "stdin", "cwd", "grantRoot", "changes", "additionalPermissions", "permissions", "networkApprovalContext", "commandActions", "message", "serverName", "url", "requestedSchema"]
+        let keys = ["reason", "command", "kind", "stdin", "cwd", "grantRoot", "changes", "additionalPermissions", "permissions", "networkApprovalContext", "commandActions", "message", "serverName", "mode", "url", "requestedSchema"]
         return keys.compactMap { key in
             guard let value = params[key], !(value is NSNull) else { return nil }
             if let string = value as? String { return "\(key): \(string)" }
@@ -76,6 +91,7 @@ public struct AgentApprovalRequest: Identifiable {
             guard let choices = params["availableDecisions"] as? [Any] else { return true }
             return choices.contains { ($0 as? String) == "accept" }
         case "item/fileChange/requestApproval", "item/permissions/requestApproval": return true
+        case "mcpServer/elicitation/request": return isToolConfirmation
         // URL/form elicitation may involve login, secrets, or a complex schema.
         // Do not manufacture consent/content for requests we cannot faithfully render.
         default: return false
@@ -92,7 +108,10 @@ public struct AgentApprovalRequest: Identifiable {
         case "item/tool/requestUserInput":
             let validIDs = Set(questions.compactMap { $0["id"] as? String })
             result = ["answers": allow ? answers.filter { validIDs.contains($0.key) }.mapValues { ["answers": [$0]] } : [:]]
-        case "mcpServer/elicitation/request": result = ["action": "decline", "content": NSNull()]
+        case "mcpServer/elicitation/request":
+            result = allow && isToolConfirmation
+                ? ["action": "accept", "content": [String: Any]()]
+                : ["action": "decline", "content": NSNull()]
         default:
             return ["id": requestID.json, "error": ["code": -32601, "message": "SuperBot does not support this request; no permission was granted."]]
         }

@@ -105,6 +105,8 @@ Settings are ordered **Harnesses → Heartbeats → Security → Updates → Dev
 
 Messenger stores mutable inbox cursors in the bot's `.superbot/inbox.json`, inside its already-writable workspace. Older `.agents/inbox.json` cursors are read as a migration fallback and left untouched; subsequent consumption writes the new location. This keeps Codex's protected skills directory read-only without requiring elevated access just to read messages.
 
+Plain MCP confirmation forms with no input fields (such as a browser destination prompt) show **Allow** and **Decline**. The app sends acceptance only after the user's click, with an empty response object; it does not fabricate field values or claim the tool's grant lasts only one command. URL/sign-in flows, forms requesting data, and unknown schema constraints remain unsupported and cannot be accepted.
+
 Groups can contain **one or more bots**. New Group and Group Info share an **Add Bots** search picker and a grid of selected avatars with individual remove controls. Saving an empty group is not allowed; removing a member does not delete the bot or conversation history.
 
 ## Build, launch, and test

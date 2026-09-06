@@ -81,6 +81,34 @@ final class AgentAccessTests: XCTestCase {
         XCTAssertEqual((request.response(allow: true)["result"] as? [String: Any])?["action"] as? String, "decline")
     }
 
+    func testEmptyToolConfirmationRequiresExplicitAllowAndReturnsEmptyContent() throws {
+        let request = approval("mcpServer/elicitation/request", params: [
+            "mode": "form", "message": "Allow Browser use to access https://www.google.com?",
+            "serverName": "cua_repl", "requestedSchema": ["type": "object", "properties": [String: Any]()]
+        ])
+        XCTAssertTrue(request.canAllow)
+        let declined = request.response(allow: false)["result"] as! [String: Any]
+        XCTAssertEqual(declined["action"] as? String, "decline")
+        let accepted = request.response(allow: true)["result"] as! [String: Any]
+        XCTAssertEqual(accepted["action"] as? String, "accept")
+        XCTAssertTrue(try XCTUnwrap(accepted["content"] as? [String: Any]).isEmpty)
+        XCTAssertTrue(request.detail.contains("https://www.google.com"))
+    }
+
+    func testToolFormsWithDataOrUnknownConstraintsRemainBlocked() {
+        let schemas: [[String: Any]] = [
+            ["type": "object", "properties": ["password": ["type": "string"]]],
+            ["type": "object", "properties": [:], "required": ["secret"]],
+            ["type": "object", "properties": [:], "minProperties": 1],
+            ["type": "object", "properties": [:], "required": "malformed"]
+        ]
+        for schema in schemas {
+            let request = approval("mcpServer/elicitation/request", params: ["mode": "form", "message": "Confirm", "requestedSchema": schema])
+            XCTAssertFalse(request.canAllow)
+            XCTAssertEqual((request.response(allow: true)["result"] as? [String: Any])?["action"] as? String, "decline")
+        }
+    }
+
     func testUnknownRequestFailsClosed() {
         let request = approval("future/permission/request", params: [:])
         XCTAssertFalse(request.canAllow)

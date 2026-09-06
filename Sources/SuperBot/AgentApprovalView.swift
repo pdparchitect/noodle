@@ -57,7 +57,7 @@ struct AgentApprovalView: View {
                     Button("Send Response") { store.runtime.resolveApproval(request, allow: true, answers: answers) }
                         .disabled(request.questions.contains { (answers[$0["id"] as? String ?? ""] ?? "").isEmpty })
                 } else if request.canAllow {
-                    Button(request.method == "item/permissions/requestApproval" ? "Allow for This Turn" : "Allow Once") {
+                    Button(request.isToolConfirmation ? "Allow" : (request.method == "item/permissions/requestApproval" ? "Allow for This Turn" : "Allow Once")) {
                         store.runtime.resolveApproval(request, allow: true)
                     }
                 }
