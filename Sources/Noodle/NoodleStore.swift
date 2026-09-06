@@ -30,6 +30,7 @@ final class NoodleStore {
     var searchText = ""
     var draft = ""
     var creationSheet: CreationSheet?
+    var selectedSettingsTab: NoodleSettingsTab = .harnesses
     var agentBeingEdited: AgentRecord?
     var groupBeingEdited: BotConversation?
     var backgroundBeingEdited: BotConversation?

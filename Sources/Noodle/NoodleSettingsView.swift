@@ -1,24 +1,40 @@
 import SwiftUI
 import NoodleCore
 
+enum NoodleSettingsTab: Hashable {
+    case harnesses, heartbeats, security, updates
+    #if DEBUG
+    case developer
+    #endif
+}
+
 struct NoodleSettingsView: View {
+    @Environment(NoodleStore.self) private var store
+
     var body: some View {
-        TabView {
+        @Bindable var store = store
+
+        TabView(selection: $store.selectedSettingsTab) {
             HarnessesSettingsView()
                 .tabItem {
                     Label("Harnesses", systemImage: "terminal")
                 }
+                .tag(NoodleSettingsTab.harnesses)
             HeartbeatsSettingsView()
                 .tabItem {
                     Label("Heartbeats", systemImage: "waveform.path.ecg")
                 }
+                .tag(NoodleSettingsTab.heartbeats)
             AgentAccessSettingsView()
                 .tabItem { Label("Security", systemImage: "lock.shield") }
+                .tag(NoodleSettingsTab.security)
             UpdatesSettingsView()
                 .tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }
+                .tag(NoodleSettingsTab.updates)
             #if DEBUG
             DeveloperSettingsView()
                 .tabItem { Label("Dev", systemImage: "hammer") }
+                .tag(NoodleSettingsTab.developer)
             #endif
         }
         .frame(width: 580, height: 380)
