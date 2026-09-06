@@ -37,6 +37,10 @@ struct ChatView: View {
                 .padding(.bottom, 11)
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.28))
+        .overlay {
+            ConversationEffectsView(conversationID: conversation.id)
+                .id(conversation.id)
+        }
         .fileImporter(
             isPresented: $choosingAttachments,
             allowedContentTypes: [.data],
