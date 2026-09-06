@@ -1,7 +1,9 @@
 import AppKit
 import ImageIO
+import ImagePlayground
 import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 import NoodleCore
 
 struct NewBotSheet: View {
@@ -371,6 +373,8 @@ private struct BotIconEditor: View {
     @State private var editedColorIndex: Int
     @State private var editedImageData: Data?
     @State private var photoSelection: PhotosPickerItem?
+    @State private var choosingFile = false
+    @State private var choosingPhoto = false
     @State private var isLoadingPhoto = false
     @State private var photoError: String?
 
@@ -431,10 +435,26 @@ private struct BotIconEditor: View {
                     .padding(.top, 4)
 
                 HStack(spacing: 10) {
-                    PhotosPicker(selection: $photoSelection, matching: .images) {
-                        Label("Choose Photo…", systemImage: "photo.on.rectangle")
+                    Menu {
+                        Button("Choose File…", systemImage: "folder") {
+                            choosingFile = true
+                        }
+                        Button("Photos Library…", systemImage: "photo.on.rectangle") {
+                            photoSelection = nil
+                            choosingPhoto = true
+                        }
+                    } label: {
+                        Label("Choose Image…", systemImage: "photo")
                     }
-                    .buttonStyle(.bordered)
+
+                    if #available(macOS 15.1, *) {
+                        BotIconImagePlaygroundButton(
+                            name: name,
+                            sourceImageData: editedImageData
+                        ) { url in
+                            Task { await loadImage(at: url, requiresSecurityScope: false) }
+                        }
+                    }
 
                     if editedImageData != nil {
                         Button("Use Generated Icon") {
@@ -517,9 +537,49 @@ private struct BotIconEditor: View {
             .padding(20)
         }
         .frame(width: 440, height: 520)
+        .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image]) { result in
+            switch result {
+            case .success(let url):
+                Task { await loadImage(at: url, requiresSecurityScope: true) }
+            case .failure(let error):
+                photoError = error.localizedDescription
+            }
+        }
+        .photosPicker(
+            isPresented: $choosingPhoto,
+            selection: $photoSelection,
+            matching: .images,
+            preferredItemEncoding: .current
+        )
         .onChange(of: photoSelection) { _, item in
             guard let item else { return }
             Task { await loadPhoto(item) }
+        }
+    }
+
+    @MainActor
+    private func loadImage(at url: URL, requiresSecurityScope: Bool) async {
+        isLoadingPhoto = true
+        photoError = nil
+        defer { isLoadingPhoto = false }
+
+        do {
+            let data = try await Task.detached(priority: .userInitiated) {
+                let accessed = requiresSecurityScope && url.startAccessingSecurityScopedResource()
+                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+
+                let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+                guard size <= 50 * 1_024 * 1_024 else { throw BotIconImageError.tooLarge }
+                return try Data(contentsOf: url)
+            }.value
+
+            guard let prepared = Self.preparedAvatarData(from: data) else {
+                throw BotIconImageError.invalidImage
+            }
+            editedImageData = prepared
+            photoSelection = nil
+        } catch {
+            photoError = error.localizedDescription
         }
     }
 
@@ -572,6 +632,57 @@ private struct BotIconEditor: View {
             using: .jpeg,
             properties: [.compressionFactor: 0.86]
         )
+    }
+}
+
+private enum BotIconImageError: LocalizedError {
+    case invalidImage
+    case tooLarge
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidImage:
+            "That image could not be used."
+        case .tooLarge:
+            "Choose an image smaller than 50 MB."
+        }
+    }
+}
+
+@available(macOS 15.1, *)
+private struct BotIconImagePlaygroundButton: View {
+    @Environment(\.supportsImagePlayground) private var supportsImagePlayground
+    @State private var isPresented = false
+
+    let name: String
+    let sourceImageData: Data?
+    let onCompletion: (URL) -> Void
+
+    var body: some View {
+        if supportsImagePlayground {
+            Button("Create Image…", systemImage: "apple.intelligence") {
+                isPresented = true
+            }
+            .imagePlaygroundSheet(
+                isPresented: $isPresented,
+                concept: imageConcept,
+                sourceImage: sourceImage,
+                onCompletion: onCompletion
+            )
+        }
+    }
+
+    private var imageConcept: String {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedName.isEmpty {
+            return "A distinctive, friendly avatar for an AI assistant"
+        }
+        return "A distinctive, friendly avatar for \(trimmedName), an AI assistant"
+    }
+
+    private var sourceImage: Image? {
+        guard let sourceImageData, let image = NSImage(data: sourceImageData) else { return nil }
+        return Image(nsImage: image)
     }
 }
 
