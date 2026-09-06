@@ -41,7 +41,7 @@ Capability enumeration is harness-specific and private. The Codex driver calls `
 Every bot directory is named with an opaque UUID. `AGENTS.md` is the canonical instruction file: its Backstory section is user-authored and its marked runtime section is refreshed by SuperBot. `CLAUDE.md` is a relative symlink to the same instructions. Legacy `instructions.md` content is migrated into `AGENTS.md` and the obsolete file is removed. The managed Messenger skill consists of:
 
 - `.agents/skills/messenger/SKILL.md`
-- `.agents/skills/messenger/messenger`, a symlink to the running SuperBot executable
+- `.agents/skills/messenger/messenger`, a symlink to the bundled `SuperBot.app/Contents/Helpers/messenger` executable
 - `.agents/managed-skills.json`, recording the managed pack version and paths
 
 On app updates, SuperBot refreshes only paths declared in that manifest. Skills created elsewhere under `.agents/skills` remain bot-owned and are not removed.
@@ -73,8 +73,14 @@ Restricted bots inherit the app sandbox. Settings → Security can explicitly ro
 
 Extended shell turns use Codex `workspaceWrite` and `on-request` approvals instead of `externalSandbox`. MCP/browser runtimes are outside this shell boundary and retain their own access controls. Runtime server requests are tracked independently of client request IDs, displayed in chat, and answered only by the user. Command approvals are one-time, filesystem/network grants last only for the turn, and unsupported request formats fail closed. Completion, termination, or revocation clears stale prompts. Heartbeats use the same permission handling and never approve themselves.
 
-Each extended connection owns a managed process group. Switching access stops that group before launching a replacement; disconnecting cleans it up as well. Revocation is persisted before shutdown, and a failure to confirm termination blocks replacement for that bot. Restricted and extended modes store separate private Codex thread IDs, preserving the shared conversation and workspace. Already completed external actions and detached applications are not undone. The fixed compatibility check proves nested sandbox setup, not browser connectivity or user-granted macOS privacy access. See the README for the exact access disclosure and verification scripts.
+Each extended connection owns a managed process group. Switching access stops that group before launching a replacement; disconnecting cleans it up as well. Revocation is persisted before shutdown, and a failure to confirm termination blocks replacement for that bot. Restricted and extended modes store separate private Codex thread IDs, preserving the shared conversation and workspace. Already completed external actions and detached applications are not undone. The fixed compatibility check proves nested sandbox setup, not browser connectivity or user-granted macOS privacy access. See [Security and agent access](security.md) for the exact access disclosure and verification scripts.
 
 SuperBot keeps App Sandbox enabled. Attachment import uses the native file importer and the `com.apple.security.files.user-selected.read-only` entitlement. Imported data is copied into the conversation before access ends. Codex requires outgoing client networking and a temporary home-relative read/write exception limited to `/.codex/`; the driver explicitly sets `CODEX_HOME` to that directory so the sandbox does not redirect Codex to an unauthenticated container-local home.
 
 Local notifications use the User Notifications framework and require the user's runtime approval, but no additional entitlement. There is no broad home-directory, Apple Events, device, personal-data, or incoming-network entitlement. The minimal bundled Messenger helper is signed separately without application entitlements and operates only within the bot workspace and conversation roots supplied by the runtime.
+
+See [Storage and Messenger](storage-and-messenger.md) for the on-disk layout and command examples.
+
+---
+
+[Documentation](README.md) · [SuperBot](../README.md)
