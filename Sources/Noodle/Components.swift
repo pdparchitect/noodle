@@ -112,6 +112,7 @@ struct MessageBubble: View {
     @Environment(NoodleStore.self) private var store
     @State private var inspectedReaction: String?
     @State private var changingReaction = false
+    @State private var isVisible = false
     let message: ChatMessage
     let hasConversationBackground: Bool
     @Binding var selectedAttachmentID: UUID?
@@ -171,6 +172,10 @@ struct MessageBubble: View {
                     }
                     .padding(.top, hasReactions && store.attachments(for: message).isEmpty ? 12 : 0)
 
+                if let linkPreviewURL {
+                    MessageLinkPreview(url: linkPreviewURL, shouldLoad: isVisible)
+                }
+
                 ForEach(store.attachments(for: message)) { attachment in
                     AttachmentInlinePreview(
                         attachment: attachment,
@@ -196,7 +201,14 @@ struct MessageBubble: View {
 
             if !isUser { Spacer(minLength: 120) }
         }
+        .onScrollVisibilityChange(threshold: 0.01) { visible in
+            isVisible = visible
+        }
         .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private var linkPreviewURL: URL? {
+        MessageLink.firstPublicWebURL(in: message.body)
     }
 
     @ViewBuilder private var messageBackground: some View {
