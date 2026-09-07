@@ -44,14 +44,13 @@ struct ChatView: View {
 
     @ViewBuilder private var chatContent: some View {
         if #available(macOS 26.0, *) {
-            transcript
-                .scrollEdgeEffectStyle(.soft, for: .top)
+            topFadedTranscript
                 .scrollEdgeEffectStyle(.soft, for: .bottom)
                 .safeAreaBar(edge: .bottom, spacing: 0) {
                     pinnedBottomContent
                 }
         } else {
-            legacyMaskedTranscript
+            topFadedTranscript
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     pinnedBottomContent
                         .background(.bar)
@@ -68,11 +67,12 @@ struct ChatView: View {
         }
     }
 
-    private var legacyMaskedTranscript: some View {
+    private var topFadedTranscript: some View {
         transcript
             .mask {
-                // Fade only scrolling messages behind the toolbar. The
-                // window-wide wallpaper shade stays below the sidebar.
+                // Fade the transcript pixels themselves as they pass beneath
+                // the toolbar. The separate window-wide shade remains behind
+                // the sidebar and transcript for wallpaper contrast.
                 VStack(spacing: 0) {
                     LinearGradient(stops: [
                         .init(color: .clear, location: 0),
