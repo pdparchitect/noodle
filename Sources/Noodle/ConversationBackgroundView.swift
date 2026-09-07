@@ -204,14 +204,24 @@ struct ConversationBackgroundSheet: View {
                     }
                 } label: {
                     Label("Choose Image…", systemImage: "photo")
+                        .frame(maxWidth: .infinity)
                 }
-                .fixedSize()
-                if !selected.isDefault {
-                    Button("Remove Background") { selected = ConversationBackground(); imageData = nil; image = nil }
+                .frame(maxWidth: .infinity)
+
+                if #available(macOS 15.1, *) {
+                    NoodleImagePlaygroundButton(sourceImageData: imageData) { url in
+                        Task { await loadGeneratedImage(at: url) }
+                    }
+                    .frame(maxWidth: .infinity)
                 }
+
                 Spacer()
-                if busy { ProgressView().controlSize(.small) }
-            }.disabled(busy)
+                ZStack {
+                    if busy { ProgressView().controlSize(.small) }
+                }
+                .frame(width: 16, height: 16)
+            }
+            .disabled(busy)
             if let failure { Text(failure).font(.caption).foregroundStyle(.red) }
         }
         .padding(24).frame(width: 520)
@@ -268,6 +278,22 @@ struct ConversationBackgroundSheet: View {
         image = preview
         selected = ConversationBackground(imageFilename: "preview")
         failure = nil
+    }
+
+    @MainActor
+    private func loadGeneratedImage(at url: URL) async {
+        busy = true
+        failure = nil
+        defer { busy = false }
+
+        do {
+            let data = try await Task.detached(priority: .userInitiated) {
+                try Data(contentsOf: url)
+            }.value
+            try useImage(data)
+        } catch {
+            failure = error.localizedDescription
+        }
     }
 
     private func choice(_ title: String, background: ConversationBackground) -> some View {
