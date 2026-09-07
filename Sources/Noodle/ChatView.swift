@@ -14,54 +14,82 @@ struct ChatView: View {
     @State private var transcriptPositions: [UUID: TranscriptViewport] = [:]
 
     var body: some View {
-        VStack(spacing: 0) {
-            transcript
-                .mask {
-                    // Fade only scrolling messages behind the toolbar. The
-                    // window-wide wallpaper shade stays below the sidebar.
-                    VStack(spacing: 0) {
-                        LinearGradient(stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .white.opacity(0.12), location: 0.45),
-                            .init(color: .white, location: 1)
-                        ], startPoint: .top, endPoint: .bottom)
-                        .frame(height: 88)
-                        Color.white
-                    }
-                    .ignoresSafeArea(edges: .top)
+        chatContent
+            .background(Color(nsColor: .textBackgroundColor).opacity(0.28))
+            .overlay {
+                ConversationEffectsView(conversationID: conversation.id)
+                    .id(conversation.id)
+            }
+            .fileImporter(
+                isPresented: $choosingAttachments,
+                allowedContentTypes: [.data],
+                allowsMultipleSelection: true
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    urls.forEach(store.importAttachment)
+                case .failure(let error):
+                    store.errorMessage = error.localizedDescription
                 }
+            }
+            .quickLookPreview($previewedAttachmentURL)
+            .onPasteCommand(of: AttachmentTransfer.pasteContentTypes) { providers in
+                store.importAttachments(from: providers)
+            }
+            .onChange(of: conversation.id) { _, _ in
+                selectedAttachmentID = nil
+                previewedAttachmentURL = nil
+            }
+    }
+
+    @ViewBuilder private var chatContent: some View {
+        if #available(macOS 26.0, *) {
+            transcript
+                .scrollEdgeEffectStyle(.soft, for: .bottom)
+                .safeAreaBar(edge: .bottom, spacing: 0) {
+                    pinnedBottomContent
+                }
+        } else {
+            legacyMaskedTranscript
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    pinnedBottomContent
+                        .background(.bar)
+                }
+        }
+    }
+
+    private var pinnedBottomContent: some View {
+        VStack(spacing: 0) {
             if let request = store.runtime.approvals.first(where: { conversation.participantIDs.contains($0.agentID) }) {
                 AgentApprovalView(request: request).id(request.id)
             }
-            composer
-                .padding(.horizontal, 12)
-                .padding(.bottom, 11)
+            composerFooter
         }
-        .background(Color(nsColor: .textBackgroundColor).opacity(0.28))
-        .overlay {
-            ConversationEffectsView(conversationID: conversation.id)
-                .id(conversation.id)
-        }
-        .fileImporter(
-            isPresented: $choosingAttachments,
-            allowedContentTypes: [.data],
-            allowsMultipleSelection: true
-        ) { result in
-            switch result {
-            case .success(let urls):
-                urls.forEach(store.importAttachment)
-            case .failure(let error):
-                store.errorMessage = error.localizedDescription
+    }
+
+    private var legacyMaskedTranscript: some View {
+        transcript
+            .mask {
+                // Fade only scrolling messages behind the toolbar. The
+                // window-wide wallpaper shade stays below the sidebar.
+                VStack(spacing: 0) {
+                    LinearGradient(stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: .white.opacity(0.12), location: 0.45),
+                        .init(color: .white, location: 1)
+                    ], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 88)
+                    Color.white
+                }
+                .ignoresSafeArea(edges: .top)
             }
-        }
-        .quickLookPreview($previewedAttachmentURL)
-        .onPasteCommand(of: AttachmentTransfer.pasteContentTypes) { providers in
-            store.importAttachments(from: providers)
-        }
-        .onChange(of: conversation.id) { _, _ in
-            selectedAttachmentID = nil
-            previewedAttachmentURL = nil
-        }
+    }
+
+    private var composerFooter: some View {
+        composer
+            .padding(.horizontal, 12)
+            .padding(.bottom, 11)
+            .frame(maxWidth: .infinity)
     }
 
     private var transcript: some View {
@@ -96,60 +124,7 @@ struct ChatView: View {
                 }
             }
 
-            HStack(alignment: .bottom, spacing: 8) {
-                Button {
-                    choosingAttachments = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 30, height: 30)
-                        .background(.quaternary.opacity(0.35), in: Circle())
-                        .frame(width: composerControlHeight, height: composerControlHeight)
-                }
-                .buttonStyle(.plain)
-                .help("Add Attachment")
-
-                HStack(alignment: .bottom, spacing: 7) {
-                    TextField(
-                        composerPrompt,
-                        text: Binding(
-                            get: { store.draft },
-                            set: { store.draft = $0 }
-                        ),
-                        axis: .vertical
-                    )
-                    .textFieldStyle(.plain)
-                    .autocorrectionDisabled(false)
-                    .font(.system(size: 14))
-                    .lineLimit(1...6)
-                    .focused($composerFocused)
-                    .background(ChatComposerSpellCheckEnabler(isActive: composerFocused))
-                    .onSubmit(store.sendDraft)
-                    .padding(.leading, 5)
-                    .padding(.vertical, 6)
-
-                    if cannotSend {
-                        Image(systemName: "arrow.up.circle")
-                            .font(.system(size: 22))
-                            .foregroundStyle(.tertiary)
-                            .frame(width: 27, height: 27)
-                    } else {
-                        Button(action: store.sendDraft) {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 23))
-                                .foregroundStyle(Color.accentColor)
-                                .frame(width: 27, height: 27)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Send Message")
-                    }
-                }
-                .padding(.horizontal, 7)
-                .frame(minHeight: composerControlHeight)
-                .background(.quaternary.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(.separator.opacity(0.6)))
-            }
+            composerControls
         }
         .onChange(of: composerFocused) { _, isFocused in
             store.composerIsFocused = isFocused
@@ -164,6 +139,115 @@ struct ChatView: View {
             store.pendingAttachments.isEmpty
     }
 
+    @ViewBuilder private var composerControls: some View {
+        if #available(macOS 26.0, *) {
+            GlassEffectContainer(spacing: composerControlSpacing) {
+                composerControlRow
+            }
+        } else {
+            composerControlRow
+        }
+    }
+
+    private var composerControlRow: some View {
+        HStack(alignment: .bottom, spacing: composerControlSpacing) {
+            attachmentButton
+            composerInput
+        }
+    }
+
+    @ViewBuilder private var attachmentButton: some View {
+        if #available(macOS 26.0, *) {
+            Button {
+                choosingAttachments = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .frame(width: composerControlHeight, height: composerControlHeight)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: Circle())
+            .help("Add Attachment")
+        } else {
+            Button {
+                choosingAttachments = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: composerControlHeight, height: composerControlHeight)
+                    .background(.quaternary.opacity(0.35), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .help("Add Attachment")
+        }
+    }
+
+    @ViewBuilder private var composerInput: some View {
+        if #available(macOS 26.0, *) {
+            composerInputContents
+                .glassEffect(
+                    .regular,
+                    in: RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
+                )
+        } else {
+            composerInputContents
+                .background(
+                    .quaternary.opacity(0.10),
+                    in: RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
+                        .stroke(.separator.opacity(0.6))
+                }
+        }
+    }
+
+    private var composerInputContents: some View {
+        ZStack(alignment: .bottomTrailing) {
+            TextField(
+                composerPrompt,
+                text: Binding(
+                    get: { store.draft },
+                    set: { store.draft = $0 }
+                ),
+                axis: .vertical
+            )
+            .textFieldStyle(.plain)
+            .autocorrectionDisabled(false)
+            .font(.system(size: 14))
+            .lineLimit(1...6)
+            .focused($composerFocused)
+            .background(ChatComposerSpellCheckEnabler(isActive: composerFocused))
+            .onSubmit(store.sendDraft)
+            .padding(.leading, 12)
+            .padding(.trailing, composerSendControlWidth + 14)
+            .padding(.vertical, 6)
+            .frame(minHeight: composerControlHeight, alignment: .center)
+
+            if cannotSend {
+                Image(systemName: "arrow.up.circle")
+                    .font(.system(size: 22))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: composerSendControlWidth, height: composerControlHeight)
+                    .padding(.trailing, 7)
+            } else {
+                Button(action: store.sendDraft) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 23))
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: composerSendControlWidth, height: composerControlHeight)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 7)
+                .help("Send Message")
+            }
+        }
+    }
+
     private func showPreview(_ attachment: ConversationAttachment) {
         selectedAttachmentID = attachment.id
         previewedAttachmentURL = store.attachmentFileURL(attachment)
@@ -173,7 +257,10 @@ struct ChatView: View {
         "Message \(store.title(for: conversation))"
     }
 
-    private var composerControlHeight: CGFloat { 32 }
+    private var composerControlHeight: CGFloat { 36 }
+    private var composerControlSpacing: CGFloat { 8 }
+    private var composerSendControlWidth: CGFloat { 27 }
+    private var composerCornerRadius: CGFloat { composerControlHeight / 2 }
 
 }
 
