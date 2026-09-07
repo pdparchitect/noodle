@@ -248,6 +248,7 @@ private struct ConversationTranscript: View {
                 ForEach(store.messages(for: conversation)) { message in
                     MessageBubble(
                         message: message,
+                        hasConversationBackground: !store.background(for: conversation).isDefault,
                         selectedAttachmentID: $selectedAttachmentID,
                         previewAttachment: previewAttachment
                     )
