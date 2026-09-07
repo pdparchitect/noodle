@@ -45,6 +45,7 @@ struct ChatView: View {
     @ViewBuilder private var chatContent: some View {
         if #available(macOS 26.0, *) {
             transcript
+                .scrollEdgeEffectStyle(.soft, for: .top)
                 .scrollEdgeEffectStyle(.soft, for: .bottom)
                 .safeAreaBar(edge: .bottom, spacing: 0) {
                     pinnedBottomContent
