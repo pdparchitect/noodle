@@ -40,7 +40,10 @@ final class AgentRuntimeCoordinator {
         accessConfiguration = AgentAccessConfiguration.load(from: defaults)
         let configuration = AgentHeartbeatConfiguration.load(from: defaults)
         heartbeatConfiguration = configuration
-        heartbeatScheduler = AgentHeartbeatScheduler(configuration: configuration)
+        heartbeatScheduler = AgentHeartbeatScheduler(
+            configuration: configuration,
+            lastActivity: Self.loadDates(from: defaults, key: Self.lastActivityDatesKey)
+        )
         lastHeartbeatDates = Self.loadLastHeartbeatDates(from: defaults)
         installations = discovery.discover()
     }
@@ -128,10 +131,18 @@ final class AgentRuntimeCoordinator {
         heartbeatScheduler.configure(configuration, at: Date())
         heartbeatConfiguration = configuration
         configuration.save(to: defaults)
+        saveHeartbeatActivityDates()
+    }
+
+    func seedHeartbeatActivity(for agentID: UUID, at date: Date) {
+        if heartbeatScheduler.register(agentID, at: date) {
+            saveHeartbeatActivityDates()
+        }
     }
 
     func recordActivity(for agentID: UUID) {
         heartbeatScheduler.recordActivity(for: agentID, at: Date())
+        saveHeartbeatActivityDates()
     }
 
     private func recordHeartbeat(for agentID: UUID) {
@@ -148,10 +159,24 @@ final class AgentRuntimeCoordinator {
         )
     }
 
+    private func saveHeartbeatActivityDates() {
+        defaults.set(
+            Dictionary(uniqueKeysWithValues: heartbeatScheduler.lastActivity.map {
+                ($0.key.uuidString, $0.value.timeIntervalSince1970)
+            }),
+            forKey: Self.lastActivityDatesKey
+        )
+    }
+
+    private static let lastActivityDatesKey = "Noodle.heartbeat.lastActivityDates"
     private static let lastHeartbeatDatesKey = "Noodle.heartbeat.lastDates"
 
     private static func loadLastHeartbeatDates(from defaults: UserDefaults) -> [UUID: Date] {
-        guard let stored = defaults.dictionary(forKey: lastHeartbeatDatesKey) else { return [:] }
+        loadDates(from: defaults, key: lastHeartbeatDatesKey)
+    }
+
+    private static func loadDates(from defaults: UserDefaults, key: String) -> [UUID: Date] {
+        guard let stored = defaults.dictionary(forKey: key) else { return [:] }
         return Dictionary(uniqueKeysWithValues: stored.compactMap { key, value in
             guard let id = UUID(uuidString: key), let seconds = value as? TimeInterval else { return nil }
             return (id, Date(timeIntervalSince1970: seconds))
@@ -160,7 +185,9 @@ final class AgentRuntimeCoordinator {
 
     func checkHeartbeats() {
         let readyIDs = Set(processes.filter { $0.value.canReceiveHeartbeat }.map(\.key))
-        for id in heartbeatScheduler.takeDueHeartbeats(readyAgentIDs: readyIDs, at: Date()) {
+        let dueIDs = heartbeatScheduler.takeDueHeartbeats(readyAgentIDs: readyIDs, at: Date())
+        if !dueIDs.isEmpty { saveHeartbeatActivityDates() }
+        for id in dueIDs {
             // Do not start offline/failed bots or enqueue a heartbeat behind real work.
             processes[id]?.heartbeat()
         }
@@ -217,6 +244,7 @@ final class AgentRuntimeCoordinator {
         for id in processes.keys where !liveIDs.contains(id) {
             processes.removeValue(forKey: id)?.stop()
             heartbeatScheduler.remove(id)
+            saveHeartbeatActivityDates()
         }
 
         for agent in agents {
@@ -312,13 +340,11 @@ final class AgentRuntimeCoordinator {
                 workspaceURL: repository.directory(for: agent),
                 extendedAccess: accessConfiguration.isExtended(agent.id),
                 onSnapshot: { [weak self] snapshot in
-                    if self?.snapshots[snapshot.agentID]?.phase != snapshot.phase {
+                    if self?.snapshots[snapshot.agentID]?.phase == .working,
+                       snapshot.phase == .ready {
                         self?.recordActivity(for: snapshot.agentID)
                     }
                     self?.snapshots[snapshot.agentID] = snapshot
-                },
-                onActivity: { [weak self] in
-                    self?.recordActivity(for: agent.id)
                 },
                 onHeartbeat: { [weak self] in
                     self?.recordHeartbeat(for: agent.id)
@@ -387,6 +413,7 @@ final class AgentRuntimeCoordinator {
         processes.removeValue(forKey: agentID)?.stop()
         snapshots.removeValue(forKey: agentID)
         heartbeatScheduler.remove(agentID)
+        saveHeartbeatActivityDates()
         lastHeartbeatDates.removeValue(forKey: agentID)
         saveLastHeartbeatDates()
     }
@@ -399,7 +426,6 @@ final class AgentRuntimeCoordinator {
         capabilityProbe = nil
         processes.values.forEach { $0.stop() }
         processes.removeAll()
-        heartbeatScheduler = AgentHeartbeatScheduler(configuration: heartbeatConfiguration)
         snapshots = snapshots.mapValues {
             AgentRuntimeSnapshot(agentID: $0.agentID, phase: .offline, detail: "Stopped")
         }
@@ -431,7 +457,6 @@ private final class CodexAgentProcess {
     private var extendedRunning = false
     private var extendedPID: Int32?
     private let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
-    private let onActivity: @MainActor () -> Void
     private let onHeartbeat: @MainActor () -> Void
     private let stateURL: URL
 
@@ -458,7 +483,6 @@ private final class CodexAgentProcess {
         workspaceURL: URL,
         extendedAccess: Bool,
         onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void,
-        onActivity: @escaping @MainActor () -> Void,
         onHeartbeat: @escaping @MainActor () -> Void,
         onApprovals: @escaping @MainActor ([AgentApprovalRequest]) -> Void
     ) {
@@ -468,7 +492,6 @@ private final class CodexAgentProcess {
         self.extendedAccess = extendedAccess
         self.onApprovals = onApprovals
         self.onSnapshot = onSnapshot
-        self.onActivity = onActivity
         self.onHeartbeat = onHeartbeat
         stateURL = workspaceURL.appendingPathComponent(extendedAccess ? ".agents/codex-runtime-extended.json" : ".agents/codex-runtime.json")
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
@@ -633,11 +656,6 @@ private final class CodexAgentProcess {
 
     private func handle(_ message: [String: Any]) {
         guard !intentionallyStopped, process != nil || extendedRunning else { return }
-        let eventMethod = message["method"] as? String ?? ""
-        if message["id"] != nil || eventMethod.hasPrefix("item/")
-            || eventMethod.hasPrefix("turn/") || eventMethod == "thread/tokenUsage/updated" {
-            onActivity()
-        }
         var approvalMessage = message
         if var params = message["params"] as? [String: Any], let itemID = params["itemId"] as? String,
            let item = approvalItemDetails[itemID] {
@@ -786,7 +804,6 @@ private final class CodexAgentProcess {
         do {
             try request(.startTurn(reason), method: "turn/start", params: params)
             turnIsActive = true
-            onActivity()
             update(.working, reason == .heartbeat ? "Heartbeat: checking for follow-up work" : "Checking for new messages")
         } catch {
             if reason == .inboxChanged { notificationPending = true }

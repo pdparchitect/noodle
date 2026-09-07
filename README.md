@@ -24,7 +24,7 @@ account and subscription.
 - Native direct and group conversations with persistent history
 - Separate workspace, backstory, model and access controls for every bot
 - Images, files, reactions, notifications and conversation backgrounds
-- Configurable heartbeats for useful follow-up while Noodle is running
+- Configurable heartbeats that preserve true agent idleness across relaunches
 - Commands from Spotlight and Shortcuts
 - Signed, automatic updates through GitHub Releases
 

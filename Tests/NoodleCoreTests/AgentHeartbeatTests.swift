@@ -61,6 +61,25 @@ final class AgentHeartbeatTests: XCTestCase {
         XCTAssertEqual(due(&scheduler, after: 88_200), [bob])
     }
 
+    func testPersistedActivitySurvivesSchedulerRecreation() {
+        var scheduler = AgentHeartbeatScheduler(lastActivity: [bob: start])
+        XCTAssertEqual(due(&scheduler, after: 1_799), [])
+        XCTAssertEqual(due(&scheduler, after: 1_800), [bob])
+    }
+
+    func testRegisteringAStartedRuntimeDoesNotResetPersistedIdleness() {
+        var scheduler = AgentHeartbeatScheduler(lastActivity: [bob: start])
+        XCTAssertFalse(scheduler.register(bob, at: start.addingTimeInterval(1_700)))
+        XCTAssertEqual(due(&scheduler, after: 1_800), [bob])
+    }
+
+    func testNewBotIsTrackedFromItsKnownActivityDate() {
+        var scheduler = AgentHeartbeatScheduler()
+        XCTAssertTrue(scheduler.register(bob, at: start))
+        XCTAssertFalse(scheduler.register(bob, at: start.addingTimeInterval(900)))
+        XCTAssertEqual(due(&scheduler, after: 1_800), [bob])
+    }
+
     func testDisabledByDefaultOverrideAndReenableStartsFresh() {
         var scheduler = tracked()
         scheduler.configure(.init(isEnabled: false), at: start.addingTimeInterval(500))

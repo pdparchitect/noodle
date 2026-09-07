@@ -39,8 +39,21 @@ public struct AgentHeartbeatScheduler: Sendable {
     public private(set) var configuration: AgentHeartbeatConfiguration
     public private(set) var lastActivity: [UUID: Date] = [:]
 
-    public init(configuration: AgentHeartbeatConfiguration = .init()) {
+    public init(
+        configuration: AgentHeartbeatConfiguration = .init(),
+        lastActivity: [UUID: Date] = [:]
+    ) {
         self.configuration = configuration
+        self.lastActivity = lastActivity
+    }
+
+    /// Begin tracking a bot without treating process startup as new activity.
+    /// Existing persisted activity always wins.
+    @discardableResult
+    public mutating func register(_ agentID: UUID, at date: Date) -> Bool {
+        guard lastActivity[agentID] == nil else { return false }
+        lastActivity[agentID] = date
+        return true
     }
 
     public mutating func recordActivity(for agentID: UUID, at date: Date) {

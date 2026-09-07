@@ -788,6 +788,20 @@ final class NoodleStore {
     }
 
     func startAgents() {
+        for agent in agents {
+            let conversationIDs = Set(conversations.filter {
+                $0.participantIDs.contains(agent.id)
+            }.map(\.id))
+            let latestMessageDate = messagesByConversation
+                .filter { conversationIDs.contains($0.key) }
+                .flatMap(\.value)
+                .map(\.createdAt)
+                .max()
+            runtime.seedHeartbeatActivity(
+                for: agent.id,
+                at: latestMessageDate ?? agent.createdAt
+            )
+        }
         runtime.startAll(agents: agents, repository: repository)
         runtime.refreshCapabilities()
     }
