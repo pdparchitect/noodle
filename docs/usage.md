@@ -20,6 +20,7 @@
 - Show native macOS notifications with the sending bot's avatar while Noodle is unfocused, hidden, minimized, or has no open window
 - Check for signed updates hosted entirely on GitHub and install/relaunch without interrupting active agents
 - Wake idle agents with configurable inactivity heartbeats, enabled by default after 30 minutes
+- Generate either conventional real names or playful names when creating bots
 
 ## Groups
 
@@ -35,7 +36,7 @@ Noodle asks for notification permission on first launch. Notifications use the b
 
 ## Agent heartbeats
 
-**Settings → Heartbeats** enables or disables inactivity wake-ups globally or for individual bots and sets the idle interval (30 minutes by default, configurable from 1 minute to 24 hours). Each bot has its own timer. Incoming notifications, outgoing messages and reactions, active harness work, and completion of a turn restart that timer. Merely viewing a conversation or polling for messages does not reset it.
+**Settings → Heartbeat** enables or disables inactivity wake-ups globally or for individual bots and sets the idle interval (30 minutes by default, configurable from 1 minute to 24 hours). Each bot has its own timer. Incoming notifications, outgoing messages and reactions, active harness work, and completion of a turn restart that timer. Merely viewing a conversation or polling for messages does not reset it.
 
 After a full quiet interval, Noodle delivers a distinct `<noodle-event type="heartbeat" />` to a ready, idle agent using the same harness turn mechanism as message notifications. It never interrupts an active turn, queues stale heartbeats behind messages, or starts offline/failed bots. Normal incoming messages still take priority. A heartbeat that finishes without a reply starts another full idle interval; waking the Mac after a long sleep produces at most one overdue heartbeat per idle bot, not a backlog of turns.
 
@@ -45,7 +46,7 @@ Preferences persist across launches. Timers start fresh when agents reconnect, w
 
 ## Settings
 
-Settings are ordered **Harnesses → Heartbeats → Security → Updates → Dev**. The entire Dev tab is compiled out of release builds.
+Settings are ordered **General → Harnesses → Heartbeat → Security → Updates → Dev**. General controls whether generated bot names use conventional real names or the playful adjective–noun style. The entire Dev tab is compiled out of release builds.
 
 For bot permissions and startup errors, see [Security and agent access](security.md). For update preferences, see [In-app updates](releases.md#in-app-updates). For a development build with the Dev tab, see [Development](development.md).
 
@@ -53,4 +54,3 @@ For bot permissions and startup errors, see [Security and agent access](security
 ---
 
 [Documentation](README.md) · [Noodle](../README.md)
-
