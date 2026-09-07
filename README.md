@@ -1,43 +1,64 @@
+<div align="center">
+
+<img src="Support/AppIcon.png" alt="Noodle" width="88">
+
 # Noodle
 
-Your coding agents, in one native macOS messenger.
+**Your coding agents, in one native macOS messenger.**
 
-Give each bot its own workspace and backstory. Chat one-to-one, bring bots together in a group, and share files without leaving the conversation. Noodle currently supports Codex and uses your existing Codex login.
+[Install](#install) · [Build from source](#build-from-source) · [Documentation](docs/README.md) · [Architecture](docs/architecture.md) · [Security](docs/security.md)
 
-<!-- Replace the placeholder below with your screenshot:
-![Noodle conversations on macOS](docs/screenshot.png)
+</div>
+
+<!-- Add the main product screenshot here when it is ready:
+<p align="center">
+  <img src="docs/images/noodle.png" alt="Bots and groups in Noodle on macOS" width="1100">
+</p>
 -->
 
-> Screenshot coming soon.
+Create persistent bots with their own workspaces and personalities. Chat with
+them individually, bring them together in groups, and share files without
+leaving the conversation. Noodle currently runs Codex using your existing
+account and subscription.
 
-## Get started
+## What it does
 
-Requires macOS 15 or later and an installed, signed-in Codex harness.
+- Native direct and group conversations with persistent history
+- Separate workspace, backstory, model and access controls for every bot
+- Images, files, reactions, notifications and conversation backgrounds
+- Configurable heartbeats for useful follow-up while Noodle is running
+- Commands from Spotlight and Shortcuts
+- Signed, automatic updates through GitHub Releases
 
-1. Download Noodle from [GitHub Releases](https://github.com/pdparchitect/noodle/releases).
-2. Open the app and create a bot. Choose its harness and model.
-3. Start chatting, or create a group with one or more bots.
+## Install
 
-## A few things you can do
+Requires macOS 15 or later with Codex installed and signed in.
 
-- Give bots separate workspaces, personalities, and conversation backgrounds.
-- Share images and files, preview attachments, and react with emojis.
-- Keep track of replies with unread indicators and native notifications.
-- Send commands through Spotlight and Shortcuts.
-- Let idle bots follow up with configurable heartbeats.
+1. Download the latest build from [GitHub Releases](https://github.com/pdparchitect/noodle/releases/latest).
+2. Open Noodle and confirm the Codex installation in **Settings → Harnesses**.
+3. Create a bot and start a conversation.
 
-Heartbeats are on by default after 30 minutes and may use model tokens. You can turn them off in Settings. Bots use restricted access by default; extended access is an explicit per-bot choice.
+Bots are restricted to their private workspaces by default. Broader access is
+an explicit per-bot choice. See [Security and agent access](docs/security.md).
 
 ## Build from source
 
-With full Xcode installed, run from the repository root:
+Install full Xcode, then run:
 
 ```sh
 scripts/build-and-launch.sh
 ```
 
-See the [development guide](docs/development.md) for signing, installation, and tests.
+Local builds keep their data separate from the released app. See the
+[development guide](docs/development.md) for tests, signing and production-data
+mode.
 
 ## Documentation
 
-Configuration, architecture, security, and release setup live in [docs/](docs/README.md).
+- [Using Noodle](docs/usage.md)
+- [Harness setup](docs/harness-setup.md)
+- [Development](docs/development.md)
+- [Architecture](docs/architecture.md)
+- [Storage and Messenger](docs/storage-and-messenger.md)
+- [Security and agent access](docs/security.md)
+- [Releases and updates](docs/releases.md)

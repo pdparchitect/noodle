@@ -24,7 +24,7 @@
 
 ## Groups
 
-Groups can contain **one or more bots**. New Group and Group Info share an **Add Bots** search picker and a grid of selected avatars with individual remove controls. Saving an empty group is not allowed; removing a member does not delete the bot or conversation history.
+Groups can contain **one or more bots**. Their editable names are separate from the stable UUIDs that own their histories, attachments, backgrounds, and agent references. New Group and Group Info share an **Add Bots** search picker and a grid of selected avatars with individual remove controls. Saving an empty group is not allowed; removing a member does not delete the bot or conversation history.
 
 ## Quick send with Spotlight and Shortcuts
 
