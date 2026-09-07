@@ -6,7 +6,7 @@
 
 **Your coding agents, in one native macOS messenger.**
 
-[Install](#install) · [Build from source](#build-from-source) · [Documentation](docs/README.md) · [Architecture](docs/architecture.md) · [Security](docs/security.md)
+[Download](#download-and-run) · [Documentation](docs/README.md) · [Security](docs/security.md)
 
 </div>
 
@@ -30,7 +30,7 @@ account and subscription.
 - Commands from Spotlight and Shortcuts
 - Signed, automatic updates through GitHub Releases
 
-## Install
+## Download and run
 
 Requires macOS 15 or later with Codex installed and signed in.
 
@@ -40,18 +40,6 @@ Requires macOS 15 or later with Codex installed and signed in.
 
 Bots are restricted to their private workspaces by default. Broader access is
 an explicit per-bot choice. See [Security and agent access](docs/security.md).
-
-## Build from source
-
-Install full Xcode, then run:
-
-```sh
-scripts/build-and-launch.sh
-```
-
-Local builds keep their data separate from the released app. See the
-[development guide](docs/development.md) for tests, signing and production-data
-mode.
 
 ## Documentation
 
