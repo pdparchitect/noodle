@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import ImageIO
 import UniformTypeIdentifiers
 
 public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
@@ -674,12 +675,13 @@ public struct WorkspaceRepository: Sendable {
         guard values.isRegularFile == true else { throw WorkspaceError.invalidAttachment }
 
         let attachmentID = UUID()
+        let resolvedMediaType = detectedImageMediaType(at: sourceURL) ?? mediaType
         let attachment = ConversationAttachment(
             id: attachmentID,
             conversationID: conversationID,
             originalFilename: sourceURL.lastPathComponent,
             storedFilename: storedAttachmentName(id: attachmentID, originalFilename: sourceURL.lastPathComponent),
-            mediaType: mediaType,
+            mediaType: resolvedMediaType,
             byteCount: Int64(values.fileSize ?? 0),
             createdAt: now
         )
@@ -709,12 +711,13 @@ public struct WorkspaceRepository: Sendable {
         guard !filename.isEmpty else { throw WorkspaceError.invalidAttachment }
 
         let attachmentID = UUID()
+        let resolvedMediaType = detectedImageMediaType(in: data) ?? mediaType
         let attachment = ConversationAttachment(
             id: attachmentID,
             conversationID: conversationID,
             originalFilename: filename,
             storedFilename: storedAttachmentName(id: attachmentID, originalFilename: filename),
-            mediaType: mediaType,
+            mediaType: resolvedMediaType,
             byteCount: Int64(data.count),
             createdAt: now
         )
@@ -737,8 +740,48 @@ public struct WorkspaceRepository: Sendable {
             options: [.skipsHiddenFiles]
         )
         .filter { $0.pathExtension == "json" }
-        .map { try read(ConversationAttachment.self, from: $0) }
+        .map { metadataURL in
+            let attachment = try read(ConversationAttachment.self, from: metadataURL)
+            let fileURL = attachmentFileURL(attachment)
+            guard let detectedMediaType = detectedImageMediaType(at: fileURL),
+                  detectedMediaType != attachment.mediaType else { return attachment }
+
+            let repaired = ConversationAttachment(
+                id: attachment.id,
+                conversationID: attachment.conversationID,
+                originalFilename: attachment.originalFilename,
+                storedFilename: attachment.storedFilename,
+                mediaType: detectedMediaType,
+                byteCount: attachment.byteCount,
+                createdAt: attachment.createdAt
+            )
+            try? write(repaired, to: metadataURL)
+            return repaired
+        }
         .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private func detectedImageMediaType(at url: URL) -> String? {
+        guard let source = CGImageSourceCreateWithURL(
+            url as CFURL,
+            [kCGImageSourceShouldCache: false] as CFDictionary
+        ) else { return nil }
+        return detectedImageMediaType(from: source)
+    }
+
+    private func detectedImageMediaType(in data: Data) -> String? {
+        guard let source = CGImageSourceCreateWithData(
+            data as CFData,
+            [kCGImageSourceShouldCache: false] as CFDictionary
+        ) else { return nil }
+        return detectedImageMediaType(from: source)
+    }
+
+    private func detectedImageMediaType(from source: CGImageSource) -> String? {
+        guard let typeIdentifier = CGImageSourceGetType(source) as String?,
+              let contentType = UTType(typeIdentifier),
+              contentType.conforms(to: .image) else { return nil }
+        return contentType.preferredMIMEType
     }
 
     public func attachmentFileURL(_ attachment: ConversationAttachment) -> URL {

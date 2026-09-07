@@ -2,6 +2,7 @@ import QuickLookThumbnailing
 import ImageIO
 import SwiftUI
 import NoodleCore
+import UniformTypeIdentifiers
 
 extension ConversationAttachment {
     var previewSymbolName: String {
@@ -20,6 +21,7 @@ struct AttachmentInlinePreview: View {
     let select: () -> Void
     let preview: () -> Void
     private let imagePreviewSize: CGSize
+    private let displaysAsImage: Bool
 
     @State private var thumbnail: NSImage?
     @State private var thumbnailUnavailable = false
@@ -37,14 +39,15 @@ struct AttachmentInlinePreview: View {
         self.isSelected = isSelected
         self.select = select
         self.preview = preview
-        imagePreviewSize = attachment.mediaType.hasPrefix("image/")
+        displaysAsImage = attachment.mediaType.hasPrefix("image/") || AttachmentThumbnailCache.isImage(fileURL)
+        imagePreviewSize = displaysAsImage
             ? AttachmentThumbnailCache.previewSize(for: fileURL)
             : CGSize(width: 300, height: 200)
     }
 
     var body: some View {
         Group {
-            if attachment.mediaType.hasPrefix("image/") {
+            if displaysAsImage {
                 imagePreview
             } else {
                 documentPreview
@@ -152,6 +155,15 @@ struct AttachmentInlinePreview: View {
             return
         }
 
+        if displaysAsImage,
+           let generated = AttachmentThumbnailCache.imageThumbnail(for: fileURL) {
+            AttachmentThumbnailCache.shared.setObject(generated, forKey: key)
+            withAnimation(.easeOut(duration: 0.15)) {
+                thumbnail = generated
+            }
+            return
+        }
+
         let request = QLThumbnailGenerator.Request(
             fileAt: fileURL,
             size: CGSize(width: 520, height: 300),
@@ -179,12 +191,30 @@ private enum AttachmentThumbnailCache {
     static let shared = NSCache<NSURL, NSImage>()
     private static var previewSizes: [URL: CGSize] = [:]
 
+    static func isImage(_ url: URL) -> Bool {
+        guard let source = imageSource(for: url),
+              let identifier = CGImageSourceGetType(source) as String?,
+              let type = UTType(identifier) else { return false }
+        return type.conforms(to: .image)
+    }
+
+    static func imageThumbnail(for url: URL) -> NSImage? {
+        guard let source = imageSource(for: url),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 1_040,
+                kCGImageSourceShouldCacheImmediately: true
+              ] as CFDictionary) else { return nil }
+        return NSImage(cgImage: image, size: .zero)
+    }
+
     static func previewSize(for url: URL) -> CGSize {
         if let size = previewSizes[url] { return size }
         var size = CGSize(width: 300, height: 200)
         // Read dimensions from the header, without decoding pixels. The loading
         // placeholder and finished thumbnail then occupy exactly the same frame.
-        if let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+        if let source = imageSource(for: url),
            let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
            let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
            let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
@@ -198,5 +228,12 @@ private enum AttachmentThumbnailCache {
         }
         previewSizes[url] = size
         return size
+    }
+
+    private static func imageSource(for url: URL) -> CGImageSource? {
+        CGImageSourceCreateWithURL(
+            url as CFURL,
+            [kCGImageSourceShouldCache: false] as CFDictionary
+        )
     }
 }

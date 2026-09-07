@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 import UniformTypeIdentifiers
 @testable import NoodleCore
@@ -492,6 +493,59 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(attachment.mediaType, "image/png")
         XCTAssertEqual(attachment.byteCount, Int64(imageData.count))
         XCTAssertEqual(try Data(contentsOf: repository.attachmentFileURL(attachment)), imageData)
+    }
+
+    func testImageContentRepairsIncorrectAttachmentMediaType() throws {
+        let created = try repository.createAgent(named: "Image Bot")
+        let source = root.appendingPathComponent("mislabeled.png")
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: 2,
+            pixelsHigh: 2,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ))
+        let jpegData = try XCTUnwrap(bitmap.representation(using: .jpeg, properties: [:]))
+        try jpegData.write(to: source)
+
+        let imported = try repository.importAttachment(
+            from: source,
+            into: created.conversation.id,
+            mediaType: "application/octet-stream"
+        )
+        XCTAssertEqual(imported.mediaType, "image/jpeg")
+
+        let stale = ConversationAttachment(
+            id: imported.id,
+            conversationID: imported.conversationID,
+            originalFilename: imported.originalFilename,
+            storedFilename: imported.storedFilename,
+            mediaType: "application/octet-stream",
+            byteCount: imported.byteCount,
+            createdAt: imported.createdAt
+        )
+        let metadataURL = repository.attachmentFileURL(imported)
+            .deletingLastPathComponent()
+            .appendingPathComponent("\(imported.id.uuidString.lowercased()).json")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(stale).write(to: metadataURL, options: .atomic)
+
+        let repaired = try XCTUnwrap(
+            repository.loadAttachments(conversationID: created.conversation.id).first
+        )
+        XCTAssertEqual(repaired.mediaType, "image/jpeg")
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let persisted = try decoder.decode(ConversationAttachment.self, from: Data(contentsOf: metadataURL))
+        XCTAssertEqual(persisted.mediaType, "image/jpeg")
     }
 
     func testAttachmentTransferLoadsPastedImageData() async throws {
