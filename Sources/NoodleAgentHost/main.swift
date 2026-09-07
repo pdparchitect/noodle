@@ -91,11 +91,14 @@ private final class HostSession: NSObject, AgentHostService {
         queue.async {
             guard self.process == nil, !self.stopping else { reply(0, "Runtime already started or stopping."); return }
             do {
-                let executable = try HostPaths.executable(executablePath)
+                _ = try HostPaths.executable(executablePath)
                 let workspace = try HostPaths.workspace(agentID)
                 let child = Process()
                 child.executableURL = Bundle.main.executableURL
-                child.arguments = ["--codex-child", executable.path, agentID]
+                // Preserve the approved installation path for the child's independent
+                // trust check. Passing the resolved release path would fall outside the
+                // intentionally narrow installation allowlist on the second check.
+                child.arguments = ["--codex-child", executablePath, agentID]
                 child.currentDirectoryURL = workspace
                 // Do not inherit DYLD, shell startup hooks, or arbitrary app environment.
                 child.environment = [
