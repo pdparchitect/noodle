@@ -131,8 +131,11 @@ final class AgentHeartbeatTests: XCTestCase {
     func testHeartbeatIsNotMistakenForAnInboxChange() {
         XCTAssertEqual(AgentWakeReason.heartbeat.eventText, "<noodle-event type=\"heartbeat\" />")
         XCTAssertEqual(AgentWakeReason.inboxChanged.eventText, "<noodle-event type=\"inbox-changed\" />")
+        XCTAssertEqual(AgentWakeReason.runtimeRecovered.eventText, "<noodle-event type=\"runtime-recovered\" />")
         XCTAssertTrue(AgentWakeReason.heartbeatInstructions.contains("finish silently"))
         XCTAssertTrue(AgentWakeReason.heartbeatInstructions.contains("does not authorize"))
+        XCTAssertTrue(AgentWakeReason.recoveryInstructions.contains("interrupted task"))
+        XCTAssertTrue(AgentWakeReason.recoveryInstructions.contains("Avoid repeating consequential side effects"))
     }
 
     private func tracked() -> AgentHeartbeatScheduler {

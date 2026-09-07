@@ -59,15 +59,20 @@ if ! grep -q 'SendNoodleCommandIntent' "$intent_metadata"; then
 fi
 
 if ! xcrun assetutil --info "$app/Contents/Resources/Assets.car" | grep -q '"Name" : "CodexHarness"'; then
-    print -u2 "The flat Codex harness vector is missing from the asset catalogue."
+    print -u2 "The official Codex harness icon is missing from the asset catalogue."
+    exit 1
+fi
+
+if ! xcrun assetutil --info "$app/Contents/Resources/Assets.car" | grep -q '"Name" : "ClaudeHarness"'; then
+    print -u2 "The official Claude harness icon is missing from the asset catalogue."
     exit 1
 fi
 
 entitlements="$(codesign -d --entitlements :- "$app" 2>/dev/null)"
 compact_entitlements="$(print -r -- "$entitlements" | tr -d '[:space:]')"
 entitlement_count="$(print -r -- "$compact_entitlements" | grep -o '<key>' | wc -l | tr -d '[:space:]')"
-if [[ "$entitlement_count" != "6" ]]; then
-    print -u2 "The app must contain exactly the six reviewed sandbox entitlements."
+if [[ "$entitlement_count" != "7" ]]; then
+    print -u2 "The app must contain exactly the seven reviewed sandbox entitlements."
     exit 1
 fi
 zsh "$project_root/scripts/verify-updater.sh" "$app"
@@ -90,6 +95,11 @@ fi
 
 if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key><array><string>/.codex/</string></array>'; then
     print -u2 "The narrow Codex state-directory exception is missing or broader than expected."
+    exit 1
+fi
+
+if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key><array><string>/.local/bin/claude</string><string>/.local/share/claude/versions/</string></array>'; then
+    print -u2 "The narrow Claude Code executable exceptions are missing or broader than expected."
     exit 1
 fi
 

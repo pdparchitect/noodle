@@ -5,6 +5,7 @@ import SwiftUI
 struct MessageLinkPreview: View {
     private let cardWidth: CGFloat = 280
     private let imageHeight: CGFloat = 158
+    private let cardHeight: CGFloat = 220
 
     let url: URL
     let shouldLoad: Bool
@@ -15,75 +16,64 @@ struct MessageLinkPreview: View {
     @State private var failed = false
 
     var body: some View {
-        Group {
-            if let metadata {
-                Button {
-                    NSWorkspace.shared.open(metadata.originalURL ?? metadata.url ?? url)
-                } label: {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ZStack {
-                            Color.black.opacity(0.28)
-                            if let previewImage {
-                                Image(nsImage: previewImage)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: cardWidth, height: imageHeight, alignment: .topLeading)
-                                    .clipped()
-                                    .transition(.opacity)
-                            } else {
-                                Image(systemName: "link")
-                                    .font(.system(size: 26, weight: .light))
-                                    .foregroundStyle(.secondary)
-                            }
-                            if isYouTubeLink {
-                                Image(systemName: "play.fill")
-                                    .font(.system(size: 22, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                    .padding(14)
-                                    .background(.black.opacity(0.7), in: Circle())
-                            }
-                        }
-                        .frame(width: cardWidth, height: imageHeight)
-                        .clipped()
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(title(for: metadata))
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.primary)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                            Text(siteLabel)
-                                .font(.system(size: 10.5))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 9)
-                        .frame(width: cardWidth, alignment: .leading)
-                        .frame(minHeight: 62, alignment: .leading)
+        Button {
+            NSWorkspace.shared.open(metadata?.originalURL ?? metadata?.url ?? url)
+        } label: {
+            VStack(alignment: .leading, spacing: 0) {
+                ZStack {
+                    Color.black.opacity(0.28)
+                    if let previewImage {
+                        Image(nsImage: previewImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: cardWidth, height: imageHeight, alignment: .topLeading)
+                            .clipped()
+                            .transition(.opacity)
+                    } else if requested && !failed {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "link")
+                            .font(.system(size: 26, weight: .light))
+                            .foregroundStyle(.secondary)
                     }
-                    .background(.regularMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(.white.opacity(0.12), lineWidth: 1)
+                    if isYouTubeLink, metadata != nil {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(14)
+                            .background(.black.opacity(0.7), in: Circle())
                     }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open link: \(title(for: metadata))")
-            } else if requested && !failed {
-                HStack(spacing: 9) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text(url.host ?? url.absoluteString)
-                        .font(.system(size: 11.5, weight: .medium))
+                .frame(width: cardWidth, height: imageHeight)
+                .clipped()
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    Text(siteLabel)
+                        .font(.system(size: 10.5))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                .frame(width: cardWidth, height: 54)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .padding(.horizontal, 11)
+                .padding(.vertical, 9)
+                .frame(width: cardWidth, alignment: .leading)
+                .frame(minHeight: cardHeight - imageHeight, alignment: .leading)
+            }
+            .frame(width: cardWidth, height: cardHeight, alignment: .top)
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(.white.opacity(0.12), lineWidth: 1)
             }
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open link: \(title)")
         .onChange(of: shouldLoad, initial: true) { _, visible in
             guard visible else { return }
             requestMetadata()
@@ -106,8 +96,8 @@ struct MessageLinkPreview: View {
         }
     }
 
-    private func title(for metadata: LPLinkMetadata) -> String {
-        metadata.title ?? url.host ?? url.absoluteString
+    private var title: String {
+        metadata?.title ?? url.host ?? url.absoluteString
     }
 
     private var siteLabel: String {

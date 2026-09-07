@@ -1,6 +1,6 @@
 # Storage and Messenger
 
-Codex is the first implemented harness. Noodle finds the Codex executable bundled with ChatGPT or Codex, speaks its native App Server protocol internally, and keeps that implementation behind the provider-neutral `start`, `stop`, and `notify` runtime boundary. ACP is not used.
+Noodle has native drivers for Codex and Claude Code behind the same provider-neutral `start`, `stop`, and `notify` runtime boundary. Codex uses App Server; Claude Code uses its persistent stream-json input/output mode. ACP is not used.
 
 ## Durable layout
 
@@ -42,6 +42,8 @@ Messenger stores mutable inbox cursors in the bot's `.noodle/inbox.json`, inside
 
 ## Messenger command
 
+See the generated [Messages and events reference](message-reference.md) for all wake events, messages, group notices, reactions, effects, delivery fields, and CLI commands. Its source is the same catalogue used for agent instructions and CLI help.
+
 From inside a bot workspace:
 
 ```sh
@@ -52,7 +54,7 @@ From inside a bot workspace:
 ./.agents/skills/messenger/messenger --send --conversation <uuid> --body "Files attached" --attach ./report.pdf --attach ./chart.png
 ```
 
-The command can infer the bot UUID and Noodle repository root from its symlink location or from the private runtime environment. Results are JSON so harnesses can consume them without provider-specific parsing. Every delivered attachment includes its absolute copied-file path so a harness can open it directly. A bot sends files with a repeatable `--attach <file-path>` option; relative paths resolve from its workspace, and Noodle copies each file into conversation-owned storage before linking it to the reply. Reply text is optional when at least one attachment is supplied. Codex runs this CLI through its programmatic command bridge; it does not receive private Noodle messaging tools.
+The command can infer the bot UUID and Noodle repository root from its symlink location or from the private runtime environment. Results are JSON so harnesses can consume them without provider-specific parsing. Every delivered attachment includes its absolute copied-file path so a harness can open it directly. A bot sends files with a repeatable `--attach <file-path>` option; relative paths resolve from its workspace, and Noodle copies each file into conversation-owned storage before linking it to the reply. Reply text is optional when at least one attachment is supplied. Codex runs this CLI through its programmatic command bridge; Claude Code runs it with its Bash tool and opens image paths with its Read tool. Neither harness receives private Noodle messaging tools.
 
 Agents can also trigger temporary [chat effects](chat-effects.md), starting with `--effect confetti --conversation <uuid>`. Use `--list-effects` to discover supported effects.
 

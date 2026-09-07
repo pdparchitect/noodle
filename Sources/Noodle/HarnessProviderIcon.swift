@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 import NoodleCore
 
@@ -7,21 +6,18 @@ struct HarnessProviderIcon: View {
     let provider: HarnessProvider
 
     var body: some View {
-        switch provider {
-        case .codex:
-            codexImage
-                .resizable()
-                .renderingMode(.template)
-                .scaledToFit()
-        }
+        Image(assetName)
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
     }
 
-    private var codexImage: Image {
-        guard let url = Bundle.main.url(forResource: "CodexHarness", withExtension: "svg"),
-              let image = NSImage(contentsOf: url) else {
-            return Image(systemName: "apple.terminal")
+    private var assetName: String {
+        switch provider {
+        case .codex:
+            "CodexHarness"
+        case .claudeCode:
+            "ClaudeHarness"
         }
-        image.isTemplate = true
-        return Image(nsImage: image)
     }
 }

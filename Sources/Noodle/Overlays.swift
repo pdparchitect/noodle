@@ -95,6 +95,11 @@ struct NewBotSheet: View {
         .frame(width: 520)
         .onAppear {
             if name.isEmpty { name = BotNameGenerator.random(style: selectedBotNameStyle) }
+            if !store.runtime.availableInstallations.contains(where: {
+                $0.provider.rawValue == selectedHarnessIdentifier
+            }), let first = store.runtime.availableInstallations.first {
+                selectedHarnessIdentifier = first.provider.rawValue
+            }
             nameFocused = true
             store.runtime.refreshCapabilities()
         }

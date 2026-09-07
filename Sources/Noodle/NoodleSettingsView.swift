@@ -54,6 +54,7 @@ struct NoodleSettingsView: View {
 }
 
 private struct GeneralSettingsView: View {
+    @Environment(NoodleStore.self) private var store
     @AppStorage(BotNameStyle.defaultsKey) private var botNameStyle = BotNameStyle.real.rawValue
 
     var body: some View {
@@ -65,6 +66,14 @@ private struct GeneralSettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+            }
+            Section {
+                Toggle("Keep Mac awake while agents work", isOn: Binding(
+                    get: { store.runtime.preventIdleSleepWhileWorking },
+                    set: { store.runtime.configurePreventIdleSleepWhileWorking($0) }
+                ))
+            } footer: {
+                Text("Prevents automatic idle sleep only while an agent is working. Closing the lid or choosing Sleep still suspends the Mac.")
             }
         }
         .formStyle(.grouped)

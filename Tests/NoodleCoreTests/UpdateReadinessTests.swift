@@ -25,6 +25,12 @@ final class UpdateReadinessTests: XCTestCase {
         XCTAssertTrue(ready([.ready]))
     }
 
+    func testSleepPreventionIsOptInAndOnlyAppliesWhileWorking() {
+        XCTAssertFalse(AgentSleepPolicy.shouldPreventIdleSleep(enabled: false, phases: [.working]))
+        XCTAssertFalse(AgentSleepPolicy.shouldPreventIdleSleep(enabled: true, phases: [.ready, .starting]))
+        XCTAssertTrue(AgentSleepPolicy.shouldPreventIdleSleep(enabled: true, phases: [.ready, .working]))
+    }
+
     private func ready(
         _ phases: [AgentRuntimePhase], draft: String = "",
         attachments: Bool = false, editing: Bool = false

@@ -2,12 +2,14 @@ import Foundation
 
 public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, Identifiable {
     case codex
+    case claudeCode = "claude-code"
 
     public var id: String { rawValue }
 
     public var displayName: String {
         switch self {
         case .codex: return "Codex"
+        case .claudeCode: return "Claude Code"
         }
     }
 
@@ -69,10 +71,51 @@ public struct HarnessModel: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+/// Claude Code does not expose its interactive `/model` picker as a machine-readable
+/// command. Keep its standard model aliases available without duplicating the CLI's
+/// changing version catalogue.
+public enum ClaudeCodeCapabilities {
+    public static let efforts = [
+        HarnessEffort(id: "low", description: "Faster responses with less reasoning."),
+        HarnessEffort(id: "medium", description: "Balanced reasoning."),
+        HarnessEffort(id: "high", description: "More thorough reasoning."),
+        HarnessEffort(id: "xhigh", description: "Extended reasoning for difficult work."),
+        HarnessEffort(id: "max", description: "Maximum available reasoning effort.")
+    ]
+
+    public static let models: [HarnessModel] = [
+        model("fable", "Fable", "The latest Fable model for the hardest, longest-running tasks."),
+        model("opus", "Opus", "The latest Opus model for complex reasoning and large changes."),
+        model("sonnet", "Sonnet", "The latest Sonnet model for everyday coding work.", isDefault: true),
+        model("haiku", "Haiku", "The latest fast model for quick and mechanical work.")
+    ]
+
+    public static func isValidModelIdentifier(_ identifier: String) -> Bool {
+        models.contains { $0.id == identifier }
+    }
+
+    private static func model(
+        _ id: String,
+        _ displayName: String,
+        _ description: String,
+        isDefault: Bool = false
+    ) -> HarnessModel {
+        HarnessModel(
+            id: id,
+            displayName: displayName,
+            description: description,
+            supportedEfforts: efforts,
+            defaultEffort: "high",
+            isDefault: isDefault
+        )
+    }
+}
+
 public struct HarnessDiscovery: Sendable {
     private let applicationsDirectory: URL
     private let executableSearchDirectories: [URL]
     private let standaloneCodexURL: URL
+    private let standaloneClaudeURL: URL
     #if DEBUG
     private let simulateNoHarnesses: Bool
     private var externalInstallChecks: Set<HarnessProvider> = []
@@ -89,6 +132,7 @@ public struct HarnessDiscovery: Sendable {
         #endif
         self.applicationsDirectory = applicationsDirectory.standardizedFileURL
         self.standaloneCodexURL = homeDirectory.appendingPathComponent(".codex/packages/standalone/current/bin/codex")
+        self.standaloneClaudeURL = homeDirectory.appendingPathComponent(".local/bin/claude")
         self.executableSearchDirectories = executableSearchDirectories ?? [
             homeDirectory.appendingPathComponent(".local/bin", isDirectory: true),
             URL(fileURLWithPath: "/opt/homebrew/bin", isDirectory: true),
@@ -127,6 +171,8 @@ public struct HarnessDiscovery: Sendable {
                 applicationsDirectory.appendingPathComponent("ChatGPT.app/Contents/Resources/codex"),
                 applicationsDirectory.appendingPathComponent("Codex.app/Contents/Resources/codex")
             ]
+        case .claudeCode:
+            return standaloneCandidates(for: provider)
         }
     }
 
@@ -135,6 +181,10 @@ public struct HarnessDiscovery: Sendable {
         // The package location is accessible through the existing ~/.codex grant,
         // even when the sandbox cannot traverse the shell's ~/.local/bin symlink.
         case .codex: return [standaloneCodexURL] + executableSearchDirectories.map { $0.appendingPathComponent("codex") }
+        case .claudeCode:
+            return [standaloneClaudeURL] + executableSearchDirectories
+                .map { $0.appendingPathComponent("claude") }
+                .filter { $0.standardizedFileURL != standaloneClaudeURL.standardizedFileURL }
         }
     }
 
@@ -170,5 +220,14 @@ public struct AgentRuntimeSnapshot: Codable, Hashable, Sendable {
         self.phase = phase
         self.detail = detail
         self.processIdentifier = processIdentifier
+    }
+}
+
+public enum AgentSleepPolicy {
+    public static func shouldPreventIdleSleep(
+        enabled: Bool,
+        phases: some Sequence<AgentRuntimePhase>
+    ) -> Bool {
+        enabled && phases.contains(.working)
     }
 }

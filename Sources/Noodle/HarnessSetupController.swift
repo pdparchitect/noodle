@@ -14,7 +14,10 @@ final class HarnessSetupController {
     @ObservationIgnored private var checkedPaths: [HarnessProvider: String] = [:]
 
     init(providers: [HarnessProvider: any HarnessSetupProviding]? = nil) {
-        self.providers = providers ?? [.codex: CodexSetupProvider(codexHome: HarnessStorage.codexHome)]
+        self.providers = providers ?? [
+            .codex: CodexSetupProvider(codexHome: HarnessStorage.codexHome),
+            .claudeCode: ClaudeCodeSetupProvider()
+        ]
     }
 
     func refresh(_ installations: [HarnessInstallation]) async {

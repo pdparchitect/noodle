@@ -8,18 +8,26 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- A shared message/event catalogue generates agent guidance, Messenger help, and the message reference, with build and test checks for documentation drift.
+
+- First-class Claude Code harness support with crisp vector Claude Code and Codex marks, native-install discovery, isolated account setup, standard Fable, Opus, Sonnet, and Haiku choices, effort controls, persistent stream-json sessions, supervised recovery, and Messenger-based conversations.
+- An opt-in General setting that prevents automatic Mac sleep only while at least one agent is working.
+- Supervised agent runtimes that restart after unexpected Codex exits or Mac wake, use bounded retry backoff, and safely resume interrupted work.
 - Native link previews for safe public web links, with compact cards, lazy loading, and inline image previews.
 - Public bot descriptions, group membership notices, and a Messenger roster command that reports each participant's name, description, and conversation-local activity without exposing private backstories.
 - Public group descriptions that are editable, searchable, visible in the conversation, and supplied to every member as shared context. Description changes notify the group.
 
 ### Changed
 
+- Autonomous harness launch now validates either OpenAI's signed Codex package or Anthropic's signed Claude Code native install and maps provider settings to fixed commands without exposing an arbitrary execution endpoint.
+- Long conversations keep transcript loading off the main thread, reuse parsed Markdown, virtualize off-screen messages, defer attachment thumbnails until visible, batch scroll-position updates, and use indexed attachment lookups to reduce typing and scrolling stalls.
 - Sidebar message previews now show clean plain text without displaying Markdown syntax.
 - Link and attachment previews use compact, top-leading layouts and repair incorrectly labelled image attachments when possible.
 
 ### Fixed
 
 - The application-menu update command remains responsive after Sparkle enables update checks.
+- Harness icons use transparent vector templates that inherit native foreground styling alongside system symbols; Codex path rendering no longer clips on macOS.
 
 ## [0.8.0] - 2026-09-07
 

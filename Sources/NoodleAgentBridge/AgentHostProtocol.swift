@@ -29,12 +29,32 @@ public enum AgentHostIdentity {
     }
 }
 
-// Deliberately no arbitrary executable, arguments, environment, or shell endpoint.
+// Deliberately no arbitrary arguments, environment, or shell endpoint. The host
+// maps this typed configuration to a fixed command for each trusted harness.
 @objc public protocol AgentHostService {
-    func start(agentID: String, executablePath: String, withReply reply: @escaping (Int32, String?) -> Void)
+    func start(
+        harnessIdentifier: String,
+        agentID: String,
+        executablePath: String,
+        sessionID: String?,
+        resumeSession: Bool,
+        modelIdentifier: String?,
+        effortIdentifier: String?,
+        withReply reply: @escaping (Int32, String?) -> Void
+    )
     func write(_ data: Data)
     func stop(withReply reply: @escaping (Bool) -> Void)
     func checkCompatibility(withReply reply: @escaping (Bool, String) -> Void)
+    func checkAuthentication(
+        harnessIdentifier: String,
+        executablePath: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+    func signIn(
+        harnessIdentifier: String,
+        executablePath: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
 }
 
 @objc public protocol AgentHostClient {

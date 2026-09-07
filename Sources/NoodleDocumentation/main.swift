@@ -1,0 +1,26 @@
+import Foundation
+import NoodleCore
+
+// Development utility only; never bundled into the application or run by a bot.
+let arguments = Array(CommandLine.arguments.dropFirst())
+guard arguments.count == 2, ["--write", "--check"].contains(arguments[0]) else {
+    FileHandle.standardError.write(Data("Usage: NoodleDocumentation --write|--check <reference.md>\n".utf8))
+    exit(2)
+}
+let url = URL(fileURLWithPath: arguments[1])
+let expected = MessengerDocumentation.referenceMarkdown
+do {
+    if arguments[0] == "--write" {
+        try expected.write(to: url, atomically: true, encoding: .utf8)
+        print("Generated \(url.path)")
+    } else {
+        guard try String(contentsOf: url, encoding: .utf8) == expected else {
+            FileHandle.standardError.write(Data("Message reference is out of date. Run: swift run --disable-sandbox NoodleDocumentation --write docs/message-reference.md\n".utf8))
+            exit(1)
+        }
+        print("Message reference is current.")
+    }
+} catch {
+    FileHandle.standardError.write(Data("Message reference: \(error.localizedDescription)\nRun: swift run --disable-sandbox NoodleDocumentation --write docs/message-reference.md\n".utf8))
+    exit(1)
+}

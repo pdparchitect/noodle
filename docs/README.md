@@ -7,6 +7,7 @@
 - [Harness setup](harness-setup.md) — native installation, account status, and sign-in.
 - [Development](development.md) — requirements, local builds, signing, installation, and tests.
 - [Storage and Messenger](storage-and-messenger.md) — workspace layout, managed skills, inbox state, and the messaging CLI.
+- [Messages and events](message-reference.md) — generated event handling, recipients, delivery fields, and complete Messenger command reference.
 - [Architecture](architecture.md) — process lifecycle, harness discovery, and message flow.
 - [Security and agent access](security.md) — autonomous and restricted modes, entitlements, and helper boundaries.
 - [Releases and updates](releases.md) — versioning, GitHub Actions, signing secrets, notarization, and Sparkle.

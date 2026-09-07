@@ -27,6 +27,19 @@ That mode writes `.build/Noodle.app` with the production bundle identity. Never 
 
 The build automatically uses the first installed Apple Development identity so macOS can index App Intents. Set `NOODLE_SIGNING_IDENTITY` to override that choice, or set it to `-` explicitly for an ad-hoc build.
 
+## Message documentation
+
+Message and event guidance lives in `Sources/NoodleCore/MessengerDocumentation.swift`, alongside exhaustive references for runtime wake reasons, delivery kinds, group notices, effects and CLI commands. Agent workspace instructions and Messenger help use this catalogue directly; workspace synchronization refreshes the managed guidance while preserving each bot's backstory and custom skills.
+
+After changing the catalogue, regenerate and commit the reference:
+
+```sh
+swift run --disable-sandbox NoodleDocumentation --write docs/message-reference.md
+swift run --disable-sandbox NoodleDocumentation --check docs/message-reference.md
+```
+
+The application build checks the reference without rewriting it. Tests also check documentation freshness and encoded delivery/message field coverage. The generator runs locally and is not bundled into the app.
+
 ## Development-only Settings
 
 Settings includes a Dev tab in debug builds only. The whole tab is compiled out of release builds. To build with development tools enabled:

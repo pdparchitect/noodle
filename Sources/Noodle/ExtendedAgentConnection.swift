@@ -1,5 +1,6 @@
 import Foundation
 import NoodleAgentBridge
+import NoodleCore
 
 final class ExtendedAgentConnection: NSObject, AgentHostClient {
     private let connection: NSXPCConnection
@@ -35,8 +36,26 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
         } as? AgentHostService
     }
 
-    func start(agentID: UUID, executablePath: String, reply: @escaping (Int32, String?) -> Void) {
-        proxy()?.start(agentID: agentID.uuidString, executablePath: executablePath, withReply: reply)
+    func start(
+        provider: HarnessProvider,
+        agentID: UUID,
+        executablePath: String,
+        sessionID: UUID? = nil,
+        resumeSession: Bool = false,
+        modelIdentifier: String? = nil,
+        effortIdentifier: String? = nil,
+        reply: @escaping (Int32, String?) -> Void
+    ) {
+        proxy()?.start(
+            harnessIdentifier: provider.rawValue,
+            agentID: agentID.uuidString,
+            executablePath: executablePath,
+            sessionID: sessionID?.uuidString,
+            resumeSession: resumeSession,
+            modelIdentifier: modelIdentifier,
+            effortIdentifier: effortIdentifier,
+            withReply: reply
+        )
     }
     func write(_ data: Data) { proxy()?.write(data) }
     func stop(reply: @escaping (Bool) -> Void) {
@@ -46,8 +65,34 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
             reply(stopped)
         }
     }
+    func invalidate() {
+        stopping = true
+        connection.invalidate()
+    }
     func checkCompatibility(reply: @escaping (Bool, String) -> Void) {
         proxy(failure: { reply(false, $0) })?.checkCompatibility(withReply: reply)
+    }
+    func checkAuthentication(
+        provider: HarnessProvider,
+        executablePath: String,
+        reply: @escaping (Bool, String?) -> Void
+    ) {
+        proxy(failure: { reply(false, $0) })?.checkAuthentication(
+            harnessIdentifier: provider.rawValue,
+            executablePath: executablePath,
+            withReply: reply
+        )
+    }
+    func signIn(
+        provider: HarnessProvider,
+        executablePath: String,
+        reply: @escaping (Bool, String?) -> Void
+    ) {
+        proxy(failure: { reply(false, $0) })?.signIn(
+            harnessIdentifier: provider.rawValue,
+            executablePath: executablePath,
+            withReply: reply
+        )
     }
     func receive(_ data: Data, isError: Bool) { onData?(data, isError) }
     func terminated(_ status: Int32) { onExit?(status) }

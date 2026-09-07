@@ -306,6 +306,17 @@ private struct TranscriptGeometry: Equatable {
     let containerHeight: CGFloat
 }
 
+/// Retains the latest geometry without invalidating the SwiftUI hierarchy on
+/// every pixel of a scroll gesture. The durable value is published only when
+/// scrolling becomes idle.
+private final class TranscriptViewportRecorder {
+    var viewport: TranscriptViewport
+
+    init(_ viewport: TranscriptViewport) {
+        self.viewport = viewport
+    }
+}
+
 private struct ConversationTranscript: View {
     @Environment(NoodleStore.self) private var store
     let conversation: BotConversation
@@ -314,7 +325,7 @@ private struct ConversationTranscript: View {
     let bottomOverlayHeight: CGFloat
     let saveViewport: (TranscriptViewport) -> Void
     @State private var position: ScrollPosition
-    @State private var viewport: TranscriptViewport
+    @State private var viewportRecorder: TranscriptViewportRecorder
     @State private var followsLatest: Bool
     @State private var userIsScrolling = false
 
@@ -334,16 +345,15 @@ private struct ConversationTranscript: View {
         _position = State(initialValue: initialViewport.isAtBottom
             ? ScrollPosition(edge: .bottom)
             : ScrollPosition(y: initialViewport.offset))
-        _viewport = State(initialValue: initialViewport)
+        _viewportRecorder = State(initialValue: TranscriptViewportRecorder(initialViewport))
         _followsLatest = State(initialValue: initialViewport.isAtBottom)
     }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            // Measure the actual transcript height on its first layout. Lazy
-            // estimates change as attachment rows enter the viewport and cause
-            // visible corrections when restoring a bottom or pixel offset.
-            VStack(spacing: 10) {
+            // Link and attachment previews reserve stable dimensions, allowing
+            // long histories to remain lazy without scroll-position corrections.
+            LazyVStack(spacing: 10) {
                 ConversationStartView(conversation: conversation)
                     .padding(.bottom, 14)
 
@@ -383,24 +393,35 @@ private struct ConversationTranscript: View {
                 containerHeight: geometry.containerSize.height
             )
         } action: { _, updated in
-            viewport = updated.viewport
+            viewportRecorder.viewport = updated.viewport
             // isPositionedByUser stays true after a gesture ends. It must not
             // turn a later message/thumbnail resize into an apparent scroll away.
             if userIsScrolling {
-                followsLatest = updated.viewport.isAtBottom
-                saveViewport(updated.viewport)
+                if followsLatest != updated.viewport.isAtBottom {
+                    followsLatest = updated.viewport.isAtBottom
+                }
             } else if followsLatest && !updated.viewport.isAtBottom {
                 position.scrollTo(edge: .bottom)
             }
         }
-        .onScrollPhaseChange { _, phase in
-            userIsScrolling = phase != .idle && phase != .animating
+        .onScrollPhaseChange { oldPhase, newPhase in
+            let wasUserScrolling = oldPhase != .idle && oldPhase != .animating
+            let isUserScrolling = newPhase != .idle && newPhase != .animating
+            userIsScrolling = isUserScrolling
+            if wasUserScrolling && !isUserScrolling {
+                let finalViewport = viewportRecorder.viewport
+                followsLatest = finalViewport.isAtBottom
+                saveViewport(finalViewport)
+            }
         }
         .onChange(of: store.messages(for: conversation).last?.id) { _, _ in
             let last = store.messages(for: conversation).last
             if last?.author == .user {
                 followsLatest = true
-                saveViewport(TranscriptViewport(offset: viewport.offset, isAtBottom: true))
+                saveViewport(TranscriptViewport(
+                    offset: viewportRecorder.viewport.offset,
+                    isAtBottom: true
+                ))
             }
             if followsLatest && !userIsScrolling {
                 position.scrollTo(edge: .bottom)

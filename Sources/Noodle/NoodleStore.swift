@@ -4,6 +4,22 @@ import Observation
 import NoodleCore
 import UniformTypeIdentifiers
 
+private struct TranscriptSnapshot: Sendable {
+    let conversations: [BotConversation]
+    let messages: [UUID: [ChatMessage]]
+    let attachments: [UUID: [ConversationAttachment]]
+    let conversationsChanged: Bool
+    let messagesChanged: Bool
+    let attachmentsChanged: Bool
+    let revisions: [UUID: TranscriptRevision]
+}
+
+private struct TranscriptRevision: Equatable, Sendable {
+    let messagesModifiedAt: Date?
+    let messagesSize: UInt64?
+    let attachmentsModifiedAt: Date?
+}
+
 @MainActor
 @Observable
 final class NoodleStore {
@@ -23,8 +39,17 @@ final class NoodleStore {
 
     private(set) var agents: [AgentRecord] = []
     private(set) var conversations: [BotConversation] = []
-    private(set) var messagesByConversation: [UUID: [ChatMessage]] = [:]
-    private(set) var attachmentsByConversation: [UUID: [ConversationAttachment]] = [:]
+    private(set) var messagesByConversation: [UUID: [ChatMessage]] = [:] {
+        didSet { transcriptGeneration &+= 1 }
+    }
+    private(set) var attachmentsByConversation: [UUID: [ConversationAttachment]] = [:] {
+        didSet {
+            transcriptGeneration &+= 1
+            attachmentLookupByConversation = attachmentsByConversation.mapValues { attachments in
+                Dictionary(uniqueKeysWithValues: attachments.map { ($0.id, $0) })
+            }
+        }
+    }
     private(set) var unreadConversationIDs: Set<UUID> = []
     var selectedConversationID: UUID?
     var searchText = ""
@@ -42,6 +67,9 @@ final class NoodleStore {
     let repository: WorkspaceRepository
     let runtime = AgentRuntimeCoordinator()
     private var transcriptRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var transcriptGeneration: UInt = 0
+    private var attachmentLookupByConversation: [UUID: [UUID: ConversationAttachment]] = [:]
+    @ObservationIgnored private var transcriptRevisions: [UUID: TranscriptRevision] = [:]
     private var isProcessingShares = false
     private var failedShareIDs: Set<UUID> = []
 
@@ -131,6 +159,9 @@ final class NoodleStore {
                     ($0.id, try repository.loadAttachments(conversationID: $0.id))
                 }
             )
+            transcriptRevisions = Dictionary(uniqueKeysWithValues: conversations.map {
+                ($0.id, Self.transcriptRevision(for: $0.id, repository: repository))
+            })
             let knownConversationIDs = Set(conversations.map(\.id))
             let storedUnreadIDs = try repository.loadUnreadConversationIDs()
             unreadConversationIDs = storedUnreadIDs.intersection(knownConversationIDs)
@@ -420,8 +451,7 @@ final class NoodleStore {
     }
 
     func attachments(for message: ChatMessage) -> [ConversationAttachment] {
-        let all = attachmentsByConversation[message.conversationID, default: []]
-        let byID = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
+        let byID = attachmentLookupByConversation[message.conversationID, default: [:]]
         return message.attachments.compactMap { byID[$0] }
     }
 
@@ -595,21 +625,115 @@ final class NoodleStore {
 
     func refreshTranscripts() {
         do {
-            let knownMessageIDs = Set(
-                messagesByConversation.values.flatMap { messages in
-                    messages.map(\.id)
-                }
-            )
-            let latestConversations = try repository.loadConversations()
+            applyTranscriptSnapshot(try Self.loadTranscriptSnapshot(
+                from: repository,
+                currentConversations: conversations,
+                currentMessages: messagesByConversation,
+                currentAttachments: attachmentsByConversation,
+                currentRevisions: transcriptRevisions
+            ))
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func refreshTranscriptsInBackground() async {
+        let generation = transcriptGeneration
+        let repository = repository
+        let currentConversations = conversations
+        let currentMessages = messagesByConversation
+        let currentAttachments = attachmentsByConversation
+        let currentRevisions = transcriptRevisions
+        do {
+            let snapshot = try await Task.detached(priority: .utility) {
+                try Self.loadTranscriptSnapshot(
+                    from: repository,
+                    currentConversations: currentConversations,
+                    currentMessages: currentMessages,
+                    currentAttachments: currentAttachments,
+                    currentRevisions: currentRevisions
+                )
+            }.value
+            guard !Task.isCancelled, generation == transcriptGeneration else { return }
+            applyTranscriptSnapshot(snapshot)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    nonisolated private static func loadTranscriptSnapshot(
+        from repository: WorkspaceRepository,
+        currentConversations: [BotConversation],
+        currentMessages: [UUID: [ChatMessage]],
+        currentAttachments: [UUID: [ConversationAttachment]],
+        currentRevisions: [UUID: TranscriptRevision]
+    ) throws -> TranscriptSnapshot {
+        let conversations = try repository.loadConversations()
+        var messages: [UUID: [ChatMessage]] = [:]
+        var attachments: [UUID: [ConversationAttachment]] = [:]
+        var revisions: [UUID: TranscriptRevision] = [:]
+        let conversationIDs = Set(conversations.map(\.id))
+        var messagesChanged = Set(currentMessages.keys) != conversationIDs
+        var attachmentsChanged = Set(currentAttachments.keys) != conversationIDs
+        for conversation in conversations {
+            let revision = transcriptRevision(for: conversation.id, repository: repository)
+            revisions[conversation.id] = revision
+            if revision.messagesModifiedAt == currentRevisions[conversation.id]?.messagesModifiedAt,
+               revision.messagesSize == currentRevisions[conversation.id]?.messagesSize,
+               let current = currentMessages[conversation.id] {
+                messages[conversation.id] = current
+            } else {
+                messages[conversation.id] = try repository.loadMessages(conversationID: conversation.id)
+                messagesChanged = true
+            }
+            if revision.attachmentsModifiedAt == currentRevisions[conversation.id]?.attachmentsModifiedAt,
+               let current = currentAttachments[conversation.id] {
+                attachments[conversation.id] = current
+            } else {
+                attachments[conversation.id] = try repository.loadAttachments(conversationID: conversation.id)
+                attachmentsChanged = true
+            }
+        }
+        return TranscriptSnapshot(
+            conversations: conversations,
+            messages: messages,
+            attachments: attachments,
+            conversationsChanged: conversations != currentConversations,
+            messagesChanged: messagesChanged,
+            attachmentsChanged: attachmentsChanged,
+            revisions: revisions
+        )
+    }
+
+    nonisolated private static func transcriptRevision(
+        for conversationID: UUID,
+        repository: WorkspaceRepository
+    ) -> TranscriptRevision {
+        let fileManager = FileManager.default
+        let messagesURL = repository.conversationDirectory(id: conversationID)
+            .appendingPathComponent("messages.json")
+        let messageAttributes = try? fileManager.attributesOfItem(atPath: messagesURL.path)
+        let attachmentAttributes = try? fileManager.attributesOfItem(
+            atPath: repository.attachmentsDirectory(conversationID: conversationID).path
+        )
+        return TranscriptRevision(
+            messagesModifiedAt: messageAttributes?[.modificationDate] as? Date,
+            messagesSize: (messageAttributes?[.size] as? NSNumber)?.uint64Value,
+            attachmentsModifiedAt: attachmentAttributes?[.modificationDate] as? Date
+        )
+    }
+
+    private func applyTranscriptSnapshot(_ snapshot: TranscriptSnapshot) {
+        transcriptRevisions = snapshot.revisions
+        guard snapshot.conversationsChanged || snapshot.messagesChanged || snapshot.attachmentsChanged else { return }
+
+        let newAgentMessages: [ChatMessage]
+        let reactionChanges: [MessageReactionChange]
+        if snapshot.messagesChanged {
+            let knownMessageIDs = Set(messagesByConversation.values.flatMap { $0.map(\.id) })
             let knownReactionIDs = Set(messagesByConversation.values.flatMap { $0 }
                 .flatMap { $0.reactionChanges ?? [] }.map(\.id))
-            var latestMessages: [UUID: [ChatMessage]] = [:]
-            var latestAttachments: [UUID: [ConversationAttachment]] = [:]
-            for conversation in latestConversations {
-                latestMessages[conversation.id] = try repository.loadMessages(conversationID: conversation.id)
-                latestAttachments[conversation.id] = try repository.loadAttachments(conversationID: conversation.id)
-            }
-            let newAgentMessages = latestMessages.values
+            newAgentMessages = snapshot.messages.values
                 .flatMap { $0 }
                 .filter { message in
                     guard !knownMessageIDs.contains(message.id) else { return false }
@@ -617,31 +741,32 @@ final class NoodleStore {
                     return false
                 }
                 .sorted { $0.createdAt < $1.createdAt }
-
-            if latestConversations != conversations { conversations = latestConversations }
-            if latestMessages != messagesByConversation { messagesByConversation = latestMessages }
-            if latestAttachments != attachmentsByConversation { attachmentsByConversation = latestAttachments }
-            for message in newAgentMessages {
-                if case .agent(let id) = message.author { runtime.recordActivity(for: id) }
-            }
-            notifyGroupParticipants(for: newAgentMessages)
-            let reactionChanges = latestMessages.values.flatMap { $0 }
+            reactionChanges = snapshot.messages.values.flatMap { $0 }
                 .flatMap { $0.reactionChanges ?? [] }.filter { !knownReactionIDs.contains($0.id) }
-            for change in reactionChanges {
-                if case .agent(let id) = change.author { runtime.recordActivity(for: id) }
-            }
-            let reactionRecipientIDs = Set(reactionChanges.flatMap { change in
-                (latestConversations.first { $0.id == change.conversationID }?.participantIDs ?? [])
-                    .filter { change.author != .agent($0) }
-            })
-            if !reactionRecipientIDs.isEmpty {
-                runtime.notify(agents.filter { reactionRecipientIDs.contains($0.id) }, repository: repository)
-            }
-            registerUnreadMessages(newAgentMessages)
-            postNotifications(for: newAgentMessages)
-        } catch {
-            errorMessage = error.localizedDescription
+        } else {
+            newAgentMessages = []
+            reactionChanges = []
         }
+
+        if snapshot.conversationsChanged { conversations = snapshot.conversations }
+        if snapshot.messagesChanged { messagesByConversation = snapshot.messages }
+        if snapshot.attachmentsChanged { attachmentsByConversation = snapshot.attachments }
+        for message in newAgentMessages {
+            if case .agent(let id) = message.author { runtime.recordActivity(for: id) }
+        }
+        notifyGroupParticipants(for: newAgentMessages)
+        for change in reactionChanges {
+            if case .agent(let id) = change.author { runtime.recordActivity(for: id) }
+        }
+        let reactionRecipientIDs = Set(reactionChanges.flatMap { change in
+            (snapshot.conversations.first { $0.id == change.conversationID }?.participantIDs ?? [])
+                .filter { change.author != .agent($0) }
+        })
+        if !reactionRecipientIDs.isEmpty {
+            runtime.notify(agents.filter { reactionRecipientIDs.contains($0.id) }, repository: repository)
+        }
+        registerUnreadMessages(newAgentMessages)
+        postNotifications(for: newAgentMessages)
     }
 
     func participants(for conversation: BotConversation) -> [AgentRecord] {
@@ -835,12 +960,18 @@ final class NoodleStore {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled else { break }
-                self?.refreshTranscripts()
-                await self?.processSharedInbox()
+                guard let self else { break }
+                await self.refreshTranscriptsInBackground()
+                await self.processSharedInbox()
                 guard !Task.isCancelled else { break }
-                self?.runtime.checkHeartbeats()
+                self.runtime.reconcile(agents: self.agents, repository: self.repository)
+                self.runtime.checkHeartbeats()
             }
         }
+    }
+
+    func recoverAgentsAfterWake() {
+        runtime.reconcile(agents: agents, repository: repository, immediately: true)
     }
 
     func stopMonitoring() {

@@ -160,9 +160,19 @@ public enum MessengerCLI {
             repositoryRoot = agentsDirectory.deletingLastPathComponent()
             agentID = id
 
-            if values.contains("--help") || values.contains("-h") || values.isEmpty {
+            let command: MessengerCommandKind
+            if values.contains("-h") || values.isEmpty {
+                command = .help
+            } else if let matched = MessengerCommandKind.allCases.first(where: { values.contains($0.rawValue) }) {
+                command = matched
+            } else {
+                throw MessengerCLIError.invalidArguments
+            }
+
+            switch command {
+            case .help:
                 action = .help
-            } else if values.contains("--effect") {
+            case .effect:
                 let options = try Self.effectOptions(values)
                 guard let rawConversation = options["--conversation"],
                       let conversationID = UUID(uuidString: rawConversation),
@@ -173,29 +183,29 @@ public enum MessengerCLI {
                     requestID = id
                 } else { requestID = UUID() }
                 action = .effect(conversationID: conversationID, kind: kind, requestID: requestID)
-            } else if values.contains("--list-effects") {
+            case .listEffects:
                 var rest = values
                 rest.removeAll { $0 == "--list-effects" }
                 guard rest.isEmpty || (rest.count == 2 && rest[0] == "--agent-directory") else {
                     throw MessengerCLIError.invalidArguments
                 }
                 action = .listEffects
-            } else if values.contains("--get-latest") {
+            case .getLatest:
                 action = .getLatest(
                     consumes: !values.contains("--peek"),
                     includesInlineImages: values.contains("--inline-images")
                 )
-            } else if values.contains("--list-conversations") {
+            case .listConversations:
                 action = .listConversations
-            } else if values.contains("--list-participants") {
+            case .listParticipants:
                 guard let raw = Self.option("--conversation", in: values),
                       let id = UUID(uuidString: raw) else { throw MessengerCLIError.invalidArguments }
                 action = .listParticipants(conversationID: id)
-            } else if values.contains("--list-messages") {
+            case .listMessages:
                 guard let raw = Self.option("--conversation", in: values),
                       let id = UUID(uuidString: raw) else { throw MessengerCLIError.invalidArguments }
                 action = .listMessages(conversationID: id)
-            } else if values.contains("--react") || values.contains("--unreact") {
+            case .react, .unreact:
                 guard values.contains("--react") != values.contains("--unreact"),
                       let rawConversation = Self.option("--conversation", in: values),
                       let conversationID = UUID(uuidString: rawConversation),
@@ -206,7 +216,7 @@ public enum MessengerCLI {
                 }
                 action = .react(conversationID: conversationID, messageID: messageID,
                                 emoji: emoji, present: values.contains("--react"))
-            } else if values.contains("--send") {
+            case .send:
                 guard let rawConversation = Self.option("--conversation", in: values),
                       let conversationID = UUID(uuidString: rawConversation) else {
                     throw MessengerCLIError.invalidArguments
@@ -233,8 +243,6 @@ public enum MessengerCLI {
                     body: body,
                     attachmentURLs: attachmentURLs
                 )
-            } else {
-                throw MessengerCLIError.invalidArguments
             }
         }
 
@@ -306,35 +314,7 @@ public enum MessengerCLI {
         }
     }
 
-    private static let help = """
-    Noodle Messenger
-
-      messenger --list-effects
-      messenger --effect <kind> --conversation <uuid> [--request-id <uuid>]
-      messenger --get-latest [--peek] [--inline-images]
-      messenger --list-conversations
-      messenger --list-participants --conversation <uuid>
-      messenger --list-messages --conversation <uuid>
-      messenger --react --conversation <uuid> --message <uuid> --emoji <emoji>
-      messenger --unreact --conversation <uuid> --message <uuid> --emoji <emoji>
-      messenger --send --conversation <uuid> --body <text>
-      messenger --send --conversation <uuid> --body-percent-encoded <percent-encoded-utf8>
-      messenger --send --conversation <uuid> --body-base64 <utf8-base64>
-      messenger --send --conversation <uuid> [--body <text>] --attach <file-path> [--attach <file-path> ...]
-
-    The command normally discovers the bot from its symlink path. For diagnostics, append
-    --agent-directory <absolute-agent-workspace-path>.
-    Reactions are per bot; adding twice is safe. --unreact removes only your reaction.
-    --get-latest includes reactionChange events on previously read messages.
-    --list-conversations includes each group's public description.
-    --list-messages includes your own messages and current reactions without consuming the inbox.
-    --list-participants includes the conversation description, public bot descriptions, and conversation-local last activity, never backstories.
-    --effect queues a temporary visual effect in a chat you participate in (currently: confetti).
-    Effects play once in the visible foreground chat, expire after 30 seconds, and respect Reduce Motion.
-    A receipt confirms queuing, not display. Effects do not send messages or wake other agents.
-    Use the same --request-id when retrying; recent IDs are retained for up to five minutes (32 events).
-    Send at most one effect per conversation every two seconds. --list-effects returns supported kind names.
-    """
+    private static var help: String { MessengerDocumentation.cliHelp }
 }
 
 private struct MessengerEffectReceipt: Encodable {

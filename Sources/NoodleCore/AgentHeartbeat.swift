@@ -85,13 +85,14 @@ public struct AgentHeartbeatScheduler: Sendable {
     }
 }
 
-public enum AgentWakeReason: String, Sendable {
+public enum AgentWakeReason: String, CaseIterable, Sendable {
     case inboxChanged = "inbox-changed"
     case heartbeat
+    case runtimeRecovered = "runtime-recovered"
 
     public var eventText: String { "<noodle-event type=\"\(rawValue)\" />" }
 
-    public static let heartbeatInstructions = """
-    A `heartbeat` event is an inactivity wake-up, not a user message. First check Messenger once for unread messages and prioritize them. If the inbox is empty, review your existing Backstory, memory.md, and previously assigned work for a useful authorized follow-up. A heartbeat does not authorize new projects, broader access, destructive operations, publishing, or other external actions. If nothing needs doing, finish silently; never send a heartbeat acknowledgement or invent work to fill the interval. Send meaningful progress, results, or a required question through Messenger to the relevant conversation only when useful.
-    """
+    public static var heartbeatInstructions: String { AgentWakeReason.heartbeat.reference.guidance }
+
+    public static var recoveryInstructions: String { AgentWakeReason.runtimeRecovered.reference.guidance }
 }

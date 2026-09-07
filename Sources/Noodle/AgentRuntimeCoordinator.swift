@@ -8,6 +8,20 @@ private let noodleAppVersion = Bundle.main.object(
 ) as? String ?? "development"
 
 @MainActor
+protocol AgentRuntimeProcess: AnyObject {
+    var configuration: AgentRecord { get }
+    var snapshot: AgentRuntimeSnapshot { get }
+    var isAlive: Bool { get }
+    var hasInterruptedWork: Bool { get }
+    var canReceiveHeartbeat: Bool { get }
+    func start()
+    func stop(completion: @escaping (Bool) -> Void)
+    func notify()
+    func heartbeat()
+    func resolveApproval(_ approval: AgentApprovalRequest, allow: Bool, answers: [String: String])
+}
+
+@MainActor
 @Observable
 final class AgentRuntimeCoordinator {
     private(set) var installations: [HarnessInstallation]
@@ -15,7 +29,10 @@ final class AgentRuntimeCoordinator {
     private(set) var capabilityErrors: [HarnessProvider: String] = [:]
     private(set) var isLoadingCapabilities = false
     private(set) var isRefreshingInstallations = false
-    private(set) var snapshots: [UUID: AgentRuntimeSnapshot] = [:]
+    private(set) var snapshots: [UUID: AgentRuntimeSnapshot] = [:] {
+        didSet { updateSleepAssertion() }
+    }
+    private(set) var preventIdleSleepWhileWorking: Bool
     private(set) var heartbeatConfiguration: AgentHeartbeatConfiguration
     private(set) var lastHeartbeatDates: [UUID: Date]
     private(set) var accessConfiguration: AgentAccessConfiguration
@@ -24,19 +41,26 @@ final class AgentRuntimeCoordinator {
     private(set) var accessCheckResult: String?
     private(set) var isCheckingAccess = false
     @ObservationIgnored private var checkConnection: ExtendedAgentConnection?
+    @ObservationIgnored private let sleepController = AgentActivitySleepController()
     private var lifecycleID = UUID()
     private var blockedRestarts: Set<UUID> = []
+    private var restartAttempts: [UUID: Int] = [:]
+    @ObservationIgnored private var restartTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var stabilityTasks: [UUID: Task<Void, Never>] = [:]
+    private var recoveryPending: Set<UUID> = []
+    private var isStoppingAll = false
 
     @ObservationIgnored private var heartbeatScheduler: AgentHeartbeatScheduler
     private let defaults: UserDefaults
 
     private var discovery: HarnessDiscovery
-    private var processes: [UUID: CodexAgentProcess] = [:]
+    private var processes: [UUID: any AgentRuntimeProcess] = [:]
     private var capabilityProbe: CodexCapabilityProbe?
 
     init(discovery: HarnessDiscovery = HarnessDiscovery(), defaults: UserDefaults = .standard) {
         self.discovery = discovery
         self.defaults = defaults
+        preventIdleSleepWhileWorking = defaults.bool(forKey: Self.preventIdleSleepDefaultsKey)
         accessConfiguration = AgentAccessConfiguration.load(from: defaults)
         let configuration = AgentHeartbeatConfiguration.load(from: defaults)
         heartbeatConfiguration = configuration
@@ -47,6 +71,21 @@ final class AgentRuntimeCoordinator {
         lastHeartbeatDates = Self.loadLastHeartbeatDates(from: defaults)
         installations = discovery.discover()
     }
+
+    func configurePreventIdleSleepWhileWorking(_ enabled: Bool) {
+        preventIdleSleepWhileWorking = enabled
+        defaults.set(enabled, forKey: Self.preventIdleSleepDefaultsKey)
+        updateSleepAssertion()
+    }
+
+    private func updateSleepAssertion() {
+        sleepController.update(shouldPreventIdleSleep: AgentSleepPolicy.shouldPreventIdleSleep(
+            enabled: preventIdleSleepWhileWorking,
+            phases: snapshots.values.map(\.phase)
+        ))
+    }
+
+    private static let preventIdleSleepDefaultsKey = "Noodle.power.preventIdleSleepWhileWorking"
 
     func setExtendedAccess(_ enabled: Bool, agent: AgentRecord, repository: WorkspaceRepository) {
         guard !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id), accessConfiguration.isExtended(agent.id) != enabled else { return }
@@ -242,7 +281,8 @@ final class AgentRuntimeCoordinator {
         installations = discovery.discover()
         let liveIDs = Set(agents.map(\.id))
         for id in processes.keys where !liveIDs.contains(id) {
-            processes.removeValue(forKey: id)?.stop()
+            processes.removeValue(forKey: id)?.stop { _ in }
+            cancelSupervision(for: id)
             heartbeatScheduler.remove(id)
             saveHeartbeatActivityDates()
         }
@@ -257,10 +297,11 @@ final class AgentRuntimeCoordinator {
                     detail: "Choose a harness in Edit Bot"
                 )
             } else if installation(for: agent) != nil {
+                let name = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.displayName ?? "Harness"
                 snapshots[agent.id] = AgentRuntimeSnapshot(
                     agentID: agent.id,
                     phase: .offline,
-                    detail: "Codex is configured"
+                    detail: "\(name) is configured"
                 )
             } else {
                 snapshots[agent.id] = AgentRuntimeSnapshot(
@@ -284,6 +325,13 @@ final class AgentRuntimeCoordinator {
         capabilityProbe?.stop()
         capabilityProbe = nil
         capabilityErrors.removeAll()
+
+        if availableInstallations.contains(where: { $0.provider == .claudeCode }) {
+            modelsByProvider[.claudeCode] = ClaudeCodeCapabilities.models
+        } else {
+            modelsByProvider[.claudeCode] = []
+            capabilityErrors[.claudeCode] = "Claude Code is not installed"
+        }
 
         guard let installation = availableInstallations.first(where: { $0.provider == .codex }),
               let executablePath = installation.executablePath else {
@@ -312,6 +360,7 @@ final class AgentRuntimeCoordinator {
     }
 
     func startAll(agents: [AgentRecord], repository: WorkspaceRepository) {
+        isStoppingAll = false
         installations = discovery.discover()
         for agent in agents {
             start(agent: agent, repository: repository)
@@ -334,17 +383,22 @@ final class AgentRuntimeCoordinator {
 
         switch installation.provider {
         case .codex:
+            restartTasks.removeValue(forKey: agent.id)?.cancel()
             let process = CodexAgentProcess(
                 agent: agent,
                 executableURL: URL(fileURLWithPath: executablePath),
                 workspaceURL: repository.directory(for: agent),
                 extendedAccess: accessConfiguration.isExtended(agent.id),
+                recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
                 onSnapshot: { [weak self] snapshot in
                     if self?.snapshots[snapshot.agentID]?.phase == .working,
                        snapshot.phase == .ready {
                         self?.recordActivity(for: snapshot.agentID)
                     }
                     self?.snapshots[snapshot.agentID] = snapshot
+                    if snapshot.phase == .ready {
+                        self?.markStable(agentID: snapshot.agentID)
+                    }
                 },
                 onHeartbeat: { [weak self] in
                     self?.recordHeartbeat(for: agent.id)
@@ -352,20 +406,43 @@ final class AgentRuntimeCoordinator {
                 onApprovals: { [weak self] pending in
                     self?.approvals.removeAll { $0.agentID == agent.id }
                     self?.approvals.append(contentsOf: pending)
+                },
+                onUnexpectedTermination: { [weak self] terminated, detail, needsRecovery in
+                    self?.runtimeTerminated(
+                        terminated,
+                        agent: agent,
+                        repository: repository,
+                        detail: detail,
+                        needsRecovery: needsRecovery
+                    )
                 }
             )
             processes[agent.id] = process
             process.start()
-            // Recover notifications lost during an app restart or failed launch.
-            // Peek off the main thread; only Messenger may consume the inbox.
-            Task { [weak self, weak process] in
-                let hasUnread = await Task.detached {
-                    (try? repository.latestMessages(for: agent.id, consuming: false).isEmpty == false) ?? false
-                }.value
-                guard let self, let process, self.processes[agent.id] === process else { return }
-                if hasUnread { process.notify() }
-            }
+        case .claudeCode:
+            restartTasks.removeValue(forKey: agent.id)?.cancel()
+            let process = ClaudeAgentProcess(
+                agent: agent,
+                executableURL: URL(fileURLWithPath: executablePath),
+                workspaceURL: repository.directory(for: agent),
+                extendedAccess: accessConfiguration.isExtended(agent.id),
+                recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
+                onSnapshot: runtimeSnapshotHandler(for: agent.id),
+                onHeartbeat: { [weak self] in self?.recordHeartbeat(for: agent.id) },
+                onUnexpectedTermination: { [weak self] terminated, detail, needsRecovery in
+                    self?.runtimeTerminated(
+                        terminated,
+                        agent: agent,
+                        repository: repository,
+                        detail: detail,
+                        needsRecovery: needsRecovery
+                    )
+                }
+            )
+            processes[agent.id] = process
+            process.start()
         }
+        recoverUnreadMessages(for: agent, process: processes[agent.id], repository: repository)
     }
 
     func restart(
@@ -374,13 +451,16 @@ final class AgentRuntimeCoordinator {
         resetThread: Bool = false
     ) {
         guard !changingAccess.contains(agent.id) else { return }
+        cancelSupervision(for: agent.id)
         changingAccess.insert(agent.id)
         let lifecycle = lifecycleID
         let old = processes.removeValue(forKey: agent.id)
         if resetThread {
-            let stateURL = repository.directory(for: agent)
-                .appendingPathComponent(accessConfiguration.isExtended(agent.id) ? ".agents/codex-runtime-extended.json" : ".agents/codex-runtime.json")
-            try? FileManager.default.removeItem(at: stateURL)
+            let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")
+            let prefix = provider == .claudeCode ? "claude-runtime" : "codex-runtime"
+            let filename = accessConfiguration.isExtended(agent.id)
+                ? ".agents/\(prefix)-extended.json" : ".agents/\(prefix).json"
+            try? FileManager.default.removeItem(at: repository.directory(for: agent).appendingPathComponent(filename))
         }
         let finish: (Bool) -> Void = { [weak self] stopped in
             guard let self else { return }
@@ -406,11 +486,13 @@ final class AgentRuntimeCoordinator {
     }
 
     func stop(agentID: UUID) {
+        cancelSupervision(for: agentID)
+        recoveryPending.remove(agentID)
         changingAccess.remove(agentID)
         approvals.removeAll { $0.agentID == agentID }
         accessConfiguration.remove(agentID)
         accessConfiguration.save(to: defaults)
-        processes.removeValue(forKey: agentID)?.stop()
+        processes.removeValue(forKey: agentID)?.stop { _ in }
         snapshots.removeValue(forKey: agentID)
         heartbeatScheduler.remove(agentID)
         saveHeartbeatActivityDates()
@@ -419,21 +501,135 @@ final class AgentRuntimeCoordinator {
     }
 
     func stopAll() {
+        isStoppingAll = true
         lifecycleID = UUID()
         changingAccess = []
         approvals = []
         capabilityProbe?.stop()
         capabilityProbe = nil
-        processes.values.forEach { $0.stop() }
+        restartTasks.values.forEach { $0.cancel() }
+        restartTasks.removeAll()
+        stabilityTasks.values.forEach { $0.cancel() }
+        stabilityTasks.removeAll()
+        restartAttempts.removeAll()
+        recoveryPending.removeAll()
+        processes.values.forEach { $0.stop { _ in } }
         processes.removeAll()
         snapshots = snapshots.mapValues {
             AgentRuntimeSnapshot(agentID: $0.agentID, phase: .offline, detail: "Stopped")
         }
     }
+
+    func reconcile(agents: [AgentRecord], repository: WorkspaceRepository, immediately: Bool = false) {
+        guard !isStoppingAll else { return }
+        for agent in agents where installation(for: agent) != nil {
+            if let process = processes[agent.id], process.isAlive { continue }
+            if let process = processes.removeValue(forKey: agent.id) {
+                if process.hasInterruptedWork {
+                    recoveryPending.insert(agent.id)
+                }
+                process.stop { _ in }
+            }
+            if immediately {
+                restartTasks.removeValue(forKey: agent.id)?.cancel()
+            }
+            guard restartTasks[agent.id] == nil,
+                  !changingAccess.contains(agent.id),
+                  !blockedRestarts.contains(agent.id) else { continue }
+            scheduleRestart(agent: agent, repository: repository, detail: "Runtime connection was lost", immediately: immediately)
+        }
+    }
+
+    private func runtimeTerminated(
+        _ terminated: any AgentRuntimeProcess,
+        agent: AgentRecord,
+        repository: WorkspaceRepository,
+        detail: String,
+        needsRecovery: Bool
+    ) {
+        guard !isStoppingAll,
+              let current = processes[agent.id],
+              ObjectIdentifier(current) == ObjectIdentifier(terminated) else { return }
+        processes.removeValue(forKey: agent.id)
+        approvals.removeAll { $0.agentID == agent.id }
+        stabilityTasks.removeValue(forKey: agent.id)?.cancel()
+        if needsRecovery { recoveryPending.insert(agent.id) }
+        scheduleRestart(agent: agent, repository: repository, detail: detail)
+    }
+
+    private func scheduleRestart(
+        agent: AgentRecord,
+        repository: WorkspaceRepository,
+        detail: String,
+        immediately: Bool = false
+    ) {
+        guard !isStoppingAll, restartTasks[agent.id] == nil else { return }
+        let attempt = min((restartAttempts[agent.id] ?? 0) + 1, 7)
+        restartAttempts[agent.id] = attempt
+        let delay = immediately ? 0 : min(pow(2.0, Double(attempt - 1)), 30)
+        let delayText = delay == 0 ? "now" : "in \(Int(delay)) seconds"
+        snapshots[agent.id] = .init(
+            agentID: agent.id,
+            phase: .starting,
+            detail: "\(detail). Restarting \(delayText)…"
+        )
+        restartTasks[agent.id] = Task { [weak self] in
+            if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+            guard let self, !Task.isCancelled, !self.isStoppingAll else { return }
+            self.restartTasks[agent.id] = nil
+            self.start(agent: agent, repository: repository)
+        }
+    }
+
+    private func markStable(agentID: UUID) {
+        guard stabilityTasks[agentID] == nil,
+              let process = processes[agentID] else { return }
+        stabilityTasks[agentID] = Task { [weak self, weak process] in
+            try? await Task.sleep(for: .seconds(60))
+            guard let self, let process, !Task.isCancelled,
+                  self.processes[agentID].map(ObjectIdentifier.init) == ObjectIdentifier(process),
+                  process.isAlive else { return }
+            self.restartAttempts[agentID] = nil
+            self.stabilityTasks[agentID] = nil
+        }
+    }
+
+    private func cancelSupervision(for agentID: UUID) {
+        restartTasks.removeValue(forKey: agentID)?.cancel()
+        stabilityTasks.removeValue(forKey: agentID)?.cancel()
+        restartAttempts.removeValue(forKey: agentID)
+    }
+
+    private func runtimeSnapshotHandler(for agentID: UUID) -> @MainActor (AgentRuntimeSnapshot) -> Void {
+        { [weak self] snapshot in
+            if self?.snapshots[snapshot.agentID]?.phase == .working, snapshot.phase == .ready {
+                self?.recordActivity(for: snapshot.agentID)
+            }
+            self?.snapshots[snapshot.agentID] = snapshot
+            if snapshot.phase == .ready { self?.markStable(agentID: agentID) }
+        }
+    }
+
+    private func recoverUnreadMessages(
+        for agent: AgentRecord,
+        process: (any AgentRuntimeProcess)?,
+        repository: WorkspaceRepository
+    ) {
+        guard let process else { return }
+        Task { [weak self, weak process] in
+            let hasUnread = await Task.detached {
+                (try? repository.latestMessages(for: agent.id, consuming: false).isEmpty == false) ?? false
+            }.value
+            guard let self, let process,
+                  self.processes[agent.id].map(ObjectIdentifier.init) == ObjectIdentifier(process) else { return }
+            if hasUnread { process.notify() }
+        }
+    }
+
 }
 
 @MainActor
-private final class CodexAgentProcess {
+final class CodexAgentProcess: AgentRuntimeProcess {
     private enum RequestPurpose {
         case initialize
         case startThread
@@ -459,6 +655,7 @@ private final class CodexAgentProcess {
     private var extendedPID: Int32?
     private let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
     private let onHeartbeat: @MainActor () -> Void
+    private let onUnexpectedTermination: @MainActor (CodexAgentProcess, String, Bool) -> Void
     private let stateURL: URL
 
     private var process: Process?
@@ -473,7 +670,9 @@ private final class CodexAgentProcess {
     private var threadID: String?
     private var turnIsActive = false
     private var notificationPending = false
+    private var recoveryPending: Bool
     private var intentionallyStopped = false
+    private var terminationReported = false
     private var lastErrorText: String?
 
     private(set) var snapshot: AgentRuntimeSnapshot
@@ -483,17 +682,21 @@ private final class CodexAgentProcess {
         executableURL: URL,
         workspaceURL: URL,
         extendedAccess: Bool,
+        recoverInterruptedWork: Bool,
         onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void,
         onHeartbeat: @escaping @MainActor () -> Void,
-        onApprovals: @escaping @MainActor ([AgentApprovalRequest]) -> Void
+        onApprovals: @escaping @MainActor ([AgentApprovalRequest]) -> Void,
+        onUnexpectedTermination: @escaping @MainActor (CodexAgentProcess, String, Bool) -> Void
     ) {
         configuration = agent
         self.executableURL = executableURL
         self.workspaceURL = workspaceURL
         self.extendedAccess = extendedAccess
+        recoveryPending = recoverInterruptedWork
         self.onApprovals = onApprovals
         self.onSnapshot = onSnapshot
         self.onHeartbeat = onHeartbeat
+        self.onUnexpectedTermination = onUnexpectedTermination
         stateURL = workspaceURL.appendingPathComponent(extendedAccess ? ".agents/codex-runtime-extended.json" : ".agents/codex-runtime.json")
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
         let state = Self.loadState(from: stateURL)
@@ -503,6 +706,7 @@ private final class CodexAgentProcess {
     func start() {
         guard process == nil, extendedConnection == nil else { return }
         intentionallyStopped = false
+        terminationReported = false
         update(.starting, "Starting Codex")
 
         if extendedAccess {
@@ -517,21 +721,20 @@ private final class CodexAgentProcess {
                     }
                 }
                 connection.onExit = { [weak self] status in Task { @MainActor in self?.didTerminate(status: status) } }
-                connection.onFailure = { [weak self] detail in Task { @MainActor in
-                    guard let self, !self.intentionallyStopped else { return }
-                    self.extendedRunning = false
-                    self.fail(detail)
-                } }
+                connection.onFailure = { [weak self] detail in
+                    Task { @MainActor in self?.reportUnexpectedTermination(detail) }
+                }
                 extendedRunning = true
-                connection.start(agentID: configuration.id, executablePath: executableURL.path) { [weak self] pid, error in
+                connection.start(provider: .codex, agentID: configuration.id, executablePath: executableURL.path) { [weak self] pid, error in
                     Task { @MainActor in
                         guard let self, !self.intentionallyStopped else { return }
-                        if let error { self.extendedRunning = false; self.fail(error); return }
+                        if let error { self.reportUnexpectedTermination(error); return }
                         self.extendedPID = pid
-                        do { try self.initialize() } catch { self.fail(error.localizedDescription) }
+                        do { try self.initialize() }
+                        catch { self.reportUnexpectedTermination(error.localizedDescription) }
                     }
                 }
-            } catch { fail(error.localizedDescription) }
+            } catch { reportUnexpectedTermination(error.localizedDescription) }
             return
         }
 
@@ -584,9 +787,7 @@ private final class CodexAgentProcess {
             errors = errorPipe.fileHandleForReading
             update(.starting, "Connecting to Codex")
             try initialize()
-        } catch {
-            fail(error.localizedDescription)
-        }
+        } catch { reportUnexpectedTermination(error.localizedDescription) }
     }
 
     private func initialize() throws {
@@ -598,6 +799,7 @@ private final class CodexAgentProcess {
 
     func stop(completion: @escaping (Bool) -> Void = { _ in }) {
         intentionallyStopped = true
+        terminationReported = true
         pendingApprovals = []
         onApprovals([])
         let hadExtendedConnection = extendedConnection != nil
@@ -632,27 +834,42 @@ private final class CodexAgentProcess {
             && !turnIsActive && !notificationPending && threadID != nil
     }
 
+    var isAlive: Bool { process?.isRunning == true || extendedRunning }
+
+    var hasInterruptedWork: Bool {
+        recoveryPending || turnIsActive || notificationPending
+    }
+
     func heartbeat() {
         guard canReceiveHeartbeat else { return }
         startTurn(reason: .heartbeat)
     }
 
     private func didTerminate(status: Int32) {
-        guard !intentionallyStopped else { return }
+        reportUnexpectedTermination(lastErrorText ?? "Codex exited with status \(status)")
+    }
+
+    private func reportUnexpectedTermination(_ detail: String) {
+        guard !intentionallyStopped, !terminationReported else { return }
+        terminationReported = true
+        let needsRecovery = recoveryPending || turnIsActive || notificationPending
         extendedRunning = false
+        extendedConnection?.invalidate()
+        extendedConnection = nil
         pendingApprovals = []
         onApprovals([])
+        output?.readabilityHandler = nil
+        errors?.readabilityHandler = nil
+        process?.terminationHandler = nil
+        if process?.isRunning == true { process?.terminate() }
         process = nil
         input = nil
         output = nil
         errors = nil
         purposes.removeAll()
         turnIsActive = false
-        if intentionallyStopped {
-            update(.offline, "Stopped")
-        } else {
-            fail(lastErrorText ?? "Codex exited with status \(status)")
-        }
+        fail(detail)
+        onUnexpectedTermination(self, detail, needsRecovery)
     }
 
     private func handle(_ message: [String: Any]) {
@@ -777,6 +994,11 @@ private final class CodexAgentProcess {
 
     private func finishOpeningThread() {
         update(.ready, "Codex ready")
+        if recoveryPending {
+            recoveryPending = false
+            startTurn(reason: .runtimeRecovered)
+            return
+        }
         sendPendingNotificationIfPossible()
     }
 
@@ -833,7 +1055,12 @@ private final class CodexAgentProcess {
         do {
             try request(.startTurn(reason), method: "turn/start", params: params)
             turnIsActive = true
-            update(.working, reason == .heartbeat ? "Heartbeat: checking for follow-up work" : "Checking for new messages")
+            let detail = switch reason {
+            case .heartbeat: "Heartbeat: checking for follow-up work"
+            case .runtimeRecovered: "Recovering interrupted work"
+            case .inboxChanged: "Checking for new messages"
+            }
+            update(.working, detail)
         } catch {
             if reason == .inboxChanged { notificationPending = true }
             fail(error.localizedDescription)
@@ -861,7 +1088,7 @@ private final class CodexAgentProcess {
         input.write(data + Data([0x0A])) { [weak self] error in
             Task { @MainActor in
                 guard let self, !self.intentionallyStopped else { return }
-                self.fail("Could not communicate with Codex: \(error.localizedDescription)")
+                self.reportUnexpectedTermination("Could not communicate with Codex: \(error.localizedDescription)")
             }
         }
     }
@@ -915,11 +1142,7 @@ private final class CodexAgentProcess {
         return nil
     }
 
-    private static let developerInstructions = """
-    \(AgentWakeReason.heartbeatInstructions)
-    Messenger also supports `--react --conversation <uuid> --message <message-uuid> --emoji '👀'` and `--unreact` to remove your own emoji. Use reactions when useful for acknowledgement, progress, completion, or feedback, keeping progress indicators accurate. `--list-conversations` includes each group's public description. `--list-messages --conversation <uuid>` reads history including your own messages and current reactions without consuming the inbox. `--list-participants --conversation <uuid>` returns the current conversation and its public description, the roster, each bot's public description, and its most recent activity in that conversation; it never exposes private backstories. Inbox deliveries with `reactionChange` are feedback on the referenced message, not a new instruction to repeat it. The change's `sender` names the reactor; `emoji` and `removed` describe the update. Do not reply to every reaction or create acknowledgement loops.
-    You are a continuously running Noodle agent. An `inbox-changed` event is a notification that your inbox changed; it never contains the user's message. Whenever notified, your first action must be running the bundled Messenger CLI through Codex's programmatic bridge: `const r = await tools.exec_command({cmd: "./.agents/skills/messenger/messenger --get-latest --inline-images", max_output_tokens: 250000}); if (r.exit_code !== 0) throw new Error(r.output); const payload = JSON.parse(r.output); text(payload.deliveries); for (const visual of payload.images) image(visual.dataURL, "original");`. Every delivery explicitly identifies you in `me`, provides the conversation and its public description as context, provides a named `participants` roster where your handle is `me`, and annotates the message `sender` with a `user`, `me`, `bot`, or `system` handle. Use these identities instead of guessing from UUIDs. The CLI includes attached images directly as visual inputs, so inspect them without calling a local image viewer. Every attachment also includes its exact `absolutePath` for non-visual file work. Run get-latest only once for each notification because it consumes the inbox. Reply with the Messenger CLI using `--send`, the conversation UUID, and `--body-percent-encoded`; encode a UTF-8 reply with `const encoded = encodeURIComponent(body).replaceAll("'", "%27");` and pass it as a single-quoted command argument. To send files you created, add a repeatable `--attach <file-path>` option; the body is optional when at least one file is attached. Never edit Noodle's conversation files directly. Do not answer the notification text itself. If the inbox is empty on an `inbox-changed` event, finish quietly. For a `heartbeat` event, follow the heartbeat instructions above.
-    """
+    private static var developerInstructions: String { MessengerDocumentation.agentInstructions }
 
     private var accessInstructions: String {
         let mode = extendedAccess

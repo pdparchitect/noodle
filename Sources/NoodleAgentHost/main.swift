@@ -10,8 +10,11 @@ private enum HostPaths {
         return URL(fileURLWithPath: String(cString: path), isDirectory: true)
     }()
 
-    static func executable(_ path: String) throws -> URL {
-        try CodexExecutableTrust.executable(at: path, home: home)
+    static func executable(_ path: String, provider: HarnessProvider) throws -> URL {
+        switch provider {
+        case .codex: return try CodexExecutableTrust.executable(at: path, home: home)
+        case .claudeCode: return try ClaudeExecutableTrust.executable(at: path, home: home)
+        }
     }
 
     static func workspace(_ id: String) throws -> URL {
@@ -54,19 +57,51 @@ if CommandLine.arguments == [CommandLine.arguments[0], "--check-process-group"] 
     }
 }
 
-// The child creates a dedicated process group before starting Codex. Disabling
+// The child creates a dedicated process group before starting the harness. Disabling
 // extended access terminates this group, including ordinary tool descendants.
-if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--codex-child" {
+if CommandLine.arguments.count == 9, CommandLine.arguments[1] == "--harness-child" {
     do {
-        let executable = try HostPaths.executable(CommandLine.arguments[2])
-        let workspace = try HostPaths.workspace(CommandLine.arguments[3])
+        guard let provider = HarnessProvider(rawValue: CommandLine.arguments[2]) else {
+            throw HostError("Unsupported harness.")
+        }
+        let executable = try HostPaths.executable(CommandLine.arguments[3], provider: provider)
+        let workspace = try HostPaths.workspace(CommandLine.arguments[4])
+        let sessionID = CommandLine.arguments[5].isEmpty ? nil : UUID(uuidString: CommandLine.arguments[5])
+        let resumeSession = CommandLine.arguments[6] == "1"
+        let model = CommandLine.arguments[7].isEmpty ? nil : CommandLine.arguments[7]
+        let effort = CommandLine.arguments[8].isEmpty ? nil : CommandLine.arguments[8]
         try isolateProcessGroup()
         guard chdir(workspace.path) == 0 else { throw HostError("Could not open the bot workspace: \(String(cString: strerror(errno)))") }
-        let strings: [String] = [executable.path, "app-server"]
+        var strings: [String]
+        switch provider {
+        case .codex:
+            strings = [executable.path, "app-server"]
+        case .claudeCode:
+            guard let sessionID else { throw HostError("Claude Code requires a valid session identifier.") }
+            if let model {
+                guard ClaudeCodeCapabilities.isValidModelIdentifier(model) else {
+                    throw HostError("Unsupported Claude Code model identifier.")
+                }
+            }
+            if let effort, !["low", "medium", "high", "xhigh", "max"].contains(effort) {
+                throw HostError("Unsupported Claude Code effort.")
+            }
+            strings = [
+                executable.path, "-p",
+                "--input-format", "stream-json",
+                "--output-format", "stream-json",
+                "--verbose",
+                "--permission-mode", "bypassPermissions",
+                "--permission-prompts", "none",
+                resumeSession ? "--resume" : "--session-id", sessionID.uuidString.lowercased()
+            ]
+            if let model { strings += ["--model", model] }
+            if let effort { strings += ["--effort", effort] }
+        }
         var arguments: [UnsafeMutablePointer<CChar>?] = strings.map { value in value.withCString { strdup($0) } }
         arguments.append(nil)
         execv(executable.path, arguments)
-        throw HostError("Could not execute Codex.")
+        throw HostError("Could not execute \(provider.displayName).")
     } catch {
         fputs("\(error.localizedDescription)\n", stderr)
         exit(1)
@@ -77,6 +112,7 @@ private final class HostSession: NSObject, AgentHostService {
     private weak var connection: NSXPCConnection?
     private let queue = DispatchQueue(label: "Noodle.agent-host-session")
     private var process: Process?
+    private var accountProcess: Process?
     private var input: ProcessInputWriter?
     private var outputs: [FileHandle] = []
     private var stopping = false
@@ -87,24 +123,40 @@ private final class HostSession: NSObject, AgentHostService {
 
     private var client: AgentHostClient? { connection?.remoteObjectProxy as? AgentHostClient }
 
-    func start(agentID: String, executablePath: String, withReply reply: @escaping (Int32, String?) -> Void) {
+    func start(
+        harnessIdentifier: String,
+        agentID: String,
+        executablePath: String,
+        sessionID: String?,
+        resumeSession: Bool,
+        modelIdentifier: String?,
+        effortIdentifier: String?,
+        withReply reply: @escaping (Int32, String?) -> Void
+    ) {
         queue.async {
             guard self.process == nil, !self.stopping else { reply(0, "Runtime already started or stopping."); return }
             do {
-                _ = try HostPaths.executable(executablePath)
+                guard let provider = HarnessProvider(rawValue: harnessIdentifier) else {
+                    throw HostError("Unsupported harness.")
+                }
+                _ = try HostPaths.executable(executablePath, provider: provider)
                 let workspace = try HostPaths.workspace(agentID)
                 let child = Process()
                 child.executableURL = Bundle.main.executableURL
                 // Preserve the approved installation path for the child's independent
                 // trust check. Passing the resolved release path would fall outside the
                 // intentionally narrow installation allowlist on the second check.
-                child.arguments = ["--codex-child", executablePath, agentID]
+                child.arguments = [
+                    "--harness-child", provider.rawValue, executablePath, agentID,
+                    sessionID ?? "", resumeSession ? "1" : "0",
+                    modelIdentifier ?? "", effortIdentifier ?? ""
+                ]
                 child.currentDirectoryURL = workspace
                 // Do not inherit DYLD, shell startup hooks, or arbitrary app environment.
                 child.environment = [
                     "HOME": HostPaths.home.path,
                     "USER": NSUserName(), "LOGNAME": NSUserName(),
-                    "PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
+                    "PATH": "\(HostPaths.home.path)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
                     "TMPDIR": NSTemporaryDirectory(),
                     "CODEX_HOME": HostPaths.home.appendingPathComponent(".codex").path,
                     "NOODLE_AGENT_ID": agentID.lowercased(), "NOODLE_WORKSPACE": workspace.path
@@ -147,6 +199,9 @@ private final class HostSession: NSObject, AgentHostService {
             self.stopReplies.append(reply)
             guard !self.stopping else { return }
             self.stopping = true
+            self.accountProcess?.terminationHandler = nil
+            if self.accountProcess?.isRunning == true { self.accountProcess?.terminate() }
+            self.accountProcess = nil
             self.input = nil
             guard let id = self.groupID else { self.finishStop(true); return }
             kill(-id, SIGTERM)
@@ -186,6 +241,87 @@ private final class HostSession: NSObject, AgentHostService {
                 reply(probe.terminationStatus == 0, probe.terminationStatus == 0 ? "Runtime isolation check passed." : detail)
             } catch { reply(false, error.localizedDescription) }
         }
+    }
+
+    func checkAuthentication(
+        harnessIdentifier: String,
+        executablePath: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    ) {
+        queue.async {
+            do {
+                guard let provider = HarnessProvider(rawValue: harnessIdentifier), provider == .claudeCode else {
+                    throw HostError("This harness does not use the Claude Code account check.")
+                }
+                let executable = try HostPaths.executable(executablePath, provider: provider)
+                reply(try self.claudeAuthenticationStatus(executable), nil)
+            } catch { reply(false, error.localizedDescription) }
+        }
+    }
+
+    func signIn(
+        harnessIdentifier: String,
+        executablePath: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    ) {
+        queue.async {
+            do {
+                guard let provider = HarnessProvider(rawValue: harnessIdentifier), provider == .claudeCode else {
+                    throw HostError("This harness does not support this sign-in flow.")
+                }
+                let executable = try HostPaths.executable(executablePath, provider: provider)
+                let login = Process()
+                login.executableURL = executable
+                login.arguments = ["auth", "login", "--claudeai"]
+                login.currentDirectoryURL = FileManager.default.temporaryDirectory
+                login.standardInput = FileHandle.nullDevice
+                login.standardOutput = FileHandle.nullDevice
+                login.standardError = FileHandle.nullDevice
+                login.environment = self.accountEnvironment
+                login.terminationHandler = { [weak self] login in
+                    self?.queue.async {
+                        guard let self, self.accountProcess === login else { return }
+                        self.accountProcess = nil
+                        do {
+                            guard login.terminationStatus == 0 else {
+                                throw HostError("Claude Code sign-in did not complete. You can also run `claude auth login` in Terminal.")
+                            }
+                            reply(try self.claudeAuthenticationStatus(executable), nil)
+                        } catch { reply(false, error.localizedDescription) }
+                    }
+                }
+                try login.run()
+                self.accountProcess = login
+            } catch { reply(false, error.localizedDescription) }
+        }
+    }
+
+    private var accountEnvironment: [String: String] {
+        [
+            "HOME": HostPaths.home.path,
+            "USER": NSUserName(), "LOGNAME": NSUserName(),
+            "PATH": "\(HostPaths.home.path)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
+            "TMPDIR": NSTemporaryDirectory()
+        ]
+    }
+
+    private func claudeAuthenticationStatus(_ executable: URL) throws -> Bool {
+        let process = Process(), output = Pipe()
+        process.executableURL = executable
+        process.arguments = ["auth", "status", "--json"]
+        process.currentDirectoryURL = FileManager.default.temporaryDirectory
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        process.environment = accountEnvironment
+        try process.run()
+        process.waitUntilExit()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let loggedIn = object["loggedIn"] as? Bool else {
+            throw HostError("Claude Code returned an unsupported account response.")
+        }
+        return loggedIn
     }
 }
 

@@ -82,6 +82,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSUpdateDynamicServices()
         NoodleNotifications.configure(delegate: self)
         AppUpdater.shared.start()
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(workspaceDidWake),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
         attachmentPasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
             guard event.charactersIgnoringModifiers?.lowercased() == "v",
@@ -105,10 +111,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
         if let attachmentPasteMonitor {
             NSEvent.removeMonitor(attachmentPasteMonitor)
         }
         NoodleStore.active?.stopMonitoring()
+    }
+
+    @objc private func workspaceDidWake(_ notification: Notification) {
+        NoodleStore.active?.recoverAgentsAfterWake()
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {

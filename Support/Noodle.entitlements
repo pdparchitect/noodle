@@ -19,5 +19,10 @@
     <array>
         <string>/.codex/</string>
     </array>
+    <key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
+    <array>
+        <string>/.local/bin/claude</string>
+        <string>/.local/share/claude/versions/</string>
+    </array>
 </dict>
 </plist>

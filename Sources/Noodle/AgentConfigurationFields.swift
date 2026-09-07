@@ -251,7 +251,7 @@ private struct ModelChooser: View {
 
             Divider()
 
-            Text(models.count == 1 ? "1 model" : "\(models.count) models")
+            Text(models.count == 1 ? "1 known model" : "\(models.count) known models")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .trailing)

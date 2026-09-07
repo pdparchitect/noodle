@@ -10,7 +10,8 @@ let package = Package(
     products: [
         .library(name: "NoodleCore", targets: ["NoodleCore"]),
         .executable(name: "Noodle", targets: ["Noodle"]),
-        .executable(name: "NoodleMessenger", targets: ["NoodleMessenger"])
+        .executable(name: "NoodleMessenger", targets: ["NoodleMessenger"]),
+        .executable(name: "NoodleDocumentation", targets: ["NoodleDocumentation"])
     ],
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4")
@@ -19,6 +20,7 @@ let package = Package(
         .target(name: "NoodleAgentBridge"),
         .executableTarget(name: "NoodleAgentHost", dependencies: ["NoodleCore", "NoodleAgentBridge"]),
         .target(name: "NoodleCore"),
+        .executableTarget(name: "NoodleDocumentation", dependencies: ["NoodleCore"]),
         .target(name: "NoodleSharing", dependencies: ["NoodleCore"]),
         .executableTarget(
             name: "NoodleShareExtension",

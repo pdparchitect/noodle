@@ -5,9 +5,9 @@ import Foundation
 public enum ConversationEffectKind: String, Codable, CaseIterable, Sendable {
     case confetti
 
-    static let messengerInstructions = """
-    You can celebrate a meaningful result with a temporary chat effect: `./.agents/skills/messenger/messenger --effect confetti --conversation <uuid>`. Use `--list-effects` to discover supported effect names. Effects are optional, should be used sparingly, and never replace a reply. They play once only when the user has that conversation in the foreground, expire after 30 seconds, and respect Reduce Motion. The JSON receipt confirms queuing, not that the user saw it. Effects do not create messages or notify agents. For a retry, reuse an optional `--request-id <uuid>`; recent IDs are retained for up to five minutes (32 events). You can only target conversations you participate in.
-    """
+    static var messengerInstructions: String {
+        allCases.map { $0.reference.guidance }.joined(separator: "\n\n")
+    }
 }
 
 public struct ConversationEffect: Codable, Equatable, Identifiable, Sendable {

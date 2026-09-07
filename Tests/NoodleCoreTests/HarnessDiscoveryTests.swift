@@ -52,6 +52,23 @@ final class HarnessDiscoveryTests: XCTestCase {
         XCTAssertEqual(result.detail, "Not installed")
     }
 
+    func testDiscoveryFindsClaudeCodeNativeInstallerLink() throws {
+        let claude = root.appendingPathComponent(".local/bin/claude")
+        try FileManager.default.createDirectory(at: claude.deletingLastPathComponent(), withIntermediateDirectories: true)
+        XCTAssertTrue(FileManager.default.createFile(atPath: claude.path, contents: Data()))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
+
+        let result = HarnessDiscovery(
+            homeDirectory: root,
+            applicationsDirectory: root,
+            executableSearchDirectories: [],
+            environment: [:]
+        ).discover(.claudeCode)
+
+        XCTAssertEqual(result.executablePath, claude.path)
+        XCTAssertEqual(result.provider.displayName, "Claude Code")
+    }
+
     func testNoHarnessOverrideIsDebugOnlyAndSurvivesRefresh() throws {
         let executable = root.appendingPathComponent("codex")
         XCTAssertTrue(FileManager.default.createFile(atPath: executable.path, contents: Data()))
@@ -104,5 +121,20 @@ final class HarnessDiscoveryTests: XCTestCase {
         XCTAssertEqual(model.supportedEfforts.first?.displayName, "Low")
         XCTAssertEqual(model.defaultEffort, "low")
         XCTAssertTrue(model.isDefault)
+    }
+
+    func testClaudeCatalogueContainsOnlyTheStandardAliases() {
+        XCTAssertEqual(
+            ClaudeCodeCapabilities.models.map(\.id),
+            ["fable", "opus", "sonnet", "haiku"]
+        )
+    }
+
+    func testClaudeModelIdentifiersRemainArgumentSafe() {
+        XCTAssertTrue(ClaudeCodeCapabilities.isValidModelIdentifier("fable"))
+        XCTAssertTrue(ClaudeCodeCapabilities.isValidModelIdentifier("opus"))
+        XCTAssertFalse(ClaudeCodeCapabilities.isValidModelIdentifier("claude-opus-4-7"))
+        XCTAssertFalse(ClaudeCodeCapabilities.isValidModelIdentifier("claude-opus-4-7 --verbose"))
+        XCTAssertFalse(ClaudeCodeCapabilities.isValidModelIdentifier(""))
     }
 }

@@ -13,6 +13,12 @@ public struct HarnessInstallationGuide: Equatable, Sendable {
     public let command: String?
     public let instructions: String
     public let documentationURL: URL
+
+    public init(command: String?, instructions: String, documentationURL: URL) {
+        self.command = command
+        self.instructions = instructions
+        self.documentationURL = documentationURL
+    }
 }
 
 public struct HarnessSetupError: LocalizedError {

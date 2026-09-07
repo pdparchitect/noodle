@@ -17,6 +17,7 @@ extension ConversationAttachment {
 struct AttachmentInlinePreview: View {
     let attachment: ConversationAttachment
     let fileURL: URL
+    let shouldLoad: Bool
     let isSelected: Bool
     let select: () -> Void
     let preview: () -> Void
@@ -30,12 +31,14 @@ struct AttachmentInlinePreview: View {
     init(
         attachment: ConversationAttachment,
         fileURL: URL,
+        shouldLoad: Bool,
         isSelected: Bool,
         select: @escaping () -> Void,
         preview: @escaping () -> Void
     ) {
         self.attachment = attachment
         self.fileURL = fileURL
+        self.shouldLoad = shouldLoad
         self.isSelected = isSelected
         self.select = select
         self.preview = preview
@@ -77,7 +80,8 @@ struct AttachmentInlinePreview: View {
         .accessibilityLabel("Attachment \(attachment.originalFilename)")
         .accessibilityHint("Click or press Space to preview")
         .accessibilityAddTraits(.isButton)
-        .task(id: fileURL) {
+        .task(id: shouldLoad) {
+            guard shouldLoad else { return }
             await loadThumbnail()
         }
     }
@@ -156,7 +160,10 @@ struct AttachmentInlinePreview: View {
         }
 
         if displaysAsImage,
-           let generated = AttachmentThumbnailCache.imageThumbnail(for: fileURL) {
+           let generated = await Task.detached(priority: .utility, operation: {
+               AttachmentThumbnailCache.generateImageThumbnail(for: fileURL)
+           }).value {
+            guard !Task.isCancelled else { return }
             AttachmentThumbnailCache.shared.setObject(generated, forKey: key)
             withAnimation(.easeOut(duration: 0.15)) {
                 thumbnail = generated
@@ -198,7 +205,7 @@ private enum AttachmentThumbnailCache {
         return type.conforms(to: .image)
     }
 
-    static func imageThumbnail(for url: URL) -> NSImage? {
+    nonisolated static func generateImageThumbnail(for url: URL) -> NSImage? {
         guard let source = imageSource(for: url),
               let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -230,7 +237,7 @@ private enum AttachmentThumbnailCache {
         return size
     }
 
-    private static func imageSource(for url: URL) -> CGImageSource? {
+    nonisolated private static func imageSource(for url: URL) -> CGImageSource? {
         CGImageSourceCreateWithURL(
             url as CFURL,
             [kCGImageSourceShouldCache: false] as CFDictionary

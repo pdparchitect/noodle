@@ -65,6 +65,16 @@ final class HarnessSetupTests: XCTestCase {
         try FileManager.default.createDirectory(at: executable.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("not signed".utf8).write(to: executable)
         XCTAssertThrowsError(try CodexExecutableTrust.executable(at: executable.path, home: root))
+        XCTAssertThrowsError(try ClaudeExecutableTrust.executable(at: "/bin/sh", home: root))
+    }
+
+    func testOfficialClaudeCodeNativeInstallWhenFixtureProvided() throws {
+        guard let path = ProcessInfo.processInfo.environment["NOODLE_TEST_CLAUDE_EXECUTABLE"] else {
+            throw XCTSkip("Set NOODLE_TEST_CLAUDE_EXECUTABLE to the official native Claude Code link.")
+        }
+        let home = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+        let executable = try ClaudeExecutableTrust.executable(at: path, home: home)
+        XCTAssertEqual(executable.deletingLastPathComponent().lastPathComponent, "versions")
     }
 
     @MainActor func testStatusUsesAccountRPCWithoutStartingATurn() async throws {

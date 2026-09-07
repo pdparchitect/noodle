@@ -55,6 +55,7 @@ fi
 
 swift build --disable-sandbox --package-path "$project_root" --configuration "$configuration" >&2
 bin_path="$(swift build --disable-sandbox --package-path "$project_root" --configuration "$configuration" --show-bin-path)"
+"$bin_path/NoodleDocumentation" --check "$project_root/docs/message-reference.md" >&2
 developer_dir="$(xcode-select -p)"
 toolchain_dir="$developer_dir/Toolchains/XcodeDefault.xctoolchain"
 sdk_root="$(xcrun --sdk macosx --show-sdk-path)"
@@ -105,7 +106,6 @@ cp "$project_root/Support/AgentHost-Info.plist" "$agent_host/Contents/Info.plist
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$agent_host/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$agent_host/Contents/Info.plist"
 cp "$project_root/.build/checkouts/Sparkle/LICENSE" "$contents/Resources/Sparkle-LICENSE.txt"
-cp "$project_root/Support/Assets.xcassets/CodexHarness.imageset/codex-harness.svg" "$contents/Resources/CodexHarness.svg"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $app_name" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $app_name" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier" "$contents/Info.plist"

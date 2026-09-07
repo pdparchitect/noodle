@@ -129,29 +129,11 @@ struct MessageBubble: View {
     }
 
     private var renderedBody: AttributedString {
-        let options = AttributedString.MarkdownParsingOptions(
-            interpretedSyntax: .inlineOnlyPreservingWhitespace,
-            failurePolicy: .returnPartiallyParsedIfPossible
-        )
-        guard var rendered = try? AttributedString(markdown: message.body, options: options) else {
-            return AttributedString(message.body)
-        }
-
-        let allowedSchemes = Set(["http", "https", "mailto"])
-        var unsafeLinkRanges: [Range<AttributedString.Index>] = []
-        for run in rendered.runs {
-            if let link = run.link,
-               !allowedSchemes.contains(link.scheme?.lowercased() ?? "") {
-                unsafeLinkRanges.append(run.range)
-            }
-        }
-        for range in unsafeLinkRanges {
-            rendered[range].link = nil
-        }
-        return rendered
+        MessageMarkdownCache.shared.render(message)
     }
 
     var body: some View {
+        let attachments = store.attachments(for: message)
         if isSystem {
             HStack {
                 Spacer(minLength: 80)
@@ -187,27 +169,28 @@ struct MessageBubble: View {
                         reactionContextMenu(attachment: nil)
                     }
                     .overlay(alignment: .topTrailing) {
-                        if store.attachments(for: message).isEmpty { cornerReactions }
+                        if attachments.isEmpty { cornerReactions }
                     }
-                    .padding(.top, hasReactions && store.attachments(for: message).isEmpty ? 12 : 0)
+                    .padding(.top, hasReactions && attachments.isEmpty ? 12 : 0)
 
                 if let linkPreviewURL {
                     MessageLinkPreview(url: linkPreviewURL, shouldLoad: isVisible)
                 }
 
-                ForEach(store.attachments(for: message)) { attachment in
+                ForEach(attachments) { attachment in
                     AttachmentInlinePreview(
                         attachment: attachment,
                         fileURL: store.attachmentFileURL(attachment),
+                        shouldLoad: isVisible,
                         isSelected: selectedAttachmentID == attachment.id,
                         select: { selectedAttachmentID = attachment.id },
                         preview: { previewAttachment(attachment) }
                     )
                     .overlay { reactionContextMenu(attachment: attachment) }
                     .overlay(alignment: .topTrailing) {
-                        if attachment.id == store.attachments(for: message).last?.id { cornerReactions }
+                        if attachment.id == attachments.last?.id { cornerReactions }
                     }
-                    .padding(.top, hasReactions && attachment.id == store.attachments(for: message).last?.id ? 12 : 0)
+                    .padding(.top, hasReactions && attachment.id == attachments.last?.id ? 12 : 0)
                 }
 
                 if isUser {
@@ -367,4 +350,40 @@ struct MessageBubble: View {
         }
     }
 
+}
+
+private final class MessageMarkdownCache: @unchecked Sendable {
+    static let shared = MessageMarkdownCache()
+
+    private final class Box {
+        let value: AttributedString
+        init(_ value: AttributedString) { self.value = value }
+    }
+
+    private let values = NSCache<NSUUID, Box>()
+
+    private init() {
+        values.countLimit = 1_000
+    }
+
+    func render(_ message: ChatMessage) -> AttributedString {
+        let key = message.id as NSUUID
+        if let cached = values.object(forKey: key) { return cached.value }
+
+        let options = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace,
+            failurePolicy: .returnPartiallyParsedIfPossible
+        )
+        var rendered = (try? AttributedString(markdown: message.body, options: options))
+            ?? AttributedString(message.body)
+        let allowedSchemes = Set(["http", "https", "mailto"])
+        let unsafeLinkRanges = rendered.runs.compactMap { run -> Range<AttributedString.Index>? in
+            guard let link = run.link,
+                  !allowedSchemes.contains(link.scheme?.lowercased() ?? "") else { return nil }
+            return run.range
+        }
+        for range in unsafeLinkRanges { rendered[range].link = nil }
+        values.setObject(Box(rendered), forKey: key)
+        return rendered
+    }
 }
