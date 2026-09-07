@@ -157,6 +157,7 @@ final class NoodleStore {
         avatarSymbolName: String?,
         avatarColorIndex: Int,
         avatarImageData: Data?,
+        publicDescription: String,
         backstory: String
     ) -> Bool {
         guard runtime.availableInstallations.contains(where: { $0.provider.rawValue == harnessIdentifier }) else {
@@ -169,6 +170,7 @@ final class NoodleStore {
                 harnessIdentifier: harnessIdentifier,
                 modelIdentifier: modelIdentifier,
                 reasoningEffort: reasoningEffort,
+                publicDescription: publicDescription,
                 avatarSymbolName: avatarSymbolName,
                 avatarColorIndex: avatarColorIndex,
                 avatarImageData: avatarImageData,
@@ -199,6 +201,7 @@ final class NoodleStore {
         avatarSymbolName: String?,
         avatarColorIndex: Int,
         avatarImageData: Data?,
+        publicDescription: String,
         backstory: String
     ) -> Bool {
         do {
@@ -209,6 +212,7 @@ final class NoodleStore {
                 harnessIdentifier: harnessIdentifier,
                 modelIdentifier: modelIdentifier,
                 reasoningEffort: reasoningEffort,
+                publicDescription: publicDescription,
                 avatarSymbolName: avatarSymbolName,
                 avatarColorIndex: avatarColorIndex,
                 avatarImageData: avatarImageData
@@ -272,6 +276,7 @@ final class NoodleStore {
 
     func updateGroup(_ conversation: BotConversation, named name: String, participantIDs: Set<UUID>) -> Bool {
         do {
+            let membershipChanged = participantIDs != Set(conversation.participantIDs)
             let updated = try repository.updateGroup(
                 conversationID: conversation.id,
                 named: name,
@@ -281,6 +286,12 @@ final class NoodleStore {
             if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
                 conversations[index] = updated
                 conversations.sort { $0.updatedAt > $1.updatedAt }
+            }
+            if membershipChanged {
+                messagesByConversation[conversation.id] = try repository.loadMessages(
+                    conversationID: conversation.id
+                )
+                runtime.notify(participants(for: updated), repository: repository)
             }
             groupBeingEdited = nil
             refreshAppShortcuts()

@@ -13,6 +13,7 @@ struct NewBotSheet: View {
     @State private var selectedHarnessIdentifier = HarnessProvider.codex.rawValue
     @State private var selectedModelIdentifier = ""
     @State private var selectedEffort = ""
+    @State private var publicDescription = ""
     @State private var backstory = ""
     @State private var avatarSymbolName: String? = "sparkles"
     @State private var avatarColorIndex = Int.random(in: BotAvatarPalette.gradients.indices)
@@ -85,6 +86,8 @@ struct NewBotSheet: View {
                     selectedEffort: $selectedEffort
                 )
 
+                BotPublicDescriptionEditor(publicDescription: $publicDescription)
+
                 BotBackstoryEditor(backstory: $backstory)
             }
             .padding(20)
@@ -126,6 +129,7 @@ struct NewBotSheet: View {
             avatarSymbolName: avatarSymbolName,
             avatarColorIndex: avatarColorIndex,
             avatarImageData: avatarImageData,
+            publicDescription: publicDescription,
             backstory: backstory
         )
     }
@@ -165,6 +169,7 @@ struct EditBotSheet: View {
     @State private var selectedHarnessIdentifier: String
     @State private var selectedModelIdentifier: String
     @State private var selectedEffort: String
+    @State private var publicDescription: String
     @State private var backstory = ""
     @State private var avatarSymbolName: String?
     @State private var avatarColorIndex: Int
@@ -179,6 +184,7 @@ struct EditBotSheet: View {
         _selectedHarnessIdentifier = State(initialValue: agent.harnessIdentifier ?? HarnessProvider.codex.rawValue)
         _selectedModelIdentifier = State(initialValue: agent.modelIdentifier ?? "")
         _selectedEffort = State(initialValue: agent.reasoningEffort ?? "")
+        _publicDescription = State(initialValue: agent.publicDescription ?? "")
         _avatarSymbolName = State(initialValue: agent.avatarSymbolName)
         _avatarColorIndex = State(initialValue: agent.avatarColorIndex ?? agent.accentSeed)
         _avatarImageData = State(initialValue: agent.avatarImageData)
@@ -232,6 +238,8 @@ struct EditBotSheet: View {
                     selectedModelIdentifier: $selectedModelIdentifier,
                     selectedEffort: $selectedEffort
                 )
+
+                BotPublicDescriptionEditor(publicDescription: $publicDescription)
 
                 BotBackstoryEditor(backstory: $backstory)
 
@@ -320,9 +328,34 @@ struct EditBotSheet: View {
             avatarSymbolName: avatarSymbolName,
             avatarColorIndex: avatarColorIndex,
             avatarImageData: avatarImageData,
+            publicDescription: publicDescription,
             backstory: backstory
         ) {
             dismiss()
+        }
+    }
+}
+
+private struct BotPublicDescriptionEditor: View {
+    @Binding var publicDescription: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Description")
+                .font(.caption.weight(.semibold))
+
+            TextField(
+                "Briefly describe what this bot does…",
+                text: $publicDescription,
+                axis: .vertical
+            )
+            .textFieldStyle(.roundedBorder)
+            .lineLimit(2...3)
+            .autocorrectionDisabled(false)
+
+            Text("Visible to other bots in shared groups. The private backstory below is never included.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }

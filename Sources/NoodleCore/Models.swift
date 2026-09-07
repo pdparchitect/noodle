@@ -11,6 +11,7 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
     public var harnessIdentifier: String?
     public var modelIdentifier: String?
     public var reasoningEffort: String?
+    public var publicDescription: String?
     public let accentSeed: Int
     public var avatarSymbolName: String?
     public var avatarColorIndex: Int?
@@ -24,6 +25,7 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
         harnessIdentifier: String? = nil,
         modelIdentifier: String? = nil,
         reasoningEffort: String? = nil,
+        publicDescription: String? = nil,
         accentSeed: Int = Int.random(in: 0...5),
         avatarSymbolName: String? = nil,
         avatarColorIndex: Int? = nil,
@@ -36,6 +38,7 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
         self.harnessIdentifier = harnessIdentifier
         self.modelIdentifier = modelIdentifier
         self.reasoningEffort = reasoningEffort
+        self.publicDescription = publicDescription
         self.accentSeed = accentSeed
         self.avatarSymbolName = avatarSymbolName
         self.avatarColorIndex = avatarColorIndex
@@ -260,6 +263,38 @@ public struct MessengerDelivery: Codable, Hashable, Sendable {
     }
 }
 
+public struct MessengerParticipantStatus: Codable, Hashable, Sendable {
+    public let participant: MessengerIdentity
+    public let publicDescription: String?
+    public let lastActiveAt: Date?
+
+    public init(
+        participant: MessengerIdentity,
+        publicDescription: String?,
+        lastActiveAt: Date?
+    ) {
+        self.participant = participant
+        self.publicDescription = publicDescription
+        self.lastActiveAt = lastActiveAt
+    }
+}
+
+public struct MessengerRoster: Codable, Hashable, Sendable {
+    public let me: MessengerIdentity
+    public let conversation: BotConversation
+    public let participants: [MessengerParticipantStatus]
+
+    public init(
+        me: MessengerIdentity,
+        conversation: BotConversation,
+        participants: [MessengerParticipantStatus]
+    ) {
+        self.me = me
+        self.conversation = conversation
+        self.participants = participants
+    }
+}
+
 public struct MessengerInlineImage: Codable, Hashable, Sendable {
     public let attachmentID: UUID
     public let originalFilename: String
@@ -340,7 +375,7 @@ public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
     public let launcherExecutableURL: URL?
 
-    public static let managedSkillVersion = 13
+    public static let managedSkillVersion = 14
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
         self.rootURL = rootURL.standardizedFileURL
@@ -385,6 +420,7 @@ public struct WorkspaceRepository: Sendable {
         harnessIdentifier: String? = nil,
         modelIdentifier: String? = nil,
         reasoningEffort: String? = nil,
+        publicDescription: String? = nil,
         avatarSymbolName: String? = nil,
         avatarColorIndex: Int? = nil,
         avatarImageData: Data? = nil,
@@ -401,6 +437,7 @@ public struct WorkspaceRepository: Sendable {
             harnessIdentifier: harnessIdentifier,
             modelIdentifier: modelIdentifier,
             reasoningEffort: reasoningEffort,
+            publicDescription: Self.normalizedOptionalText(publicDescription),
             avatarSymbolName: avatarSymbolName,
             avatarColorIndex: avatarColorIndex,
             avatarImageData: avatarImageData
@@ -434,6 +471,7 @@ public struct WorkspaceRepository: Sendable {
             harnessIdentifier: agent.harnessIdentifier,
             modelIdentifier: agent.modelIdentifier,
             reasoningEffort: agent.reasoningEffort,
+            publicDescription: agent.publicDescription,
             avatarSymbolName: agent.avatarSymbolName,
             avatarColorIndex: agent.avatarColorIndex,
             avatarImageData: agent.avatarImageData,
@@ -447,6 +485,7 @@ public struct WorkspaceRepository: Sendable {
         harnessIdentifier: String?,
         modelIdentifier: String?,
         reasoningEffort: String?,
+        publicDescription: String? = nil,
         avatarSymbolName: String? = nil,
         avatarColorIndex: Int? = nil,
         avatarImageData: Data? = nil,
@@ -458,6 +497,7 @@ public struct WorkspaceRepository: Sendable {
         renamed.harnessIdentifier = harnessIdentifier
         renamed.modelIdentifier = modelIdentifier
         renamed.reasoningEffort = reasoningEffort
+        renamed.publicDescription = Self.normalizedOptionalText(publicDescription)
         renamed.avatarSymbolName = avatarSymbolName
         renamed.avatarColorIndex = avatarColorIndex
         renamed.avatarImageData = avatarImageData
@@ -534,7 +574,9 @@ public struct WorkspaceRepository: Sendable {
             throw WorkspaceError.missingAgent(uniqueIDs.first(where: { !knownIDs.contains($0) }) ?? UUID())
         }
 
-        let addedIDs = Set(uniqueIDs).subtracting(conversation.participantIDs)
+        let previousIDs = Set(conversation.participantIDs)
+        let addedIDs = Set(uniqueIDs).subtracting(previousIDs)
+        let removedIDs = previousIDs.subtracting(uniqueIDs)
         if !addedIDs.isEmpty {
             let messages = try loadMessages(conversationID: conversation.id)
             let messageCount = messages.count
@@ -553,7 +595,33 @@ public struct WorkspaceRepository: Sendable {
         conversation.participantIDs = uniqueIDs.sorted { $0.uuidString < $1.uuidString }
         conversation.updatedAt = now
         try updateConversation(conversation)
+
+        if !addedIDs.isEmpty || !removedIDs.isEmpty {
+            let namesByID = Dictionary(uniqueKeysWithValues: existingAgents.map { ($0.id, $0.displayName) })
+            let addedNames = addedIDs.compactMap { namesByID[$0] }.sorted()
+            let removedNames = removedIDs.compactMap { namesByID[$0] }.sorted()
+            var changes: [String] = []
+            if !addedNames.isEmpty {
+                changes.append("\(Self.formattedNames(addedNames)) \(addedNames.count == 1 ? "was" : "were") added to the group.")
+            }
+            if !removedNames.isEmpty {
+                changes.append("\(Self.formattedNames(removedNames)) \(removedNames.count == 1 ? "was" : "were") removed from the group.")
+            }
+            try append(ChatMessage(
+                conversationID: conversation.id,
+                author: .system,
+                body: changes.joined(separator: " "),
+                createdAt: now,
+                delivery: .delivered
+            ))
+        }
         return conversation
+    }
+
+    private static func formattedNames(_ names: [String]) -> String {
+        guard names.count > 1 else { return names.first ?? "A bot" }
+        if names.count == 2 { return names.joined(separator: " and ") }
+        return names.dropLast().joined(separator: ", ") + ", and " + (names.last ?? "")
     }
 
     public func append(_ message: ChatMessage) throws {
@@ -945,6 +1013,46 @@ public struct WorkspaceRepository: Sendable {
         }
     }
 
+    public func participantRoster(for agentID: UUID, conversationID: UUID) throws -> MessengerRoster {
+        let agents = try loadAgents()
+        guard let readingAgent = agents.first(where: { $0.id == agentID }) else {
+            throw WorkspaceError.missingAgent(agentID)
+        }
+        guard let conversation = try loadConversations().first(where: {
+            $0.id == conversationID && $0.participantIDs.contains(agentID)
+        }) else {
+            throw WorkspaceError.missingConversation(conversationID)
+        }
+
+        let agentsByID = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, $0) })
+        let messages = try loadMessages(conversationID: conversationID)
+        var lastActivity: [UUID: Date] = [:]
+        for message in messages {
+            guard case .agent(let authorID) = message.author else { continue }
+            lastActivity[authorID] = max(lastActivity[authorID] ?? .distantPast, message.createdAt)
+        }
+
+        let me = MessengerIdentity(handle: .me, agentID: agentID, displayName: readingAgent.displayName)
+        let participants = conversation.participantIDs.compactMap { participantID -> MessengerParticipantStatus? in
+            guard let agent = agentsByID[participantID] else { return nil }
+            let identity = participantID == agentID
+                ? me
+                : MessengerIdentity(handle: .bot, agentID: participantID, displayName: agent.displayName)
+            return MessengerParticipantStatus(
+                participant: identity,
+                publicDescription: agent.publicDescription,
+                lastActiveAt: lastActivity[participantID]
+            )
+        }.sorted {
+            if $0.participant.handle == .me { return true }
+            if $1.participant.handle == .me { return false }
+            return $0.participant.displayName.localizedCaseInsensitiveCompare(
+                $1.participant.displayName
+            ) == .orderedAscending
+        }
+        return MessengerRoster(me: me, conversation: conversation, participants: participants)
+    }
+
     @discardableResult
     public func setReaction(
         conversationID: UUID, messageID: UUID, author: MessageAuthor,
@@ -1181,6 +1289,11 @@ public struct WorkspaceRepository: Sendable {
         return value
     }
 
+    private static func normalizedOptionalText(_ rawValue: String?) -> String? {
+        let value = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return value.isEmpty ? nil : value
+    }
+
     private func loadChildren<Value: Decodable>(
         from parent: URL,
         filename: String,
@@ -1294,7 +1407,7 @@ public struct WorkspaceRepository: Sendable {
 
     \(ConversationEffectKind.messengerInstructions)
 
-    Reactions are lightweight acknowledgements or feedback. Use `./.agents/skills/messenger/messenger --react --conversation <uuid> --message <message-uuid> --emoji '👀'` to add your reaction; use `--unreact` with the same arguments to remove it. For example, 👀 can acknowledge receipt, ⏳ can indicate work in progress, and ✅ can indicate completion; choose reactions only when useful and keep work-status reactions accurate. Adding the same emoji twice is safe. `--list-messages --conversation <uuid>` reads full history, including your own messages and current reactions, without consuming the inbox. A delivery with `reactionChange` is feedback on the referenced message, not a new request to repeat it: its `sender` identifies the reactor, `emoji` identifies the reaction, and `removed` distinguishes removal. Reacting does not notify you of your own event. Other participants are notified; do not create acknowledgement loops or reply to every reaction.
+    Reactions are lightweight acknowledgements or feedback. Use `./.agents/skills/messenger/messenger --react --conversation <uuid> --message <message-uuid> --emoji '👀'` to add your reaction; use `--unreact` with the same arguments to remove it. For example, 👀 can acknowledge receipt, ⏳ can indicate work in progress, and ✅ can indicate completion; choose reactions only when useful and keep work-status reactions accurate. Adding the same emoji twice is safe. `--list-messages --conversation <uuid>` reads full history, including your own messages and current reactions, without consuming the inbox. `--list-participants --conversation <uuid>` returns the current named roster, each bot's public description, and its most recent message time in that conversation. It never exposes another bot's private backstory. A delivery with `reactionChange` is feedback on the referenced message, not a new request to repeat it: its `sender` identifies the reactor, `emoji` identifies the reaction, and `removed` distinguishes removal. Reacting does not notify you of your own event. Other participants are notified; do not create acknowledgement loops or reply to every reaction.
 
     Noodle `inbox-changed` notifications mean that this inbox may have changed. They never contain the user's message. In Codex, immediately run the bundled Messenger CLI through the programmatic bridge: `const r = await tools.exec_command({cmd: "./.agents/skills/messenger/messenger --get-latest --inline-images", max_output_tokens: 250000}); if (r.exit_code !== 0) throw new Error(r.output); const payload = JSON.parse(r.output); text(payload.deliveries); for (const visual of payload.images) image(visual.dataURL, "original");`. Every delivery names `me`, lists the conversation's named `participants`, and annotates the message `sender` with a `user`, `me`, `bot`, or `system` handle. Images attached to unread messages arrive directly from the CLI as visual inputs, so inspect them without calling a local image viewer. Every attachment also includes its exact `absolutePath` for non-visual file work. Run the get-latest command only once for each notification because it consumes the inbox. Reply through the Messenger CLI using `--send`, the conversation UUID, and `--body-percent-encoded`; create the argument with `encodeURIComponent(body).replaceAll("'", "%27")`. Add a repeatable `--attach <file-path>` option to send files you created; reply text is optional when a file is attached. Never reply to the notification text itself. If there are no deliveries on an `inbox-changed` event, finish quietly. On a `heartbeat` event, follow the heartbeat guidance above.
 
@@ -1329,7 +1442,7 @@ public struct WorkspaceRepository: Sendable {
 
     \(ConversationEffectKind.messengerInstructions)
 
-    Add an emoji with `./.agents/skills/messenger/messenger --react --conversation <uuid> --message <message-uuid> --emoji '👀'`. Remove only your own emoji using `--unreact` with the same arguments. Adding twice is idempotent. Use any single emoji for acknowledgement, progress, completion, or feedback, and remove outdated progress indicators when finished. `--list-messages --conversation <uuid>` lists history and current named reactions without consuming the inbox, including your own messages. `--get-latest` also delivers `reactionChange` events on already-read messages. The change has a named `sender`, `emoji`, and `removed` flag. The referenced message is context, not a new request: handle feedback appropriately without repeating the original task or creating reaction/reply loops. You do not receive your own reaction events.
+    Add an emoji with `./.agents/skills/messenger/messenger --react --conversation <uuid> --message <message-uuid> --emoji '👀'`. Remove only your own emoji using `--unreact` with the same arguments. Adding twice is idempotent. Use any single emoji for acknowledgement, progress, completion, or feedback, and remove outdated progress indicators when finished. `--list-messages --conversation <uuid>` lists history and current named reactions without consuming the inbox, including your own messages. `--list-participants --conversation <uuid>` returns the current named roster, each bot's public description, and its most recent message time in that conversation. It never exposes another bot's private backstory. `--get-latest` also delivers `reactionChange` events on already-read messages. The change has a named `sender`, `emoji`, and `removed` flag. The referenced message is context, not a new request: handle feedback appropriately without repeating the original task or creating reaction/reply loops. You do not receive your own reaction events.
 
     In Codex, run the bundled CLI through the programmatic bridge: `const r = await tools.exec_command({cmd: "./.agents/skills/messenger/messenger --get-latest --inline-images", max_output_tokens: 250000}); if (r.exit_code !== 0) throw new Error(r.output); const payload = JSON.parse(r.output); text(payload.deliveries); for (const visual of payload.images) image(visual.dataURL, "original");`. Each delivery includes `me`, a named participant roster, an explicitly annotated sender (`user`, `me`, `bot`, or `system`), the message, and linked attachments. The CLI includes attached images as visual inputs; inspect those without calling a local image viewer. Every attachment also includes its exact `absolutePath` for non-visual file work. Run get-latest only once for each notification because it consumes the inbox.
 

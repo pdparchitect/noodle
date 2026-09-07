@@ -123,6 +123,11 @@ struct MessageBubble: View {
         return false
     }
 
+    private var isSystem: Bool {
+        if case .system = message.author { return true }
+        return false
+    }
+
     private var renderedBody: AttributedString {
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace,
@@ -147,6 +152,20 @@ struct MessageBubble: View {
     }
 
     var body: some View {
+        if isSystem {
+            HStack {
+                Spacer(minLength: 80)
+                Label(message.body, systemImage: "person.2.fill")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+                Spacer(minLength: 80)
+            }
+            .transition(.opacity)
+        } else {
         HStack(alignment: .bottom, spacing: 8) {
             if isUser { Spacer(minLength: 120) }
 
@@ -205,6 +224,7 @@ struct MessageBubble: View {
             isVisible = visible
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
     }
 
     private var linkPreviewURL: URL? {

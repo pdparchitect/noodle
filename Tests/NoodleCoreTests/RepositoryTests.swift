@@ -62,6 +62,8 @@ final class RepositoryTests: XCTestCase {
         XCTAssertTrue(agentsGuide.contains("image(visual.dataURL"))
         XCTAssertTrue(agentsGuide.contains("--body-percent-encoded"))
         XCTAssertTrue(agentsGuide.contains("--attach <file-path>"))
+        XCTAssertTrue(agentsGuide.contains("--list-participants"))
+        XCTAssertTrue(agentsGuide.contains("private backstory"))
         XCTAssertFalse(agentsGuide.contains("TextEncoder"))
         XCTAssertTrue(agentsGuide.contains("named `participants`"))
         XCTAssertFalse(agentsGuide.contains("noodle_get_latest"))
@@ -70,6 +72,8 @@ final class RepositoryTests: XCTestCase {
         XCTAssertTrue(messengerGuide.contains("max_output_tokens: 250000"))
         XCTAssertTrue(messengerGuide.contains("--body-percent-encoded"))
         XCTAssertTrue(messengerGuide.contains("--attach <file-path>"))
+        XCTAssertTrue(messengerGuide.contains("--list-participants"))
+        XCTAssertTrue(messengerGuide.contains("private backstory"))
         XCTAssertTrue(messengerGuide.contains("named participant roster"))
         XCTAssertFalse(messengerGuide.contains("noodle_get_latest"))
         XCTAssertEqual(created.conversation.participantIDs, [created.agent.id])
@@ -150,7 +154,8 @@ final class RepositoryTests: XCTestCase {
             named: "Research Bot",
             harnessIdentifier: "codex",
             modelIdentifier: "gpt-test",
-            reasoningEffort: "high"
+            reasoningEffort: "high",
+            publicDescription: "Finds and verifies evidence."
         )
         let originalDirectory = repository.directory(for: created.agent)
         let renamed = try repository.updateAgent(
@@ -158,7 +163,8 @@ final class RepositoryTests: XCTestCase {
             displayName: "Evidence Bot",
             harnessIdentifier: "codex",
             modelIdentifier: "gpt-test-2",
-            reasoningEffort: "medium"
+            reasoningEffort: "medium",
+            publicDescription: created.agent.publicDescription
         )
 
         XCTAssertEqual(renamed.id, created.agent.id)
@@ -167,6 +173,7 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(try repository.loadAgents().first?.harnessIdentifier, "codex")
         XCTAssertEqual(try repository.loadAgents().first?.modelIdentifier, "gpt-test-2")
         XCTAssertEqual(try repository.loadAgents().first?.reasoningEffort, "medium")
+        XCTAssertEqual(try repository.loadAgents().first?.publicDescription, "Finds and verifies evidence.")
     }
 
     func testAvatarPreferencesAndPreparedPhotoPersistAcrossRename() throws {
@@ -289,10 +296,17 @@ final class RepositoryTests: XCTestCase {
 
         XCTAssertEqual(Set(updated.participantIDs), [second.agent.id, third.agent.id])
         let preservedHistory = try repository.loadMessages(conversationID: group.id)
-        XCTAssertEqual(preservedHistory.map(\.id), [historical.id])
-        XCTAssertEqual(preservedHistory.map(\.body), ["Earlier context"])
+        XCTAssertEqual(preservedHistory.first?.id, historical.id)
+        XCTAssertEqual(preservedHistory.last?.author, .system)
+        XCTAssertEqual(
+            preservedHistory.last?.body,
+            "Review Bot was added to the group. Research Bot was removed from the group."
+        )
         XCTAssertTrue(try repository.latestMessages(for: first.agent.id).isEmpty)
-        XCTAssertTrue(try repository.latestMessages(for: third.agent.id).isEmpty)
+        XCTAssertEqual(
+            try repository.latestMessages(for: third.agent.id).map(\.message.body),
+            ["Review Bot was added to the group. Research Bot was removed from the group."]
+        )
 
         let fresh = ChatMessage(
             conversationID: group.id,
@@ -690,6 +704,62 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(sent.body, replyBody)
     }
 
+    func testMessengerListsParticipantsWithPublicDescriptionsAndConversationActivity() throws {
+        let firstActivity = Date(timeIntervalSince1970: 1_700_000_000)
+        let secondActivity = Date(timeIntervalSince1970: 1_700_000_100)
+        let first = try repository.createAgent(
+            named: "Research Bot",
+            publicDescription: "Finds and verifies evidence.",
+            backstory: "SECRET RESEARCH BACKSTORY"
+        )
+        let second = try repository.createAgent(
+            named: "Build Bot",
+            publicDescription: "Turns plans into working software.",
+            backstory: "SECRET BUILD BACKSTORY"
+        )
+        let group = try repository.createGroup(
+            named: "Launch Room",
+            participantIDs: [first.agent.id, second.agent.id],
+            existingAgents: [first.agent, second.agent]
+        )
+        try repository.append(ChatMessage(
+            conversationID: group.id,
+            author: .agent(first.agent.id),
+            body: "Evidence ready",
+            createdAt: firstActivity,
+            delivery: .delivered
+        ))
+        try repository.append(ChatMessage(
+            conversationID: group.id,
+            author: .agent(second.agent.id),
+            body: "Build ready",
+            createdAt: secondActivity,
+            delivery: .delivered
+        ))
+
+        let command = repository.directory(for: first.agent)
+            .appendingPathComponent(".agents/skills/messenger/messenger")
+        let result = MessengerCLI.run(arguments: [
+            command.path,
+            "--list-participants",
+            "--conversation", group.id.uuidString
+        ])
+
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertFalse(result.standardOutput.contains("SECRET RESEARCH BACKSTORY"))
+        XCTAssertFalse(result.standardOutput.contains("SECRET BUILD BACKSTORY"))
+        let roster = try decode(MessengerRoster.self, from: result.standardOutput)
+        XCTAssertEqual(roster.conversation.id, group.id)
+        XCTAssertEqual(roster.me.agentID, first.agent.id)
+        XCTAssertEqual(roster.participants.map(\.participant.displayName), ["Research Bot", "Build Bot"])
+        XCTAssertEqual(roster.participants.map(\.participant.handle), [.me, .bot])
+        XCTAssertEqual(
+            roster.participants.map(\.publicDescription),
+            ["Finds and verifies evidence.", "Turns plans into working software."]
+        )
+        XCTAssertEqual(roster.participants.map(\.lastActiveAt), [firstActivity, secondActivity])
+    }
+
     func testMessengerCanSendMultipleFilesFromBotWorkspace() throws {
         let sender = try repository.createAgent(named: "Build Bot")
         let recipient = try repository.createAgent(named: "Review Bot")
@@ -994,7 +1064,7 @@ final class RepositoryTests: XCTestCase {
         _ = try repository.updateGroupParticipants(conversationID: group.id,
             participantIDs: [first.agent.id, second.agent.id, third.agent.id],
             existingAgents: [first.agent, second.agent, third.agent])
-        XCTAssertTrue(try repository.latestMessages(for: third.agent.id).isEmpty)
+        XCTAssertEqual(try repository.latestMessages(for: third.agent.id).first?.message.author, .system)
         try repository.setReaction(conversationID: group.id, messageID: message.id,
                                    author: .user, emoji: "✅", present: true)
         XCTAssertEqual(try repository.latestMessages(for: third.agent.id).first?.reactionChange?.emoji, "✅")

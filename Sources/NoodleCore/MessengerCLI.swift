@@ -66,6 +66,12 @@ public enum MessengerCLI {
                     .filter { $0.participantIDs.contains(invocation.agentID) }
                 return .json(conversations)
 
+            case .listParticipants(let conversationID):
+                return .json(try repository.participantRoster(
+                    for: invocation.agentID,
+                    conversationID: conversationID
+                ))
+
             case .listMessages(let conversationID):
                 return .json(try repository.latestMessages(
                     for: invocation.agentID, consuming: false, in: conversationID, includingRead: true
@@ -119,6 +125,7 @@ public enum MessengerCLI {
         case effect(conversationID: UUID, kind: String, requestID: UUID)
         case getLatest(consumes: Bool, includesInlineImages: Bool)
         case listConversations
+        case listParticipants(conversationID: UUID)
         case listMessages(conversationID: UUID)
         case react(conversationID: UUID, messageID: UUID, emoji: String, present: Bool)
         case send(conversationID: UUID, body: String, attachmentURLs: [URL])
@@ -180,6 +187,10 @@ public enum MessengerCLI {
                 )
             } else if values.contains("--list-conversations") {
                 action = .listConversations
+            } else if values.contains("--list-participants") {
+                guard let raw = Self.option("--conversation", in: values),
+                      let id = UUID(uuidString: raw) else { throw MessengerCLIError.invalidArguments }
+                action = .listParticipants(conversationID: id)
             } else if values.contains("--list-messages") {
                 guard let raw = Self.option("--conversation", in: values),
                       let id = UUID(uuidString: raw) else { throw MessengerCLIError.invalidArguments }
@@ -302,6 +313,7 @@ public enum MessengerCLI {
       messenger --effect <kind> --conversation <uuid> [--request-id <uuid>]
       messenger --get-latest [--peek] [--inline-images]
       messenger --list-conversations
+      messenger --list-participants --conversation <uuid>
       messenger --list-messages --conversation <uuid>
       messenger --react --conversation <uuid> --message <uuid> --emoji <emoji>
       messenger --unreact --conversation <uuid> --message <uuid> --emoji <emoji>
@@ -315,6 +327,7 @@ public enum MessengerCLI {
     Reactions are per bot; adding twice is safe. --unreact removes only your reaction.
     --get-latest includes reactionChange events on previously read messages.
     --list-messages includes your own messages and current reactions without consuming the inbox.
+    --list-participants includes public descriptions and conversation-local last activity, never backstories.
     --effect queues a temporary visual effect in a chat you participate in (currently: confetti).
     Effects play once in the visible foreground chat, expire after 30 seconds, and respect Reduce Motion.
     A receipt confirms queuing, not display. Effects do not send messages or wake other agents.
