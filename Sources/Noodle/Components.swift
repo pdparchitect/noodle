@@ -58,15 +58,11 @@ struct ConversationAvatar: View {
 
     var body: some View {
         if isGroup {
-            ZStack {
-                Circle().fill(.quaternary)
-                ForEach(Array(participants.prefix(3).enumerated()), id: \.element.id) { index, agent in
-                    BotAvatar(agent: agent, size: size * 0.62)
-                        .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
-                        .offset(groupOffset(index))
-                }
+            if participants.count == 1, let agent = participants.first {
+                singleMemberGroupAvatar(agent)
+            } else {
+                multiMemberGroupAvatar
             }
-            .frame(width: size, height: size)
         } else if let agent = participants.first {
             BotAvatar(agent: agent, size: size)
         } else {
@@ -75,6 +71,32 @@ struct ConversationAvatar: View {
                 .foregroundStyle(.secondary)
                 .frame(width: size, height: size)
         }
+    }
+
+    private func singleMemberGroupAvatar(_ agent: AgentRecord) -> some View {
+        ZStack {
+            Circle()
+                .fill(.quaternary)
+                .frame(width: size * 0.88, height: size * 0.88)
+                .offset(x: size * 0.06, y: size * 0.06)
+
+            BotAvatar(agent: agent, size: size * 0.86)
+                .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
+                .offset(x: -size * 0.06, y: -size * 0.06)
+        }
+        .frame(width: size, height: size)
+    }
+
+    private var multiMemberGroupAvatar: some View {
+        ZStack {
+            Circle().fill(.quaternary)
+            ForEach(Array(participants.prefix(3).enumerated()), id: \.element.id) { index, agent in
+                BotAvatar(agent: agent, size: size * 0.62)
+                    .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
+                    .offset(groupOffset(index))
+            }
+        }
+        .frame(width: size, height: size)
     }
 
     private func groupOffset(_ index: Int) -> CGSize {
