@@ -102,6 +102,7 @@ struct NewBotSheet: View {
                 colorIndex: $avatarColorIndex,
                 imageData: $avatarImageData
             )
+            .noodleSheetSizing()
         }
     }
 
@@ -239,8 +240,6 @@ struct EditBotSheet: View {
                     ConversationBackgroundSettingsRow(conversation: conversation)
                 }
 
-                Spacer()
-
                 Divider()
 
                 Button("Delete Bot\u{2026}", role: .destructive) {
@@ -252,7 +251,7 @@ struct EditBotSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 520, height: 710)
+        .frame(width: 520)
         .onAppear {
             nameFocused = true
             backstory = store.backstory(for: agent)
@@ -265,6 +264,7 @@ struct EditBotSheet: View {
                 colorIndex: $avatarColorIndex,
                 imageData: $avatarImageData
             )
+            .noodleSheetSizing()
         }
         .confirmationDialog(
             "Delete Bot?",
@@ -548,11 +548,10 @@ private struct BotIconEditor: View {
                     .padding(8)
                 }
 
-                Spacer()
             }
             .padding(20)
         }
-        .frame(width: 440, height: 520)
+        .frame(width: 440)
         .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image]) { result in
             switch result {
             case .success(let url):
@@ -789,7 +788,6 @@ struct GroupInfoSheet: View {
 
                 ConversationBackgroundSettingsRow(conversation: conversation)
 
-                Spacer()
                 Divider()
 
                 Button("Delete Group\u{2026}", role: .destructive) {
@@ -800,7 +798,7 @@ struct GroupInfoSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 460, height: 560)
+        .frame(width: 460)
         .confirmationDialog(
             "Delete Group?",
             isPresented: $confirmingDeletion,
@@ -918,7 +916,7 @@ struct NewGroupSheet: View {
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 14)
         }
-        .frame(width: 480, height: 440)
+        .frame(width: 480)
         .onAppear { nameFocused = true }
     }
 

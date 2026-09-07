@@ -314,21 +314,27 @@ struct RootView: View {
             case .bot:
                 NewBotSheet()
                     .environment(store)
+                    .noodleSheetSizing()
             case .group:
                 NewGroupSheet()
                     .environment(store)
+                    .noodleSheetSizing()
             }
         }
         .sheet(item: $store.agentBeingEdited) { agent in
             EditBotSheet(agent: agent)
                 .environment(store)
+                .noodleSheetSizing()
         }
         .sheet(item: $store.groupBeingEdited) { conversation in
             GroupInfoSheet(conversation: conversation)
                 .environment(store)
+                .noodleSheetSizing()
         }
         .sheet(item: $store.backgroundBeingEdited) { conversation in
-            ConversationBackgroundSheet(conversation: conversation).environment(store)
+            ConversationBackgroundSheet(conversation: conversation)
+                .environment(store)
+                .noodleSheetSizing()
         }
         .alert(
             "Noodle",

@@ -307,6 +307,10 @@ struct ConversationBackgroundSettingsRow: View {
             }.padding(12).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
-        .sheet(isPresented: $editing) { ConversationBackgroundSheet(conversation: conversation).environment(store) }
+        .sheet(isPresented: $editing) {
+            ConversationBackgroundSheet(conversation: conversation)
+                .environment(store)
+                .noodleSheetSizing()
+        }
     }
 }

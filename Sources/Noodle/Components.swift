@@ -1,6 +1,13 @@
 import SwiftUI
 import NoodleCore
 
+extension View {
+    func noodleSheetSizing() -> some View {
+        fixedSize(horizontal: false, vertical: true)
+            .presentationSizing(.fitted)
+    }
+}
+
 enum BotAvatarPalette {
     static let gradients: [[Color]] = [
         [.blue, .cyan],
