@@ -122,6 +122,29 @@ struct MessageBubble: View {
         return false
     }
 
+    private var renderedBody: AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace,
+            failurePolicy: .returnPartiallyParsedIfPossible
+        )
+        guard var rendered = try? AttributedString(markdown: message.body, options: options) else {
+            return AttributedString(message.body)
+        }
+
+        let allowedSchemes = Set(["http", "https", "mailto"])
+        var unsafeLinkRanges: [Range<AttributedString.Index>] = []
+        for run in rendered.runs {
+            if let link = run.link,
+               !allowedSchemes.contains(link.scheme?.lowercased() ?? "") {
+                unsafeLinkRanges.append(run.range)
+            }
+        }
+        for range in unsafeLinkRanges {
+            rendered[range].link = nil
+        }
+        return rendered
+    }
+
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             if isUser { Spacer(minLength: 120) }
@@ -132,7 +155,7 @@ struct MessageBubble: View {
             }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
-                Text(message.body)
+                Text(renderedBody)
                     .font(.system(size: 12.5))
                     .lineSpacing(2)
                     .foregroundStyle(.white)

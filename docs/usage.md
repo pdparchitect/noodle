@@ -11,6 +11,7 @@
 - Notify bots without copying message bodies into the harness event
 - Let Codex read and reply through the bundled Messenger CLI
 - Persist direct chats, group chats, unread inbox cursors, and linked attachments
+- Render common inline Markdown in selectable message text, with safe web and email links
 - Show durable unread indicators for conversations with unseen bot replies
 - Accept any regular file attachment, show selectable inline thumbnails outside the message bubble, and open Quick Look-compatible files—including PDFs—with Space or a double-click
 - Install and update the managed Messenger skill without touching a bot's other skills
