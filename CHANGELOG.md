@@ -17,6 +17,10 @@ All notable changes to Noodle are documented here, following
 - Sidebar message previews now show clean plain text without displaying Markdown syntax.
 - Link and attachment previews use compact, top-leading layouts and repair incorrectly labelled image attachments when possible.
 
+### Fixed
+
+- The application-menu update command remains responsive after Sparkle enables update checks.
+
 ## [0.8.0] - 2026-09-07
 
 ### Added
