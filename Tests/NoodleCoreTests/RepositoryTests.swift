@@ -307,6 +307,37 @@ final class RepositoryTests: XCTestCase {
         )
     }
 
+    func testRenameGroupPreservesIdentityMembersAndHistory() throws {
+        let first = try repository.createAgent(named: "Research Bot")
+        let second = try repository.createAgent(named: "Build Bot")
+        let agents = [first.agent, second.agent]
+        let group = try repository.createGroup(
+            named: "Launch Room",
+            participantIDs: agents.map(\.id),
+            existingAgents: agents
+        )
+        let message = ChatMessage(
+            conversationID: group.id,
+            author: .user,
+            body: "Keep this history.",
+            delivery: .delivered
+        )
+        try repository.append(message)
+
+        let renamed = try repository.updateGroup(
+            conversationID: group.id,
+            named: "Release Room",
+            participantIDs: group.participantIDs,
+            existingAgents: agents
+        )
+
+        XCTAssertEqual(renamed.id, group.id)
+        XCTAssertEqual(renamed.displayName, "Release Room")
+        XCTAssertEqual(renamed.participantIDs, group.participantIDs)
+        XCTAssertEqual(try repository.loadMessages(conversationID: group.id).map(\.id), [message.id])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: repository.conversationDirectory(id: group.id).path))
+    }
+
     func testUpdateGroupMembershipRequiresAtLeastOneKnownBot() throws {
         let first = try repository.createAgent(named: "Research Bot")
         let second = try repository.createAgent(named: "Build Bot")

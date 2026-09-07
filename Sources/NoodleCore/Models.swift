@@ -496,12 +496,35 @@ public struct WorkspaceRepository: Sendable {
         existingAgents: [AgentRecord],
         now: Date = Date()
     ) throws -> BotConversation {
+        guard let conversation = try loadConversations().first(where: {
+            $0.id == conversationID && $0.kind == .group
+        }) else {
+            throw WorkspaceError.missingConversation(conversationID)
+        }
+
+        return try updateGroup(
+            conversationID: conversationID,
+            named: conversation.displayName,
+            participantIDs: participantIDs,
+            existingAgents: existingAgents,
+            now: now
+        )
+    }
+
+    public func updateGroup(
+        conversationID: UUID,
+        named rawName: String,
+        participantIDs: [UUID],
+        existingAgents: [AgentRecord],
+        now: Date = Date()
+    ) throws -> BotConversation {
         guard var conversation = try loadConversations().first(where: {
             $0.id == conversationID && $0.kind == .group
         }) else {
             throw WorkspaceError.missingConversation(conversationID)
         }
 
+        let name = try validatedName(rawName)
         let uniqueIDs = Array(Set(participantIDs))
         guard !uniqueIDs.isEmpty else { throw WorkspaceError.insufficientGroupParticipants }
 
@@ -525,6 +548,7 @@ public struct WorkspaceRepository: Sendable {
             }
         }
 
+        conversation.displayName = name
         conversation.participantIDs = uniqueIDs.sorted { $0.uuidString < $1.uuidString }
         conversation.updatedAt = now
         try updateConversation(conversation)

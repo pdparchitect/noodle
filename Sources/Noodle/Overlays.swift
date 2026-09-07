@@ -674,11 +674,14 @@ struct GroupInfoSheet: View {
     @Environment(NoodleStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let conversation: BotConversation
+    @State private var name: String
     @State private var selectedIDs: Set<UUID>
     @State private var confirmingDeletion = false
+    @FocusState private var nameFocused: Bool
 
     init(conversation: BotConversation) {
         self.conversation = conversation
+        _name = State(initialValue: conversation.displayName)
         _selectedIDs = State(initialValue: Set(conversation.participantIDs))
     }
 
@@ -692,7 +695,7 @@ struct GroupInfoSheet: View {
                 Text("Group Info").font(.headline)
                 Spacer()
                 Button("Save") {
-                    if store.updateGroup(conversation, participantIDs: selectedIDs) {
+                    if store.updateGroup(conversation, named: name, participantIDs: selectedIDs) {
                         dismiss()
                     }
                 }
@@ -712,8 +715,16 @@ struct GroupInfoSheet: View {
                         size: 64
                     )
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(conversation.displayName)
-                            .font(.title3.weight(.semibold))
+                        TextField("Group name", text: $name)
+                            .textFieldStyle(.roundedBorder)
+                            .autocorrectionDisabled(false)
+                            .focused($nameFocused)
+                            .onSubmit {
+                                if canSave,
+                                   store.updateGroup(conversation, named: name, participantIDs: selectedIDs) {
+                                    dismiss()
+                                }
+                            }
                         Text(selectedIDs.count == 1 ? "1 bot" : "\(selectedIDs.count) bots")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -751,6 +762,7 @@ struct GroupInfoSheet: View {
         } message: {
             Text(store.deletionMessage(for: conversation))
         }
+        .onAppear { nameFocused = true }
     }
 
     private var selectedBots: [AgentRecord] {
@@ -758,7 +770,11 @@ struct GroupInfoSheet: View {
     }
 
     private var canSave: Bool {
-        !selectedIDs.isEmpty && selectedIDs != Set(conversation.participantIDs)
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmedName.isEmpty && !selectedIDs.isEmpty && (
+            trimmedName != conversation.displayName ||
+                selectedIDs != Set(conversation.participantIDs)
+        )
     }
 }
 

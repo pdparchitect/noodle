@@ -270,10 +270,11 @@ final class NoodleStore {
         }
     }
 
-    func updateGroup(_ conversation: BotConversation, participantIDs: Set<UUID>) -> Bool {
+    func updateGroup(_ conversation: BotConversation, named name: String, participantIDs: Set<UUID>) -> Bool {
         do {
-            let updated = try repository.updateGroupParticipants(
+            let updated = try repository.updateGroup(
                 conversationID: conversation.id,
+                named: name,
                 participantIDs: Array(participantIDs),
                 existingAgents: agents
             )
