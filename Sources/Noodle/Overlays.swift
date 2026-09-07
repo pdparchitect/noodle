@@ -8,7 +8,8 @@ import NoodleCore
 struct NewBotSheet: View {
     @Environment(NoodleStore.self) private var store
     @Environment(\.dismiss) private var dismiss
-    @State private var name = BotNameGenerator.random()
+    @AppStorage(BotNameStyle.defaultsKey) private var botNameStyle = BotNameStyle.real.rawValue
+    @State private var name = ""
     @State private var selectedHarnessIdentifier = HarnessProvider.codex.rawValue
     @State private var selectedModelIdentifier = ""
     @State private var selectedEffort = ""
@@ -57,7 +58,7 @@ struct NewBotSheet: View {
                                 }
 
                             Button {
-                                name = BotNameGenerator.random(excluding: name)
+                                name = BotNameGenerator.random(style: selectedBotNameStyle, excluding: name)
                                 nameFocused = true
                             } label: {
                                 Image(systemName: "arrow.triangle.2.circlepath")
@@ -90,7 +91,7 @@ struct NewBotSheet: View {
         }
         .frame(width: 520)
         .onAppear {
-            if name.isEmpty { name = BotNameGenerator.random() }
+            if name.isEmpty { name = BotNameGenerator.random(style: selectedBotNameStyle) }
             nameFocused = true
             store.runtime.refreshCapabilities()
         }
@@ -110,6 +111,10 @@ struct NewBotSheet: View {
             store.runtime.availableInstallations.contains {
                 $0.provider.rawValue == selectedHarnessIdentifier
             }
+    }
+
+    private var selectedBotNameStyle: BotNameStyle {
+        BotNameStyle(rawValue: botNameStyle) ?? .real
     }
 
     private func create() {
@@ -754,34 +759,6 @@ struct GroupInfoSheet: View {
 
     private var canSave: Bool {
         !selectedIDs.isEmpty && selectedIDs != Set(conversation.participantIDs)
-    }
-}
-
-private enum BotNameGenerator {
-    private static let descriptors = [
-        "Amber", "Bright", "Brisk", "Calm", "Clever", "Copper", "Cozy", "Curious",
-        "Daring", "Dusk", "Ember", "Gentle", "Golden", "Happy", "Indigo", "Jolly",
-        "Keen", "Lucky", "Lunar", "Merry", "Mint", "Misty", "Nimble", "Quiet",
-        "Sage", "Silver", "Sunny", "Swift", "Velvet", "Vivid", "Warm", "Wild"
-    ]
-    private static let companions = [
-        "Badger", "Beacon", "Birch", "Comet", "Corgi", "Finch", "Fox", "Gecko",
-        "Heron", "Juniper", "Kite", "Lark", "Lynx", "Maple", "Marlin", "Moth",
-        "Otter", "Panda", "Pebble", "Pixel", "Quill", "Robin", "Sparrow", "Sprout",
-        "Starling", "Thistle", "Tiger", "Willow", "Wren", "Yak", "Zinnia", "Zuzu"
-    ]
-
-    static func random(excluding current: String? = nil) -> String {
-        let current = current?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        for _ in 0..<8 {
-            guard let descriptor = descriptors.randomElement(),
-                  let companion = companions.randomElement() else { return "Noodle" }
-            let candidate = "\(descriptor) \(companion)"
-            if candidate != current { return candidate }
-        }
-
-        return "Noodle"
     }
 }
 

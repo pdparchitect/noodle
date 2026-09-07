@@ -3,7 +3,7 @@ import SwiftUI
 import NoodleCore
 
 enum NoodleSettingsTab: Hashable {
-    case harnesses, heartbeats, security, updates
+    case general, harnesses, heartbeats, security, updates
     #if DEBUG
     case developer
     #endif
@@ -16,6 +16,12 @@ struct NoodleSettingsView: View {
         @Bindable var store = store
 
         TabView(selection: $store.selectedSettingsTab.animation(.easeInOut(duration: 0.22))) {
+            GeneralSettingsView()
+                .settingsContentSize()
+                .tabItem {
+                    Label("General", systemImage: "gearshape")
+                }
+                .tag(NoodleSettingsTab.general)
             HarnessesSettingsView()
                 .settingsContentSize()
                 .tabItem {
@@ -44,6 +50,24 @@ struct NoodleSettingsView: View {
             #endif
         }
         .modifier(SettingsWindowResizeAnchor())
+    }
+}
+
+private struct GeneralSettingsView: View {
+    @AppStorage(BotNameStyle.defaultsKey) private var botNameStyle = BotNameStyle.real.rawValue
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Generated bot names", selection: $botNameStyle) {
+                    ForEach(BotNameStyle.allCases) { style in
+                        Text(style.displayName).tag(style.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 
