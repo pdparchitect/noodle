@@ -16,7 +16,7 @@ private enum HostPaths {
 
     static func workspace(_ id: String) throws -> URL {
         guard let uuid = UUID(uuidString: id) else { throw HostError("Invalid bot identifier.") }
-        let root = home.appendingPathComponent("Library/Containers/com.pdparchitect.noodle/Data/Library/Application Support/Noodle/Agents", isDirectory: true).resolvingSymlinksInPath()
+        let root = home.appendingPathComponent("Library/Containers/\(AgentHostIdentity.application)/Data/Library/Application Support/Noodle/Agents", isDirectory: true).resolvingSymlinksInPath()
         let directory = root.appendingPathComponent(uuid.uuidString.lowercased(), isDirectory: true)
         guard directory.resolvingSymlinksInPath() == directory,
               FileManager.default.fileExists(atPath: directory.appendingPathComponent("agent.json").path) else {
