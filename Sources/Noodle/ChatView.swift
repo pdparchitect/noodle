@@ -434,14 +434,6 @@ private struct ConversationStartView: View {
                     .multilineTextAlignment(.center)
             }
 
-            if conversation.kind == .direct,
-               let agent = store.participants(for: conversation).first {
-                Button("Show Bot Workspace") {
-                    store.revealWorkspace(for: agent)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
         }
         .frame(maxWidth: .infinity)
     }
