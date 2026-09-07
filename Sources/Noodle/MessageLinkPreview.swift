@@ -2,6 +2,9 @@ import SwiftUI
 @preconcurrency import LinkPresentation
 
 struct MessageLinkPreview: View {
+    private let cardWidth: CGFloat = 280
+    private let cardHeight: CGFloat = 210
+
     let url: URL
     let shouldLoad: Bool
 
@@ -13,7 +16,7 @@ struct MessageLinkPreview: View {
         Group {
             if let metadata {
                 NativeLinkPreview(metadata: metadata)
-                    .frame(width: 360, height: 92)
+                    .frame(width: cardWidth, height: cardHeight)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -28,7 +31,7 @@ struct MessageLinkPreview: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                .frame(width: 360, height: 54)
+                .frame(width: cardWidth, height: 54)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
         }
