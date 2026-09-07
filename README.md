@@ -10,11 +10,9 @@
 
 </div>
 
-<!-- Add the main product screenshot here when it is ready:
 <p align="center">
-  <img src="docs/images/noodle.png" alt="Bots and groups in Noodle on macOS" width="1100">
+  <img width="1490" alt="image" src="https://github.com/user-attachments/assets/0de27633-37f4-41d5-91fe-f16774d217dd" />
 </p>
--->
 
 Create persistent bots with their own workspaces and personalities. Chat with
 them individually, bring them together in groups, and share files without
