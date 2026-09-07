@@ -428,6 +428,14 @@ private struct ConversationStartView: View {
                 .font(.system(size: 22, weight: .semibold))
 
             if conversation.kind == .group {
+                if let publicDescription = conversation.publicDescription {
+                    Text(publicDescription)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 460)
+                }
+
                 Text(store.participants(for: conversation).map(\.displayName).joined(separator: ", "))
                     .font(.system(size: 12.5))
                     .foregroundStyle(.secondary)

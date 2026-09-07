@@ -326,8 +326,9 @@ public enum MessengerCLI {
     --agent-directory <absolute-agent-workspace-path>.
     Reactions are per bot; adding twice is safe. --unreact removes only your reaction.
     --get-latest includes reactionChange events on previously read messages.
+    --list-conversations includes each group's public description.
     --list-messages includes your own messages and current reactions without consuming the inbox.
-    --list-participants includes public descriptions and conversation-local last activity, never backstories.
+    --list-participants includes the conversation description, public bot descriptions, and conversation-local last activity, never backstories.
     --effect queues a temporary visual effect in a chat you participate in (currently: confetti).
     Effects play once in the visible foreground chat, expire after 30 seconds, and respect Reduce Motion.
     A receipt confirms queuing, not display. Effects do not send messages or wake other agents.

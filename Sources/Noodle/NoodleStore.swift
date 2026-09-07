@@ -94,6 +94,7 @@ final class NoodleStore {
 
         return conversations.filter { conversation in
             title(for: conversation).localizedCaseInsensitiveContains(term) ||
+                (conversation.publicDescription?.localizedCaseInsensitiveContains(term) ?? false) ||
                 participants(for: conversation).contains {
                     $0.displayName.localizedCaseInsensitiveContains(term)
                 } ||
@@ -254,10 +255,11 @@ final class NoodleStore {
         }
     }
 
-    func createGroup(named name: String, participantIDs: Set<UUID>) -> Bool {
+    func createGroup(named name: String, publicDescription: String, participantIDs: Set<UUID>) -> Bool {
         do {
             let conversation = try repository.createGroup(
                 named: name,
+                publicDescription: publicDescription,
                 participantIDs: Array(participantIDs),
                 existingAgents: agents
             )
@@ -274,12 +276,20 @@ final class NoodleStore {
         }
     }
 
-    func updateGroup(_ conversation: BotConversation, named name: String, participantIDs: Set<UUID>) -> Bool {
+    func updateGroup(
+        _ conversation: BotConversation,
+        named name: String,
+        publicDescription: String,
+        participantIDs: Set<UUID>
+    ) -> Bool {
         do {
             let membershipChanged = participantIDs != Set(conversation.participantIDs)
+            let normalizedDescription = publicDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+            let descriptionChanged = (conversation.publicDescription ?? "") != normalizedDescription
             let updated = try repository.updateGroup(
                 conversationID: conversation.id,
                 named: name,
+                publicDescription: publicDescription,
                 participantIDs: Array(participantIDs),
                 existingAgents: agents
             )
@@ -287,7 +297,7 @@ final class NoodleStore {
                 conversations[index] = updated
                 conversations.sort { $0.updatedAt > $1.updatedAt }
             }
-            if membershipChanged {
+            if membershipChanged || descriptionChanged {
                 messagesByConversation[conversation.id] = try repository.loadMessages(
                     conversationID: conversation.id
                 )

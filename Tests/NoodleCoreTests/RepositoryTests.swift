@@ -244,6 +244,7 @@ final class RepositoryTests: XCTestCase {
         let agents = [first.agent, second.agent]
         let group = try repository.createGroup(
             named: "Launch Room",
+            publicDescription: "Coordinate research and implementation for the launch.",
             participantIDs: agents.map(\.id),
             existingAgents: agents
         )
@@ -260,6 +261,10 @@ final class RepositoryTests: XCTestCase {
         )
         XCTAssertEqual(loadedGroup.id, group.id)
         XCTAssertEqual(loadedGroup.displayName, "Launch Room")
+        XCTAssertEqual(
+            loadedGroup.publicDescription,
+            "Coordinate research and implementation for the launch."
+        )
         XCTAssertEqual(loadedGroup.participantIDs, group.participantIDs)
 
         let loadedMessage = try XCTUnwrap(
@@ -342,6 +347,7 @@ final class RepositoryTests: XCTestCase {
         let renamed = try repository.updateGroup(
             conversationID: group.id,
             named: "Release Room",
+            publicDescription: group.publicDescription,
             participantIDs: group.participantIDs,
             existingAgents: agents
         )
@@ -719,6 +725,7 @@ final class RepositoryTests: XCTestCase {
         )
         let group = try repository.createGroup(
             named: "Launch Room",
+            publicDescription: "Coordinate a safe, evidence-backed launch.",
             participantIDs: [first.agent.id, second.agent.id],
             existingAgents: [first.agent, second.agent]
         )
@@ -750,6 +757,7 @@ final class RepositoryTests: XCTestCase {
         XCTAssertFalse(result.standardOutput.contains("SECRET BUILD BACKSTORY"))
         let roster = try decode(MessengerRoster.self, from: result.standardOutput)
         XCTAssertEqual(roster.conversation.id, group.id)
+        XCTAssertEqual(roster.conversation.publicDescription, "Coordinate a safe, evidence-backed launch.")
         XCTAssertEqual(roster.me.agentID, first.agent.id)
         XCTAssertEqual(roster.participants.map(\.participant.displayName), ["Research Bot", "Build Bot"])
         XCTAssertEqual(roster.participants.map(\.participant.handle), [.me, .bot])
@@ -758,6 +766,40 @@ final class RepositoryTests: XCTestCase {
             ["Finds and verifies evidence.", "Turns plans into working software."]
         )
         XCTAssertEqual(roster.participants.map(\.lastActiveAt), [firstActivity, secondActivity])
+    }
+
+    func testGroupDescriptionUpdateNotifiesEveryCurrentMember() throws {
+        let first = try repository.createAgent(named: "Research Bot")
+        let second = try repository.createAgent(named: "Build Bot")
+        let agents = [first.agent, second.agent]
+        let group = try repository.createGroup(
+            named: "Launch Room",
+            publicDescription: "Initial context",
+            participantIDs: agents.map(\.id),
+            existingAgents: agents
+        )
+
+        let updated = try repository.updateGroup(
+            conversationID: group.id,
+            named: group.displayName,
+            publicDescription: "Ship the release after research and build checks pass.",
+            participantIDs: group.participantIDs,
+            existingAgents: agents
+        )
+
+        XCTAssertEqual(updated.publicDescription, "Ship the release after research and build checks pass.")
+        for agent in agents {
+            let delivery = try XCTUnwrap(repository.latestMessages(for: agent.id).first)
+            XCTAssertEqual(
+                delivery.message.body,
+                "The group description was updated: Ship the release after research and build checks pass."
+            )
+            XCTAssertEqual(delivery.message.author, .system)
+            XCTAssertEqual(
+                delivery.conversation.publicDescription,
+                "Ship the release after research and build checks pass."
+            )
+        }
     }
 
     func testMessengerCanSendMultipleFilesFromBotWorkspace() throws {

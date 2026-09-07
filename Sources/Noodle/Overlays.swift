@@ -708,6 +708,7 @@ struct GroupInfoSheet: View {
     @Environment(\.dismiss) private var dismiss
     let conversation: BotConversation
     @State private var name: String
+    @State private var publicDescription: String
     @State private var selectedIDs: Set<UUID>
     @State private var confirmingDeletion = false
     @FocusState private var nameFocused: Bool
@@ -715,6 +716,7 @@ struct GroupInfoSheet: View {
     init(conversation: BotConversation) {
         self.conversation = conversation
         _name = State(initialValue: conversation.displayName)
+        _publicDescription = State(initialValue: conversation.publicDescription ?? "")
         _selectedIDs = State(initialValue: Set(conversation.participantIDs))
     }
 
@@ -728,7 +730,12 @@ struct GroupInfoSheet: View {
                 Text("Group Info").font(.headline)
                 Spacer()
                 Button("Save") {
-                    if store.updateGroup(conversation, named: name, participantIDs: selectedIDs) {
+                    if store.updateGroup(
+                        conversation,
+                        named: name,
+                        publicDescription: publicDescription,
+                        participantIDs: selectedIDs
+                    ) {
                         dismiss()
                     }
                 }
@@ -754,7 +761,12 @@ struct GroupInfoSheet: View {
                             .focused($nameFocused)
                             .onSubmit {
                                 if canSave,
-                                   store.updateGroup(conversation, named: name, participantIDs: selectedIDs) {
+                                   store.updateGroup(
+                                       conversation,
+                                       named: name,
+                                       publicDescription: publicDescription,
+                                       participantIDs: selectedIDs
+                                   ) {
                                     dismiss()
                                 }
                             }
@@ -763,6 +775,8 @@ struct GroupInfoSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                GroupDescriptionEditor(publicDescription: $publicDescription)
 
                 GroupMemberPicker(agents: store.agents, selectedIDs: $selectedIDs)
 
@@ -804,8 +818,10 @@ struct GroupInfoSheet: View {
 
     private var canSave: Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDescription = publicDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmedName.isEmpty && !selectedIDs.isEmpty && (
             trimmedName != conversation.displayName ||
+                trimmedDescription != (conversation.publicDescription ?? "") ||
                 selectedIDs != Set(conversation.participantIDs)
         )
     }
@@ -840,6 +856,7 @@ struct NewGroupSheet: View {
     @Environment(NoodleStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
+    @State private var publicDescription = ""
     @State private var selectedIDs = Set<UUID>()
     @FocusState private var nameFocused: Bool
 
@@ -853,7 +870,11 @@ struct NewGroupSheet: View {
                 Text("New Group").font(.headline)
                 Spacer()
                 Button("Create") {
-                    _ = store.createGroup(named: name, participantIDs: selectedIDs)
+                    _ = store.createGroup(
+                        named: name,
+                        publicDescription: publicDescription,
+                        participantIDs: selectedIDs
+                    )
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(canCreate ? Color.blue : .secondary)
@@ -866,7 +887,12 @@ struct NewGroupSheet: View {
             TextField("Group name", text: $name)
                 .textFieldStyle(.roundedBorder)
                 .focused($nameFocused)
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+
+            GroupDescriptionEditor(publicDescription: $publicDescription)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
 
             GroupMemberPicker(agents: store.agents, selectedIDs: $selectedIDs)
                 .padding(.horizontal, 16)
@@ -883,5 +909,29 @@ struct NewGroupSheet: View {
 
     private var canCreate: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !selectedIDs.isEmpty
+    }
+}
+
+private struct GroupDescriptionEditor: View {
+    @Binding var publicDescription: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Description")
+                .font(.caption.weight(.semibold))
+
+            TextField(
+                "Describe the purpose and context of this group…",
+                text: $publicDescription,
+                axis: .vertical
+            )
+            .textFieldStyle(.roundedBorder)
+            .lineLimit(2...4)
+            .autocorrectionDisabled(false)
+
+            Text("Shared with every bot in this group so they understand its purpose.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }
