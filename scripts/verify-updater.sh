@@ -1,6 +1,7 @@
 #!/bin/zsh
 set -euo pipefail
 app="${1:?Pass the built Noodle.app path}"
+bundle_identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")"
 sparkle="$app/Contents/Frameworks/Sparkle.framework"
 info="$app/Contents/Info.plist"
 team="$(codesign -dv --verbose=4 "$app" 2>&1 | awk -F= '/^TeamIdentifier=/ { print $2 }')"
@@ -15,7 +16,7 @@ if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == "1" ]]; then
 fi
 signed="$(codesign -d --entitlements :- "$app" 2>/dev/null | tr -d '[:space:]')"
 print -r -- "$signed" | grep -Fq '<key>com.apple.security.app-sandbox</key><true/>'
-print -r -- "$signed" | grep -Fq '<key>com.apple.security.temporary-exception.mach-lookup.global-name</key><array><string>com.pdparchitect.noodle-spks</string><string>com.pdparchitect.noodle-spki</string></array>'
+print -r -- "$signed" | grep -Fq "<key>com.apple.security.temporary-exception.mach-lookup.global-name</key><array><string>$bundle_identifier-spks</string><string>$bundle_identifier-spki</string></array>"
 for component in \
     "$sparkle/Versions/B/XPCServices/Installer.xpc" \
     "$sparkle/Versions/B/Autoupdate" \

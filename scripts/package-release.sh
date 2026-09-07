@@ -30,9 +30,15 @@ mkdir -p "$dist" "$project_root/.release"
 
 export NOODLE_BUILD_CONFIGURATION=release
 export NOODLE_BUILD_NUMBER="$version"
+export NOODLE_DATA_CONTAINER=production
 export NOODLE_CODESIGN_TIMESTAMP=1
 export NOODLE_REQUIRE_DEVELOPER_ID=1
 app="$("$project_root/scripts/build-app.sh")"
+
+if [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" != "com.pdparchitect.noodle" ]]; then
+    print -u2 "Release packaging must use the production data container identity."
+    exit 1
+fi
 
 signature_info="$(codesign -dv --verbose=4 "$app" 2>&1)"
 if ! grep -q '^Authority=Developer ID Application:' <<< "$signature_info"; then

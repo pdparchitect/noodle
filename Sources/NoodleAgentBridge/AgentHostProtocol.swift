@@ -2,8 +2,25 @@ import Foundation
 import Security
 
 public enum AgentHostIdentity {
-    public static let service = "com.pdparchitect.noodle.agent-host"
-    public static let application = "com.pdparchitect.noodle"
+    public static var service: String {
+        configuredIdentifier(
+            key: "NoodleAgentHostService",
+            fallback: "com.pdparchitect.noodle.agent-host"
+        )
+    }
+
+    public static var application: String {
+        configuredIdentifier(
+            key: "NoodleApplicationIdentifier",
+            fallback: "com.pdparchitect.noodle"
+        )
+    }
+
+    private static func configuredIdentifier(key: String, fallback: String) -> String {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String,
+              !value.isEmpty else { return fallback }
+        return value
+    }
 
     public static func requirement(for identifier: String, bundle: Bundle = .main) -> String? {
         guard let team = bundle.object(forInfoDictionaryKey: "NoodleSigningTeam") as? String,

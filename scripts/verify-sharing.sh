@@ -3,7 +3,8 @@ set -euo pipefail
 app="${1:?Pass the built Noodle.app path}"
 extension="$app/Contents/PlugIns/NoodleShare.appex"
 team="$(codesign -dv --verbose=4 "$app" 2>&1 | awk -F= '/^TeamIdentifier=/ { print $2 }')"
-expected="$team.com.pdparchitect.noodle.sharing"
+bundle_identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")"
+expected="$team.$bundle_identifier.sharing"
 for bundle in "$app" "$extension"; do
     codesign --verify --strict "$bundle"
     group="$(/usr/libexec/PlistBuddy -c 'Print :NoodleSharedGroup' "$bundle/Contents/Info.plist")"

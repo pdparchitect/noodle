@@ -23,6 +23,16 @@ if [[ "$actual_build" != "${NOODLE_BUILD_NUMBER:-$expected_version}" ]]; then
     exit 1
 fi
 
+expected_identifier="com.pdparchitect.noodle.local"
+if [[ "${NOODLE_DATA_CONTAINER:-development}" == "production" ]]; then
+    expected_identifier="com.pdparchitect.noodle"
+fi
+actual_identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")"
+if [[ "$actual_identifier" != "$expected_identifier" ]]; then
+    print -u2 "Built app uses $actual_identifier instead of the requested $expected_identifier data container."
+    exit 1
+fi
+
 codesign --verify --deep --strict --verbose=2 "$app"
 codesign --verify --strict --verbose=2 "$app/Contents/Helpers/messenger"
 

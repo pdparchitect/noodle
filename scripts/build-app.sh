@@ -3,10 +3,27 @@ set -euo pipefail
 
 project_root="${0:A:h:h}"
 configuration="${NOODLE_BUILD_CONFIGURATION:-release}"
+data_container="${NOODLE_DATA_CONTAINER:-development}"
 version="$(tr -d '[:space:]' < "$project_root/VERSION")"
 build_number="${NOODLE_BUILD_NUMBER:-$version}"
 build_root="$project_root/.build"
-app="$build_root/Noodle.app"
+case "$data_container" in
+    development)
+        app_name="Noodle Local"
+        bundle_identifier="com.pdparchitect.noodle.local"
+        url_scheme="noodle-local"
+        ;;
+    production)
+        app_name="Noodle"
+        bundle_identifier="com.pdparchitect.noodle"
+        url_scheme="noodle"
+        ;;
+    *)
+        print -u2 "NOODLE_DATA_CONTAINER must be development or production."
+        exit 1
+        ;;
+esac
+app="$build_root/$app_name.app"
 contents="$app/Contents"
 module_cache="$build_root/module-cache"
 entitlements="$project_root/Support/Noodle.entitlements"
@@ -19,6 +36,11 @@ fi
 
 if [[ ! "$build_number" =~ '^[0-9]+(\.[0-9]+){0,2}$' ]]; then
     print -u2 "NOODLE_BUILD_NUMBER must be a numeric bundle version such as 1.2.3."
+    exit 1
+fi
+
+if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == "1" && "$data_container" != "production" ]]; then
+    print -u2 "Public releases must set NOODLE_DATA_CONTAINER=production."
     exit 1
 fi
 
@@ -52,6 +74,9 @@ share_extension="$contents/PlugIns/NoodleShare.appex"
 mkdir -p "$share_extension/Contents/MacOS"
 cp "$bin_path/NoodleShareExtension" "$share_extension/Contents/MacOS/NoodleShareExtension"
 cp "$project_root/Support/ShareExtension-Info.plist" "$share_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.share" "$share_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Send to $app_name" "$share_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleName Send to $app_name" "$share_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$share_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$share_extension/Contents/Info.plist"
 cp "$bin_path/Noodle" "$contents/MacOS/Noodle"
@@ -76,10 +101,18 @@ otool -l "$agent_host/Contents/MacOS/NoodleAgentHost" \
         fi
     done
 cp "$project_root/Support/AgentHost-Info.plist" "$agent_host/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.agent-host" "$agent_host/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$agent_host/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$agent_host/Contents/Info.plist"
 cp "$project_root/.build/checkouts/Sparkle/LICENSE" "$contents/Resources/Sparkle-LICENSE.txt"
 cp "$project_root/Support/Assets.xcassets/CodexHarness.imageset/codex-harness.svg" "$contents/Resources/CodexHarness.svg"
+/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $app_name" "$contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleName $app_name" "$contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier" "$contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLName $bundle_identifier.sharing" "$contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 $url_scheme" "$contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :NSServices:0:NSPortName $app_name" "$contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :NSServices:1:NSPortName $app_name" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$contents/Info.plist"
 updates_enabled=false
@@ -103,7 +136,7 @@ xcrun appintentsmetadataprocessor \
     --xcode-version "$xcode_build_version" \
     --platform-family macOS \
     --deployment-target 15.0 \
-    --bundle-identifier com.pdparchitect.noodle \
+    --bundle-identifier "$bundle_identifier" \
     --output "$contents/Resources" \
     --target-triple "$target_arch-apple-macos15.0" \
     --binary-file "$bin_path/Noodle" \
@@ -142,9 +175,11 @@ if [[ ! "$team_id" =~ '^[A-Z0-9]{10}$' ]]; then
     print -u2 "Sharing requires an Apple Development or Developer ID identity with a team identifier."
     exit 1
 fi
-shared_group="$team_id.com.pdparchitect.noodle.sharing"
+shared_group="$team_id.$bundle_identifier.sharing"
 for file in "$contents/Info.plist" "$agent_host/Contents/Info.plist"; do
     /usr/libexec/PlistBuddy -c "Add :NoodleSigningTeam string $team_id" "$file"
+    /usr/libexec/PlistBuddy -c "Add :NoodleApplicationIdentifier string $bundle_identifier" "$file"
+    /usr/libexec/PlistBuddy -c "Add :NoodleAgentHostService string $bundle_identifier.agent-host" "$file"
 done
 # Explicitly approved opt-in boundary: authenticated, hardened, non-root XPC host.
 # No sandbox inheritance, extra entitlements, or global Mach-service exception.
@@ -156,6 +191,8 @@ cp "$project_root/Support/ShareExtension.entitlements" "$share_entitlements"
 for file in "$resolved_entitlements" "$share_entitlements"; do
     /usr/libexec/PlistBuddy -c "Set :com.apple.security.application-groups:0 $shared_group" "$file"
 done
+/usr/libexec/PlistBuddy -c "Set :com.apple.security.temporary-exception.mach-lookup.global-name:0 $bundle_identifier-spks" "$resolved_entitlements"
+/usr/libexec/PlistBuddy -c "Set :com.apple.security.temporary-exception.mach-lookup.global-name:1 $bundle_identifier-spki" "$resolved_entitlements"
 for file in "$contents/Info.plist" "$share_extension/Contents/Info.plist"; do
     /usr/libexec/PlistBuddy -c "Add :NoodleSharedGroup string $shared_group" "$file"
 done
