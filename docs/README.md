@@ -8,5 +8,5 @@
 - [Development](development.md) — requirements, local builds, signing, installation, and tests.
 - [Storage and Messenger](storage-and-messenger.md) — workspace layout, managed skills, inbox state, and the messaging CLI.
 - [Architecture](architecture.md) — process lifecycle, harness discovery, and message flow.
-- [Security and agent access](security.md) — restricted and extended modes, approvals, entitlements, and helper boundaries.
+- [Security and agent access](security.md) — autonomous and restricted modes, entitlements, and helper boundaries.
 - [Releases and updates](releases.md) — versioning, GitHub Actions, signing secrets, notarization, and Sparkle.

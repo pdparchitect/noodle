@@ -7,7 +7,7 @@ struct DeveloperSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Button(store.runtime.isCheckingAccess ? "Checking…" : "Test Extended Runtime") {
+                Button(store.runtime.isCheckingAccess ? "Checking…" : "Test Autonomous Runtime") {
                     store.runtime.checkExtendedRuntime()
                 }
                 .disabled(store.runtime.isCheckingAccess)
@@ -15,7 +15,7 @@ struct DeveloperSettingsView: View {
                     Text(result).font(.caption).textSelection(.enabled)
                 }
             } footer: {
-                Text("Checks whether extended access is available.")
+                Text("Checks whether autonomous access is available.")
             }
         }
         .formStyle(.grouped)

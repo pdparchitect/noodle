@@ -109,7 +109,7 @@ private struct ConversationRow: View {
                         .foregroundStyle(.tertiary)
                 }
 
-                Text(hasPendingApproval ? "Waiting for your approval" : store.preview(for: conversation))
+                Text(hasPendingApproval ? "Waiting for your response" : store.preview(for: conversation))
                     .font(.system(size: 12.5))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -144,7 +144,7 @@ private struct ConversationRow: View {
 
     private var accessibilityLabel: String {
         let unread = store.hasUnreadMessages(in: conversation) ? "Unread, " : ""
-        return "\(unread)\(store.title(for: conversation)), \(hasPendingApproval ? "Waiting for your approval" : store.preview(for: conversation))"
+        return "\(unread)\(store.title(for: conversation)), \(hasPendingApproval ? "Waiting for your response" : store.preview(for: conversation))"
     }
 
     private var hasPendingApproval: Bool {

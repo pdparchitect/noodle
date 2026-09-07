@@ -2,24 +2,39 @@ import XCTest
 @testable import NoodleCore
 
 final class AgentAccessTests: XCTestCase {
-    func testNewAndExistingBotsDefaultToRestricted() {
-        XCTAssertFalse(AgentAccessConfiguration().isExtended(UUID()))
+    func testNewAndExistingBotsDefaultToAutonomousAccess() {
+        XCTAssertTrue(AgentAccessConfiguration().isExtended(UUID()))
     }
 
-    func testOptInPersistsPerBotAndRevocationPersists() {
+    func testRestrictionPersistsPerBotAndCanBeRemoved() {
         let suite = "Noodle.AccessTests.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let bot = UUID(), other = UUID()
         var configuration = AgentAccessConfiguration.load(from: defaults)
-        XCTAssertFalse(configuration.isExtended(bot))
-        configuration.setExtended(true, for: bot)
-        configuration.save(to: defaults)
-        XCTAssertTrue(AgentAccessConfiguration.load(from: defaults).isExtended(bot))
-        XCTAssertFalse(AgentAccessConfiguration.load(from: defaults).isExtended(other))
+        XCTAssertTrue(configuration.isExtended(bot))
         configuration.setExtended(false, for: bot)
         configuration.save(to: defaults)
         XCTAssertFalse(AgentAccessConfiguration.load(from: defaults).isExtended(bot))
+        XCTAssertTrue(AgentAccessConfiguration.load(from: defaults).isExtended(other))
+        configuration.setExtended(true, for: bot)
+        configuration.save(to: defaults)
+        XCTAssertTrue(AgentAccessConfiguration.load(from: defaults).isExtended(bot))
+    }
+
+    func testLegacyOptInStorageMigratesToAutonomousDefaults() {
+        let suite = "Noodle.AccessTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let previouslyExtendedBot = UUID()
+        let previouslyRestrictedBot = UUID()
+        defaults.set([previouslyExtendedBot.uuidString], forKey: "Noodle.access.extendedAgents")
+
+        let configuration = AgentAccessConfiguration.load(from: defaults)
+        XCTAssertTrue(configuration.isExtended(previouslyExtendedBot))
+        XCTAssertTrue(configuration.isExtended(previouslyRestrictedBot))
+        configuration.save(to: defaults)
+        XCTAssertNil(defaults.object(forKey: "Noodle.access.extendedAgents"))
     }
 
     func testRequestIDsPreserveStringAndNumberIdentity() throws {
@@ -93,6 +108,44 @@ final class AgentAccessTests: XCTestCase {
         XCTAssertEqual(accepted["action"] as? String, "accept")
         XCTAssertTrue(try XCTUnwrap(accepted["content"] as? [String: Any]).isEmpty)
         XCTAssertTrue(request.detail.contains("https://www.google.com"))
+    }
+
+    func testRoutineToolConfirmationIsAutomaticallyAccepted() throws {
+        let request = approval("mcpServer/elicitation/request", params: [
+            "mode": "form", "message": "Allow Browser use?",
+            "requestedSchema": ["type": "object", "properties": [String: Any]()]
+        ])
+        let response = try XCTUnwrap(request.automaticResponse(extendedAccess: true))
+        XCTAssertEqual((response["result"] as? [String: Any])?["action"] as? String, "accept")
+    }
+
+    func testAutonomousAccessAutomaticallyAllowsRuntimePermissions() {
+        for method in [
+            "item/commandExecution/requestApproval",
+            "item/fileChange/requestApproval",
+            "item/permissions/requestApproval"
+        ] {
+            let request = approval(method, params: ["permissions": ["network": ["enabled": true]]])
+            let response = request.automaticResponse(extendedAccess: true)
+            XCTAssertNotNil(response)
+            if method == "item/permissions/requestApproval" {
+                let permissions = (response?["result"] as? [String: Any])?["permissions"] as? [String: Any]
+                XCTAssertFalse(permissions?.isEmpty ?? true)
+            } else {
+                XCTAssertEqual((response?["result"] as? [String: String])?["decision"], "accept")
+            }
+        }
+    }
+
+    func testRestrictedAccessAutomaticallyDeclinesRuntimePermissions() {
+        let request = approval("item/commandExecution/requestApproval", params: ["command": "open example"])
+        let response = request.automaticResponse(extendedAccess: false)
+        XCTAssertEqual((response?["result"] as? [String: String])?["decision"], "decline")
+    }
+
+    func testOnlyQuestionsPauseForAUserResponse() {
+        let request = approval("item/tool/requestUserInput", params: ["questions": [["id": "q1", "question": "Which account?"]]])
+        XCTAssertNil(request.automaticResponse(extendedAccess: true))
     }
 
     func testToolFormsWithDataOrUnknownConstraintsRemainBlocked() {

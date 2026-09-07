@@ -49,10 +49,10 @@ struct AgentApprovalView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             HStack {
-                Text("Waiting for you · applies to this bot’s current task")
+                Text("The bot needs information to continue")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("Decline") { store.runtime.resolveApproval(request, allow: false) }
+                Button("Skip") { store.runtime.resolveApproval(request, allow: false) }
                 if request.isQuestion {
                     Button("Send Response") { store.runtime.resolveApproval(request, allow: true, answers: answers) }
                         .disabled(request.questions.contains { (answers[$0["id"] as? String ?? ""] ?? "").isEmpty })

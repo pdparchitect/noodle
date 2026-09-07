@@ -3,7 +3,6 @@ import NoodleCore
 
 struct AgentAccessSettingsView: View {
     @Environment(NoodleStore.self) private var store
-    @State private var confirmingAgent: AgentRecord?
 
     var body: some View {
         Form {
@@ -16,17 +15,16 @@ struct AgentAccessSettingsView: View {
                         Toggle(isOn: Binding(
                             get: { store.runtime.accessConfiguration.isExtended(agent.id) },
                             set: { enabled in
-                                if enabled { confirmingAgent = agent }
-                                else { store.runtime.setExtendedAccess(false, agent: agent, repository: store.repository) }
+                                store.runtime.setExtendedAccess(enabled, agent: agent, repository: store.repository)
                             }
                         )) {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(agent.displayName)
-                                Text(store.runtime.changingAccess.contains(agent.id) ? "Restarting runtime…" : (store.runtime.accessConfiguration.isExtended(agent.id) ? "Extended access" : "Restricted"))
+                                Text(store.runtime.changingAccess.contains(agent.id) ? "Restarting runtime…" : (store.runtime.accessConfiguration.isExtended(agent.id) ? "Autonomous access" : "Restricted"))
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }
-                        .accessibilityLabel("\(agent.displayName), extended access")
+                        .accessibilityLabel("\(agent.displayName), autonomous access")
                         .disabled(store.runtime.changingAccess.contains(agent.id))
                         if store.runtime.snapshot(for: agent.id).phase == .failed {
                             VStack(alignment: .leading, spacing: 8) {
@@ -45,21 +43,9 @@ struct AgentAccessSettingsView: View {
                     }
                 }
             } footer: {
-                Text("Extended access lets a bot use files and tools outside its private workspace.")
+                Text("Bots run autonomously by default. Turn access off only when you want a bot confined to its private workspace.")
             }
         }
         .formStyle(.grouped)
-        .alert("Enable extended access?", isPresented: Binding(
-            get: { confirmingAgent != nil },
-            set: { if !$0 { confirmingAgent = nil } }
-        ), presenting: confirmingAgent) { agent in
-            Button("Cancel", role: .cancel) { confirmingAgent = nil }
-            Button("Enable for \(agent.displayName)") {
-                store.runtime.setExtendedAccess(true, agent: agent, repository: store.repository)
-                confirmingAgent = nil
-            }
-        } message: { agent in
-            Text("\(agent.displayName) will be able to use files and connected tools outside its private workspace. You can turn this off at any time.")
-        }
     }
 }

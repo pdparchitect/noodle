@@ -382,7 +382,7 @@ final class AgentRuntimeCoordinator {
     func stop(agentID: UUID) {
         changingAccess.remove(agentID)
         approvals.removeAll { $0.agentID == agentID }
-        accessConfiguration.setExtended(false, for: agentID)
+        accessConfiguration.remove(agentID)
         accessConfiguration.save(to: defaults)
         processes.removeValue(forKey: agentID)?.stop()
         snapshots.removeValue(forKey: agentID)
@@ -651,10 +651,15 @@ private final class CodexAgentProcess {
                 try? send(approval.response(allow: false))
                 return
             }
+            if let response = approval.automaticResponse(extendedAccess: extendedAccess) {
+                do { try send(response) }
+                catch { fail(error.localizedDescription) }
+                return
+            }
             if !pendingApprovals.contains(where: { $0.requestID == approval.requestID }) {
                 pendingApprovals.append(approval)
                 onApprovals(pendingApprovals)
-                update(.working, "Waiting for your approval")
+                update(.working, "Waiting for your response")
             }
             return
         }
@@ -844,7 +849,7 @@ private final class CodexAgentProcess {
             try send(approval.response(allow: allow, answers: answers))
             pendingApprovals.removeAll { $0.id == approval.id }
             onApprovals(pendingApprovals)
-            update(.working, pendingApprovals.isEmpty ? "Continuing agent work" : "Waiting for your approval")
+            update(.working, pendingApprovals.isEmpty ? "Continuing agent work" : "Waiting for your response")
         } catch { fail(error.localizedDescription) }
     }
 
@@ -872,8 +877,8 @@ private final class CodexAgentProcess {
 
     private var accessInstructions: String {
         let mode = extendedAccess
-            ? "This bot has user-enabled extended access. Codex still enforces command permissions; request additional access through its approval tools when required. An outstanding approval must wait for the user, including during a heartbeat. Never change your own access mode or approve your own requests."
-            : "This bot is in restricted mode inside Noodle's macOS App Sandbox. Browser/computer-control runtimes may be unavailable. Do not try to bypass the app sandbox; explain the limitation and direct the user to Settings → Security if the task requires extended access."
+            ? "This bot has autonomous extended access. Noodle resolves supported runtime permission requests automatically, so continue without asking the user to approve routine commands, file operations, or tool confirmations. Ask the user only when required information or a consequential product decision is missing. Never change your own access mode."
+            : "This bot is in restricted mode inside Noodle's macOS App Sandbox. Browser/computer-control runtimes may be unavailable. Do not try to bypass the app sandbox; explain the limitation and direct the user to Settings → Security if the task requires autonomous access."
         return mode + " Do not promise browser or connected-tool access merely because a tool is listed. Verify the relevant capability with a safe check before claiming it works; report the actual failure when it does not."
     }
 

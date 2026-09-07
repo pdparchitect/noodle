@@ -1,17 +1,19 @@
 import Foundation
 
 public struct AgentAccessConfiguration: Equatable, Sendable {
-    public private(set) var extendedAgentIDs: Set<UUID>
-    public init(extendedAgentIDs: Set<UUID> = []) { self.extendedAgentIDs = extendedAgentIDs }
-    public func isExtended(_ id: UUID) -> Bool { extendedAgentIDs.contains(id) }
+    public private(set) var restrictedAgentIDs: Set<UUID>
+    public init(restrictedAgentIDs: Set<UUID> = []) { self.restrictedAgentIDs = restrictedAgentIDs }
+    public func isExtended(_ id: UUID) -> Bool { !restrictedAgentIDs.contains(id) }
     public mutating func setExtended(_ enabled: Bool, for id: UUID) {
-        if enabled { extendedAgentIDs.insert(id) } else { extendedAgentIDs.remove(id) }
+        if enabled { restrictedAgentIDs.remove(id) } else { restrictedAgentIDs.insert(id) }
     }
+    public mutating func remove(_ id: UUID) { restrictedAgentIDs.remove(id) }
     public static func load(from defaults: UserDefaults) -> Self {
-        .init(extendedAgentIDs: Set((defaults.stringArray(forKey: "Noodle.access.extendedAgents") ?? []).compactMap(UUID.init(uuidString:))))
+        .init(restrictedAgentIDs: Set((defaults.stringArray(forKey: "Noodle.access.restrictedAgents") ?? []).compactMap(UUID.init(uuidString:))))
     }
     public func save(to defaults: UserDefaults) {
-        defaults.set(extendedAgentIDs.map(\.uuidString).sorted(), forKey: "Noodle.access.extendedAgents")
+        defaults.set(restrictedAgentIDs.map(\.uuidString).sorted(), forKey: "Noodle.access.restrictedAgents")
+        defaults.removeObject(forKey: "Noodle.access.extendedAgents")
     }
 }
 
@@ -95,6 +97,22 @@ public struct AgentApprovalRequest: Identifiable {
         // URL/form elicitation may involve login, secrets, or a complex schema.
         // Do not manufacture consent/content for requests we cannot faithfully render.
         default: return false
+        }
+    }
+
+    /// Routine runtime requests are resolved without interrupting an autonomous
+    /// bot. Only a real question is returned to the app for user input.
+    public func automaticResponse(extendedAccess: Bool) -> [String: Any]? {
+        if isQuestion { return nil }
+        switch method {
+        case "item/commandExecution/requestApproval",
+             "item/fileChange/requestApproval",
+             "item/permissions/requestApproval":
+            return response(allow: extendedAccess)
+        case "mcpServer/elicitation/request":
+            return response(allow: isToolConfirmation)
+        default:
+            return response(allow: false)
         }
     }
 

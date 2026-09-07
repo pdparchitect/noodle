@@ -20,11 +20,11 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
         connection.exportedObject = self
         connection.invalidationHandler = { [weak self] in
             guard let self, !self.stopping else { return }
-            self.onFailure?("Extended runtime disconnected. Turn extended access off and on to reconnect.")
+            self.onFailure?("Autonomous runtime disconnected. Turn autonomous access off and on to reconnect.")
         }
         connection.interruptionHandler = { [weak self] in
             guard let self, !self.stopping else { return }
-            self.onFailure?("Extended runtime was interrupted.")
+            self.onFailure?("Autonomous runtime was interrupted.")
         }
         connection.resume()
     }

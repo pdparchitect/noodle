@@ -35,7 +35,7 @@ Settings includes a Dev tab in debug builds only. The whole tab is compiled out 
 NOODLE_BUILD_CONFIGURATION=debug scripts/build-app.sh
 ```
 
-The Dev tab contains **Test Extended Runtime**, a fixed isolation-compatibility probe. It does not start a bot or prove browser access. See [Security and agent access](security.md) for the helper boundary and verification checks.
+The Dev tab contains **Test Autonomous Runtime**, a fixed isolation-compatibility probe. It does not start a bot or prove browser access. See [Security and agent access](security.md) for the helper boundary and verification checks.
 
 To test the normal app with no detected harnesses, quit Noodle and launch a debug build with:
 
