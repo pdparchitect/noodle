@@ -780,7 +780,8 @@ final class NoodleStore {
     }
 
     func preview(for conversation: BotConversation) -> String {
-        messages(for: conversation).last?.body ?? "No messages yet"
+        guard let body = messages(for: conversation).last?.body else { return "No messages yet" }
+        return MarkdownPlainText.convert(body)
     }
 
     func revealWorkspace(for agent: AgentRecord) {
