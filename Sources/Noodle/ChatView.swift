@@ -119,6 +119,7 @@ struct ChatView: View {
                         axis: .vertical
                     )
                     .textFieldStyle(.plain)
+                    .autocorrectionDisabled(false)
                     .font(.system(size: 14))
                     .lineLimit(1...6)
                     .focused($composerFocused)
