@@ -461,18 +461,20 @@ private struct BotIconEditor: View {
                             }
                         }
 
-                        if editedImageData != nil {
-                            Divider()
+                        Divider()
 
-                            Button {
-                                editedImageData = nil
-                                photoSelection = nil
-                            } label: {
-                                Label("Use Symbol Instead", systemImage: "square.grid.2x2")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
+                        Button {
+                            editedImageData = nil
+                            photoSelection = nil
+                        } label: {
+                            Label(
+                                editedImageData == nil ? "Using Symbol" : "Use Symbol Instead",
+                                systemImage: editedImageData == nil ? "checkmark" : "square.grid.2x2"
+                            )
+                            .frame(maxWidth: .infinity)
                         }
+                        .buttonStyle(.bordered)
+                        .disabled(editedImageData == nil)
 
                         if isLoadingPhoto {
                             ProgressView()
