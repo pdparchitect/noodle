@@ -1,3 +1,4 @@
+import AppKit
 import QuickLook
 import SwiftUI
 import NoodleCore
@@ -123,6 +124,7 @@ struct ChatView: View {
                     .font(.system(size: 14))
                     .lineLimit(1...6)
                     .focused($composerFocused)
+                    .background(ChatComposerSpellCheckEnabler(isActive: composerFocused))
                     .onSubmit(store.sendDraft)
                     .padding(.leading, 5)
                     .padding(.vertical, 6)
@@ -173,6 +175,25 @@ struct ChatView: View {
 
     private var composerControlHeight: CGFloat { 32 }
 
+}
+
+private struct ChatComposerSpellCheckEnabler: NSViewRepresentable {
+    let isActive: Bool
+
+    func makeNSView(context: Context) -> NSView {
+        NSView(frame: .zero)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard isActive else { return }
+
+        DispatchQueue.main.async {
+            guard let textView = nsView.window?.firstResponder as? NSTextView else { return }
+            textView.isContinuousSpellCheckingEnabled = true
+            textView.isGrammarCheckingEnabled = true
+            textView.isAutomaticSpellingCorrectionEnabled = true
+        }
+    }
 }
 
 private struct TranscriptViewport: Equatable {
