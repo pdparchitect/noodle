@@ -12,6 +12,7 @@ struct ChatView: View {
     @State private var selectedAttachmentID: UUID?
     @State private var previewedAttachmentURL: URL?
     @State private var transcriptPositions: [UUID: TranscriptViewport] = [:]
+    @State private var bottomOverlayHeight: CGFloat = 0
 
     var body: some View {
         chatContent
@@ -46,16 +47,25 @@ struct ChatView: View {
         if #available(macOS 26.0, *) {
             topFadedTranscript
                 .scrollEdgeEffectStyle(.soft, for: .bottom)
-                .safeAreaBar(edge: .bottom, spacing: 0) {
-                    pinnedBottomContent
+                .overlay(alignment: .bottom) {
+                    measuredPinnedBottomContent
                 }
         } else {
             topFadedTranscript
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    pinnedBottomContent
+                .overlay(alignment: .bottom) {
+                    measuredPinnedBottomContent
                         .background(.bar)
                 }
         }
+    }
+
+    private var measuredPinnedBottomContent: some View {
+        pinnedBottomContent
+            .onGeometryChange(for: CGFloat.self) { geometry in
+                geometry.size.height
+            } action: { height in
+                bottomOverlayHeight = height
+            }
     }
 
     private var pinnedBottomContent: some View {
@@ -100,6 +110,7 @@ struct ChatView: View {
             initialViewport: transcriptPositions[id] ?? TranscriptViewport(),
             selectedAttachmentID: $selectedAttachmentID,
             previewAttachment: showPreview,
+            bottomOverlayHeight: bottomOverlayHeight,
             saveViewport: { transcriptPositions[id] = $0 }
         )
         .id(id)
@@ -300,6 +311,7 @@ private struct ConversationTranscript: View {
     let conversation: BotConversation
     @Binding var selectedAttachmentID: UUID?
     let previewAttachment: (ConversationAttachment) -> Void
+    let bottomOverlayHeight: CGFloat
     let saveViewport: (TranscriptViewport) -> Void
     @State private var position: ScrollPosition
     @State private var viewport: TranscriptViewport
@@ -311,11 +323,13 @@ private struct ConversationTranscript: View {
         initialViewport: TranscriptViewport,
         selectedAttachmentID: Binding<UUID?>,
         previewAttachment: @escaping (ConversationAttachment) -> Void,
+        bottomOverlayHeight: CGFloat,
         saveViewport: @escaping (TranscriptViewport) -> Void
     ) {
         self.conversation = conversation
         _selectedAttachmentID = selectedAttachmentID
         self.previewAttachment = previewAttachment
+        self.bottomOverlayHeight = bottomOverlayHeight
         self.saveViewport = saveViewport
         _position = State(initialValue: initialViewport.isAtBottom
             ? ScrollPosition(edge: .bottom)
@@ -342,7 +356,10 @@ private struct ConversationTranscript: View {
                     )
                 }
 
-                Color.clear.frame(height: 20)
+                // The composer overlays the scroll view so messages can pass
+                // beneath it. This trailing clearance still lets the final
+                // message scroll completely above the composer.
+                Color.clear.frame(height: bottomOverlayHeight + 20)
             }
             .padding(.horizontal, 15)
             .padding(.top, 30)
