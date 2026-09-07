@@ -120,10 +120,29 @@ private struct HeartbeatsSettingsView: View {
             if !store.agents.isEmpty {
                 Section("Bots") {
                     ForEach(store.agents) { agent in
-                        Toggle(agent.displayName, isOn: Binding(
-                            get: { !store.runtime.heartbeatConfiguration.disabledAgentIDs.contains(agent.id) },
-                            set: { store.runtime.setHeartbeatEnabled($0, for: agent.id) }
-                        ))
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(agent.displayName)
+                                if let date = store.runtime.lastHeartbeatDates[agent.id] {
+                                    HStack(spacing: 0) {
+                                        Text("Last heartbeat ")
+                                        Text(date, style: .relative)
+                                    }
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                } else {
+                                    Text("No heartbeat yet")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            Toggle("Heartbeat for \(agent.displayName)", isOn: Binding(
+                                get: { !store.runtime.heartbeatConfiguration.disabledAgentIDs.contains(agent.id) },
+                                set: { store.runtime.setHeartbeatEnabled($0, for: agent.id) }
+                            ))
+                            .labelsHidden()
+                        }
                     }
                 }
                 .disabled(!store.runtime.heartbeatConfiguration.isEnabled)
