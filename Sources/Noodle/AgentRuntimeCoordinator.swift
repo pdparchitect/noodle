@@ -438,6 +438,7 @@ private final class CodexAgentProcess {
         case initialize
         case startThread
         case resumeThread
+        case setThreadName
         case startTurn(AgentWakeReason)
     }
 
@@ -690,6 +691,12 @@ private final class CodexAgentProcess {
                     openThread()
                     return
                 }
+                if case .setThreadName = purpose {
+                    // Naming is presentational. An older Codex installation that
+                    // does not support it must not keep the bot from running.
+                    finishOpeningThread()
+                    return
+                }
                 fail(error["message"] as? String ?? "Codex request failed")
                 return
             }
@@ -706,8 +713,9 @@ private final class CodexAgentProcess {
                 }
                 threadID = id
                 saveState(threadID: id)
-                update(.ready, "Codex ready")
-                sendPendingNotificationIfPossible()
+                setThreadName(id)
+            case .setThreadName:
+                finishOpeningThread()
             case .startTurn(let reason):
                 turnIsActive = true
                 update(.working, snapshot.detail)
@@ -749,6 +757,27 @@ private final class CodexAgentProcess {
                 sendPendingNotificationIfPossible()
             }
         }
+    }
+
+    private func setThreadName(_ threadID: String) {
+        let botName = configuration.displayName
+            .split(whereSeparator: \Character.isWhitespace)
+            .joined(separator: " ")
+        let name = botName.isEmpty ? "Noodle · Bot" : "Noodle · \(botName)"
+        do {
+            try request(
+                .setThreadName,
+                method: "thread/name/set",
+                params: ["threadId": threadID, "name": name]
+            )
+        } catch {
+            finishOpeningThread()
+        }
+    }
+
+    private func finishOpeningThread() {
+        update(.ready, "Codex ready")
+        sendPendingNotificationIfPossible()
     }
 
     private func openThread() {
