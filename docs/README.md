@@ -10,3 +10,4 @@
 - [Architecture](architecture.md) — process lifecycle, harness discovery, and message flow.
 - [Security and agent access](security.md) — autonomous and restricted modes, entitlements, and helper boundaries.
 - [Releases and updates](releases.md) — versioning, GitHub Actions, signing secrets, notarization, and Sparkle.
+- [Changelog](../CHANGELOG.md) — user-facing changes in released and upcoming versions.

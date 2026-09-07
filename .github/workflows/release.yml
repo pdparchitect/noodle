@@ -32,6 +32,10 @@ jobs:
             print -u2 "Tag $GITHUB_REF_NAME does not match VERSION v$version"
             exit 1
           fi
+          if ! grep -Eq "^## \\[$version\\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md; then
+            print -u2 "CHANGELOG.md has no dated section for $version"
+            exit 1
+          fi
           print "NOODLE_VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Import Developer ID certificate
@@ -98,6 +102,24 @@ jobs:
         shell: zsh {0}
         run: scripts/package-release.sh "$GITHUB_REF_NAME"
 
+      - name: Prepare release notes from changelog
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          notes="$RUNNER_TEMP/noodle-release-notes.md"
+          awk -v version="$NOODLE_VERSION" '
+            BEGIN { header = "## [" version "]" }
+            index($0, header) == 1 { found = 1; next }
+            found && index($0, "## [") == 1 { exit }
+            found { print }
+            END { if (!found) exit 1 }
+          ' CHANGELOG.md > "$notes"
+          if [[ ! -s "$notes" ]]; then
+            print -u2 "The $NOODLE_VERSION changelog section is empty"
+            exit 1
+          fi
+          print "NOODLE_RELEASE_NOTES=$notes" >> "$GITHUB_ENV"
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -111,7 +133,7 @@ jobs:
             "dist/appcast.xml" \
             --draft \
             --verify-tag \
-            --generate-notes \
+            --notes-file "$NOODLE_RELEASE_NOTES" \
             --title "Noodle $NOODLE_VERSION"
           gh release edit "$GITHUB_REF_NAME" --draft=false --latest
 

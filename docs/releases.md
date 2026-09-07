@@ -4,13 +4,25 @@ Commands and project paths below are relative to the repository root.
 
 The root `VERSION` file is the canonical stable application version (`X.Y.Z`). Swift Package Manager describes the package and deployment target, but it does not provide a macOS app marketing version. Starting with the updater bootstrap, the build copies `VERSION` into both `CFBundleShortVersionString` and `CFBundleVersion`, so local builds and CI releases use the same ordering. Increase it for every release; never reuse a published version. `NOODLE_BUILD_NUMBER` is a local-testing override only; release packaging always uses `VERSION`.
 
-To publish a release, update `VERSION`, commit the change, and run:
+`CHANGELOG.md` is the source of truth for user-facing release notes. Keep work
+that has landed since the latest release under `Unreleased`. To publish a
+release, move those entries into a dated `## [X.Y.Z] - YYYY-MM-DD` section,
+update `VERSION` to the same version, commit both changes, and run:
 
 ```sh
 scripts/create-release-tag.sh
 ```
 
-The script creates and pushes a matching `vX.Y.Z` tag. GitHub Actions runs the tests, imports the dedicated Developer ID Application identity into an ephemeral keychain, signs the app and every embedded executable, submits the archive to Apple's notary service, staples the ticket, and verifies Gatekeeper acceptance. Sparkle then signs the final ZIP and generates a signed `appcast.xml`. The release stays a draft until its ZIP, checksum, and appcast have all uploaded, then becomes the latest GitHub release.
+The script refuses to tag a version without a matching dated changelog section,
+then creates and pushes a matching `vX.Y.Z` tag. GitHub Actions repeats that
+validation, runs the tests, imports the dedicated Developer ID Application
+identity into an ephemeral keychain, signs the app and every embedded
+executable, submits the archive to Apple's notary service, staples the ticket,
+and verifies Gatekeeper acceptance. Sparkle then signs the final ZIP and
+generates a signed `appcast.xml`. The matching changelog section becomes the
+GitHub Release description. The release stays a draft until its ZIP, checksum,
+appcast, and curated notes have all uploaded, then becomes the latest GitHub
+release.
 
 The release workflow reads signing material only from encrypted GitHub Actions secrets:
 
@@ -37,4 +49,3 @@ Release assets must be accessible to the app for update checks and downloads to 
 ---
 
 [Documentation](README.md) · [Noodle](../README.md)
-

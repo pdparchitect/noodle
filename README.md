@@ -47,4 +47,5 @@ an explicit per-bot choice. See [Security and agent access](docs/security.md).
 - [Architecture](docs/architecture.md)
 - [Storage and Messenger](docs/storage-and-messenger.md)
 - [Security and agent access](docs/security.md)
+- [Changelog](CHANGELOG.md)
 - [Releases and updates](docs/releases.md)

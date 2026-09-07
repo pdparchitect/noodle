@@ -5,6 +5,11 @@ project_root="${0:A:h:h}"
 version="$(tr -d '[:space:]' < "$project_root/VERSION")"
 tag="v$version"
 
+if ! grep -Eq "^## \\[$version\\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" "$project_root/CHANGELOG.md"; then
+    print -u2 "CHANGELOG.md has no dated section for $version. Move the release notes out of Unreleased first."
+    exit 1
+fi
+
 if [[ -n "$(git -C "$project_root" status --porcelain)" ]]; then
     print -u2 "Commit all changes before creating a release tag."
     exit 1
