@@ -76,12 +76,6 @@ private struct ConversationRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Circle()
-                .fill(Color.accentColor)
-                .frame(width: 8, height: 8)
-                .opacity(store.hasUnreadMessages(in: conversation) ? 1 : 0)
-                .accessibilityHidden(true)
-
             ZStack(alignment: .bottomTrailing) {
                 ConversationAvatar(
                     participants: store.participants(for: conversation),
@@ -92,6 +86,14 @@ private struct ConversationRow: View {
                     .fill(runtimeColor)
                     .frame(width: 10, height: 10)
                     .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
+            }
+            .overlay(alignment: .topLeading) {
+                Circle()
+                    .fill(Color.accentColor)
+                    .frame(width: 8, height: 8)
+                    .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
+                    .opacity(store.hasUnreadMessages(in: conversation) ? 1 : 0)
+                    .accessibilityHidden(true)
             }
 
             VStack(alignment: .leading, spacing: 2) {

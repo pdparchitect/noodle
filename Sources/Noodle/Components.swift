@@ -113,6 +113,7 @@ struct MessageBubble: View {
     @State private var inspectedReaction: String?
     @State private var changingReaction = false
     let message: ChatMessage
+    let hasConversationBackground: Bool
     @Binding var selectedAttachmentID: UUID?
     let previewAttachment: (ConversationAttachment) -> Void
 
@@ -138,10 +139,7 @@ struct MessageBubble: View {
                     .textSelection(.enabled)
                     .padding(.horizontal, 13)
                     .padding(.vertical, 8)
-                    .background(
-                        isUser ? Color.accentColor : Color(nsColor: .controlBackgroundColor),
-                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    )
+                    .background { messageBackground }
                     .overlay {
                         reactionContextMenu(attachment: nil)
                     }
@@ -176,6 +174,20 @@ struct MessageBubble: View {
             if !isUser { Spacer(minLength: 120) }
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    @ViewBuilder private var messageBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+
+        if hasConversationBackground {
+            shape
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    shape.fill(isUser ? Color.accentColor.opacity(0.28) : Color.black.opacity(0.22))
+                }
+        } else {
+            shape.fill(isUser ? Color.accentColor : Color(white: 0.20))
+        }
     }
 
     private var hasReactions: Bool { !(message.reactions ?? []).isEmpty }
