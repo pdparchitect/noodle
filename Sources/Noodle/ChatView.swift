@@ -13,6 +13,7 @@ struct ChatView: View {
     @State private var previewedAttachmentURL: URL?
     @State private var transcriptPositions: [UUID: TranscriptViewport] = [:]
     @State private var bottomOverlayHeight: CGFloat = 0
+    @StateObject private var nameCompletion = ComposerNameCompletion()
 
     var body: some View {
         chatContent
@@ -40,6 +41,7 @@ struct ChatView: View {
             .onChange(of: conversation.id) { _, _ in
                 selectedAttachmentID = nil
                 previewedAttachmentURL = nil
+                nameCompletion.detach()
             }
     }
 
@@ -101,6 +103,13 @@ struct ChatView: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 11)
             .frame(maxWidth: .infinity)
+            .overlay(alignment: .topLeading) {
+                if composerFocused && !nameCompletion.candidates.isEmpty {
+                    AgentNameSuggestions(completion: nameCompletion)
+                        .padding(.leading, 56)
+                        .offset(y: -nameCompletion.popupHeight - 6)
+                }
+            }
     }
 
     private var transcript: some View {
@@ -143,6 +152,7 @@ struct ChatView: View {
         }
         .onDisappear {
             store.composerIsFocused = false
+            nameCompletion.detach()
         }
     }
 
@@ -232,7 +242,13 @@ struct ChatView: View {
             .font(.system(size: 14))
             .lineLimit(1...6)
             .focused($composerFocused)
-            .background(ChatComposerSpellCheckEnabler(isActive: composerFocused))
+            .background(ChatComposerBridge(
+                isActive: composerFocused,
+                draft: store.draft,
+                agents: store.agents,
+                preferredIDs: Set(conversation.participantIDs),
+                completion: nameCompletion
+            ))
             .onSubmit(store.sendDraft)
             .padding(.leading, 12)
             .padding(.trailing, composerSendControlWidth + 14)
@@ -274,25 +290,6 @@ struct ChatView: View {
     private var composerSendControlWidth: CGFloat { 27 }
     private var composerCornerRadius: CGFloat { composerControlHeight / 2 }
 
-}
-
-private struct ChatComposerSpellCheckEnabler: NSViewRepresentable {
-    let isActive: Bool
-
-    func makeNSView(context: Context) -> NSView {
-        NSView(frame: .zero)
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        guard isActive else { return }
-
-        DispatchQueue.main.async {
-            guard let textView = nsView.window?.firstResponder as? NSTextView else { return }
-            textView.isContinuousSpellCheckingEnabled = true
-            textView.isGrammarCheckingEnabled = true
-            textView.isAutomaticSpellingCorrectionEnabled = true
-        }
-    }
 }
 
 private struct TranscriptViewport: Equatable {
