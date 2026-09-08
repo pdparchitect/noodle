@@ -1,6 +1,6 @@
 import Foundation
 
-public enum HarnessAuthenticationStatus: Equatable, Sendable {
+public enum HarnessAuthenticationStatus: String, Codable, Equatable, Sendable {
     case authenticated, unauthenticated, notRequired
 }
 

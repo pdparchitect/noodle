@@ -10,6 +10,7 @@ export SWIFTPM_MODULECACHE_OVERRIDE="$module_cache"
 
 swift test --disable-sandbox --package-path "$project_root"
 zsh "$project_root/Tests/link-previews.sh"
+zsh "$project_root/Tests/harness-presentation.sh"
 app="$(NOODLE_BUILD_CONFIGURATION="${NOODLE_BUILD_CONFIGURATION:-debug}" "$project_root/scripts/build-app.sh")"
 
 expected_version="$(tr -d '[:space:]' < "$project_root/VERSION")"

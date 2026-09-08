@@ -18,6 +18,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Harness Settings remembers confirmed installation and sign-in status across launches and keeps it visible during Check Again. Incomplete discovery no longer flashes “Not installed”; cached status is display-only and never authorizes harness execution.
 - The attachment menu offers **Use as Background** only for recognized images, not documents with Quick Look thumbnails; the menu label is shorter.
 - Switching chats preserves each conversation's unsent text and queued attachments for the current app session. Sending clears only that conversation's draft, and automatic update restarts wait for drafts in all chats.
 - Recognized FX transport failures now explain interrupted model connections and how to resume, without echoing private provider errors or incorrectly implying a lost login.
@@ -29,6 +30,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Removed the Dev Settings tab; runtime diagnostics remain in internal test tools.
 - Settings tabs use the singular labels **Harness** and **Update**.
 - New bots default to restricted access; existing bots retain their access settings. Autonomous access remains an explicit per-bot option in Security, required by the current Claude Code harness.
 

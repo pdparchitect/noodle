@@ -9,11 +9,16 @@ final class HarnessSetupController {
     private(set) var activity: [HarnessProvider: String] = [:]
     private(set) var challenges: [HarnessProvider: HarnessSignInChallenge] = [:]
     private(set) var checking: Set<HarnessProvider> = []
+    private(set) var snapshots: [HarnessProvider: HarnessPresentationSnapshot]
     private let providers: [HarnessProvider: any HarnessSetupProviding]
+    @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var operations: [HarnessProvider: Task<Void, Never>] = [:]
-    @ObservationIgnored private var checkedPaths: [HarnessProvider: String] = [:]
 
-    init(providers: [HarnessProvider: any HarnessSetupProviding]? = nil) {
+    init(providers: [HarnessProvider: any HarnessSetupProviding]? = nil, defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        let cached = HarnessPresentationCache.load(from: defaults)
+        snapshots = cached
+        authentication = cached.compactMapValues(\.authentication)
         self.providers = providers ?? [
             .codex: CodexSetupProvider(codexHome: HarnessStorage.codexHome),
             .claudeCode: ClaudeCodeSetupProvider(),
@@ -22,31 +27,41 @@ final class HarnessSetupController {
         ]
     }
 
-    func refresh(_ installations: [HarnessInstallation]) async {
+    var displayedInstallations: [HarnessInstallation] {
+        HarnessProvider.allCases.map { snapshots[$0]?.installation ?? HarnessInstallation(provider: $0, executablePath: nil) }
+    }
+
+    private func record(_ installation: HarnessInstallation, authentication status: HarnessAuthenticationStatus?) {
+        let snapshot = HarnessPresentationSnapshot(installation: installation, authentication: status)
+        guard snapshots[installation.provider] != snapshot else { return }
+        snapshots[installation.provider] = snapshot
+        authentication[installation.provider] = snapshot.authentication
+        HarnessPresentationCache.save(snapshots, to: defaults)
+    }
+
+    func refresh(_ installations: [HarnessInstallation], discoveryErrors: [HarnessProvider: String] = [:]) async {
         for installation in installations {
             let id = installation.provider
             guard operations[id] == nil, !checking.contains(id), let provider = providers[id] else { continue }
-            guard installation.isAvailable else {
-                authentication[id] = nil
-                errors[id] = nil
-                checkedPaths[id] = nil
-                continue
+            if let error = discoveryErrors[id] {
+                errors[id] = error
+                continue // A failed check is not proof of uninstallation or sign-out.
             }
-            if checkedPaths[id] != installation.executablePath {
-                authentication[id] = nil
+            guard installation.isAvailable else {
+                record(installation, authentication: nil)
                 errors[id] = nil
-                checkedPaths[id] = installation.executablePath
+                continue
             }
             checking.insert(id)
             defer { checking.remove(id) }
             do {
                 let status = try await provider.status(for: installation)
                 try Task.checkCancellation()
-                authentication[id] = status
+                record(installation, authentication: status)
                 errors[id] = nil
             } catch is CancellationError { return }
             catch {
-                authentication[id] = nil
+                if snapshots[id]?.installation != installation { record(installation, authentication: nil) }
                 errors[id] = error.localizedDescription
             }
         }
@@ -69,7 +84,8 @@ final class HarnessSetupController {
                     self?.activity[id] = "Waiting for sign-in…"
                 }
                 try Task.checkCancellation()
-                authentication[id] = status
+                record(installation, authentication: status)
+                errors[id] = nil
             } catch {
                 if !(error is CancellationError), !Task.isCancelled { errors[id] = error.localizedDescription }
             }

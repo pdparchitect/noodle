@@ -29,6 +29,7 @@ final class AgentRuntimeCoordinator {
     private(set) var capabilityErrors: [HarnessProvider: String] = [:]
     private(set) var isLoadingCapabilities = false
     private(set) var isRefreshingInstallations = false
+    private(set) var installationErrors: [HarnessProvider: String] = [:]
     private(set) var snapshots: [UUID: AgentRuntimeSnapshot] = [:] {
         didSet { updateSleepAssertion() }
     }
@@ -38,9 +39,6 @@ final class AgentRuntimeCoordinator {
     private(set) var accessConfiguration: AgentAccessConfiguration
     private(set) var approvals: [AgentApprovalRequest] = []
     private(set) var changingAccess: Set<UUID> = []
-    private(set) var accessCheckResult: String?
-    private(set) var isCheckingAccess = false
-    @ObservationIgnored private var checkConnection: ExtendedAgentConnection?
     @ObservationIgnored private let sleepController = AgentActivitySleepController()
     private var lifecycleID = UUID()
     private var blockedRestarts: Set<UUID> = []
@@ -73,11 +71,13 @@ final class AgentRuntimeCoordinator {
             guard !Task.isCancelled else { return }
             let installation = HarnessInstallation(provider: .grokBuild, executablePath: result.executablePath)
             hostGrokInstallation = installation
+            installationErrors[.grokBuild] = nil
             installations = installations.map { $0.provider == .grokBuild ? installation : $0 }
             modelsByProvider[.grokBuild] = result.models
             capabilityErrors[.grokBuild] = result.executablePath == nil ? "Grok Build is not installed" : (result.authenticated ? nil : "Run grok login in Terminal, then check again.")
         } catch {
             guard !Task.isCancelled else { return }
+            installationErrors[.grokBuild] = error.localizedDescription
             capabilityErrors[.grokBuild] = error.localizedDescription
         }
     }
@@ -148,33 +148,6 @@ final class AgentRuntimeCoordinator {
     func resolveApproval(_ approval: AgentApprovalRequest, allow: Bool, answers: [String: String] = [:]) {
         guard approvals.contains(where: { $0.id == approval.id }) else { return }
         processes[approval.agentID]?.resolveApproval(approval, allow: allow, answers: answers)
-    }
-
-    func checkExtendedRuntime() {
-        guard !isCheckingAccess else { return }
-        isCheckingAccess = true
-        accessCheckResult = nil
-        do {
-            let connection = try ExtendedAgentConnection()
-            checkConnection = connection
-            connection.checkCompatibility { [weak self] success, detail in
-                Task { @MainActor in
-                    guard self?.checkConnection === connection else { return }
-                    self?.accessCheckResult = success ? detail : "Runtime check failed: \(detail)"
-                    self?.isCheckingAccess = false
-                    connection.stop { _ in }
-                    self?.checkConnection = nil
-                }
-            }
-            Task { [weak self] in
-                try? await Task.sleep(for: .seconds(15))
-                guard self?.checkConnection === connection else { return }
-                self?.isCheckingAccess = false
-                self?.accessCheckResult = "Runtime check timed out. No bot access was changed."
-                self?.checkConnection = nil
-                connection.stop { _ in }
-            }
-        } catch { isCheckingAccess = false; accessCheckResult = error.localizedDescription }
     }
 
     func configureHeartbeats(enabled: Bool? = nil, intervalMinutes: Int? = nil) {
@@ -283,8 +256,12 @@ final class AgentRuntimeCoordinator {
             discovery.discover()
         }.value
         guard !Task.isCancelled else { return }
-        installations = detected
         await refreshGrokCapabilities()
+        guard !Task.isCancelled else { return }
+        let complete = detected.map { installation in
+            installation.provider == .grokBuild ? (hostGrokInstallation ?? installation) : installation
+        }
+        if installations != complete { installations = complete }
     }
 
     func installation(for agent: AgentRecord) -> HarnessInstallation? {

@@ -4,9 +4,6 @@ import NoodleCore
 
 enum NoodleSettingsTab: Hashable {
     case general, harnesses, heartbeats, security, updates
-    #if DEBUG
-    case developer
-    #endif
 }
 
 struct NoodleSettingsView: View {
@@ -42,12 +39,6 @@ struct NoodleSettingsView: View {
                 .settingsContentSize()
                 .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }
                 .tag(NoodleSettingsTab.updates)
-            #if DEBUG
-            DeveloperSettingsView()
-                .settingsContentSize()
-                .tabItem { Label("Dev", systemImage: "hammer") }
-                .tag(NoodleSettingsTab.developer)
-            #endif
         }
         .modifier(SettingsWindowResizeAnchor())
     }
@@ -196,19 +187,23 @@ private struct HarnessesSettingsView: View {
     @Environment(NoodleStore.self) private var store
     @State private var setup = HarnessSetupController()
     @State private var showRefreshProgress = false
+    @State private var checkingAll = false
 
     private var isRefreshing: Bool {
-        store.runtime.isRefreshingInstallations || !setup.checking.isEmpty
+        checkingAll || store.runtime.isRefreshingInstallations || !setup.checking.isEmpty
     }
 
     var body: some View {
         Form {
             Section {
-                ForEach(store.runtime.installations) { installation in
-                    HarnessInstallationRow(installation: installation, setup: setup) {
+                ForEach(setup.displayedInstallations) { installation in
+                    HarnessInstallationRow(installation: installation,
+                        liveInstallation: store.runtime.installations.first { $0.provider == installation.provider },
+                        isRefreshing: isRefreshing, setup: setup) {
                         Task {
                             await store.runtime.checkExternalInstallation(installation.provider)
-                            await setup.refresh(store.runtime.installations)
+                            guard !store.runtime.isRefreshingInstallations else { return }
+                            await setup.refresh(store.runtime.installations, discoveryErrors: store.runtime.installationErrors)
                         }
                     }
                 }
@@ -225,7 +220,7 @@ private struct HarnessesSettingsView: View {
                     Button("Check Again") {
                         Task { await refresh() }
                     }
-                    .disabled(store.runtime.isRefreshingInstallations || !setup.checking.isEmpty)
+                    .disabled(isRefreshing)
                 }
             }
         }
@@ -246,13 +241,19 @@ private struct HarnessesSettingsView: View {
     }
 
     private func refresh() async {
+        guard !checkingAll else { return }
+        checkingAll = true
+        defer { checkingAll = false }
         await store.runtime.refreshInstallations()
-        await setup.refresh(store.runtime.installations)
+        guard !Task.isCancelled, !store.runtime.isRefreshingInstallations else { return }
+        await setup.refresh(store.runtime.installations, discoveryErrors: store.runtime.installationErrors)
     }
 }
 
 private struct HarnessInstallationRow: View {
     let installation: HarnessInstallation
+    let liveInstallation: HarnessInstallation?
+    let isRefreshing: Bool
     let setup: HarnessSetupController
     let install: () -> Void
     @State private var showsInstallationGuide = false
@@ -288,7 +289,7 @@ private struct HarnessInstallationRow: View {
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    Text("Install the native harness to use it with Noodle.")
+                    Text(setup.snapshots[id] == nil ? "Checking the installation…" : "Install the native harness to use it with Noodle.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
@@ -316,7 +317,7 @@ private struct HarnessInstallationRow: View {
                     Text("Enter this code on the sign-in page.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else if setup.activity[id] == nil {
-                    if !installation.isAvailable {
+                    if !installation.isAvailable && setup.snapshots[id] != nil {
                         if showsInstallationGuide, let guide = setup.installationGuide(for: id) {
                             Text(guide.instructions).font(.caption).foregroundStyle(.secondary)
                             if let command = guide.command {
@@ -347,8 +348,10 @@ private struct HarnessInstallationRow: View {
                             Button("Install…") { showsInstallationGuide = true }
                         }
                     } else if setup.authentication[id] == .unauthenticated {
-                        Button("Sign In…") { setup.signIn(installation) }
-                            .disabled(setup.checking.contains(id))
+                        Button("Sign In…") {
+                            if let liveInstallation, liveInstallation.isAvailable { setup.signIn(liveInstallation) }
+                        }
+                            .disabled(isRefreshing || liveInstallation?.isAvailable != true)
                     }
                 }
             }
@@ -370,8 +373,9 @@ private struct HarnessInstallationRow: View {
 
     private var statusText: String {
         if setup.activity[id] != nil { return "Setting up" }
-        if !installation.isAvailable { return "Not installed" }
         if setup.errors[id] != nil { return "Needs attention" }
+        if setup.snapshots[id] == nil { return "Checking…" }
+        if !installation.isAvailable { return "Not installed" }
         switch setup.authentication[id] {
         case .authenticated: return "Signed in"
         case .unauthenticated: return "Sign-in required"
@@ -382,6 +386,7 @@ private struct HarnessInstallationRow: View {
 
     private var statusIcon: String {
         if setup.errors[id] != nil { return "exclamationmark.triangle" }
+        if setup.snapshots[id] == nil { return "ellipsis.circle" }
         if !installation.isAvailable { return "arrow.down.circle" }
         return setup.authentication[id] == .authenticated || setup.authentication[id] == .notRequired
             ? "checkmark.circle.fill" : "person.crop.circle.badge.questionmark"
