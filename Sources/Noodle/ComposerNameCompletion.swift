@@ -4,18 +4,21 @@ import NoodleCore
 
 @MainActor
 final class ComposerNameCompletion: NSObject, ObservableObject {
+    static let descriptionsDefaultsKey = "Noodle.composer.showBotDescriptions"
     private weak var editor: NSTextView?
     private weak var anchor: NSView?
     private var menu: NSMenu?
     private var agents: [AgentRecord] = []
     private var preferredIDs: Set<UUID> = []
+    private var showDescriptions = false
     private var dismissedRequest: AgentNameCompletion?
     private var observers: [NSObjectProtocol] = []
     private var presentationScheduled = false
 
-    func attach(to editor: NSTextView, anchor: NSView, agents: [AgentRecord], preferredIDs: Set<UUID>) {
+    func attach(to editor: NSTextView, anchor: NSView, agents: [AgentRecord], preferredIDs: Set<UUID>, showDescriptions: Bool) {
         self.agents = agents
         self.preferredIDs = preferredIDs
+        self.showDescriptions = showDescriptions
         if self.editor !== editor {
             detach()
             self.editor = editor
@@ -68,14 +71,23 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
 
         let picker = NSMenu(title: "Bot names")
         picker.autoenablesItems = false
+        picker.minimumWidth = showDescriptions ? 360 : 220
         for agent in candidates {
-            let item = NSMenuItem(title: agent.displayName, action: #selector(selectName(_:)), keyEquivalent: "")
+            let item = NSMenuItem(title: Self.menuTitle(for: agent, showDescriptions: showDescriptions),
+                                  action: #selector(selectName(_:)), keyEquivalent: "")
+            if showDescriptions {
+                let title = NSMutableAttributedString(string: item.title, attributes: [.font: NSFont.menuFont(ofSize: 0)])
+                let descriptionStart = (agent.displayName as NSString).length
+                if title.length > descriptionStart {
+                    title.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor,
+                                       range: NSRange(location: descriptionStart, length: title.length - descriptionStart))
+                }
+                item.attributedTitle = title
+            }
             item.target = self
             item.representedObject = agent.displayName
-            let image = agent.avatarImageData.flatMap(NSImage.init(data:))
-                ?? NSImage(systemSymbolName: "person.crop.circle", accessibilityDescription: nil)
-            image?.size = NSSize(width: 16, height: 16)
-            item.image = image
+            if showDescriptions { item.toolTip = agent.publicDescription }
+            item.image = Self.menuAvatar(for: agent)
             picker.addItem(item)
         }
 
@@ -88,6 +100,31 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
         let localPosition = anchor.convert(window.convertPoint(fromScreen: position), from: nil)
         picker.popUp(positioning: nil, at: localPosition, in: anchor)
         if menu === picker { menu = nil }
+    }
+
+    static func menuTitle(for agent: AgentRecord, showDescriptions: Bool) -> String {
+        guard showDescriptions, let description = agent.publicDescription else { return agent.displayName }
+        let summary = description.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        guard !summary.isEmpty else { return agent.displayName }
+        let shortened = summary.count > 72 ? String(summary.prefix(72)) + "…" : summary
+        return "\(agent.displayName)  \(shortened)"
+    }
+
+    static func menuAvatar(for agent: AgentRecord) -> NSImage? {
+        guard let data = agent.avatarImageData, let source = NSImage(data: data),
+              source.size.width > 0, source.size.height > 0 else {
+            let fallback = NSImage(systemSymbolName: "person.crop.circle", accessibilityDescription: nil)
+            fallback?.size = NSSize(width: 16, height: 16)
+            return fallback
+        }
+        return NSImage(size: NSSize(width: 16, height: 16), flipped: false) { bounds in
+            NSBezierPath(ovalIn: bounds).addClip()
+            let scale = max(bounds.width / source.size.width, bounds.height / source.size.height)
+            let size = NSSize(width: source.size.width * scale, height: source.size.height * scale)
+            source.draw(in: NSRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2,
+                                  width: size.width, height: size.height))
+            return true
+        }
     }
 
     @objc private func selectName(_ item: NSMenuItem) {
@@ -103,6 +140,7 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
 
 /// Keeps SwiftUI's existing multiline field, including undo, paste and spelling.
 struct ChatComposerBridge: NSViewRepresentable {
+    @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showDescriptions = false
     let isActive: Bool
     let draft: String
     let agents: [AgentRecord]
@@ -118,7 +156,8 @@ struct ChatComposerBridge: NSViewRepresentable {
             guard isActive else { completion.detach(); return }
             guard let editor = view.window?.firstResponder as? NSTextView,
                   editor.string == draft else { return }
-            completion.attach(to: editor, anchor: view, agents: agents, preferredIDs: preferredIDs)
+            completion.attach(to: editor, anchor: view, agents: agents, preferredIDs: preferredIDs,
+                              showDescriptions: showDescriptions)
         }
     }
 

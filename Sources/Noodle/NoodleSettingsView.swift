@@ -56,6 +56,7 @@ struct NoodleSettingsView: View {
 private struct GeneralSettingsView: View {
     @Environment(NoodleStore.self) private var store
     @AppStorage(BotNameStyle.defaultsKey) private var botNameStyle = BotNameStyle.real.rawValue
+    @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showBotDescriptions = false
 
     var body: some View {
         Form {
@@ -66,6 +67,11 @@ private struct GeneralSettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+            }
+            Section {
+                Toggle("Show descriptions in the @ name menu", isOn: $showBotDescriptions)
+            } footer: {
+                Text("Show each bot's public description beside its name. Private backstories are never shown.")
             }
             Section {
                 Toggle("Keep Mac awake while agents work", isOn: Binding(

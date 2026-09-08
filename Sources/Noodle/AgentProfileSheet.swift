@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import NoodleCore
 
@@ -48,10 +49,65 @@ struct AgentProfileSheet: View {
         }
         .padding(20)
         .frame(width: 320)
+        .background(ProfileOutsideClickDismissal { dismiss() })
     }
 
     private var description: String {
         let value = agent.publicDescription?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return value.isEmpty ? "No description yet." : value
+    }
+}
+
+/// Informational profiles can be dismissed without a decision. Keep this local
+/// to the profile: clicking outside an editor must not discard unsaved changes.
+private struct ProfileOutsideClickDismissal: NSViewRepresentable {
+    let dismiss: () -> Void
+
+    func makeNSView(context: Context) -> DismissalView { DismissalView() }
+
+    func updateNSView(_ view: DismissalView, context: Context) {
+        view.dismiss = dismiss
+    }
+
+    static func dismantleNSView(_ view: DismissalView, coordinator: ()) {
+        view.stopMonitoring()
+    }
+
+    final class DismissalView: NSView {
+        var dismiss: (() -> Void)?
+        private var mouseMonitor: Any?
+        private var deactivationObserver: NSObjectProtocol?
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            stopMonitoring()
+            guard window != nil else { return }
+            mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+                let outside = MainActor.assumeIsolated {
+                    guard let self, let sheet = self.window, let parent = sheet.sheetParent,
+                          event.window === parent else { return false }
+                    let point = parent.convertPoint(toScreen: event.locationInWindow)
+                    guard !sheet.frame.contains(point) else { return false }
+                    self.dismiss?()
+                    return true
+                }
+                // Dismiss only; don't activate whatever was behind the sheet.
+                return outside ? nil : event
+            }
+            deactivationObserver = NotificationCenter.default.addObserver(
+                forName: NSApplication.didResignActiveNotification, object: NSApp, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.dismiss?() }
+            }
+        }
+
+        func stopMonitoring() {
+            if let mouseMonitor { NSEvent.removeMonitor(mouseMonitor) }
+            if let deactivationObserver { NotificationCenter.default.removeObserver(deactivationObserver) }
+            mouseMonitor = nil
+            deactivationObserver = nil
+        }
     }
 }
