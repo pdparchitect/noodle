@@ -40,11 +40,6 @@ private struct FixtureView: View {
                 .onSubmit { submissions += 1 }
                 .padding(12)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 18))
-                .overlay(alignment: .topLeading) {
-                    if focused && !completion.candidates.isEmpty {
-                        AgentNameSuggestions(completion: completion).offset(y: -completion.popupHeight - 8)
-                    }
-                }
         }
         .padding(24).frame(width: 540, height: 450)
         .sheet(item: $profile, onDismiss: {

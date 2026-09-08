@@ -128,13 +128,6 @@ struct ChatView: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 11)
             .frame(maxWidth: .infinity)
-            .overlay(alignment: .topLeading) {
-                if composerFocused && !nameCompletion.candidates.isEmpty {
-                    AgentNameSuggestions(completion: nameCompletion)
-                        .padding(.leading, 56)
-                        .offset(y: -nameCompletion.popupHeight - 6)
-                }
-            }
     }
 
     private var transcript: some View {

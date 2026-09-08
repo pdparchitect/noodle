@@ -9,7 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - Click a bot's avatar in a group message to see its public profile, address it by name in the composer, or open its direct conversation.
-- Type `@` in the chat composer to find bot names, navigate suggestions with the arrow keys, and insert a plain-text name with Return, Tab or a click.
+- Type `@` in the chat composer to open a native macOS bot-name menu with system styling, keyboard navigation and type-to-select. Choose a name with Return or a click to insert plain text.
 - Privacy-safe runtime lifecycle and inbox-read logs in debug and release builds, with wake correlation IDs and extra debug-only notification diagnostics.
 - A shared message/event catalogue generates agent guidance, Messenger help, and the message reference, with build and test checks for documentation drift.
 

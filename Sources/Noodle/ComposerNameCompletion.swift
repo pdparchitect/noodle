@@ -3,19 +3,17 @@ import SwiftUI
 import NoodleCore
 
 @MainActor
-final class ComposerNameCompletion: ObservableObject {
-    @Published private(set) var candidates: [AgentRecord] = []
-    @Published private(set) var selectedIndex = 0
-    var popupHeight: CGFloat { CGFloat(min(5, candidates.count)) * 46 + 12 }
+final class ComposerNameCompletion: NSObject, ObservableObject {
     private weak var editor: NSTextView?
+    private weak var anchor: NSView?
+    private var menu: NSMenu?
     private var agents: [AgentRecord] = []
     private var preferredIDs: Set<UUID> = []
-    private var request: AgentNameCompletion?
     private var dismissedRequest: AgentNameCompletion?
     private var observers: [NSObjectProtocol] = []
-    private var keyMonitor: Any?
+    private var presentationScheduled = false
 
-    func attach(to editor: NSTextView, agents: [AgentRecord], preferredIDs: Set<UUID>) {
+    func attach(to editor: NSTextView, anchor: NSView, agents: [AgentRecord], preferredIDs: Set<UUID>) {
         self.agents = agents
         self.preferredIDs = preferredIDs
         if self.editor !== editor {
@@ -23,81 +21,87 @@ final class ComposerNameCompletion: ObservableObject {
             self.editor = editor
             for notification in [NSText.didChangeNotification, NSTextView.didChangeSelectionNotification] {
                 observers.append(NotificationCenter.default.addObserver(forName: notification, object: editor, queue: .main) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.refresh() }
+                    MainActor.assumeIsolated { self?.scheduleMenu() }
                 })
             }
-            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                let consumed = MainActor.assumeIsolated {
-                    guard let self else { return false }
-                    return self.handle(event) == nil
-                }
-                return consumed ? nil : event
-            }
         }
+        self.anchor = anchor
         editor.isContinuousSpellCheckingEnabled = true
         editor.isGrammarCheckingEnabled = true
         editor.isAutomaticSpellingCorrectionEnabled = true
-        refresh()
+        scheduleMenu()
     }
 
     func detach() {
+        menu?.cancelTracking()
+        menu = nil
         observers.forEach(NotificationCenter.default.removeObserver)
         observers.removeAll()
-        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
-        keyMonitor = nil
         editor = nil
-        request = nil
+        anchor = nil
         dismissedRequest = nil
-        if !candidates.isEmpty { candidates = [] }
     }
 
-    private func refresh() {
-        guard let editor, !editor.hasMarkedText(), editor.window?.firstResponder === editor else {
-            if !candidates.isEmpty { candidates = [] }
+    private func scheduleMenu() {
+        guard menu == nil, !presentationScheduled else { return }
+        presentationScheduled = true
+        // Finish the text edit and SwiftUI binding update before entering native
+        // menu tracking. AppKit owns drawing, selection and keyboard handling.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.presentationScheduled = false
+            self.showMenu()
+        }
+    }
+
+    private func showMenu() {
+        guard menu == nil, let editor, let anchor, let window = anchor.window,
+              editor.window === window, window.firstResponder === editor,
+              !editor.hasMarkedText() else { return }
+        guard let request = AgentNameCompletion.request(in: editor.string, selection: editor.selectedRange()) else {
+            dismissedRequest = nil
             return
         }
-        let updated = AgentNameCompletion.request(in: editor.string, selection: editor.selectedRange())
-        if updated != request {
-            selectedIndex = 0
-            dismissedRequest = nil
+        guard request != dismissedRequest else { return }
+        let candidates = request.matches(agents, preferredIDs: preferredIDs)
+        guard !candidates.isEmpty else { return }
+
+        let picker = NSMenu(title: "Bot names")
+        picker.autoenablesItems = false
+        for agent in candidates {
+            let item = NSMenuItem(title: agent.displayName, action: #selector(selectName(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = agent.displayName
+            let image = agent.avatarImageData.flatMap(NSImage.init(data:))
+                ?? NSImage(systemSymbolName: "person.crop.circle", accessibilityDescription: nil)
+            image?.size = NSSize(width: 16, height: 16)
+            item.image = image
+            picker.addItem(item)
         }
-        request = updated
-        let matches = updated == dismissedRequest ? [] : updated?.matches(agents, preferredIDs: preferredIDs) ?? []
-        if candidates != matches { candidates = matches }
-        if selectedIndex >= candidates.count { selectedIndex = 0 }
+
+        let glyph = editor.firstRect(forCharacterRange: NSRange(location: request.range.location, length: 1), actualRange: nil)
+        // Screen coordinates increase upwards. Place the native menu above @;
+        // AppKit adjusts it to fit the screen, including outside the app window.
+        let position = NSPoint(x: glyph.minX, y: glyph.maxY + picker.size.height + 4)
+        menu = picker
+        dismissedRequest = request
+        let localPosition = anchor.convert(window.convertPoint(fromScreen: position), from: nil)
+        picker.popUp(positioning: nil, at: localPosition, in: anchor)
+        if menu === picker { menu = nil }
     }
 
-    private func handle(_ event: NSEvent) -> NSEvent? {
-        guard let editor, event.window === editor.window,
-              editor.window?.firstResponder === editor, !editor.hasMarkedText(),
-              event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty else { return event }
-        refresh()
-        guard !candidates.isEmpty else { return event }
-        switch event.keyCode {
-        case 125: selectedIndex = (selectedIndex + 1) % candidates.count
-        case 126: selectedIndex = (selectedIndex + candidates.count - 1) % candidates.count
-        case 36, 48, 76: accept(candidates[selectedIndex])
-        case 53:
-            dismissedRequest = request
-            candidates = []
-        default: return event
-        }
-        return nil
-    }
-
-    func accept(_ agent: AgentRecord) {
-        guard let editor, !editor.hasMarkedText(), let request,
+    @objc private func selectName(_ item: NSMenuItem) {
+        guard let name = item.representedObject as? String,
+              let editor, !editor.hasMarkedText(), let request = dismissedRequest,
               AgentNameCompletion.request(in: editor.string, selection: editor.selectedRange()) == request else { return }
         editor.window?.makeFirstResponder(editor)
         editor.breakUndoCoalescing()
-        editor.insertText(request.replacement(name: agent.displayName, in: editor.string), replacementRange: request.range)
+        editor.insertText(request.replacement(name: name, in: editor.string), replacementRange: request.range)
         editor.breakUndoCoalescing()
-        refresh()
     }
 }
 
-/// Keeps SwiftUI's existing multiline field (including undo, paste and spelling)
-/// and only intercepts completion keys while that specific field owns focus.
+/// Keeps SwiftUI's existing multiline field, including undo, paste and spelling.
 struct ChatComposerBridge: NSViewRepresentable {
     let isActive: Bool
     let draft: String
@@ -114,49 +118,11 @@ struct ChatComposerBridge: NSViewRepresentable {
             guard isActive else { completion.detach(); return }
             guard let editor = view.window?.firstResponder as? NSTextView,
                   editor.string == draft else { return }
-            completion.attach(to: editor, agents: agents, preferredIDs: preferredIDs)
+            completion.attach(to: editor, anchor: view, agents: agents, preferredIDs: preferredIDs)
         }
     }
 
     static func dismantleNSView(_ nsView: NSView, coordinator: ComposerNameCompletion) {
         coordinator.detach()
-    }
-}
-
-struct AgentNameSuggestions: View {
-    @ObservedObject var completion: ComposerNameCompletion
-
-    var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(Array(completion.candidates.enumerated()), id: \.element.id) { index, agent in
-                        Button { completion.accept(agent) } label: {
-                            HStack(spacing: 10) {
-                                BotAvatar(agent: agent, size: 28)
-                                Text(agent.displayName).lineLimit(1)
-                                Spacer()
-                                if index == completion.selectedIndex {
-                                    Image(systemName: "return").foregroundStyle(.secondary)
-                                }
-                            }
-                            .padding(8)
-                            .contentShape(Rectangle())
-                            .background(index == completion.selectedIndex ? Color.accentColor.opacity(0.22) : .clear, in: RoundedRectangle(cornerRadius: 7))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Insert \(agent.displayName)")
-                        .id(agent.id)
-                    }
-                }.padding(6)
-            }
-            .frame(width: 280, height: completion.popupHeight)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(.separator.opacity(0.4)))
-            .shadow(color: .black.opacity(0.2), radius: 8, y: 3)
-            .onChange(of: completion.selectedIndex) { _, index in
-                if completion.candidates.indices.contains(index) { proxy.scrollTo(completion.candidates[index].id) }
-            }
-        }
     }
 }

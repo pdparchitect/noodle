@@ -31,7 +31,7 @@ For native sheet sizing changes, run `zsh Tests/sheet-sizing.sh` from a logged-i
 
 ## Chat interaction checks
 
-Run `zsh Tests/chat-features.sh` on a logged-in Mac to open an isolated, sandboxed UI fixture. It uses synthetic bots and cannot send messages or load the app's data. Verify `@` filtering; Up/Down navigation; Return/Tab and mouse selection inserting plain names without incrementing the submission counter; Escape dismissal; normal typing and undo; and profile Reply/Direct Message actions preserving the draft and returning keyboard focus. The profile must contain only the public description, never a backstory. Close the fixture before rebuilding it.
+Run `zsh Tests/chat-features.sh` on a logged-in Mac to open an isolated, sandboxed UI fixture. It uses synthetic bots and cannot send messages or load the app's data. Verify `@` opens a real macOS menu above the symbol; native type-to-select and Up/Down navigation; Return and mouse selection inserting plain names without incrementing the submission counter; Escape dismissal; normal typing and undo; and profile Reply/Direct Message actions preserving the draft and returning keyboard focus. Menu materials, row spacing and highlighting must be system-rendered, with no custom row views. The profile must contain only the public description, never a backstory. Close the fixture before rebuilding it.
 
 ## Message documentation
 
