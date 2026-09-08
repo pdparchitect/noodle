@@ -2,8 +2,8 @@ import XCTest
 @testable import NoodleCore
 
 final class AgentAccessTests: XCTestCase {
-    func testNewAndExistingBotsDefaultToAutonomousAccess() {
-        XCTAssertTrue(AgentAccessConfiguration().isExtended(UUID()))
+    func testNewBotsDefaultToRestrictedAccess() {
+        XCTAssertFalse(AgentAccessConfiguration().isExtended(UUID()))
     }
 
     func testRestrictionPersistsPerBotAndCanBeRemoved() {
@@ -12,29 +12,73 @@ final class AgentAccessTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         let bot = UUID(), other = UUID()
         var configuration = AgentAccessConfiguration.load(from: defaults)
-        XCTAssertTrue(configuration.isExtended(bot))
-        configuration.setExtended(false, for: bot)
-        configuration.save(to: defaults)
-        XCTAssertFalse(AgentAccessConfiguration.load(from: defaults).isExtended(bot))
-        XCTAssertTrue(AgentAccessConfiguration.load(from: defaults).isExtended(other))
+        XCTAssertFalse(configuration.isExtended(bot))
         configuration.setExtended(true, for: bot)
         configuration.save(to: defaults)
         XCTAssertTrue(AgentAccessConfiguration.load(from: defaults).isExtended(bot))
+        XCTAssertFalse(AgentAccessConfiguration.load(from: defaults).isExtended(other))
+        configuration.setExtended(false, for: bot)
+        configuration.save(to: defaults)
+        XCTAssertFalse(AgentAccessConfiguration.load(from: defaults).isExtended(bot))
     }
 
-    func testLegacyOptInStorageMigratesToAutonomousDefaults() {
+    func testMigrationPreservesExistingAccessButDoesNotGrantNewBots() {
         let suite = "Noodle.AccessTests.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let previouslyExtendedBot = UUID()
         let previouslyRestrictedBot = UUID()
-        defaults.set([previouslyExtendedBot.uuidString], forKey: "Noodle.access.extendedAgents")
+        defaults.set([previouslyRestrictedBot.uuidString], forKey: "Noodle.access.restrictedAgents")
 
-        let configuration = AgentAccessConfiguration.load(from: defaults)
+        let existing: Set<UUID> = [previouslyExtendedBot, previouslyRestrictedBot]
+        let configuration = AgentAccessConfiguration.migrateExistingAgents(existing, in: defaults)
         XCTAssertTrue(configuration.isExtended(previouslyExtendedBot))
-        XCTAssertTrue(configuration.isExtended(previouslyRestrictedBot))
+        XCTAssertFalse(configuration.isExtended(previouslyRestrictedBot))
+        let newBot = UUID()
+        XCTAssertFalse(configuration.isExtended(newBot))
+        let reloaded = AgentAccessConfiguration.migrateExistingAgents(existing.union([newBot]), in: defaults)
+        XCTAssertEqual(reloaded, configuration)
+        XCTAssertFalse(reloaded.isExtended(newBot))
+    }
+
+    func testMigrationPreservesPreviousImplicitAutonomousAccess() {
+        let suite = "Noodle.AccessTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let bot = UUID()
+        let configuration = AgentAccessConfiguration.migrateExistingAgents([bot], in: defaults)
+        XCTAssertTrue(configuration.isExtended(bot))
+        XCTAssertFalse(configuration.isExtended(UUID()))
+    }
+
+    func testFreshInstallAndRelaunchDoNotGrantNewBots() {
+        let suite = "Noodle.AccessTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        _ = AgentAccessConfiguration.migrateExistingAgents([], in: defaults)
+        let bot = UUID()
+        let configuration = AgentAccessConfiguration.migrateExistingAgents([bot], in: defaults)
+        XCTAssertFalse(configuration.isExtended(bot))
+    }
+
+    func testRemovingGrantCannotBeUndoneByMigration() {
+        let suite = "Noodle.AccessTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let bot = UUID()
+        var configuration = AgentAccessConfiguration.migrateExistingAgents([bot], in: defaults)
+        configuration.remove(bot)
         configuration.save(to: defaults)
-        XCTAssertNil(defaults.object(forKey: "Noodle.access.extendedAgents"))
+        XCTAssertFalse(AgentAccessConfiguration.migrateExistingAgents([bot], in: defaults).isExtended(bot))
+    }
+
+    func testMalformedNewStorageFailsClosedInsteadOfMigratingLegacyDefaults() {
+        let suite = "Noodle.AccessTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let bot = UUID()
+        defaults.set("invalid", forKey: "Noodle.access.autonomousAgents")
+        XCTAssertFalse(AgentAccessConfiguration.migrateExistingAgents([bot], in: defaults).isExtended(bot))
     }
 
     func testRequestIDsPreserveStringAndNumberIdentity() throws {

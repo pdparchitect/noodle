@@ -43,7 +43,7 @@ struct AgentAccessSettingsView: View {
                     }
                 }
             } footer: {
-                Text("Bots run autonomously by default. Turn access off only when you want a bot confined to its private workspace.")
+                Text("New bots start in restricted mode. Turn on autonomous access for a bot that needs access beyond its private workspace. Claude Code currently requires autonomous access. Existing bots keep their access settings.")
             }
         }
         .formStyle(.grouped)

@@ -59,7 +59,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     func start() {
         guard connection == nil else { return }
         guard extendedAccess else {
-            update(.failed, "Claude Code requires Extended access in Settings → Security")
+            update(.failed, "Claude Code requires autonomous access in Settings → Security")
             return
         }
         intentionallyStopped = false

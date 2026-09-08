@@ -87,6 +87,10 @@ final class AgentRuntimeCoordinator {
 
     private static let preventIdleSleepDefaultsKey = "Noodle.power.preventIdleSleepWhileWorking"
 
+    func prepareAccessForExistingAgents(_ agents: [AgentRecord]) {
+        accessConfiguration = AgentAccessConfiguration.migrateExistingAgents(Set(agents.map(\.id)), in: defaults)
+    }
+
     func setExtendedAccess(_ enabled: Bool, agent: AgentRecord, repository: WorkspaceRepository) {
         guard !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id), accessConfiguration.isExtended(agent.id) != enabled else { return }
         changingAccess.insert(agent.id)

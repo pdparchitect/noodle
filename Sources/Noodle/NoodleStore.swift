@@ -144,6 +144,7 @@ final class NoodleStore {
         do {
             try repository.prepare()
             agents = try repository.loadAgents()
+            runtime.prepareAccessForExistingAgents(agents)
             try repository.synchronizeAgentWorkspaces(agents)
             conversations = try repository.loadConversations()
             backgrounds = Dictionary(uniqueKeysWithValues: conversations.map {
@@ -197,6 +198,7 @@ final class NoodleStore {
             return false
         }
         do {
+            runtime.prepareAccessForExistingAgents(agents)
             let created = try repository.createAgent(
                 named: name,
                 harnessIdentifier: harnessIdentifier,
