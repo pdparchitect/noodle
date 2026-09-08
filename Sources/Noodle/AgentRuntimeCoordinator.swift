@@ -674,6 +674,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private var intentionallyStopped = false
     private var terminationReported = false
     private var lastErrorText: String?
+    private lazy var trace = RuntimeTrace(agentID: configuration.id, provider: .codex, workspace: workspaceURL)
 
     private(set) var snapshot: AgentRuntimeSnapshot
 
@@ -708,6 +709,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         intentionallyStopped = false
         terminationReported = false
         update(.starting, "Starting Codex")
+        trace.runtimeStarting()
 
         if extendedAccess {
             do {
@@ -798,6 +800,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     }
 
     func stop(completion: @escaping (Bool) -> Void = { _ in }) {
+        trace.finish(.runtimeStopped)
         intentionallyStopped = true
         terminationReported = true
         pendingApprovals = []
@@ -824,6 +827,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     }
 
     func notify() {
+        RuntimeDiagnostics.notificationQueued(agentID: configuration.id, coalesced: notificationPending)
         notificationPending = true
         if process == nil { start() }
         sendPendingNotificationIfPossible()
@@ -851,6 +855,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
 
     private func reportUnexpectedTermination(_ detail: String) {
         guard !intentionallyStopped, !terminationReported else { return }
+        trace.finish(.runtimeDisconnected)
         terminationReported = true
         let needsRecovery = recoveryPending || turnIsActive || notificationPending
         extendedRunning = false
@@ -934,6 +939,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             case .setThreadName:
                 finishOpeningThread()
             case .startTurn(let reason):
+                trace.record(.turnAccepted)
                 turnIsActive = true
                 update(.working, snapshot.detail)
                 if reason == .heartbeat { onHeartbeat() }
@@ -966,6 +972,13 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             let params = message["params"] as? [String: Any]
             let turn = params?["turn"] as? [String: Any]
             let status = turn?["status"] as? String
+            let outcome: RuntimeDiagnostics.Event = switch status {
+            case "completed": .turnCompleted
+            case "failed": .turnFailed
+            case "interrupted": .turnInterrupted
+            default: .turnEndedUnknown
+            }
+            trace.finish(outcome)
             if status == "failed" {
                 let error = turn?["error"] as? [String: Any]
                 fail(error?["message"] as? String ?? "Codex turn failed")
@@ -1034,6 +1047,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
 
     private func startTurn(reason: AgentWakeReason) {
         guard let threadID else { return }
+        trace.begin(reason: reason)
         let policy: [String: Any] = extendedAccess ? [
             "type": "workspaceWrite",
             "writableRoots": [workspaceURL.path, workspaceURL.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Conversations").path],
@@ -1054,6 +1068,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
 
         do {
             try request(.startTurn(reason), method: "turn/start", params: params)
+            trace.record(.wakeSubmitted)
             turnIsActive = true
             let detail = switch reason {
             case .heartbeat: "Heartbeat: checking for follow-up work"
@@ -1111,6 +1126,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     }
 
     private func fail(_ detail: String) {
+        trace.finish(.runtimeFailed)
         pendingApprovals = []
         onApprovals([])
         update(.failed, detail)

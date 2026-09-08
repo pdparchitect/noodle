@@ -40,6 +40,32 @@ swift run --disable-sandbox NoodleDocumentation --check docs/message-reference.m
 
 The application build checks the reference without rewriting it. Tests also check documentation freshness and encoded delivery/message field coverage. The generator runs locally and is not bundled into the app.
 
+## Runtime diagnostics
+
+Debug and release builds emit lightweight macOS unified logs under subsystem `com.pdparchitect.noodle.runtime`, category `lifecycle`. Filter by that subsystem in Console, or stream them while reproducing a problem:
+
+```sh
+log stream --style compact --level debug --predicate 'subsystem == "com.pdparchitect.noodle.runtime"'
+```
+
+For retained records, use:
+
+```sh
+log show --last 1h --style compact --predicate 'subsystem == "com.pdparchitect.noodle.runtime"'
+```
+
+Lifecycle records include the bot UUID, harness, wake UUID/reason, event and delivery count—not bot names, message contents, prompts, commands, file paths, credentials or raw error text. macOS controls log retention; this is diagnostic evidence, not a durable audit trail. Debug builds additionally log queued/coalesced inbox notifications and non-consuming inbox inspections. They do not log every streamed token or polling tick.
+
+Interpret the events literally:
+
+- `wake-prepared` / `wake-submitted`: Noodle prepared the turn and handed its request to the transport, not proof the harness ran it.
+- `turn-accepted`: Codex acknowledged the turn-start request. Claude has no equivalent acknowledgement; `turn-output-observed` means its first assistant/result event arrived.
+- `inbox-read`: Messenger fetched and consumed the inbox; `count` is the number of deliveries, including reaction changes. Zero is a successful empty read. `--peek` is debug-only and does not count as consumption. `inbox-read-failed` means the fetch failed.
+- `turn-completed`, `turn-failed`, `turn-interrupted`, `turn-ended-unknown`: harness-reported termination of the turn, not evidence the user's task was accomplished.
+- `runtime-starting`, `runtime-stopped`, `runtime-disconnected`, `runtime-failed`: runtime lifecycle, including failures before a wake exists.
+
+For cross-process correlation, `.noodle/runtime-log-context.json` holds only the active wake's IDs, harness and reason. It is replaced at the next wake and cleared on normal completion, failure, stop or runtime startup. It never drives scheduling, inbox state or recovery; logging/marker failures do not block work. CLI calls outside an active wake log `uncorrelated`. Correlation is best effort: a child command that outlives its turn cannot be reliably attributed this way. Existing bots need the updated app/runtime; no agent reporting commands or new behavioural rules are required.
+
 ## Development-only Settings
 
 Settings includes a Dev tab in debug builds only. The whole tab is compiled out of release builds. To build with development tools enabled:

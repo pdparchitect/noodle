@@ -31,6 +31,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     private var terminationReported = false
     private var receivedOutput = false
     private var lastErrorText: String?
+    private lazy var trace = RuntimeTrace(agentID: configuration.id, provider: .claudeCode, workspace: workspaceURL)
     private lazy var outputReader = JSONLineReader { [weak self] message in
         Task { @MainActor in self?.handle(message) }
     }
@@ -80,6 +81,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         receivedOutput = false
         lastErrorText = nil
         update(.starting, "Starting Claude Code")
+        trace.runtimeStarting()
         do {
             try saveState()
             let connection = try ExtendedAgentConnection()
@@ -132,6 +134,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     }
 
     func stop(completion: @escaping (Bool) -> Void = { _ in }) {
+        trace.finish(.runtimeStopped)
         intentionallyStopped = true
         terminationReported = true
         running = false
@@ -153,6 +156,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     }
 
     func notify() {
+        RuntimeDiagnostics.notificationQueued(agentID: configuration.id, coalesced: notificationPending)
         notificationPending = true
         if connection == nil { start() }
         sendPendingNotificationIfPossible()
@@ -195,6 +199,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
             if reason == .inboxChanged { notificationPending = true }
             return
         }
+        trace.begin(reason: reason)
         let object: [String: Any] = [
             "type": "user",
             "message": [
@@ -205,6 +210,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         do {
             let data = try JSONSerialization.data(withJSONObject: object) + Data([0x0A])
             connection.write(data)
+            trace.record(.wakeSubmitted)
             turnIsActive = true
             if reason == .heartbeat { onHeartbeat() }
             let detail = switch reason {
@@ -231,10 +237,12 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
             resumesSession = true
             return
         }
+        if type == "assistant" || type == "result" { trace.outputObserved() }
         guard type == "result" else { return }
         turnIsActive = false
         resumesSession = true
         let failed = message["is_error"] as? Bool == true
+        trace.finish(failed ? .turnFailed : .turnCompleted)
         if failed {
             let detail = (message["result"] as? String)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -252,6 +260,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
 
     private func reportUnexpectedTermination(_ detail: String) {
         guard !intentionallyStopped, !terminationReported else { return }
+        trace.finish(.runtimeDisconnected)
         terminationReported = true
         let needsRecovery = recoveryPending || turnIsActive || notificationPending
         if resumesSession && !receivedOutput {

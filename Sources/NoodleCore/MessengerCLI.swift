@@ -38,10 +38,18 @@ public enum MessengerCLI {
                 return .json(MessengerEffectReceipt(effect: event))
 
             case .getLatest(let consumes, let includesInlineImages):
-                let deliveries = try repository.latestMessages(
-                    for: invocation.agentID,
-                    consuming: consumes
-                )
+                let deliveries: [MessengerDelivery]
+                do {
+                    deliveries = try repository.latestMessages(for: invocation.agentID, consuming: consumes)
+                    RuntimeDiagnostics.inboxRead(agentID: invocation.agentID,
+                        workspace: repository.directory(forAgentID: invocation.agentID),
+                        count: deliveries.count, consuming: consumes)
+                } catch {
+                    RuntimeDiagnostics.inboxRead(agentID: invocation.agentID,
+                        workspace: repository.directory(forAgentID: invocation.agentID),
+                        count: nil, consuming: consumes)
+                    throw error
+                }
                 if includesInlineImages {
                     var includedIDs = Set<UUID>()
                     let images = deliveries
