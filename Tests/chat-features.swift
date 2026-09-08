@@ -36,22 +36,6 @@ private func pixelDifference(_ lhs: NSImage, _ rhs: NSImage) -> CGFloat {
 }
 
 @MainActor private func verifyNativeMenuPresentation() throws {
-    let clipboard = NSPasteboard.withUniqueName()
-    defer { clipboard.releaseGlobally() }
-    try require(!ImageAttachmentPasteboard.canPasteImage(clipboard))
-    clipboard.setString("Plain text", forType: .string)
-    try require(!ImageAttachmentPasteboard.canPasteImage(clipboard))
-    clipboard.clearContents()
-    clipboard.setData(fixtureAvatarData(), forType: .tiff)
-    try require(ImageAttachmentPasteboard.canPasteImage(clipboard))
-    clipboard.clearContents()
-    clipboard.writeObjects([URL(fileURLWithPath: "/tmp/noodle-menu-example.png") as NSURL,
-                            URL(fileURLWithPath: "/tmp/noodle-menu-example.txt") as NSURL])
-    try require(ImageAttachmentPasteboard.canPasteImage(clipboard))
-    try require(ImageAttachmentPasteboard.imageFileURLs(clipboard).map(\.pathExtension) == ["png"])
-    clipboard.clearContents()
-    clipboard.writeObjects([URL(fileURLWithPath: "/tmp/noodle-menu-example.txt") as NSURL])
-    try require(!ImageAttachmentPasteboard.canPasteImage(clipboard))
     let agent = AgentRecord(displayName: "Mara", publicDescription: "  Reviews\n ideas.  ", avatarImageData: fixtureAvatarData())
     let directProfile = AgentProfileSheet(agent: agent)
     try require(directProfile.reply == nil && directProfile.directMessage == nil)
@@ -114,8 +98,7 @@ private struct FixtureView: View {
             Button("Attachments") { attachmentMenu = true }
                 .background(ComposerAttachmentMenu(isPresented: $attachmentMenu,
                     attachFile: { attachmentAction = "File" },
-                    choosePhoto: { attachmentAction = "Photo" },
-                    pasteImage: { attachmentAction = "Paste" }))
+                    choosePhoto: { attachmentAction = "Photo" }))
             Text("Attachment action: \(attachmentAction)")
             Spacer()
             TextField("Message", text: $draft, axis: .vertical)

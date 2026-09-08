@@ -1,13 +1,11 @@
 import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 
-/// Uses a real menu and checks the clipboard when opened, without polling it.
+/// Opens a native menu anchored to the composer’s existing + button.
 struct ComposerAttachmentMenu: NSViewRepresentable {
     @Binding var isPresented: Bool
     let attachFile: () -> Void
     let choosePhoto: () -> Void
-    let pasteImage: () -> Void
 
     func makeNSView(context: Context) -> MenuAnchor { MenuAnchor() }
 
@@ -34,15 +32,13 @@ struct ComposerAttachmentMenu: NSViewRepresentable {
         func show(configuration: ComposerAttachmentMenu) {
             let menu = NSMenu()
             menu.autoenablesItems = false
-            actions = [configuration.attachFile, configuration.choosePhoto, configuration.pasteImage]
+            actions = [configuration.attachFile, configuration.choosePhoto]
             selectedAction = nil
-            for (index, entry) in [("Attach File…", "doc"), ("Choose Photo…", "photo.on.rectangle"),
-                                   ("Paste Image", "doc.on.clipboard")].enumerated() {
+            for (index, entry) in [("Attach File…", "doc"), ("Choose Photo…", "photo.on.rectangle")].enumerated() {
                 let item = NSMenuItem(title: entry.0, action: #selector(selectItem(_:)), keyEquivalent: "")
                 item.image = NSImage(systemSymbolName: entry.1, accessibilityDescription: nil)
                 item.target = self
                 item.tag = index
-                if index == 2 { item.isEnabled = ImageAttachmentPasteboard.canPasteImage() }
                 menu.addItem(item)
             }
             menu.popUp(positioning: nil, at: NSPoint(x: bounds.minX, y: bounds.maxY + 5), in: self)
@@ -56,21 +52,6 @@ struct ComposerAttachmentMenu: NSViewRepresentable {
         @objc private func selectItem(_ item: NSMenuItem) {
             guard actions.indices.contains(item.tag) else { return }
             selectedAction = actions[item.tag]
-        }
-    }
-}
-
-enum ImageAttachmentPasteboard {
-    static func canPasteImage(_ pasteboard: NSPasteboard = .general) -> Bool {
-        pasteboard.availableType(from: [.png, .tiff]) != nil || !imageFileURLs(pasteboard).isEmpty
-    }
-
-    static func imageFileURLs(_ pasteboard: NSPasteboard) -> [URL] {
-        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
-        return urls.filter { url in
-            let type = (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType
-                ?? UTType(filenameExtension: url.pathExtension)
-            return type?.conforms(to: .image) == true
         }
     }
 }

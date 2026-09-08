@@ -234,9 +234,6 @@ struct ChatView: View {
                             attachmentDestinationID = conversation.id
                             photoSelection = []
                             choosingPhotos = true
-                        },
-                        pasteImage: {
-                            _ = store.importAttachmentsFromPasteboard(imagesOnly: true, into: conversation.id)
                         })
                 }
             composerInput

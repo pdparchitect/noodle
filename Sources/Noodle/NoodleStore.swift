@@ -520,12 +520,11 @@ final class NoodleStore {
         }
     }
 
-    func importAttachmentsFromPasteboard(imagesOnly: Bool = false, into destination: UUID? = nil) -> Bool {
-        guard let conversationID = destination ?? selectedConversation?.id else { return false }
+    func importAttachmentsFromPasteboard() -> Bool {
+        guard let conversationID = selectedConversation?.id else { return false }
         let pasteboard = NSPasteboard.general
 
-        let values = imagesOnly ? ImageAttachmentPasteboard.imageFileURLs(pasteboard)
-            : (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? [])
+        let values = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
         if !values.isEmpty {
             var imported = false
             for value in values {
