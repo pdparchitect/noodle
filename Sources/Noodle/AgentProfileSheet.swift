@@ -6,9 +6,9 @@ import NoodleCore
 struct AgentProfileSheet: View {
     @Environment(\.dismiss) private var dismiss
     let agent: AgentRecord
-    let canOpenDirectMessage: Bool
-    let reply: () -> Void
-    let directMessage: () -> Void
+    var canOpenDirectMessage = false
+    var reply: (() -> Void)? = nil
+    var directMessage: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 16) {
@@ -33,18 +33,24 @@ struct AgentProfileSheet: View {
                     .frame(maxWidth: .infinity)
             }
             .frame(maxHeight: 120)
-            VStack(spacing: 10) {
-                Button(action: reply) {
-                    Label("Reply in Group", systemImage: "arrowshape.turn.up.left")
-                        .frame(maxWidth: .infinity)
+            if reply != nil || directMessage != nil {
+                VStack(spacing: 10) {
+                    if let reply {
+                        Button(action: reply) {
+                            Label("Reply in Group", systemImage: "arrowshape.turn.up.left")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    if let directMessage {
+                        Button(action: directMessage) {
+                            Label("Direct Message", systemImage: "bubble.left")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!canOpenDirectMessage)
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                Button(action: directMessage) {
-                    Label("Direct Message", systemImage: "bubble.left")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .disabled(!canOpenDirectMessage)
             }
         }
         .padding(20)

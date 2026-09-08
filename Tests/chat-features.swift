@@ -37,6 +37,10 @@ private func pixelDifference(_ lhs: NSImage, _ rhs: NSImage) -> CGFloat {
 
 @MainActor private func verifyNativeMenuPresentation() throws {
     let agent = AgentRecord(displayName: "Mara", publicDescription: "  Reviews\n ideas.  ", avatarImageData: fixtureAvatarData())
+    let directProfile = AgentProfileSheet(agent: agent)
+    try require(directProfile.reply == nil && directProfile.directMessage == nil)
+    let groupProfile = AgentProfileSheet(agent: agent, canOpenDirectMessage: true, reply: {}, directMessage: {})
+    try require(groupProfile.reply != nil && groupProfile.directMessage != nil)
     try require(ComposerNameCompletion.menuTitle(for: agent, showDescriptions: false) == "Mara")
     try require(ComposerNameCompletion.menuTitle(for: agent, showDescriptions: true) == "Mara  Reviews ideas.")
     try require(ComposerNameCompletion.menuTitle(for: AgentRecord(displayName: "Ruby"), showDescriptions: true) == "Ruby")
@@ -72,6 +76,7 @@ private struct FixtureView: View {
     @State private var profile: AgentRecord?
     @State private var pendingReply: String?
     @State private var destination = "Group"
+    @State private var directProfile = false
     @FocusState private var focused: Bool
     private let agents = [
         AgentRecord(displayName: "Angy", publicDescription: "Designs friendly interfaces."),
@@ -85,7 +90,8 @@ private struct FixtureView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("\(destination) — submissions: \(submissions)").font(.headline)
-            Button("Show Mara's profile") { profile = agents[1] }
+            Button("Show Mara's profile") { directProfile = false; profile = agents[1] }
+            Button("Show Mara's DM profile") { directProfile = true; profile = agents[1] }
             Toggle("Show descriptions in the @ name menu", isOn: $showDescriptions)
             Spacer()
             TextField("Message", text: $draft, axis: .vertical)
@@ -101,13 +107,17 @@ private struct FixtureView: View {
             if let pendingReply { draft = pendingReply + ", " + draft; self.pendingReply = nil }
             DispatchQueue.main.async { focused = true }
         }) { agent in
-            AgentProfileSheet(agent: agent, canOpenDirectMessage: true, reply: {
-                pendingReply = agent.displayName
-                profile = nil
-            }, directMessage: {
-                destination = "Direct: \(agent.displayName)"
-                profile = nil
-            }).noodleSheetSizing()
+            if directProfile {
+                AgentProfileSheet(agent: agent).noodleSheetSizing()
+            } else {
+                AgentProfileSheet(agent: agent, canOpenDirectMessage: true, reply: {
+                    pendingReply = agent.displayName
+                    profile = nil
+                }, directMessage: {
+                    destination = "Direct: \(agent.displayName)"
+                    profile = nil
+                }).noodleSheetSizing()
+            }
         }
         .onDisappear { completion.detach() }
     }

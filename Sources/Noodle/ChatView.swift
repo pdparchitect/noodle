@@ -46,19 +46,24 @@ struct ChatView: View {
                 let direct = store.conversations.first {
                     $0.kind == .direct && $0.participantIDs == [agent.id]
                 }
-                AgentProfileSheet(
-                    agent: agent,
-                    canOpenDirectMessage: direct != nil,
-                    reply: {
-                        profileAction = .reply(name: agent.displayName, conversationID: conversation.id)
-                        profileAgent = nil
-                    },
-                    directMessage: {
-                        if let direct { profileAction = .directMessage(direct.id) }
-                        profileAgent = nil
-                    }
-                )
-                .noodleSheetSizing()
+                if conversation.kind == .direct {
+                    AgentProfileSheet(agent: agent)
+                        .noodleSheetSizing()
+                } else {
+                    AgentProfileSheet(
+                        agent: agent,
+                        canOpenDirectMessage: direct != nil,
+                        reply: {
+                            profileAction = .reply(name: agent.displayName, conversationID: conversation.id)
+                            profileAgent = nil
+                        },
+                        directMessage: {
+                            if let direct { profileAction = .directMessage(direct.id) }
+                            profileAgent = nil
+                        }
+                    )
+                    .noodleSheetSizing()
+                }
             }
             .onPasteCommand(of: AttachmentTransfer.pasteContentTypes) { providers in
                 store.importAttachments(from: providers)
@@ -387,7 +392,7 @@ private struct ConversationTranscript: View {
             // Link and attachment previews reserve stable dimensions, allowing
             // long histories to remain lazy without scroll-position corrections.
             LazyVStack(spacing: 10) {
-                ConversationStartView(conversation: conversation)
+                ConversationStartView(conversation: conversation, showAgentProfile: showAgentProfile)
                     .padding(.bottom, 14)
 
                 ForEach(store.messages(for: conversation)) { message in
@@ -396,7 +401,7 @@ private struct ConversationTranscript: View {
                         hasConversationBackground: !store.background(for: conversation).isDefault,
                         selectedAttachmentID: $selectedAttachmentID,
                         previewAttachment: previewAttachment,
-                        showAgentProfile: conversation.kind == .group ? showAgentProfile : nil
+                        showAgentProfile: showAgentProfile
                     )
                 }
 
@@ -479,14 +484,20 @@ private struct ConversationTranscript: View {
 private struct ConversationStartView: View {
     @Environment(NoodleStore.self) private var store
     let conversation: BotConversation
+    let showAgentProfile: (AgentRecord) -> Void
 
     var body: some View {
         VStack(spacing: 12) {
-            ConversationAvatar(
-                participants: store.participants(for: conversation),
-                isGroup: conversation.kind == .group,
-                size: 82
-            )
+            if conversation.kind == .direct, let agent = store.participants(for: conversation).first {
+                Button { showAgentProfile(agent) } label: {
+                    avatar.contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help(agent.displayName)
+                .accessibilityLabel("Show \(agent.displayName)'s profile")
+            } else {
+                avatar
+            }
 
             Text(store.title(for: conversation))
                 .font(.system(size: 22, weight: .semibold))
@@ -508,6 +519,14 @@ private struct ConversationStartView: View {
 
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var avatar: some View {
+        ConversationAvatar(
+            participants: store.participants(for: conversation),
+            isGroup: conversation.kind == .group,
+            size: 82
+        )
     }
 }
 
