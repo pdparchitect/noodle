@@ -31,24 +31,39 @@ final class ClaudeCodeSetupProvider: HarnessSetupProviding {
         guard installation.provider == .claudeCode, let executablePath = installation.executablePath else {
             throw HarnessSetupError("Install the harness first.")
         }
-        let operation = try ClaudeSetupOperation()
+        let operation = try HarnessAccountOperation()
         return try await operation.run(executablePath: executablePath, signIn: signIn)
     }
 }
 
 @MainActor
-private final class ClaudeSetupOperation {
+final class HarnessAccountOperation {
     private let connection: ExtendedAgentConnection
     private var continuation: CheckedContinuation<HarnessAuthenticationStatus, Error>?
     private var finished = false
+    private var timeout: Task<Void, Never>?
 
     init() throws { connection = try ExtendedAgentConnection() }
 
-    func run(executablePath: String, signIn: Bool) async throws -> HarnessAuthenticationStatus {
+    func run(executablePath: String, signIn: Bool, provider: HarnessProvider = .claudeCode,
+             onChallenge: (@MainActor (HarnessSignInChallenge) -> Void)? = nil) async throws -> HarnessAuthenticationStatus {
         try await withTaskCancellationHandler {
             try Task.checkCancellation()
             return try await withCheckedThrowingContinuation { continuation in
                 self.continuation = continuation
+                connection.onFailure = { [weak self] error in
+                    Task { @MainActor in self?.finish(.failure(HarnessSetupError(error))) }
+                }
+                connection.onSignInChallenge = { url, code in
+                    Task { @MainActor in
+                        if let challenge = FxProtocol.loginChallenge("Open \(url)\nCode: \(code)\n") { onChallenge?(challenge) }
+                    }
+                }
+                timeout = Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(signIn ? 600 : 40))
+                    guard !Task.isCancelled else { return }
+                    self?.finish(.failure(HarnessSetupError("Harness account check timed out.")))
+                }
                 let reply: (Bool, String?) -> Void = { [weak self] authenticated, error in
                     Task { @MainActor in
                         guard let self else { return }
@@ -57,9 +72,9 @@ private final class ClaudeSetupOperation {
                     }
                 }
                 if signIn {
-                    connection.signIn(provider: .claudeCode, executablePath: executablePath, reply: reply)
+                    connection.signIn(provider: provider, executablePath: executablePath, reply: reply)
                 } else {
-                    connection.checkAuthentication(provider: .claudeCode, executablePath: executablePath, reply: reply)
+                    connection.checkAuthentication(provider: provider, executablePath: executablePath, reply: reply)
                 }
             }
         } onCancel: {
@@ -70,6 +85,7 @@ private final class ClaudeSetupOperation {
     private func finish(_ result: Result<HarnessAuthenticationStatus, Error>) {
         guard !finished, let continuation else { return }
         finished = true
+        timeout?.cancel()
         self.continuation = nil
         connection.invalidate()
         continuation.resume(with: result)

@@ -14,6 +14,7 @@ private enum HostPaths {
         switch provider {
         case .codex: return try CodexExecutableTrust.executable(at: path, home: home)
         case .claudeCode: return try ClaudeExecutableTrust.executable(at: path, home: home)
+        case .fx: return try FxExecutableTrust.executable(at: path, home: home)
         }
     }
 
@@ -76,6 +77,10 @@ if CommandLine.arguments.count == 9, CommandLine.arguments[1] == "--harness-chil
         switch provider {
         case .codex:
             strings = [executable.path, "app-server"]
+        case .fx:
+            guard effort == nil, model.map(FxProtocol.validIdentifier) ?? true else { throw HostError("Unsupported FX model or effort.") }
+            strings = [executable.path, "acp"]
+            if let model { strings += ["--model", model] }
         case .claudeCode:
             guard let sessionID else { throw HostError("Claude Code requires a valid session identifier.") }
             if let model {
@@ -118,6 +123,9 @@ private final class HostSession: NSObject, AgentHostService {
     private var stopping = false
     private var stopReplies: [(Bool) -> Void] = []
     private var groupID: Int32?
+    private var loginOutput: FileHandle?
+    private var loginText = ""
+    private var loginChallengeSent = false
 
     init(connection: NSXPCConnection) { self.connection = connection }
 
@@ -202,6 +210,9 @@ private final class HostSession: NSObject, AgentHostService {
             self.accountProcess?.terminationHandler = nil
             if self.accountProcess?.isRunning == true { self.accountProcess?.terminate() }
             self.accountProcess = nil
+            self.loginOutput?.readabilityHandler = nil
+            self.loginOutput = nil
+            self.loginText = ""
             self.input = nil
             guard let id = self.groupID else { self.finishStop(true); return }
             kill(-id, SIGTERM)
@@ -250,11 +261,11 @@ private final class HostSession: NSObject, AgentHostService {
     ) {
         queue.async {
             do {
-                guard let provider = HarnessProvider(rawValue: harnessIdentifier), provider == .claudeCode else {
+                guard let provider = HarnessProvider(rawValue: harnessIdentifier), provider == .claudeCode || provider == .fx else {
                     throw HostError("This harness does not use the Claude Code account check.")
                 }
                 let executable = try HostPaths.executable(executablePath, provider: provider)
-                reply(try self.claudeAuthenticationStatus(executable), nil)
+                reply(try provider == .fx ? FxInspection.status(executable: executable, environment: self.accountEnvironment).authenticated : self.claudeAuthenticationStatus(executable), nil)
             } catch { reply(false, error.localizedDescription) }
         }
     }
@@ -266,27 +277,51 @@ private final class HostSession: NSObject, AgentHostService {
     ) {
         queue.async {
             do {
-                guard let provider = HarnessProvider(rawValue: harnessIdentifier), provider == .claudeCode else {
+                guard let provider = HarnessProvider(rawValue: harnessIdentifier), provider == .claudeCode || provider == .fx else {
                     throw HostError("This harness does not support this sign-in flow.")
                 }
                 let executable = try HostPaths.executable(executablePath, provider: provider)
                 let login = Process()
                 login.executableURL = executable
-                login.arguments = ["auth", "login", "--claudeai"]
+                login.arguments = provider == .fx ? ["login"] : ["auth", "login", "--claudeai"]
                 login.currentDirectoryURL = FileManager.default.temporaryDirectory
                 login.standardInput = FileHandle.nullDevice
                 login.standardOutput = FileHandle.nullDevice
                 login.standardError = FileHandle.nullDevice
                 login.environment = self.accountEnvironment
+                if provider == .fx {
+                    let output = Pipe()
+                    login.standardOutput = output
+                    self.loginText = ""
+                    self.loginChallengeSent = false
+                    self.loginOutput = output.fileHandleForReading
+                    output.fileHandleForReading.readabilityHandler = { [weak self] handle in
+                        let data = handle.availableData
+                        if data.isEmpty { handle.readabilityHandler = nil; return }
+                        self?.queue.async {
+                            guard let self, self.accountProcess === login, !self.loginChallengeSent else { return }
+                            self.loginText += String(decoding: data, as: UTF8.self)
+                            self.loginText = String(self.loginText.prefix(16_384))
+                            if let challenge = FxProtocol.loginChallenge(self.loginText) {
+                                self.loginChallengeSent = true
+                                self.loginText = ""
+                                self.client?.signInChallenge(challenge.url.absoluteString, code: challenge.code)
+                            }
+                        }
+                    }
+                }
                 login.terminationHandler = { [weak self] login in
                     self?.queue.async {
                         guard let self, self.accountProcess === login else { return }
                         self.accountProcess = nil
+                        self.loginOutput?.readabilityHandler = nil
+                        self.loginOutput = nil
+                        self.loginText = ""
                         do {
                             guard login.terminationStatus == 0 else {
-                                throw HostError("Claude Code sign-in did not complete. You can also run `claude auth login` in Terminal.")
+                                throw HostError("\(provider.displayName) sign-in did not complete. Try signing in from Terminal.")
                             }
-                            reply(try self.claudeAuthenticationStatus(executable), nil)
+                            reply(try provider == .fx ? FxInspection.status(executable: executable, environment: self.accountEnvironment).authenticated : self.claudeAuthenticationStatus(executable), nil)
                         } catch { reply(false, error.localizedDescription) }
                     }
                 }
@@ -303,6 +338,15 @@ private final class HostSession: NSObject, AgentHostService {
             "PATH": "\(HostPaths.home.path)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
             "TMPDIR": NSTemporaryDirectory()
         ]
+    }
+
+    func fxModels(executablePath: String, withReply reply: @escaping (Data?, String?) -> Void) {
+        queue.async {
+            do {
+                let executable = try HostPaths.executable(executablePath, provider: .fx)
+                reply(try JSONEncoder().encode(FxInspection.models(executable: executable, environment: self.accountEnvironment)), nil)
+            } catch { reply(nil, error.localizedDescription) }
+        }
     }
 
     private func claudeAuthenticationStatus(_ executable: URL) throws -> Bool {

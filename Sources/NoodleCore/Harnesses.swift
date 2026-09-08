@@ -3,6 +3,7 @@ import Foundation
 public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, Identifiable {
     case codex
     case claudeCode = "claude-code"
+    case fx
 
     public var id: String { rawValue }
 
@@ -10,6 +11,7 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
         switch self {
         case .codex: return "Codex"
         case .claudeCode: return "Claude Code"
+        case .fx: return "FX"
         }
     }
 
@@ -116,6 +118,7 @@ public struct HarnessDiscovery: Sendable {
     private let executableSearchDirectories: [URL]
     private let standaloneCodexURL: URL
     private let standaloneClaudeURL: URL
+    private let standaloneFxURL: URL
     #if DEBUG
     private let simulateNoHarnesses: Bool
     private var externalInstallChecks: Set<HarnessProvider> = []
@@ -133,6 +136,7 @@ public struct HarnessDiscovery: Sendable {
         self.applicationsDirectory = applicationsDirectory.standardizedFileURL
         self.standaloneCodexURL = homeDirectory.appendingPathComponent(".codex/packages/standalone/current/bin/codex")
         self.standaloneClaudeURL = homeDirectory.appendingPathComponent(".local/bin/claude")
+        self.standaloneFxURL = homeDirectory.appendingPathComponent(".local/bin/fx")
         self.executableSearchDirectories = executableSearchDirectories ?? [
             homeDirectory.appendingPathComponent(".local/bin", isDirectory: true),
             URL(fileURLWithPath: "/opt/homebrew/bin", isDirectory: true),
@@ -171,7 +175,7 @@ public struct HarnessDiscovery: Sendable {
                 applicationsDirectory.appendingPathComponent("ChatGPT.app/Contents/Resources/codex"),
                 applicationsDirectory.appendingPathComponent("Codex.app/Contents/Resources/codex")
             ]
-        case .claudeCode:
+        case .claudeCode, .fx:
             return standaloneCandidates(for: provider)
         }
     }
@@ -185,6 +189,7 @@ public struct HarnessDiscovery: Sendable {
             return [standaloneClaudeURL] + executableSearchDirectories
                 .map { $0.appendingPathComponent("claude") }
                 .filter { $0.standardizedFileURL != standaloneClaudeURL.standardizedFileURL }
+        case .fx: return [standaloneFxURL]
         }
     }
 

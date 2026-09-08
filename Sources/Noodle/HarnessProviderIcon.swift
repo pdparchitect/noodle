@@ -18,6 +18,8 @@ struct HarnessProviderIcon: View {
             "CodexHarness"
         case .claudeCode:
             "ClaudeHarness"
+        case .fx:
+            "FxHarness"
         }
     }
 }

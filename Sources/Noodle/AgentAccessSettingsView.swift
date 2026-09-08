@@ -43,7 +43,7 @@ struct AgentAccessSettingsView: View {
                     }
                 }
             } footer: {
-                Text("New bots start in restricted mode. Turn on autonomous access for a bot that needs access beyond its private workspace. Claude Code currently requires autonomous access. Existing bots keep their access settings.")
+                Text("New bots start in restricted mode. Turn on autonomous access for a bot that needs access beyond its private workspace. Claude Code and FX currently require autonomous access. Existing bots keep their access settings.")
             }
         }
         .formStyle(.grouped)

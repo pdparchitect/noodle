@@ -16,7 +16,8 @@ final class HarnessSetupController {
     init(providers: [HarnessProvider: any HarnessSetupProviding]? = nil) {
         self.providers = providers ?? [
             .codex: CodexSetupProvider(codexHome: HarnessStorage.codexHome),
-            .claudeCode: ClaudeCodeSetupProvider()
+            .claudeCode: ClaudeCodeSetupProvider(),
+            .fx: FxSetupProvider()
         ]
     }
 

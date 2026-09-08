@@ -56,6 +56,7 @@ final class AgentRuntimeCoordinator {
     private var discovery: HarnessDiscovery
     private var processes: [UUID: any AgentRuntimeProcess] = [:]
     private var capabilityProbe: CodexCapabilityProbe?
+    private var fxCapabilityTask: Task<Void, Never>?
 
     init(discovery: HarnessDiscovery = HarnessDiscovery(), defaults: UserDefaults = .standard) {
         self.discovery = discovery
@@ -326,6 +327,20 @@ final class AgentRuntimeCoordinator {
 
     func refreshCapabilities() {
         installations = discovery.discover()
+        fxCapabilityTask?.cancel()
+        if let path = availableInstallations.first(where: { $0.provider == .fx })?.executablePath {
+            fxCapabilityTask = Task { [weak self] in
+                do {
+                    let models = try await FxModelProbe().load(path: path)
+                    guard !Task.isCancelled else { return }
+                    self?.modelsByProvider[.fx] = models
+                    self?.capabilityErrors[.fx] = nil
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    self?.capabilityErrors[.fx] = error.localizedDescription
+                }
+            }
+        } else { modelsByProvider[.fx] = [] }
         capabilityProbe?.stop()
         capabilityProbe = nil
         capabilityErrors.removeAll()
@@ -386,6 +401,21 @@ final class AgentRuntimeCoordinator {
         }
 
         switch installation.provider {
+        case .fx:
+            restartTasks.removeValue(forKey: agent.id)?.cancel()
+            let process = FxAgentProcess(
+                agent: agent, executableURL: URL(fileURLWithPath: executablePath),
+                workspaceURL: repository.directory(for: agent),
+                extendedAccess: accessConfiguration.isExtended(agent.id),
+                recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
+                onSnapshot: runtimeSnapshotHandler(for: agent.id),
+                onHeartbeat: { [weak self] in self?.recordHeartbeat(for: agent.id) },
+                onUnexpectedTermination: { [weak self] terminated, detail, needsRecovery in
+                    self?.runtimeTerminated(terminated, agent: agent, repository: repository, detail: detail, needsRecovery: needsRecovery)
+                }
+            )
+            processes[agent.id] = process
+            process.start()
         case .codex:
             restartTasks.removeValue(forKey: agent.id)?.cancel()
             let process = CodexAgentProcess(
@@ -461,7 +491,7 @@ final class AgentRuntimeCoordinator {
         let old = processes.removeValue(forKey: agent.id)
         if resetThread {
             let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")
-            let prefix = provider == .claudeCode ? "claude-runtime" : "codex-runtime"
+            let prefix = provider == .fx ? "fx-runtime" : (provider == .claudeCode ? "claude-runtime" : "codex-runtime")
             let filename = accessConfiguration.isExtended(agent.id)
                 ? ".agents/\(prefix)-extended.json" : ".agents/\(prefix).json"
             try? FileManager.default.removeItem(at: repository.directory(for: agent).appendingPathComponent(filename))
@@ -505,6 +535,7 @@ final class AgentRuntimeCoordinator {
     }
 
     func stopAll() {
+        fxCapabilityTask?.cancel()
         isStoppingAll = true
         lifecycleID = UUID()
         changingAccess = []

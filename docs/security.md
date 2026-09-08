@@ -18,13 +18,19 @@ Plain MCP confirmation forms with no input fields (such as a browser destination
 
 ## Security boundary
 
+### FX
+
+FX also requires an explicit per-bot autonomous access grant; new restricted FX bots stay stopped with an explanation. The host validates Vercel's signed native executable at exactly `~/.local/bin/fx` (identifier `com.vercel.fx`, team `JW6Y669B67`) and launches the fixed `fx acp` command with an optional validated model. It does not offer arbitrary execution arguments. FX owns its native tools and reads the bot's workspace instructions and Messenger skill. Noodle handles ACP permission requests only for the current session with **allow once**, and does not disable FX's safety review. Held reviews remain failed turns with unfinished-work recovery preserved, not successful heartbeats.
+
+The main app receives only account availability, model metadata, and a verified Vercel device-code challenge from fixed host commands. It has no access to `~/.fx` or its credential files. The existing read-only executable exception additionally contains `~/.local/bin/fx`; there are still seven entitlement keys. FX uses the same durable unfinished-turn markers and recovery wake behavior described above. Its native template glyph is derived from the user-supplied FX website SVG, without background or animation.
+
 The finished app keeps App Sandbox enabled with these narrowly scoped entitlements:
 
 - App Sandbox
 - User-selected file read access, used only to import attachments
 - Outgoing network client access, required by Codex
 - A home-relative read/write exception restricted to `~/.codex/`, allowing the Codex child to use the user's existing login and persistent thread state
-- Home-relative read-only exceptions for `~/.local/bin/claude` and `~/.local/share/claude/versions/`, used only to detect and inspect Anthropic's native executable
+- Home-relative read-only exceptions for `~/.local/bin/claude`, `~/.local/share/claude/versions/`, and `~/.local/bin/fx`, used only to detect and inspect the signed native executables
 - The existing team-scoped sharing app group, shared only with Noodle's share extension
 - Exactly two update-installer IPC names: `com.pdparchitect.noodle-spks` and `com.pdparchitect.noodle-spki`
 

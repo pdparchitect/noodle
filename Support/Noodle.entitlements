@@ -23,6 +23,7 @@
     <array>
         <string>/.local/bin/claude</string>
         <string>/.local/share/claude/versions/</string>
+        <string>/.local/bin/fx</string>
     </array>
 </dict>
 </plist>

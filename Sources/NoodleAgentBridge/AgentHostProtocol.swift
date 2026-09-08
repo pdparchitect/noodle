@@ -55,9 +55,11 @@ public enum AgentHostIdentity {
         executablePath: String,
         withReply reply: @escaping (Bool, String?) -> Void
     )
+    func fxModels(executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
 }
 
 @objc public protocol AgentHostClient {
     func receive(_ data: Data, isError: Bool)
     func terminated(_ status: Int32)
+    func signInChallenge(_ url: String, code: String)
 }

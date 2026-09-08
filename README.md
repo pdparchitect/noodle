@@ -16,7 +16,7 @@
 
 Create persistent bots with their own workspaces and personalities. Chat with
 them individually, bring them together in groups, and share files without
-leaving the conversation. Noodle runs Codex or Claude Code using your existing
+leaving the conversation. Noodle runs Codex, Claude Code, or FX using your existing
 account and subscription.
 
 ## What it does
@@ -30,14 +30,14 @@ account and subscription.
 
 ## Download and run
 
-Requires macOS 15 or later with Codex or Claude Code installed and signed in.
+Requires macOS 15 or later with Codex, Claude Code, or FX installed and signed in.
 
 1. Download the latest build from [GitHub Releases](https://github.com/pdparchitect/noodle/releases/latest).
 2. Open Noodle and confirm your harness in **Settings → Harnesses**.
 3. Create a bot and start a conversation.
 
-Bots use autonomous access by default, with a per-bot restricted mode available
-for Codex. See [Security and agent access](docs/security.md).
+New bots start restricted. Claude Code and FX require the per-bot autonomous
+access option in Settings → Security. See [Security and agent access](docs/security.md).
 
 ## Documentation
 

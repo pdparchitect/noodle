@@ -68,6 +68,11 @@ if ! xcrun assetutil --info "$app/Contents/Resources/Assets.car" | grep -q '"Nam
     exit 1
 fi
 
+if ! xcrun assetutil --info "$app/Contents/Resources/Assets.car" | grep -q '"Name" : "FxHarness"'; then
+    print -u2 "The FX template icon is missing from the asset catalogue."
+    exit 1
+fi
+
 entitlements="$(codesign -d --entitlements :- "$app" 2>/dev/null)"
 compact_entitlements="$(print -r -- "$entitlements" | tr -d '[:space:]')"
 entitlement_count="$(print -r -- "$compact_entitlements" | grep -o '<key>' | wc -l | tr -d '[:space:]')"
@@ -98,8 +103,8 @@ if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.temp
     exit 1
 fi
 
-if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key><array><string>/.local/bin/claude</string><string>/.local/share/claude/versions/</string></array>'; then
-    print -u2 "The narrow Claude Code executable exceptions are missing or broader than expected."
+if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key><array><string>/.local/bin/claude</string><string>/.local/share/claude/versions/</string><string>/.local/bin/fx</string></array>'; then
+    print -u2 "The narrow Claude Code / FX executable exceptions are missing or broader than expected."
     exit 1
 fi
 
