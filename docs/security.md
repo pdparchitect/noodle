@@ -18,6 +18,12 @@ Plain MCP confirmation forms with no input fields (such as a browser destination
 
 ## Security boundary
 
+### Grok Build
+
+Grok Build requires the same explicit per-bot autonomous access grant. The host accepts only the official `~/.grok/bin/grok` installation (or its `~/.local/bin/grok` alias), resolving to the exact native download path and verifying xAI's signature (`xai-grok-pager`, team `5Y6N3AJ54S`). It launches a dedicated `grok agent --no-leader … stdio` process with validated model/effort settings. Shared leader mode and blanket approval flags are not used. ACP permission responses select only the offered **allow once** option for the active session while autonomous access is enabled.
+
+Discovery, cached authentication and model metadata inspection happen in the existing signed host through a fixed, argument-free `inspectGrok` endpoint. Only the installation path, sign-in boolean and model/effort catalogue cross back into the app; no account identity, tokens or raw authentication errors are exposed. Inspection creates no conversation or model turn. The main app receives **no additional sandbox entitlements** and no access to `~/.grok` credentials. The user-supplied Grok SVG is bundled as a transparent vector template with website CSS and duplicate IDs removed.
+
 ### FX
 
 The Agent Host's `XPCService.JoinExistingSession` is enabled so it and the signed harness children run in the app's login security session. This allows normal access to the existing user's Keychain rather than launching in an isolated audit session. Keychain access controls still apply; Noodle does not export credentials or change item permissions. Build verification checks this setting in the signed helper bundle.

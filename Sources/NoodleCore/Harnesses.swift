@@ -4,6 +4,7 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
     case codex
     case claudeCode = "claude-code"
     case fx
+    case grokBuild = "grok-build"
 
     public var id: String { rawValue }
 
@@ -12,6 +13,7 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
         case .codex: return "Codex"
         case .claudeCode: return "Claude Code"
         case .fx: return "FX"
+        case .grokBuild: return "Grok Build"
         }
     }
 
@@ -119,6 +121,7 @@ public struct HarnessDiscovery: Sendable {
     private let standaloneCodexURL: URL
     private let standaloneClaudeURL: URL
     private let standaloneFxURL: URL
+    private let standaloneGrokURL: URL
     #if DEBUG
     private let simulateNoHarnesses: Bool
     private var externalInstallChecks: Set<HarnessProvider> = []
@@ -137,6 +140,7 @@ public struct HarnessDiscovery: Sendable {
         self.standaloneCodexURL = homeDirectory.appendingPathComponent(".codex/packages/standalone/current/bin/codex")
         self.standaloneClaudeURL = homeDirectory.appendingPathComponent(".local/bin/claude")
         self.standaloneFxURL = homeDirectory.appendingPathComponent(".local/bin/fx")
+        self.standaloneGrokURL = homeDirectory.appendingPathComponent(".grok/bin/grok")
         self.executableSearchDirectories = executableSearchDirectories ?? [
             homeDirectory.appendingPathComponent(".local/bin", isDirectory: true),
             URL(fileURLWithPath: "/opt/homebrew/bin", isDirectory: true),
@@ -146,6 +150,14 @@ public struct HarnessDiscovery: Sendable {
 
     public func discover() -> [HarnessInstallation] {
         HarnessProvider.allCases.map(discover)
+    }
+
+    public func allowsHostDiscovery(for provider: HarnessProvider) -> Bool {
+        #if DEBUG
+        return !simulateNoHarnesses || externalInstallChecks.contains(provider)
+        #else
+        return true
+        #endif
     }
 
     public func discover(_ provider: HarnessProvider) -> HarnessInstallation {
@@ -175,7 +187,7 @@ public struct HarnessDiscovery: Sendable {
                 applicationsDirectory.appendingPathComponent("ChatGPT.app/Contents/Resources/codex"),
                 applicationsDirectory.appendingPathComponent("Codex.app/Contents/Resources/codex")
             ]
-        case .claudeCode, .fx:
+        case .claudeCode, .fx, .grokBuild:
             return standaloneCandidates(for: provider)
         }
     }
@@ -190,6 +202,7 @@ public struct HarnessDiscovery: Sendable {
                 .map { $0.appendingPathComponent("claude") }
                 .filter { $0.standardizedFileURL != standaloneClaudeURL.standardizedFileURL }
         case .fx: return [standaloneFxURL]
+        case .grokBuild: return [standaloneGrokURL]
         }
     }
 

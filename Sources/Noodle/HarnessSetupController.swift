@@ -17,7 +17,8 @@ final class HarnessSetupController {
         self.providers = providers ?? [
             .codex: CodexSetupProvider(codexHome: HarnessStorage.codexHome),
             .claudeCode: ClaudeCodeSetupProvider(),
-            .fx: FxSetupProvider()
+            .fx: FxSetupProvider(),
+            .grokBuild: GrokSetupProvider()
         ]
     }
 

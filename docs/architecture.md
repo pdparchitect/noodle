@@ -32,9 +32,9 @@ The number of processes follows the number of bots, not the number of conversati
 
 ## Harness discovery
 
-Noodle advertises only harnesses for which it has a complete native driver. The Codex driver looks for the executable bundled inside `ChatGPT.app` or `Codex.app`, its standalone package, and conventional local binary directories. The Claude Code driver looks for Anthropic's native installer link at `~/.local/bin/claude`. Finding a desktop application without its executable does not make a harness selectable.
+Noodle discovers supported CLI installations, not desktop application names alone. The Codex driver looks for the executable bundled inside `ChatGPT.app` or `Codex.app`, its standalone package, and conventional local binary directories. Claude Code uses Anthropic's native installer link at `~/.local/bin/claude`; FX uses `~/.local/bin/fx`. Grok Build is discovered through the signed host at `~/.grok/bin/grok`, so the main app needs no access to its private configuration. FX remains experimental while its upstream safety-review failure prevents live Messenger verification.
 
-Capability enumeration is harness-specific and private. The Codex driver calls `model/list`; the Claude Code driver exposes the CLI's stable Sonnet, Opus, and Haiku aliases plus supported effort levels. Both convert their choices into provider-neutral model and effort records. No ACP adapter or readiness layer exists.
+Capability enumeration is harness-specific and private. Codex calls `model/list`; Claude Code exposes standard Fable, Opus, Sonnet and Haiku aliases. FX uses its CLI model catalogue. Grok Build reads model names and per-model reasoning efforts from ACP initialization metadata, and checks the existing login with `authenticate` / `cached_token` without creating a session. These become provider-neutral model and effort records. FX and Grok share a persistent ACP transport with separate session-state files, serialized wakes and unfinished-work markers; Grok reapplies selected model/effort settings after session load.
 
 ## Agent workspace and managed skills
 

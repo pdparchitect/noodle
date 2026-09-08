@@ -5,11 +5,11 @@
 - Create and edit UUID-backed bots
 - Give each bot an editable backstory stored canonically in `AGENTS.md`
 - Explicitly assign one of the installed, supported harnesses to each bot
-- Read the live Codex model catalogue and offer Claude Code's standard Fable, Opus, Sonnet, and Haiku aliases with effort levels
-- Maintain one persistent Codex App Server thread or Claude Code stream-json session per bot
+- Read live Codex, FX and Grok Build model catalogues and offer Claude Code's standard Fable, Opus, Sonnet, and Haiku aliases with effort levels
+- Maintain one persistent Codex App Server thread, Claude Code stream-json session, or FX/Grok Build ACP session per bot
 - Start every configured bot with Noodle and stop every bot when Noodle terminates
 - Notify bots without copying message bodies into the harness event
-- Let Codex and Claude Code read and reply through the bundled Messenger CLI
+- Let harnesses read and reply through the bundled Messenger CLI (FX remains experimental pending upstream review-service recovery)
 - Persist direct chats, group chats, unread inbox cursors, and linked attachments
 - Render common inline Markdown in selectable message text, with safe web and email links
 - Show durable unread indicators for conversations with unseen bot replies

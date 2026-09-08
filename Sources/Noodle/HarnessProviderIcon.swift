@@ -20,6 +20,8 @@ struct HarnessProviderIcon: View {
             "ClaudeHarness"
         case .fx:
             "FxHarness"
+        case .grokBuild:
+            "GrokHarness"
         }
     }
 }

@@ -57,6 +57,30 @@ final class AgentRuntimeCoordinator {
     private var processes: [UUID: any AgentRuntimeProcess] = [:]
     private var capabilityProbe: CodexCapabilityProbe?
     private var fxCapabilityTask: Task<Void, Never>?
+    private var grokCapabilityTask: Task<Void, Never>?
+    private var hostGrokInstallation: HarnessInstallation?
+
+    private func discoveredInstallations() -> [HarnessInstallation] {
+        discovery.discover().map { installation in
+            installation.provider == .grokBuild ? (hostGrokInstallation ?? installation) : installation
+        }
+    }
+
+    private func refreshGrokCapabilities() async {
+        guard discovery.allowsHostDiscovery(for: .grokBuild) else { return }
+        do {
+            let result = try await GrokHostProbe().load()
+            guard !Task.isCancelled else { return }
+            let installation = HarnessInstallation(provider: .grokBuild, executablePath: result.executablePath)
+            hostGrokInstallation = installation
+            installations = installations.map { $0.provider == .grokBuild ? installation : $0 }
+            modelsByProvider[.grokBuild] = result.models
+            capabilityErrors[.grokBuild] = result.executablePath == nil ? "Grok Build is not installed" : (result.authenticated ? nil : "Run grok login in Terminal, then check again.")
+        } catch {
+            guard !Task.isCancelled else { return }
+            capabilityErrors[.grokBuild] = error.localizedDescription
+        }
+    }
 
     init(discovery: HarnessDiscovery = HarnessDiscovery(), defaults: UserDefaults = .standard) {
         self.discovery = discovery
@@ -260,6 +284,7 @@ final class AgentRuntimeCoordinator {
         }.value
         guard !Task.isCancelled else { return }
         installations = detected
+        await refreshGrokCapabilities()
     }
 
     func installation(for agent: AgentRecord) -> HarnessInstallation? {
@@ -283,7 +308,7 @@ final class AgentRuntimeCoordinator {
     }
 
     func refresh(agents: [AgentRecord], repository: WorkspaceRepository? = nil) {
-        installations = discovery.discover()
+        installations = discoveredInstallations()
         let liveIDs = Set(agents.map(\.id))
         for id in processes.keys where !liveIDs.contains(id) {
             processes.removeValue(forKey: id)?.stop { _ in }
@@ -326,7 +351,9 @@ final class AgentRuntimeCoordinator {
     }
 
     func refreshCapabilities() {
-        installations = discovery.discover()
+        installations = discoveredInstallations()
+        grokCapabilityTask?.cancel()
+        grokCapabilityTask = Task { [weak self] in await self?.refreshGrokCapabilities() }
         fxCapabilityTask?.cancel()
         if let path = availableInstallations.first(where: { $0.provider == .fx })?.executablePath {
             fxCapabilityTask = Task { [weak self] in
@@ -380,7 +407,7 @@ final class AgentRuntimeCoordinator {
 
     func startAll(agents: [AgentRecord], repository: WorkspaceRepository) {
         isStoppingAll = false
-        installations = discovery.discover()
+        installations = discoveredInstallations()
         for agent in agents {
             start(agent: agent, repository: repository)
         }
@@ -401,10 +428,10 @@ final class AgentRuntimeCoordinator {
         }
 
         switch installation.provider {
-        case .fx:
+        case .fx, .grokBuild:
             restartTasks.removeValue(forKey: agent.id)?.cancel()
-            let process = FxAgentProcess(
-                agent: agent, executableURL: URL(fileURLWithPath: executablePath),
+            let process = ACPAgentProcess(
+                provider: installation.provider, agent: agent, executableURL: URL(fileURLWithPath: executablePath),
                 workspaceURL: repository.directory(for: agent),
                 extendedAccess: accessConfiguration.isExtended(agent.id),
                 recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
@@ -491,7 +518,7 @@ final class AgentRuntimeCoordinator {
         let old = processes.removeValue(forKey: agent.id)
         if resetThread {
             let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")
-            let prefix = provider == .fx ? "fx-runtime" : (provider == .claudeCode ? "claude-runtime" : "codex-runtime")
+            let prefix = provider == .grokBuild ? "grok-runtime" : (provider == .fx ? "fx-runtime" : (provider == .claudeCode ? "claude-runtime" : "codex-runtime"))
             let filename = accessConfiguration.isExtended(agent.id)
                 ? ".agents/\(prefix)-extended.json" : ".agents/\(prefix).json"
             try? FileManager.default.removeItem(at: repository.directory(for: agent).appendingPathComponent(filename))
@@ -536,6 +563,7 @@ final class AgentRuntimeCoordinator {
 
     func stopAll() {
         fxCapabilityTask?.cancel()
+        grokCapabilityTask?.cancel()
         isStoppingAll = true
         lifecycleID = UUID()
         changingAccess = []

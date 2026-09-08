@@ -69,6 +69,11 @@ if ! xcrun assetutil --info "$app/Contents/Resources/Assets.car" | grep -q '"Nam
     exit 1
 fi
 
+if ! xcrun assetutil --info "$app/Contents/Resources/Assets.car" | grep -q '"Name" : "GrokHarness"'; then
+    print -u2 "The Grok Build template icon is missing from the asset catalogue."
+    exit 1
+fi
+
 if ! xcrun assetutil --info "$app/Contents/Resources/Assets.car" | grep -q '"Name" : "FxHarness"'; then
     print -u2 "The FX template icon is missing from the asset catalogue."
     exit 1

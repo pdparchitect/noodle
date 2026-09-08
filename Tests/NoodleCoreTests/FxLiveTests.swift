@@ -23,7 +23,7 @@ final class FxLiveTests: XCTestCase {
             try repository.append(ChatMessage(conversationID: bot.conversation.id, author: .user, body: body, delivery: .queued))
         }
         try enqueue("Integration test: read .agents/skills/messenger/SKILL.md, then reply through Messenger with exactly FX smoke ok. Do not do any other work or use other skills.")
-        let first = try FxWireFixture(executable: executable, workspace: workspace)
+        let first = try ACPWireFixture(executable: executable, workspace: workspace)
         defer { first.stop() }
         _ = try first.request("initialize", FxProtocol.initializeParameters)
         let opened = try first.request("session/new", ["cwd": workspace.path, "mcpServers": []])
@@ -34,7 +34,7 @@ final class FxLiveTests: XCTestCase {
         }
         first.stop()
         try enqueue("Integration test: reply through Messenger with exactly FX resumed. Do not do any other work.")
-        let second = try FxWireFixture(executable: executable, workspace: workspace)
+        let second = try ACPWireFixture(executable: executable, workspace: workspace)
         defer { second.stop() }
         _ = try second.request("initialize", FxProtocol.initializeParameters)
         _ = try second.request("session/load", ["sessionId": session, "cwd": workspace.path, "mcpServers": []])
@@ -43,7 +43,7 @@ final class FxLiveTests: XCTestCase {
     }
 }
 
-private final class FxWireFixture {
+final class ACPWireFixture {
     private let process = Process()
     private let stdin = Pipe(), stdout = Pipe()
     private let condition = NSCondition(), writeLock = NSLock()
@@ -55,9 +55,9 @@ private final class FxWireFixture {
         return diagnosticText
     }
     private lazy var reader = JSONLineReader { [weak self] object in self?.receive(object) }
-    init(executable: URL, workspace: URL) throws {
+    init(executable: URL, workspace: URL, arguments: [String] = ["acp"]) throws {
         process.executableURL = executable
-        process.arguments = ["acp"]
+        process.arguments = arguments
         process.currentDirectoryURL = workspace
         process.standardInput = stdin
         process.standardOutput = stdout
@@ -102,17 +102,17 @@ private final class FxWireFixture {
         }
     }
     func request(_ method: String, _ params: [String: Any]) throws -> [String: Any] {
-        FileHandle.standardError.write(Data("FX fixture: \(method)\n".utf8))
+        FileHandle.standardError.write(Data("ACP fixture: \(method)\n".utf8))
         sequence += 1
         let id = sequence
         try send(["jsonrpc": "2.0", "id": id, "method": method, "params": params])
         condition.lock(); defer { condition.unlock() }
         let deadline = Date().addingTimeInterval(120)
         while messages[id] == nil {
-            guard condition.wait(until: deadline) else { throw HarnessSetupError("FX live test timed out during \(method)") }
+            guard condition.wait(until: deadline) else { throw HarnessSetupError("ACP live test timed out during \(method)") }
         }
         let object = messages.removeValue(forKey: id)!
-        if let error = object["error"] as? [String: Any] { throw HarnessSetupError("FX \(method): \(error["message"] ?? "failed")") }
+        if let error = object["error"] as? [String: Any] { throw HarnessSetupError("ACP \(method): \(error["message"] ?? "failed")") }
         return object["result"] as? [String: Any] ?? [:]
     }
 }

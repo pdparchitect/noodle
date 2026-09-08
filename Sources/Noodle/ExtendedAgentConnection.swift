@@ -101,4 +101,7 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
     func fxModels(executablePath: String, reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.fxModels(executablePath: executablePath, withReply: reply)
     }
+    func inspectGrok(reply: @escaping (Data?, String?) -> Void) {
+        proxy(failure: { reply(nil, $0) })?.inspectGrok(withReply: reply)
+    }
 }

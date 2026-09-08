@@ -4,14 +4,16 @@ import NoodleCore
 /// Persistent ACP transport. Agent output stays in the harness; Messenger is
 /// the sole author of user-visible messages, just as for Codex and Claude.
 @MainActor
-final class FxAgentProcess: AgentRuntimeProcess {
+final class ACPAgentProcess: AgentRuntimeProcess {
     let configuration: AgentRecord
+    private let provider: HarnessProvider
+    private var name: String { provider.displayName }
     private let executableURL: URL
     private let workspaceURL: URL
     private let extendedAccess: Bool
     private let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
     private let onHeartbeat: @MainActor () -> Void
-    private let onUnexpectedTermination: @MainActor (FxAgentProcess, String, Bool) -> Void
+    private let onUnexpectedTermination: @MainActor (ACPAgentProcess, String, Bool) -> Void
     private let stateURL: URL
     private var turnRecovery: AgentTurnRecovery
     private var sessionID: String?
@@ -24,21 +26,23 @@ final class FxAgentProcess: AgentRuntimeProcess {
     private var recoveryPending: Bool
     private var pid: Int32?
     private var sequence = 0
-    private enum Purpose { case initialize, create, load, prompt(AgentWakeReason) }
+    private enum Purpose { case initialize, authenticate, create, load, model, effort, prompt(AgentWakeReason) }
     private var requests: [Int: Purpose] = [:]
     private var startupTimeout: Task<Void, Never>?
     private struct State: Codable { let sessionID: String }
-    private lazy var trace = RuntimeTrace(agentID: configuration.id, provider: .fx, workspace: workspaceURL)
+    private lazy var trace = RuntimeTrace(agentID: configuration.id, provider: provider, workspace: workspaceURL)
     private lazy var reader = JSONLineReader { [weak self] object in
         Task { @MainActor in self?.receive(object) }
     }
     private(set) var snapshot: AgentRuntimeSnapshot
 
-    init(agent: AgentRecord, executableURL: URL, workspaceURL: URL, extendedAccess: Bool,
+    init(provider: HarnessProvider, agent: AgentRecord, executableURL: URL, workspaceURL: URL, extendedAccess: Bool,
          recoverInterruptedWork: Bool,
          onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void,
          onHeartbeat: @escaping @MainActor () -> Void,
-         onUnexpectedTermination: @escaping @MainActor (FxAgentProcess, String, Bool) -> Void) {
+         onUnexpectedTermination: @escaping @MainActor (ACPAgentProcess, String, Bool) -> Void) {
+        precondition(provider == .fx || provider == .grokBuild)
+        self.provider = provider
         configuration = agent
         self.executableURL = executableURL
         self.workspaceURL = workspaceURL
@@ -46,7 +50,8 @@ final class FxAgentProcess: AgentRuntimeProcess {
         self.onSnapshot = onSnapshot
         self.onHeartbeat = onHeartbeat
         self.onUnexpectedTermination = onUnexpectedTermination
-        stateURL = workspaceURL.appendingPathComponent(extendedAccess ? ".agents/fx-runtime-extended.json" : ".agents/fx-runtime.json")
+        let prefix = provider == .fx ? "fx" : "grok"
+        stateURL = workspaceURL.appendingPathComponent(extendedAccess ? ".agents/\(prefix)-runtime-extended.json" : ".agents/\(prefix)-runtime.json")
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
         recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
         if let data = try? Data(contentsOf: stateURL), let state = try? JSONDecoder().decode(State.self, from: data),
@@ -60,9 +65,9 @@ final class FxAgentProcess: AgentRuntimeProcess {
 
     func start() {
         guard connection == nil else { return }
-        guard extendedAccess else { update(.failed, "FX requires autonomous access in Settings → Security"); return }
+        guard extendedAccess else { update(.failed, "\(name) requires autonomous access in Settings → Security"); return }
         stopped = false
-        update(.starting, "Starting FX")
+        update(.starting, "Starting \(name)")
         trace.runtimeStarting()
         do {
             let connection = try ExtendedAgentConnection()
@@ -72,16 +77,17 @@ final class FxAgentProcess: AgentRuntimeProcess {
                 guard !isError else { return }
                 Task { @MainActor in self?.reader.receive(data) }
             }
-            connection.onExit = { [weak self] code in Task { @MainActor in self?.terminated("FX exited with status \(code)") } }
+            connection.onExit = { [weak self] code in Task { @MainActor in self?.terminated("Harness exited with status \(code)") } }
             connection.onFailure = { [weak self] error in Task { @MainActor in self?.terminated(error) } }
             running = true
             startupTimeout = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(60))
                 guard !Task.isCancelled else { return }
-                self?.terminated("FX session startup timed out")
+                self?.terminated("Harness session startup timed out")
             }
-            connection.start(provider: .fx, agentID: configuration.id, executablePath: executableURL.path,
-                             modelIdentifier: configuration.modelIdentifier) { [weak self] pid, error in
+            connection.start(provider: provider, agentID: configuration.id, executablePath: executableURL.path,
+                             modelIdentifier: configuration.modelIdentifier,
+                             effortIdentifier: provider == .grokBuild ? configuration.reasoningEffort : nil) { [weak self] pid, error in
                 Task { @MainActor in
                     guard let self, !self.stopped, self.running else { return }
                     if let error { self.terminated(error); return }
@@ -129,7 +135,7 @@ final class FxAgentProcess: AgentRuntimeProcess {
     private func startTurn(_ reason: AgentWakeReason) {
         guard let sessionID, running, !turnIsActive else { return }
         do { try turnRecovery.begin() }
-        catch { update(.failed, "Could not persist unfinished FX work: \(error.localizedDescription)"); return }
+        catch { update(.failed, "Could not persist unfinished \(name) work: \(error.localizedDescription)"); return }
         turnIsActive = true
         reviewHeld = false
         trace.begin(reason: reason)
@@ -146,7 +152,7 @@ final class FxAgentProcess: AgentRuntimeProcess {
     }
     private func send(_ object: [String: Any]) {
         do {
-            guard let connection else { throw HarnessSetupError("FX connection closed") }
+            guard let connection else { throw HarnessSetupError("\(name) connection closed") }
             connection.write(try JSONSerialization.data(withJSONObject: object) + Data([10]))
         } catch { terminated(error.localizedDescription) }
     }
@@ -171,49 +177,72 @@ final class FxAgentProcess: AgentRuntimeProcess {
             // Only an explicit missing session permits discarding its pointer.
             if case .load = purpose, error["message"] as? String == "Session not found" {
                 do { try FileManager.default.removeItem(at: stateURL) }
-                catch { terminated("Could not clear FX's missing session"); return }
+                catch { terminated("Could not clear \(name)'s missing session"); return }
                 sessionID = nil
                 openSession()
             } else if case .prompt = purpose {
                 turnIsActive = false
                 trace.finish(.turnFailed)
-                update(.failed, FxProtocol.turnFailureDescription(error))
-            } else { terminated("FX session setup failed: \(String((error["message"] as? String ?? "Unknown error").prefix(300)))") }
+                update(.failed, provider == .fx ? FxProtocol.turnFailureDescription(error) : "Grok Build could not complete the turn. Check its account and model, then use Retry Startup. Unfinished work is preserved.")
+            } else { terminated("\(name) session setup failed. Check its sign-in and selected model in Settings.") }
             return
         }
-        guard let result = object["result"] as? [String: Any] else { terminated("FX returned an invalid ACP response"); return }
+        guard let result = object["result"] as? [String: Any] else { terminated("\(name) returned an invalid ACP response"); return }
         switch purpose {
         case .initialize:
-            guard result["protocolVersion"] as? Int == 1 else { terminated("FX uses an unsupported ACP version"); return }
+            guard result["protocolVersion"] as? Int == 1 else { terminated("\(name) uses an unsupported ACP version"); return }
+            if provider == .grokBuild {
+                request(.authenticate, method: "authenticate", params: ["methodId": "cached_token"])
+            } else { openSession() }
+        case .authenticate:
             openSession()
         case .create, .load:
             if let returned = result["sessionId"] as? String { sessionID = returned }
-            guard let sessionID, FxProtocol.validIdentifier(sessionID) else { terminated("FX did not identify its session"); return }
+            guard let sessionID, FxProtocol.validIdentifier(sessionID) else { terminated("\(name) did not identify its session"); return }
             do {
                 try FileManager.default.createDirectory(at: stateURL.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try JSONEncoder().encode(State(sessionID: sessionID)).write(to: stateURL, options: .atomic)
-            } catch { terminated("Could not save the FX session"); return }
-            startupTimeout?.cancel()
-            update(.ready, "FX ready")
-            if recoveryPending {
-                recoveryPending = false
-                startTurn(.runtimeRecovered)
-            } else { sendPending() }
+            } catch { terminated("Could not save the \(name) session"); return }
+            if provider == .grokBuild, let model = configuration.modelIdentifier {
+                request(.model, method: "session/set_model", params: ["sessionId": sessionID, "modelId": model])
+            } else { configureEffort() }
+        case .model:
+            // Grok can return a model rejection inside a successful RPC envelope.
+            if let meta = result["_meta"] as? [String: Any], let model = meta["model"] as? [String: Any], model["Err"] != nil {
+                terminated("Grok Build rejected the selected model."); return
+            }
+            configureEffort()
+        case .effort:
+            sessionReady()
         case .prompt:
-            guard let stopReason = result["stopReason"] as? String else { terminated("FX returned no turn completion reason"); return }
+            guard let stopReason = result["stopReason"] as? String else { terminated("\(name) returned no turn completion reason"); return }
             turnIsActive = false
             guard !reviewHeld, stopReason == "end_turn" else {
                 trace.finish(.turnFailed)
-                update(.failed, reviewHeld ? "FX held tool execution: its safety reviewer is unavailable. Retry when FX's review service recovers." : "FX stopped before completing the turn. Retry Startup to resume.")
+                update(.failed, reviewHeld ? "\(name) held tool execution: its safety reviewer is unavailable. Retry when the review service recovers." : "\(name) stopped before completing the turn. Retry Startup to resume.")
                 return
             }
             do { try turnRecovery.finish() }
-            catch { update(.failed, "Could not record finished FX work"); return }
+            catch { update(.failed, "Could not record finished \(name) work"); return }
             turnIsActive = false
             trace.finish(.turnCompleted)
-            update(.ready, "FX ready")
+            update(.ready, "\(name) ready")
             sendPending()
         }
+    }
+    private func configureEffort() {
+        if provider == .grokBuild, let sessionID, let effort = configuration.reasoningEffort {
+            request(.effort, method: "session/set_mode", params: ["sessionId": sessionID, "modeId": effort])
+        } else { sessionReady() }
+    }
+
+    private func sessionReady() {
+        startupTimeout?.cancel()
+        update(.ready, "\(name) ready")
+        if recoveryPending {
+            recoveryPending = false
+            startTurn(.runtimeRecovered)
+        } else { sendPending() }
     }
     private func terminated(_ detail: String) {
         guard !stopped else { return }

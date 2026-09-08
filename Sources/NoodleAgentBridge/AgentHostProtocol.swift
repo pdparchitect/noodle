@@ -56,6 +56,7 @@ public enum AgentHostIdentity {
         withReply reply: @escaping (Bool, String?) -> Void
     )
     func fxModels(executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
+    func inspectGrok(withReply reply: @escaping (Data?, String?) -> Void)
 }
 
 @objc public protocol AgentHostClient {

@@ -15,6 +15,7 @@ private enum HostPaths {
         case .codex: return try CodexExecutableTrust.executable(at: path, home: home)
         case .claudeCode: return try ClaudeExecutableTrust.executable(at: path, home: home)
         case .fx: return try FxExecutableTrust.executable(at: path, home: home)
+        case .grokBuild: return try GrokExecutableTrust.executable(at: path, home: home)
         }
     }
 
@@ -81,6 +82,13 @@ if CommandLine.arguments.count == 9, CommandLine.arguments[1] == "--harness-chil
             guard effort == nil, model.map(FxProtocol.validIdentifier) ?? true else { throw HostError("Unsupported FX model or effort.") }
             strings = [executable.path, "acp"]
             if let model { strings += ["--model", model] }
+        case .grokBuild:
+            guard model.map(FxProtocol.validIdentifier) ?? true,
+                  effort.map(GrokProtocol.efforts.contains) ?? true else { throw HostError("Unsupported Grok Build model or effort.") }
+            strings = [executable.path, "agent", "--no-leader"]
+            if let model { strings += ["--model", model] }
+            if let effort { strings += ["--reasoning-effort", effort] }
+            strings += ["stdio"]
         case .claudeCode:
             guard let sessionID else { throw HostError("Claude Code requires a valid session identifier.") }
             if let model {
@@ -251,6 +259,15 @@ private final class HostSession: NSObject, AgentHostService {
                 let detail = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
                 reply(probe.terminationStatus == 0, probe.terminationStatus == 0 ? "Runtime isolation check passed." : detail)
             } catch { reply(false, error.localizedDescription) }
+        }
+    }
+
+    func inspectGrok(withReply reply: @escaping (Data?, String?) -> Void) {
+        queue.async {
+            do {
+                let result = try GrokInspection.inspect(home: HostPaths.home, environment: self.accountEnvironment)
+                reply(try JSONEncoder().encode(result), nil)
+            } catch { reply(nil, error.localizedDescription) }
         }
     }
 
