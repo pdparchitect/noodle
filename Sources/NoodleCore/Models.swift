@@ -378,7 +378,7 @@ public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
     public let launcherExecutableURL: URL?
 
-    public static let managedSkillVersion = 18
+    public static let managedSkillVersion = 19
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
         self.rootURL = rootURL.standardizedFileURL
@@ -673,6 +673,7 @@ public struct WorkspaceRepository: Sendable {
 
         let claudeFile = directory.appendingPathComponent("CLAUDE.md")
         try replaceSymlink(at: claudeFile, destinationPath: "AGENTS.md")
+        let claudeSkillPaths = try synchronizeClaudeSkillLinks(in: directory)
 
         let skillFile = messengerDirectory.appendingPathComponent("SKILL.md")
         try Self.messengerSkill.write(to: skillFile, atomically: true, encoding: .utf8)
@@ -689,7 +690,7 @@ public struct WorkspaceRepository: Sendable {
                 "CLAUDE.md",
                 ".agents/skills/messenger/SKILL.md",
                 ".agents/skills/messenger/messenger"
-            ]
+            ] + claudeSkillPaths
         )
         try write(manifest, to: agentsDirectory.appendingPathComponent("managed-skills.json"))
     }
@@ -1340,6 +1341,44 @@ public struct WorkspaceRepository: Sendable {
             try FileManager.default.removeItem(at: url)
         }
         try FileManager.default.createSymbolicLink(atPath: url.path, withDestinationPath: destinationPath)
+    }
+
+    private func synchronizeClaudeSkillLinks(in directory: URL) throws -> [String] {
+        let manager = FileManager.default
+        let claude = directory.appendingPathComponent(".claude", isDirectory: true)
+        // Never follow an existing redirected configuration folder or replace
+        // user-authored Claude settings, skills or symlinks.
+        if let type = try? manager.attributesOfItem(atPath: claude.path)[.type] as? FileAttributeType {
+            guard type == .typeDirectory else { return [] }
+        } else {
+            try manager.createDirectory(at: claude, withIntermediateDirectories: false)
+        }
+        let skills = claude.appendingPathComponent("skills", isDirectory: true)
+        let destination = "../.agents/skills"
+        if (try? manager.destinationOfSymbolicLink(atPath: skills.path)) == destination {
+            return [".claude/skills"]
+        }
+        guard let type = try? manager.attributesOfItem(atPath: skills.path)[.type] as? FileAttributeType else {
+            try manager.createSymbolicLink(atPath: skills.path, withDestinationPath: destination)
+            return [".claude/skills"]
+        }
+        guard type == .typeDirectory else { return [] }
+
+        // An existing native skills directory belongs to the bot. Add missing
+        // skill links inside it, leaving native skills and name conflicts alone.
+        let shared = directory.appendingPathComponent(".agents/skills", isDirectory: true)
+        var managedPaths: [String] = []
+        for name in try manager.contentsOfDirectory(atPath: shared.path).sorted() {
+            let link = skills.appendingPathComponent(name)
+            let target = "../../.agents/skills/\(name)"
+            if (try? manager.destinationOfSymbolicLink(atPath: link.path)) == target {
+                managedPaths.append(".claude/skills/\(name)")
+            } else if (try? manager.attributesOfItem(atPath: link.path)) == nil {
+                try manager.createSymbolicLink(atPath: link.path, withDestinationPath: target)
+                managedPaths.append(".claude/skills/\(name)")
+            }
+        }
+        return managedPaths
     }
 
     private func storedAttachmentName(id: UUID, originalFilename: String) -> String {

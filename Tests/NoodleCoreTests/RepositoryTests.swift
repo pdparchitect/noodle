@@ -74,6 +74,71 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(created.conversation.participantIDs, [created.agent.id])
     }
 
+    func testClaudeSkillDiscoveryLinkIsCreatedAndRepairedOnBootstrap() throws {
+        let bot = try repository.createAgent(named: "Claude Bot")
+        let directory = repository.directory(for: bot.agent)
+        let link = directory.appendingPathComponent(".claude/skills")
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: link.path), "../.agents/skills")
+        let shared = directory.appendingPathComponent(".agents/skills/custom/SKILL.md")
+        try FileManager.default.createDirectory(at: shared.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "Custom skill".write(to: shared, atomically: true, encoding: .utf8)
+        XCTAssertEqual(try String(contentsOf: link.appendingPathComponent("custom/SKILL.md"), encoding: .utf8), "Custom skill")
+        try FileManager.default.removeItem(at: link)
+        // This is the bulk bootstrap called by NoodleStore.reload at app startup.
+        try repository.synchronizeAgentWorkspaces([bot.agent])
+        try repository.synchronizeAgentWorkspaces([bot.agent])
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: link.path), "../.agents/skills")
+        XCTAssertEqual(
+            try String(contentsOf: link.appendingPathComponent("messenger/SKILL.md"), encoding: .utf8),
+            try String(contentsOf: directory.appendingPathComponent(".agents/skills/messenger/SKILL.md"), encoding: .utf8)
+        )
+    }
+
+    func testClaudeNativeSkillsAndSettingsSurviveBootstrap() throws {
+        let bot = try repository.createAgent(named: "Native Skills Bot")
+        let directory = repository.directory(for: bot.agent)
+        let skills = directory.appendingPathComponent(".claude/skills")
+        try FileManager.default.removeItem(at: skills)
+        try FileManager.default.createDirectory(at: skills, withIntermediateDirectories: true)
+        let settings = directory.appendingPathComponent(".claude/settings.json")
+        try "{}".write(to: settings, atomically: true, encoding: .utf8)
+        let custom = skills.appendingPathComponent("custom/SKILL.md")
+        try FileManager.default.createDirectory(at: custom.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "Native skill".write(to: custom, atomically: true, encoding: .utf8)
+        let sharedCustom = directory.appendingPathComponent(".agents/skills/custom/SKILL.md")
+        try FileManager.default.createDirectory(at: sharedCustom.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "Shared skill".write(to: sharedCustom, atomically: true, encoding: .utf8)
+        try repository.synchronizeAgentWorkspace(bot.agent)
+        try repository.synchronizeAgentWorkspace(bot.agent)
+        XCTAssertEqual(try String(contentsOf: settings, encoding: .utf8), "{}")
+        XCTAssertEqual(try String(contentsOf: custom, encoding: .utf8), "Native skill")
+        XCTAssertEqual(try String(contentsOf: sharedCustom, encoding: .utf8), "Shared skill")
+        XCTAssertEqual(
+            try FileManager.default.destinationOfSymbolicLink(atPath: skills.appendingPathComponent("messenger").path),
+            "../../.agents/skills/messenger"
+        )
+    }
+
+    func testClaudeRedirectedDirectoriesAreNotModified() throws {
+        let bot = try repository.createAgent(named: "Redirected Bot")
+        let directory = repository.directory(for: bot.agent)
+        let claude = directory.appendingPathComponent(".claude")
+        let external = root.appendingPathComponent("external-claude")
+        try FileManager.default.createDirectory(at: external, withIntermediateDirectories: true)
+        try FileManager.default.removeItem(at: claude)
+        try FileManager.default.createSymbolicLink(at: claude, withDestinationURL: external)
+        try repository.synchronizeAgentWorkspace(bot.agent)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: external.path), [])
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: claude.path), external.path)
+        try FileManager.default.removeItem(at: claude)
+        try FileManager.default.createDirectory(at: claude, withIntermediateDirectories: true)
+        let skills = claude.appendingPathComponent("skills")
+        try FileManager.default.createSymbolicLink(at: skills, withDestinationURL: external)
+        try repository.synchronizeAgentWorkspace(bot.agent)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: external.path), [])
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: skills.path), external.path)
+    }
+
     func testBackstoryIsStoredInAgentsFileAndSurvivesSynchronization() throws {
         let created = try repository.createAgent(named: "Story Bot")
         let directory = repository.directory(for: created.agent)
