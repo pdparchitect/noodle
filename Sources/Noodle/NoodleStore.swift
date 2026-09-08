@@ -832,6 +832,17 @@ final class NoodleStore {
         backgrounds[conversation.id] = saved
     }
 
+    func useAttachmentAsBackground(_ attachment: ConversationAttachment) async {
+        let repository = repository
+        do {
+            let saved = try await Task.detached {
+                try repository.setBackground(from: attachment)
+            }.value
+            // Keep the action bound to its source chat even if selection changes during decoding.
+            backgrounds[attachment.conversationID] = saved
+        } catch { errorMessage = error.localizedDescription }
+    }
+
     func changeReaction(_ emoji: String, to replacement: String, on message: ChatMessage) {
         guard emoji != replacement else { return }
         do {

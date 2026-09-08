@@ -67,6 +67,13 @@ extension WorkspaceRepository {
         catch { try? FileManager.default.removeItem(at: url); throw error }
     }
 
+    @discardableResult public func setBackground(from attachment: ConversationAttachment) throws -> ConversationBackground {
+        let url = attachmentFileURL(attachment)
+        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize
+        guard let size, size <= 50 * 1024 * 1024 else { throw ConversationBackgroundError.invalidImage }
+        return try setBackground(conversationID: attachment.conversationID, imageData: Data(contentsOf: url))
+    }
+
     private func persistBackground(_ background: ConversationBackground, conversationID: UUID) throws -> ConversationBackground {
         let directory = conversationDirectory(id: conversationID)
         guard FileManager.default.fileExists(atPath: directory.appendingPathComponent("conversation.json").path) else {

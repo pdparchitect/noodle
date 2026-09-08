@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Right-click an attached image from anyone in a DM or group to use it as that conversation's background. The original attachment stays unchanged.
 - Bot avatars in direct messages (including the chat header) open an informational profile with name, enlarged avatar and public description. Hover tooltips match group avatars; DM profiles omit the group reply and direct-message actions.
 - Grok Build harness with a theme-aware vector icon, existing-login detection, live model and reasoning-effort discovery, persistent ACP sessions, Messenger replies and interrupted-work recovery. Requires explicit per-bot autonomous access; installation and terminal sign-in guidance are included.
 - General settings now offers a link-preview timeout (5–30 seconds, default 10), covering both metadata and thumbnail loading.

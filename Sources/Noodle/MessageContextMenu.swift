@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 import SwiftUI
 import NoodleCore
 
@@ -9,6 +10,8 @@ struct MessageContextMenu: NSViewRepresentable {
     let copy: () -> Void
     let preview: (() -> Void)?
     let reveal: (() -> Void)?
+    var backgroundImageURL: URL? = nil
+    var useAsBackground: (() -> Void)? = nil
 
     func makeNSView(context: Context) -> MenuHost { MenuHost() }
 
@@ -50,6 +53,14 @@ struct MessageContextMenu: NSViewRepresentable {
             }
             if let reveal = configuration.reveal {
                 addItem("Show in Finder", symbol: "folder", to: menu, action: reveal)
+            }
+            // Inspect only when opening the menu, not while scrolling the transcript.
+            // Decode detection also covers real images with generic attachment MIME types.
+            if let url = configuration.backgroundImageURL,
+               let useAsBackground = configuration.useAsBackground,
+               CGImageSourceCreateWithURL(url as CFURL, nil) != nil {
+                menu.addItem(.separator())
+                addItem("Use as Conversation Background", symbol: "photo", to: menu, action: useAsBackground)
             }
             NSMenu.popUpContextMenu(menu, with: event, for: self)
             actions = []

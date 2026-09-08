@@ -74,6 +74,37 @@ final class ConversationBackgroundTests: XCTestCase {
         }
     }
 
+    func testAttachmentBackgroundsInDirectAndGroupChatsPreserveOriginals() throws {
+        let bot = try repository.createAgent(named: "Bot")
+        let group = try repository.createGroup(named: "Team", participantIDs: [bot.agent.id], existingAgents: [bot.agent])
+        let data = try fixtureImage()
+        for conversationID in [bot.conversation.id, group.id] {
+            let attachment = try repository.importAttachment(data: data, originalFilename: "picture.png",
+                into: conversationID, mediaType: "application/octet-stream")
+            let originalURL = repository.attachmentFileURL(attachment)
+            let saved = try repository.setBackground(from: attachment)
+            let backgroundURL = try XCTUnwrap(repository.backgroundImageURL(saved, conversationID: conversationID))
+            XCTAssertNotEqual(backgroundURL, originalURL)
+            XCTAssertNotNil(CGImageSourceCreateWithURL(backgroundURL as CFURL, nil))
+            XCTAssertEqual(try WorkspaceRepository(rootURL: root).loadBackground(conversationID: conversationID), saved)
+            XCTAssertEqual(try Data(contentsOf: originalURL), data)
+            try repository.setBackground(conversationID: conversationID, preset: nil)
+            XCTAssertEqual(try Data(contentsOf: originalURL), data, "Reset must never remove the attachment")
+        }
+    }
+
+    func testUnreadableAttachmentKeepsExistingBackground() throws {
+        let bot = try repository.createAgent(named: "Bot")
+        let attachment = try repository.importAttachment(data: Data("not an image".utf8),
+            originalFilename: "broken.png", into: bot.conversation.id, mediaType: "image/png")
+        try repository.setBackground(conversationID: bot.conversation.id, preset: .ocean)
+        XCTAssertThrowsError(try repository.setBackground(from: attachment))
+        XCTAssertEqual(try repository.loadBackground(conversationID: bot.conversation.id).preset, .ocean)
+        try FileManager.default.removeItem(at: repository.attachmentFileURL(attachment))
+        XCTAssertThrowsError(try repository.setBackground(from: attachment))
+        XCTAssertEqual(try repository.loadBackground(conversationID: bot.conversation.id).preset, .ocean)
+    }
+
     private func fixtureImage() throws -> Data {
         let context = try XCTUnwrap(CGContext(data: nil, width: 3000, height: 10, bitsPerComponent: 8,
             bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))

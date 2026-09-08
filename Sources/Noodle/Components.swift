@@ -211,7 +211,11 @@ struct MessageBubble: View {
                 }
             },
             preview: attachment.map { item in { previewAttachment(item) } },
-            reveal: attachment.map { item in { store.revealAttachment(item) } }
+            reveal: attachment.map { item in { store.revealAttachment(item) } },
+            backgroundImageURL: attachment.map { store.attachmentFileURL($0) },
+            useAsBackground: attachment.map { item in
+                { Task { await store.useAttachmentAsBackground(item) } }
+            }
         )
     }
 
