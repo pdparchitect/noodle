@@ -57,6 +57,7 @@ public enum AgentHostIdentity {
     )
     func fxModels(executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
     func inspectGrok(withReply reply: @escaping (Data?, String?) -> Void)
+    func inspectHarnessVersion(harnessIdentifier: String, executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
 }
 
 @objc public protocol AgentHostClient {

@@ -262,6 +262,17 @@ private final class HostSession: NSObject, AgentHostService {
         }
     }
 
+    func inspectHarnessVersion(harnessIdentifier: String, executablePath: String, withReply reply: @escaping (Data?, String?) -> Void) {
+        queue.async {
+            do {
+                guard let provider = HarnessProvider(rawValue: harnessIdentifier) else { throw HostError("Unknown harness.") }
+                let executable = try HostPaths.executable(executablePath, provider: provider)
+                let report = try HarnessVersionInspection.inspect(provider: provider, executable: executable, environment: self.accountEnvironment)
+                reply(try JSONEncoder().encode(report), nil)
+            } catch { reply(nil, error.localizedDescription) }
+        }
+    }
+
     func inspectGrok(withReply reply: @escaping (Data?, String?) -> Void) {
         queue.async {
             do {

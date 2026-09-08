@@ -185,12 +185,12 @@ private struct HeartbeatsSettingsView: View {
 
 private struct HarnessesSettingsView: View {
     @Environment(NoodleStore.self) private var store
-    @State private var setup = HarnessSetupController()
+    @State private var setup = HarnessSetupController(versionChecker: HarnessVersionChecker())
     @State private var showRefreshProgress = false
     @State private var checkingAll = false
 
     private var isRefreshing: Bool {
-        checkingAll || store.runtime.isRefreshingInstallations || !setup.checking.isEmpty
+        checkingAll || store.runtime.isRefreshingInstallations || !setup.checking.isEmpty || setup.checkingVersions
     }
 
     var body: some View {
@@ -204,6 +204,7 @@ private struct HarnessesSettingsView: View {
                             await store.runtime.checkExternalInstallation(installation.provider)
                             guard !store.runtime.isRefreshingInstallations else { return }
                             await setup.refresh(store.runtime.installations, discoveryErrors: store.runtime.installationErrors)
+                            await setup.refreshVersions(store.runtime.installations, forceLatest: true)
                         }
                     }
                 }
@@ -218,7 +219,7 @@ private struct HarnessesSettingsView: View {
                         .accessibilityLabel("Checking for harnesses")
                         .accessibilityHidden(!showRefreshProgress)
                     Button("Check Again") {
-                        Task { await refresh() }
+                        Task { await refresh(forceLatest: true) }
                     }
                     .disabled(isRefreshing)
                 }
@@ -240,13 +241,14 @@ private struct HarnessesSettingsView: View {
         .onDisappear { setup.cancelAll() }
     }
 
-    private func refresh() async {
+    private func refresh(forceLatest: Bool = false) async {
         guard !checkingAll else { return }
         checkingAll = true
         defer { checkingAll = false }
         await store.runtime.refreshInstallations()
         guard !Task.isCancelled, !store.runtime.isRefreshingInstallations else { return }
         await setup.refresh(store.runtime.installations, discoveryErrors: store.runtime.installationErrors)
+        await setup.refreshVersions(store.runtime.installations, forceLatest: forceLatest)
     }
 }
 
@@ -259,6 +261,7 @@ private struct HarnessInstallationRow: View {
     @State private var showsInstallationGuide = false
     @State private var hasCheckedInstallation = false
     @State private var terminalError: String?
+    @State private var showsUpdateGuide = false
     @Environment(\.openURL) private var openURL
 
     private var id: HarnessProvider { installation.provider }
@@ -296,6 +299,9 @@ private struct HarnessInstallationRow: View {
                 if let error = setup.errors[id] {
                     Text(error).font(.caption).foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+                if installation.isAvailable {
+                    versionDetails
                 }
                 if let activity = setup.activity[id] {
                     HStack {
@@ -368,6 +374,45 @@ private struct HarnessInstallationRow: View {
             Task { @MainActor in
                 terminalError = error == nil ? nil : "Could not open Terminal. Open it manually and paste the installation command."
             }
+        }
+    }
+
+    @ViewBuilder private var versionDetails: some View {
+        let version = setup.snapshots[id]?.version
+        HStack(spacing: 8) {
+            Text(version?.installedVersion.map { "Version \($0)" } ?? "Version not checked yet")
+                .font(.caption).foregroundStyle(.secondary)
+            if version?.compatibilityIssue != nil {
+                Label("Update required", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+            } else if version?.updateAvailable == true {
+                Text("Update available\(version?.latestVersion.map { " — \($0)" } ?? "")")
+                    .font(.caption).foregroundStyle(.orange)
+            }
+        }
+        if let issue = version?.compatibilityIssue {
+            Text(issue).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+        }
+        if let error = version?.checkError {
+            Text(error).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        Button("Update Instructions…") { showsUpdateGuide.toggle() }
+        if showsUpdateGuide {
+            let guide = HarnessVersionPolicy.updateGuide(for: installation)
+            Text(guide.instructions).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if let command = guide.command {
+                Text(command).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Copy Command") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(command, forType: .string)
+                    }
+                    Button("Open Terminal") { openTerminal() }
+                }
+            }
+            Link("Official Update Guide", destination: guide.documentationURL)
+            if let terminalError { Text(terminalError).font(.caption).foregroundStyle(.red) }
         }
     }
 

@@ -896,6 +896,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     }
 
     private func reportUnexpectedTermination(_ detail: String) {
+        let detail = HarnessVersionPolicy.startupIssue(provider: .codex, text: detail) ?? detail
         guard !intentionallyStopped, !terminationReported else { return }
         trace.finish(.runtimeDisconnected)
         terminationReported = true

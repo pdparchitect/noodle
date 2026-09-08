@@ -1,5 +1,7 @@
 # Security and agent access
 
+Harness Settings uses a fixed `inspectHarnessVersion` Agent Host endpoint to read each trusted installation's version and required CLI help. The host validates the provider and executable using the existing signature/path checks; callers cannot supply arbitrary arguments or environment variables. Probes have bounded time/output, disable Claude's automatic updater, and never start agent turns or install software. Only parsed versions and sanitized compatibility diagnostics return to the app. The sandboxed app separately checks public vendor release metadata over HTTPS with bounded requests and responses. Cached results are presentation-only: they neither grant access nor change authentication, and update instructions require the user to act in Terminal. No additional sandbox entitlements are needed.
+
 ## Autonomous agent access
 
 New bots start in **Restricted** mode. **Settings → Security** provides an explicit per-bot **Autonomous access** option. Existing bots retain their access settings: on upgrade, the previous default-on policy is saved once for the existing roster, while newly created bots receive no implicit grant. Restricted Codex bots run inside Noodle's App Sandbox. Claude Code currently requires autonomous access, so a new restricted Claude bot stays stopped with an explanation until the user enables it.

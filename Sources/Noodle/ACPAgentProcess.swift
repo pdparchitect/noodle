@@ -67,15 +67,22 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         guard connection == nil else { return }
         guard extendedAccess else { update(.failed, "\(name) requires autonomous access in Settings → Security"); return }
         stopped = false
+        compatibilityIssue = nil
         update(.starting, "Starting \(name)")
         trace.runtimeStarting()
         do {
             let connection = try ExtendedAgentConnection()
             self.connection = connection
             connection.onData = { [weak self] data, isError in
-                // Do not expose arbitrary stderr, which can include private config.
-                guard !isError else { return }
-                Task { @MainActor in self?.reader.receive(data) }
+                Task { @MainActor in
+                    guard let self else { return }
+                    if isError {
+                        // Classify known CLI rejections without exposing private stderr.
+                        if let issue = HarnessVersionPolicy.startupIssue(provider: self.provider, text: String(decoding: data.prefix(4096), as: UTF8.self)) {
+                            self.compatibilityIssue = issue
+                        }
+                    } else { self.reader.receive(data) }
+                }
             }
             connection.onExit = { [weak self] code in Task { @MainActor in self?.terminated("Harness exited with status \(code)") } }
             connection.onFailure = { [weak self] error in Task { @MainActor in self?.terminated(error) } }
@@ -244,7 +251,10 @@ final class ACPAgentProcess: AgentRuntimeProcess {
             startTurn(.runtimeRecovered)
         } else { sendPending() }
     }
+    private var compatibilityIssue: String?
+
     private func terminated(_ detail: String) {
+        let detail = compatibilityIssue ?? HarnessVersionPolicy.startupIssue(provider: provider, text: detail) ?? detail
         guard !stopped else { return }
         let needsRecovery = hasInterruptedWork
         stopped = true

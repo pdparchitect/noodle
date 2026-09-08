@@ -5,10 +5,12 @@ import Foundation
 public struct HarnessPresentationSnapshot: Codable, Equatable, Sendable {
     public let installation: HarnessInstallation
     public let authentication: HarnessAuthenticationStatus?
+    public let version: HarnessVersionReport?
 
-    public init(installation: HarnessInstallation, authentication: HarnessAuthenticationStatus?) {
+    public init(installation: HarnessInstallation, authentication: HarnessAuthenticationStatus?, version: HarnessVersionReport? = nil) {
         self.installation = installation
         self.authentication = installation.isAvailable ? authentication : nil
+        self.version = installation.isAvailable ? version : nil
     }
 }
 
@@ -20,7 +22,7 @@ public enum HarnessPresentationCache {
               let snapshots = try? JSONDecoder().decode([HarnessPresentationSnapshot].self, from: data) else { return [:] }
         return snapshots.reduce(into: [:]) { result, snapshot in
             result[snapshot.installation.provider] = HarnessPresentationSnapshot(
-                installation: snapshot.installation, authentication: snapshot.authentication)
+                installation: snapshot.installation, authentication: snapshot.authentication, version: snapshot.version)
         }
     }
 

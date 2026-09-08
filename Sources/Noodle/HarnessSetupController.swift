@@ -12,10 +12,14 @@ final class HarnessSetupController {
     private(set) var snapshots: [HarnessProvider: HarnessPresentationSnapshot]
     private let providers: [HarnessProvider: any HarnessSetupProviding]
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let versionChecker: (any HarnessVersionChecking)?
+    private(set) var checkingVersions = false
     @ObservationIgnored private var operations: [HarnessProvider: Task<Void, Never>] = [:]
 
-    init(providers: [HarnessProvider: any HarnessSetupProviding]? = nil, defaults: UserDefaults = .standard) {
+    init(providers: [HarnessProvider: any HarnessSetupProviding]? = nil, defaults: UserDefaults = .standard,
+         versionChecker: (any HarnessVersionChecking)? = nil) {
         self.defaults = defaults
+        self.versionChecker = versionChecker
         let cached = HarnessPresentationCache.load(from: defaults)
         snapshots = cached
         authentication = cached.compactMapValues(\.authentication)
@@ -32,11 +36,42 @@ final class HarnessSetupController {
     }
 
     private func record(_ installation: HarnessInstallation, authentication status: HarnessAuthenticationStatus?) {
-        let snapshot = HarnessPresentationSnapshot(installation: installation, authentication: status)
+        let previous = snapshots[installation.provider]
+        let snapshot = HarnessPresentationSnapshot(installation: installation, authentication: status,
+            version: previous?.installation == installation ? previous?.version : nil)
         guard snapshots[installation.provider] != snapshot else { return }
         snapshots[installation.provider] = snapshot
         authentication[installation.provider] = snapshot.authentication
         HarnessPresentationCache.save(snapshots, to: defaults)
+    }
+
+    func refreshVersions(_ installations: [HarnessInstallation], forceLatest: Bool = false) async {
+        guard let versionChecker, !checkingVersions else { return }
+        checkingVersions = true
+        defer { checkingVersions = false }
+        await withTaskGroup(of: (HarnessInstallation, HarnessVersionReport?).self) { group in
+            for installation in installations where installation.isAvailable {
+                let previous = snapshots[installation.provider]?.version
+                group.addTask { @MainActor in
+                    do { return (installation, try await versionChecker.check(installation, previous: previous, forceLatest: forceLatest)) }
+                    catch is CancellationError { return (installation, nil) }
+                    catch {
+                        var report = previous ?? HarnessVersionReport()
+                        report.checkError = "Could not inspect the harness version. Try Check Again."
+                        return (installation, report)
+                    }
+                }
+            }
+            for await (installation, report) in group {
+                guard !Task.isCancelled, let report,
+                      let previous = snapshots[installation.provider], previous.installation == installation else { continue }
+                let updated = HarnessPresentationSnapshot(installation: installation, authentication: previous.authentication, version: report)
+                if updated != previous {
+                    snapshots[installation.provider] = updated
+                    HarnessPresentationCache.save(snapshots, to: defaults)
+                }
+            }
+        }
     }
 
     func refresh(_ installations: [HarnessInstallation], discoveryErrors: [HarnessProvider: String] = [:]) async {
