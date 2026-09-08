@@ -11,6 +11,9 @@ struct MessageContextMenu: NSViewRepresentable {
     let reveal: (() -> Void)?
     var backgroundImageURL: URL? = nil
     var useAsBackground: (() -> Void)? = nil
+    var backgroundTargetName: String = "this conversation"
+    var iconTargetName: String? = nil
+    var useAsIcon: (() -> Void)? = nil
 
     func makeNSView(context: Context) -> MenuHost { MenuHost() }
 
@@ -59,10 +62,37 @@ struct MessageContextMenu: NSViewRepresentable {
                let useAsBackground = configuration.useAsBackground,
                ConversationBackground.canUseImage(at: url) {
                 menu.addItem(.separator())
-                addItem("Use as Background", symbol: "photo", to: menu, action: useAsBackground)
+                addItem("Use as Background", symbol: "photo", to: menu) { [weak self] in
+                    self?.confirmAppearanceChange(title: "Use as Background?",
+                        message: "Replace the background for \(configuration.backgroundTargetName) with this image?",
+                        button: "Use as Background", action: useAsBackground)
+                }
+                if let name = configuration.iconTargetName, let useAsIcon = configuration.useAsIcon {
+                    addItem("Use as Icon", symbol: "person.crop.circle", to: menu) { [weak self] in
+                        self?.confirmAppearanceChange(title: "Use as Icon?",
+                            message: "Replace \(name)’s icon with this image? Their icon will change everywhere in Noodle.",
+                            button: "Use as Icon", action: useAsIcon)
+                    }
+                }
             }
             NSMenu.popUpContextMenu(menu, with: event, for: self)
             actions = []
+        }
+
+        private func confirmAppearanceChange(title: String, message: String, button: String,
+                                             action: @escaping () -> Void) {
+            guard let window else { return }
+            // Present a native sheet only after the context menu has stopped tracking.
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                alert.messageText = title
+                alert.informativeText = message
+                alert.addButton(withTitle: button)
+                alert.addButton(withTitle: "Cancel")
+                alert.beginSheetModal(for: window) { response in
+                    if response == .alertFirstButtonReturn { action() }
+                }
+            }
         }
 
         private func showEmojiPicker() {

@@ -118,6 +118,46 @@ final class ConversationBackgroundTests: XCTestCase {
         XCTAssertFalse(ConversationBackground.canUseImage(at: root.appendingPathComponent("missing.png")))
     }
 
+    func testDirectChatAttachmentSetsOnlyBotIconAndPreservesOriginal() throws {
+        let bot = try repository.createAgent(named: "Bot")
+        let before = try XCTUnwrap(repository.loadAgents().first)
+        let original = try fixtureImage()
+        let attachment = try repository.importAttachment(data: original, originalFilename: "icon.png",
+            into: bot.conversation.id, mediaType: "image/png")
+        let conversationBefore = try Data(contentsOf: repository.conversationDirectory(id: bot.conversation.id)
+            .appendingPathComponent("conversation.json"))
+        let updated = try repository.setAgentIcon(from: attachment)
+        let icon = try XCTUnwrap(updated.avatarImageData)
+        let source = try XCTUnwrap(CGImageSourceCreateWithData(icon as CFData, nil))
+        let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
+        XCTAssertLessThanOrEqual(try XCTUnwrap(properties[kCGImagePropertyPixelWidth] as? Int), 512)
+        var expected = before
+        expected.avatarImageData = updated.avatarImageData
+        expected.updatedAt = updated.updatedAt
+        XCTAssertEqual(updated, expected, "Runtime configuration and other bot fields must not change")
+        var reloaded = try XCTUnwrap(repository.loadAgents().first)
+        XCTAssertEqual(reloaded.updatedAt.timeIntervalSince1970, updated.updatedAt.timeIntervalSince1970, accuracy: 1)
+        reloaded.updatedAt = updated.updatedAt // Repository JSON rounds timestamp precision.
+        XCTAssertEqual(reloaded, updated)
+        XCTAssertEqual(try Data(contentsOf: repository.attachmentFileURL(attachment)), original)
+        XCTAssertEqual(try Data(contentsOf: repository.conversationDirectory(id: bot.conversation.id)
+            .appendingPathComponent("conversation.json")), conversationBefore)
+        XCTAssertTrue(try repository.loadBackground(conversationID: bot.conversation.id).isDefault)
+    }
+
+    func testIconActionRejectsGroupsAndNonImagesWithoutChangingBot() throws {
+        let bot = try repository.createAgent(named: "Bot")
+        let before = try XCTUnwrap(repository.loadAgents().first)
+        let group = try repository.createGroup(named: "Team", participantIDs: [bot.agent.id], existingAgents: [bot.agent])
+        let image = try repository.importAttachment(data: fixtureImage(), originalFilename: "icon.png",
+            into: group.id, mediaType: "image/png")
+        XCTAssertThrowsError(try repository.setAgentIcon(from: image), "Even a single-member group must not offer icon replacement")
+        let text = try repository.importAttachment(data: Data("# Notes".utf8), originalFilename: "notes.md",
+            into: bot.conversation.id, mediaType: "text/markdown")
+        XCTAssertThrowsError(try repository.setAgentIcon(from: text))
+        XCTAssertEqual(try repository.loadAgents().first, before)
+    }
+
     private func fixtureImage() throws -> Data {
         let context = try XCTUnwrap(CGContext(data: nil, width: 3000, height: 10, bitsPerComponent: 8,
             bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))

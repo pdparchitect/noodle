@@ -843,6 +843,17 @@ final class NoodleStore {
         } catch { errorMessage = error.localizedDescription }
     }
 
+    func useAttachmentAsIcon(_ attachment: ConversationAttachment) async {
+        let repository = repository
+        do {
+            let updated = try await Task.detached {
+                try repository.setAgentIcon(from: attachment)
+            }.value
+            if let index = agents.firstIndex(where: { $0.id == updated.id }) { agents[index] = updated }
+            refreshAppShortcuts()
+        } catch { errorMessage = error.localizedDescription }
+    }
+
     func changeReaction(_ emoji: String, to replacement: String, on message: ChatMessage) {
         guard emoji != replacement else { return }
         do {

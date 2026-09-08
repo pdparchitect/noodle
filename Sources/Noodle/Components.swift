@@ -200,7 +200,12 @@ struct MessageBubble: View {
     }
 
     private func reactionContextMenu(attachment: ConversationAttachment?) -> some View {
-        MessageContextMenu(
+        let conversation = store.conversations.first { $0.id == message.conversationID }
+        let iconAgent = conversation.flatMap { conversation in
+            conversation.kind == .direct && conversation.participantIDs.count == 1
+                ? store.agents.first { $0.id == conversation.participantIDs.first } : nil
+        }
+        return MessageContextMenu(
             selected: Set((message.reactions ?? []).filter { $0.author == .user }.map(\.emoji)),
             react: { store.toggleReaction($0, on: message) },
             copy: {
@@ -215,6 +220,11 @@ struct MessageBubble: View {
             backgroundImageURL: attachment.map { store.attachmentFileURL($0) },
             useAsBackground: attachment.map { item in
                 { Task { await store.useAttachmentAsBackground(item) } }
+            },
+            backgroundTargetName: conversation?.displayName ?? "this conversation",
+            iconTargetName: iconAgent?.displayName,
+            useAsIcon: attachment.flatMap { item in
+                iconAgent.map { _ in { Task { await store.useAttachmentAsIcon(item) } } }
             }
         )
     }

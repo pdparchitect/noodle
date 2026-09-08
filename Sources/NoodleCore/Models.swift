@@ -508,6 +508,34 @@ public struct WorkspaceRepository: Sendable {
         return renamed
     }
 
+    public func setAgentIcon(from attachment: ConversationAttachment) throws -> AgentRecord {
+        guard let conversation = try loadConversations().first(where: { $0.id == attachment.conversationID }),
+              conversation.kind == .direct, conversation.participantIDs.count == 1,
+              var agent = try loadAgents().first(where: { $0.id == conversation.participantIDs[0] }) else {
+            throw WorkspaceError.invalidAttachment
+        }
+        let url = attachmentFileURL(attachment)
+        guard let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              size <= 50 * 1024 * 1024, ConversationBackground.canUseImage(at: url),
+              let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 512
+              ] as CFDictionary) else { throw ConversationBackgroundError.invalidImage }
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else {
+            throw ConversationBackgroundError.invalidImage
+        }
+        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.86] as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { throw ConversationBackgroundError.invalidImage }
+        // Appearance only: preserve runtime configuration and do not restart the bot.
+        agent.avatarImageData = data as Data
+        agent.updatedAt = Date()
+        try write(agent, to: directory(for: agent).appendingPathComponent("agent.json"))
+        return agent
+    }
+
     public func createGroup(
         named rawName: String,
         publicDescription: String? = nil,
