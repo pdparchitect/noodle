@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     @Environment(NoodleStore.self) private var store
     let conversation: BotConversation
+    var composerFocusRequest: UUID? = nil
     @State private var composerFocused = false
     @State private var choosingAttachments = false
     @State private var showingAttachmentMenu = false
@@ -98,6 +99,9 @@ struct ChatView: View {
                 selectedAttachmentID = nil
                 previewedAttachmentURL = nil
                 nameCompletion.detach()
+            }
+            .onChange(of: composerFocusRequest) { _, request in
+                if request != nil { composerFocused = true }
             }
     }
 

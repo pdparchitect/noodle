@@ -210,16 +210,17 @@ struct RootView: View {
     @Environment(NoodleStore.self) private var store
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var isFileDropTargeted = false
+    @State private var composerFocusRequest = UUID()
 
     var body: some View {
         @Bindable var store = store
 
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView()
+            SidebarView { composerFocusRequest = UUID() }
                 .navigationSplitViewColumnWidth(min: 280, ideal: 326, max: 380)
         } detail: {
             if let conversation = store.selectedConversation {
-                ChatView(conversation: conversation)
+                ChatView(conversation: conversation, composerFocusRequest: composerFocusRequest)
             } else {
                 Color(nsColor: .textBackgroundColor).opacity(0.28)
                     .accessibilityHidden(true)

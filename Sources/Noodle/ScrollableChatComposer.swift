@@ -28,6 +28,9 @@ struct ScrollableChatComposer: NSViewRepresentable {
 
     func updateNSView(_ view: ComposerScrollView, context: Context) {
         context.coordinator.parent = self
+        let requestFocus = isFocused && !context.coordinator.lastRequestedFocus
+        context.coordinator.lastRequestedFocus = isFocused
+        let focusRevision = context.coordinator.focusRevision
         view.editor.placeholder = placeholder
         view.editor.setAccessibilityLabel(placeholder)
         if context.coordinator.conversationID != conversationID {
@@ -46,7 +49,8 @@ struct ScrollableChatComposer: NSViewRepresentable {
         view.invalidateIntrinsicContentSize()
         DispatchQueue.main.async { [weak view, weak coordinator = context.coordinator] in
             guard let view, let coordinator else { return }
-            if coordinator.parent.isFocused, view.window?.firstResponder !== view.editor {
+            if requestFocus, coordinator.focusRevision == focusRevision,
+               coordinator.parent.isFocused, view.window?.firstResponder !== view.editor {
                 view.window?.makeFirstResponder(view.editor)
             }
             coordinator.attachCompletion()
@@ -67,6 +71,8 @@ struct ScrollableChatComposer: NSViewRepresentable {
     @MainActor final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: ScrollableChatComposer
         var conversationID: UUID?
+        var lastRequestedFocus = false
+        var focusRevision = 0
         weak var view: ComposerScrollView?
         init(_ parent: ScrollableChatComposer) { self.parent = parent }
 
@@ -79,9 +85,12 @@ struct ScrollableChatComposer: NSViewRepresentable {
         }
 
         func focusChanged(_ focused: Bool) {
+            focusRevision += 1
+            let revision = focusRevision
             // Do not mutate SwiftUI state during its own AppKit update pass.
             DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
+                guard let self, self.focusRevision == revision,
+                      let view = self.view, (view.window?.firstResponder === view.editor) == focused else { return }
                 if self.parent.isFocused != focused { self.parent.isFocused = focused }
                 if focused { self.attachCompletion() } else { self.parent.completion.detach() }
             }

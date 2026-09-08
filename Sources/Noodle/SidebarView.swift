@@ -3,6 +3,7 @@ import SwiftUI
 import NoodleCore
 
 struct SidebarView: View {
+    var focusComposer: () -> Void = {}
     @Environment(NoodleStore.self) private var store
     @FocusState private var searchIsFocused: Bool
 
@@ -45,6 +46,11 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
+        .modifier(ConversationListKeyboardNavigation(
+            hasSelection: store.selectedConversationID != nil,
+            searchIsFocused: searchIsFocused,
+            focusComposer: focusComposer
+        ))
         .background(Color.black.opacity(0.24).ignoresSafeArea())
         .searchable(text: $store.searchText, placement: .sidebar, prompt: "Search")
         .controlSize(.large)
