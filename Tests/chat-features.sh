@@ -9,6 +9,7 @@ swiftc -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/BotAvatar.swift" \
     "$project_root/Sources/Noodle/SheetSizing.swift" \
     "$project_root/Sources/Noodle/ComposerNameCompletion.swift" \
+    "$project_root/Sources/Noodle/ComposerAttachmentMenu.swift" \
     "$project_root/Sources/Noodle/AgentProfileSheet.swift" \
     "$project_root/Tests/chat-features.swift" \
     "$bin_path"/NoodleCore.build/*.swift.o \

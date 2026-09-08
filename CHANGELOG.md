@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- The composer’s + button opens a native menu with **Attach File…**, **Choose Photo…** from the system Photos picker, and **Paste Image** when an image is on the clipboard. Selected photos stay in the originating chat’s draft; existing paste shortcuts still work.
 - Attached-image background changes ask for confirmation. Direct-chat images also offer **Use as Icon**, with confirmation before changing the bot's icon throughout Noodle.
 - Right-click an attached image from anyone in a DM or group to use it as that conversation's background. The original attachment stays unchanged.
 - Bot avatars in direct messages (including the chat header) open an informational profile with name, enlarged avatar and public description. Hover tooltips match group avatars; DM profiles omit the group reply and direct-message actions.

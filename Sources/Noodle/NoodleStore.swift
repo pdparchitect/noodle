@@ -479,8 +479,12 @@ final class NoodleStore {
 
     func importAttachment(from url: URL) {
         guard let conversationID = selectedConversation?.id else { return }
+        importAttachment(from: url, into: conversationID)
+    }
+
+    func importAttachment(from url: URL, into conversationID: UUID) {
         do {
-            try importAttachment(from: url, into: conversationID)
+            try importAttachmentFile(from: url, into: conversationID)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -497,7 +501,7 @@ final class NoodleStore {
                     guard conversations.contains(where: { $0.id == conversationID }) else { return }
                     switch payload {
                     case .file(let url):
-                        try importAttachment(from: url, into: conversationID)
+                        try importAttachmentFile(from: url, into: conversationID)
                     case .data(let data, let originalFilename, let mediaType):
                         try importAttachment(
                             data: data,
@@ -516,20 +520,17 @@ final class NoodleStore {
         }
     }
 
-    func importAttachmentsFromPasteboard() -> Bool {
-        guard let conversationID = selectedConversation?.id else { return false }
+    func importAttachmentsFromPasteboard(imagesOnly: Bool = false, into destination: UUID? = nil) -> Bool {
+        guard let conversationID = destination ?? selectedConversation?.id else { return false }
         let pasteboard = NSPasteboard.general
 
-        if pasteboard.availableType(from: [.fileURL]) != nil,
-           let values = pasteboard.readObjects(
-               forClasses: [NSURL.self],
-               options: [.urlReadingFileURLsOnly: true]
-           ) as? [NSURL],
-           !values.isEmpty {
+        let values = imagesOnly ? ImageAttachmentPasteboard.imageFileURLs(pasteboard)
+            : (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? [])
+        if !values.isEmpty {
             var imported = false
             for value in values {
                 do {
-                    try importAttachment(from: value as URL, into: conversationID)
+                    try importAttachmentFile(from: value, into: conversationID)
                     imported = true
                 } catch {
                     errorMessage = error.localizedDescription
@@ -571,7 +572,14 @@ final class NoodleStore {
         return false
     }
 
-    private func importAttachment(from url: URL, into conversationID: UUID) throws {
+    func importPhoto(data: Data, into conversationID: UUID) throws {
+        let payload = try AttachmentTransfer.photoPayload(data)
+        if case .data(let data, let filename, let mediaType) = payload {
+            try importAttachment(data: data, originalFilename: filename, mediaType: mediaType, into: conversationID)
+        }
+    }
+
+    private func importAttachmentFile(from url: URL, into conversationID: UUID) throws {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         let mediaType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"

@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import UniformTypeIdentifiers
 
 public enum AttachmentTransferPayload: Sendable {
@@ -21,6 +22,16 @@ public enum AttachmentTransferError: LocalizedError {
 }
 
 public enum AttachmentTransfer {
+    public static func photoPayload(_ data: Data) throws -> AttachmentTransferPayload {
+        guard data.count <= 50 * 1024 * 1024,
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let identifier = CGImageSourceGetType(source) as String?,
+              let type = UTType(identifier), type.conforms(to: .image),
+              CGImageSourceGetCount(source) > 0 else { throw ConversationBackgroundError.invalidImage }
+        return .data(data, originalFilename: "Photo.\(type.preferredFilenameExtension ?? "image")",
+                     mediaType: type.preferredMIMEType ?? "application/octet-stream")
+    }
+
     public static let dropContentTypes: [UTType] = [
         .fileURL,
         .image,

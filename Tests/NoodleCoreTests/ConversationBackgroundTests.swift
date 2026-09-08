@@ -168,4 +168,16 @@ final class ConversationBackgroundTests: XCTestCase {
         XCTAssertTrue(CGImageDestinationFinalize(destination))
         return data as Data
     }
+
+    func testSelectedPhotoPayloadUsesActualImageTypeAndOriginalData() throws {
+        let data = try fixtureImage()
+        guard case .data(let imported, let filename, let mediaType) = try AttachmentTransfer.photoPayload(data) else {
+            return XCTFail("Photo selection must produce an image attachment")
+        }
+        XCTAssertEqual(imported, data)
+        XCTAssertEqual(filename, "Photo.png")
+        XCTAssertEqual(mediaType, "image/png")
+        XCTAssertThrowsError(try AttachmentTransfer.photoPayload(Data("not a photo".utf8)))
+        XCTAssertThrowsError(try AttachmentTransfer.photoPayload(Data()))
+    }
 }

@@ -1,5 +1,6 @@
 import AppKit
 import QuickLook
+import PhotosUI
 import SwiftUI
 import NoodleCore
 import UniformTypeIdentifiers
@@ -9,6 +10,10 @@ struct ChatView: View {
     let conversation: BotConversation
     @FocusState private var composerFocused: Bool
     @State private var choosingAttachments = false
+    @State private var showingAttachmentMenu = false
+    @State private var choosingPhotos = false
+    @State private var photoSelection: [PhotosPickerItem] = []
+    @State private var attachmentDestinationID: UUID?
     @State private var selectedAttachmentID: UUID?
     @State private var previewedAttachmentURL: URL?
     @State private var transcriptPositions: [UUID: TranscriptViewport] = [:]
@@ -34,11 +39,32 @@ struct ChatView: View {
                 allowedContentTypes: [.data],
                 allowsMultipleSelection: true
             ) { result in
+                let destination = attachmentDestinationID
+                attachmentDestinationID = nil
                 switch result {
                 case .success(let urls):
-                    urls.forEach(store.importAttachment)
+                    if let destination { urls.forEach { store.importAttachment(from: $0, into: destination) } }
                 case .failure(let error):
                     store.errorMessage = error.localizedDescription
+                }
+            }
+            .photosPicker(isPresented: $choosingPhotos, selection: $photoSelection,
+                          matching: .images, preferredItemEncoding: .current)
+            .onChange(of: photoSelection) { _, items in
+                guard !items.isEmpty, let destination = attachmentDestinationID else { return }
+                attachmentDestinationID = nil
+                photoSelection = []
+                Task {
+                    var firstError: Error?
+                    for item in items {
+                        do {
+                            guard let data = try await item.loadTransferable(type: Data.self) else {
+                                throw AttachmentTransferError.unsupportedItem
+                            }
+                            try store.importPhoto(data: data, into: destination)
+                        } catch { firstError = firstError ?? error }
+                    }
+                    if let firstError { store.errorMessage = firstError.localizedDescription }
                 }
             }
             .quickLookPreview($previewedAttachmentURL)
@@ -198,6 +224,21 @@ struct ChatView: View {
     private var composerControlRow: some View {
         HStack(alignment: .bottom, spacing: composerControlSpacing) {
             attachmentButton
+                .background {
+                    ComposerAttachmentMenu(isPresented: $showingAttachmentMenu,
+                        attachFile: {
+                            attachmentDestinationID = conversation.id
+                            choosingAttachments = true
+                        },
+                        choosePhoto: {
+                            attachmentDestinationID = conversation.id
+                            photoSelection = []
+                            choosingPhotos = true
+                        },
+                        pasteImage: {
+                            _ = store.importAttachmentsFromPasteboard(imagesOnly: true, into: conversation.id)
+                        })
+                }
             composerInput
         }
     }
@@ -205,7 +246,7 @@ struct ChatView: View {
     @ViewBuilder private var attachmentButton: some View {
         if #available(macOS 26.0, *) {
             Button {
-                choosingAttachments = true
+                showingAttachmentMenu = true
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 15, weight: .medium))
@@ -218,7 +259,7 @@ struct ChatView: View {
             .help("Add Attachment")
         } else {
             Button {
-                choosingAttachments = true
+                showingAttachmentMenu = true
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 15, weight: .medium))
