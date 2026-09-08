@@ -11,26 +11,57 @@ private func fixtureAvatarData() -> Data? {
     }.tiffRepresentation
 }
 
-@MainActor private func verifyNativeMenuPresentation() {
-    let agent = AgentRecord(displayName: "Mara", publicDescription: "  Reviews\n ideas.  ", avatarImageData: fixtureAvatarData())
-    precondition(ComposerNameCompletion.menuTitle(for: agent, showDescriptions: false) == "Mara")
-    precondition(ComposerNameCompletion.menuTitle(for: agent, showDescriptions: true) == "Mara  Reviews ideas.")
-    precondition(ComposerNameCompletion.menuTitle(for: AgentRecord(displayName: "Ruby"), showDescriptions: true) == "Ruby")
-    let long = AgentRecord(displayName: "Long", publicDescription: String(repeating: "x", count: 200))
-    precondition(ComposerNameCompletion.menuTitle(for: long, showDescriptions: true) == "Long  " + String(repeating: "x", count: 72) + "…")
-    let avatar = ComposerNameCompletion.menuAvatar(for: agent)!
-    let bitmap = NSBitmapImageRep(cgImage: avatar.cgImage(forProposedRect: nil, context: nil, hints: nil)!)
-    precondition(bitmap.colorAt(x: 0, y: 0)!.alphaComponent < 0.1)
-    precondition(bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)!.alphaComponent > 0.9)
+private struct FixtureFailure: Error, CustomStringConvertible {
+    let description: String
 }
 
-struct BotAvatar: View {
-    let agent: AgentRecord
-    let size: CGFloat
-    var body: some View {
-        Circle().fill(.blue.gradient).overlay(Text(String(agent.displayName.prefix(1))).foregroundStyle(.white))
-            .frame(width: size, height: size)
+private func require(_ condition: @autoclosure () -> Bool, line: UInt = #line) throws {
+    if !condition() { throw FixtureFailure(description: "Avatar/menu regression failed at line \(line)") }
+}
+
+private func pixelDifference(_ lhs: NSImage, _ rhs: NSImage) -> CGFloat {
+    let a = NSBitmapImageRep(cgImage: lhs.cgImage(forProposedRect: nil, context: nil, hints: nil)!)
+    let b = NSBitmapImageRep(cgImage: rhs.cgImage(forProposedRect: nil, context: nil, hints: nil)!)
+    guard a.pixelsWide == b.pixelsWide, a.pixelsHigh == b.pixelsHigh else { return 1 }
+    var difference: CGFloat = 0
+    for y in 0..<a.pixelsHigh {
+        for x in 0..<a.pixelsWide {
+            let c = a.colorAt(x: x, y: y)!.usingColorSpace(.sRGB)!
+            let d = b.colorAt(x: x, y: y)!.usingColorSpace(.sRGB)!
+            difference += abs(c.redComponent - d.redComponent) + abs(c.greenComponent - d.greenComponent)
+                + abs(c.blueComponent - d.blueComponent) + abs(c.alphaComponent - d.alphaComponent)
+        }
     }
+    return difference / CGFloat(a.pixelsWide * a.pixelsHigh * 4)
+}
+
+@MainActor private func verifyNativeMenuPresentation() throws {
+    let agent = AgentRecord(displayName: "Mara", publicDescription: "  Reviews\n ideas.  ", avatarImageData: fixtureAvatarData())
+    try require(ComposerNameCompletion.menuTitle(for: agent, showDescriptions: false) == "Mara")
+    try require(ComposerNameCompletion.menuTitle(for: agent, showDescriptions: true) == "Mara  Reviews ideas.")
+    try require(ComposerNameCompletion.menuTitle(for: AgentRecord(displayName: "Ruby"), showDescriptions: true) == "Ruby")
+    let long = AgentRecord(displayName: "Long", publicDescription: String(repeating: "x", count: 200))
+    try require(ComposerNameCompletion.menuTitle(for: long, showDescriptions: true) == "Long  " + String(repeating: "x", count: 72) + "…")
+    let avatar = ComposerNameCompletion.menuAvatar(for: agent)!
+    let bitmap = NSBitmapImageRep(cgImage: avatar.cgImage(forProposedRect: nil, context: nil, hints: nil)!)
+    try require(bitmap.colorAt(x: 0, y: 0)!.alphaComponent < 0.1)
+    try require(bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)!.alphaComponent > 0.9)
+    try require(!avatar.isTemplate && avatar.size == NSSize(width: 16, height: 16))
+    let generated = AgentRecord(displayName: "Generated", accentSeed: 0)
+    let generatedImage = ComposerNameCompletion.menuAvatar(for: generated)!
+    let generatedBitmap = NSBitmapImageRep(cgImage: generatedImage.cgImage(forProposedRect: nil, context: nil, hints: nil)!)
+    try require(generatedBitmap.pixelsWide == 32 && generatedBitmap.pixelsHigh == 32)
+    try require(generatedBitmap.colorAt(x: 0, y: 0)!.alphaComponent < 0.1)
+    try require(generatedBitmap.colorAt(x: 8, y: 16)!.alphaComponent > 0.9)
+    var customized = generated
+    customized.avatarColorIndex = 2
+    try require(pixelDifference(ComposerNameCompletion.menuAvatar(for: customized)!, generatedImage) > 0.01)
+    customized = generated
+    customized.avatarSymbolName = "heart.fill"
+    try require(pixelDifference(ComposerNameCompletion.menuAvatar(for: customized)!, generatedImage) > 0.005)
+    customized = generated
+    customized.avatarImageData = Data([0, 1, 2])
+    try require(pixelDifference(ComposerNameCompletion.menuAvatar(for: customized)!, generatedImage) < 0.002)
 }
 
 private struct FixtureView: View {
@@ -84,7 +115,18 @@ private struct FixtureView: View {
 
 @main
 struct ChatFeaturesTest: App {
-    init() { verifyNativeMenuPresentation() }
+    init() {
+        if CommandLine.arguments.contains("--verify") {
+            do {
+                try verifyNativeMenuPresentation()
+                print("Avatar/menu regression checks passed")
+                exit(0)
+            } catch {
+                print(error)
+                exit(1)
+            }
+        }
+    }
     var body: some Scene {
         WindowGroup("Chat Feature Tests") { FixtureView().preferredColorScheme(.dark) }
     }

@@ -111,20 +111,7 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
     }
 
     static func menuAvatar(for agent: AgentRecord) -> NSImage? {
-        guard let data = agent.avatarImageData, let source = NSImage(data: data),
-              source.size.width > 0, source.size.height > 0 else {
-            let fallback = NSImage(systemSymbolName: "person.crop.circle", accessibilityDescription: nil)
-            fallback?.size = NSSize(width: 16, height: 16)
-            return fallback
-        }
-        return NSImage(size: NSSize(width: 16, height: 16), flipped: false) { bounds in
-            NSBezierPath(ovalIn: bounds).addClip()
-            let scale = max(bounds.width / source.size.width, bounds.height / source.size.height)
-            let size = NSSize(width: source.size.width * scale, height: source.size.height * scale)
-            source.draw(in: NSRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2,
-                                  width: size.width, height: size.height))
-            return true
-        }
+        BotAvatar.menuImage(for: agent)
     }
 
     @objc private func selectName(_ item: NSMenuItem) {

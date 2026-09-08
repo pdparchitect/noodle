@@ -6,6 +6,7 @@ bin_path="$(swift build --disable-sandbox --package-path "$project_root" --show-
 fixture_app="$project_root/.build/Chat Feature Tests.app"
 mkdir -p "$fixture_app/Contents/MacOS"
 swiftc -I "$bin_path/Modules" \
+    "$project_root/Sources/Noodle/BotAvatar.swift" \
     "$project_root/Sources/Noodle/SheetSizing.swift" \
     "$project_root/Sources/Noodle/ComposerNameCompletion.swift" \
     "$project_root/Sources/Noodle/AgentProfileSheet.swift" \
@@ -15,4 +16,5 @@ swiftc -I "$bin_path/Modules" \
 cp "$project_root/Tests/chat-features-Info.plist" "$fixture_app/Contents/Info.plist"
 codesign --force --sign - --entitlements "$project_root/Tests/chat-features.entitlements" "$fixture_app"
 codesign --verify --strict "$fixture_app"
+"$fixture_app/Contents/MacOS/ChatFeaturesTest" --verify
 open "$fixture_app"

@@ -31,6 +31,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- The name menu uses the same avatars as the sidebar, including generated colours and symbols as well as uploaded portraits.
 - Bot profiles dismiss when clicking outside or switching away from the app; the native name menu uses circular avatars and a comfortable minimum width.
 - Bot workspace bootstrap exposes shared skills through Claude Code's native `.claude/skills` discovery path, preserving existing Claude settings and native skills.
 - Editor sheets resize in both directions as their content changes, avoiding gaps and clipped headers; large group membership grids scroll within a bounded height.

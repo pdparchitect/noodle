@@ -1,49 +1,6 @@
 import SwiftUI
 import NoodleCore
 
-enum BotAvatarPalette {
-    static let gradients: [[Color]] = [
-        [.blue, .cyan],
-        [.purple, .pink],
-        [.orange, .yellow],
-        [.mint, .teal],
-        [.indigo, .blue],
-        [.pink, .orange]
-    ]
-}
-
-struct BotAvatar: View {
-    let agent: AgentRecord
-    let size: CGFloat
-
-    private var palette: [Color] {
-        let index = agent.avatarColorIndex ?? agent.accentSeed
-        return BotAvatarPalette.gradients[abs(index) % BotAvatarPalette.gradients.count]
-    }
-
-    var body: some View {
-        ZStack {
-            if let data = agent.avatarImageData,
-               let image = NSImage(data: data) {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Circle()
-                    .fill(LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing))
-
-                Image(systemName: agent.avatarSymbolName ?? "sparkles")
-                    .font(.system(size: size * 0.38, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-        }
-        .frame(width: size, height: size)
-        .clipShape(Circle())
-        .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
-        .accessibilityHidden(true)
-    }
-}
-
 struct ConversationAvatar: View {
     let participants: [AgentRecord]
     let isGroup: Bool
