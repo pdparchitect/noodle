@@ -7,6 +7,7 @@ fixture_app="$project_root/.build/Chat Feature Tests.app"
 mkdir -p "$fixture_app/Contents/MacOS"
 swiftc -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/BotAvatar.swift" \
+    "$project_root/Sources/Noodle/MessageMarkdownCache.swift" \
     "$project_root/Sources/Noodle/SheetSizing.swift" \
     "$project_root/Sources/Noodle/ComposerNameCompletion.swift" \
     "$project_root/Sources/Noodle/ComposerAttachmentMenu.swift" \

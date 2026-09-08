@@ -130,6 +130,89 @@ private struct FixtureView: View {
     }
 }
 
+private struct MarkdownFixtureView: View {
+    @State private var source = sample
+    private static let sample = """
+    # Markdown rendering
+    ## Headings and inline formatting
+
+    This is **bold**, *italic*, ***bold italic***, ~~struck through~~ and `inline code`.
+    A [normal web link](https://example.com) sits inside a paragraph.
+
+    - First bullet with **emphasis**
+    - Second bullet
+      - Nested bullet
+
+    1. First numbered step
+    2. Second numbered step
+
+    > A block quote with multiple words and **bold text**.
+
+    ```swift
+    let greeting = "Hello, Noodle!"
+    print(greeting)
+    ```
+
+    | Name | Role |
+    | --- | --- |
+    | Mara | Research |
+    | Ruby | Design |
+
+    - [x] Completed task
+    - [ ] Pending task
+
+    ---
+
+    A longer paragraph to check wrapping: the preview uses the same parser, font size, line spacing and plain conversation bubble styling as chat messages. Resize this window to see how the text behaves at different widths.
+
+    Explicit line break here.
+    And another line here. Emoji: 👋 ✨ 🧑‍💻
+    """
+
+    private var rendered: AttributedString {
+        MessageMarkdownCache.shared.render(ChatMessage(
+            conversationID: UUID(), author: .user, body: source, delivery: .saved))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Markdown — current chat rendering").font(.headline)
+                Spacer()
+                Button("Reset Sample") { source = Self.sample }
+            }
+            Text("Edit the source on the left. This shows current behavior, including unsupported Markdown syntax.")
+                .foregroundStyle(.secondary)
+            HSplitView {
+                VStack(alignment: .leading) {
+                    Text("Source").font(.subheadline).foregroundStyle(.secondary)
+                    TextEditor(text: $source)
+                        .font(.system(size: 12, design: .monospaced))
+                        .accessibilityLabel("Markdown source")
+                }
+                .frame(minWidth: 260, idealWidth: 380)
+                VStack(alignment: .leading) {
+                    Text("Chat preview").font(.subheadline).foregroundStyle(.secondary)
+                    ScrollView {
+                        Text(rendered)
+                            .font(.system(size: 12.5))
+                            .lineSpacing(2)
+                            .foregroundStyle(.white)
+                            .textSelection(.enabled)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 8)
+                            .background(Color(white: 0.20), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding(.leading, 12)
+                .frame(minWidth: 280)
+            }
+        }
+        .padding(20)
+    }
+}
+
 @main
 struct ChatFeaturesTest: App {
     init() {
@@ -145,6 +228,14 @@ struct ChatFeaturesTest: App {
         }
     }
     var body: some Scene {
-        WindowGroup("Chat Feature Tests") { FixtureView().preferredColorScheme(.dark) }
+        WindowGroup("Chat Feature Tests") {
+            TabView {
+                MarkdownFixtureView().tabItem { Text("Markdown") }
+                FixtureView().tabItem { Text("Chat Controls") }
+            }
+            .padding(12)
+            .frame(minWidth: 760, idealWidth: 940, minHeight: 600, idealHeight: 740)
+            .preferredColorScheme(.dark)
+        }
     }
 }
