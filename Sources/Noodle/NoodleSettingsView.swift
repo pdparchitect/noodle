@@ -393,11 +393,10 @@ private struct HarnessInstallationRow: View {
         if let issue = version?.compatibilityIssue {
             Text(issue).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
         }
-        if let error = version?.checkError {
-            Text(error).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        if version?.updateAvailable == true {
+            Button("Update Instructions…") { showsUpdateGuide.toggle() }
         }
-        Button("Update Instructions…") { showsUpdateGuide.toggle() }
-        if showsUpdateGuide {
+        if version?.updateAvailable == true, showsUpdateGuide {
             let guide = HarnessVersionPolicy.updateGuide(for: installation)
             Text(guide.instructions).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let command = guide.command {

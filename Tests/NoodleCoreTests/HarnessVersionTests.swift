@@ -2,6 +2,20 @@ import XCTest
 @testable import NoodleCore
 
 final class HarnessVersionTests: XCTestCase {
+    func testUpdateVisibilityNeedsAConfirmedNewerVersion() {
+        XCTAssertFalse(HarnessVersionReport().updateAvailable)
+        XCTAssertFalse(HarnessVersionReport(installedVersion: "1.0.0", checkError: "Release unavailable").updateAvailable)
+        XCTAssertFalse(HarnessVersionReport(installedVersion: "1.0.0", latestVersion: "1.0.0").updateAvailable)
+        XCTAssertFalse(HarnessVersionReport(installedVersion: "2.0.0", latestVersion: "1.0.0").updateAvailable)
+        XCTAssertFalse(HarnessVersionReport(installedVersion: "1.0.0", compatibilityIssue: "Missing option").updateAvailable)
+        // A failed refresh does not erase an already confirmed update.
+        XCTAssertTrue(HarnessVersionReport(installedVersion: "1.0.0", latestVersion: "1.0.1", checkError: "Refresh failed").updateAvailable)
+        var updated = HarnessVersionReport(installedVersion: "1.0.0", latestVersion: "1.0.1")
+        XCTAssertTrue(updated.updateAvailable)
+        updated.installedVersion = "1.0.1"
+        XCTAssertFalse(updated.updateAvailable)
+    }
+
     func testVersionComparison() throws {
         let values = ["1.0.0-alpha", "1.0.0-alpha.2", "1.0.0-alpha.10", "1.0.0-beta", "1.0.0", "1.0.9", "1.0.10", "2.0.0"]
         let parsed = try values.map { try XCTUnwrap(HarnessVersion($0)) }

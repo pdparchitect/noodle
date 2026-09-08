@@ -20,6 +20,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Harness update instructions only appear when a newer version is confirmed. Failed version checks no longer add an inline error label to Settings.
 - Bot and group names use single-line fields with validation against multiline or oversized pasted text. Existing malformed names can no longer expand the chat header or empty-message placeholder; descriptions, backstories and messages remain multiline.
 - Shift+Enter inserts a new line in the chat input; Enter continues to send. Native text editing, undo and bot-name menu navigation are preserved.
 - Harness Settings remembers confirmed installation and sign-in status across launches and keeps it visible during Check Again. Incomplete discovery no longer flashes “Not installed”; cached status is display-only and never authorizes harness execution.
