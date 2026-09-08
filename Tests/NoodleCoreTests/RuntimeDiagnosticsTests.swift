@@ -2,6 +2,64 @@ import XCTest
 @testable import NoodleCore
 
 final class RuntimeDiagnosticsTests: XCTestCase {
+    func testSandboxedHelperRelaysReadWithoutAccessToLogd() throws {
+        let project = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let helper = project.appendingPathComponent(".build/debug/NoodleMessenger")
+        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: helper.path))
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = WorkspaceRepository(rootURL: root)
+        try repository.prepare()
+        let bot = try repository.createAgent(named: "Logging fixture")
+        let workspace = repository.directory(for: bot.agent)
+        var trace = RuntimeTrace(agentID: bot.agent.id, provider: .codex, workspace: workspace)
+        trace.begin(reason: .heartbeat)
+        let context = try XCTUnwrap(RuntimeDiagnostics.readContext(in: workspace, agentID: bot.agent.id))
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
+        child.arguments = ["-p", "(version 1) (allow default) (deny mach-lookup (global-name \"com.apple.logd\") (global-name \"com.apple.logd.events\") (global-name \"com.apple.system.logger\"))",
+                           helper.path, "--agent-directory", workspace.path, "--get-latest"]
+        let output = Pipe(), errors = Pipe()
+        child.standardOutput = output
+        child.standardError = errors
+        try child.run()
+        child.waitUntilExit()
+        XCTAssertEqual(child.terminationStatus, 0)
+        XCTAssertEqual(String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self), "")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: output.fileHandleForReading.readDataToEndOfFile()) as? [Any])
+        XCTAssertTrue(body.isEmpty)
+        let receipt = try XCTUnwrap(RuntimeDiagnostics.readReceipt(in: workspace, context: context))
+        XCTAssertEqual(receipt.reads, 1)
+        XCTAssertEqual(receipt.deliveries, 0)
+        XCTAssertEqual(receipt.failures, 0)
+        trace.finish(.turnCompleted)
+        XCTAssertNil(RuntimeDiagnostics.readReceipt(in: workspace, context: context))
+    }
+
+    func testReceiptAggregatesOnlyConsumingReadsAndClearsAfterFailure() throws {
+        let workspace = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let bot = UUID()
+        var trace = RuntimeTrace(agentID: bot, provider: .claudeCode, workspace: workspace)
+        trace.begin(reason: .inboxChanged)
+        let context = try XCTUnwrap(RuntimeDiagnostics.readContext(in: workspace, agentID: bot))
+        RuntimeDiagnostics.inboxRead(agentID: bot, workspace: workspace, count: 20, consuming: false)
+        XCTAssertNil(RuntimeDiagnostics.readReceipt(in: workspace, context: context))
+        RuntimeDiagnostics.inboxRead(agentID: bot, workspace: workspace, count: 2, consuming: true)
+        RuntimeDiagnostics.inboxRead(agentID: bot, workspace: workspace, count: 0, consuming: true)
+        RuntimeDiagnostics.inboxRead(agentID: bot, workspace: workspace, count: nil, consuming: true)
+        let receipt = try XCTUnwrap(RuntimeDiagnostics.readReceipt(in: workspace, context: context))
+        XCTAssertEqual(receipt.reads, 2)
+        XCTAssertEqual(receipt.deliveries, 2)
+        XCTAssertEqual(receipt.failures, 1)
+        let data = try Data(contentsOf: RuntimeDiagnostics.receiptURL(in: workspace))
+        let fields = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(Set(fields.keys), ["context", "reads", "failures", "deliveries"])
+        trace.finish(.runtimeDisconnected)
+        XCTAssertNil(RuntimeDiagnostics.readReceipt(in: workspace, context: context))
+    }
+
     func testCLILoggingPreservesInboxAndOutputContract() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

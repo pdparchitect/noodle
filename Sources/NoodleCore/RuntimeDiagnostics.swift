@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import Darwin
 
 /// Diagnostics only: no messages, tool arguments, names, paths, or raw errors.
 public enum RuntimeDiagnostics {
@@ -33,6 +34,68 @@ public enum RuntimeDiagnostics {
         let reason: String
     }
 
+    /// Bounded metadata snapshot, not an inbox or an agent-facing protocol.
+    struct InboxReceipt: Codable, Equatable {
+        let context: Context
+        var reads = 0
+        var failures = 0
+        var deliveries = 0
+    }
+
+    static func receiptURL(in workspace: URL) -> URL {
+        workspace.appendingPathComponent(".noodle/runtime-log-inbox.json")
+    }
+
+    static func readReceipt(in workspace: URL, context: Context) -> InboxReceipt? {
+        let url = receiptURL(in: workspace)
+        guard hasSafeContextDirectory(in: workspace),
+              let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey]),
+              values.isRegularFile == true, values.isSymbolicLink != true,
+              let size = values.fileSize, size < 4_096,
+              let data = try? Data(contentsOf: url),
+              let receipt = try? JSONDecoder().decode(InboxReceipt.self, from: data),
+              receipt.context == context,
+              (0...1_000_000).contains(receipt.reads),
+              (0...1_000_000).contains(receipt.failures),
+              (0...1_000_000_000).contains(receipt.deliveries) else { return nil }
+        return receipt
+    }
+
+    private static func saveInboxReceipt(in workspace: URL, context: Context, count: Int?) {
+        guard hasSafeContextDirectory(in: workspace) else { return }
+        let lockURL = workspace.appendingPathComponent(".noodle/runtime-log-inbox.lock")
+        let descriptor = open(lockURL.path, O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC, S_IRUSR | S_IWUSR)
+        guard descriptor >= 0 else { return }
+        defer { close(descriptor) }
+        // Never wait for diagnostics. Concurrent or unavailable logging cannot delay work.
+        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else { return }
+        defer { flock(descriptor, LOCK_UN) }
+        guard readContext(in: workspace, agentID: context.agentID) == context else { return }
+        var receipt = readReceipt(in: workspace, context: context) ?? InboxReceipt(context: context)
+        if let count {
+            receipt.reads = min(receipt.reads + 1, 1_000_000)
+            receipt.deliveries = min(receipt.deliveries + min(max(0, count), 1_000_000_000), 1_000_000_000)
+        } else {
+            receipt.failures = min(receipt.failures + 1, 1_000_000)
+        }
+        if let data = try? JSONEncoder().encode(receipt) {
+            try? data.write(to: receiptURL(in: workspace), options: .atomic)
+        }
+    }
+
+    static func relayInboxReceipt(in workspace: URL, context: Context) {
+        guard let receipt = readReceipt(in: workspace, context: context) else { return }
+        if receipt.reads > 0 {
+            record(.inboxRead, agentID: context.agentID, provider: context.provider,
+                   context: context, count: receipt.deliveries, reads: receipt.reads)
+        }
+        if receipt.failures > 0 {
+            record(.inboxReadFailed, agentID: context.agentID, provider: context.provider,
+                   context: context, reads: receipt.failures)
+        }
+        try? FileManager.default.removeItem(at: receiptURL(in: workspace))
+    }
+
     static func contextURL(in workspace: URL) -> URL {
         workspace.appendingPathComponent(".noodle/runtime-log-context.json")
     }
@@ -52,23 +115,29 @@ public enum RuntimeDiagnostics {
             == workspace.resolvingSymlinksInPath().appendingPathComponent(".noodle").standardizedFileURL
     }
 
-    static func record(_ event: Event, agentID: UUID, provider: HarnessProvider?, context: Context?, count: Int = 0) {
+    static func record(_ event: Event, agentID: UUID, provider: HarnessProvider?, context: Context?, count: Int = 0, reads: Int = 0) {
         let providerName = provider?.rawValue ?? "unknown"
         let wake = context?.wakeID.uuidString ?? "uncorrelated"
         let reason = context?.reason ?? "none"
         switch event {
         case .runtimeDisconnected, .runtimeFailed, .turnFailed, .inboxReadFailed:
-            logger.error("event=\(event.rawValue, privacy: .public) bot=\(agentID.uuidString, privacy: .public) harness=\(providerName, privacy: .public) wake=\(wake, privacy: .public) reason=\(reason, privacy: .public) count=\(count)")
+            logger.error("event=\(event.rawValue, privacy: .public) bot=\(agentID.uuidString, privacy: .public) harness=\(providerName, privacy: .public) wake=\(wake, privacy: .public) reason=\(reason, privacy: .public) count=\(count) reads=\(reads)")
         default:
-            logger.notice("event=\(event.rawValue, privacy: .public) bot=\(agentID.uuidString, privacy: .public) harness=\(providerName, privacy: .public) wake=\(wake, privacy: .public) reason=\(reason, privacy: .public) count=\(count)")
+            logger.notice("event=\(event.rawValue, privacy: .public) bot=\(agentID.uuidString, privacy: .public) harness=\(providerName, privacy: .public) wake=\(wake, privacy: .public) reason=\(reason, privacy: .public) count=\(count) reads=\(reads)")
         }
     }
 
     public static func inboxRead(agentID: UUID, workspace: URL, count: Int?, consuming: Bool) {
         let context = readContext(in: workspace, agentID: agentID)
         if consuming {
-            record(count == nil ? .inboxReadFailed : .inboxRead, agentID: agentID,
-                   provider: context?.provider, context: context, count: count ?? 0)
+            if let context {
+                // Sandboxed harness commands may not reach logd. The app emits
+                // this receipt when the turn ends, using the captured wake ID.
+                saveInboxReceipt(in: workspace, context: context, count: count)
+            } else {
+                record(count == nil ? .inboxReadFailed : .inboxRead, agentID: agentID,
+                       provider: nil, context: nil, count: count ?? 0, reads: 1)
+            }
         }
         #if DEBUG
         logger.debug("inbox-inspected bot=\(agentID.uuidString, privacy: .public) consuming=\(consuming) count=\(count ?? -1)")
@@ -120,7 +189,8 @@ public struct RuntimeTrace {
     public mutating func runtimeStarting() {
         // Discard a marker left by an abrupt app exit. It cannot prove anything
         // about a newly started runtime's subsequent CLI calls.
-        if RuntimeDiagnostics.readContext(in: workspace, agentID: agentID) != nil {
+        if let previous = RuntimeDiagnostics.readContext(in: workspace, agentID: agentID) {
+            RuntimeDiagnostics.relayInboxReceipt(in: workspace, context: previous)
             try? FileManager.default.removeItem(at: RuntimeDiagnostics.contextURL(in: workspace))
         }
         context = nil
@@ -134,6 +204,7 @@ public struct RuntimeTrace {
     }
 
     public mutating func finish(_ event: RuntimeDiagnostics.Event) {
+        if let context { RuntimeDiagnostics.relayInboxReceipt(in: workspace, context: context) }
         record(event)
         // An older runtime must not clear a newer runtime's correlation marker.
         if let context, RuntimeDiagnostics.readContext(in: workspace, agentID: agentID) == context {

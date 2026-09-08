@@ -28,6 +28,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Inbox-read diagnostics are relayed by Noodle when sandboxed Messenger commands cannot reach macOS logging, including successful empty checks and read failures.
 - The application-menu update command remains responsive after Sparkle enables update checks.
 - Harness icons use transparent vector templates that inherit native foreground styling alongside system symbols; Codex path rendering no longer clips on macOS.
 
