@@ -20,6 +20,8 @@ Plain MCP confirmation forms with no input fields (such as a browser destination
 
 ### FX
 
+The Agent Host's `XPCService.JoinExistingSession` is enabled so it and the signed harness children run in the app's login security session. This allows normal access to the existing user's Keychain rather than launching in an isolated audit session. Keychain access controls still apply; Noodle does not export credentials or change item permissions. Build verification checks this setting in the signed helper bundle.
+
 FX also requires an explicit per-bot autonomous access grant; new restricted FX bots stay stopped with an explanation. The host validates Vercel's signed native executable at exactly `~/.local/bin/fx` (identifier `com.vercel.fx`, team `JW6Y669B67`) and launches the fixed `fx acp` command with an optional validated model. It does not offer arbitrary execution arguments. FX owns its native tools and reads the bot's workspace instructions and Messenger skill. Noodle handles ACP permission requests only for the current session with **allow once**, and does not disable FX's safety review. Held reviews remain failed turns with unfinished-work recovery preserved, not successful heartbeats.
 
 The main app receives only account availability, model metadata, and a verified Vercel device-code challenge from fixed host commands. It has no access to `~/.fx` or its credential files. The existing read-only executable exception additionally contains `~/.local/bin/fx`; there are still seven entitlement keys. FX uses the same durable unfinished-turn markers and recovery wake behavior described above. Its native template glyph is derived from the user-supplied FX website SVG, without background or animation.

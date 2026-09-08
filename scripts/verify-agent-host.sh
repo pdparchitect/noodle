@@ -2,6 +2,8 @@
 set -euo pipefail
 app="${1:?Pass the built Noodle.app path}"
 host="$app/Contents/XPCServices/NoodleAgentHost.xpc"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :XPCService:ServiceType' "$host/Contents/Info.plist")" == "Application" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :XPCService:JoinExistingSession' "$host/Contents/Info.plist")" == "true" ]]
 codesign --verify --strict "$host"
 host_signature="$(codesign -dv --verbose=4 "$host" 2>&1)"
 app_team="$(codesign -dv --verbose=4 "$app" 2>&1 | awk -F= '/^TeamIdentifier=/ { print $2 }')"
