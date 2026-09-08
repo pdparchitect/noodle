@@ -234,7 +234,7 @@ public enum MessengerCLI {
                     isDirectory: true
                 )
                 let attachmentURLs = try Self.options("--attach", in: values).map {
-                    URL(fileURLWithPath: $0, relativeTo: currentDirectory).standardizedFileURL
+                    try AttachmentSource.resolve($0, relativeTo: currentDirectory)
                 }
                 let suppliedBody = try Self.messageBody(in: values)
                 let body: String

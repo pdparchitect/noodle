@@ -169,6 +169,8 @@ public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable 
     public let mediaType: String
     public let byteCount: Int64
     public let createdAt: Date
+    /// Present for link attachments. The owned file is a small .webloc bookmark, not downloaded page content.
+    public let url: URL?
 
     public init(
         id: UUID = UUID(),
@@ -177,7 +179,8 @@ public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable 
         storedFilename: String,
         mediaType: String,
         byteCount: Int64,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        url: URL? = nil
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -186,6 +189,7 @@ public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable 
         self.mediaType = mediaType
         self.byteCount = byteCount
         self.createdAt = createdAt
+        self.url = url
     }
 }
 
@@ -226,6 +230,7 @@ public struct MessengerAttachment: Codable, Hashable, Sendable {
     public let byteCount: Int64
     public let createdAt: Date
     public let absolutePath: String
+    public let url: URL?
 
     public init(attachment: ConversationAttachment, absolutePath: String) {
         id = attachment.id
@@ -236,6 +241,7 @@ public struct MessengerAttachment: Codable, Hashable, Sendable {
         byteCount = attachment.byteCount
         createdAt = attachment.createdAt
         self.absolutePath = absolutePath
+        url = attachment.url
     }
 }
 
@@ -772,6 +778,9 @@ public struct WorkspaceRepository: Sendable {
         mediaType: String,
         now: Date = Date()
     ) throws -> ConversationAttachment {
+        if !sourceURL.isFileURL {
+            return try importLinkAttachment(sourceURL, into: conversationID, now: now)
+        }
         guard try loadConversations().contains(where: { $0.id == conversationID }) else {
             throw WorkspaceError.missingConversation(conversationID)
         }
@@ -804,8 +813,15 @@ public struct WorkspaceRepository: Sendable {
         originalFilename: String,
         into conversationID: UUID,
         mediaType: String,
-        now: Date = Date()
+        now: Date = Date(),
+        linkURL: URL? = nil
     ) throws -> ConversationAttachment {
+        if let linkURL {
+            guard MessageLink.publicWebURL(from: linkURL, preservingFragment: true) == linkURL,
+                  mediaType == "application/x-webloc",
+                  let bookmark = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String],
+                  bookmark["URL"] == linkURL.absoluteString else { throw WorkspaceError.invalidAttachment }
+        }
         guard try loadConversations().contains(where: { $0.id == conversationID }) else {
             throw WorkspaceError.missingConversation(conversationID)
         }
@@ -823,7 +839,8 @@ public struct WorkspaceRepository: Sendable {
             storedFilename: storedAttachmentName(id: attachmentID, originalFilename: filename),
             mediaType: resolvedMediaType,
             byteCount: Int64(data.count),
-            createdAt: now
+            createdAt: now,
+            url: linkURL
         )
         let directory = attachmentsDirectory(conversationID: conversationID)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -833,6 +850,13 @@ public struct WorkspaceRepository: Sendable {
         )
         try write(attachment, to: directory.appendingPathComponent("\(attachment.id.uuidString.lowercased()).json"))
         return attachment
+    }
+
+    public func importLinkAttachment(_ url: URL, into conversationID: UUID, now: Date = Date()) throws -> ConversationAttachment {
+        guard let url = MessageLink.publicWebURL(from: url, preservingFragment: true) else { throw AttachmentSource.InvalidSource() }
+        let data = try PropertyListSerialization.data(fromPropertyList: ["URL": url.absoluteString], format: .xml, options: 0)
+        return try importAttachment(data: data, originalFilename: "\(url.host ?? "Link").webloc", into: conversationID,
+            mediaType: "application/x-webloc", now: now, linkURL: url)
     }
 
     public func loadAttachments(conversationID: UUID) throws -> [ConversationAttachment] {
@@ -846,6 +870,7 @@ public struct WorkspaceRepository: Sendable {
         .filter { $0.pathExtension == "json" }
         .map { metadataURL in
             let attachment = try read(ConversationAttachment.self, from: metadataURL)
+            if attachment.url != nil { return attachment }
             let fileURL = attachmentFileURL(attachment)
             guard let detectedMediaType = detectedImageMediaType(at: fileURL),
                   detectedMediaType != attachment.mediaType else { return attachment }
@@ -894,7 +919,7 @@ public struct WorkspaceRepository: Sendable {
     }
 
     public func inlineImageDataURL(for attachment: MessengerAttachment) throws -> String? {
-        guard attachment.mediaType.lowercased().hasPrefix("image/") else { return nil }
+        guard attachment.url == nil, attachment.mediaType.lowercased().hasPrefix("image/") else { return nil }
 
         let directory = attachmentsDirectory(conversationID: attachment.conversationID)
             .standardizedFileURL

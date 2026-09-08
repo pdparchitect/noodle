@@ -17,7 +17,7 @@ struct MessageLinkPreview: View {
 
     var body: some View {
         Button {
-            NSWorkspace.shared.open(metadata?.originalURL ?? metadata?.url ?? url)
+            NSWorkspace.shared.open(url)
         } label: {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack {

@@ -66,7 +66,7 @@ final class RepositoryTests: XCTestCase {
         XCTAssertTrue(messengerGuide.contains("image(visual.dataURL"))
         XCTAssertTrue(messengerGuide.contains("named `participants`"))
         XCTAssertTrue(messengerGuide.contains("--body-percent-encoded"))
-        XCTAssertTrue(messengerGuide.contains("--attach <file-path>"))
+        XCTAssertTrue(messengerGuide.contains("--attach <file-path-or-url>"))
         XCTAssertTrue(messengerGuide.contains("--list-participants"))
         XCTAssertTrue(messengerGuide.contains("private backstory"))
         XCTAssertTrue(messengerGuide.contains("named participant roster"))

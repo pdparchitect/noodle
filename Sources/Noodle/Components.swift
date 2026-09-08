@@ -134,19 +134,27 @@ struct MessageBubble: View {
                     }
                     .padding(.top, hasReactions && attachments.isEmpty ? 12 : 0)
 
-                if let linkPreviewURL {
+                if let linkPreviewURL, !attachments.contains(where: {
+                    $0.url.flatMap { MessageLink.publicWebURL(from: $0) } == linkPreviewURL
+                }) {
                     MessageLinkPreview(url: linkPreviewURL, shouldLoad: isVisible)
                 }
 
                 ForEach(attachments) { attachment in
-                    AttachmentInlinePreview(
-                        attachment: attachment,
-                        fileURL: store.attachmentFileURL(attachment),
-                        shouldLoad: isVisible,
-                        isSelected: selectedAttachmentID == attachment.id,
-                        select: { selectedAttachmentID = attachment.id },
-                        preview: { previewAttachment(attachment) }
-                    )
+                    Group {
+                        if let url = attachment.url.flatMap({ MessageLink.publicWebURL(from: $0, preservingFragment: true) }) {
+                            MessageLinkPreview(url: url, shouldLoad: isVisible)
+                        } else {
+                            AttachmentInlinePreview(
+                                attachment: attachment,
+                                fileURL: store.attachmentFileURL(attachment),
+                                shouldLoad: isVisible,
+                                isSelected: selectedAttachmentID == attachment.id,
+                                select: { selectedAttachmentID = attachment.id },
+                                preview: { previewAttachment(attachment) }
+                            )
+                        }
+                    }
                     .overlay { reactionContextMenu(attachment: attachment) }
                     .overlay(alignment: .topTrailing) {
                         if attachment.id == attachments.last?.id { cornerReactions }
@@ -209,7 +217,11 @@ struct MessageBubble: View {
             selected: Set((message.reactions ?? []).filter { $0.author == .user }.map(\.emoji)),
             react: { store.toggleReaction($0, on: message) },
             copy: {
-                if let attachment { store.copyAttachment(attachment) }
+                if let url = attachment?.url {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                    NSPasteboard.general.setString(url.absoluteString, forType: .URL)
+                } else if let attachment { store.copyAttachment(attachment) }
                 else {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(message.body, forType: .string)

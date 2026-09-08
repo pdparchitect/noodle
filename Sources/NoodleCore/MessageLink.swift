@@ -30,7 +30,7 @@ public enum MessageLink {
         return result
     }
 
-    private static func publicWebURL(from url: URL) -> URL? {
+    public static func publicWebURL(from url: URL, preservingFragment: Bool = false) -> URL? {
         guard url.absoluteString.count <= 2_048,
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let scheme = components.scheme?.lowercased(),
@@ -44,7 +44,7 @@ public enum MessageLink {
         var canonical = components
         canonical.scheme = scheme
         canonical.host = rawHost
-        canonical.fragment = nil
+        if !preservingFragment { canonical.fragment = nil }
         return canonical.url
     }
 

@@ -61,6 +61,10 @@ final class MessengerDocumentationTests: XCTestCase {
         }
         try check(message, fields: MessengerDocumentation.messageFields)
         try check(delivery, fields: MessengerDocumentation.deliveryFields)
+        let link = ConversationAttachment(conversationID: conversation.id, originalFilename: "example.com.webloc",
+            storedFilename: "link.webloc", mediaType: "application/x-webloc", byteCount: 100,
+            url: URL(string: "https://example.com/page")!)
+        try check(MessengerAttachment(attachment: link, absolutePath: "/fixture/link.webloc"), fields: MessengerDocumentation.attachmentFields)
         XCTAssertEqual(delivery.kind, .reactionChange)
         delivery.reactionChange = nil
         XCTAssertEqual(delivery.kind, .message)
