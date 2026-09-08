@@ -32,6 +32,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Release packaging validates the same seven-key sandbox policy as the smoke tests, including Claude Code's exact read-only executable paths.
 - Transcript geometry updates no longer feed back into scroll-to-bottom commands; short conversations are correctly treated as fully visible with titlebar insets.
 - The name menu uses the same avatars as the sidebar, including generated colours and symbols as well as uploaded portraits.
 - Bot profiles dismiss when clicking outside or switching away from the app; the native name menu uses circular avatars and a comfortable minimum width.
