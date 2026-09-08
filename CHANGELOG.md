@@ -28,6 +28,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Editor sheets resize in both directions as their content changes, avoiding gaps and clipped headers; large group membership grids scroll within a bounded height.
 - Claude bots recover from explicitly missing saved sessions instead of endlessly restarting; new session IDs are saved only after Claude confirms startup, and unrelated failures preserve existing session pointers.
 - Inbox-read diagnostics are relayed by Noodle when sandboxed Messenger commands cannot reach macOS logging, including successful empty checks and read failures.
 - The application-menu update command remains responsive after Sparkle enables update checks.

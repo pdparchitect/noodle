@@ -98,7 +98,9 @@ struct GroupMemberPicker: View {
                     .padding(12)
                 }
             }
-            .frame(minHeight: 140, maxHeight: .infinity)
+            // Grow with a few rows, then scroll rather than pushing the sheet's
+            // header and action buttons outside the available window.
+            .frame(minHeight: 140, maxHeight: 280)
             .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
         }
     }

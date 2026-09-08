@@ -27,6 +27,8 @@ That mode writes `.build/Noodle.app` with the production bundle identity. Never 
 
 The build automatically uses the first installed Apple Development identity so macOS can index App Intents. Set `NOODLE_SIGNING_IDENTITY` to override that choice, or set it to `-` explicitly for an ad-hoc build.
 
+For native sheet sizing changes, run `zsh Tests/sheet-sizing.sh` from a logged-in macOS desktop. This standalone UI regression fixture exercises the shared sheet sizing and real member picker with synthetic bots: repeated growth/shrinkage, 11 → 1 → 11 members, a large scrollable group and an empty group. It opens no Noodle store or agent runtime and does not modify saved groups. Keep it separate from headless tests.
+
 ## Message documentation
 
 Message and event guidance lives in `Sources/NoodleCore/MessengerDocumentation.swift`, alongside exhaustive references for runtime wake reasons, delivery kinds, group notices, effects and CLI commands. The Messenger skill and CLI help use this catalogue directly. Bot workspace and Codex runtime instructions contain only a short pointer requiring the skill to be read before handling messages or wake events, rather than repeating the full guide. Workspace synchronization refreshes the managed guidance while preserving each bot's backstory and custom skills.
