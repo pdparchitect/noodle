@@ -55,7 +55,6 @@ struct SidebarView: View {
             }
         }
         .onChange(of: store.selectedConversationID) { _, conversationID in
-            store.draft = ""
             store.markConversationRead(conversationID)
         }
         .onAppear {

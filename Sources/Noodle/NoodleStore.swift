@@ -53,7 +53,22 @@ final class NoodleStore {
     private(set) var unreadConversationIDs: Set<UUID> = []
     var selectedConversationID: UUID?
     var searchText = ""
-    var draft = ""
+    private var drafts = ConversationDrafts()
+    var draft: String {
+        get { selectedConversationID.map { drafts[$0].text } ?? "" }
+        set {
+            guard let selectedConversationID else { return }
+            drafts[selectedConversationID].text = newValue
+        }
+    }
+
+    func draft(for conversationID: UUID) -> String {
+        drafts[conversationID].text
+    }
+
+    func setDraft(_ text: String, for conversationID: UUID) {
+        drafts[conversationID].text = text
+    }
     var creationSheet: CreationSheet?
     var selectedSettingsTab: NoodleSettingsTab = .general
     var agentBeingEdited: AgentRecord?
@@ -61,7 +76,13 @@ final class NoodleStore {
     var backgroundBeingEdited: BotConversation?
     private(set) var backgrounds: [UUID: ConversationBackground] = [:]
     var errorMessage: String?
-    var pendingAttachments: [ConversationAttachment] = []
+    var pendingAttachments: [ConversationAttachment] {
+        get { selectedConversationID.map { drafts[$0].attachments } ?? [] }
+        set {
+            guard let selectedConversationID else { return }
+            drafts[selectedConversationID].attachments = newValue
+        }
+    }
     var composerIsFocused = false
 
     let repository: WorkspaceRepository
@@ -107,7 +128,7 @@ final class NoodleStore {
     }
 
     var canRelaunchForUpdate: Bool {
-        UpdateReadiness.canRelaunch(
+        !drafts.hasContent && UpdateReadiness.canRelaunch(
             phases: runtime.snapshots.values.map(\.phase),
             draft: draft,
             hasAttachments: !pendingAttachments.isEmpty,
@@ -164,6 +185,7 @@ final class NoodleStore {
                 ($0.id, Self.transcriptRevision(for: $0.id, repository: repository))
             })
             let knownConversationIDs = Set(conversations.map(\.id))
+            drafts.retainConversations(knownConversationIDs)
             let storedUnreadIDs = try repository.loadUnreadConversationIDs()
             unreadConversationIDs = storedUnreadIDs.intersection(knownConversationIDs)
             if unreadConversationIDs != storedUnreadIDs {
@@ -362,10 +384,9 @@ final class NoodleStore {
                 try repository.deleteConversation(id: conversation.id)
             }
 
+            drafts.clear(conversation.id)
             if selectedConversationID == conversation.id {
                 selectedConversationID = nil
-                draft = ""
-                pendingAttachments = []
             }
             reload()
             agentBeingEdited = nil
@@ -407,8 +428,7 @@ final class NoodleStore {
                 conversations.sort { $0.updatedAt > $1.updatedAt }
             }
 
-            draft = ""
-            pendingAttachments = []
+            drafts.clear(conversation.id)
             runtime.notify(participants(for: conversation), repository: repository)
         } catch {
             errorMessage = error.localizedDescription
@@ -474,7 +494,7 @@ final class NoodleStore {
             for provider in providers {
                 do {
                     let payload = try await AttachmentTransfer.load(provider)
-                    guard selectedConversationID == conversationID else { return }
+                    guard conversations.contains(where: { $0.id == conversationID }) else { return }
                     switch payload {
                     case .file(let url):
                         try importAttachment(from: url, into: conversationID)
@@ -561,7 +581,7 @@ final class NoodleStore {
             mediaType: mediaType
         )
         attachmentsByConversation[conversationID, default: []].append(attachment)
-        pendingAttachments.append(attachment)
+        drafts[conversationID].attachments.append(attachment)
     }
 
     private func importAttachment(
@@ -577,13 +597,13 @@ final class NoodleStore {
             mediaType: mediaType
         )
         attachmentsByConversation[conversationID, default: []].append(attachment)
-        pendingAttachments.append(attachment)
+        drafts[conversationID].attachments.append(attachment)
     }
 
     func removePendingAttachment(_ attachment: ConversationAttachment) {
         do {
             try repository.removeAttachment(attachment)
-            pendingAttachments.removeAll { $0.id == attachment.id }
+            drafts[attachment.conversationID].attachments.removeAll { $0.id == attachment.id }
             attachmentsByConversation[attachment.conversationID, default: []].removeAll {
                 $0.id == attachment.id
             }

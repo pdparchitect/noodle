@@ -251,8 +251,8 @@ struct ChatView: View {
             TextField(
                 composerPrompt,
                 text: Binding(
-                    get: { store.draft },
-                    set: { store.draft = $0 }
+                    get: { store.draft(for: conversation.id) },
+                    set: { store.setDraft($0, for: conversation.id) }
                 ),
                 axis: .vertical
             )
