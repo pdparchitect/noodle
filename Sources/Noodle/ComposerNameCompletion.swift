@@ -13,6 +13,7 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
     private var showDescriptions = true
     private var dismissedRequest: AgentNameCompletion?
     private var observers: [NSObjectProtocol] = []
+    private var returnKeyMonitor: Any?
     private var presentationScheduled = false
 
     func attach(to editor: NSTextView, anchor: NSView, agents: [AgentRecord], preferredIDs: Set<UUID>, showDescriptions: Bool) {
@@ -22,6 +23,11 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
         if self.editor !== editor {
             detach()
             self.editor = editor
+            returnKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, self.menu == nil, let editor = self.editor,
+                      event.window === editor.window, editor.window?.firstResponder === editor else { return event }
+                return Self.insertLineBreak(for: event, in: editor) ? nil : event
+            }
             for notification in [NSText.didChangeNotification, NSTextView.didChangeSelectionNotification] {
                 observers.append(NotificationCenter.default.addObserver(forName: notification, object: editor, queue: .main) { [weak self] _ in
                     MainActor.assumeIsolated { self?.scheduleMenu() }
@@ -36,6 +42,8 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
     }
 
     func detach() {
+        if let returnKeyMonitor { NSEvent.removeMonitor(returnKeyMonitor) }
+        returnKeyMonitor = nil
         menu?.cancelTracking()
         menu = nil
         observers.forEach(NotificationCenter.default.removeObserver)
@@ -43,6 +51,16 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
         editor = nil
         anchor = nil
         dismissedRequest = nil
+    }
+
+    /// Preserve native editing, selection replacement and undo. Plain Return is
+    /// left to SwiftUI's onSubmit; marked text and menu tracking keep native keys.
+    static func insertLineBreak(for event: NSEvent, in editor: NSTextView) -> Bool {
+        guard event.type == .keyDown, event.keyCode == 36 || event.keyCode == 76,
+              event.modifierFlags.intersection([.shift, .control, .option, .command]) == .shift,
+              !editor.hasMarkedText(), editor.isEditable else { return false }
+        editor.insertText("\n", replacementRange: editor.selectedRange())
+        return true
     }
 
     private func scheduleMenu() {

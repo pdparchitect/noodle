@@ -36,6 +36,27 @@ private func pixelDifference(_ lhs: NSImage, _ rhs: NSImage) -> CGFloat {
 }
 
 @MainActor private func verifyNativeMenuPresentation() throws {
+    let editor = NSTextView(frame: .zero)
+    editor.isEditable = true
+    editor.string = "Hi 👋 world"
+    editor.setSelectedRange(NSRange(location: 5, length: 1))
+    func returnEvent(_ flags: NSEvent.ModifierFlags, keyCode: UInt16 = 36) -> NSEvent {
+        NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
+                        windowNumber: 0, context: nil, characters: "\r", charactersIgnoringModifiers: "\r",
+                        isARepeat: false, keyCode: keyCode)!
+    }
+    try require(!ComposerNameCompletion.insertLineBreak(for: returnEvent([]), in: editor))
+    try require(editor.string == "Hi 👋 world")
+    try require(ComposerNameCompletion.insertLineBreak(for: returnEvent(.shift), in: editor))
+    try require(editor.string == "Hi 👋\nworld")
+    try require(editor.selectedRange() == NSRange(location: 6, length: 0))
+    try require(ComposerNameCompletion.insertLineBreak(for: returnEvent(.shift, keyCode: 76), in: editor))
+    try require(editor.string == "Hi 👋\n\nworld")
+    for flags: NSEvent.ModifierFlags in [.command, .option, [.shift, .command], [.shift, .control]] {
+        try require(!ComposerNameCompletion.insertLineBreak(for: returnEvent(flags), in: editor))
+    }
+    editor.setMarkedText("composing", selectedRange: NSRange(location: 0, length: 0), replacementRange: editor.selectedRange())
+    try require(!ComposerNameCompletion.insertLineBreak(for: returnEvent(.shift), in: editor))
     let agent = AgentRecord(displayName: "Mara", publicDescription: "  Reviews\n ideas.  ", avatarImageData: fixtureAvatarData())
     let directProfile = AgentProfileSheet(agent: agent)
     try require(directProfile.reply == nil && directProfile.directMessage == nil)
