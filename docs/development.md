@@ -29,6 +29,10 @@ The build automatically uses the first installed Apple Development identity so m
 
 For native sheet sizing changes, run `zsh Tests/sheet-sizing.sh` from a logged-in macOS desktop. This standalone UI regression fixture exercises the shared sheet sizing and real member picker with synthetic bots: repeated growth/shrinkage, 11 → 1 → 11 members, a large scrollable group and an empty group. It opens no Noodle store or agent runtime and does not modify saved groups. Keep it separate from headless tests.
 
+## Chat interaction checks
+
+Run `zsh Tests/chat-features.sh` on a logged-in Mac to open an isolated, sandboxed UI fixture. It uses synthetic bots and cannot send messages or load the app's data. Verify `@` filtering; Up/Down navigation; Return/Tab and mouse selection inserting plain names without incrementing the submission counter; Escape dismissal; normal typing and undo; and profile Reply/Direct Message actions preserving the draft and returning keyboard focus. The profile must contain only the public description, never a backstory. Close the fixture before rebuilding it.
+
 ## Message documentation
 
 Message and event guidance lives in `Sources/NoodleCore/MessengerDocumentation.swift`, alongside exhaustive references for runtime wake reasons, delivery kinds, group notices, effects and CLI commands. The Messenger skill and CLI help use this catalogue directly. Bot workspace and Codex runtime instructions contain only a short pointer requiring the skill to be read before handling messages or wake events, rather than repeating the full guide. Workspace synchronization refreshes the managed guidance while preserving each bot's backstory and custom skills.

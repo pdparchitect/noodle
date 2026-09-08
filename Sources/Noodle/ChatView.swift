@@ -14,6 +14,13 @@ struct ChatView: View {
     @State private var transcriptPositions: [UUID: TranscriptViewport] = [:]
     @State private var bottomOverlayHeight: CGFloat = 0
     @StateObject private var nameCompletion = ComposerNameCompletion()
+    @State private var profileAgent: AgentRecord?
+    @State private var profileAction: ProfileAction?
+
+    private enum ProfileAction {
+        case reply(name: String, conversationID: UUID)
+        case directMessage(UUID)
+    }
 
     var body: some View {
         chatContent
@@ -35,6 +42,24 @@ struct ChatView: View {
                 }
             }
             .quickLookPreview($previewedAttachmentURL)
+            .sheet(item: $profileAgent, onDismiss: finishProfileAction) { agent in
+                let direct = store.conversations.first {
+                    $0.kind == .direct && $0.participantIDs == [agent.id]
+                }
+                AgentProfileSheet(
+                    agent: agent,
+                    canOpenDirectMessage: direct != nil,
+                    reply: {
+                        profileAction = .reply(name: agent.displayName, conversationID: conversation.id)
+                        profileAgent = nil
+                    },
+                    directMessage: {
+                        if let direct { profileAction = .directMessage(direct.id) }
+                        profileAgent = nil
+                    }
+                )
+                .noodleSheetSizing()
+            }
             .onPasteCommand(of: AttachmentTransfer.pasteContentTypes) { providers in
                 store.importAttachments(from: providers)
             }
@@ -120,6 +145,7 @@ struct ChatView: View {
             selectedAttachmentID: $selectedAttachmentID,
             previewAttachment: showPreview,
             bottomOverlayHeight: bottomOverlayHeight,
+            showAgentProfile: { profileAgent = $0 },
             saveViewport: { transcriptPositions[id] = $0 }
         )
         .id(id)
@@ -281,6 +307,20 @@ struct ChatView: View {
         previewedAttachmentURL = store.attachmentFileURL(attachment)
     }
 
+    private func finishProfileAction() {
+        guard let action = profileAction else { return }
+        profileAction = nil
+        switch action {
+        case .reply(let name, let conversationID):
+            guard conversation.id == conversationID else { return }
+            store.draft = "\(name), " + store.draft
+        case .directMessage(let id):
+            store.selectedConversationID = id
+        }
+        // Restore keyboard focus after AppKit finishes dismissing the sheet.
+        DispatchQueue.main.async { composerFocused = true }
+    }
+
     private var composerPrompt: String {
         "Message \(store.title(for: conversation))"
     }
@@ -320,6 +360,7 @@ private struct ConversationTranscript: View {
     @Binding var selectedAttachmentID: UUID?
     let previewAttachment: (ConversationAttachment) -> Void
     let bottomOverlayHeight: CGFloat
+    let showAgentProfile: (AgentRecord) -> Void
     let saveViewport: (TranscriptViewport) -> Void
     @State private var position: ScrollPosition
     @State private var viewportRecorder: TranscriptViewportRecorder
@@ -332,12 +373,14 @@ private struct ConversationTranscript: View {
         selectedAttachmentID: Binding<UUID?>,
         previewAttachment: @escaping (ConversationAttachment) -> Void,
         bottomOverlayHeight: CGFloat,
+        showAgentProfile: @escaping (AgentRecord) -> Void,
         saveViewport: @escaping (TranscriptViewport) -> Void
     ) {
         self.conversation = conversation
         _selectedAttachmentID = selectedAttachmentID
         self.previewAttachment = previewAttachment
         self.bottomOverlayHeight = bottomOverlayHeight
+        self.showAgentProfile = showAgentProfile
         self.saveViewport = saveViewport
         _position = State(initialValue: initialViewport.isAtBottom
             ? ScrollPosition(edge: .bottom)
@@ -359,7 +402,8 @@ private struct ConversationTranscript: View {
                         message: message,
                         hasConversationBackground: !store.background(for: conversation).isDefault,
                         selectedAttachmentID: $selectedAttachmentID,
-                        previewAttachment: previewAttachment
+                        previewAttachment: previewAttachment,
+                        showAgentProfile: conversation.kind == .group ? showAgentProfile : nil
                     )
                 }
 

@@ -110,6 +110,7 @@ struct MessageBubble: View {
     let hasConversationBackground: Bool
     @Binding var selectedAttachmentID: UUID?
     let previewAttachment: (ConversationAttachment) -> Void
+    let showAgentProfile: ((AgentRecord) -> Void)?
 
     private var isUser: Bool {
         if case .user = message.author { return true }
@@ -146,7 +147,17 @@ struct MessageBubble: View {
 
             if !isUser, case .agent(let id) = message.author,
                let agent = store.agents.first(where: { $0.id == id }) {
-                BotAvatar(agent: agent, size: 27)
+                if let showAgentProfile {
+                    Button { showAgentProfile(agent) } label: {
+                        BotAvatar(agent: agent, size: 27)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(agent.displayName)
+                    .accessibilityLabel("Show \(agent.displayName)'s profile")
+                } else {
+                    BotAvatar(agent: agent, size: 27)
+                }
             }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
