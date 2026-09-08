@@ -25,7 +25,7 @@ struct NoodleSettingsView: View {
             HarnessesSettingsView()
                 .settingsContentSize()
                 .tabItem {
-                    Label("Harnesses", systemImage: "terminal")
+                    Label("Harness", systemImage: "terminal")
                 }
                 .tag(NoodleSettingsTab.harnesses)
             HeartbeatsSettingsView()
@@ -40,7 +40,7 @@ struct NoodleSettingsView: View {
                 .tag(NoodleSettingsTab.security)
             UpdatesSettingsView()
                 .settingsContentSize()
-                .tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }
+                .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }
                 .tag(NoodleSettingsTab.updates)
             #if DEBUG
             DeveloperSettingsView()
