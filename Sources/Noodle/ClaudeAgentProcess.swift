@@ -5,11 +5,6 @@ import NoodleCore
 /// intentionally ignored: Noodle agents communicate through the Messenger CLI.
 @MainActor
 final class ClaudeAgentProcess: AgentRuntimeProcess {
-    private struct PersistedState: Codable {
-        let version: Int
-        let sessionID: UUID
-    }
-
     let configuration: AgentRecord
     private let executableURL: URL
     private let workspaceURL: URL
@@ -17,9 +12,8 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     private let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
     private let onHeartbeat: @MainActor () -> Void
     private let onUnexpectedTermination: @MainActor (ClaudeAgentProcess, String, Bool) -> Void
-    private let stateURL: URL
-    private let sessionID: UUID
-    private var resumesSession: Bool
+    private var sessionState: ClaudeSessionState
+    private var sessionID: UUID { sessionState.sessionID }
 
     private var connection: ExtendedAgentConnection?
     private var running = false
@@ -29,7 +23,6 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     private var turnIsActive = false
     private var intentionallyStopped = false
     private var terminationReported = false
-    private var receivedOutput = false
     private var lastErrorText: String?
     private lazy var trace = RuntimeTrace(agentID: configuration.id, provider: .claudeCode, workspace: workspaceURL)
     private lazy var outputReader = JSONLineReader { [weak self] message in
@@ -56,17 +49,10 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         self.onHeartbeat = onHeartbeat
         self.onUnexpectedTermination = onUnexpectedTermination
         recoveryPending = recoverInterruptedWork
-        stateURL = workspaceURL.appendingPathComponent(
+        let stateURL = workspaceURL.appendingPathComponent(
             extendedAccess ? ".agents/claude-runtime-extended.json" : ".agents/claude-runtime.json"
         )
-        let state = Self.loadState(from: stateURL)
-        if let state, state.version == Self.runtimeVersion {
-            sessionID = state.sessionID
-            resumesSession = true
-        } else {
-            sessionID = UUID()
-            resumesSession = false
-        }
+        sessionState = ClaudeSessionState(url: stateURL)
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
     }
 
@@ -78,12 +64,10 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         }
         intentionallyStopped = false
         terminationReported = false
-        receivedOutput = false
         lastErrorText = nil
         update(.starting, "Starting Claude Code")
         trace.runtimeStarting()
         do {
-            try saveState()
             let connection = try ExtendedAgentConnection()
             self.connection = connection
             connection.onData = { [weak self] data, isError in
@@ -94,7 +78,6 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
                             .trimmingCharacters(in: .whitespacesAndNewlines)
                         if !detail.isEmpty { self.lastErrorText = String(detail.suffix(2_000)) }
                     } else {
-                        self.receivedOutput = true
                         self.outputReader.receive(data)
                     }
                 }
@@ -111,12 +94,12 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
                 agentID: configuration.id,
                 executablePath: executableURL.path,
                 sessionID: sessionID,
-                resumeSession: resumesSession,
+                resumeSession: sessionState.shouldResume,
                 modelIdentifier: configuration.modelIdentifier,
                 effortIdentifier: configuration.reasoningEffort
             ) { [weak self] pid, error in
                 Task { @MainActor in
-                    guard let self, !self.intentionallyStopped else { return }
+                    guard let self, !self.intentionallyStopped, !self.terminationReported else { return }
                     if let error { self.reportUnexpectedTermination(error); return }
                     self.processIdentifier = pid
                     self.update(.ready, "Claude Code ready")
@@ -229,18 +212,28 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         guard !intentionallyStopped, running else { return }
         let type = message["type"] as? String
         if type == "system", message["subtype"] as? String == "init" {
-            if let rawID = message["session_id"] as? String,
-               UUID(uuidString: rawID) != sessionID {
+            guard let rawID = message["session_id"] as? String,
+                  let confirmedID = UUID(uuidString: rawID), confirmedID == sessionID else {
                 reportUnexpectedTermination("Claude Code opened an unexpected session.")
                 return
             }
-            resumesSession = true
+            do { try sessionState.confirm(sessionID: confirmedID) }
+            catch { reportUnexpectedTermination("Could not save Claude session: \(error.localizedDescription)") }
             return
         }
         if type == "assistant" || type == "result" { trace.outputObserved() }
         guard type == "result" else { return }
+        do {
+            if try sessionState.invalidateMissingSession(from: message) {
+                trace.record(.turnFailed)
+                reportUnexpectedTermination("Claude's saved session was not found; starting a new session")
+                return
+            }
+        } catch {
+            reportUnexpectedTermination("Could not clear missing Claude session: \(error.localizedDescription)")
+            return
+        }
         turnIsActive = false
-        resumesSession = true
         let failed = message["is_error"] as? Bool == true
         trace.finish(failed ? .turnFailed : .turnCompleted)
         if failed {
@@ -263,10 +256,6 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         trace.finish(.runtimeDisconnected)
         terminationReported = true
         let needsRecovery = recoveryPending || turnIsActive || notificationPending
-        if resumesSession && !receivedOutput {
-            // A stale session must not trap the supervisor in an endless resume loop.
-            try? FileManager.default.removeItem(at: stateURL)
-        }
         running = false
         turnIsActive = false
         processIdentifier = nil
@@ -274,20 +263,6 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         connection = nil
         update(.failed, detail)
         onUnexpectedTermination(self, detail, needsRecovery)
-    }
-
-    private func saveState() throws {
-        try FileManager.default.createDirectory(
-            at: stateURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try JSONEncoder().encode(PersistedState(version: Self.runtimeVersion, sessionID: sessionID))
-            .write(to: stateURL, options: .atomic)
-    }
-
-    private static func loadState(from url: URL) -> PersistedState? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(PersistedState.self, from: data)
     }
 
     private func update(_ phase: AgentRuntimePhase, _ detail: String) {
@@ -300,5 +275,4 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         onSnapshot(snapshot)
     }
 
-    private static let runtimeVersion = 1
 }

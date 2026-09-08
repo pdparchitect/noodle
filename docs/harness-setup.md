@@ -34,6 +34,8 @@ For Claude Code, the isolated Agent Host asks the signed CLI for `claude auth st
 
 Claude bots use a persistent stream-json session with the selected model and supported effort level. Noodle offers the standard Fable, Opus, Sonnet, and Haiku aliases; Claude Code resolves each alias to the appropriate current model for the signed-in account. Claude bots currently require autonomous access; restricted mode remains available for Codex bots.
 
+Noodle saves a new Claude session pointer only after Claude confirms initialization. If resuming explicitly fails because that exact session does not exist, Noodle clears only its stale pointer and lets supervision start a fresh session. Bot workspaces, memory, conversation history and Claude transcripts are untouched. Authentication, model, quota and transport errors do not discard valid session pointers.
+
 ## Development and security
 
 `NOODLE_SIMULATE_NO_HARNESSES=1` hides all harnesses at startup in debug builds. **Check Installation** then enables discovery of external standalone/CLI installations for that session; app-bundled ChatGPT/Codex copies stay excluded. If no external installation exists, the UI remains uninstalled and bot creation remains disabled. A new flagged launch resets the simulation; release builds ignore the flag.
