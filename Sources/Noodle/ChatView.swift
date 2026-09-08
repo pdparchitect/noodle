@@ -418,7 +418,7 @@ private struct ConversationTranscript: View {
     }
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
+        ScrollView(.vertical) {
             // Link and attachment previews reserve stable dimensions, allowing
             // long histories to remain lazy without scroll-position corrections.
             LazyVStack(spacing: 10) {
@@ -443,6 +443,8 @@ private struct ConversationTranscript: View {
             .padding(.horizontal, 15)
             .padding(.top, 30)
         }
+        .scrollIndicators(.automatic, axes: .vertical)
+        .contentMargins(.bottom, bottomOverlayHeight + 8, for: .scrollIndicators)
         .scrollPosition($position)
         .defaultScrollAnchor(.bottom, for: .initialOffset)
         .defaultScrollAnchor(followsLatest ? .bottom : .top, for: .sizeChanges)

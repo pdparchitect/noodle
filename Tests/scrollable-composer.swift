@@ -73,10 +73,33 @@ struct ScrollableComposerFixture: View {
                 try await Task.sleep(for: .milliseconds(300))
                 precondition(scroll.editor.string == "Short draft")
                 precondition(scroll.frame.height <= 25, "Composer must shrink after switching to a short draft")
+                let singleLineHeight = scroll.frame.height
                 precondition(scroll.editor.undoManager?.canUndo != true, "Undo must not restore another chat's draft")
                 model.text = ""
                 try await Task.sleep(for: .milliseconds(150))
                 precondition(scroll.editor.string.isEmpty && scroll.editor.placeholder == "Message Test")
+                precondition(abs(scroll.frame.height - singleLineHeight) < 0.5, "Empty and one-line drafts must have identical height")
+                model.text = "x"
+                try await Task.sleep(for: .milliseconds(150))
+                precondition(abs(scroll.frame.height - singleLineHeight) < 0.5, "Typing the first character must not shift the layout")
+                model.text = "x\n"
+                try await Task.sleep(for: .milliseconds(150))
+                precondition(scroll.frame.height > singleLineHeight, "An actual trailing newline must still grow the editor")
+                model.text = ""
+                try await Task.sleep(for: .milliseconds(150))
+                precondition(abs(scroll.frame.height - singleLineHeight) < 0.5, "Clearing text must restore the same single-line height")
+                for count in 1...8 {
+                    scroll.editor.insertText("\n", replacementRange: scroll.editor.selectedRange())
+                    try await Task.sleep(for: .milliseconds(100))
+                    let emptyLastLineHeight = scroll.frame.height
+                    scroll.editor.insertText("x", replacementRange: scroll.editor.selectedRange())
+                    try await Task.sleep(for: .milliseconds(100))
+                    precondition(abs(scroll.frame.height - emptyLastLineHeight) < 0.5,
+                        "Typing on empty line \(count + 1) must not shrink the composer")
+                    precondition(scroll.frame.height <= singleLineHeight * 6 + 0.5)
+                }
+                model.text = ""
+                try await Task.sleep(for: .milliseconds(150))
                 // A private pasteboard leaves the user's clipboard untouched.
                 let pasteboard = NSPasteboard.withUniqueName()
                 defer { pasteboard.releaseGlobally() }

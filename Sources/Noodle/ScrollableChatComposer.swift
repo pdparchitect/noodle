@@ -146,7 +146,10 @@ struct ScrollableChatComposer: NSViewRepresentable {
         container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
         layout.ensureLayout(for: container)
         let line = ceil(layout.defaultLineHeight(for: composerFont))
-        let used = ceil(layout.usedRect(for: container).height + layout.extraLineFragmentRect.height)
+        // The extra fragment overlaps the used rect for an empty editor. Adding
+        // their heights counts that line twice and shifts the transcript as the
+        // first character is entered. Measure their union's bottom instead.
+        let used = ceil(max(layout.usedRect(for: container).maxY, layout.extraLineFragmentRect.maxY))
         return min(line * 6, max(line, used))
     }
 }

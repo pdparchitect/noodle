@@ -22,6 +22,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Empty and one-line chat drafts have identical composer heights, preventing the conversation from jumping when typing the first character or clearing the input. Additional lines still expand the composer normally.
+- The main conversation shows its native vertical scrollbar according to macOS scroll-bar preferences, with clearance above the overlaid composer. Message layout, saved scroll positions and follow-latest behaviour are unchanged.
 - Long chat drafts now have native trackpad scrolling and an automatically hiding scrollbar within the existing six-line composer. Pasting stays plain text; Enter sends, Shift+Enter adds a line, and native undo and bot-name completion are preserved.
 - Harness update instructions only appear when a newer version is confirmed. Failed version checks no longer add an inline error label to Settings.
 - Bot and group names use single-line fields with validation against multiline or oversized pasted text. Existing malformed names can no longer expand the chat header or empty-message placeholder; descriptions, backstories and messages remain multiline.
