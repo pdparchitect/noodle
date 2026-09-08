@@ -1,5 +1,4 @@
 import AppKit
-import ImageIO
 import SwiftUI
 import NoodleCore
 
@@ -58,9 +57,9 @@ struct MessageContextMenu: NSViewRepresentable {
             // Decode detection also covers real images with generic attachment MIME types.
             if let url = configuration.backgroundImageURL,
                let useAsBackground = configuration.useAsBackground,
-               CGImageSourceCreateWithURL(url as CFURL, nil) != nil {
+               ConversationBackground.canUseImage(at: url) {
                 menu.addItem(.separator())
-                addItem("Use as Conversation Background", symbol: "photo", to: menu, action: useAsBackground)
+                addItem("Use as Background", symbol: "photo", to: menu, action: useAsBackground)
             }
             NSMenu.popUpContextMenu(menu, with: event, for: self)
             actions = []

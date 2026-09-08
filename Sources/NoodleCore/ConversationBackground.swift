@@ -15,6 +15,19 @@ public struct ConversationBackground: Codable, Equatable, Sendable {
         self.imageFilename = imageFilename
     }
     public var isDefault: Bool { preset == nil && imageFilename == nil }
+
+    public static func canUseImage(at url: URL) -> Bool {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL,
+            [kCGImageSourceShouldCache: false] as CFDictionary) else { return false }
+        return isImageSource(source)
+    }
+
+    fileprivate static func isImageSource(_ source: CGImageSource) -> Bool {
+        // ImageIO can create a source for arbitrary text without recognizing an image.
+        guard let identifier = CGImageSourceGetType(source) as String?,
+              let type = UTType(identifier), type.conforms(to: .image) else { return false }
+        return CGImageSourceGetCount(source) > 0
+    }
 }
 
 public enum ConversationBackgroundError: LocalizedError {
@@ -43,6 +56,7 @@ extension WorkspaceRepository {
     @discardableResult public func setBackground(conversationID: UUID, imageData: Data) throws -> ConversationBackground {
         guard imageData.count <= 50 * 1024 * 1024,
               let source = CGImageSourceCreateWithData(imageData as CFData, nil),
+              ConversationBackground.isImageSource(source),
               let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceCreateThumbnailWithTransform: true,

@@ -105,6 +105,19 @@ final class ConversationBackgroundTests: XCTestCase {
         XCTAssertEqual(try repository.loadBackground(conversationID: bot.conversation.id).preset, .ocean)
     }
 
+    func testBackgroundMenuRecognizesImageContentsNotFileNamesOrDocumentPreviews() throws {
+        let bot = try repository.createAgent(named: "Bot")
+        for filename in ["review.md", "notes.txt", "archive.zip", "fake.png"] {
+            let attachment = try repository.importAttachment(data: Data("# Review notes\nNot an image.".utf8),
+                originalFilename: filename, into: bot.conversation.id, mediaType: "image/png")
+            XCTAssertFalse(ConversationBackground.canUseImage(at: repository.attachmentFileURL(attachment)), filename)
+        }
+        let image = try repository.importAttachment(data: fixtureImage(), originalFilename: "picture.bin",
+            into: bot.conversation.id, mediaType: "application/octet-stream")
+        XCTAssertTrue(ConversationBackground.canUseImage(at: repository.attachmentFileURL(image)))
+        XCTAssertFalse(ConversationBackground.canUseImage(at: root.appendingPathComponent("missing.png")))
+    }
+
     private func fixtureImage() throws -> Data {
         let context = try XCTUnwrap(CGContext(data: nil, width: 3000, height: 10, bitsPerComponent: 8,
             bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
