@@ -366,156 +366,40 @@ struct ChatView: View {
 
 }
 
-private struct TranscriptViewport: Equatable {
-    var offset: CGFloat = 0
-    var isAtBottom = true
-}
-
-private struct TranscriptGeometry: Equatable {
-    let viewport: TranscriptViewport
-    let contentHeight: CGFloat
-    let containerHeight: CGFloat
-}
-
-/// Retains the latest geometry without invalidating the SwiftUI hierarchy on
-/// every pixel of a scroll gesture. The durable value is published only when
-/// scrolling becomes idle.
-private final class TranscriptViewportRecorder {
-    var viewport: TranscriptViewport
-
-    init(_ viewport: TranscriptViewport) {
-        self.viewport = viewport
-    }
-}
-
 private struct ConversationTranscript: View {
     @Environment(NoodleStore.self) private var store
     let conversation: BotConversation
+    let initialViewport: TranscriptViewport
     @Binding var selectedAttachmentID: UUID?
     let previewAttachment: (ConversationAttachment) -> Void
     let bottomOverlayHeight: CGFloat
     let showAgentProfile: (AgentRecord) -> Void
     let saveViewport: (TranscriptViewport) -> Void
-    @State private var position: ScrollPosition
-    @State private var viewportRecorder: TranscriptViewportRecorder
-    @State private var followsLatest: Bool
-    @State private var userIsScrolling = false
-
-    init(
-        conversation: BotConversation,
-        initialViewport: TranscriptViewport,
-        selectedAttachmentID: Binding<UUID?>,
-        previewAttachment: @escaping (ConversationAttachment) -> Void,
-        bottomOverlayHeight: CGFloat,
-        showAgentProfile: @escaping (AgentRecord) -> Void,
-        saveViewport: @escaping (TranscriptViewport) -> Void
-    ) {
-        self.conversation = conversation
-        _selectedAttachmentID = selectedAttachmentID
-        self.previewAttachment = previewAttachment
-        self.bottomOverlayHeight = bottomOverlayHeight
-        self.showAgentProfile = showAgentProfile
-        self.saveViewport = saveViewport
-        _position = State(initialValue: initialViewport.isAtBottom
-            ? ScrollPosition(edge: .bottom)
-            : ScrollPosition(y: initialViewport.offset))
-        _viewportRecorder = State(initialValue: TranscriptViewportRecorder(initialViewport))
-        _followsLatest = State(initialValue: initialViewport.isAtBottom)
-    }
 
     var body: some View {
-        ScrollView(.vertical) {
-            // Link and attachment previews reserve stable dimensions, allowing
-            // long histories to remain lazy without scroll-position corrections.
-            LazyVStack(spacing: 10) {
-                ConversationStartView(conversation: conversation, showAgentProfile: showAgentProfile)
-                    .padding(.bottom, 14)
+        let messages = store.messages(for: conversation)
+        TranscriptScrollView(
+            initialViewport: initialViewport,
+            lastMessageID: messages.last?.id,
+            lastMessageIsFromUser: messages.last?.author == .user,
+            bottomOverlayHeight: bottomOverlayHeight,
+            saveViewport: saveViewport
+        ) {
+            ConversationStartView(conversation: conversation, showAgentProfile: showAgentProfile)
+                .padding(.bottom, 14)
+                .id(conversation.id)
 
-                ForEach(store.messages(for: conversation)) { message in
-                    MessageBubble(
-                        message: message,
-                        hasConversationBackground: !store.background(for: conversation).isDefault,
-                        selectedAttachmentID: $selectedAttachmentID,
-                        previewAttachment: previewAttachment,
-                        showAgentProfile: showAgentProfile
-                    )
-                }
-
-                // The composer overlays the scroll view so messages can pass
-                // beneath it. This trailing clearance still lets the final
-                // message scroll completely above the composer.
-                Color.clear.frame(height: bottomOverlayHeight + 20)
-            }
-            .padding(.horizontal, 15)
-            .padding(.top, 30)
-        }
-        .scrollIndicators(.automatic, axes: .vertical)
-        .contentMargins(.bottom, bottomOverlayHeight + 8, for: .scrollIndicators)
-        .scrollPosition($position)
-        .defaultScrollAnchor(.bottom, for: .initialOffset)
-        .defaultScrollAnchor(followsLatest ? .bottom : .top, for: .sizeChanges)
-        .defaultScrollAnchor(.top, for: .alignment)
-        .onScrollGeometryChange(for: TranscriptGeometry.self) { geometry in
-            let metrics = TranscriptScrollMetrics(
-                contentOffset: geometry.contentOffset.y,
-                contentHeight: geometry.contentSize.height,
-                viewportHeight: geometry.containerSize.height,
-                topInset: geometry.contentInsets.top,
-                bottomInset: geometry.contentInsets.bottom
-            )
-            return TranscriptGeometry(
-                viewport: TranscriptViewport(
-                    // ScrollPosition(y:) is measured from the inset-adjusted
-                    // top. Geometry's raw offset starts at -contentInsets.top.
-                    // Restoring the raw value subtracts the toolbar inset on
-                    // every round trip through another conversation.
-                    offset: metrics.offset,
-                    isAtBottom: metrics.isAtBottom
-                ),
-                contentHeight: geometry.contentSize.height,
-                containerHeight: geometry.containerSize.height
-            )
-        } action: { _, updated in
-            viewportRecorder.viewport = updated.viewport
-            // isPositionedByUser stays true after a gesture ends. It must not
-            // turn a later message/thumbnail resize into an apparent scroll away.
-            if userIsScrolling {
-                if followsLatest != updated.viewport.isAtBottom {
-                    followsLatest = updated.viewport.isAtBottom
-                }
-            }
-            // Never write ScrollPosition from its own geometry callback. Lazy
-            // row measurement and selectable text can repeatedly invalidate
-            // layout, turning corrective scrolls into a main-thread loop.
-            // Size-change anchoring above handles growth; new messages request
-            // a single scroll in onChange below.
-        }
-        .onScrollPhaseChange { oldPhase, newPhase in
-            let wasUserScrolling = oldPhase != .idle && oldPhase != .animating
-            let isUserScrolling = newPhase != .idle && newPhase != .animating
-            userIsScrolling = isUserScrolling
-            if wasUserScrolling && !isUserScrolling {
-                let finalViewport = viewportRecorder.viewport
-                followsLatest = finalViewport.isAtBottom
-                saveViewport(finalViewport)
+            ForEach(messages) { message in
+                MessageBubble(
+                    message: message,
+                    hasConversationBackground: !store.background(for: conversation).isDefault,
+                    selectedAttachmentID: $selectedAttachmentID,
+                    previewAttachment: previewAttachment,
+                    showAgentProfile: showAgentProfile
+                )
+                .id(message.id)
             }
         }
-        .onChange(of: store.messages(for: conversation).last?.id) { _, _ in
-            let last = store.messages(for: conversation).last
-            if last?.author == .user {
-                followsLatest = true
-                saveViewport(TranscriptViewport(
-                    offset: viewportRecorder.viewport.offset,
-                    isAtBottom: true
-                ))
-            }
-            if followsLatest && !userIsScrolling {
-                position.scrollTo(edge: .bottom)
-            }
-        }
-        // Save only actual user scrolling (above), never teardown geometry.
-        // During a conversation switch the outgoing scroll view can receive
-        // a resized viewport; recording it would corrupt its saved position.
     }
 }
 
