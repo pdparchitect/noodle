@@ -33,6 +33,11 @@ struct NoodleApp: App {
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
+            CommandGroup(replacing: .help) {
+                Button("Noodle Help") {
+                    NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle")!)
+                }
+            }
             CommandGroup(after: .appSettings) {
                 CheckForUpdatesButton()
             }

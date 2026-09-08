@@ -12,6 +12,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- The Help menu's **Noodle Help** item opens the project's GitHub page in the default browser.
 - Codex and Claude bots persist unfinished turns before dispatch and receive a recovery wake after Noodle restarts, including force-quits. Completed and idle bots are not woken just because the app reopened.
 
 ### Changed
