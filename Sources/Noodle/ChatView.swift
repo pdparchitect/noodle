@@ -413,15 +413,21 @@ private struct ConversationTranscript: View {
         .defaultScrollAnchor(followsLatest ? .bottom : .top, for: .sizeChanges)
         .defaultScrollAnchor(.top, for: .alignment)
         .onScrollGeometryChange(for: TranscriptGeometry.self) { geometry in
-            let bottom = max(0, geometry.contentSize.height + geometry.contentInsets.bottom - geometry.containerSize.height)
+            let metrics = TranscriptScrollMetrics(
+                contentOffset: geometry.contentOffset.y,
+                contentHeight: geometry.contentSize.height,
+                viewportHeight: geometry.containerSize.height,
+                topInset: geometry.contentInsets.top,
+                bottomInset: geometry.contentInsets.bottom
+            )
             return TranscriptGeometry(
                 viewport: TranscriptViewport(
                     // ScrollPosition(y:) is measured from the inset-adjusted
                     // top. Geometry's raw offset starts at -contentInsets.top.
                     // Restoring the raw value subtracts the toolbar inset on
                     // every round trip through another conversation.
-                    offset: max(0, geometry.contentOffset.y + geometry.contentInsets.top),
-                    isAtBottom: geometry.contentOffset.y >= bottom - 2
+                    offset: metrics.offset,
+                    isAtBottom: metrics.isAtBottom
                 ),
                 contentHeight: geometry.contentSize.height,
                 containerHeight: geometry.containerSize.height
@@ -434,9 +440,12 @@ private struct ConversationTranscript: View {
                 if followsLatest != updated.viewport.isAtBottom {
                     followsLatest = updated.viewport.isAtBottom
                 }
-            } else if followsLatest && !updated.viewport.isAtBottom {
-                position.scrollTo(edge: .bottom)
             }
+            // Never write ScrollPosition from its own geometry callback. Lazy
+            // row measurement and selectable text can repeatedly invalidate
+            // layout, turning corrective scrolls into a main-thread loop.
+            // Size-change anchoring above handles growth; new messages request
+            // a single scroll in onChange below.
         }
         .onScrollPhaseChange { oldPhase, newPhase in
             let wasUserScrolling = oldPhase != .idle && oldPhase != .animating
