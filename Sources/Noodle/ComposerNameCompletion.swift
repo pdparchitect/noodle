@@ -10,7 +10,7 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
     private var menu: NSMenu?
     private var agents: [AgentRecord] = []
     private var preferredIDs: Set<UUID> = []
-    private var showDescriptions = false
+    private var showDescriptions = true
     private var dismissedRequest: AgentNameCompletion?
     private var observers: [NSObjectProtocol] = []
     private var presentationScheduled = false
@@ -127,7 +127,7 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
 
 /// Keeps SwiftUI's existing multiline field, including undo, paste and spelling.
 struct ChatComposerBridge: NSViewRepresentable {
-    @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showDescriptions = false
+    @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showDescriptions = true
     let isActive: Bool
     let draft: String
     let agents: [AgentRecord]

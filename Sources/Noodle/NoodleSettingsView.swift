@@ -56,7 +56,7 @@ struct NoodleSettingsView: View {
 private struct GeneralSettingsView: View {
     @Environment(NoodleStore.self) private var store
     @AppStorage(BotNameStyle.defaultsKey) private var botNameStyle = BotNameStyle.real.rawValue
-    @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showBotDescriptions = false
+    @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showBotDescriptions = true
 
     var body: some View {
         Form {

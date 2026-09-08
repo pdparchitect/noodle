@@ -65,7 +65,7 @@ private func pixelDifference(_ lhs: NSImage, _ rhs: NSImage) -> CGFloat {
 }
 
 private struct FixtureView: View {
-    @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showDescriptions = false
+    @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showDescriptions = true
     @StateObject private var completion = ComposerNameCompletion()
     @State private var draft = ""
     @State private var submissions = 0
