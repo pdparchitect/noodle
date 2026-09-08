@@ -7,6 +7,10 @@ Check without writing with `swift run --disable-sandbox NoodleDocumentation --ch
 
 Runtime wake notifications tell a bot to check for work. Messenger deliveries carry conversation messages or reaction feedback. Effects are transient UI events. Direct/group is a conversation kind, attachments are message content, and delivery status is not a separate event.
 
+## Agent instruction loading
+
+The bot's `AGENTS.md` (also exposed as `CLAUDE.md`) holds its backstory, workspace rules, and a short pointer to `.agents/skills/messenger/SKILL.md`. Codex runtime instructions use the same pointer. The Messenger skill holds the complete generated guidance below; startup instructions do not repeat it.
+
 ## Events and handling
 
 ### inbox-changed

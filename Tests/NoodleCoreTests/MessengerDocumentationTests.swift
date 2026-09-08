@@ -2,6 +2,18 @@ import XCTest
 @testable import NoodleCore
 
 final class MessengerDocumentationTests: XCTestCase {
+    func testBootstrapRoutesEveryWakeToSkillWithoutDuplicatingDetails() {
+        let bootstrap = MessengerDocumentation.bootstrapInstructions
+        XCTAssertTrue(bootstrap.contains(".agents/skills/messenger/SKILL.md"))
+        for reason in AgentWakeReason.allCases {
+            XCTAssertTrue(bootstrap.contains(reason.rawValue))
+        }
+        XCTAssertFalse(bootstrap.contains(MessengerDocumentation.transportInstructions))
+        XCTAssertFalse(bootstrap.contains("--get-latest"))
+        XCTAssertLessThan(bootstrap.count, 1_000)
+        XCTAssertLessThan(bootstrap.count, MessengerDocumentation.skillInstructions.count / 4)
+    }
+
     func testReferenceIsCurrentAndEveryRuntimeCaseHasGuidance() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
@@ -14,7 +26,7 @@ final class MessengerDocumentationTests: XCTestCase {
             XCTAssertFalse(entry.guidance.isEmpty, entry.id)
             XCTAssertFalse(entry.fields.isEmpty, entry.id)
             XCTAssertFalse(entry.recipients.isEmpty, entry.id)
-            XCTAssertTrue(MessengerDocumentation.agentInstructions.contains(entry.guidance), entry.id)
+            XCTAssertTrue(MessengerDocumentation.skillInstructions.contains(entry.guidance), entry.id)
         }
         XCTAssertEqual(Set(AgentWakeReason.allCases.map(\.rawValue)),
                        Set(AgentWakeReason.allCases.map { $0.reference.id }))
@@ -76,6 +88,7 @@ final class MessengerDocumentationTests: XCTestCase {
 
         <!-- noodle:managed:start -->
         Obsolete runtime guidance.
+        \(MessengerDocumentation.skillInstructions)
         <!-- noodle:managed:end -->
         """.write(to: guide, atomically: true, encoding: .utf8)
         let custom = workspace.appendingPathComponent(".agents/skills/custom", isDirectory: true)
@@ -86,8 +99,12 @@ final class MessengerDocumentationTests: XCTestCase {
         let skill = try String(contentsOf: workspace.appendingPathComponent(".agents/skills/messenger/SKILL.md"), encoding: .utf8)
         XCTAssertTrue(refreshed.contains("PRIVATE-BACKSTORY-TO-PRESERVE"))
         XCTAssertFalse(refreshed.contains("Obsolete runtime guidance"))
-        XCTAssertTrue(refreshed.contains(MessengerDocumentation.agentInstructions))
-        XCTAssertTrue(skill.contains(MessengerDocumentation.agentInstructions))
+        XCTAssertTrue(refreshed.contains(MessengerDocumentation.bootstrapInstructions))
+        XCTAssertFalse(refreshed.contains(MessengerDocumentation.skillInstructions))
+        XCTAssertFalse(refreshed.contains(MessengerDocumentation.transportInstructions))
+        XCTAssertTrue(skill.contains(MessengerDocumentation.skillInstructions))
+        let claudeGuide = try String(contentsOf: workspace.appendingPathComponent("CLAUDE.md"), encoding: .utf8)
+        XCTAssertEqual(claudeGuide, refreshed)
         XCTAssertFalse(skill.contains("PRIVATE-BACKSTORY-TO-PRESERVE"))
         XCTAssertEqual(try String(contentsOf: custom.appendingPathComponent("SKILL.md"), encoding: .utf8), "My custom skill")
     }

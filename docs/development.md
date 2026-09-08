@@ -29,7 +29,7 @@ The build automatically uses the first installed Apple Development identity so m
 
 ## Message documentation
 
-Message and event guidance lives in `Sources/NoodleCore/MessengerDocumentation.swift`, alongside exhaustive references for runtime wake reasons, delivery kinds, group notices, effects and CLI commands. Agent workspace instructions and Messenger help use this catalogue directly; workspace synchronization refreshes the managed guidance while preserving each bot's backstory and custom skills.
+Message and event guidance lives in `Sources/NoodleCore/MessengerDocumentation.swift`, alongside exhaustive references for runtime wake reasons, delivery kinds, group notices, effects and CLI commands. The Messenger skill and CLI help use this catalogue directly. Bot workspace and Codex runtime instructions contain only a short pointer requiring the skill to be read before handling messages or wake events, rather than repeating the full guide. Workspace synchronization refreshes the managed guidance while preserving each bot's backstory and custom skills.
 
 After changing the catalogue, regenerate and commit the reference:
 

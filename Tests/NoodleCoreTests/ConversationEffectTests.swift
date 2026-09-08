@@ -144,14 +144,16 @@ final class ConversationEffectTests: XCTestCase {
         }
     }
 
-    func testGeneratedAgentInstructionsAdvertiseEffects() throws {
+    func testGeneratedMessengerSkillAdvertisesEffects() throws {
         let bot = try repository.createAgent(named: "Builder")
-        for path in ["AGENTS.md", ".agents/skills/messenger/SKILL.md"] {
-            let text = try String(contentsOf: repository.directory(for: bot.agent).appendingPathComponent(path), encoding: .utf8)
-            XCTAssertTrue(text.contains("--effect confetti"))
-            XCTAssertTrue(text.contains("--list-effects"))
-            XCTAssertTrue(text.contains("not that the user saw it"))
-        }
+        let directory = repository.directory(for: bot.agent)
+        let text = try String(contentsOf: directory.appendingPathComponent(".agents/skills/messenger/SKILL.md"), encoding: .utf8)
+        XCTAssertTrue(text.contains("--effect confetti"))
+        XCTAssertTrue(text.contains("--list-effects"))
+        XCTAssertTrue(text.contains("not that the user saw it"))
+        let startup = try String(contentsOf: directory.appendingPathComponent("AGENTS.md"), encoding: .utf8)
+        XCTAssertTrue(startup.contains(MessengerDocumentation.bootstrapInstructions))
+        XCTAssertFalse(startup.contains("--effect confetti"))
     }
 
     func testConcurrentConsumersClaimExactlyOnce() throws {

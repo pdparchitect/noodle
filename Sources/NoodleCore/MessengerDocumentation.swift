@@ -203,7 +203,15 @@ public enum MessengerDocumentation {
     Reply through `./.agents/skills/messenger/messenger --send --conversation <uuid> --body-percent-encoded <percent-encoded-utf8>`. In Codex, encode the body with `encodeURIComponent(body).replaceAll("'", "%27")` and pass it as a single-quoted shell argument. Add a repeatable `--attach <file-path>` option to send files; reply text is optional with attachments. Use the conversation UUID, not a display name. Never edit Noodle's conversation JSON directly.
     """
 
-    public static var agentInstructions: String {
+    /// Always-loaded guidance routes bots to the skill instead of repeating its contents.
+    public static var bootstrapInstructions: String {
+        let wakeReasons = AgentWakeReason.allCases.map { "`\($0.rawValue)`" }.joined(separator: ", ")
+        return """
+        Before handling Noodle messages or wake events (\(wakeReasons)), read `.agents/skills/messenger/SKILL.md` in this workspace and follow it. The Messenger skill is the authoritative guide to events, inbox consumption, replies, attachments, reactions, and group context. Read it explicitly if your harness has not loaded it; do not guess commands or event behavior. Use Messenger for conversation operations, never edit Noodle's conversation JSON directly.
+        """
+    }
+
+    public static var skillInstructions: String {
         let events = eventReferences.map(\.markdown).joined(separator: "\n\n")
         return events + "\n\n### Reading and replying\n\n" + transportInstructions
             + "\n\n### Messenger commands\n\n" + commandMarkdown
@@ -233,6 +241,10 @@ public enum MessengerDocumentation {
         Check without writing with `swift run --disable-sandbox NoodleDocumentation --check docs/message-reference.md`.
 
         Runtime wake notifications tell a bot to check for work. Messenger deliveries carry conversation messages or reaction feedback. Effects are transient UI events. Direct/group is a conversation kind, attachments are message content, and delivery status is not a separate event.
+
+        ## Agent instruction loading
+
+        The bot's `AGENTS.md` (also exposed as `CLAUDE.md`) holds its backstory, workspace rules, and a short pointer to `.agents/skills/messenger/SKILL.md`. Codex runtime instructions use the same pointer. The Messenger skill holds the complete generated guidance below; startup instructions do not repeat it.
 
         ## Events and handling
 

@@ -1142,7 +1142,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         return nil
     }
 
-    private static var developerInstructions: String { MessengerDocumentation.agentInstructions }
+    private static var developerInstructions: String { MessengerDocumentation.bootstrapInstructions }
 
     private var accessInstructions: String {
         let mode = extendedAccess

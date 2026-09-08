@@ -378,7 +378,7 @@ public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
     public let launcherExecutableURL: URL?
 
-    public static let managedSkillVersion = 17
+    public static let managedSkillVersion = 18
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
         self.rootURL = rootURL.standardizedFileURL
@@ -1411,7 +1411,7 @@ public struct WorkspaceRepository: Sendable {
 
         ## Messages
 
-        \(MessengerDocumentation.agentInstructions)
+        \(MessengerDocumentation.bootstrapInstructions)
         """
     }
 
@@ -1424,7 +1424,7 @@ public struct WorkspaceRepository: Sendable {
 
         # Messenger
 
-        \(MessengerDocumentation.agentInstructions)
+        \(MessengerDocumentation.skillInstructions)
         """
     }
 }
