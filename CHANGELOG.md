@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-08
+
 ### Added
 
 - The `@` menu shows dimmed public bot descriptions by default, with ellipses for long descriptions and a General setting to turn them off.
@@ -13,7 +15,6 @@ All notable changes to Noodle are documented here, following
 - Type `@` in the chat composer to open a native macOS bot-name menu with system styling, keyboard navigation and type-to-select. Choose a name with Return or a click to insert plain text.
 - Privacy-safe runtime lifecycle and inbox-read logs in debug and release builds, with wake correlation IDs and extra debug-only notification diagnostics.
 - A shared message/event catalogue generates agent guidance, Messenger help, and the message reference, with build and test checks for documentation drift.
-
 - First-class Claude Code harness support with crisp vector Claude Code and Codex marks, native-install discovery, isolated account setup, standard Fable, Opus, Sonnet, and Haiku choices, effort controls, persistent stream-json sessions, supervised recovery, and Messenger-based conversations.
 - An opt-in General setting that prevents automatic Mac sleep only while at least one agent is working.
 - Supervised agent runtimes that restart after unexpected Codex exits or Mac wake, use bounded retry backoff, and safely resume interrupted work.
@@ -151,7 +152,8 @@ All notable changes to Noodle are documented here, following
 - Signed and notarized macOS packaging with a dedicated Developer ID identity.
 - Sandboxed messaging and explicit attachment paths for agent file access.
 
-[Unreleased]: https://github.com/pdparchitect/noodle/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/pdparchitect/noodle/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/pdparchitect/noodle/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/pdparchitect/noodle/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/pdparchitect/noodle/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/pdparchitect/noodle/compare/v0.5.0...v0.6.0
