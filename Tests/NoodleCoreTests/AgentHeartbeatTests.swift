@@ -135,7 +135,9 @@ final class AgentHeartbeatTests: XCTestCase {
         XCTAssertTrue(AgentWakeReason.heartbeatInstructions.contains("finish silently"))
         XCTAssertTrue(AgentWakeReason.heartbeatInstructions.contains("does not authorize"))
         XCTAssertTrue(AgentWakeReason.recoveryInstructions.contains("interrupted task"))
-        XCTAssertTrue(AgentWakeReason.recoveryInstructions.contains("Avoid repeating consequential side effects"))
+        XCTAssertTrue(AgentWakeReason.recoveryInstructions.contains("Verify what already completed before repeating consequential side effects"))
+        XCTAssertTrue(AgentWakeReason.recoveryInstructions.contains("app quit or was killed"))
+        XCTAssertTrue(AgentWakeReason.recoveryInstructions.contains("do not wait for the user to repeat the request"))
     }
 
     private func tracked() -> AgentHeartbeatScheduler {

@@ -661,6 +661,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private let onHeartbeat: @MainActor () -> Void
     private let onUnexpectedTermination: @MainActor (CodexAgentProcess, String, Bool) -> Void
     private let stateURL: URL
+    private var turnRecovery: AgentTurnRecovery
 
     private var process: Process?
     private var input: ProcessInputWriter?
@@ -697,12 +698,13 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         self.executableURL = executableURL
         self.workspaceURL = workspaceURL
         self.extendedAccess = extendedAccess
-        recoveryPending = recoverInterruptedWork
         self.onApprovals = onApprovals
         self.onSnapshot = onSnapshot
         self.onHeartbeat = onHeartbeat
         self.onUnexpectedTermination = onUnexpectedTermination
         stateURL = workspaceURL.appendingPathComponent(extendedAccess ? ".agents/codex-runtime-extended.json" : ".agents/codex-runtime.json")
+        turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
+        recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
         let state = Self.loadState(from: stateURL)
         threadID = state?.version == Self.runtimeVersion ? state?.threadID : nil
@@ -845,7 +847,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     var isAlive: Bool { process?.isRunning == true || extendedRunning }
 
     var hasInterruptedWork: Bool {
-        recoveryPending || turnIsActive || notificationPending
+        recoveryPending || turnIsActive || notificationPending || turnRecovery.hasUnfinishedTurn
     }
 
     func heartbeat() {
@@ -861,7 +863,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         guard !intentionallyStopped, !terminationReported else { return }
         trace.finish(.runtimeDisconnected)
         terminationReported = true
-        let needsRecovery = recoveryPending || turnIsActive || notificationPending
+        let needsRecovery = hasInterruptedWork
         extendedRunning = false
         extendedConnection?.invalidate()
         extendedConnection = nil
@@ -969,6 +971,14 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             onApprovals(pendingApprovals)
         }
         if method == "turn/completed" {
+            guard turnIsActive else { return }
+            if let reportedThread = (message["params"] as? [String: Any])?["threadId"] as? String,
+               reportedThread != threadID { return }
+            do { try turnRecovery.finish() }
+            catch {
+                fail("Could not record finished Codex work: \(error.localizedDescription)")
+                return
+            }
             approvalItemDetails = [:]
             pendingApprovals = []
             onApprovals([])
@@ -1071,6 +1081,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         if let effort = configuration.reasoningEffort { params["effort"] = effort }
 
         do {
+            try turnRecovery.begin()
             try request(.startTurn(reason), method: "turn/start", params: params)
             trace.record(.wakeSubmitted)
             turnIsActive = true

@@ -13,6 +13,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     private let onHeartbeat: @MainActor () -> Void
     private let onUnexpectedTermination: @MainActor (ClaudeAgentProcess, String, Bool) -> Void
     private var sessionState: ClaudeSessionState
+    private var turnRecovery: AgentTurnRecovery
     private var sessionID: UUID { sessionState.sessionID }
 
     private var connection: ExtendedAgentConnection?
@@ -48,11 +49,12 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         self.onSnapshot = onSnapshot
         self.onHeartbeat = onHeartbeat
         self.onUnexpectedTermination = onUnexpectedTermination
-        recoveryPending = recoverInterruptedWork
         let stateURL = workspaceURL.appendingPathComponent(
             extendedAccess ? ".agents/claude-runtime-extended.json" : ".agents/claude-runtime.json"
         )
         sessionState = ClaudeSessionState(url: stateURL)
+        turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
+        recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
     }
 
@@ -154,7 +156,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     var isAlive: Bool { running || !extendedAccess }
 
     var hasInterruptedWork: Bool {
-        recoveryPending || turnIsActive || notificationPending
+        recoveryPending || turnIsActive || notificationPending || turnRecovery.hasUnfinishedTurn
     }
 
     func heartbeat() {
@@ -192,6 +194,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         ]
         do {
             let data = try JSONSerialization.data(withJSONObject: object) + Data([0x0A])
+            try turnRecovery.begin()
             connection.write(data)
             trace.record(.wakeSubmitted)
             turnIsActive = true
@@ -223,6 +226,8 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         }
         if type == "assistant" || type == "result" { trace.outputObserved() }
         guard type == "result" else { return }
+        if let rawID = message["session_id"] as? String,
+           UUID(uuidString: rawID) != sessionID { return }
         do {
             if try sessionState.invalidateMissingSession(from: message) {
                 trace.record(.turnFailed)
@@ -231,6 +236,12 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
             }
         } catch {
             reportUnexpectedTermination("Could not clear missing Claude session: \(error.localizedDescription)")
+            return
+        }
+        guard turnIsActive else { return }
+        do { try turnRecovery.finish() }
+        catch {
+            update(.failed, "Could not record finished Claude work: \(error.localizedDescription)")
             return
         }
         turnIsActive = false
@@ -255,7 +266,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         guard !intentionallyStopped, !terminationReported else { return }
         trace.finish(.runtimeDisconnected)
         terminationReported = true
-        let needsRecovery = recoveryPending || turnIsActive || notificationPending
+        let needsRecovery = hasInterruptedWork
         running = false
         turnIsActive = false
         processIdentifier = nil

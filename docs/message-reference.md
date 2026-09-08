@@ -35,7 +35,7 @@ Fields: A bodyless `<noodle-event type="runtime-recovered" />` notification.
 
 Recipients: The one bot being woken.
 
-A `runtime-recovered` event means Noodle restarted this bot after its runtime ended unexpectedly while work or an inbox notification was pending. Check Messenger once for unread messages and prioritize them. If the inbox is empty, inspect the current thread context for an interrupted task and resume it when safe. Avoid repeating consequential side effects that may already have completed. If there is no interrupted work, finish silently; never send a recovery acknowledgement merely to announce that the runtime restarted.
+A `runtime-recovered` event means Noodle restarted this bot with unfinished work, including after the app quit or was killed, or after its runtime ended unexpectedly while work or an inbox notification was pending. Check Messenger once for unread messages and prioritize them. If the inbox is empty, inspect the current thread context and workspace for an interrupted task and actively continue it when safe; do not wait for the user to repeat the request. Verify what already completed before repeating consequential side effects. If there is no interrupted work, finish silently; never send a recovery acknowledgement merely to announce that the runtime restarted.
 
 ### message
 
