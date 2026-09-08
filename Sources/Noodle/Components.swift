@@ -141,20 +141,14 @@ struct MessageBubble: View {
                 }
 
                 ForEach(attachments) { attachment in
-                    Group {
-                        if let url = attachment.url.flatMap({ MessageLink.publicWebURL(from: $0, preservingFragment: true) }) {
-                            MessageLinkPreview(url: url, shouldLoad: isVisible)
-                        } else {
-                            AttachmentInlinePreview(
-                                attachment: attachment,
-                                fileURL: store.attachmentFileURL(attachment),
-                                shouldLoad: isVisible,
-                                isSelected: selectedAttachmentID == attachment.id,
-                                select: { selectedAttachmentID = attachment.id },
-                                preview: { previewAttachment(attachment) }
-                            )
-                        }
-                    }
+                    AttachmentInlinePreview(
+                        attachment: attachment,
+                        fileURL: store.attachmentFileURL(attachment),
+                        shouldLoad: isVisible,
+                        isSelected: selectedAttachmentID == attachment.id,
+                        select: { selectedAttachmentID = attachment.id },
+                        preview: { previewAttachment(attachment) }
+                    )
                     .overlay { reactionContextMenu(attachment: attachment) }
                     .overlay(alignment: .topTrailing) {
                         if attachment.id == attachments.last?.id { cornerReactions }
