@@ -9,6 +9,7 @@ struct ChatView: View {
     @Environment(NoodleStore.self) private var store
     let conversation: BotConversation
     var composerFocusRequest: UUID? = nil
+    var focusSidebar: (() -> Void)? = nil
     @State private var composerFocused = false
     @State private var choosingAttachments = false
     @State private var showingAttachmentMenu = false
@@ -306,7 +307,8 @@ struct ChatView: View {
                 agents: store.agents,
                 preferredIDs: Set(conversation.participantIDs),
                 completion: nameCompletion,
-                submit: store.sendDraft
+                submit: store.sendDraft,
+                focusSidebar: focusSidebar
             )
             .padding(.leading, 12)
             .padding(.trailing, composerSendControlWidth + 14)

@@ -4,6 +4,7 @@ import NoodleCore
 
 struct SidebarView: View {
     var focusComposer: () -> Void = {}
+    var focusRequest: UUID? = nil
     @Environment(NoodleStore.self) private var store
     @FocusState private var searchIsFocused: Bool
 
@@ -49,7 +50,8 @@ struct SidebarView: View {
         .modifier(ConversationListKeyboardNavigation(
             hasSelection: store.selectedConversationID != nil,
             searchIsFocused: searchIsFocused,
-            focusComposer: focusComposer
+            focusComposer: focusComposer,
+            focusRequest: focusRequest
         ))
         .background(Color.black.opacity(0.24).ignoresSafeArea())
         .searchable(text: $store.searchText, placement: .sidebar, prompt: "Search")

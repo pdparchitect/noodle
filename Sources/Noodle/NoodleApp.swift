@@ -211,16 +211,20 @@ struct RootView: View {
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var isFileDropTargeted = false
     @State private var composerFocusRequest = UUID()
+    @State private var sidebarFocusRequest = UUID()
 
     var body: some View {
         @Bindable var store = store
 
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView { composerFocusRequest = UUID() }
+            SidebarView(focusComposer: { composerFocusRequest = UUID() }, focusRequest: sidebarFocusRequest)
                 .navigationSplitViewColumnWidth(min: 280, ideal: 326, max: 380)
         } detail: {
             if let conversation = store.selectedConversation {
-                ChatView(conversation: conversation, composerFocusRequest: composerFocusRequest)
+                ChatView(conversation: conversation, composerFocusRequest: composerFocusRequest, focusSidebar: {
+                    columnVisibility = .all
+                    sidebarFocusRequest = UUID()
+                })
             } else {
                 Color(nsColor: .textBackgroundColor).opacity(0.28)
                     .accessibilityHidden(true)

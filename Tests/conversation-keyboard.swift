@@ -9,6 +9,7 @@ import NoodleCore
     @Published var search = ""
     @Published var searchFocused = false
     @Published var focusRequests = 0
+    @Published var sidebarFocusRequest = UUID()
     let ids = [UUID(), UUID(), UUID()]
     let completion = ComposerNameCompletion()
 }
@@ -27,14 +28,15 @@ struct KeyboardFixture: View {
                     searchIsFocused: model.searchFocused, focusComposer: {
                         model.focusRequests += 1
                         model.focused = true
-                    }))
+                    }, focusRequest: model.sidebarFocusRequest))
             }.frame(width: 200)
             VStack {
                 Button("A control Tab must skip") {}
                 Spacer()
                 ScrollableChatComposer(text: $model.text, isFocused: $model.focused,
                     conversationID: model.ids[model.selection ?? 0], placeholder: "Message fixture",
-                    agents: [], preferredIDs: [], completion: model.completion, submit: {})
+                    agents: [], preferredIDs: [], completion: model.completion, submit: {},
+                    focusSidebar: { model.sidebarFocusRequest = UUID() })
             }.frame(width: 320)
         }.padding(20).frame(height: 300)
     }
@@ -91,20 +93,36 @@ struct KeyboardFixture: View {
             await settle()
             precondition(model.text == "x", "Typing after Tab must enter the chat draft")
 
-            window.makeFirstResponder(table)
+            let previousSidebarRequest = model.sidebarFocusRequest
+            key("\u{19}", code: 48, modifiers: .shift)
             await settle()
-            key("\t", code: 48, modifiers: .shift)
+            precondition(model.sidebarFocusRequest != previousSidebarRequest, "Shift-Tab must invoke the sidebar callback")
+            precondition(window.firstResponder === table, "Composer Shift-Tab must return directly to the sidebar")
+            precondition(model.selection == 1, "Returning focus must preserve the selected conversation")
+            precondition(model.text == "x", "Shift-Tab must not modify the draft")
+            key(String(UnicodeScalar(NSDownArrowFunctionKey)!), code: 125, modifiers: [.function, .numericPad])
             await settle()
-            precondition(model.focusRequests == 1, "Shift-Tab retains native navigation")
+            precondition(model.selection == 2, "Arrow navigation must resume from the selected sidebar row")
+            key("\t", code: 48)
+            await settle()
+            precondition(window.firstResponder === composer.editor, "Tab must work again after returning to the sidebar")
+
+            key("\u{19}", code: 48, modifiers: .shift)
+            await settle()
+            precondition(window.firstResponder === table, "Repeated Shift-Tab must return to the sidebar")
+            precondition(model.selection == 2)
+            key("\u{19}", code: 48, modifiers: .shift)
+            await settle()
+            precondition(model.focusRequests == 2, "Sidebar Shift-Tab retains native navigation")
             window.makeFirstResponder(table)
             model.searchFocused = true
             await settle()
             key("\t", code: 48)
             await settle()
-            precondition(model.focusRequests == 1, "Search must not use the sidebar shortcut")
+            precondition(model.focusRequests == 2, "Search must not use the sidebar shortcut")
             model.completion.detach()
             window.orderOut(nil)
-            print("Conversation keyboard checks passed: stable sidebar focus, Up/Down, direct Tab, typing and modified/search exclusions")
+            print("Conversation keyboard checks passed: stable sidebar focus, Up/Down, Tab/Shift-Tab round trip, typing and modified/search exclusions")
             exit(0)
         }
         app.run()

@@ -13,6 +13,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
     let preferredIDs: Set<UUID>
     let completion: ComposerNameCompletion
     let submit: () -> Void
+    var focusSidebar: (() -> Void)? = nil
     @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showDescriptions = true
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -103,8 +104,17 @@ struct ScrollableChatComposer: NSViewRepresentable {
         }
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-            guard commandSelector == #selector(NSResponder.insertNewline(_:)), !textView.hasMarkedText() else { return false }
+            guard !textView.hasMarkedText() else { return false }
             let modifiers = NSApp.currentEvent?.modifierFlags.intersection([.shift, .option, .control, .command]) ?? []
+            if commandSelector == #selector(NSResponder.insertBacktab(_:)),
+               modifiers.intersection([.option, .control, .command]).isEmpty,
+               let focusSidebar = parent.focusSidebar {
+                parent.completion.detach()
+                parent.isFocused = false
+                focusSidebar()
+                return true
+            }
+            guard commandSelector == #selector(NSResponder.insertNewline(_:)) else { return false }
             if modifiers.contains(.shift) || modifiers.contains(.option) { return false }
             parent.submit()
             return true
