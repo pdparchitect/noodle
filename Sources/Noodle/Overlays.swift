@@ -5,6 +5,18 @@ import SwiftUI
 import UniformTypeIdentifiers
 import NoodleCore
 
+private struct NameValidationMessage: View {
+    let name: String
+    var body: some View {
+        if !name.isEmpty, let error = ConversationName.error(for: name) {
+            Text(error)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 struct NewBotSheet: View {
     @Environment(NoodleStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -49,7 +61,8 @@ struct NewBotSheet: View {
 
                     VStack(alignment: .leading, spacing: 5) {
                         ZStack(alignment: .trailing) {
-                            TextField("Bot name", text: $name)
+                            TextField("Bot name", text: $name, axis: .horizontal)
+                                .lineLimit(1)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(size: 14))
                                 .autocorrectionDisabled(false)
@@ -79,6 +92,8 @@ struct NewBotSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                NameValidationMessage(name: name)
 
                 AgentConfigurationFields(
                     selectedHarnessIdentifier: $selectedHarnessIdentifier,
@@ -115,7 +130,7 @@ struct NewBotSheet: View {
     }
 
     private var canCreate: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        ConversationName.error(for: name) == nil &&
             store.runtime.availableInstallations.contains {
                 $0.provider.rawValue == selectedHarnessIdentifier
             }
@@ -231,12 +246,15 @@ struct EditBotSheet: View {
                     .help("Change Bot Icon")
                     .accessibilityLabel("Change Bot Icon")
 
-                    TextField("Bot name", text: $name)
+                    TextField("Bot name", text: $name, axis: .horizontal)
+                        .lineLimit(1)
                         .textFieldStyle(.roundedBorder)
                         .autocorrectionDisabled(false)
                         .focused($nameFocused)
                         .onSubmit { if canSave { save() } }
                 }
+
+                NameValidationMessage(name: name)
 
                 AgentConfigurationFields(
                     selectedHarnessIdentifier: $selectedHarnessIdentifier,
@@ -307,7 +325,7 @@ struct EditBotSheet: View {
     }
 
     private var canSave: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        ConversationName.error(for: name) == nil &&
             store.runtime.availableInstallations.contains {
                 $0.provider.rawValue == selectedHarnessIdentifier
             }
@@ -760,7 +778,8 @@ struct GroupInfoSheet: View {
                         size: 64
                     )
                     VStack(alignment: .leading, spacing: 4) {
-                        TextField("Group name", text: $name)
+                        TextField("Group name", text: $name, axis: .horizontal)
+                            .lineLimit(1)
                             .textFieldStyle(.roundedBorder)
                             .autocorrectionDisabled(false)
                             .focused($nameFocused)
@@ -780,6 +799,8 @@ struct GroupInfoSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                NameValidationMessage(name: name)
 
                 GroupDescriptionEditor(publicDescription: $publicDescription)
 
@@ -824,7 +845,7 @@ struct GroupInfoSheet: View {
     private var canSave: Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDescription = publicDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmedName.isEmpty && !selectedIDs.isEmpty && (
+        return ConversationName.error(for: name) == nil && !selectedIDs.isEmpty && (
             trimmedName != conversation.displayName ||
                 trimmedDescription != (conversation.publicDescription ?? "") ||
                 selectedIDs != Set(conversation.participantIDs)
@@ -889,11 +910,15 @@ struct NewGroupSheet: View {
 
             Divider()
 
-            TextField("Group name", text: $name)
+            TextField("Group name", text: $name, axis: .horizontal)
+                .lineLimit(1)
                 .textFieldStyle(.roundedBorder)
                 .focused($nameFocused)
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
+
+            NameValidationMessage(name: name)
+                .padding(.horizontal, 16)
 
             GroupDescriptionEditor(publicDescription: $publicDescription)
                 .padding(.horizontal, 16)
@@ -913,7 +938,7 @@ struct NewGroupSheet: View {
     }
 
     private var canCreate: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !selectedIDs.isEmpty
+        ConversationName.error(for: name) == nil && !selectedIDs.isEmpty
     }
 }
 

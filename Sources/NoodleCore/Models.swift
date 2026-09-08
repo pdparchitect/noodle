@@ -430,7 +430,7 @@ public struct WorkspaceRepository: Sendable {
         backstory: String = "",
         now: Date = Date()
     ) throws -> CreatedAgentWorkspace {
-        let name = try validatedName(rawName)
+        let name = try ConversationName.validated(rawName)
         try prepare()
 
         let agent = AgentRecord(
@@ -495,7 +495,7 @@ public struct WorkspaceRepository: Sendable {
         now: Date = Date()
     ) throws -> AgentRecord {
         var renamed = agent
-        renamed.displayName = try validatedName(rawName)
+        renamed.displayName = try ConversationName.validated(rawName)
         renamed.updatedAt = now
         renamed.harnessIdentifier = harnessIdentifier
         renamed.modelIdentifier = modelIdentifier
@@ -543,7 +543,7 @@ public struct WorkspaceRepository: Sendable {
         existingAgents: [AgentRecord],
         now: Date = Date()
     ) throws -> BotConversation {
-        let name = try validatedName(rawName)
+        let name = try ConversationName.validated(rawName)
         let uniqueIDs = Array(Set(participantIDs))
         guard !uniqueIDs.isEmpty else { throw WorkspaceError.insufficientGroupParticipants }
 
@@ -600,7 +600,7 @@ public struct WorkspaceRepository: Sendable {
             throw WorkspaceError.missingConversation(conversationID)
         }
 
-        let name = try validatedName(rawName)
+        let name = try ConversationName.validated(rawName)
         let uniqueIDs = Array(Set(participantIDs))
         guard !uniqueIDs.isEmpty else { throw WorkspaceError.insufficientGroupParticipants }
 

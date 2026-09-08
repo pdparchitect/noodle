@@ -971,9 +971,9 @@ final class NoodleStore {
     func title(for conversation: BotConversation) -> String {
         if conversation.kind == .direct,
            let agent = participants(for: conversation).first {
-            return agent.displayName
+            return ConversationName.display(agent.displayName)
         }
-        return conversation.displayName
+        return ConversationName.display(conversation.displayName)
     }
 
     func preview(for conversation: BotConversation) -> String {

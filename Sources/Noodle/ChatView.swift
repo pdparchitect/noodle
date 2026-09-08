@@ -539,6 +539,8 @@ private struct ConversationStartView: View {
 
             Text(store.title(for: conversation))
                 .font(.system(size: 22, weight: .semibold))
+                .lineLimit(1)
+                .truncationMode(.tail)
 
             if conversation.kind == .group {
                 if let publicDescription = conversation.publicDescription {
