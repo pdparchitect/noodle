@@ -23,6 +23,10 @@
 - Wake idle agents with configurable inactivity heartbeats, enabled by default after 30 minutes
 - Generate either conventional real names or playful names when creating bots
 
+## Link previews
+
+Visible links load previews on demand. **Settings → General → Link preview timeout** sets the maximum time for a new preview, including its thumbnail: 5, 10 (default), 20, or 30 seconds. If the site has no image, fails, or takes too long, the spinner stops and the card remains clickable with a link icon and any available title. Results, including failed attempts, are kept in a bounded in-memory cache so ordinary row redraws do not continually retry. The setting applies to new requests; existing requests retain their deadline.
+
 ## Groups
 
 Groups can contain **one or more bots**. Their editable names are separate from the stable UUIDs that own their histories, attachments, backgrounds, and agent references. New Group and Group Info share an **Add Bots** search picker and a grid of selected avatars with individual remove controls. Saving an empty group is not allowed; removing a member does not delete the bot or conversation history.

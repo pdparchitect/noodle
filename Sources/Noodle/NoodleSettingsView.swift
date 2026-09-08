@@ -57,6 +57,7 @@ private struct GeneralSettingsView: View {
     @Environment(NoodleStore.self) private var store
     @AppStorage(BotNameStyle.defaultsKey) private var botNameStyle = BotNameStyle.real.rawValue
     @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showBotDescriptions = true
+    @AppStorage(LinkPreviewSettings.timeoutKey) private var linkPreviewTimeout = LinkPreviewSettings.defaultTimeout
 
     var body: some View {
         Form {
@@ -72,6 +73,15 @@ private struct GeneralSettingsView: View {
                 Toggle("Show descriptions in the @ name menu", isOn: $showBotDescriptions)
             } footer: {
                 Text("Show each bot's public description beside its name. Private backstories are never shown.")
+            }
+            Section {
+                Picker("Link preview timeout", selection: $linkPreviewTimeout) {
+                    ForEach(LinkPreviewSettings.timeoutOptions, id: \.self) { seconds in
+                        Text("\(seconds) seconds").tag(seconds)
+                    }
+                }
+            } footer: {
+                Text("Maximum time for new link previews, including images. Unavailable previews remain clickable without a loading spinner.")
             }
             Section {
                 Toggle("Keep Mac awake while agents work", isOn: Binding(

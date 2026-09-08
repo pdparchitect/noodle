@@ -177,7 +177,7 @@ final class FxAgentProcess: AgentRuntimeProcess {
             } else if case .prompt = purpose {
                 turnIsActive = false
                 trace.finish(.turnFailed)
-                update(.failed, "FX could not complete the turn. Check its account and selected model, then retry.")
+                update(.failed, FxProtocol.turnFailureDescription(error))
             } else { terminated("FX session setup failed: \(String((error["message"] as? String ?? "Unknown error").prefix(300)))") }
             return
         }

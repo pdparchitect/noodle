@@ -8,10 +8,13 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- General settings now offers a link-preview timeout (5–30 seconds, default 10), covering both metadata and thumbnail loading.
 - Experimental Vercel FX harness with a native template icon, official installation guidance, existing-account detection, Vercel sign-in, live model discovery, persistent ACP sessions, Messenger wake events and interrupted-work recovery. FX requires explicit autonomous access. Its safety-review failure currently blocks live Messenger round-trip verification; held tool execution is reported as a failure, not readiness.
 
 ### Fixed
 
+- Recognized FX transport failures now explain interrupted model connections and how to resume, without echoing private provider errors or incorrectly implying a lost login.
+- Link previews stop loading when a site has no image, an image fails, or the total deadline expires. Failed previews stay clickable, cache their fallback, cancel outstanding work, and ignore late callbacks.
 - Model search disables autocorrection while preserving the original plain SwiftUI field and rounded search-bar appearance.
 - The Agent Host joins the app's login security session so FX can access its existing Keychain login instead of incorrectly asking signed-in users to authenticate again.
 - The Help menu's **Noodle Help** item opens the project's GitHub page in the default browser.

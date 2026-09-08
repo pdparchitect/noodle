@@ -2,6 +2,21 @@ import Foundation
 
 /// FX v0.0.8 uses ACP JSON-RPC over newline-delimited stdio.
 public enum FxProtocol {
+    /// Only known transport identifiers are surfaced; never echo arbitrary
+    /// provider error payloads, which may contain account or request data.
+    public static func turnFailureDescription(_ error: [String: Any]) -> String {
+        let networkErrors: Set<String> = [
+            "TlsInitializationFailed", "ConnectionSetupTimedOut", "UnknownHostName",
+            "NameServerFailure", "NoAddressReturned", "DetectingNetworkConfigurationFailed",
+            "AddressUnavailable", "ConnectionPending", "ConnectionRefused", "HostUnreachable",
+            "NetworkUnreachable", "NetworkDown", "Timeout", "WouldBlock", "WriteFailed", "ReadFailed",
+            "HttpConnectionClosing", "ConnectionResetByPeer", "ConnectionTimedOut", "SystemResumed"
+        ]
+        if let name = error["message"] as? String, networkErrors.contains(name) {
+            return "FX's model connection was interrupted (\(name)). Use Retry Startup to resume unfinished work."
+        }
+        return "FX could not complete the turn. Check FX's provider and model, then use Retry Startup. Your unfinished work is preserved."
+    }
     public static var initializeParameters: [String: Any] {
         ["protocolVersion": 1,
          "clientInfo": ["name": "noodle", "title": "Noodle", "version": "1"],

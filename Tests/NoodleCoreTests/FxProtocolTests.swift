@@ -2,6 +2,12 @@ import XCTest
 @testable import NoodleCore
 
 final class FxProtocolTests: XCTestCase {
+    func testTransportFailuresExplainRetryWithoutEchoingPrivatePayloads() {
+        XCTAssertTrue(FxProtocol.turnFailureDescription(["message": "ConnectionResetByPeer"]).contains("model connection was interrupted"))
+        let unknown = FxProtocol.turnFailureDescription(["message": "secret-account-token"])
+        XCTAssertFalse(unknown.contains("secret-account-token"))
+        XCTAssertTrue(unknown.contains("Retry Startup"))
+    }
     func testHeldReviewsAreNotSuccessfulToolRuns() {
         let content: [[String: Any]] = [["content": ["type": "text", "text": #"{"error":{"type":"tool_review_held","held":true}}"#]]]
         XCTAssertTrue(FxProtocol.reviewWasHeld(["sessionUpdate": "tool_call_update", "status": "failed", "content": content]))

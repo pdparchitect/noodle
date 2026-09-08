@@ -13,7 +13,7 @@ struct MessageLinkPreview: View {
     @State private var metadata: LPLinkMetadata?
     @State private var previewImage: NSImage?
     @State private var requested = false
-    @State private var failed = false
+    @State private var loading = false
 
     var body: some View {
         Button {
@@ -29,7 +29,7 @@ struct MessageLinkPreview: View {
                             .frame(width: cardWidth, height: imageHeight, alignment: .topLeading)
                             .clipped()
                             .transition(.opacity)
-                    } else if requested && !failed {
+                    } else if loading {
                         ProgressView()
                             .controlSize(.small)
                     } else {
@@ -83,15 +83,12 @@ struct MessageLinkPreview: View {
     private func requestMetadata() {
         guard !requested else { return }
         requested = true
+        loading = true
         LinkPreviewMetadataCache.shared.load(url) { result in
-            metadata = result
-            failed = result == nil
-            guard let result,
-                  let provider = result.imageProvider ?? result.iconProvider else { return }
-            LinkPreviewMetadataCache.shared.loadImage(for: url, provider: provider) { image in
-                withAnimation(.easeOut(duration: 0.15)) {
-                    previewImage = image
-                }
+            metadata = result.metadata
+            loading = false
+            withAnimation(.easeOut(duration: 0.15)) {
+                previewImage = result.image
             }
         }
     }
@@ -111,81 +108,104 @@ struct MessageLinkPreview: View {
     }
 }
 
+enum LinkPreviewSettings {
+    static let timeoutKey = "Noodle.linkPreview.timeoutSeconds"
+    static let defaultTimeout = 10
+    static let timeoutOptions = [5, 10, 20, 30]
+    static func timeout(in defaults: UserDefaults = .standard) -> TimeInterval {
+        let value = defaults.object(forKey: timeoutKey) as? Int ?? defaultTimeout
+        return TimeInterval(min(30, max(5, value)))
+    }
+}
+
 @MainActor
-private final class LinkPreviewMetadataCache {
+final class LinkPreviewMetadataCache {
     static let shared = LinkPreviewMetadataCache()
+    final class Result: NSObject {
+        let metadata: LPLinkMetadata?
+        let image: NSImage?
+        init(metadata: LPLinkMetadata?, image: NSImage?) {
+            self.metadata = metadata
+            self.image = image
+        }
+    }
+    private final class Request {
+        var metadata: LPLinkMetadata?
+        var completions: [(Result) -> Void] = []
+        var cancellations: [() -> Void] = []
+        var deadline: Task<Void, Never>?
+    }
+    typealias MetadataLoader = (URL, TimeInterval, @escaping (LPLinkMetadata?) -> Void) -> (() -> Void)
+    typealias ImageLoader = (NSItemProvider, @escaping (NSImage?) -> Void) -> (() -> Void)
+    private let fetchMetadata: MetadataLoader
+    private let fetchImage: ImageLoader
+    private let cache = NSCache<NSURL, Result>()
+    private var pending: [URL: Request] = [:]
 
-    private let cache = NSCache<NSURL, LPLinkMetadata>()
-    private let imageCache = NSCache<NSURL, NSImage>()
-    private var failedURLs = Set<URL>()
-    private var pending: [URL: [(LPLinkMetadata?) -> Void]] = [:]
-    private var providers: [URL: LPMetadataProvider] = [:]
-    private var pendingImages: [URL: [(NSImage?) -> Void]] = [:]
-
-    private init() {
+    init(fetchMetadata: @escaping MetadataLoader = LinkPreviewMetadataCache.nativeMetadata,
+         fetchImage: @escaping ImageLoader = LinkPreviewMetadataCache.nativeImage) {
+        self.fetchMetadata = fetchMetadata
+        self.fetchImage = fetchImage
         cache.countLimit = 128
-        imageCache.countLimit = 128
     }
-
-    func loadImage(for url: URL, provider: NSItemProvider, completion: @escaping (NSImage?) -> Void) {
-        if let image = imageCache.object(forKey: url as NSURL) {
-            completion(image)
+    func load(_ url: URL, timeout: TimeInterval = LinkPreviewSettings.timeout(), completion: @escaping (Result) -> Void) {
+        if let result = cache.object(forKey: url as NSURL) {
+            completion(result)
             return
         }
-        if pendingImages[url] != nil {
-            pendingImages[url]?.append(completion)
+        if let request = pending[url] {
+            request.completions.append(completion)
             return
         }
-
-        pendingImages[url] = [completion]
-        provider.loadObject(ofClass: NSImage.self) { [weak self] object, _ in
+        let request = Request()
+        request.completions = [completion]
+        pending[url] = request
+        // One deadline covers metadata AND its image, independently of whether
+        // Apple's callbacks arrive. Every terminal outcome stops the spinner.
+        request.deadline = Task { [weak self, weak request] in
+            try? await Task.sleep(for: .seconds(max(0.01, timeout)))
+            guard !Task.isCancelled, let request else { return }
+            self?.finish(url, request: request, image: nil)
+        }
+        request.cancellations.append(fetchMetadata(url, timeout) { [weak self, weak request] metadata in
             Task { @MainActor in
-                self?.finishImage(url, image: object as? NSImage)
+                guard let self, let request, self.pending[url] === request else { return }
+                request.metadata = metadata
+                guard let provider = metadata?.imageProvider ?? metadata?.iconProvider else {
+                    self.finish(url, request: request, image: nil)
+                    return
+                }
+                request.cancellations.append(self.fetchImage(provider) { [weak self, weak request] image in
+                    Task { @MainActor in
+                        guard let request else { return }
+                        self?.finish(url, request: request, image: image)
+                    }
+                })
             }
-        }
+        })
     }
-
-    func load(_ url: URL, completion: @escaping (LPLinkMetadata?) -> Void) {
-        if let metadata = cache.object(forKey: url as NSURL) {
-            completion(metadata)
-            return
-        }
-        if failedURLs.contains(url) {
-            completion(nil)
-            return
-        }
-        if pending[url] != nil {
-            pending[url]?.append(completion)
-            return
-        }
-
-        pending[url] = [completion]
+    private func finish(_ url: URL, request: Request, image: NSImage?) {
+        guard pending[url] === request else { return }
+        pending[url] = nil
+        request.deadline?.cancel()
+        request.cancellations.forEach { $0() }
+        let result = Result(metadata: request.metadata, image: image)
+        // Cache failures too: rebuilding visible rows must not start retry loops.
+        cache.setObject(result, forKey: url as NSURL)
+        request.completions.forEach { $0(result) }
+    }
+    nonisolated static func nativeMetadata(_ url: URL, timeout: TimeInterval, completion: @escaping (LPLinkMetadata?) -> Void) -> (() -> Void) {
         let provider = LPMetadataProvider()
-        provider.timeout = 12
-        providers[url] = provider
-        provider.startFetchingMetadata(for: url) { [weak self] metadata, error in
-            Task { @MainActor in
-                self?.finish(url, metadata: error == nil ? metadata : nil)
-            }
+        provider.timeout = timeout
+        provider.startFetchingMetadata(for: url) { metadata, error in
+            completion(error == nil ? metadata : nil)
         }
+        return { provider.cancel() }
     }
-
-    private func finish(_ url: URL, metadata: LPLinkMetadata?) {
-        providers[url] = nil
-        if let metadata {
-            cache.setObject(metadata, forKey: url as NSURL)
-        } else {
-            failedURLs.insert(url)
+    nonisolated static func nativeImage(_ provider: NSItemProvider, completion: @escaping (NSImage?) -> Void) -> (() -> Void) {
+        let progress = provider.loadObject(ofClass: NSImage.self) { object, _ in
+            completion(object as? NSImage)
         }
-        let completions = pending.removeValue(forKey: url) ?? []
-        completions.forEach { $0(metadata) }
-    }
-
-    private func finishImage(_ url: URL, image: NSImage?) {
-        if let image {
-            imageCache.setObject(image, forKey: url as NSURL)
-        }
-        let completions = pendingImages.removeValue(forKey: url) ?? []
-        completions.forEach { $0(image) }
+        return { progress.cancel() }
     }
 }
