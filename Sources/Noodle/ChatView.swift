@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     @Environment(NoodleStore.self) private var store
     let conversation: BotConversation
-    @FocusState private var composerFocused: Bool
+    @State private var composerFocused = false
     @State private var choosingAttachments = false
     @State private var showingAttachmentMenu = false
     @State private var choosingPhotos = false
@@ -291,27 +291,19 @@ struct ChatView: View {
 
     private var composerInputContents: some View {
         ZStack(alignment: .bottomTrailing) {
-            TextField(
-                composerPrompt,
+            ScrollableChatComposer(
                 text: Binding(
                     get: { store.draft(for: conversation.id) },
                     set: { store.setDraft($0, for: conversation.id) }
                 ),
-                axis: .vertical
-            )
-            .textFieldStyle(.plain)
-            .autocorrectionDisabled(false)
-            .font(.system(size: 14))
-            .lineLimit(1...6)
-            .focused($composerFocused)
-            .background(ChatComposerBridge(
-                isActive: composerFocused,
-                draft: store.draft,
+                isFocused: $composerFocused,
+                conversationID: conversation.id,
+                placeholder: composerPrompt,
                 agents: store.agents,
                 preferredIDs: Set(conversation.participantIDs),
-                completion: nameCompletion
-            ))
-            .onSubmit(store.sendDraft)
+                completion: nameCompletion,
+                submit: store.sendDraft
+            )
             .padding(.leading, 12)
             .padding(.trailing, composerSendControlWidth + 14)
             .padding(.vertical, 6)

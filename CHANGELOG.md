@@ -22,6 +22,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Long chat drafts now have native trackpad scrolling and an automatically hiding scrollbar within the existing six-line composer. Pasting stays plain text; Enter sends, Shift+Enter adds a line, and native undo and bot-name completion are preserved.
 - Harness update instructions only appear when a newer version is confirmed. Failed version checks no longer add an inline error label to Settings.
 - Bot and group names use single-line fields with validation against multiline or oversized pasted text. Existing malformed names can no longer expand the chat header or empty-message placeholder; descriptions, backstories and messages remain multiline.
 - Shift+Enter inserts a new line in the chat input; Enter continues to send. Native text editing, undo and bot-name menu navigation are preserved.
