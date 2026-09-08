@@ -12,6 +12,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Model search treats identifiers as literal text, with spell-checking, autocorrection, completion, and smart text substitutions disabled only in that field.
 - The Agent Host joins the app's login security session so FX can access its existing Keychain login instead of incorrectly asking signed-in users to authenticate again.
 - The Help menu's **Noodle Help** item opens the project's GitHub page in the default browser.
 - Codex and Claude bots persist unfinished turns before dispatch and receive a recovery wake after Noodle restarts, including force-quits. Completed and idle bots are not woken just because the app reopened.

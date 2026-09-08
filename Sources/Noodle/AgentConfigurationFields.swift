@@ -214,8 +214,8 @@ private struct ModelChooser: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
-                TextField("Search models", text: $query)
-                    .textFieldStyle(.plain)
+                ModelSearchField(text: $query)
+                    .frame(height: 20)
                 if !query.isEmpty {
                     Button { query = "" } label: {
                         Image(systemName: "xmark.circle.fill")
