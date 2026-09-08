@@ -49,7 +49,8 @@ struct ConversationWallpaper: View {
         let request = Request(background: background, imageURL: imageURL)
         ZStack {
             Color(nsColor: .textBackgroundColor)
-            ConversationBackgroundView(background: displayed.request.background, previewImage: displayed.image)
+            ConversationBackgroundView(background: displayed.request.background,
+                imageURL: displayed.request.imageURL, previewImage: displayed.image)
                 .id(displayed.id)
                 .transition(.opacity)
                 .zIndex(1)
@@ -60,7 +61,9 @@ struct ConversationWallpaper: View {
             guard request != displayed.request else { return }
             let image: NSImage?
             if let url = request.imageURL {
-                image = await Task.detached { NSImage(contentsOf: url) }.value
+                let kind = request.background.mediaKind
+                let poster = await Task.detached { await BackgroundMedia.poster(at: url, kind: kind) }.value
+                image = poster.map { NSImage(cgImage: $0, size: .zero) }
             } else {
                 image = nil
             }
@@ -105,6 +108,7 @@ struct ConversationBackgroundView: View {
     let background: ConversationBackground
     var imageURL: URL?
     var previewImage: NSImage?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var loadedImage: NSImage?
 
     var body: some View {
@@ -121,6 +125,9 @@ struct ConversationBackgroundView: View {
                         .rotationEffect(.degrees(-35)).offset(x: geometry.size.width * 0.35)
                         .blur(radius: 50)
                 }
+                if let imageURL, let kind = background.mediaKind, kind != .image {
+                    AnimatedWallpaper(url: imageURL, kind: kind, reduceMotion: reduceMotion)
+                }
                 if !background.isDefault { Color.black.opacity(0.25) }
             }
             .clipped()
@@ -129,10 +136,11 @@ struct ConversationBackgroundView: View {
         .accessibilityHidden(true)
         .task(id: imageURL) {
             loadedImage = nil
-            guard let imageURL else { return }
-            let image = await Task.detached { NSImage(contentsOf: imageURL) }.value
+            guard let imageURL, previewImage == nil else { return }
+            let kind = background.mediaKind
+            let poster = await Task.detached { await BackgroundMedia.poster(at: imageURL, kind: kind) }.value
             guard !Task.isCancelled else { return }
-            loadedImage = image
+            loadedImage = poster.map { NSImage(cgImage: $0, size: .zero) }
         }
     }
 
@@ -154,6 +162,7 @@ struct ConversationBackgroundSheet: View {
     @State private var original = ConversationBackground()
     @State private var imageData: Data?
     @State private var image: NSImage?
+    @State private var preparedFile: PreparedBackgroundFile?
     @State private var choosingImage = false
     @State private var choosingPhoto = false
     @State private var photoSelection: PhotosPickerItem?
@@ -163,7 +172,7 @@ struct ConversationBackgroundSheet: View {
     var body: some View {
         VStack(spacing: 20) {
             HStack {
-                Button("Cancel") { dismiss() }
+                Button("Cancel") { dismiss() }.disabled(busy)
                 Spacer()
                 Text("Conversation Background").font(.headline)
                 Spacer()
@@ -171,17 +180,17 @@ struct ConversationBackgroundSheet: View {
                     busy = true
                     Task {
                         do {
-                            try await store.setBackground(selected, imageData: imageData, for: conversation)
+                            try await store.setBackground(selected, imageData: imageData, file: preparedFile, for: conversation)
                             dismiss()
                         } catch { failure = error.localizedDescription; busy = false }
                     }
                 }
-                .disabled(busy || (selected == original && imageData == nil))
+                .disabled(busy || (selected == original && imageData == nil && preparedFile == nil))
                 .keyboardShortcut(.defaultAction)
             }
             Text(store.title(for: conversation)).foregroundStyle(.secondary)
             ConversationBackgroundView(background: selected,
-                imageURL: store.repository.backgroundImageURL(selected, conversationID: conversation.id), previewImage: image)
+                imageURL: preparedFile?.url ?? store.repository.backgroundImageURL(selected, conversationID: conversation.id), previewImage: image)
                 .overlay {
                     VStack(alignment: .leading, spacing: 14) {
                         Text("Make this space your own.").padding(10).background(.regularMaterial, in: Capsule())
@@ -203,7 +212,7 @@ struct ConversationBackgroundSheet: View {
                         choosingPhoto = true
                     }
                 } label: {
-                    Label("Choose Image…", systemImage: "photo")
+                    Label("Choose Background…", systemImage: "photo")
                         .frame(maxWidth: .infinity)
                 }
                 .frame(maxWidth: .infinity)
@@ -222,24 +231,25 @@ struct ConversationBackgroundSheet: View {
                 .frame(width: 16, height: 16)
             }
             .disabled(busy)
+            Text("Images, HEIC and MP4/M4V/MOV files. Videos loop silently; dynamic HEIC frames cycle every 8 seconds. Motion pauses when hidden or Reduce Motion is on.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let failure { Text(failure).font(.caption).foregroundStyle(.red) }
         }
         .padding(24).frame(width: 520)
         .onAppear { original = store.background(for: conversation); selected = original }
-        .fileImporter(isPresented: $choosingImage, allowedContentTypes: [.image]) { result in
+        .onDisappear { preparedFile = nil }
+        .interactiveDismissDisabled(busy)
+        .fileImporter(isPresented: $choosingImage, allowedContentTypes: [.image, .mpeg4Movie, .quickTimeMovie, UTType(filenameExtension: "m4v")!]) { result in
             switch result {
             case .success(let url):
                 busy = true
                 Task {
                     do {
-                        let data = try await Task.detached {
-                            let scoped = url.startAccessingSecurityScopedResource()
-                            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                            let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-                            guard size <= 50 * 1024 * 1024 else { throw ConversationBackgroundError.invalidImage }
-                            return try Data(contentsOf: url)
-                        }.value
-                        try useImage(data)
+                        let file = try await Task.detached { try await PreparedBackgroundFile.prepare(url) }.value
+                        preparedFile = file
+                        imageData = nil; image = nil
+                        selected = ConversationBackground(imageFilename: "preview", mediaKind: file.kind)
+                        failure = nil
                     } catch { failure = error.localizedDescription }
                     busy = false
                 }
@@ -264,7 +274,7 @@ struct ConversationBackgroundSheet: View {
                 if let imageError = error as? ConversationBackgroundError {
                     failure = imageError.localizedDescription
                 } else {
-                    failure = "Photos couldn’t provide this image. If it’s in iCloud, open it in Photos and let it download, then try again. You can also use Choose Image → Choose File."
+                    failure = "Photos couldn’t provide this image. If it’s in iCloud, open it in Photos and let it download, then try again. You can also use Choose Background → Choose File."
                 }
             }
         }
@@ -275,6 +285,7 @@ struct ConversationBackgroundSheet: View {
             throw ConversationBackgroundError.invalidImage
         }
         imageData = data
+        preparedFile = nil
         image = preview
         selected = ConversationBackground(imageFilename: "preview")
         failure = nil
@@ -298,7 +309,7 @@ struct ConversationBackgroundSheet: View {
 
     private func choice(_ title: String, background: ConversationBackground) -> some View {
         Button {
-            selected = background; imageData = nil; image = nil; failure = nil
+            selected = background; imageData = nil; image = nil; preparedFile = nil; failure = nil
         } label: {
             VStack(spacing: 6) {
                 ConversationBackgroundView(background: background)

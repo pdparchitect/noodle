@@ -10,9 +10,11 @@ public enum ConversationBackgroundPreset: String, Codable, CaseIterable, Sendabl
 public struct ConversationBackground: Codable, Equatable, Sendable {
     public var preset: ConversationBackgroundPreset?
     public var imageFilename: String?
-    public init(preset: ConversationBackgroundPreset? = nil, imageFilename: String? = nil) {
+    public var mediaKind: BackgroundMediaKind?
+    public init(preset: ConversationBackgroundPreset? = nil, imageFilename: String? = nil, mediaKind: BackgroundMediaKind? = nil) {
         self.preset = preset
         self.imageFilename = imageFilename
+        self.mediaKind = mediaKind
     }
     public var isDefault: Bool { preset == nil && imageFilename == nil }
 
@@ -32,7 +34,13 @@ public struct ConversationBackground: Codable, Equatable, Sendable {
 
 public enum ConversationBackgroundError: LocalizedError {
     case invalidImage
-    public var errorDescription: String? { "Choose a readable image smaller than 50 MB." }
+    case invalidMedia
+    public var errorDescription: String? {
+        switch self {
+        case .invalidImage: return "Choose a readable image smaller than 50 MB."
+        case .invalidMedia: return "Choose a readable image or HEIC up to 512 MB, or a playable MP4, M4V or MOV video up to 1 GB. Wallpaper packages and streaming playlists are not supported."
+        }
+    }
 }
 
 extension WorkspaceRepository {
@@ -43,8 +51,10 @@ extension WorkspaceRepository {
     }
 
     public func backgroundImageURL(_ background: ConversationBackground, conversationID: UUID) -> URL? {
-        guard let name = background.imageFilename, name.hasSuffix(".jpg"),
-              UUID(uuidString: String(name.dropLast(4))) != nil else { return nil }
+        guard let name = background.imageFilename,
+              name == (name as NSString).lastPathComponent,
+              ["jpg", "heic", "heif", "mov", "mp4", "m4v"].contains((name as NSString).pathExtension),
+              UUID(uuidString: (name as NSString).deletingPathExtension) != nil else { return nil }
         return conversationDirectory(id: conversationID).appendingPathComponent("Backgrounds", isDirectory: true)
             .appendingPathComponent(name)
     }
@@ -88,7 +98,7 @@ extension WorkspaceRepository {
         return try setBackground(conversationID: attachment.conversationID, imageData: Data(contentsOf: url))
     }
 
-    private func persistBackground(_ background: ConversationBackground, conversationID: UUID) throws -> ConversationBackground {
+    func persistBackground(_ background: ConversationBackground, conversationID: UUID) throws -> ConversationBackground {
         let directory = conversationDirectory(id: conversationID)
         guard FileManager.default.fileExists(atPath: directory.appendingPathComponent("conversation.json").path) else {
             throw WorkspaceError.missingConversation(conversationID)

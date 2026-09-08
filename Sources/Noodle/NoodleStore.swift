@@ -830,9 +830,10 @@ final class NoodleStore {
         return backgrounds[id] ?? ConversationBackground()
     }
 
-    func setBackground(_ background: ConversationBackground, imageData: Data?, for conversation: BotConversation) async throws {
+    func setBackground(_ background: ConversationBackground, imageData: Data?, file: PreparedBackgroundFile? = nil, for conversation: BotConversation) async throws {
         let repository = repository
         let saved = try await Task.detached {
+            if let file { return try repository.setBackground(conversationID: conversation.id, file: file) }
             if let imageData { return try repository.setBackground(conversationID: conversation.id, imageData: imageData) }
             return try repository.setBackground(conversationID: conversation.id, preset: background.preset)
         }.value
