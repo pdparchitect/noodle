@@ -90,6 +90,7 @@ otool -l "$contents/MacOS/Noodle" \
         fi
     done
 cp "$bin_path/NoodleMessenger" "$contents/Helpers/messenger"
+cp "$bin_path/NoodleMCPCLI" "$contents/Helpers/mcpshim"
 cp "$project_root/Support/Info.plist" "$contents/Info.plist"
 agent_host="$contents/XPCServices/NoodleAgentHost.xpc"
 mkdir -p "$agent_host/Contents/MacOS"
@@ -106,6 +107,13 @@ cp "$project_root/Support/AgentHost-Info.plist" "$agent_host/Contents/Info.plist
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$agent_host/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$agent_host/Contents/Info.plist"
 cp "$project_root/.build/checkouts/Sparkle/LICENSE" "$contents/Resources/Sparkle-LICENSE.txt"
+for dependency in swift-sdk swift-log swift-system eventsource swift-nio swift-atomics swift-collections; do
+    if [[ -f "$project_root/.build/checkouts/$dependency/LICENSE" ]]; then
+        cp "$project_root/.build/checkouts/$dependency/LICENSE" "$contents/Resources/$dependency-LICENSE.txt"
+    elif [[ -f "$project_root/.build/checkouts/$dependency/LICENSE.txt" ]]; then
+        cp "$project_root/.build/checkouts/$dependency/LICENSE.txt" "$contents/Resources/$dependency-LICENSE.txt"
+    fi
+done
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $app_name" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $app_name" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier" "$contents/Info.plist"
@@ -170,6 +178,8 @@ fi
 
 codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/messenger"
+codesign --force --options runtime "$timestamp_option" \
+    --sign "$signing_identity" "$contents/Helpers/mcpshim"
 team_id="$(codesign -dv --verbose=4 "$contents/Helpers/messenger" 2>&1 | awk -F= '/^TeamIdentifier=/ { print $2 }')"
 if [[ ! "$team_id" =~ '^[A-Z0-9]{10}$' ]]; then
     print -u2 "Sharing requires an Apple Development or Developer ID identity with a team identifier."

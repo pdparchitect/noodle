@@ -392,6 +392,12 @@ final class AgentRuntimeCoordinator {
 
     func start(agent: AgentRecord, repository: WorkspaceRepository) {
         guard processes[agent.id] == nil, !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id) else { return }
+        do { try repository.synchronizeAgentWorkspace(agent) }
+        catch {
+            snapshots[agent.id] = AgentRuntimeSnapshot(agentID: agent.id, phase: .failed,
+                detail: "Could not prepare the bot's workspace. Check its managed skill directories before retrying.")
+            return
+        }
         guard let installation = installation(for: agent),
               let executablePath = installation.executablePath else {
             snapshots[agent.id] = AgentRuntimeSnapshot(

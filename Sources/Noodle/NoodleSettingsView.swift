@@ -3,7 +3,7 @@ import SwiftUI
 import NoodleCore
 
 enum NoodleSettingsTab: Hashable {
-    case general, harnesses, heartbeats, security, updates
+    case general, harnesses, mcps, heartbeats, security, updates
 }
 
 struct NoodleSettingsView: View {
@@ -31,6 +31,10 @@ struct NoodleSettingsView: View {
                     Label("Heartbeat", systemImage: "waveform.path.ecg")
                 }
                 .tag(NoodleSettingsTab.heartbeats)
+            MCPSettingsView()
+                .settingsContentSize()
+                .tabItem { Label("MCP", systemImage: "puzzlepiece.extension") }
+                .tag(NoodleSettingsTab.mcps)
             AgentAccessSettingsView()
                 .settingsContentSize()
                 .tabItem { Label("Security", systemImage: "lock.shield") }

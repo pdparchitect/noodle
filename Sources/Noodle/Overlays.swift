@@ -31,6 +31,7 @@ struct NewBotSheet: View {
     @State private var avatarColorIndex = Int.random(in: BotAvatarPalette.gradients.indices)
     @State private var avatarImageData: Data?
     @State private var editingAvatar = false
+    @State private var mcpConnectionIDs: Set<UUID> = []
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -103,6 +104,8 @@ struct NewBotSheet: View {
 
                 BotPublicDescriptionEditor(publicDescription: $publicDescription)
 
+                MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs)
+
                 BotBackstoryEditor(backstory: $backstory)
             }
             .padding(20)
@@ -150,7 +153,8 @@ struct NewBotSheet: View {
             avatarColorIndex: avatarColorIndex,
             avatarImageData: avatarImageData,
             publicDescription: publicDescription,
-            backstory: backstory
+            backstory: backstory,
+            mcpConnectionIDs: mcpConnectionIDs
         )
     }
 
@@ -195,6 +199,7 @@ struct EditBotSheet: View {
     @State private var avatarColorIndex: Int
     @State private var avatarImageData: Data?
     @State private var editingAvatar = false
+    @State private var mcpConnectionIDs: Set<UUID> = []
     @State private var confirmingDeletion = false
     @FocusState private var nameFocused: Bool
 
@@ -264,6 +269,8 @@ struct EditBotSheet: View {
 
                 BotPublicDescriptionEditor(publicDescription: $publicDescription)
 
+                MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs)
+
                 BotBackstoryEditor(backstory: $backstory)
 
                 Text("Saving restarts this bot with the selected Codex model. Its workspace and conversation history stay unchanged.")
@@ -290,6 +297,7 @@ struct EditBotSheet: View {
         .onAppear {
             nameFocused = true
             backstory = store.backstory(for: agent)
+            mcpConnectionIDs = store.mcp.selectedIDs(for: agent)
             store.runtime.refreshCapabilities()
         }
         .sheet(isPresented: $editingAvatar) {
@@ -352,7 +360,8 @@ struct EditBotSheet: View {
             avatarColorIndex: avatarColorIndex,
             avatarImageData: avatarImageData,
             publicDescription: publicDescription,
-            backstory: backstory
+            backstory: backstory,
+            mcpConnectionIDs: mcpConnectionIDs
         ) {
             dismiss()
         }

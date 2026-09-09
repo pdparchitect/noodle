@@ -12,6 +12,7 @@ swift test --disable-sandbox --package-path "$project_root"
 zsh "$project_root/Tests/link-previews.sh"
 zsh "$project_root/Tests/harness-presentation.sh"
 zsh "$project_root/Tests/transcript-resize.sh"
+zsh "$project_root/Tests/mcp-fixture.sh" --check
 app="$(NOODLE_BUILD_CONFIGURATION="${NOODLE_BUILD_CONFIGURATION:-debug}" "$project_root/scripts/build-app.sh")"
 
 expected_version="$(tr -d '[:space:]' < "$project_root/VERSION")"
@@ -38,6 +39,18 @@ fi
 
 codesign --verify --deep --strict --verbose=2 "$app"
 codesign --verify --strict --verbose=2 "$app/Contents/Helpers/messenger"
+codesign --verify --strict --verbose=2 "$app/Contents/Helpers/mcpshim"
+mcp_entitlements="$(codesign -d --entitlements :- "$app/Contents/Helpers/mcpshim" 2>/dev/null)"
+if print -r -- "$mcp_entitlements" | grep -q '<key>'; then
+    print -u2 "The MCP CLI must not inherit application entitlements."
+    exit 1
+fi
+"$app/Contents/Helpers/mcpshim" --help
+if otool -L "$app/Contents/Helpers/mcpshim" | grep -Eq '/opt/homebrew|/usr/local'; then
+    print -u2 "The MCP CLI links against a mutable external dependency."
+    exit 1
+fi
+test -f "$app/Contents/Resources/swift-sdk-LICENSE.txt"
 
 helper_entitlements="$(codesign -d --entitlements :- "$app/Contents/Helpers/messenger" 2>/dev/null)"
 if print -r -- "$helper_entitlements" | grep -q '<key>'; then

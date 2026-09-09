@@ -14,12 +14,15 @@ let package = Package(
         .executable(name: "NoodleDocumentation", targets: ["NoodleDocumentation"])
     ],
     dependencies: [
-        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4")
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
+        .package(url: "https://github.com/modelcontextprotocol/swift-sdk", exact: "0.12.1")
     ],
     targets: [
         .target(name: "NoodleAgentBridge"),
         .executableTarget(name: "NoodleAgentHost", dependencies: ["NoodleCore", "NoodleAgentBridge"]),
         .target(name: "NoodleCore"),
+        .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "MCP", package: "swift-sdk")]),
+        .executableTarget(name: "NoodleMCPCLI", dependencies: ["NoodleCore"]),
         .executableTarget(name: "NoodleDocumentation", dependencies: ["NoodleCore"]),
         .target(name: "NoodleSharing", dependencies: ["NoodleCore"]),
         .executableTarget(
@@ -30,7 +33,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: ["NoodleCore", "NoodleSharing", "NoodleAgentBridge", .product(name: "Sparkle", package: "Sparkle")],
+            dependencies: ["NoodleCore", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", .product(name: "Sparkle", package: "Sparkle")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",
@@ -47,6 +50,10 @@ let package = Package(
         .testTarget(
             name: "NoodleCoreTests",
             dependencies: ["NoodleCore"]
+        ),
+        .testTarget(
+            name: "NoodleMCPTests",
+            dependencies: ["NoodleMCP", "NoodleCore", .product(name: "MCP", package: "swift-sdk")]
         )
     ],
     swiftLanguageModes: [.v5]

@@ -384,7 +384,7 @@ public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
     public let launcherExecutableURL: URL?
 
-    public static let managedSkillVersion = 19
+    public static let managedSkillVersion = 20
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
         self.rootURL = rootURL.standardizedFileURL
@@ -693,8 +693,9 @@ public struct WorkspaceRepository: Sendable {
         try FileManager.default.createDirectory(at: messengerDirectory, withIntermediateDirectories: true)
 
         let backstory = try loadAgentBackstory(agent)
+        let mcpRegistry = try MCPRegistry.load(root: rootURL)
         let agentsFile = directory.appendingPathComponent("AGENTS.md")
-        try Self.renderedAgentInstructions(backstory: backstory).write(
+        try Self.renderedAgentInstructions(backstory: backstory, mcpConnections: mcpRegistry.assigned(to: agent.id)).write(
             to: agentsFile,
             atomically: true,
             encoding: .utf8
@@ -707,6 +708,9 @@ public struct WorkspaceRepository: Sendable {
 
         let claudeFile = directory.appendingPathComponent("CLAUDE.md")
         try replaceSymlink(at: claudeFile, destinationPath: "AGENTS.md")
+        let mcpExecutable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("mcpshim")
+        try MCPSkillWriter.synchronize(workspace: directory, connections: mcpRegistry.assigned(to: agent.id),
+            executable: mcpExecutable.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil })
         let claudeSkillPaths = try synchronizeClaudeSkillLinks(in: directory)
 
         let skillFile = messengerDirectory.appendingPathComponent("SKILL.md")
@@ -760,7 +764,8 @@ public struct WorkspaceRepository: Sendable {
         }
 
         let agentsFile = directory.appendingPathComponent("AGENTS.md")
-        try Self.renderedAgentInstructions(backstory: backstory).write(
+        try Self.renderedAgentInstructions(backstory: backstory,
+            mcpConnections: MCPRegistry.load(root: rootURL).assigned(to: agent.id)).write(
             to: agentsFile,
             atomically: true,
             encoding: .utf8
@@ -1452,7 +1457,7 @@ public struct WorkspaceRepository: Sendable {
     private static let managedInstructionsStart = "<!-- noodle:managed:start -->"
     private static let managedInstructionsEnd = "<!-- noodle:managed:end -->"
 
-    private static func renderedAgentInstructions(backstory: String) -> String {
+    private static func renderedAgentInstructions(backstory: String, mcpConnections: [MCPConnectionRecord] = []) -> String {
         let normalizedBackstory = backstory.trimmingCharacters(in: .whitespacesAndNewlines)
         return """
         # Noodle Agent
@@ -1463,6 +1468,7 @@ public struct WorkspaceRepository: Sendable {
 
         \(managedInstructionsStart)
         \(managedAgentInstructions)
+        \(MCPSkillWriter.index(mcpConnections))
         \(managedInstructionsEnd)
         """
     }
@@ -1499,7 +1505,7 @@ public struct WorkspaceRepository: Sendable {
         """
         ## Noodle Runtime
 
-        This directory is the bot's persistent workspace. The Backstory section above is this bot's user-authored instructions. Noodle manages the runtime section and Messenger core skill; other skills under `.agents/skills` belong to this bot and are left untouched.
+        This directory is the bot's persistent workspace. The Backstory section above is this bot's user-authored instructions. Noodle manages the runtime section, Messenger core skill, and assigned MCP connection skills; unrelated skills under `.agents/skills` belong to this bot and are left untouched.
 
         ## Messages
 
