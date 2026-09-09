@@ -3,14 +3,9 @@ import Security
 
 public enum GrokExecutableTrust {
     public static func executable(at path: String, home: URL) throws -> URL {
-        let canonical = home.appendingPathComponent(".grok/bin/grok").standardizedFileURL
-        let alias = home.appendingPathComponent(".local/bin/grok").standardizedFileURL
         let url = URL(fileURLWithPath: path).standardizedFileURL
         let resolved = url.resolvingSymlinksInPath()
-        let download = home.appendingPathComponent(".grok/downloads/grok-macos-aarch64").standardizedFileURL
-        let intelDownload = home.appendingPathComponent(".grok/downloads/grok-macos-x86_64").standardizedFileURL
-        guard [canonical, alias].contains(url),
-              [canonical, download, intelDownload].contains(resolved) else {
+        guard supportsInstallation(requested: url, resolved: resolved, home: home) else {
             throw HarnessSetupError("Grok Build requires its official native installation at ~/.grok/bin/grok.")
         }
         var code: SecStaticCode?
@@ -23,5 +18,23 @@ public enum GrokExecutableTrust {
             throw HarnessSetupError("Grok Build’s xAI signature could not be verified.")
         }
         return resolved
+    }
+
+    /// Layout validation only. Every accepted executable must still pass the
+    /// pinned xAI signature requirement above before inspection or execution.
+    static func supportsInstallation(requested: URL, resolved: URL, home: URL) -> Bool {
+        let canonical = home.appendingPathComponent(".grok/bin/grok").standardizedFileURL
+        let alias = home.appendingPathComponent(".local/bin/grok").standardizedFileURL
+        guard [canonical, alias].contains(requested.standardizedFileURL) else { return false }
+        if resolved == canonical { return true }
+
+        let downloads = home.appendingPathComponent(".grok/downloads", isDirectory: true).standardizedFileURL
+        // Compare the resolved parent, not a path prefix: a symlink out of this
+        // directory (including a redirected downloads directory) is not trusted.
+        return resolved.deletingLastPathComponent().standardizedFileURL == downloads &&
+            resolved.lastPathComponent.range(
+                of: #"\Agrok-(?:[0-9]+\.[0-9]+\.[0-9]+-)?macos-(?:aarch64|x86_64)\z"#,
+                options: .regularExpression
+            ) != nil
     }
 }

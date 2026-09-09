@@ -23,6 +23,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Updated Grok Build installations are recognized when the official launcher points to a versioned download. The native installation location and xAI code-signature checks remain enforced.
 - Resizing the conversation window anchors the message being read as text reflows, instead of retaining a pixel offset that can jump to different content. Chats already at the bottom continue following the latest message.
 - Shift+Tab from the chat input returns focus directly to the selected sidebar conversation, preserving the draft and allowing Up/Down navigation to resume.
 - Switching conversations keeps keyboard focus in the sidebar for Up/Down navigation. Tab from the conversation list jumps directly to the chat input, without changing search, menu or modified-key navigation.
