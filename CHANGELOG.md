@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Voice recording keeps the normal composer height and glass style. General settings now offers a microphone selector; silent input is called out in the recording bar, and waveform metering handles integer PCM audio as well as floating-point samples.
 - Group editor Members and Description headings use the same size and weight.
 - Removed the explanatory media-format footer from the background editor; progress and errors remain visible when needed.
 - Bot sidebar menus show Edit Bot, Change Background, then a separator before Show Workspace in Finder.

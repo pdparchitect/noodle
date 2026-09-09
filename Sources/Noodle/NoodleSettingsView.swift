@@ -53,9 +53,33 @@ private struct GeneralSettingsView: View {
     @AppStorage(BotNameStyle.defaultsKey) private var botNameStyle = BotNameStyle.real.rawValue
     @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showBotDescriptions = true
     @AppStorage(LinkPreviewSettings.timeoutKey) private var linkPreviewTimeout = LinkPreviewSettings.defaultTimeout
+    @AppStorage(VoiceInputDevice.defaultsKey) private var microphoneUID = ""
+    @State private var microphones: [VoiceInputDevice] = []
+    @State private var defaultMicrophoneID: UInt32 = 0
 
     var body: some View {
         Form {
+            if #available(macOS 26.0, *) {
+                Section {
+                    Picker("Microphone", selection: $microphoneUID) {
+                        Text(microphones.first(where: { $0.audioID == defaultMicrophoneID })
+                            .map { "System Default — \($0.name)" } ?? "System Default").tag("")
+                        ForEach(microphones) { microphone in
+                            Text(microphone.name).tag(microphone.id)
+                        }
+                        if !microphoneUID.isEmpty && !microphones.contains(where: { $0.id == microphoneUID }) {
+                            Text("Selected microphone unavailable").tag(microphoneUID)
+                        }
+                    }
+                }
+                .task {
+                    while !Task.isCancelled {
+                        microphones = VoiceInputDevice.available()
+                        defaultMicrophoneID = VoiceInputDevice.defaultDeviceID
+                        do { try await Task.sleep(for: .seconds(2)) } catch { break }
+                    }
+                }
+            }
             Section {
                 Picker("Generated bot names", selection: $botNameStyle) {
                     ForEach(BotNameStyle.allCases) { style in

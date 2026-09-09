@@ -34,7 +34,14 @@ struct VoiceMessageComposer<Content: View>: View {
                             Spacer()
                         } else {
                             if recorder.phase == .recording { Circle().fill(.red).frame(width: 6, height: 6) }
-                            VoiceWaveform(samples: recorder.levels).frame(height: 22)
+                            if recorder.noInputSignal && recorder.phase == .recording {
+                                Text("No sound from \(recorder.inputName) — check Microphone in Settings")
+                                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .help("Check the microphone’s mute switch, or choose another in Settings → General.")
+                            } else {
+                                VoiceWaveform(samples: recorder.levels).frame(height: 22)
+                            }
                             Text(voiceTime(recorder.duration)).font(.caption.monospacedDigit())
                             if recorder.phase == .recording {
                                 Button { Task { await recorder.finish() } } label: { Image(systemName: "stop.fill") }
@@ -48,6 +55,8 @@ struct VoiceMessageComposer<Content: View>: View {
                         .disabled(sending || !(recorder.phase == .recording || recorder.phase == .ready))
                         .help("Send Voice Message (Return)")
                     }
+                    .frame(height: 36)
+                    .help("Microphone: \(recorder.inputName)")
                     if let error = sendError ?? recorder.error {
                         Text(error).font(.caption).foregroundStyle(.red)
                     }
@@ -58,9 +67,10 @@ struct VoiceMessageComposer<Content: View>: View {
                         }.disabled(sending)
                     }
                 }
-                .padding(.horizontal, 12).padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .padding(.bottom, recorder.phase == .failed || sendError != nil ? 8 : 0)
                 .frame(maxWidth: .infinity, minHeight: 36)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .focusable().focusEffectDisabled().focused($focused)
                 .onKeyPress(.return) { Task { await sendRecording() }; return .handled }
                 .onKeyPress(.escape) { if !sending { Task { await recorder.discard() } }; return .handled }

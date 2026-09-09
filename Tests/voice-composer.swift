@@ -38,6 +38,8 @@ import NoodleCore
                     window.center()
                     window.makeKeyAndOrderFront(nil)
                     try await Task.sleep(for: .milliseconds(500))
+                    let height = window.contentView!.fittingSize.height
+                    precondition(abs(height - 76) < 1, "Voice bar must be 36pt plus 40pt fixture padding, got \(height)")
                     let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
                         windowNumber: window.windowNumber, context: nil, characters: key == 36 ? "\r" : "\u{1b}",
                         charactersIgnoringModifiers: key == 36 ? "\r" : "\u{1b}", isARepeat: false, keyCode: key)!

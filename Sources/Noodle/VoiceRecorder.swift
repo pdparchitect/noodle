@@ -18,6 +18,8 @@ struct VoiceRecordingDraft: Codable {
     private(set) var transcript: String?
     private(set) var error: String?
     private(set) var preparation = "Preparing speech…"
+    private(set) var inputName = "Microphone"
+    private(set) var noInputSignal = false
     let directory: URL
     var audioURL: URL { directory.appendingPathComponent("recording.caf") }
     var hasAudio: Bool { duration > 0 && FileManager.default.fileExists(atPath: audioURL.path) }
@@ -54,6 +56,7 @@ struct VoiceRecordingDraft: Codable {
         guard phase == .idle else { return }
         phase = .preparing
         error = nil
+        noInputSignal = false
         let token = UUID()
         generation = token
         preparationTask = Task {
@@ -65,6 +68,7 @@ struct VoiceRecordingDraft: Codable {
                 }
                 try check(token)
                 let engine = AVAudioEngine()
+                inputName = try VoiceInputDevice.configure(engine).name
                 let inputFormat = engine.inputNode.outputFormat(forBus: 0)
                 guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0,
                       let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber]) else {
@@ -92,6 +96,8 @@ struct VoiceRecordingDraft: Codable {
                 try persist()
                 meterTask = Task {
                     var ticks = 0
+                    var stalledTicks = 0
+                    var previousDuration: Double = 0
                     while !Task.isCancelled && phase == .recording {
                         try? await Task.sleep(for: .milliseconds(100))
                         guard phase == .recording else { break }
@@ -99,9 +105,13 @@ struct VoiceRecordingDraft: Codable {
                         duration = snapshot.duration
                         levels = snapshot.waveform
                         ticks += 1
+                        stalledTicks = snapshot.duration == previousDuration ? stalledTicks + 1 : 0
+                        previousDuration = snapshot.duration
+                        noInputSignal = ticks >= 30 && (snapshot.silentDuration >= 3 || stalledTicks >= 30)
                         if ticks % 10 == 0 { try? persist() }
                         if snapshot.error != nil || duration >= 600 {
-                            await finish()
+                            // Finish outside the meter task: finish cancels this task.
+                            Task { await finish() }
                             break
                         }
                     }
@@ -270,7 +280,7 @@ struct VoiceFailure: LocalizedError {
 /// to SpeechAnalyzer are newly allocated and never modified after being yielded.
 @available(macOS 26.0, *)
 final class VoiceAudioSink: @unchecked Sendable {
-    struct Snapshot { let duration: Double; let waveform: [Float]; let error: String? }
+    struct Snapshot { let duration: Double; let waveform: [Float]; let error: String?; let silentDuration: Double }
     private let lock = NSLock()
     private var file: AVAudioFile?
     private let converter: AVAudioConverter
@@ -280,6 +290,7 @@ final class VoiceAudioSink: @unchecked Sendable {
     private var peaks: [Float] = []
     private var failure: String?
     private var finished = false
+    private var lastSignalFrame: Int64 = 0
 
     init(url: URL, sourceFormat: AVAudioFormat, targetFormat: AVAudioFormat,
          continuation: AsyncStream<AnalyzerInput>.Continuation) throws {
@@ -312,10 +323,10 @@ final class VoiceAudioSink: @unchecked Sendable {
             guard output.frameLength > 0 else { return }
             try file?.write(from: output)
             frames += Int64(output.frameLength)
-            var peak: Float = 0
-            if let samples = input.floatChannelData?[0] {
-                for i in stride(from: 0, to: Int(input.frameLength), by: 8) { peak = max(peak, abs(samples[i])) }
-            }
+            // Meter exactly the audio saved and sent to Speech, including integer
+            // PCM formats. The source's first float channel is not always present.
+            let peak = Self.peak(output)
+            if peak > 0.0001 { lastSignalFrame = frames }
             if peaks.count < 20_000 { peaks.append(min(1, peak)) }
             if case .dropped = continuation.yield(AnalyzerInput(buffer: output)) {
                 failure = "Live transcription fell behind. The recording is preserved; retry transcription."
@@ -340,6 +351,26 @@ final class VoiceAudioSink: @unchecked Sendable {
         let waveform = stride(from: 0, to: peaks.count, by: width).map {
             peaks[$0..<min($0 + width, peaks.count)].max() ?? 0
         }
-        return Snapshot(duration: Double(frames) / target.sampleRate, waveform: waveform, error: failure)
+        return Snapshot(duration: Double(frames) / target.sampleRate, waveform: waveform, error: failure,
+                        silentDuration: Double(frames - lastSignalFrame) / target.sampleRate)
+    }
+
+    static func peak(_ buffer: AVAudioPCMBuffer) -> Float {
+        var peak: Float = 0
+        let channels = Int(buffer.format.channelCount)
+        let interleaved = buffer.format.isInterleaved
+        for channel in 0..<channels {
+            for frame in 0..<Int(buffer.frameLength) {
+                let index = interleaved ? frame * channels + channel : frame
+                let plane = interleaved ? 0 : channel
+                let sample: Float
+                if let values = buffer.floatChannelData { sample = values[plane][index] }
+                else if let values = buffer.int16ChannelData { sample = Float(values[plane][index]) / 32768 }
+                else if let values = buffer.int32ChannelData { sample = Float(values[plane][index]) / 2147483648 }
+                else { continue }
+                if sample.isFinite { peak = max(peak, abs(sample)) }
+            }
+        }
+        return min(1, peak)
     }
 }

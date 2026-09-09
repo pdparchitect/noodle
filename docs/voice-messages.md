@@ -5,6 +5,14 @@ SpeechTranscriber support for the current system language and installs the
 system-managed speech model if needed. Microphone permission is requested only
 after an explicit recording action. No cloud transcription fallback is used.
 
+Choose the recording microphone in Settings → General. System Default follows the
+Mac's current input; choosing a named microphone affects Noodle only and takes
+effect on the next recording. Device choices survive relaunch. An unavailable
+selection requires choosing another device, rather than silently recording from
+a different microphone. A flat input for three seconds shows a no-sound warning;
+check the hardware mute switch or select another microphone. Recording uses the
+same 36-point height and glass surface as the empty text composer.
+
 The composer displays a waveform and elapsed time while recording. Return stops,
 finalizes transcription, and sends a voice message. Stop ends recording without
 sending; Return then sends the ready recording. Escape or × discards it. Recording

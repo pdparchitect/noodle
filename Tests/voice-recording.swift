@@ -8,10 +8,57 @@ import NoodleCore
 @main private enum VoiceRecordingTests {
     @MainActor static func main() async throws {
         guard #available(macOS 26.0, *) else { print("SKIP: macOS 26 required"); return }
+        if CommandLine.arguments.contains("--devices") {
+            for device in VoiceInputDevice.available() {
+                print("\(device.name)\(device.audioID == VoiceInputDevice.defaultDeviceID ? " (default)" : "")")
+            }
+            return
+        }
+        let devices = [VoiceInputDevice(id: "built-in", name: "Built-in", audioID: 10),
+                       VoiceInputDevice(id: "usb", name: "USB", audioID: 20)]
+        let defaultDevice = try VoiceInputDevice.resolve(uid: "", devices: devices, defaultID: 10)
+        precondition(defaultDevice.id == "built-in")
+        let selectedDevice = try VoiceInputDevice.resolve(uid: "usb", devices: devices, defaultID: 10)
+        precondition(selectedDevice.audioID == 20)
+        do {
+            _ = try VoiceInputDevice.resolve(uid: "disconnected", devices: devices, defaultID: 10)
+            preconditionFailure("Must not silently record a different microphone")
+        } catch {}
+        for interleaved in [false, true] {
+            for commonFormat: AVAudioCommonFormat in [.pcmFormatFloat32, .pcmFormatInt16, .pcmFormatInt32] {
+                let format = AVAudioFormat(commonFormat: commonFormat, sampleRate: 48_000, channels: 2, interleaved: interleaved)!
+                let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 16)!
+                buffer.frameLength = 16
+                for audioBuffer in UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList) {
+                    memset(audioBuffer.mData!, 0, Int(audioBuffer.mDataByteSize))
+                }
+                precondition(VoiceAudioSink.peak(buffer) == 0)
+                let plane = interleaved ? 0 : 1
+                let index = interleaved ? 7 : 3
+                buffer.floatChannelData?[plane][index] = 0.5
+                buffer.int16ChannelData?[plane][index] = 16_384
+                buffer.int32ChannelData?[plane][index] = 1_073_741_824
+                precondition(abs(VoiceAudioSink.peak(buffer) - 0.5) < 0.001, "Meter must see the second channel in each PCM format")
+            }
+        }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-voice-test-\(UUID())")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let audio = directory.appendingPathComponent("recording.caf")
+        let integerFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: false)!
+        let integerStream = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .bufferingOldest(64))
+        let integerSink = try VoiceAudioSink(url: directory.appendingPathComponent("integer.caf"),
+            sourceFormat: integerFormat, targetFormat: integerFormat, continuation: integerStream.continuation)
+        let integerBuffer = AVAudioPCMBuffer(pcmFormat: integerFormat, frameCapacity: 16_000)!
+        integerBuffer.frameLength = 16_000
+        for i in 0..<16_000 { integerBuffer.int16ChannelData![0][i] = 0 }
+        for _ in 0..<4 { integerSink.consume(integerBuffer) }
+        precondition(integerSink.snapshot().silentDuration >= 3)
+        for i in 0..<16_000 { integerBuffer.int16ChannelData![0][i] = 16_384 }
+        integerSink.consume(integerBuffer)
+        precondition(integerSink.snapshot().silentDuration == 0)
+        precondition((integerSink.snapshot().waveform.max() ?? 0) >= 0.49)
+        integerSink.finish()
         if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--transcribe" {
             try FileManager.default.copyItem(at: URL(fileURLWithPath: CommandLine.arguments[2]), to: audio)
             let file = try AVAudioFile(forReading: audio)
@@ -78,6 +125,7 @@ import NoodleCore
         sink.finish()
         let snapshot = sink.snapshot()
         precondition(snapshot.error == nil, snapshot.error ?? "")
+        precondition(snapshot.silentDuration == 0 && (snapshot.waveform.max() ?? 0) > 0.1)
         precondition(abs(snapshot.duration - 1.024) < 0.04)
         precondition(!snapshot.waveform.isEmpty && snapshot.waveform.allSatisfy { (0...1).contains($0) })
         let recorded = try AVAudioFile(forReading: audio)
