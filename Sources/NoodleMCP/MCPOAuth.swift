@@ -71,7 +71,7 @@ struct MCPOAuth {
         guard let protectedResource,
               let resourceString = protectedResource["resource"] as? String,
               let resource = URL(string: resourceString),
-              resource == endpoint,
+              Self.acceptsResource(resource, for: endpoint),
               let issuers = protectedResource["authorization_servers"] as? [String],
               let first = issuers.first, let issuer = URL(string: first) else { throw MCPServiceError.invalidMetadata }
         _ = try MCPConnectionRecord.validatedEndpoint(issuer)
@@ -106,6 +106,22 @@ struct MCPOAuth {
         return MCPCredentials(endpoint: endpoint, issuer: issuer, authorizationEndpoint: authorization,
                               tokenEndpoint: token, clientID: clientID, redirectURI: redirect,
                               resource: resource, scope: (protectedResource["scopes_supported"] as? [String])?.joined(separator: " "))
+    }
+
+    /// A canonical OAuth resource may be the server origin rather than its MCP
+    /// transport path (for example Pipedream's /v2). Never accept another origin
+    /// or an unrelated resource path, and never change the transport destination.
+    static func acceptsResource(_ resource: URL, for endpoint: URL) -> Bool {
+        guard (try? MCPConnectionRecord.validatedEndpoint(resource)) != nil,
+              (try? MCPConnectionRecord.validatedEndpoint(endpoint)) != nil else { return false }
+        if resource == endpoint { return true }
+        guard let canonical = URLComponents(url: resource, resolvingAgainstBaseURL: false),
+              let transport = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else { return false }
+        return canonical.scheme?.lowercased() == transport.scheme?.lowercased() &&
+            canonical.host?.lowercased() == transport.host?.lowercased() &&
+            (canonical.port ?? 443) == (transport.port ?? 443) &&
+            (canonical.percentEncodedPath.isEmpty || canonical.percentEncodedPath == "/") &&
+            canonical.query == nil
     }
 
     func authorize(_ credentials: MCPCredentials, browser: @Sendable (URL) async throws -> URL) async throws -> MCPCredentials {

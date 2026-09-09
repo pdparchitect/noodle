@@ -3,7 +3,7 @@ import XCTest
 
 final class ToolCatalogTests: XCTestCase {
     func testPresetIdentitiesAndSafeEndpoints() throws {
-        XCTAssertEqual(ToolCatalog.entries.count, 35)
+        XCTAssertEqual(ToolCatalog.entries.count, 36)
         XCTAssertEqual(Set(ToolCatalog.entries.map(\.id)).count, ToolCatalog.entries.count)
         for tool in ToolCatalog.entries {
             XCTAssertFalse(tool.name.isEmpty)
@@ -35,11 +35,19 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertEqual(ToolCatalog.matching("nOtIoN MCP").map(\.id), ["notion"])
         XCTAssertTrue(ToolCatalog.matching("nothing-matches-this").isEmpty)
         XCTAssertNil(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://example.com/mcp")!))
-        let excluded = ["github", "betterstack", "pipedream", "zapier", "workato", "hubspot", "asana"]
+        let excluded = ["github", "betterstack", "zapier", "workato", "hubspot", "asana"]
         XCTAssertTrue(Set(excluded).isDisjoint(with: ToolCatalog.entries.map(\.id)))
         let notion = ToolCatalog.matching("Notion")[0]
         XCTAssertEqual(ToolCatalog.availableName(for: notion, existingNames: []), "Notion")
         XCTAssertEqual(ToolCatalog.availableName(for: notion, existingNames: ["notion", "Notion 2"]), "Notion 3")
+    }
+
+    func testPipedreamUsesThePublicEndUserGateway() throws {
+        let tool = try XCTUnwrap(ToolCatalog.matching("Pipedream").first)
+        XCTAssertEqual(tool.configuration, .mcp(.init(endpoint: URL(string: "https://mcp.pipedream.net/v2")!)))
+        XCTAssertEqual(tool.iconName, "pipedream")
+        XCTAssertTrue(tool.defaultInstructions.contains("account is unclear"))
+        XCTAssertTrue(tool.defaultInstructions.contains("never request or handle their credentials"))
     }
 
     func testCreatingPresetDoesNotAssignOrAuthenticateIt() throws {

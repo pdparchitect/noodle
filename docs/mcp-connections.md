@@ -115,6 +115,11 @@ entitlement. SDK and dependency licenses ship as Resources/*-LICENSE.txt.
 
 ## Limits and trust
 
+- OAuth resource metadata must identify the exact endpoint or a canonical root on
+  the same HTTPS origin (including effective port). Unrelated paths, cross-origin
+  resources, credentials and fragments are rejected. The canonical resource is used
+  for authorization, token exchange and refresh only; requests still go to the
+  saved MCP endpoint. This supports Pipedream's root resource with its `/v2` transport.
 - No stdio servers, API-key entry, manual OAuth client secrets, legacy HTTP+SSE endpoints,
   resources/prompts commands or automatic incremental-consent flow in this first version.
 - A server must accept dynamic registration with a native custom-scheme redirect.

@@ -30,6 +30,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | parallelai-search.icon | https://parallel.ai/favicon.ico?favicon.a0d6d5e9.ico |
 | parallelai-task.icon | https://parallel.ai/favicon.ico?favicon.a0d6d5e9.ico |
 | paypal.icon | https://www.paypalobjects.com/marketing/web/icons/monogram/pp64.png |
+| pipedream.icon | https://mcp.pipedream.com/favicon.ico |
 | polar.icon | https://polar.sh/favicon.png |
 | prisma.icon | https://www.prisma.io/apple-icon.png?apple-icon.2fqk5558kkh79.png |
 | pulumi.icon | https://www.pulumi.com/images/favicon.ico |

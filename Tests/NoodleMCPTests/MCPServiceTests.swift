@@ -19,11 +19,15 @@ private final class FixtureState: @unchecked Sendable {
     var calls = 0
     var invalidGrant = false
     var mismatchedIssuer = false
+    var resourceIdentifier = "https://service.example/mcp"
+    var pathMetadataMissing = false
+    var tokenResources: [String] = []
     func response(_ request: URLRequest) throws -> (Int, [String: Any]) {
         try lock.withLock {
             switch request.url!.path {
             case "/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-protected-resource":
-                return (200, ["resource": "https://service.example/mcp", "authorization_servers": ["https://service.example"], "scopes_supported": ["read"]])
+                if pathMetadataMissing && request.url!.path.hasSuffix("/mcp") { return (404, [:]) }
+                return (200, ["resource": resourceIdentifier, "authorization_servers": ["https://service.example"], "scopes_supported": ["read"]])
             case "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration":
                 return (200, ["issuer": mismatchedIssuer ? "https://wrong.example" : "https://service.example",
                               "authorization_endpoint": "https://service.example/authorize", "token_endpoint": "https://service.example/token",
@@ -33,6 +37,8 @@ private final class FixtureState: @unchecked Sendable {
                 return (201, ["client_id": "client-\(registrations)", "token_endpoint_auth_method": "none"])
             case "/token":
                 let body = String(data: Self.body(request), encoding: .utf8) ?? ""
+                let form = URLComponents(string: "https://service.example/?" + body)?.queryItems
+                tokenResources.append(form?.first { $0.name == "resource" }?.value ?? "")
                 if body.contains("refresh_token") {
                     refreshes += 1
                     if invalidGrant { return (400, ["error": "invalid_grant"]) }
@@ -208,6 +214,54 @@ final class MCPServiceTests: XCTestCase {
         } catch { XCTAssertTrue(error is MCPServiceError) }
         XCTAssertEqual(FixtureProtocol.state.registrations, 0)
         XCTAssertNil(vault.load(record.id))
+    }
+    func testCanonicalRootResourcePersistsThroughAuthorizationRefreshAndDiscovery() async throws {
+        FixtureProtocol.state.resourceIdentifier = "https://service.example"
+        FixtureProtocol.state.pathMetadataMissing = true
+        let vault = TestVault()
+        let record = try MCPConnectionRecord(name: "Gateway", endpoint: endpoint)
+        let client = service(vault: vault)
+        try await client.signIn(record, redirectURI: redirect) { url in
+            let query = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
+            XCTAssertEqual(query.first { $0.name == "resource" }?.value, "https://service.example")
+            XCTAssertEqual(query.first { $0.name == "code_challenge_method" }?.value, "S256")
+            var callback = URLComponents(string: query.first { $0.name == "redirect_uri" }!.value!)!
+            callback.queryItems = [.init(name: "code", value: "one-time-code"), query.first { $0.name == "state" }!]
+            return callback.url!
+        }
+        var stored = try XCTUnwrap(vault.load(record.id))
+        XCTAssertEqual(stored.resource.absoluteString, "https://service.example")
+        XCTAssertEqual(stored.endpoint, endpoint, "Canonical audience must not rewrite the MCP transport endpoint")
+        stored.expiresAt = .distantPast
+        vault.save(stored, id: record.id)
+        let request = MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil)
+        let data = try await client.perform(request, connection: record)
+        XCTAssertEqual(try JSONDecoder().decode(ListTools.Result.self, from: data).tools.count, 2)
+        XCTAssertEqual(FixtureProtocol.state.tokenResources, ["https://service.example", "https://service.example"])
+    }
+    func testResourceSubstitutionIsRejectedBeforeRegistration() async throws {
+        for resource in ["https://other.example", "https://service.example.evil.example", "http://service.example",
+                         "https://service.example:444", "https://service.example/other", "https://service.example/?tenant=other",
+                         "https://service.example/#fragment", "https://user:password@service.example", "https://127.0.0.1"] {
+            FixtureProtocol.state.resourceIdentifier = resource
+            let vault = TestVault()
+            let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+            do {
+                try await service(vault: vault).signIn(record, redirectURI: redirect, browser: Self.callback)
+                XCTFail("Unexpected resource accepted: \(resource)")
+            } catch { XCTAssertTrue(error is MCPServiceError) }
+            XCTAssertEqual(FixtureProtocol.state.registrations, 0)
+            XCTAssertNil(vault.load(record.id))
+        }
+    }
+    func testOnlyExactOrSameOriginRootResourcesAreAccepted() {
+        for resource in [endpoint.absoluteString, "https://service.example", "https://service.example/", "https://SERVICE.example:443"] {
+            XCTAssertTrue(MCPOAuth.acceptsResource(URL(string: resource)!, for: endpoint), resource)
+        }
+        for resource in ["https://service.example/mcp/", "https://service.example/%2F", "https://service.example/..",
+                         "https://service.example/?", "https://service.example:8443"] {
+            XCTAssertFalse(MCPOAuth.acceptsResource(URL(string: resource)!, for: endpoint), resource)
+        }
     }
     func testCallbackTargetAndDuplicateStateAreRejected() async throws {
         for variant in 0..<3 {

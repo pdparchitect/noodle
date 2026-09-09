@@ -37,14 +37,16 @@ overwrite them with catalogue defaults. Edits apply to all bots sharing that con
 The supplied list was filtered to fixed public HTTPS endpoints without secret
 headers, secret URL parameters, per-account URLs or legacy SSE transport.
 Only entries whose public metadata is compatible with Noodle's current discovery
-path are included: exact resource and issuer matching, a registration endpoint,
+path are included: an exact resource or same-HTTPS-origin canonical root resource,
+exact issuer matching, a registration endpoint,
 and no advertised exclusion of public clients or S256 PKCE.
 
 These are **read-only metadata checks**, not end-to-end account authorization
 certification. No registration POST, token exchange, account access or remote
 tool call was made during catalogue verification. Providers can still restrict
 redirect URIs, plans, organizations or registration. Existing errors and retry
-controls remain authoritative. Do not relax OAuth validation to admit a preset.
+controls remain authoritative. Cross-origin resources and unrelated resource paths
+remain rejected; a canonical resource never rewrites the MCP transport endpoint.
 
 [Notion's client guide](https://developers.notion.com/guides/mcp/build-mcp-client)
 and [Linear's MCP documentation](https://linear.app/docs/mcp) document the keyless
@@ -75,6 +77,7 @@ dynamic-registration flow. Each provider's checked discovery sources follow:
 | Parallel Search | https://search-mcp.parallel.ai/mcp | [Resource](https://search-mcp.parallel.ai/.well-known/oauth-protected-resource/mcp) | [Authorization](https://platform.parallel.ai/.well-known/oauth-authorization-server) |
 | Parallel Tasks | https://task-mcp.parallel.ai/mcp | [Resource](https://task-mcp.parallel.ai/.well-known/oauth-protected-resource/mcp) | [Authorization](https://platform.parallel.ai/.well-known/oauth-authorization-server) |
 | PayPal | https://mcp.paypal.com/mcp | [Resource](https://mcp.paypal.com/.well-known/oauth-protected-resource/mcp) | [Authorization](https://mcp.paypal.com/.well-known/oauth-authorization-server) |
+| Pipedream | https://mcp.pipedream.net/v2 | [Resource](https://mcp.pipedream.net/.well-known/oauth-protected-resource) | [Authorization](https://mcp.pipedream.com/.well-known/oauth-authorization-server) |
 | Polar | https://mcp.polar.sh/mcp/polar-mcp | [Resource](https://mcp.polar.sh/.well-known/oauth-protected-resource/mcp/polar-mcp) | [Authorization](https://api.polar.sh/.well-known/oauth-authorization-server) |
 | Prisma | https://mcp.prisma.io/mcp | [Resource](https://mcp.prisma.io/.well-known/oauth-protected-resource/mcp) | [Authorization](https://auth.prisma.io/.well-known/oauth-authorization-server) |
 | Pulumi | https://mcp.ai.pulumi.com/mcp | [Resource](https://mcp.ai.pulumi.com/.well-known/oauth-protected-resource) | [Authorization](https://mcp.ai.pulumi.com/.well-known/oauth-authorization-server) |
@@ -122,10 +125,16 @@ for example, must be separately investigated without silently rewriting the endp
 
 Key/header-auth entries, account-specific endpoints, and SSE-only entries were
 excluded before discovery (including GitHub, Better Stack, Buffer, PagerDuty,
-Pipedream, Isometric, Hunter, Tavily, PostHog, Context7, Firecrawl, Linkup, Dropbox,
+Isometric, Hunter, Tavily, PostHog, Context7, Firecrawl, Linkup, Dropbox,
 Instantly, Google Maps/BigQuery, Zapier, Workato, MongoDB, Twilio, Elasticsearch,
 Grafana, GitLab, Heroku, Square and monday.com). No supplied catalogue instructions
 or secret identifiers are imported into the app.
+
+Pipedream was subsequently added using its public end-user `/v2` endpoint, not
+the developer endpoint from the original supplied list. The catalogue now contains
+36 presets. See [MCP gateways](mcp-gateways.md) for its account scope and the
+separate Zapier compatibility investigation. Previously deferred entries have not
+been automatically admitted following the canonical-root compatibility change.
 
 ## Icons and privacy
 
