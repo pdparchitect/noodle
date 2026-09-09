@@ -22,11 +22,14 @@ struct SidebarView: View {
                                     Button("Edit Bot") {
                                         store.agentBeingEdited = agent
                                     }
+                                }
+                                Button("Change Background…") { store.backgroundBeingEdited = conversation }
+                                if let agent = store.participants(for: conversation).first {
+                                    Divider()
                                     Button("Show Workspace in Finder") {
                                         store.revealWorkspace(for: agent)
                                     }
                                 }
-                                Button("Change Background…") { store.backgroundBeingEdited = conversation }
                             }
                     }
                 }
