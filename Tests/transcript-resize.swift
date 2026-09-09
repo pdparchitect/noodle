@@ -29,7 +29,7 @@ struct TranscriptResizeFixture: View {
                         model.frames[id] = $0
                     }
                     .onDisappear { model.frames.removeValue(forKey: id) }
-                    .id(id)
+                    .id(TranscriptScrollTarget.message(id))
             }
         }
     }

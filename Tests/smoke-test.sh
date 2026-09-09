@@ -12,6 +12,7 @@ swift test --disable-sandbox --package-path "$project_root"
 zsh "$project_root/Tests/link-previews.sh"
 zsh "$project_root/Tests/harness-presentation.sh"
 zsh "$project_root/Tests/transcript-resize.sh"
+zsh "$project_root/Tests/transcript-startup.sh"
 zsh "$project_root/Tests/mcp-fixture.sh" --check
 zsh "$project_root/Tests/mcp-window-routing.sh"
 app="$(NOODLE_BUILD_CONFIGURATION="${NOODLE_BUILD_CONFIGURATION:-debug}" "$project_root/scripts/build-app.sh")"

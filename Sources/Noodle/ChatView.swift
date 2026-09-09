@@ -18,7 +18,6 @@ struct ChatView: View {
     @State private var attachmentDestinationID: UUID?
     @State private var selectedAttachmentID: UUID?
     @State private var previewedAttachmentURL: URL?
-    @State private var transcriptPositions: [UUID: TranscriptViewport] = [:]
     @State private var bottomOverlayHeight: CGFloat = 0
     @StateObject private var nameCompletion = ComposerNameCompletion()
     @State private var profileAgent: AgentRecord?
@@ -170,12 +169,12 @@ struct ChatView: View {
         let id = conversation.id
         return ConversationTranscript(
             conversation: conversation,
-            initialViewport: transcriptPositions[id] ?? TranscriptViewport(),
+            initialViewport: store.transcriptViewport(for: conversation),
             selectedAttachmentID: $selectedAttachmentID,
             previewAttachment: showPreview,
             bottomOverlayHeight: bottomOverlayHeight,
             showAgentProfile: { profileAgent = $0 },
-            saveViewport: { transcriptPositions[id] = $0 }
+            saveViewport: { store.saveTranscriptViewport($0, for: id) }
         )
         .id(id)
         .transaction { transaction in
@@ -387,7 +386,7 @@ private struct ConversationTranscript: View {
         ) {
             ConversationStartView(conversation: conversation, showAgentProfile: showAgentProfile)
                 .padding(.bottom, 14)
-                .id(conversation.id)
+                .id(TranscriptScrollTarget.start)
 
             ForEach(messages) { message in
                 MessageBubble(
@@ -397,7 +396,7 @@ private struct ConversationTranscript: View {
                     previewAttachment: previewAttachment,
                     showAgentProfile: showAgentProfile
                 )
-                .id(message.id)
+                .id(TranscriptScrollTarget.message(message.id))
             }
         }
     }

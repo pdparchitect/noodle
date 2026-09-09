@@ -86,6 +86,7 @@ final class NoodleStore {
     var composerIsFocused = false
 
     let repository: WorkspaceRepository
+    @ObservationIgnored private let transcriptPositions: TranscriptPositionStore
     let mcp: MCPController
     let runtime = AgentRuntimeCoordinator()
     private var transcriptRefreshTask: Task<Void, Never>?
@@ -113,6 +114,7 @@ final class NoodleStore {
             )
         }
 
+        transcriptPositions = TranscriptPositionStore(fileURL: self.repository.rootURL.appendingPathComponent("scroll-positions.json"))
         mcp = MCPController(repository: self.repository)
         reload()
         Self.active = self
@@ -189,6 +191,7 @@ final class NoodleStore {
             })
             let knownConversationIDs = Set(conversations.map(\.id))
             drafts.retainConversations(knownConversationIDs)
+            try? transcriptPositions.retainConversations(knownConversationIDs)
             let storedUnreadIDs = try repository.loadUnreadConversationIDs()
             unreadConversationIDs = storedUnreadIDs.intersection(knownConversationIDs)
             if unreadConversationIDs != storedUnreadIDs {
@@ -466,6 +469,17 @@ final class NoodleStore {
 
     func messages(for conversation: BotConversation) -> [ChatMessage] {
         messagesByConversation[conversation.id, default: []]
+    }
+
+    func transcriptViewport(for conversation: BotConversation) -> TranscriptViewport {
+        transcriptPositions.viewport(for: conversation.id)
+            .restored(availableMessageIDs: Set(messages(for: conversation).map(\.id)))
+    }
+
+    func saveTranscriptViewport(_ viewport: TranscriptViewport, for conversationID: UUID) {
+        guard conversations.contains(where: { $0.id == conversationID }) else { return }
+        do { try transcriptPositions.save(viewport, for: conversationID) }
+        catch { errorMessage = "Could not save the conversation’s reading position: \(error.localizedDescription)" }
     }
 
     func hasUnreadMessages(in conversation: BotConversation) -> Bool {

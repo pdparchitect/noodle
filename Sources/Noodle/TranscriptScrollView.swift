@@ -1,9 +1,15 @@
 import SwiftUI
 import NoodleCore
 
-struct TranscriptViewport: Equatable {
-    var offset: CGFloat = 0
-    var isAtBottom = true
+enum TranscriptScrollTarget: Hashable, Sendable {
+    case start
+    case message(UUID)
+    case bottom
+
+    var messageID: UUID? {
+        if case .message(let id) = self { return id }
+        return nil
+    }
 }
 
 private struct TranscriptGeometry: Equatable {
@@ -15,6 +21,7 @@ private struct TranscriptGeometry: Equatable {
 /// Records geometry without publishing a SwiftUI update for every scrolled pixel.
 private final class TranscriptViewportRecorder {
     var viewport: TranscriptViewport
+    var lastUserViewport: TranscriptViewport?
     init(_ viewport: TranscriptViewport) { self.viewport = viewport }
 }
 
@@ -22,6 +29,7 @@ private final class TranscriptViewportRecorder {
 /// Message IDs let SwiftUI retain the reading position when rows reflow, without
 /// corrective scrolling from geometry callbacks (which can cause layout loops).
 struct TranscriptScrollView<Content: View>: View {
+    private let initialViewport: TranscriptViewport
     let lastMessageID: UUID?
     let lastMessageIsFromUser: Bool
     let bottomOverlayHeight: CGFloat
@@ -31,21 +39,21 @@ struct TranscriptScrollView<Content: View>: View {
     @State private var viewportRecorder: TranscriptViewportRecorder
     @State private var followsLatest: Bool
     @State private var userIsScrolling = false
+    @State private var userHasScrolled = false
+    @State private var didRestoreInitialViewport = false
 
     init(initialViewport: TranscriptViewport, lastMessageID: UUID?, lastMessageIsFromUser: Bool,
          bottomOverlayHeight: CGFloat, saveViewport: @escaping (TranscriptViewport) -> Void,
          @ViewBuilder content: () -> Content) {
+        self.initialViewport = initialViewport
         self.lastMessageID = lastMessageID
         self.lastMessageIsFromUser = lastMessageIsFromUser
         self.bottomOverlayHeight = bottomOverlayHeight
         self.saveViewport = saveViewport
         self.content = content()
-        var initialPosition = ScrollPosition(idType: UUID.self)
-        if initialViewport.isAtBottom {
-            initialPosition.scrollTo(edge: .bottom)
-        } else {
-            initialPosition.scrollTo(y: initialViewport.offset)
-        }
+        let target = initialViewport.isAtBottom ? TranscriptScrollTarget.bottom
+            : initialViewport.messageID.map(TranscriptScrollTarget.message) ?? .start
+        let initialPosition = ScrollPosition(id: target, anchor: initialViewport.isAtBottom ? .bottom : .top)
         _position = State(initialValue: initialPosition)
         _viewportRecorder = State(initialValue: TranscriptViewportRecorder(initialViewport))
         _followsLatest = State(initialValue: initialViewport.isAtBottom)
@@ -57,6 +65,7 @@ struct TranscriptScrollView<Content: View>: View {
                 content
                 // Clearance above the overlaid composer, not an anchor message.
                 Color.clear.frame(height: bottomOverlayHeight + 20)
+                    .id(TranscriptScrollTarget.bottom)
             }
             .scrollTargetLayout()
             .padding(.horizontal, 15)
@@ -70,13 +79,24 @@ struct TranscriptScrollView<Content: View>: View {
             // Reassert the reading message only when the viewport changes size,
             // never when content height/offset changes, so this cannot feed back
             // into itself. Leave gestures and bottom-following to native scrolling.
-            guard oldSize.width > 0, oldSize != newSize, !followsLatest, !userIsScrolling,
-                  let messageID = position.viewID(type: UUID.self) else { return }
-            position.scrollTo(id: messageID, anchor: .top)
+            guard didRestoreInitialViewport, oldSize.width > 0, oldSize != newSize, !followsLatest, !userIsScrolling,
+                  let target = position.viewID(type: TranscriptScrollTarget.self) else { return }
+            position.scrollTo(id: target, anchor: .top)
         }
-        .defaultScrollAnchor(.bottom, for: .initialOffset)
+        .defaultScrollAnchor(initialViewport.isAtBottom ? .bottom : .top, for: .initialOffset)
         .defaultScrollAnchor(followsLatest ? .bottom : .top, for: .sizeChanges)
         .defaultScrollAnchor(.top, for: .alignment)
+        .task(id: lastMessageID) {
+            // Reassert a concrete row after attachment to the window. An edge
+            // offset can land in a lazy stack's estimated, not-yet-realized extent.
+            guard !didRestoreInitialViewport, lastMessageID != nil else { return }
+            await Task.yield()
+            guard !Task.isCancelled, !userHasScrolled else { return }
+            didRestoreInitialViewport = true
+            let target = initialViewport.isAtBottom ? TranscriptScrollTarget.bottom
+                : initialViewport.messageID.map(TranscriptScrollTarget.message) ?? .start
+            position.scrollTo(id: target, anchor: initialViewport.isAtBottom ? .bottom : .top)
+        }
         .onScrollGeometryChange(for: TranscriptGeometry.self) { geometry in
             let metrics = TranscriptScrollMetrics(
                 contentOffset: geometry.contentOffset.y,
@@ -97,6 +117,9 @@ struct TranscriptScrollView<Content: View>: View {
             if userIsScrolling, followsLatest != updated.viewport.isAtBottom {
                 followsLatest = updated.viewport.isAtBottom
             }
+            if userIsScrolling {
+                viewportRecorder.lastUserViewport = readingViewport()
+            }
             // Never write ScrollPosition here: native identity anchoring handles
             // reflow without a geometry -> corrective scroll -> geometry loop.
         }
@@ -104,19 +127,46 @@ struct TranscriptScrollView<Content: View>: View {
             let wasUserScrolling = oldPhase != .idle && oldPhase != .animating
             let isUserScrolling = newPhase != .idle && newPhase != .animating
             userIsScrolling = isUserScrolling
+            if isUserScrolling {
+                userHasScrolled = true
+                didRestoreInitialViewport = true
+            }
             if wasUserScrolling && !isUserScrolling {
-                let finalViewport = viewportRecorder.viewport
+                let finalViewport = readingViewport()
                 followsLatest = finalViewport.isAtBottom
+                viewportRecorder.lastUserViewport = finalViewport
                 saveViewport(finalViewport)
             }
         }
         .onChange(of: lastMessageID) { _, _ in
+            // Initial hydration isn't a newly sent message, even if the last
+            // stored message was authored by the user. Restoration owns it.
+            guard didRestoreInitialViewport else { return }
             if lastMessageIsFromUser {
                 followsLatest = true
-                saveViewport(TranscriptViewport(offset: viewportRecorder.viewport.offset, isAtBottom: true))
+                let latest = TranscriptViewport(offset: viewportRecorder.viewport.offset, isAtBottom: true)
+                viewportRecorder.lastUserViewport = latest
+                saveViewport(latest)
             }
-            if followsLatest && !userIsScrolling { position.scrollTo(edge: .bottom) }
+            if followsLatest && !userIsScrolling {
+                position.scrollTo(id: TranscriptScrollTarget.bottom, anchor: .bottom)
+            }
         }
-        // Save only real user scrolling, never the outgoing view's teardown geometry.
+        .onDisappear { saveLastUserViewport() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+            saveLastUserViewport()
+        }
+        // Save the captured user checkpoint, never an outgoing view's resized
+        // teardown geometry. This also covers switching chats during a gesture.
+    }
+
+    private func readingViewport() -> TranscriptViewport {
+        var viewport = viewportRecorder.viewport
+        viewport.messageID = viewport.isAtBottom ? nil : position.viewID(type: TranscriptScrollTarget.self)?.messageID
+        return viewport
+    }
+
+    private func saveLastUserViewport() {
+        if let viewport = viewportRecorder.lastUserViewport { saveViewport(viewport) }
     }
 }
