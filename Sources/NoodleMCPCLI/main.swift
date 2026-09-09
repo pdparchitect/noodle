@@ -7,7 +7,7 @@ import NoodleCore
         do {
             let args = Array(CommandLine.arguments.dropFirst())
             if args.isEmpty || args == ["--help"] {
-                print("mcpshim tools|inspect|call --connection UUID [--tool NAME] [--input JSON]\nRun from a Noodle bot workspace. Calls accept a JSON object through --input or stdin.\nNoodle must be running; manage connections and sign-in in Settings → Tools.")
+                print("./mcpshim tools|inspect|call [--tool NAME] [--input JSON]\nRun the mcpshim in the relevant skill directory; its connection is selected automatically.\nThe shared CLI also accepts --connection UUID for compatibility. Calls accept a JSON object through --input or stdin.\nNoodle must be running; manage connections and sign-in in Settings → Tools.")
                 return
             }
             guard let action = MCPBridgeAction(rawValue: args[0]), args.count % 2 == 1 else {
@@ -21,18 +21,24 @@ import NoodleCore
                 }
                 flags[key] = args[index + 1]
             }
-            guard let rawID = flags["--connection"], let id = UUID(uuidString: rawID),
-                  action == .tools || !(flags["--tool"] ?? "").isEmpty,
+            guard action == .tools || !(flags["--tool"] ?? "").isEmpty,
                   action == .call || flags["--input"] == nil,
                   action != .tools || flags["--tool"] == nil else {
-                throw MCPConnectionError.message("Specify a connection UUID and a tool for inspect/call.")
+                throw MCPConnectionError.message("Specify a tool for inspect/call; input is only supported for call.")
             }
-            var workspace = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).standardizedFileURL
-            while !FileManager.default.fileExists(atPath: workspace.appendingPathComponent("agent.json").path), workspace.path != "/" {
-                workspace.deleteLastPathComponent()
+            let context = try MCPInvocationContext.resolve(invocationPath: CommandLine.arguments[0],
+                currentDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+            let id = flags["--connection"].flatMap(UUID.init(uuidString:))
+            if flags["--connection"] != nil, id == nil {
+                throw MCPConnectionError.message("Invalid connection identifier.")
             }
-            guard workspace.path != "/" else { throw MCPConnectionError.message("Run mcpshim from the assigned Noodle bot's workspace.") }
-            let folder = try MCPBridgeFiles.prepare(workspace: workspace)
+            guard id != nil || context.skillName != nil else {
+                throw MCPConnectionError.message("Use the mcpshim inside the relevant skill directory so Noodle can select its connection.")
+            }
+            guard context.skillName == nil || id == nil else {
+                throw MCPConnectionError.message("A skill-local mcpshim selects its own connection. Omit --connection.")
+            }
+            let folder = try MCPBridgeFiles.prepare(workspace: context.workspace)
             let session: MCPBridgeSession
             do {
                 session = try JSONDecoder().decode(MCPBridgeSession.self,
@@ -57,7 +63,7 @@ import NoodleCore
                     throw MCPConnectionError.message("Tool arguments must be a JSON object no larger than 1 MB.")
                 }
             }
-            let request = MCPBridgeRequest(session: session.token, connectionID: id, action: action,
+            let request = MCPBridgeRequest(session: session.token, connectionID: id, skillName: context.skillName, action: action,
                                            tool: flags["--tool"], arguments: arguments)
             let stem = request.id.uuidString.lowercased()
             let requestFile = folder.appendingPathComponent(stem + ".request")

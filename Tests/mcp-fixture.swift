@@ -243,13 +243,13 @@ struct MCPFixtureView: View {
     }
     @MainActor private static func checkBridge(_ store: NoodleStore) async throws {
         guard let connection = store.mcp.registry.connections.first else { fatalError("Missing fixture connection") }
-        func run() async throws -> String {
-            let workspace = store.repository.directory(for: store.agent)
+        let workspace = store.repository.directory(for: store.agent)
+        func run(executable: URL? = nil, directory: URL? = nil, arguments: [String]? = nil) async throws -> String {
             return try await Task.detached {
                 let process = Process()
-                process.executableURL = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/mcpshim")
-                process.currentDirectoryURL = workspace
-                process.arguments = ["tools", "--connection", connection.id.uuidString]
+                process.executableURL = executable ?? Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/mcpshim")
+                process.currentDirectoryURL = directory ?? workspace
+                process.arguments = arguments ?? ["tools", "--connection", connection.id.uuidString]
                 let error = Pipe()
                 process.standardOutput = FileHandle.nullDevice
                 process.standardError = error
@@ -268,8 +268,42 @@ struct MCPFixtureView: View {
             throw MCPConnectionError.message("Assigned skill or CLI is missing.")
         }
         guard try await run().contains("Reconnect") else { throw MCPConnectionError.message("Unsigned-in request did not reach the credential gate.") }
+        let localCLI = folder.appendingPathComponent("mcpshim")
+        for directory in [folder, workspace] {
+            guard try await run(executable: localCLI, directory: directory, arguments: ["tools"]).contains("Reconnect") else {
+                throw MCPConnectionError.message("Skill-local CLI did not select its assigned connection.")
+            }
+        }
+        guard try await run(executable: localCLI, arguments: ["tools", "--connection", connection.id.uuidString]).contains("Omit --connection") else {
+            throw MCPConnectionError.message("Skill-local CLI accepted an explicit connection override.")
+        }
         try store.mcp.assign([], to: store.agent)
         guard !FileManager.default.fileExists(atPath: folder.appendingPathComponent("SKILL.md").path),
               try await run().contains("not assigned") else { throw MCPConnectionError.message("Removed access remained usable.") }
+        // Bypass the CLI: a known skill name must still be denied by the broker.
+        let bridge = MCPBridgeFiles.directory(workspace: workspace)
+        let session = try JSONDecoder().decode(MCPBridgeSession.self,
+            from: MCPBridgeFiles.read(bridge.appendingPathComponent("session.json"), limit: 4096))
+        let request = MCPBridgeRequest(session: session.token, skillName: connection.skillName,
+                                       action: .tools, tool: nil, arguments: nil)
+        let stem = request.id.uuidString.lowercased()
+        let requestFile = bridge.appendingPathComponent(stem + ".request")
+        let responseFile = bridge.appendingPathComponent(stem + ".response")
+        defer {
+            try? FileManager.default.removeItem(at: requestFile)
+            try? FileManager.default.removeItem(at: responseFile)
+        }
+        try MCPBridgeFiles.write(request, to: requestFile)
+        for _ in 0..<100 {
+            if let data = try? MCPBridgeFiles.read(responseFile, limit: 4096) {
+                let response = try JSONDecoder().decode(MCPBridgeResponse.self, from: data)
+                guard response.error?.contains("not assigned") == true else {
+                    throw MCPConnectionError.message("Broker accepted a revoked skill name.")
+                }
+                return
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        throw MCPConnectionError.message("Broker did not answer the forged skill-name request.")
     }
 }

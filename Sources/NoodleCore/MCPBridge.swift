@@ -5,15 +5,24 @@ public enum MCPBridgeAction: String, Codable, Sendable { case tools, inspect, ca
 public struct MCPBridgeRequest: Codable, Sendable {
     public let id: UUID
     public let session: String
-    public let connectionID: UUID
+    public let connectionID: UUID?
+    public let skillName: String?
     public let action: MCPBridgeAction
     public let tool: String?
     public let arguments: Data?
     public let expiresAt: Date
-    public init(id: UUID = UUID(), session: String, connectionID: UUID, action: MCPBridgeAction,
+    public init(id: UUID = UUID(), session: String, connectionID: UUID? = nil, skillName: String? = nil, action: MCPBridgeAction,
                 tool: String?, arguments: Data?, expiresAt: Date = Date().addingTimeInterval(120)) {
         self.id = id; self.session = session; self.connectionID = connectionID
+        self.skillName = skillName
         self.action = action; self.tool = tool; self.arguments = arguments; self.expiresAt = expiresAt
+    }
+
+    /// Called by the broker with its own assignment list, never a CLI-supplied registry.
+    public func assignedConnection(in assignments: [MCPConnectionRecord]) -> MCPConnectionRecord? {
+        guard (connectionID != nil) != (skillName != nil) else { return nil }
+        if let connectionID { return assignments.first { $0.id == connectionID } }
+        return assignments.first { $0.skillName == skillName }
     }
 }
 public struct MCPBridgeSession: Codable, Sendable {

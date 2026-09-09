@@ -79,7 +79,7 @@ final class MCPController {
             name: ToolCatalog.availableName(for: tool, existingNames: registry.connections.map(\.name)),
             description: tool.summary, instructions: tool.defaultInstructions)
         try save(record)
-        return record
+        return registry.connections.first { $0.id == record.id }!
     }
     func assign(_ ids: Set<UUID>, to agent: AgentRecord) throws {
         try validateAssignment(ids)
@@ -185,6 +185,7 @@ final class MCPController {
                       request.id == id, request.session == sessions[agent.id],
                       (request.arguments?.count ?? 0) <= MCPBridgeFiles.maxRequestBytes,
                       (request.tool?.utf8.count ?? 0) <= 1024,
+                      (request.skillName?.utf8.count ?? 0) <= 64,
                       request.expiresAt > Date(), request.expiresAt < Date().addingTimeInterval(130),
                       claimed[id] == nil else {
                     try? manager.removeItem(at: file)
@@ -194,7 +195,7 @@ final class MCPController {
                 // Consume before dispatch: a crash never silently replays an uncertain write.
                 do { try manager.moveItem(at: file, to: runningURL) } catch { continue }
                 claimed[id] = request.expiresAt
-                guard let connection = registry.assigned(to: agent.id).first(where: { $0.id == request.connectionID }) else {
+                guard let connection = request.assignedConnection(in: registry.assigned(to: agent.id)) else {
                     try? MCPBridgeFiles.write(MCPBridgeResponse(error: "This MCP connection is not assigned to this bot."), to: responseURL)
                     try? manager.removeItem(at: runningURL)
                     continue

@@ -27,8 +27,11 @@ per-tool approval dialog in Noodle. Agents must still follow user authorization.
 
 Workspace synchronization writes one generated skill per assigned connection under
 `.agents/skills` **relative to the bot workspace**, not the user's home. Each skill
-includes the display name, short description, instructions and exact connection UUID.
-The stable directory name is a readable prefix plus that UUID, avoiding collisions.
+includes the name and description in frontmatter, with instructions and CLI usage in
+the body. No account UUID appears in the file or directory name. Stable, readable
+names such as `mcp-notion` use numbered suffixes for duplicate names (`mcp-notion-2`).
+Existing UUID-suffixed skills migrate automatically without changing account identities,
+credentials or assignments. Renaming a connection does not rename its generated skill.
 Existing Claude skill links expose the same generated skill to Claude.
 
 Synchronization runs on application load, bot creation/edit, connection changes and
@@ -38,12 +41,16 @@ unrelated skills and notes. No harness-native MCP configuration is created or mo
 The symlinked, bundled `mcpshim` executable offers:
 
 ~~~sh
-mcpshim tools --connection UUID
-mcpshim inspect --connection UUID --tool TOOL_NAME
-mcpshim call --connection UUID --tool TOOL_NAME --input '{"argument":"value"}'
+./mcpshim tools
+./mcpshim inspect --tool TOOL_NAME
+./mcpshim call --tool TOOL_NAME --input '{"argument":"value"}'
 ~~~
 
-Run the command through the path in SKILL.md from the bot workspace or a descendant.
+Run these commands from the directory containing SKILL.md. The skill-local executable
+infers its connection from that directory; Noodle resolves the name against the bot's
+current assignments. This routing convention is not an authorization boundary.
+The shared CLI still accepts `--connection UUID` for existing integrations, but the
+skill-local CLI rejects explicit connection overrides.
 Calls also accept a JSON object on stdin. Tool discovery handles pagination; inspection
 returns the complete schema. Calls return the MCP result, including structured content
 and `isError`. An MCP tool error exits nonzero. This is a Noodle-built Swift CLI inspired

@@ -22,7 +22,8 @@ final class ToolCatalogTests: XCTestCase {
                 let first = try configuration.makeConnection(name: tool.name, description: tool.summary)
                 let second = try configuration.makeConnection(name: tool.name, description: tool.summary)
                 XCTAssertNotEqual(first.id, second.id)
-                XCTAssertNotEqual(first.skillName, second.skillName)
+                // The registry allocates stable numbered names when accounts are saved.
+                XCTAssertEqual(first.skillName, second.skillName)
                 XCTAssertEqual(first.endpoint, endpoint)
                 XCTAssertNil(first.iconData)
             }

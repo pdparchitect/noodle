@@ -7,7 +7,6 @@ final class MCPConnectionTests: XCTestCase {
         let personal = try MCPConnectionRecord(name: "Notion", endpoint: endpoint)
         let work = try MCPConnectionRecord(name: "Notion", endpoint: endpoint)
         XCTAssertNotEqual(personal.id, work.id)
-        XCTAssertNotEqual(personal.skillName, work.skillName)
         XCTAssertLessThanOrEqual(personal.skillName.count, 64)
         var registry = MCPRegistry()
         registry.connections = [personal, work]
@@ -24,7 +23,7 @@ final class MCPConnectionTests: XCTestCase {
         let skill = record.skillName
         record.name = "New label"
         XCTAssertEqual(record.skillName, skill)
-        XCTAssertTrue(MCPSkillWriter.contents(record).contains(record.id.uuidString.lowercased()))
+        XCTAssertFalse(MCPSkillWriter.contents(record).contains(record.id.uuidString.lowercased()))
     }
     func testGeneratedSkillMetadataRespectsFormatLimits() throws {
         for name in ["🪴", "abcdefghij klmnopqrs tuvwxyz", String(repeating: "n", count: 100)] {
@@ -60,7 +59,10 @@ final class MCPConnectionTests: XCTestCase {
         let directory = workspace.appendingPathComponent(".agents/skills/\(record.skillName)")
         let skill = try String(contentsOf: directory.appendingPathComponent("SKILL.md"), encoding: .utf8)
         XCTAssertTrue(skill.contains("Only use the work account."))
-        XCTAssertTrue(skill.contains("--connection \(record.id.uuidString.lowercased())"))
+        XCTAssertTrue(skill.contains("./mcpshim tools"))
+        XCTAssertFalse(skill.contains("--connection"))
+        XCTAssertFalse(skill.contains(record.id.uuidString.lowercased()))
+        XCTAssertFalse(skill.contains(record.id.uuidString.lowercased().replacingOccurrences(of: "-", with: "")))
         let userFile = directory.appendingPathComponent("my-notes.txt")
         try "Keep me".write(to: userFile, atomically: true, encoding: .utf8)
         try MCPSkillWriter.synchronize(workspace: workspace, connections: [], executable: nil)

@@ -7,7 +7,7 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     public let endpoint: URL
     public var description: String
     public var instructions: String
-    public let skillName: String
+    public fileprivate(set) var skillName: String
     public var iconData: Data?
 
     public init(id: UUID = UUID(), name: String, endpoint: URL,
@@ -21,7 +21,7 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
             CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789").contains($0) ? String($0) : "-"
         }.joined().split(separator: "-").joined(separator: "-")
         let prefix = String(slug.prefix(20)).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
-        self.skillName = "mcp-" + (prefix.isEmpty ? "connection" : prefix) + "-" + id.uuidString.lowercased().replacingOccurrences(of: "-", with: "")
+        self.skillName = "mcp-" + (prefix.isEmpty ? "connection" : prefix)
     }
 
     public static func validatedEndpoint(_ url: URL) throws -> URL {
@@ -61,19 +61,46 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
     public static func load(root: URL) throws -> Self {
         let file = root.appendingPathComponent("MCP/connections.json")
         guard FileManager.default.fileExists(atPath: file.path) else { return Self() }
-        let registry = try JSONDecoder().decode(Self.self, from: MCPBridgeFiles.read(file, limit: 32 * 1_048_576))
+        var registry = try JSONDecoder().decode(Self.self, from: MCPBridgeFiles.read(file, limit: 32 * 1_048_576))
         try registry.validate()
+        registry.normalizeSkillNames()
         return registry
     }
-    public func save(root: URL) throws {
+    public mutating func save(root: URL) throws {
         try validate()
+        var next = self
+        next.normalizeSkillNames()
         let folder = root.appendingPathComponent("MCP", isDirectory: true)
         guard (try? FileManager.default.attributesOfItem(atPath: folder.path)[.type] as? FileAttributeType) != .typeSymbolicLink else {
             throw MCPConnectionError.message("The MCP registry directory must not be a symbolic link.")
         }
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
                                                 attributes: [.posixPermissions: 0o700])
-        try JSONEncoder().encode(self).write(to: folder.appendingPathComponent("connections.json"), options: .atomic)
+        try JSONEncoder().encode(next).write(to: folder.appendingPathComponent("connections.json"), options: .atomic)
+        self = next
+    }
+
+    // Allocate once when saving; preserve clean names across display-name edits,
+    // removals and reloads. Legacy UUID-suffixed folders migrate on workspace sync.
+    private mutating func normalizeSkillNames() {
+        func base(_ connection: MCPConnectionRecord) -> String {
+            let suffix = "-" + connection.id.uuidString.lowercased().replacingOccurrences(of: "-", with: "")
+            return connection.skillName.hasSuffix(suffix) ? String(connection.skillName.dropLast(suffix.count)) : connection.skillName
+        }
+        let reserved = Set(connections.filter { base($0) == $0.skillName }.map(\.skillName))
+        var used: Set<String> = []
+        for index in connections.indices {
+            let original = connections[index].skillName
+            let stem = base(connections[index])
+            var candidate = stem
+            var number = 2
+            while used.contains(candidate) || (original != candidate && reserved.contains(candidate)) {
+                candidate = String(stem.prefix(52)) + "-\(number)"
+                number += 1
+            }
+            connections[index].skillName = candidate
+            used.insert(candidate)
+        }
     }
     private func validate() throws {
         guard Set(connections.map(\.id)).count == connections.count else {
@@ -82,8 +109,7 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
         for connection in connections {
             _ = try ConversationName.validated(connection.name)
             _ = try MCPConnectionRecord.validatedEndpoint(connection.endpoint)
-            let suffix = connection.id.uuidString.lowercased().replacingOccurrences(of: "-", with: "")
-            guard connection.skillName.hasPrefix("mcp-"), connection.skillName.hasSuffix("-" + suffix),
+            guard connection.skillName.hasPrefix("mcp-"), connection.skillName.count > 4,
                   connection.skillName.utf8.count <= 64,
                   connection.skillName.unicodeScalars.allSatisfy({ CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-").contains($0) }),
                   connection.description.count <= 1_000, connection.instructions.count <= 20_000,
@@ -114,16 +140,17 @@ public enum MCPSkillWriter {
 
         # \(connection.name.replacingOccurrences(of: "\n", with: " "))
 
-        This skill uses one specific account connection: \(connection.id.uuidString.lowercased()).
+        This skill uses the account connection assigned to this skill by Noodle.
         Never substitute another account or configure the harness's native MCP support.
         Noodle holds the OAuth credentials. Do not search for, read, or export credentials.
 
-        Run the bundled CLI from this bot's workspace:
+        Run these commands from the directory containing this SKILL.md. The local
+        mcpshim selects this connection automatically; Noodle verifies the bot's access.
 
         ~~~
-        .agents/skills/\(connection.skillName)/mcpshim tools --connection \(connection.id.uuidString.lowercased())
-        .agents/skills/\(connection.skillName)/mcpshim inspect --connection \(connection.id.uuidString.lowercased()) --tool TOOL_NAME
-        .agents/skills/\(connection.skillName)/mcpshim call --connection \(connection.id.uuidString.lowercased()) --tool TOOL_NAME --input '{"argument":"value"}'
+        ./mcpshim tools
+        ./mcpshim inspect --tool TOOL_NAME
+        ./mcpshim call --tool TOOL_NAME --input '{"argument":"value"}'
         ~~~
 
         Discover tools and inspect their JSON schema before calling. Pass arguments as one JSON object;
@@ -152,6 +179,17 @@ public enum MCPSkillWriter {
         }
         let previous = (try? JSONDecoder().decode([String].self, from: Data(contentsOf: manifestURL))) ?? []
         let names = connections.map(\.skillName)
+        // Check destinations before removing old generated files during migration.
+        for name in names {
+            guard isManagedName(name) else { throw MCPConnectionError.message("Invalid managed MCP skill name.") }
+            let folder = skills.appendingPathComponent(name, isDirectory: true)
+            guard !isSymlink(folder) else {
+                throw MCPConnectionError.message("Cannot write MCP skills into a redirected skill directory.")
+            }
+            if manager.fileExists(atPath: folder.path), !previous.contains(name) {
+                throw MCPConnectionError.message("A skill named \(name) already exists and is not managed by this connection. Rename that skill before trying again.")
+            }
+        }
         // Only remove files owned by this generator; never remove arbitrary skill directories.
         for name in previous where !names.contains(name) && isManagedName(name) {
             let directory = skills.appendingPathComponent(name)

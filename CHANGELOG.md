@@ -24,6 +24,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Generated MCP skills use readable names and simple skill-local commands without account UUIDs. Existing skills migrate automatically; Noodle still checks the bot's session and current connection assignment before dispatching calls.
 - The Add Tools button sits inside a full-width rounded settings group, matching the other Settings action rows.
 - MCP connections are labeled “Tools” in Settings and bot editors, with matching buttons, forms and help text. The protocol and saved connections are unchanged.
 - The empty group-members area opens the Add Bots picker when clicked. Bot editor tabs and configuration headings use “Harness” consistently.
