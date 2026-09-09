@@ -4,19 +4,18 @@ import Sparkle
 import SwiftUI
 
 @MainActor
-final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
+final class AppUpdater: NSObject, ObservableObject {
     static let shared = AppUpdater()
 
     @Published private(set) var canCheckForUpdates = false
     @Published private(set) var automaticallyChecks = false
     @Published private(set) var automaticallyDownloads = false
     @Published private(set) var allowsAutomaticUpdates = false
-    @Published private(set) var isWaitingToRelaunch = false
-    private(set) var isInstallingUpdate = false
     private var started = false
-    private var deferredRelaunch: Task<Void, Never>?
     private lazy var controller = SPUStandardUpdaterController(
-        startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil
+        // Sparkle owns installation and relaunch. Agent and editor state must not
+        // veto the user's Install and Relaunch request.
+        startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil
     )
 
     func start() {
@@ -43,41 +42,6 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
         if started { controller.updater.automaticallyDownloadsUpdates = enabled }
     }
 
-    var canRelaunch: Bool { NoodleStore.active?.canRelaunchForUpdate ?? false }
-
-    func updater(_ updater: SPUUpdater, willInstallUpdate item: SUAppcastItem) {
-        isInstallingUpdate = true
-    }
-
-    func updater(
-        _ updater: SPUUpdater,
-        shouldPostponeRelaunchForUpdate item: SUAppcastItem,
-        untilInvokingBlock installHandler: @escaping () -> Void
-    ) -> Bool {
-        guard !canRelaunch else { return false }
-        isWaitingToRelaunch = true
-        deferredRelaunch?.cancel()
-        deferredRelaunch = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                do { try await Task.sleep(for: .seconds(1)) } catch { return }
-                guard let self else { return }
-                if self.canRelaunch {
-                    self.isWaitingToRelaunch = false
-                    self.deferredRelaunch = nil
-                    installHandler()
-                    return
-                }
-            }
-        }
-        return true
-    }
-
-    func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
-        deferredRelaunch?.cancel()
-        deferredRelaunch = nil
-        isWaitingToRelaunch = false
-        isInstallingUpdate = false
-    }
 }
 
 struct CheckForUpdatesButton: View {
@@ -108,10 +72,6 @@ struct UpdatesSettingsView: View {
                     get: { updater.automaticallyDownloads }, set: updater.setAutomaticDownloads
                 ))
                 .disabled(!updater.allowsAutomaticUpdates)
-            }
-            if updater.isWaitingToRelaunch {
-                Label("Update ready. Waiting for agents or unsaved changes…", systemImage: "clock")
-                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

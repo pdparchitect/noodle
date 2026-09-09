@@ -37,7 +37,7 @@ The `.p12` secret is used only for code signing; the App Store Connect API key i
 
 ### In-app updates
 
-Use **Noodle → Check for Updates…** or **Settings → Updates**. Automatic daily checks are enabled by default. Automatic download/installation is a separate opt-in setting. Sparkle provides release prompts, progress, signature validation, installation, and relaunch. Restarting is postponed while an agent is starting/working, a message or attachment is unsent, an editor is open, or a shared item is being delivered. An additional termination check protects a resumed installation as well.
+Use **Noodle → Check for Updates…** or **Settings → Update**. Automatic daily checks are enabled by default. Automatic download/installation is a separate opt-in setting. Sparkle provides release prompts, progress, signature validation, installation, and relaunch. **Install and Relaunch** proceeds without Noodle checking agent status, drafts, attachments, or open editors, and without an additional confirmation. Harnesses follow the normal shutdown and recovery lifecycle. Unsent drafts and unsaved editor changes are not saved by the updater and can be lost on restart.
 
 The app fetches `https://github.com/pdparchitect/noodle/releases/latest/download/appcast.xml`; its enclosures point to versioned ZIP assets in the same GitHub repository. There is no separate server, GitHub Pages site, access token in the app, or custom download service. Only publish stable releases as “latest.” The previous release remains available while CI builds and uploads the next one.
 

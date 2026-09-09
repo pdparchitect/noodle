@@ -131,16 +131,6 @@ final class NoodleStore {
         creationSheet = .bot
     }
 
-    var canRelaunchForUpdate: Bool {
-        !drafts.hasContent && UpdateReadiness.canRelaunch(
-            phases: runtime.snapshots.values.map(\.phase),
-            draft: draft,
-            hasAttachments: !pendingAttachments.isEmpty,
-            isEditing: creationSheet != nil || agentBeingEdited != nil
-                || groupBeingEdited != nil || backgroundBeingEdited != nil || isProcessingShares
-        )
-    }
-
     var filteredConversations: [BotConversation] {
         let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return conversations }

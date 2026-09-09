@@ -108,15 +108,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // Sparkle may skip the postponement callback when resuming a previous install.
-        // Recheck at the actual termination boundary as well.
-        if AppUpdater.shared.isInstallingUpdate && !AppUpdater.shared.canRelaunch {
-            return .terminateCancel
-        }
-        return .terminateNow
-    }
-
     func applicationWillTerminate(_ notification: Notification) {
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         if let attachmentPasteMonitor {
