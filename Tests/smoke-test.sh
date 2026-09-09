@@ -15,6 +15,7 @@ zsh "$project_root/Tests/transcript-resize.sh"
 zsh "$project_root/Tests/transcript-startup.sh"
 zsh "$project_root/Tests/mcp-fixture.sh" --check
 zsh "$project_root/Tests/mcp-window-routing.sh"
+zsh "$project_root/Tests/destructive-buttons.sh"
 app="$(NOODLE_BUILD_CONFIGURATION="${NOODLE_BUILD_CONFIGURATION:-debug}" "$project_root/scripts/build-app.sh")"
 
 expected_version="$(tr -d '[:space:]' < "$project_root/VERSION")"

@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 import NoodleCore
 
 private enum BotEditorTab: String, CaseIterable {
-    case general = "General", runtime = "Runtime", mcp = "Tools"
+    case general = "General", runtime = "Harness", mcp = "Tools"
 }
 
 private struct BotEditorTabPicker: View {
@@ -289,10 +289,9 @@ struct EditBotSheet: View {
                         ConversationBackgroundSettingsRow(conversation: conversation)
                     }
                     Divider()
-                    Button("Delete Bot\u{2026}", role: .destructive) {
+                    DestructiveActionButton(title: "Delete Bot") {
                         confirmingDeletion = true
                     }
-                    .buttonStyle(.bordered)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 case .runtime:
                     AgentConfigurationFields(
@@ -839,10 +838,9 @@ struct GroupInfoSheet: View {
 
                 Divider()
 
-                Button("Delete Group\u{2026}", role: .destructive) {
+                DestructiveActionButton(title: "Delete Group") {
                     confirmingDeletion = true
                 }
-                .buttonStyle(.bordered)
             }
             .padding(20)
         }

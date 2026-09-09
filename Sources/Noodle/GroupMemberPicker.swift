@@ -61,13 +61,20 @@ struct GroupMemberPicker: View {
             }
             ScrollView {
                 if selected.isEmpty {
-                    VStack(spacing: 10) {
-                        Image(systemName: "person.crop.circle.badge.plus").font(.largeTitle)
-                        Text("Add bots to this group")
+                    Button { search = ""; showingAdd = true } label: {
+                        VStack(spacing: 10) {
+                            Image(systemName: "person.crop.circle.badge.plus").font(.largeTitle)
+                            Text("Add bots to this group")
+                        }
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 32)
+                        .contentShape(Rectangle())
                     }
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 32)
+                    .buttonStyle(.plain)
+                    .disabled(agents.isEmpty)
+                    .help("Add Bots")
+                    .accessibilityLabel("Add bots to this group")
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 12)], spacing: 16) {
                         ForEach(selected) { agent in

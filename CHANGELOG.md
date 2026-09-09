@@ -24,10 +24,11 @@ All notable changes to Noodle are documented here, following
 ### Fixed
 
 - MCP connections are labeled “Tools” in Settings and bot editors, with matching buttons, forms and help text. The protocol and saved connections are unchanged.
+- The empty group-members area opens the Add Bots picker when clicked. Bot editor tabs and configuration headings use “Harness” consistently.
 - Conversation reading positions survive app relaunches and restore by message identity, with a safe latest-message fallback if the saved message was removed. Initial transcript positioning targets real rows after loading instead of an estimated blank scroll extent.
-- Bot and group editor Delete buttons use the native destructive button appearance instead of a custom bright-red fill. Confirmation dialogs are unchanged.
+- Bot and group editor Delete buttons use AppKit's subdued red destructive appearance rather than a bright-red fill or neutral SwiftUI button. Labels omit ellipses; confirmation dialogs are unchanged.
 - Returning from MCP browser sign-in reuses the existing chat window and restores focus to the Settings window that started the connection, rather than opening a second chat window.
-- Bot editors use General, Runtime and MCP tabs with content-fitted, animated sheet resizing. Draft settings survive tab changes.
+- Bot editors use General, Harness and Tools tabs with content-fitted, animated sheet resizing. Draft settings survive tab changes.
 - MCP settings and connection forms are more compact, with a rounded instructions editor. MCP sign-in opens in the normal default browser with access to existing profiles and extensions; validated app callbacks, PKCE and sign-in timeouts remain enforced.
 - Updated Grok Build installations are recognized when the official launcher points to a versioned download. The native installation location and xAI code-signature checks remain enforced.
 - Resizing the conversation window anchors the message being read as text reflows, instead of retaining a pixel offset that can jump to different content. Chats already at the bottom continue following the latest message.

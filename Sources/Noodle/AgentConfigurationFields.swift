@@ -35,7 +35,7 @@ struct AgentConfigurationFields: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("Agent Runtime")
+            Text("Harness")
                 .font(.caption.weight(.semibold))
 
             VStack(spacing: 0) {

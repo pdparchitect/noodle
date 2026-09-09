@@ -14,7 +14,7 @@ provider's connected-app settings for that.
 ## Assigning and using a connection
 
 Create/Edit Bot → Tools includes an add/remove connection picker. General holds the
-description and backstory; Runtime holds harness, model and effort settings. Tabs
+description and backstory; Harness holds harness, model and effort settings. Tabs
 preserve unsaved edits and fit the sheet to their contents, with Reduce Motion respected.
 The Tools picker can select a saved connection
 before sign-in, but calls require a successful sign-in. Assignment makes the provider's
