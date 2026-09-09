@@ -28,7 +28,7 @@ final class MCPController {
         do { registry = try MCPRegistry.load(root: repository.rootURL) }
         catch {
             registryReadable = false
-            errorMessage = "Could not read saved MCP connections. They have not been replaced."
+            errorMessage = "Could not read saved tool connections. They have not been replaced."
         }
     }
     func start(agents: [AgentRecord]) {
@@ -79,12 +79,12 @@ final class MCPController {
     func validateAssignment(_ ids: Set<UUID>) throws {
         try requireReadableRegistry()
         guard ids.isSubset(of: Set(registry.connections.map(\.id))) else {
-            throw MCPConnectionError.message("One of the selected MCP connections no longer exists.")
+            throw MCPConnectionError.message("One of the selected tool connections no longer exists.")
         }
     }
     private func requireReadableRegistry() throws {
         guard registryReadable else {
-            throw MCPConnectionError.message("Saved MCP connections could not be read. Restore the registry before making changes; the existing file has not been replaced.")
+            throw MCPConnectionError.message("Saved tool connections could not be read. Restore the registry before making changes; the existing file has not been replaced.")
         }
     }
     func selectedIDs(for agent: AgentRecord) -> Set<UUID> { Set(registry.assigned(to: agent.id).map(\.id)) }
@@ -216,7 +216,7 @@ final class MCPController {
     }
     private static func safeError(_ error: Error) -> String {
         if error is MCPServiceError || error is MCPConnectionError { return error.localizedDescription }
-        return "The MCP connection could not complete the request. Try reconnecting in Settings → MCP."
+        return "The tool connection could not complete the request. Try reconnecting in Settings → Tools."
     }
 }
 

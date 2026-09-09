@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 import NoodleCore
 
 private enum BotEditorTab: String, CaseIterable {
-    case general = "General", runtime = "Runtime", mcp = "MCP"
+    case general = "General", runtime = "Runtime", mcp = "Tools"
 }
 
 private struct BotEditorTabPicker: View {

@@ -7,7 +7,7 @@ import NoodleCore
         do {
             let args = Array(CommandLine.arguments.dropFirst())
             if args.isEmpty || args == ["--help"] {
-                print("mcpshim tools|inspect|call --connection UUID [--tool NAME] [--input JSON]\nRun from a Noodle bot workspace. Calls accept a JSON object through --input or stdin.\nNoodle must be running; manage connections and sign-in in Settings → MCP.")
+                print("mcpshim tools|inspect|call --connection UUID [--tool NAME] [--input JSON]\nRun from a Noodle bot workspace. Calls accept a JSON object through --input or stdin.\nNoodle must be running; manage connections and sign-in in Settings → Tools.")
                 return
             }
             guard let action = MCPBridgeAction(rawValue: args[0]), args.count % 2 == 1 else {

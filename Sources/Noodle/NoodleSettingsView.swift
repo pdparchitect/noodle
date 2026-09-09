@@ -33,7 +33,7 @@ struct NoodleSettingsView: View {
                 .tag(NoodleSettingsTab.heartbeats)
             MCPSettingsView()
                 .settingsContentSize()
-                .tabItem { Label("MCP", systemImage: "puzzlepiece.extension") }
+                .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
                 .tag(NoodleSettingsTab.mcps)
             AgentAccessSettingsView()
                 .settingsContentSize()

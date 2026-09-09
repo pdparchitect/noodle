@@ -1,6 +1,6 @@
 # Built-in MCP connections
 
-Settings → MCP registers named account connections. Start with
+Settings → Tools registers named account connections. Start with
 https://mcp.notion.com/mcp: add a name, URL, optional short description and instructions,
 then complete the provider's consent screen. Use distinct names such as **Notion Work**
 and **Notion Personal** when adding the same endpoint twice.
@@ -13,10 +13,10 @@ provider's connected-app settings for that.
 
 ## Assigning and using a connection
 
-Create/Edit Bot → MCP includes an add/remove connection picker. General holds the
+Create/Edit Bot → Tools includes an add/remove connection picker. General holds the
 description and backstory; Runtime holds harness, model and effort settings. Tabs
 preserve unsaved edits and fit the sheet to their contents, with Reduce Motion respected.
-The MCP picker can select a saved connection
+The Tools picker can select a saved connection
 before sign-in, but calls require a successful sign-in. Assignment makes the provider's
 tools available to that bot under the scopes the user consented to; there is no extra
 per-tool approval dialog in Noodle. Agents must still follow user authorization.

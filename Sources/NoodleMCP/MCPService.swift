@@ -175,7 +175,7 @@ public actor MCPService {
             // Never echo transport errors containing a provider's private response.
             if let error = error as? MCPServiceError { throw error }
             if let error = error as? MCPConnectionError { throw error }
-            throw MCPConnectionError.message("The MCP request failed. Check the connection in Settings → MCP. Verify remote changes before retrying.")
+            throw MCPConnectionError.message("The tool request failed. Check the connection in Settings → Tools. Verify remote changes before retrying.")
         }
     }
 }

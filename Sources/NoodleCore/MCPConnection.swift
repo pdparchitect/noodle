@@ -27,7 +27,7 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     public static func validatedEndpoint(_ url: URL) throws -> URL {
         guard url.scheme?.lowercased() == "https", url.fragment == nil,
               let result = MessageLink.publicWebURL(from: url) else {
-            throw MCPConnectionError.message("Enter a public HTTPS MCP URL without credentials or a fragment.")
+            throw MCPConnectionError.message("Enter a public HTTPS server URL without credentials or a fragment.")
         }
         return result
     }
@@ -50,7 +50,7 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
     }
     public mutating func assign(_ ids: Set<UUID>, to agentID: UUID) throws {
         guard ids.isSubset(of: Set(connections.map(\.id))) else {
-            throw MCPConnectionError.message("One of the selected MCP connections no longer exists.")
+            throw MCPConnectionError.message("One of the selected tool connections no longer exists.")
         }
         assignments[agentID.uuidString.lowercased()] = ids.sorted { $0.uuidString < $1.uuidString }
     }
@@ -133,7 +133,7 @@ public enum MCPSkillWriter {
         are hints, not authorization. Do only what the user has authorized.
 
         Noodle must be running. If sign-in or additional consent is needed, tell the user to reconnect
-        this named connection in Settings → MCP. Do not launch login flows or retry uncertain writes.
+        this named connection in Settings → Tools. Do not launch login flows or retry uncertain writes.
         A timeout can mean a remote action completed without its result reaching you; verify before retrying.
 
         ## User-supplied instructions

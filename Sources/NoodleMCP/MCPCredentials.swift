@@ -73,7 +73,7 @@ public enum MCPServiceError: LocalizedError, Sendable {
         switch self {
         case .credentialStorage: return "Could not securely save or read this connection in Keychain."
         case .keychain(let code): return "Keychain could not save or read this connection (OSStatus \(code))."
-        case .signInRequired: return "Reconnect this connection in Settings → MCP."
+        case .signInRequired: return "Reconnect this connection in Settings → Tools."
         case .registrationUnsupported: return "This MCP does not support automatic OAuth client registration."
         case .invalidMetadata: return "The server returned unsupported or inconsistent OAuth metadata."
         case .invalidCallback: return "The sign-in response could not be verified. Please try connecting again."

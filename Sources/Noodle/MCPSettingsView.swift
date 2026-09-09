@@ -56,14 +56,14 @@ struct MCPSettingsView: View {
             .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
             HStack {
                 Spacer()
-                Button { showingAdd = true } label: { Label("Add MCP…", systemImage: "plus") }
+                Button { showingAdd = true } label: { Label("Add Tools…", systemImage: "plus") }
                     .help("Add a service or another account")
             }
         }
         .padding(20)
         .sheet(isPresented: $showingAdd) { MCPEditor(controller: store.mcp).noodleSheetSizing() }
         .sheet(item: $editing) { connection in MCPEditor(controller: store.mcp, existing: connection).noodleSheetSizing() }
-        .confirmationDialog("Remove MCP Connection?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+        .confirmationDialog("Remove Tool Connection?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
                             titleVisibility: .visible) {
             Button("Remove Connection", role: .destructive) {
                 if let removing { store.mcp.remove(removing) }
@@ -73,7 +73,7 @@ struct MCPSettingsView: View {
         } message: {
             Text("This removes this connection from all bots and deletes its saved sign-in from Noodle. Other connections to the same service are unchanged. To revoke the provider's grant too, use its account settings.")
         }
-        .alert("MCP", isPresented: Binding(get: { store.mcp.errorMessage != nil }, set: { if !$0 { store.mcp.errorMessage = nil } })) {
+        .alert("Tools", isPresented: Binding(get: { store.mcp.errorMessage != nil }, set: { if !$0 { store.mcp.errorMessage = nil } })) {
             Button("OK") { store.mcp.errorMessage = nil }
         } message: { Text(store.mcp.errorMessage ?? "") }
     }
@@ -100,7 +100,7 @@ private struct MCPEditor: View {
             HStack {
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
-                Text(existing == nil ? "Add MCP" : "Edit MCP").font(.headline)
+                Text(existing == nil ? "Add Tools" : "Edit Tools").font(.headline)
                 Spacer()
                 Button(existing == nil ? "Add & Connect" : "Save", action: save)
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || endpoint.isEmpty)
@@ -114,7 +114,7 @@ private struct MCPEditor: View {
                         .help("Use a distinct name for each account")
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("MCP URL").font(.caption.weight(.semibold))
+                    Text("Server URL").font(.caption.weight(.semibold))
                     TextField("https://…", text: $endpoint, axis: .horizontal).lineLimit(1)
                         .autocorrectionDisabled().disabled(existing != nil)
                 }
@@ -141,7 +141,7 @@ private struct MCPEditor: View {
     private func save() {
         do {
             guard let url = URL(string: endpoint.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-                throw MCPConnectionError.message("Enter a valid HTTPS MCP URL.")
+                throw MCPConnectionError.message("Enter a valid HTTPS server URL.")
             }
             var record = try existing ?? MCPConnectionRecord(name: name, endpoint: url)
             record.name = try ConversationName.validated(name)
@@ -184,9 +184,9 @@ struct MCPAssignmentPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("MCP Connections").font(.headline)
+                Text("Tool Connections").font(.headline)
                 Spacer()
-                Button { search = ""; showingAdd = true } label: { Label("Add MCP…", systemImage: "plus") }
+                Button { search = ""; showingAdd = true } label: { Label("Add Tools…", systemImage: "plus") }
                     .popover(isPresented: $showingAdd, arrowEdge: .bottom) {
                         VStack(spacing: 10) {
                             TextField("Search connections", text: $search).textFieldStyle(.roundedBorder).autocorrectionDisabled()
@@ -208,7 +208,7 @@ struct MCPAssignmentPicker: View {
                                         }.buttonStyle(.plain)
                                     }
                                     if controller.registry.connections.isEmpty {
-                                        Text("Add a connection in Settings → MCP first.").foregroundStyle(.secondary).padding()
+                                        Text("Add a connection in Settings → Tools first.").foregroundStyle(.secondary).padding()
                                     }
                                 }
                             }
@@ -217,7 +217,7 @@ struct MCPAssignmentPicker: View {
                     }
             }
             if selectedIDs.isEmpty {
-                Text("No MCP connections assigned").font(.caption).foregroundStyle(.secondary)
+                Text("No tool connections assigned").font(.caption).foregroundStyle(.secondary)
             } else {
                 ScrollView {
                     VStack(spacing: 6) {
