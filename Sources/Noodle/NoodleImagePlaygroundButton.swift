@@ -53,6 +53,7 @@ struct NoodleImagePlaygroundButton: View {
         } label: {
             Label("Create Image…", systemImage: "apple.intelligence")
                 .frame(maxWidth: .infinity)
+                .frame(height: 20)
         }
         .buttonStyle(.bordered)
     }

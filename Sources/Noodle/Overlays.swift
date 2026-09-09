@@ -523,19 +523,15 @@ private struct BotIconEditor: View {
                 GroupBox("Image") {
                     VStack(spacing: 8) {
                         HStack(spacing: 8) {
-                            Menu {
-                                Button("Choose File…", systemImage: "folder") {
-                                    choosingFile = true
-                                }
-                                Button("Photos Library…", systemImage: "photo.on.rectangle") {
+                            ImageSourceMenu(
+                                title: "Choose Image…",
+                                chooseFile: { choosingFile = true },
+                                choosePhoto: {
                                     photoSelection = nil
                                     choosingPhoto = true
                                 }
-                            } label: {
-                                Label("Choose Image…", systemImage: "photo")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .frame(maxWidth: .infinity)
+                            )
+                            .frame(minWidth: 0, maxWidth: .infinity)
 
                             if #available(macOS 15.1, *) {
                                 NoodleImagePlaygroundButton(
@@ -543,7 +539,7 @@ private struct BotIconEditor: View {
                                 ) { url in
                                     Task { await loadImage(at: url, requiresSecurityScope: false) }
                                 }
-                                .frame(maxWidth: .infinity)
+                                .frame(minWidth: 0, maxWidth: .infinity)
                             }
                         }
 

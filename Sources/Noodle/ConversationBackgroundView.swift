@@ -172,7 +172,10 @@ struct ConversationBackgroundSheet: View {
     var body: some View {
         VStack(spacing: 20) {
             HStack {
-                Button("Cancel") { dismiss() }.disabled(busy)
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.blue)
+                    .disabled(busy)
                 Spacer()
                 Text("Conversation Background").font(.headline)
                 Spacer()
@@ -185,6 +188,8 @@ struct ConversationBackgroundSheet: View {
                         } catch { failure = error.localizedDescription; busy = false }
                     }
                 }
+                .buttonStyle(.plain)
+                .foregroundStyle(.blue)
                 .disabled(busy || (selected == original && imageData == nil && preparedFile == nil))
                 .keyboardShortcut(.defaultAction)
             }
@@ -204,33 +209,26 @@ struct ConversationBackgroundSheet: View {
                     choice(preset.rawValue.capitalized, background: ConversationBackground(preset: preset))
                 }
             }
-            HStack {
-                Menu {
-                    Button("Choose File…", systemImage: "folder") { choosingImage = true }
-                    Button("Photos Library…", systemImage: "photo.on.rectangle") {
+            HStack(spacing: 8) {
+                ImageSourceMenu(
+                    title: "Choose Background…",
+                    chooseFile: { choosingImage = true },
+                    choosePhoto: {
                         photoSelection = nil
                         choosingPhoto = true
                     }
-                } label: {
-                    Label("Choose Background…", systemImage: "photo")
-                        .frame(maxWidth: .infinity)
-                }
-                .frame(maxWidth: .infinity)
+                )
+                .frame(minWidth: 0, maxWidth: .infinity)
 
                 if #available(macOS 15.1, *) {
                     NoodleImagePlaygroundButton(sourceImageData: imageData) { url in
                         Task { await loadGeneratedImage(at: url) }
                     }
-                    .frame(maxWidth: .infinity)
+                    .frame(minWidth: 0, maxWidth: .infinity)
                 }
-
-                Spacer()
-                ZStack {
-                    if busy { ProgressView().controlSize(.small) }
-                }
-                .frame(width: 16, height: 16)
             }
             .disabled(busy)
+            if busy { ProgressView().controlSize(.small) }
             Text("Images, HEIC and MP4/M4V/MOV files. Videos loop silently; dynamic HEIC frames cycle every 8 seconds. Motion pauses when hidden or Reduce Motion is on.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let failure { Text(failure).font(.caption).foregroundStyle(.red) }
@@ -313,7 +311,8 @@ struct ConversationBackgroundSheet: View {
         } label: {
             VStack(spacing: 6) {
                 ConversationBackgroundView(background: background)
-                    .frame(width: 80, height: 48).clipShape(RoundedRectangle(cornerRadius: 8))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48).clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected == background ? Color.accentColor : .clear, lineWidth: 2))
                 Text(title).font(.caption)
             }
@@ -322,6 +321,7 @@ struct ConversationBackgroundSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .frame(minWidth: 0, maxWidth: .infinity)
         .accessibilityLabel(title)
         .accessibilityValue(selected == background ? "Selected" : "Not selected")
         .disabled(busy)
