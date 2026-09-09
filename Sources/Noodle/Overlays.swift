@@ -292,8 +292,7 @@ struct EditBotSheet: View {
                     Button("Delete Bot\u{2026}", role: .destructive) {
                         confirmingDeletion = true
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
+                    .buttonStyle(.bordered)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 case .runtime:
                     AgentConfigurationFields(
@@ -843,8 +842,7 @@ struct GroupInfoSheet: View {
                 Button("Delete Group\u{2026}", role: .destructive) {
                     confirmingDeletion = true
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
+                .buttonStyle(.bordered)
             }
             .padding(20)
         }

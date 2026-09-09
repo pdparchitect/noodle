@@ -23,6 +23,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Bot and group editor Delete buttons use the native destructive button appearance instead of a custom bright-red fill. Confirmation dialogs are unchanged.
 - Returning from MCP browser sign-in reuses the existing chat window and restores focus to the Settings window that started the connection, rather than opening a second chat window.
 - Bot editors use General, Runtime and MCP tabs with content-fitted, animated sheet resizing. Draft settings survive tab changes.
 - MCP settings and connection forms are more compact, with a rounded instructions editor. MCP sign-in opens in the normal default browser with access to existing profiles and extensions; validated app callbacks, PKCE and sign-in timeouts remain enforced.
