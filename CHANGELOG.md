@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-09
+
 ### Added
 
 - The tool picker offers New Tool beside Done, a searchable catalogue of 35 browser-sign-in MCP services with bundled icons, and a Custom MCP form. Presets add in one step with editable default descriptions and instructions. New connections are selected in the current bot draft; saving that bot still controls assignment. The catalogue separates tool types from MCP-specific setup so other tool types can be added later.
