@@ -107,6 +107,7 @@ final class MCPController {
     }
     func connect(_ record: MCPConnectionRecord) {
         guard signingIn == nil else { return }
+        browser.captureReturnWindow()
         signingIn = record.id
         errors[record.id] = nil
         loginTask = Task {
@@ -222,6 +223,7 @@ final class MCPController {
 // Open an ordinary default-browser tab, retaining normal profiles and extensions.
 // Only a callback for the currently pending target AND state may consume the login.
 @MainActor final class MCPBrowserAuthorization {
+    private let returnWindow = ExternalEventReturnWindow()
     private var pendingID: UUID?
     private var callbackURL: URL?
     private var state: String?
@@ -229,6 +231,8 @@ final class MCPController {
     private var timeout: Task<Void, Never>?
     private let openURL: (URL) -> Bool
     private let timeoutDuration: Duration
+
+    func captureReturnWindow() { returnWindow.capture() }
 
     init(timeoutDuration: Duration = .seconds(180), openURL: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) }) {
         self.timeoutDuration = timeoutDuration
@@ -269,12 +273,14 @@ final class MCPController {
         let states = actual.queryItems?.filter { $0.name == "state" } ?? []
         guard states.count == 1, states.first?.value == state else { return false }
         // MCPOAuth additionally validates code/error parameters before token exchange.
+        returnWindow.restore()
         finish(id, .success(url))
         return true
     }
     private func finish(_ id: UUID, _ result: Result<URL, Error>) {
         guard pendingID == id else { return }
         pendingID = nil
+        returnWindow.clear()
         callbackURL = nil
         state = nil
         let continuation = continuation

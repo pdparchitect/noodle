@@ -10,6 +10,7 @@ swiftc -parse-as-library -I "$bin_path/Modules" \
     -Xcc "-fmodule-map-file=$project_root/.build/checkouts/swift-system/Sources/CSystem/include/module.modulemap" \
     -Xcc "-I$project_root/.build/checkouts/swift-system/Sources/CSystem/include" \
     "$project_root/Sources/Noodle/MCPController.swift" \
+    "$project_root/Sources/Noodle/ExternalEventPresentation.swift" \
     "$project_root/Sources/Noodle/MCPSettingsView.swift" \
     "$project_root/Sources/Noodle/SheetSizing.swift" \
     "$project_root/Tests/mcp-fixture.swift" \

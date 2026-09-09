@@ -28,7 +28,9 @@ struct NoodleApp: App {
                 .frame(minWidth: 980, minHeight: 670)
                 .preferredColorScheme(.dark)
                 .background(WindowConfiguration())
+                .reuseWindowForExternalEvents { store.mcp.receiveAuthorizationCallback($0) }
         }
+        .handlesExternalEvents(matching: ["*"])
         .defaultSize(width: 1160, height: 810)
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified(showsTitle: false))
@@ -128,9 +130,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls {
-            NoodleStore.active?.mcp.receiveAuthorizationCallback(url)
-        }
         guard urls.contains(where: { $0.scheme == "noodle" && $0.host == "shared" }) else { return }
         Task { await NoodleStore.active?.processSharedInbox() }
     }

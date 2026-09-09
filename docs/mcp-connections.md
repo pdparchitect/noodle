@@ -78,6 +78,8 @@ resource metadata, authorization-server discovery and dynamic client registratio
 public clients. Authorization Code + PKCE S256 opens the normal default browser, so
 existing profiles and password-manager extensions remain available, and returns through
 the app's registered URL callback. State, callback target and issuer are validated.
+SwiftUI routes callbacks to an existing chat scene instead of creating another window,
+then restores the Settings window that initiated sign-in, including if it was minimized.
 Unrelated or stale callbacks cannot consume an active sign-in; cancellation and a
 three-minute timeout clear the pending request. Choose the intended account in the
 provider's browser UI when connecting another account; connections retain separate credentials.

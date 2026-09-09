@@ -23,6 +23,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Returning from MCP browser sign-in reuses the existing chat window and restores focus to the Settings window that started the connection, rather than opening a second chat window.
 - Bot editors use General, Runtime and MCP tabs with content-fitted, animated sheet resizing. Draft settings survive tab changes.
 - MCP settings and connection forms are more compact, with a rounded instructions editor. MCP sign-in opens in the normal default browser with access to existing profiles and extensions; validated app callbacks, PKCE and sign-in timeouts remain enforced.
 - Updated Grok Build installations are recognized when the official launcher points to a versioned download. The native installation location and xAI code-signature checks remain enforced.
