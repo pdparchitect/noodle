@@ -357,6 +357,14 @@ private struct HarnessInstallationRow: View {
                         } else {
                             Button("Install…") { showsInstallationGuide = true }
                         }
+                    } else if setup.authentication[id] == .managedExternally {
+                        Text("Could not determine the saved sign-in status. Check Muse in Terminal, then choose Check Again.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else if id == .muse, setup.authentication[id] == .unauthenticated {
+                        Text("Run muse login in Terminal, then choose Check Again.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Button("Open Terminal") { openTerminal() }
+                        if let terminalError { Text(terminalError).font(.caption).foregroundStyle(.red) }
                     } else if setup.authentication[id] == .unauthenticated {
                         Button("Sign In…") {
                             if let liveInstallation, liveInstallation.isAvailable { setup.signIn(liveInstallation) }
@@ -428,6 +436,7 @@ private struct HarnessInstallationRow: View {
         case .authenticated: return "Signed in"
         case .unauthenticated: return "Sign-in required"
         case .notRequired: return "Ready — no sign-in required"
+        case .managedExternally: return "Sign-in status unknown"
         case nil: return setup.checking.contains(id) ? "Checking sign-in…" : "Installed"
         }
     }

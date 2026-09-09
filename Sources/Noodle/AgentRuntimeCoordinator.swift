@@ -57,10 +57,13 @@ final class AgentRuntimeCoordinator {
     private var fxCapabilityTask: Task<Void, Never>?
     private var grokCapabilityTask: Task<Void, Never>?
     private var hostGrokInstallation: HarnessInstallation?
+    private var hostMuseInstallation: HarnessInstallation?
+    private var museCapabilityTask: Task<Void, Never>?
 
     private func discoveredInstallations() -> [HarnessInstallation] {
         discovery.discover().map { installation in
-            installation.provider == .grokBuild ? (hostGrokInstallation ?? installation) : installation
+            installation.provider == .grokBuild ? (hostGrokInstallation ?? installation) :
+                (installation.provider == .muse ? (hostMuseInstallation ?? installation) : installation)
         }
     }
 
@@ -79,6 +82,24 @@ final class AgentRuntimeCoordinator {
             guard !Task.isCancelled else { return }
             installationErrors[.grokBuild] = error.localizedDescription
             capabilityErrors[.grokBuild] = error.localizedDescription
+        }
+    }
+
+    private func refreshMuseCapabilities() async {
+        guard discovery.allowsHostDiscovery(for: .muse) else { return }
+        do {
+            let result = try await MuseHostProbe().load()
+            guard !Task.isCancelled else { return }
+            let installation = HarnessInstallation(provider: .muse, executablePath: result.executablePath)
+            hostMuseInstallation = installation
+            installationErrors[.muse] = nil
+            installations = installations.map { $0.provider == .muse ? installation : $0 }
+            modelsByProvider[.muse] = result.models
+            capabilityErrors[.muse] = result.executablePath == nil ? "Muse Code is not installed" : nil
+        } catch {
+            guard !Task.isCancelled else { return }
+            installationErrors[.muse] = error.localizedDescription
+            capabilityErrors[.muse] = error.localizedDescription
         }
     }
 
@@ -257,9 +278,11 @@ final class AgentRuntimeCoordinator {
         }.value
         guard !Task.isCancelled else { return }
         await refreshGrokCapabilities()
+        await refreshMuseCapabilities()
         guard !Task.isCancelled else { return }
         let complete = detected.map { installation in
-            installation.provider == .grokBuild ? (hostGrokInstallation ?? installation) : installation
+            installation.provider == .grokBuild ? (hostGrokInstallation ?? installation) :
+                (installation.provider == .muse ? (hostMuseInstallation ?? installation) : installation)
         }
         if installations != complete { installations = complete }
     }
@@ -331,6 +354,8 @@ final class AgentRuntimeCoordinator {
         installations = discoveredInstallations()
         grokCapabilityTask?.cancel()
         grokCapabilityTask = Task { [weak self] in await self?.refreshGrokCapabilities() }
+        museCapabilityTask?.cancel()
+        museCapabilityTask = Task { [weak self] in await self?.refreshMuseCapabilities() }
         fxCapabilityTask?.cancel()
         if let path = availableInstallations.first(where: { $0.provider == .fx })?.executablePath {
             fxCapabilityTask = Task { [weak self] in
@@ -411,6 +436,20 @@ final class AgentRuntimeCoordinator {
         }
 
         switch installation.provider {
+        case .muse:
+            restartTasks.removeValue(forKey: agent.id)?.cancel()
+            let process = MuseAgentProcess(
+                agent: agent, executableURL: URL(fileURLWithPath: executablePath),
+                workspaceURL: repository.directory(for: agent),
+                extendedAccess: accessConfiguration.isExtended(agent.id),
+                recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
+                onSnapshot: runtimeSnapshotHandler(for: agent.id),
+                onHeartbeat: { [weak self] in self?.recordHeartbeat(for: agent.id) },
+                onUnexpectedTermination: { [weak self] terminated, detail, needsRecovery in
+                    self?.runtimeTerminated(terminated, agent: agent, repository: repository, detail: detail, needsRecovery: needsRecovery)
+                })
+            processes[agent.id] = process
+            process.start()
         case .fx, .grokBuild:
             restartTasks.removeValue(forKey: agent.id)?.cancel()
             let process = ACPAgentProcess(
@@ -501,7 +540,7 @@ final class AgentRuntimeCoordinator {
         let old = processes.removeValue(forKey: agent.id)
         if resetThread {
             let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")
-            let prefix = provider == .grokBuild ? "grok-runtime" : (provider == .fx ? "fx-runtime" : (provider == .claudeCode ? "claude-runtime" : "codex-runtime"))
+            let prefix = provider == .muse ? "muse-runtime" : (provider == .grokBuild ? "grok-runtime" : (provider == .fx ? "fx-runtime" : (provider == .claudeCode ? "claude-runtime" : "codex-runtime")))
             let filename = accessConfiguration.isExtended(agent.id)
                 ? ".agents/\(prefix)-extended.json" : ".agents/\(prefix).json"
             try? FileManager.default.removeItem(at: repository.directory(for: agent).appendingPathComponent(filename))

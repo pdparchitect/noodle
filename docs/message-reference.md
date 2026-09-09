@@ -11,6 +11,10 @@ Runtime wake notifications tell a bot to check for work. Messenger deliveries ca
 
 The bot's `AGENTS.md` (also exposed as `CLAUDE.md`) holds its backstory, workspace rules, and a short pointer to `.agents/skills/messenger/SKILL.md`. Codex runtime instructions use the same pointer. The Messenger skill holds the complete generated guidance below; startup instructions do not repeat it.
 
+When incompatible private model context must be replaced, the runtime appends this recovery guidance to its wake:
+
+Noodle replaced incompatible private model context. Your workspace and Noodle conversation history are intact. Read the Messenger skill, check unread messages once, and use Messenger --list-conversations and --list-messages --conversation <uuid> to recover recent unanswered requests even if the inbox was consumed before the interruption. Check your own prior replies and completed actions before repeating work. Reply through Messenger to the original conversation; do not merely acknowledge this recovery notice.
+
 ## Events and handling
 
 ### inbox-changed

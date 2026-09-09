@@ -22,6 +22,8 @@ struct HarnessProviderIcon: View {
             "FxHarness"
         case .grokBuild:
             "GrokHarness"
+        case .muse:
+            "MuseHarness"
         }
     }
 }

@@ -1,7 +1,7 @@
 import Foundation
 
 public enum HarnessAuthenticationStatus: String, Codable, Equatable, Sendable {
-    case authenticated, unauthenticated, notRequired
+    case authenticated, unauthenticated, notRequired, managedExternally
 }
 
 public struct HarnessSignInChallenge: Equatable, Sendable {

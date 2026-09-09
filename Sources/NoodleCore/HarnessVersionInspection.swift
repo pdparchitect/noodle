@@ -6,6 +6,10 @@ public enum HarnessVersionInspection {
     public static func inspect(provider: HarnessProvider, executable: URL, environment: [String: String]) throws -> HarnessVersionReport {
         let version = try run(executable, arguments: ["--version"], environment: environment)
         var report = HarnessVersionReport(installedVersion: HarnessVersion.parseOutput(version.text)?.text)
+        if provider == .muse, executable.lastPathComponent.hasPrefix("muse-bin-") {
+            let release = String(executable.lastPathComponent.dropFirst("muse-bin-".count))
+            if MuseExecutableTrust.validVersion(release) { report.installedVersion = release }
+        }
         if report.installedVersion == nil { report.checkError = "Could not read the installed version." }
         let help = try run(executable, arguments: HarnessVersionPolicy.helpArguments(for: provider), environment: environment)
         if help.exitCode == 0, help.text.lowercased().contains("usage:") {

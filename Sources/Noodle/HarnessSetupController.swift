@@ -27,7 +27,8 @@ final class HarnessSetupController {
             .codex: CodexSetupProvider(codexHome: HarnessStorage.codexHome),
             .claudeCode: ClaudeCodeSetupProvider(),
             .fx: FxSetupProvider(),
-            .grokBuild: GrokSetupProvider()
+            .grokBuild: GrokSetupProvider(),
+            .muse: MuseSetupProvider()
         ]
     }
 

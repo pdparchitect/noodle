@@ -16,6 +16,7 @@ private enum HostPaths {
         case .claudeCode: return try ClaudeExecutableTrust.executable(at: path, home: home)
         case .fx: return try FxExecutableTrust.executable(at: path, home: home)
         case .grokBuild: return try GrokExecutableTrust.executable(at: path, home: home)
+        case .muse: return try MuseExecutableTrust.executable(at: path, home: home)
         }
     }
 
@@ -76,6 +77,11 @@ if CommandLine.arguments.count == 9, CommandLine.arguments[1] == "--harness-chil
         guard chdir(workspace.path) == 0 else { throw HostError("Could not open the bot workspace: \(String(cString: strerror(errno)))") }
         var strings: [String]
         switch provider {
+        case .muse:
+            guard model.map(FxProtocol.validIdentifier) ?? true,
+                  effort.map(MuseProtocol.efforts.contains) ?? true else { throw HostError("Unsupported Muse model or effort.") }
+            // This host is reached only after explicit per-bot autonomous access.
+            strings = [executable.path, "serve", "--disable-sandbox", "--trust-workspace"]
         case .codex:
             strings = [executable.path, "app-server"]
         case .fx:
@@ -277,6 +283,15 @@ private final class HostSession: NSObject, AgentHostService {
         queue.async {
             do {
                 let result = try GrokInspection.inspect(home: HostPaths.home, environment: self.accountEnvironment)
+                reply(try JSONEncoder().encode(result), nil)
+            } catch { reply(nil, error.localizedDescription) }
+        }
+    }
+
+    func inspectMuse(withReply reply: @escaping (Data?, String?) -> Void) {
+        queue.async {
+            do {
+                let result = try MuseInspection.inspect(home: HostPaths.home, environment: self.accountEnvironment)
                 reply(try JSONEncoder().encode(result), nil)
             } catch { reply(nil, error.localizedDescription) }
         }

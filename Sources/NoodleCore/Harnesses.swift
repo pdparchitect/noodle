@@ -5,6 +5,7 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
     case claudeCode = "claude-code"
     case fx
     case grokBuild = "grok-build"
+    case muse
 
     public var id: String { rawValue }
 
@@ -14,6 +15,7 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
         case .claudeCode: return "Claude Code"
         case .fx: return "FX"
         case .grokBuild: return "Grok Build"
+        case .muse: return "Muse Code"
         }
     }
 
@@ -122,6 +124,7 @@ public struct HarnessDiscovery: Sendable {
     private let standaloneClaudeURL: URL
     private let standaloneFxURL: URL
     private let standaloneGrokURL: URL
+    private let standaloneMuseURL: URL
     #if DEBUG
     private let simulateNoHarnesses: Bool
     private var externalInstallChecks: Set<HarnessProvider> = []
@@ -141,6 +144,7 @@ public struct HarnessDiscovery: Sendable {
         self.standaloneClaudeURL = homeDirectory.appendingPathComponent(".local/bin/claude")
         self.standaloneFxURL = homeDirectory.appendingPathComponent(".local/bin/fx")
         self.standaloneGrokURL = homeDirectory.appendingPathComponent(".grok/bin/grok")
+        self.standaloneMuseURL = homeDirectory.appendingPathComponent(".local/bin/muse")
         self.executableSearchDirectories = executableSearchDirectories ?? [
             homeDirectory.appendingPathComponent(".local/bin", isDirectory: true),
             URL(fileURLWithPath: "/opt/homebrew/bin", isDirectory: true),
@@ -187,7 +191,7 @@ public struct HarnessDiscovery: Sendable {
                 applicationsDirectory.appendingPathComponent("ChatGPT.app/Contents/Resources/codex"),
                 applicationsDirectory.appendingPathComponent("Codex.app/Contents/Resources/codex")
             ]
-        case .claudeCode, .fx, .grokBuild:
+        case .claudeCode, .fx, .grokBuild, .muse:
             return standaloneCandidates(for: provider)
         }
     }
@@ -203,6 +207,7 @@ public struct HarnessDiscovery: Sendable {
                 .filter { $0.standardizedFileURL != standaloneClaudeURL.standardizedFileURL }
         case .fx: return [standaloneFxURL]
         case .grokBuild: return [standaloneGrokURL]
+        case .muse: return [standaloneMuseURL]
         }
     }
 

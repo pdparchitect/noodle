@@ -104,6 +104,9 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
     func inspectGrok(reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.inspectGrok(withReply: reply)
     }
+    func inspectMuse(reply: @escaping (Data?, String?) -> Void) {
+        proxy(failure: { reply(nil, $0) })?.inspectMuse(withReply: reply)
+    }
     func inspectHarnessVersion(provider: HarnessProvider, executablePath: String, reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.inspectHarnessVersion(harnessIdentifier: provider.rawValue, executablePath: executablePath, withReply: reply)
     }

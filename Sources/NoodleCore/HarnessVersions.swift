@@ -22,6 +22,8 @@ public struct HarnessVersion: Comparable, Equatable, Sendable {
         if lhs.numbers != rhs.numbers { return lhs.numbers.lexicographicallyPrecedes(rhs.numbers) }
         if lhs.prerelease.isEmpty || rhs.prerelease.isEmpty { return !lhs.prerelease.isEmpty && rhs.prerelease.isEmpty }
         for (a, b) in zip(lhs.prerelease, rhs.prerelease) where a != b {
+            // Muse stable builds use R-prefixed numeric revisions (R9 < R10).
+            if a.hasPrefix("R"), b.hasPrefix("R"), let x = Int(a.dropFirst()), let y = Int(b.dropFirst()) { return x < y }
             if let x = Int(a), let y = Int(b) { return x < y }
             if Int(a) != nil { return true }
             if Int(b) != nil { return false }
@@ -77,6 +79,7 @@ public enum HarnessVersionPolicy {
         case .claudeCode: return ["--input-format", "--output-format", "--permission-mode", "--permission-prompts", "--session-id"]
         case .fx: return ["acp"]
         case .grokBuild: return ["stdio", "--no-leader"]
+        case .muse: return ["serve", "schema"]
         }
     }
 
@@ -115,6 +118,7 @@ public enum HarnessVersionPolicy {
         case .claudeCode: address = "https://api.github.com/repos/anthropics/claude-code/releases/latest"
         case .fx: address = "https://releases.fx.sh/latest.txt"
         case .grokBuild: address = "https://x.ai/cli/stable"
+        case .muse: address = "https://api.meta.ai/muse-code/channels/muse-stable"
         }
         return URL(string: address)
     }
@@ -126,6 +130,11 @@ public enum HarnessVersionPolicy {
                   object["prerelease"] as? Bool != true, object["draft"] as? Bool != true,
                   let tag = object["tag_name"] as? String else { return nil }
             value = tag.hasPrefix("rust-v") ? String(tag.dropFirst(6)) : tag
+        } else if provider == .muse {
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  object["channel"] as? String == "muse-stable", object["state"] as? String == "public",
+                  let version = object["version"] as? String, MuseExecutableTrust.validVersion(version) else { return nil }
+            value = version
         } else { value = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) }
         let normalized = value.hasPrefix("v") ? String(value.dropFirst()) : value
         return HarnessVersion(normalized)?.text
@@ -150,6 +159,9 @@ public enum HarnessVersionPolicy {
         case .grokBuild:
             command = "grok update"
             link = "https://grok.com/build"
+        case .muse:
+            command = "curl -fsSL https://dev.meta.ai/install.sh | bash"
+            link = "https://dev.meta.ai/"
         }
         return .init(command: command,
             instructions: "Run this command in Terminal, then choose Check Again. Updates follow the provider’s configured release channel; managed or pinned installs may intentionally remain on an older version. Existing bot processes keep their running version until restarted.",
