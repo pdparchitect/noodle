@@ -24,6 +24,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- The Add Tools button sits inside a full-width rounded settings group, matching the other Settings action rows.
 - MCP connections are labeled “Tools” in Settings and bot editors, with matching buttons, forms and help text. The protocol and saved connections are unchanged.
 - The empty group-members area opens the Add Bots picker when clicked. Bot editor tabs and configuration headings use “Harness” consistently.
 - Conversation reading positions survive app relaunches and restore by message identity, with a safe latest-message fallback if the saved message was removed. Initial transcript positioning targets real rows after loading instead of an estimated blank scroll extent.

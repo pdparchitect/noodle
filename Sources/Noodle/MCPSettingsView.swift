@@ -59,6 +59,8 @@ struct MCPSettingsView: View {
                 Button { showingAdd = true } label: { Label("Add Tools…", systemImage: "plus") }
                     .help("Add a service or another account")
             }
+            .padding(10)
+            .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
         }
         .padding(20)
         .sheet(isPresented: $showingAdd) { ToolCreationSheet(controller: store.mcp).noodleSheetSizing() }
