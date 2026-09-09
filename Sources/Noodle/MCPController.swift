@@ -1,5 +1,4 @@
 import AppKit
-import AuthenticationServices
 import Observation
 import NoodleCore
 import NoodleMCP
@@ -119,7 +118,7 @@ final class MCPController {
                 try await service.signIn(record, redirectURI: redirect, progress: { [weak self] stage in
                     await self?.setSignInStage(stage)
                 }) { [browser] url in
-                    try await browser.authorize(url: url, callbackScheme: scheme)
+                    try await browser.authorize(url: url, callbackURL: redirect)
                 }
                 try Task.checkCancellation()
                 signInStage = "Checking available tools…"
@@ -140,6 +139,9 @@ final class MCPController {
         }
     }
     func cancelSignIn() { loginTask?.cancel() }
+    @discardableResult func receiveAuthorizationCallback(_ url: URL) -> Bool {
+        browser.receive(url)
+    }
     private func setSignInStage(_ stage: String) { signInStage = stage }
     private func synchronize() throws {
         for agent in agents { try repository.synchronizeAgentWorkspace(agent) }
@@ -217,48 +219,67 @@ final class MCPController {
     }
 }
 
-@MainActor private final class MCPBrowserAuthorization: NSObject, ASWebAuthenticationPresentationContextProviding {
+// Open an ordinary default-browser tab, retaining normal profiles and extensions.
+// Only a callback for the currently pending target AND state may consume the login.
+@MainActor final class MCPBrowserAuthorization {
     private var pendingID: UUID?
-    private var session: ASWebAuthenticationSession?
+    private var callbackURL: URL?
+    private var state: String?
     private var continuation: CheckedContinuation<URL, Error>?
     private var timeout: Task<Void, Never>?
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        NSApp.keyWindow ?? NSApp.windows.first ?? ASPresentationAnchor()
+    private let openURL: (URL) -> Bool
+    private let timeoutDuration: Duration
+
+    init(timeoutDuration: Duration = .seconds(180), openURL: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) }) {
+        self.timeoutDuration = timeoutDuration
+        self.openURL = openURL
     }
-    func authorize(url: URL, callbackScheme: String) async throws -> URL {
+    func authorize(url: URL, callbackURL: URL) async throws -> URL {
+        let states = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.filter { $0.name == "state" } ?? []
+        guard pendingID == nil, states.count == 1, let state = states.first?.value, !state.isEmpty else {
+            throw MCPServiceError.invalidCallback
+        }
         let id = UUID()
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
             return try await withCheckedThrowingContinuation { continuation in
                 self.pendingID = id
+                self.callbackURL = callbackURL
+                self.state = state
                 self.continuation = continuation
-                let session = ASWebAuthenticationSession(url: url, callbackURLScheme: callbackScheme) { [weak self] url, error in
-                    Task { @MainActor in
-                        if let url { self?.finish(id, .success(url)) }
-                        else { self?.finish(id, .failure(CancellationError())) }
-                    }
-                }
-                session.presentationContextProvider = self
-                // Separate sign-ins must offer account choice rather than silently reuse cookies.
-                session.prefersEphemeralWebBrowserSession = true
-                self.session = session
-                if !session.start() { finish(id, .failure(MCPServiceError.invalidCallback)); return }
                 timeout = Task { [weak self] in
-                    try? await Task.sleep(for: .seconds(180))
+                    try? await Task.sleep(for: self?.timeoutDuration ?? .seconds(180))
                     if !Task.isCancelled { self?.finish(id, .failure(MCPServiceError.timedOut)) }
+                }
+                if !openURL(url) {
+                    finish(id, .failure(MCPConnectionError.message("Could not open your browser. Check your default browser and try again.")))
                 }
             }
         } onCancel: {
             Task { @MainActor [weak self] in self?.finish(id, .failure(CancellationError())) }
         }
     }
+    @discardableResult func receive(_ url: URL) -> Bool {
+        guard let id = pendingID, let callbackURL, let state,
+              let expected = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
+              let actual = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              actual.scheme == expected.scheme, actual.host == expected.host,
+              actual.port == expected.port, actual.path == expected.path,
+              actual.user == nil, actual.password == nil, actual.fragment == nil else { return false }
+        let states = actual.queryItems?.filter { $0.name == "state" } ?? []
+        guard states.count == 1, states.first?.value == state else { return false }
+        // MCPOAuth additionally validates code/error parameters before token exchange.
+        finish(id, .success(url))
+        return true
+    }
     private func finish(_ id: UUID, _ result: Result<URL, Error>) {
         guard pendingID == id else { return }
         pendingID = nil
+        callbackURL = nil
+        state = nil
         let continuation = continuation
         self.continuation = nil
         timeout?.cancel(); timeout = nil
-        session?.cancel(); session = nil
         continuation?.resume(with: result)
     }
 }

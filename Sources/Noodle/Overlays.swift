@@ -5,6 +5,20 @@ import SwiftUI
 import UniformTypeIdentifiers
 import NoodleCore
 
+private enum BotEditorTab: String, CaseIterable {
+    case general = "General", runtime = "Runtime", mcp = "MCP"
+}
+
+private struct BotEditorTabPicker: View {
+    @Binding var selection: BotEditorTab
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var body: some View {
+        Picker("Bot settings", selection: $selection.animation(reduceMotion ? nil : .easeInOut(duration: 0.22))) {
+            ForEach(BotEditorTab.allCases, id: \.self) { tab in Text(tab.rawValue).tag(tab) }
+        }.pickerStyle(.segmented).labelsHidden()
+    }
+}
+
 private struct NameValidationMessage: View {
     let name: String
     var body: some View {
@@ -32,6 +46,7 @@ struct NewBotSheet: View {
     @State private var avatarImageData: Data?
     @State private var editingAvatar = false
     @State private var mcpConnectionIDs: Set<UUID> = []
+    @State private var selectedTab = BotEditorTab.general
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -96,17 +111,20 @@ struct NewBotSheet: View {
 
                 NameValidationMessage(name: name)
 
-                AgentConfigurationFields(
-                    selectedHarnessIdentifier: $selectedHarnessIdentifier,
-                    selectedModelIdentifier: $selectedModelIdentifier,
-                    selectedEffort: $selectedEffort
-                )
-
-                BotPublicDescriptionEditor(publicDescription: $publicDescription)
-
-                MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs)
-
-                BotBackstoryEditor(backstory: $backstory)
+                BotEditorTabPicker(selection: $selectedTab)
+                switch selectedTab {
+                case .general:
+                    BotPublicDescriptionEditor(publicDescription: $publicDescription)
+                    BotBackstoryEditor(backstory: $backstory)
+                case .runtime:
+                    AgentConfigurationFields(
+                        selectedHarnessIdentifier: $selectedHarnessIdentifier,
+                        selectedModelIdentifier: $selectedModelIdentifier,
+                        selectedEffort: $selectedEffort
+                    )
+                case .mcp:
+                    MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs)
+                }
             }
             .padding(20)
         }
@@ -201,6 +219,7 @@ struct EditBotSheet: View {
     @State private var editingAvatar = false
     @State private var mcpConnectionIDs: Set<UUID> = []
     @State private var confirmingDeletion = false
+    @State private var selectedTab = BotEditorTab.general
     @FocusState private var nameFocused: Bool
 
     init(agent: AgentRecord) {
@@ -261,35 +280,33 @@ struct EditBotSheet: View {
 
                 NameValidationMessage(name: name)
 
-                AgentConfigurationFields(
-                    selectedHarnessIdentifier: $selectedHarnessIdentifier,
-                    selectedModelIdentifier: $selectedModelIdentifier,
-                    selectedEffort: $selectedEffort
-                )
-
-                BotPublicDescriptionEditor(publicDescription: $publicDescription)
-
-                MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs)
-
-                BotBackstoryEditor(backstory: $backstory)
-
-                Text("Saving restarts this bot with the selected Codex model. Its workspace and conversation history stay unchanged.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                BotEditorTabPicker(selection: $selectedTab)
+                switch selectedTab {
+                case .general:
+                    BotPublicDescriptionEditor(publicDescription: $publicDescription)
+                    BotBackstoryEditor(backstory: $backstory)
+                    if let conversation = directConversation {
+                        ConversationBackgroundSettingsRow(conversation: conversation)
+                    }
+                    Divider()
+                    Button("Delete Bot\u{2026}", role: .destructive) {
+                        confirmingDeletion = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
                     .frame(maxWidth: .infinity, alignment: .leading)
-
-                if let conversation = directConversation {
-                    ConversationBackgroundSettingsRow(conversation: conversation)
+                case .runtime:
+                    AgentConfigurationFields(
+                        selectedHarnessIdentifier: $selectedHarnessIdentifier,
+                        selectedModelIdentifier: $selectedModelIdentifier,
+                        selectedEffort: $selectedEffort
+                    )
+                    Text("Saving restarts the bot. Its workspace and history stay unchanged.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                case .mcp:
+                    MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs)
                 }
-
-                Divider()
-
-                Button("Delete Bot\u{2026}", role: .destructive) {
-                    confirmingDeletion = true
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(20)
         }

@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import Observation
 import NoodleCore
+import NoodleMCP
 
 // Real MCP views/controller, with a minimal store and no harness runtime.
 @MainActor @Observable final class NoodleStore {
@@ -83,6 +84,14 @@ struct MCPFixtureView: View {
     }
 }
 
+@MainActor private final class MCPFixtureDelegate: NSObject, NSApplicationDelegate {
+    let controller: MCPController
+    init(controller: MCPController) { self.controller = controller }
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls { controller.receiveAuthorizationCallback(url) }
+    }
+}
+
 @main enum MCPFixtureMain {
     @MainActor static func main() throws {
         let app = NSApplication.shared
@@ -91,11 +100,14 @@ struct MCPFixtureView: View {
         let live = CommandLine.arguments.contains("--check-live")
         let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("MCPChecks-" + UUID().uuidString)
         let store = try NoodleStore(root: checking ? temporary : nil)
+        let delegate = MCPFixtureDelegate(controller: store.mcp)
+        app.delegate = delegate
         if checking || live {
             Task { @MainActor in
                 do {
                     if live { try await checkLive(store) }
                     else {
+                        try await checkBrowserAuthorization()
                         try await checkBridge(store)
                         try? FileManager.default.removeItem(at: temporary)
                         print("MCP native broker checks passed: unassigned rejection, missing sign-in, assigned skill and removal")
@@ -107,7 +119,7 @@ struct MCPFixtureView: View {
                     exit(1)
                 }
             }
-            app.run()
+            withExtendedLifetime(delegate) { app.run() }
             return
         }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 470),
@@ -119,7 +131,56 @@ struct MCPFixtureView: View {
         if CommandLine.arguments.contains("--connect"), let connection = store.mcp.registry.connections.first {
             Task { @MainActor in store.mcp.connect(connection) }
         }
-        app.run()
+        withExtendedLifetime(delegate) { app.run() }
+    }
+    @MainActor private static func checkBrowserAuthorization() async throws {
+        let redirect = URL(string: "noodle-mcp-tests://mcp/oauth/callback")!
+        let authorization = URL(string: "https://example.com/authorize?state=first-state")!
+        var opened: [URL] = []
+        let browser = MCPBrowserAuthorization { opened.append($0); return true }
+        let login = Task { try await browser.authorize(url: authorization, callbackURL: redirect) }
+        while opened.isEmpty { await Task.yield() }
+        guard opened == [authorization] else { throw MCPConnectionError.message("Wrong browser URL") }
+        for raw in [
+            "noodle://shared?state=first-state",
+            "noodle-mcp-tests://mcp/wrong?state=first-state&code=code",
+            "noodle-mcp-tests://mcp/oauth/callback?state=wrong&code=code",
+            "noodle-mcp-tests://mcp/oauth/callback?state=first-state&state=first-state&code=code",
+            "noodle-mcp-tests://user@mcp/oauth/callback?state=first-state&code=code",
+            "noodle-mcp-tests://mcp/oauth/callback?state=first-state&code=code#fragment"
+        ] {
+            guard !browser.receive(URL(string: raw)!) else { throw MCPConnectionError.message("Invalid callback consumed sign-in") }
+        }
+        let callback = URL(string: redirect.absoluteString + "?state=first-state&code=code")!
+        guard browser.receive(callback), try await login.value == callback, !browser.receive(callback) else {
+            throw MCPConnectionError.message("Valid callback did not complete exactly once")
+        }
+        let cancelled = Task { try await browser.authorize(url: authorization, callbackURL: redirect) }
+        while opened.count < 2 { await Task.yield() }
+        cancelled.cancel()
+        do { _ = try await cancelled.value; throw MCPConnectionError.message("Cancellation was ignored") }
+        catch is CancellationError {}
+        guard !browser.receive(callback) else { throw MCPConnectionError.message("Cancelled callback remained active") }
+        let nextAuthorization = URL(string: "https://example.com/authorize?state=second-state")!
+        let next = Task { try await browser.authorize(url: nextAuthorization, callbackURL: redirect) }
+        while opened.count < 3 { await Task.yield() }
+        guard !browser.receive(callback) else { throw MCPConnectionError.message("Stale callback consumed new sign-in") }
+        let nextCallback = URL(string: redirect.absoluteString + "?state=second-state&error=access_denied")!
+        guard browser.receive(nextCallback), try await next.value == nextCallback else {
+            throw MCPConnectionError.message("Provider rejection was not returned to OAuth validation")
+        }
+        let failed = MCPBrowserAuthorization { _ in false }
+        do {
+            _ = try await failed.authorize(url: authorization, callbackURL: redirect)
+            throw MCPServiceError.invalidCallback
+        } catch is MCPConnectionError {}
+        let timed = MCPBrowserAuthorization(timeoutDuration: .milliseconds(10)) { _ in true }
+        do {
+            _ = try await timed.authorize(url: authorization, callbackURL: redirect)
+            throw MCPConnectionError.message("Timeout was ignored")
+        } catch MCPServiceError.timedOut {}
+        guard !timed.receive(callback) else { throw MCPConnectionError.message("Expired callback remained active") }
+        print("Normal-browser OAuth checks passed: opener, state/target validation, replay rejection, cancellation, timeout and open failure")
     }
     @MainActor private static func checkLive(_ store: NoodleStore) async throws {
         guard let connection = store.mcp.registry.connections.first(where: {

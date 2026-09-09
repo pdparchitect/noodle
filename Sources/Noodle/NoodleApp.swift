@@ -128,6 +128,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            NoodleStore.active?.mcp.receiveAuthorizationCallback(url)
+        }
         guard urls.contains(where: { $0.scheme == "noodle" && $0.host == "shared" }) else { return }
         Task { await NoodleStore.active?.processSharedInbox() }
     }
@@ -307,7 +310,7 @@ struct RootView: View {
             case .bot:
                 NewBotSheet()
                     .environment(store)
-                    .noodleSheetSizing()
+                    .noodleSheetSizing(animated: true)
             case .group:
                 NewGroupSheet()
                     .environment(store)
@@ -317,7 +320,7 @@ struct RootView: View {
         .sheet(item: $store.agentBeingEdited) { agent in
             EditBotSheet(agent: agent)
                 .environment(store)
-                .noodleSheetSizing()
+                .noodleSheetSizing(animated: true)
         }
         .sheet(item: $store.groupBeingEdited) { conversation in
             GroupInfoSheet(conversation: conversation)

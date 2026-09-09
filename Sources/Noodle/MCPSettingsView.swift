@@ -11,9 +11,9 @@ struct MCPSettingsView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     if store.mcp.registry.connections.isEmpty {
-                        ContentUnavailableView("No MCP Connections", systemImage: "puzzlepiece.extension",
-                            description: Text("Connect a service, then assign its account to bots."))
-                            .padding(.vertical, 20)
+                        Label("No connections", systemImage: "puzzlepiece.extension")
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, minHeight: 80)
                     }
                     ForEach(store.mcp.registry.connections) { connection in
                         HStack(alignment: .top, spacing: 12) {
@@ -52,13 +52,12 @@ struct MCPSettingsView: View {
                     }
                 }
             }
-            .frame(height: min(430, max(180, CGFloat(store.mcp.registry.connections.count) * 130)))
+            .frame(height: min(430, max(80, CGFloat(store.mcp.registry.connections.count) * 130)))
             .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
             HStack {
-                Text("Each connection has its own sign-in. You can add the same URL more than once.")
-                    .font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button { showingAdd = true } label: { Label("Add MCP…", systemImage: "plus") }
+                    .help("Add a service or another account")
             }
         }
         .padding(20)
@@ -108,20 +107,35 @@ private struct MCPEditor: View {
                     .keyboardShortcut(.defaultAction)
             }.padding(16)
             Divider()
-            Form {
-                TextField("Name", text: $name, axis: .horizontal).lineLimit(1)
-                TextField("MCP URL", text: $endpoint, axis: .horizontal).lineLimit(1)
-                    .autocorrectionDisabled().disabled(existing != nil)
-                Text("Remote HTTPS MCPs with automatic OAuth registration. For another account, add a separate connection with a distinct name.")
-                    .font(.caption).foregroundStyle(.secondary)
-                TextField("Short description", text: $description, axis: .vertical).lineLimit(2...3)
-                Section("Additional instructions") {
-                    TextEditor(text: $instructions).frame(height: 130)
-                    Text("Included in the skill for bots assigned this connection. Do not enter passwords or tokens here.")
-                        .font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Name").font(.caption.weight(.semibold))
+                    TextField("e.g. Notion — Work", text: $name, axis: .horizontal).lineLimit(1)
+                        .help("Use a distinct name for each account")
                 }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("MCP URL").font(.caption.weight(.semibold))
+                    TextField("https://…", text: $endpoint, axis: .horizontal).lineLimit(1)
+                        .autocorrectionDisabled().disabled(existing != nil)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Description").font(.caption.weight(.semibold))
+                    TextField("Optional", text: $description, axis: .vertical).lineLimit(2...3)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Instructions").font(.caption.weight(.semibold))
+                    TextEditor(text: $instructions)
+                        .font(.system(size: 13))
+                        .scrollContentBackground(.hidden)
+                        .padding(4)
+                        .frame(height: 130)
+                        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                        .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.18)) }
+                        .help("Optional guidance for bots using this connection. Do not include passwords or tokens.")
+                }
+                Text("Sign-in opens in your browser.").font(.caption).foregroundStyle(.secondary)
                 if let error { Text(error).foregroundStyle(.red).font(.caption) }
-            }.formStyle(.grouped)
+            }.textFieldStyle(.roundedBorder).padding(20)
         }.frame(width: 480)
     }
     private func save() {

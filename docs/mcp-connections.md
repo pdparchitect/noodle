@@ -13,7 +13,10 @@ provider's connected-app settings for that.
 
 ## Assigning and using a connection
 
-Create/Edit Bot includes an add/remove MCP picker. It can select a saved connection
+Create/Edit Bot → MCP includes an add/remove connection picker. General holds the
+description and backstory; Runtime holds harness, model and effort settings. Tabs
+preserve unsaved edits and fit the sheet to their contents, with Reduce Motion respected.
+The MCP picker can select a saved connection
 before sign-in, but calls require a successful sign-in. Assignment makes the provider's
 tools available to that bot under the scopes the user consented to; there is no extra
 per-tool approval dialog in Noodle. Agents must still follow user authorization.
@@ -72,8 +75,12 @@ requests. Errors are sanitized; tokens are not written to workspaces, skills or 
 
 The initial implementation supports public HTTPS remote MCP endpoints with protected
 resource metadata, authorization-server discovery and dynamic client registration for
-public clients. Authorization Code + PKCE S256 uses a native ASWebAuthenticationSession
-and the app's registered URL callback. State, callback target and issuer are validated.
+public clients. Authorization Code + PKCE S256 opens the normal default browser, so
+existing profiles and password-manager extensions remain available, and returns through
+the app's registered URL callback. State, callback target and issuer are validated.
+Unrelated or stale callbacks cannot consume an active sign-in; cancellation and a
+three-minute timeout clear the pending request. Choose the intended account in the
+provider's browser UI when connecting another account; connections retain separate credentials.
 Redirects are not followed during metadata, registration, token or MCP HTTP requests.
 
 Client registration is persisted before opening the browser and reused after restart.

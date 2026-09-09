@@ -23,6 +23,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Bot editors use General, Runtime and MCP tabs with content-fitted, animated sheet resizing. Draft settings survive tab changes.
+- MCP settings and connection forms are more compact, with a rounded instructions editor. MCP sign-in opens in the normal default browser with access to existing profiles and extensions; validated app callbacks, PKCE and sign-in timeouts remain enforced.
 - Updated Grok Build installations are recognized when the official launcher points to a versioned download. The native installation location and xAI code-signature checks remain enforced.
 - Resizing the conversation window anchors the message being read as text reflows, instead of retaining a pixel offset that can jump to different content. Chats already at the bottom continue following the latest message.
 - Shift+Tab from the chat input returns focus directly to the selected sidebar conversation, preserving the draft and allowing Up/Down navigation to resume.

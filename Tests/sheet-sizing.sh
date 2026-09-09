@@ -11,3 +11,4 @@ swiftc -I "$bin_path/Modules" \
     "$bin_path"/NoodleCore.build/*.swift.o \
     -o "$project_root/.build/sheet-sizing-tests"
 "$project_root/.build/sheet-sizing-tests"
+"$project_root/.build/sheet-sizing-tests" --animated

@@ -52,7 +52,7 @@ private struct FixtureRoot: View {
                         .background(PositionProbe { fixture.footer = $0 })
                 }
                 .frame(width: 460)
-                .noodleSheetSizing()
+                .noodleSheetSizing(animated: CommandLine.arguments.contains("--animated"))
             }
     }
 }
