@@ -19,7 +19,7 @@ struct GroupMemberPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Members").font(.headline)
+                Text("Members").font(.caption.weight(.semibold))
                 Spacer()
                 Button { search = ""; showingAdd = true } label: {
                     Label("Add Bots", systemImage: "plus")
