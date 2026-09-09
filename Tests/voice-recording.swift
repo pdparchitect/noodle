@@ -57,6 +57,11 @@ import NoodleCore
         for i in 0..<16_000 { integerBuffer.int16ChannelData![0][i] = 16_384 }
         integerSink.consume(integerBuffer)
         precondition(integerSink.snapshot().silentDuration == 0)
+        precondition(integerSink.snapshot().liveWaveform.count == 100)
+        precondition(integerSink.snapshot().liveWaveform.prefix(80).allSatisfy { $0 == 0 })
+        precondition(integerSink.snapshot().liveWaveform.suffix(20).allSatisfy { abs($0 - 0.5) < 0.001 })
+        for _ in 0..<10 { integerSink.consume(integerBuffer) }
+        precondition(integerSink.snapshot().liveWaveform.count == 240, "Live history must stay bounded")
         precondition((integerSink.snapshot().waveform.max() ?? 0) >= 0.49)
         integerSink.finish()
         if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--transcribe" {
@@ -127,6 +132,7 @@ import NoodleCore
         precondition(snapshot.error == nil, snapshot.error ?? "")
         precondition(snapshot.silentDuration == 0 && (snapshot.waveform.max() ?? 0) > 0.1)
         precondition(abs(snapshot.duration - 1.024) < 0.04)
+        precondition(snapshot.liveWaveform.count == Int(snapshot.duration / 0.05), "Live bars must follow audio time, not callback count")
         precondition(!snapshot.waveform.isEmpty && snapshot.waveform.allSatisfy { (0...1).contains($0) })
         let recorded = try AVAudioFile(forReading: audio)
         precondition(recorded.length > 15_000 && recorded.processingFormat.sampleRate == 16_000)

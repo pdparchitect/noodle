@@ -40,7 +40,11 @@ struct VoiceMessageComposer<Content: View>: View {
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .help("Check the microphone’s mute switch, or choose another in Settings → General.")
                             } else {
-                                VoiceWaveform(samples: recorder.levels).frame(height: 22)
+                                if recorder.phase == .recording {
+                                    LiveVoiceWaveform(samples: recorder.liveLevels).frame(height: 22)
+                                } else {
+                                    VoiceWaveform(samples: recorder.levels).frame(height: 22)
+                                }
                             }
                             Text(voiceTime(recorder.duration)).font(.caption.monospacedDigit())
                             if recorder.phase == .recording {

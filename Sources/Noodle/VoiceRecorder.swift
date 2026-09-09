@@ -15,6 +15,7 @@ struct VoiceRecordingDraft: Codable {
     private(set) var phase: Phase = .idle
     private(set) var duration: TimeInterval = 0
     private(set) var levels: [Float] = []
+    private(set) var liveLevels: [Float] = []
     private(set) var transcript: String?
     private(set) var error: String?
     private(set) var preparation = "Preparing speech…"
@@ -104,6 +105,7 @@ struct VoiceRecordingDraft: Codable {
                         let snapshot = sink.snapshot()
                         duration = snapshot.duration
                         levels = snapshot.waveform
+                        liveLevels = snapshot.liveWaveform
                         ticks += 1
                         stalledTicks = snapshot.duration == previousDuration ? stalledTicks + 1 : 0
                         previousDuration = snapshot.duration
@@ -238,6 +240,7 @@ struct VoiceRecordingDraft: Codable {
         sink = nil
         duration = 0
         levels = []
+        liveLevels = []
         transcript = nil
         error = nil
         phase = .idle
@@ -280,7 +283,13 @@ struct VoiceFailure: LocalizedError {
 /// to SpeechAnalyzer are newly allocated and never modified after being yielded.
 @available(macOS 26.0, *)
 final class VoiceAudioSink: @unchecked Sendable {
-    struct Snapshot { let duration: Double; let waveform: [Float]; let error: String?; let silentDuration: Double }
+    struct Snapshot {
+        let duration: Double
+        let waveform: [Float]
+        let error: String?
+        let silentDuration: Double
+        let liveWaveform: [Float]
+    }
     private let lock = NSLock()
     private var file: AVAudioFile?
     private let converter: AVAudioConverter
@@ -291,6 +300,9 @@ final class VoiceAudioSink: @unchecked Sendable {
     private var failure: String?
     private var finished = false
     private var lastSignalFrame: Int64 = 0
+    private var livePeaks: [Float] = []
+    private var liveBucketFrames = 0
+    private var liveBucketPeak: Float = 0
 
     init(url: URL, sourceFormat: AVAudioFormat, targetFormat: AVAudioFormat,
          continuation: AsyncStream<AnalyzerInput>.Continuation) throws {
@@ -326,6 +338,7 @@ final class VoiceAudioSink: @unchecked Sendable {
             // Meter exactly the audio saved and sent to Speech, including integer
             // PCM formats. The source's first float channel is not always present.
             let peak = Self.peak(output)
+            appendLiveSamples(output)
             if peak > 0.0001 { lastSignalFrame = frames }
             if peaks.count < 20_000 { peaks.append(min(1, peak)) }
             if case .dropped = continuation.yield(AnalyzerInput(buffer: output)) {
@@ -352,15 +365,36 @@ final class VoiceAudioSink: @unchecked Sendable {
             peaks[$0..<min($0 + width, peaks.count)].max() ?? 0
         }
         return Snapshot(duration: Double(frames) / target.sampleRate, waveform: waveform, error: failure,
-                        silentDuration: Double(frames - lastSignalFrame) / target.sampleRate)
+                        silentDuration: Double(frames - lastSignalFrame) / target.sampleRate,
+                        liveWaveform: livePeaks)
     }
 
-    static func peak(_ buffer: AVAudioPCMBuffer) -> Float {
+    // A stable 50ms time scale, independent of callback size and total duration.
+    // Keep only the last 12 seconds for the live display; saved metadata retains
+    // the separate full-recording overview above.
+    private func appendLiveSamples(_ buffer: AVAudioPCMBuffer) {
+        let bucketSize = max(1, Int(target.sampleRate * 0.05))
+        var offset = 0
+        while offset < Int(buffer.frameLength) {
+            let end = min(Int(buffer.frameLength), offset + bucketSize - liveBucketFrames)
+            liveBucketPeak = max(liveBucketPeak, Self.peak(buffer, frames: offset..<end))
+            liveBucketFrames += end - offset
+            offset = end
+            if liveBucketFrames == bucketSize {
+                livePeaks.append(liveBucketPeak)
+                if livePeaks.count > 240 { livePeaks.removeFirst(livePeaks.count - 240) }
+                liveBucketFrames = 0
+                liveBucketPeak = 0
+            }
+        }
+    }
+
+    static func peak(_ buffer: AVAudioPCMBuffer, frames: Range<Int>? = nil) -> Float {
         var peak: Float = 0
         let channels = Int(buffer.format.channelCount)
         let interleaved = buffer.format.isInterleaved
         for channel in 0..<channels {
-            for frame in 0..<Int(buffer.frameLength) {
+            for frame in frames ?? 0..<Int(buffer.frameLength) {
                 let index = interleaved ? frame * channels + channel : frame
                 let plane = interleaved ? 0 : channel
                 let sample: Float

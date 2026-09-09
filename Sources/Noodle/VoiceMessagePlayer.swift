@@ -3,6 +3,38 @@ import SwiftUI
 import Observation
 import NoodleCore
 
+/// The live meter has a fixed spatial/time scale, unlike the saved overview.
+struct LiveVoiceWaveform: View {
+    let samples: [Float]
+
+    static func bars(samples: [Float], width: CGFloat, height: CGFloat) -> [CGRect] {
+        let spacing: CGFloat = 5
+        let barWidth: CGFloat = 2.5
+        let capacity = max(0, Int(width / spacing))
+        let visible = samples.suffix(capacity)
+        let start = width - CGFloat(visible.count) * spacing
+        return visible.enumerated().map { index, sample in
+            // A fixed dB range makes normal quiet speech visible without
+            // auto-normalizing silence or changing the recording's audio gain.
+            let amplitude = sample.isFinite ? max(0, min(1, sample)) : 0
+            let decibels = 20 * log10(max(0.000001, amplitude))
+            let normalized = CGFloat(max(0, min(1, (decibels + 60) / 48)))
+            let barHeight = min(height, max(2, normalized * height))
+            return CGRect(x: start + CGFloat(index) * spacing,
+                          y: (height - barHeight) / 2, width: barWidth, height: barHeight)
+        }
+    }
+
+    var body: some View {
+        Canvas { context, size in
+            for bar in Self.bars(samples: samples, width: size.width, height: size.height) {
+                context.fill(Path(roundedRect: bar, cornerRadius: 1.25), with: .color(.primary.opacity(0.7)))
+            }
+        }
+        .accessibilityLabel("Live microphone waveform")
+    }
+}
+
 struct VoiceWaveform: View {
     let samples: [Float]
     var progress: Double = 0
