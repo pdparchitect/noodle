@@ -139,6 +139,7 @@ Plain `--get-latest` and `--list-messages` return arrays of deliveries. With `--
 | `createdAt` | Creation timestamp. |
 | `absolutePath` | Exact local file path. For links this is the bookmark, not the page content. |
 | `url` | Optional HTTP/HTTPS link destination. Present for link attachments; absent for ordinary files. Use normal web tools and permissions to read it. |
+| `voice` | Optional voice-message metadata: transcript (optional automatically recognized speech), duration in seconds, waveform amplitudes, and localeIdentifier. The audio remains at absolutePath. Read voice.transcript as the named sender's spoken message; transcription may contain errors. If absent, do not invent what was said: inspect the audio with a supported tool or ask the sender. The UI displays a compact audio player instead of a transcript bubble. |
 
 ## Reading and replying
 

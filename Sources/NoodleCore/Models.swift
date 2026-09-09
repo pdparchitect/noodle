@@ -171,6 +171,7 @@ public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable 
     public let createdAt: Date
     /// Present for link attachments. The owned file is a small .webloc bookmark, not downloaded page content.
     public let url: URL?
+    public let voice: VoiceMessage?
 
     public init(
         id: UUID = UUID(),
@@ -180,7 +181,8 @@ public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable 
         mediaType: String,
         byteCount: Int64,
         createdAt: Date = Date(),
-        url: URL? = nil
+        url: URL? = nil,
+        voice: VoiceMessage? = nil
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -190,6 +192,7 @@ public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable 
         self.byteCount = byteCount
         self.createdAt = createdAt
         self.url = url
+        self.voice = voice
     }
 }
 
@@ -231,6 +234,7 @@ public struct MessengerAttachment: Codable, Hashable, Sendable {
     public let createdAt: Date
     public let absolutePath: String
     public let url: URL?
+    public let voice: VoiceMessage?
 
     public init(attachment: ConversationAttachment, absolutePath: String) {
         id = attachment.id
@@ -242,6 +246,7 @@ public struct MessengerAttachment: Codable, Hashable, Sendable {
         createdAt = attachment.createdAt
         self.absolutePath = absolutePath
         url = attachment.url
+        voice = attachment.voice
     }
 }
 
@@ -781,8 +786,14 @@ public struct WorkspaceRepository: Sendable {
         from sourceURL: URL,
         into conversationID: UUID,
         mediaType: String,
-        now: Date = Date()
+        now: Date = Date(),
+        voice: VoiceMessage? = nil
     ) throws -> ConversationAttachment {
+        if let voice {
+            guard sourceURL.isFileURL, mediaType.hasPrefix("audio/"), voice.isValid else {
+                throw WorkspaceError.invalidAttachment
+            }
+        }
         if !sourceURL.isFileURL {
             return try importLinkAttachment(sourceURL, into: conversationID, now: now)
         }
@@ -801,7 +812,8 @@ public struct WorkspaceRepository: Sendable {
             storedFilename: storedAttachmentName(id: attachmentID, originalFilename: sourceURL.lastPathComponent),
             mediaType: resolvedMediaType,
             byteCount: Int64(values.fileSize ?? 0),
-            createdAt: now
+            createdAt: now,
+            voice: voice
         )
         let directory = attachmentsDirectory(conversationID: conversationID)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

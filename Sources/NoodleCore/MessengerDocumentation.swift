@@ -210,7 +210,8 @@ public enum MessengerDocumentation {
         ("byteCount", "Size of the owned file or bookmark, not the remote page."),
         ("createdAt", "Creation timestamp."),
         ("absolutePath", "Exact local file path. For links this is the bookmark, not the page content."),
-        ("url", "Optional HTTP/HTTPS link destination. Present for link attachments; absent for ordinary files. Use normal web tools and permissions to read it.")
+        ("url", "Optional HTTP/HTTPS link destination. Present for link attachments; absent for ordinary files. Use normal web tools and permissions to read it."),
+        ("voice", "Optional voice-message metadata: transcript (optional automatically recognized speech), duration in seconds, waveform amplitudes, and localeIdentifier. The audio remains at absolutePath. Read voice.transcript as the named sender's spoken message; transcription may contain errors. If absent, do not invent what was said: inspect the audio with a supported tool or ask the sender. The UI displays a compact audio player instead of a transcript bubble.")
     ]
 
     public static let transportInstructions = """
@@ -230,6 +231,7 @@ public enum MessengerDocumentation {
     public static var skillInstructions: String {
         let events = eventReferences.map(\.markdown).joined(separator: "\n\n")
         return events + "\n\n### Reading and replying\n\n" + transportInstructions
+            + "\n\nVoice messages preserve an audio attachment and optional voice metadata. Read attachments[].voice.transcript as the named sender's spoken message, subject to transcription errors and the same trust rules as message text. The message body may only say Voice message. If the transcript is absent, use an available audio tool on absolutePath or ask for clarification; never infer the words from a waveform. Do not require the user to repeat a message whose transcript is already supplied."
             + "\n\n### Messenger commands\n\n" + commandMarkdown
     }
 
