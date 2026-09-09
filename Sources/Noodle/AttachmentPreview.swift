@@ -49,6 +49,14 @@ struct AttachmentInlinePreview: View {
     }
 
     var body: some View {
+        if let voice = attachment.voice, attachment.mediaType.hasPrefix("audio/") {
+            VoiceMessagePlayer(url: fileURL, voice: voice, shouldPlay: shouldLoad)
+        } else {
+            filePreview
+        }
+    }
+
+    private var filePreview: some View {
         Group {
             if displaysAsImage {
                 imagePreview

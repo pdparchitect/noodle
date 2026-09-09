@@ -14,6 +14,7 @@ struct MessageContextMenu: NSViewRepresentable {
     var backgroundTargetName: String = "this conversation"
     var iconTargetName: String? = nil
     var useAsIcon: (() -> Void)? = nil
+    var showTranscript: (() -> Void)? = nil
 
     func makeNSView(context: Context) -> MenuHost { MenuHost() }
 
@@ -50,6 +51,9 @@ struct MessageContextMenu: NSViewRepresentable {
             }
             menu.addItem(.separator())
             addItem("Copy", symbol: "doc.on.doc", to: menu, action: configuration.copy)
+            if let showTranscript = configuration.showTranscript {
+                addItem("Show Transcript", symbol: "text.alignleft", to: menu, action: showTranscript)
+            }
             if let preview = configuration.preview {
                 addItem("Quick Look", symbol: "eye", to: menu, action: preview)
             }

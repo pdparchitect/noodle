@@ -32,6 +32,8 @@
     <string>Copyright © 2026 Petko D. Petkov</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Record voice messages you choose to send in your conversations. Speech is transcribed on this Mac.</string>
     <key>SUFeedURL</key>
     <string>https://github.com/pdparchitect/noodle/releases/latest/download/appcast.xml</string>
     <key>SUPublicEDKey</key>

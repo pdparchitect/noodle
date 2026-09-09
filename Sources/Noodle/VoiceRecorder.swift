@@ -1,0 +1,345 @@
+import AppKit
+import AVFoundation
+import Speech
+import Observation
+import NoodleCore
+
+struct VoiceRecordingDraft: Codable {
+    let voice: VoiceMessage
+    let transcriptionComplete: Bool
+}
+
+@available(macOS 26.0, *)
+@MainActor @Observable final class VoiceRecorder {
+    enum Phase { case idle, preparing, recording, finishing, ready, failed }
+    private(set) var phase: Phase = .idle
+    private(set) var duration: TimeInterval = 0
+    private(set) var levels: [Float] = []
+    private(set) var transcript: String?
+    private(set) var error: String?
+    private(set) var preparation = "Preparing speech…"
+    let directory: URL
+    var audioURL: URL { directory.appendingPathComponent("recording.caf") }
+    var hasAudio: Bool { duration > 0 && FileManager.default.fileExists(atPath: audioURL.path) }
+    var metadata: VoiceMessage { .init(transcript: transcript, duration: duration, waveform: levels, localeIdentifier: localeIdentifier) }
+
+    private var localeIdentifier: String?
+    private var engine: AVAudioEngine?
+    private var sink: VoiceAudioSink?
+    private var analyzer: SpeechAnalyzer?
+    private var results: Task<Void, Never>?
+    private var preparationTask: Task<Void, Never>?
+    private var meterTask: Task<Void, Never>?
+    private var generation = UUID()
+    private var recognitionError: String?
+
+    init(directory: URL) {
+        self.directory = directory
+        if let data = try? Data(contentsOf: directory.appendingPathComponent("draft.json")),
+           let saved = try? JSONDecoder().decode(VoiceRecordingDraft.self, from: data),
+           FileManager.default.fileExists(atPath: audioURL.path) {
+            duration = saved.voice.duration
+            levels = saved.voice.waveform
+            transcript = saved.transcriptionComplete ? saved.voice.transcript : nil
+            localeIdentifier = saved.voice.localeIdentifier
+            if let file = try? AVAudioFile(forReading: audioURL), file.processingFormat.sampleRate > 0 {
+                duration = Double(file.length) / file.processingFormat.sampleRate
+            }
+            phase = transcript == nil ? .failed : .ready
+            if transcript == nil { error = "Recording preserved. Retry transcription or send audio only." }
+        }
+    }
+
+    func start() {
+        guard phase == .idle else { return }
+        phase = .preparing
+        error = nil
+        let token = UUID()
+        generation = token
+        preparationTask = Task {
+            do {
+                let transcriber = try await prepareTranscriber()
+                try check(token)
+                guard await AVCaptureDevice.requestAccess(for: .audio) else {
+                    throw VoiceFailure("Microphone access is off. Enable Noodle in System Settings → Privacy & Security → Microphone.")
+                }
+                try check(token)
+                let engine = AVAudioEngine()
+                let inputFormat = engine.inputNode.outputFormat(forBus: 0)
+                guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0,
+                      let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber]) else {
+                    throw VoiceFailure("No supported microphone format is available.")
+                }
+                try check(token)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                let stream = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .bufferingOldest(64))
+                let sink = try VoiceAudioSink(url: audioURL, sourceFormat: inputFormat, targetFormat: format,
+                                             continuation: stream.continuation)
+                self.sink = sink
+                let analyzer = SpeechAnalyzer(modules: [transcriber])
+                self.analyzer = analyzer
+                listen(to: transcriber, token: token)
+                try await analyzer.prepareToAnalyze(in: format)
+                try await analyzer.start(inputSequence: stream.stream)
+                try check(token)
+                self.engine = engine
+                engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { buffer, _ in
+                    sink.consume(buffer)
+                }
+                engine.prepare()
+                try engine.start()
+                phase = .recording
+                try persist()
+                meterTask = Task {
+                    var ticks = 0
+                    while !Task.isCancelled && phase == .recording {
+                        try? await Task.sleep(for: .milliseconds(100))
+                        guard phase == .recording else { break }
+                        let snapshot = sink.snapshot()
+                        duration = snapshot.duration
+                        levels = snapshot.waveform
+                        ticks += 1
+                        if ticks % 10 == 0 { try? persist() }
+                        if snapshot.error != nil || duration >= 600 {
+                            await finish()
+                            break
+                        }
+                    }
+                }
+            } catch {
+                guard generation == token else { return }
+                await stopEngineAndAnalysis()
+                self.error = error.localizedDescription
+                phase = .failed
+            }
+        }
+    }
+
+    private func prepareTranscriber() async throws -> SpeechTranscriber {
+        guard SpeechTranscriber.isAvailable,
+              let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale.current) else {
+            throw VoiceFailure("On-device transcription isn’t available for this Mac or its current language.")
+        }
+        localeIdentifier = locale.identifier
+        let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
+        if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+            preparation = "Downloading speech model…"
+            try await request.downloadAndInstall()
+        }
+        preparation = "Starting microphone…"
+        return transcriber
+    }
+
+    private func listen(to transcriber: SpeechTranscriber, token: UUID) {
+        recognitionError = nil
+        results = Task {
+            var finalized: [String] = []
+            do {
+                for try await result in transcriber.results {
+                    guard generation == token else { return }
+                    let text = String(result.text.characters)
+                    if result.isFinal { finalized.append(text) }
+                    transcript = (finalized + (result.isFinal ? [] : [text])).joined(separator: " ")
+                }
+                if generation == token { transcript = finalized.joined(separator: " ") }
+            } catch {
+                if generation == token { recognitionError = error.localizedDescription }
+            }
+        }
+    }
+
+    func finish() async {
+        guard phase == .recording else { return }
+        phase = .finishing
+        meterTask?.cancel()
+        stopCapture()
+        await finalizeAnalysis()
+    }
+
+    private func finalizeAnalysis() async {
+        let current = generation
+        let analyzer = analyzer
+        // Finalization must not leave a recording stuck indefinitely.
+        let timeout = Task {
+            do { try await Task.sleep(for: .seconds(30)) } catch { return }
+            guard generation == current else { return }
+            recognitionError = "Transcription timed out. Your recording is preserved."
+            await analyzer?.cancelAndFinishNow()
+        }
+        defer { timeout.cancel() }
+        do { try await analyzer?.finalizeAndFinishThroughEndOfInput() }
+        catch { recognitionError = recognitionError ?? error.localizedDescription }
+        await results?.value
+        guard generation == current else { return }
+        self.analyzer = nil
+        results = nil
+        transcript = metadata.transcript
+        if let failure = sink?.snapshot().error { recognitionError = failure }
+        if recognitionError != nil || transcript == nil || !hasAudio {
+            // Do not silently send a partial/failed transcription.
+            transcript = nil
+            error = recognitionError ?? "No speech recognised. Retry transcription or send audio only."
+            phase = .failed
+        } else {
+            error = nil
+            phase = .ready
+        }
+        do { try persist() } catch { self.error = error.localizedDescription; phase = .failed }
+    }
+
+    func retry() async {
+        guard phase == .failed, hasAudio else { return }
+        let token = generation
+        phase = .finishing
+        error = nil
+        transcript = nil
+        sink = nil
+        do {
+            let transcriber = try await prepareTranscriber()
+            try check(token)
+            let analyzer = SpeechAnalyzer(modules: [transcriber])
+            self.analyzer = analyzer
+            listen(to: transcriber, token: generation)
+            let file = try AVAudioFile(forReading: audioURL)
+            try await analyzer.start(inputAudioFile: file, finishAfterFile: false)
+            await finalizeAnalysis()
+        } catch {
+            guard generation == token else { return }
+            await stopEngineAndAnalysis()
+            self.error = error.localizedDescription
+            phase = .failed
+        }
+    }
+
+    func leaveConversation() async {
+        if phase == .recording { await finish() }
+        if phase == .preparing { await discard() }
+    }
+
+    func discard() async {
+        generation = UUID()
+        preparationTask?.cancel()
+        meterTask?.cancel()
+        await stopEngineAndAnalysis()
+        // Only this recorder's two owned draft files are removed.
+        for file in [audioURL, directory.appendingPathComponent("draft.json")] {
+            if FileManager.default.fileExists(atPath: file.path) { try? FileManager.default.removeItem(at: file) }
+        }
+        sink = nil
+        duration = 0
+        levels = []
+        transcript = nil
+        error = nil
+        phase = .idle
+    }
+
+    private func stopCapture() {
+        engine?.stop()
+        engine?.inputNode.removeTap(onBus: 0)
+        engine = nil
+        sink?.finish()
+        if let snapshot = sink?.snapshot() { duration = snapshot.duration; levels = snapshot.waveform }
+    }
+
+    private func stopEngineAndAnalysis() async {
+        stopCapture()
+        await analyzer?.cancelAndFinishNow()
+        results?.cancel()
+        results = nil
+        analyzer = nil
+    }
+
+    private func check(_ token: UUID) throws {
+        try Task.checkCancellation()
+        guard generation == token else { throw CancellationError() }
+    }
+
+    private func persist() throws {
+        try JSONEncoder().encode(VoiceRecordingDraft(voice: metadata, transcriptionComplete: phase == .ready))
+            .write(to: directory.appendingPathComponent("draft.json"), options: .atomic)
+    }
+}
+
+struct VoiceFailure: LocalizedError {
+    let message: String
+    init(_ message: String) { self.message = message }
+    var errorDescription: String? { message }
+}
+
+/// The audio callback owns conversion and writing under one lock. Buffers sent
+/// to SpeechAnalyzer are newly allocated and never modified after being yielded.
+@available(macOS 26.0, *)
+final class VoiceAudioSink: @unchecked Sendable {
+    struct Snapshot { let duration: Double; let waveform: [Float]; let error: String? }
+    private let lock = NSLock()
+    private var file: AVAudioFile?
+    private let converter: AVAudioConverter
+    private let target: AVAudioFormat
+    private let continuation: AsyncStream<AnalyzerInput>.Continuation
+    private var frames: Int64 = 0
+    private var peaks: [Float] = []
+    private var failure: String?
+    private var finished = false
+
+    init(url: URL, sourceFormat: AVAudioFormat, targetFormat: AVAudioFormat,
+         continuation: AsyncStream<AnalyzerInput>.Continuation) throws {
+        guard let converter = AVAudioConverter(from: sourceFormat, to: targetFormat) else {
+            throw VoiceFailure("The microphone audio format couldn’t be converted.")
+        }
+        self.converter = converter
+        target = targetFormat
+        self.continuation = continuation
+        file = try AVAudioFile(forWriting: url, settings: targetFormat.settings,
+                               commonFormat: targetFormat.commonFormat, interleaved: targetFormat.isInterleaved)
+    }
+
+    func consume(_ input: AVAudioPCMBuffer) {
+        lock.lock(); defer { lock.unlock() }
+        guard !finished else { return }
+        do {
+            let capacity = AVAudioFrameCount(ceil(Double(input.frameLength) * target.sampleRate / input.format.sampleRate)) + 64
+            guard let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return }
+            var supplied = false
+            var conversionError: NSError?
+            let status = converter.convert(to: output, error: &conversionError) { _, state in
+                if supplied { state.pointee = .noDataNow; return nil }
+                supplied = true
+                state.pointee = .haveData
+                return input
+            }
+            if let conversionError { throw conversionError }
+            guard status != .error else { throw VoiceFailure("Microphone conversion failed.") }
+            guard output.frameLength > 0 else { return }
+            try file?.write(from: output)
+            frames += Int64(output.frameLength)
+            var peak: Float = 0
+            if let samples = input.floatChannelData?[0] {
+                for i in stride(from: 0, to: Int(input.frameLength), by: 8) { peak = max(peak, abs(samples[i])) }
+            }
+            if peaks.count < 20_000 { peaks.append(min(1, peak)) }
+            if case .dropped = continuation.yield(AnalyzerInput(buffer: output)) {
+                failure = "Live transcription fell behind. The recording is preserved; retry transcription."
+                continuation.finish()
+            }
+        } catch {
+            failure = error.localizedDescription
+            continuation.finish()
+        }
+    }
+
+    func finish() {
+        lock.lock(); defer { lock.unlock() }
+        finished = true
+        file = nil
+        continuation.finish()
+    }
+
+    func snapshot() -> Snapshot {
+        lock.lock(); defer { lock.unlock() }
+        let width = max(1, Int(ceil(Double(peaks.count) / 100)))
+        let waveform = stride(from: 0, to: peaks.count, by: width).map {
+            peaks[$0..<min($0 + width, peaks.count)].max() ?? 0
+        }
+        return Snapshot(duration: Double(frames) / target.sampleRate, waveform: waveform, error: failure)
+    }
+}

@@ -17,6 +17,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Record voice messages from the composer on supported macOS 26 Macs, with a live waveform, on-device Apple transcription, Return to send and Escape to discard. Unsent recordings stay with their conversation; failed transcription offers retry or explicit audio-only sending. Chats show a compact audio player, with transcripts available from the context menu. Microphone access is requested only when recording is started.
 - Voice-message attachments preserve audio with optional transcript, duration and waveform metadata, including transcript delivery to all harnesses without duplicating the spoken text in the message body.
 - Muse Code harness with a theme-aware Meta mark, native-install detection, live MSP model catalogue and reasoning effort, terminal sign-in guidance, version checks, persistent sessions and interrupted-work recovery. Requires explicit per-bot autonomous access; the signed native binary is verified without executing its self-updating launcher.
 

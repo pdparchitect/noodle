@@ -63,6 +63,7 @@ struct MessageBubble: View {
     @State private var inspectedReaction: String?
     @State private var changingReaction = false
     @State private var isVisible = false
+    @State private var transcriptAttachment: ConversationAttachment?
     let message: ChatMessage
     let hasConversationBackground: Bool
     @Binding var selectedAttachmentID: UUID?
@@ -118,6 +119,7 @@ struct MessageBubble: View {
             }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
+                if !(message.body == VoiceMessage.messageBody && !attachments.isEmpty && attachments.allSatisfy { $0.voice != nil }) {
                 Text(renderedBody)
                     .font(.system(size: 12.5))
                     .lineSpacing(2)
@@ -133,6 +135,7 @@ struct MessageBubble: View {
                         if attachments.isEmpty { cornerReactions }
                     }
                     .padding(.top, hasReactions && attachments.isEmpty ? 12 : 0)
+                }
 
                 if let linkPreviewURL, !attachments.contains(where: {
                     $0.url.flatMap { MessageLink.publicWebURL(from: $0) } == linkPreviewURL
@@ -168,6 +171,9 @@ struct MessageBubble: View {
         }
         .onScrollVisibilityChange(threshold: 0.01) { visible in
             isVisible = visible
+        }
+        .sheet(item: $transcriptAttachment) { attachment in
+            if let voice = attachment.voice { VoiceTranscriptSheet(voice: voice).noodleSheetSizing() }
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))
         }
@@ -231,6 +237,9 @@ struct MessageBubble: View {
             iconTargetName: iconAgent?.displayName,
             useAsIcon: attachment.flatMap { item in
                 iconAgent.map { _ in { Task { await store.useAttachmentAsIcon(item) } } }
+            },
+            showTranscript: attachment.flatMap { item in
+                item.voice == nil ? nil : { transcriptAttachment = item }
             }
         )
     }

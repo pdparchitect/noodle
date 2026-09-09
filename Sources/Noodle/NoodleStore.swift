@@ -84,6 +84,16 @@ final class NoodleStore {
         }
     }
     var composerIsFocused = false
+    @ObservationIgnored private var voiceRecorders: [UUID: AnyObject] = [:]
+
+    @available(macOS 26.0, *)
+    func voiceRecorder(for conversationID: UUID) -> VoiceRecorder {
+        if let recorder = voiceRecorders[conversationID] as? VoiceRecorder { return recorder }
+        let recorder = VoiceRecorder(directory: repository.attachmentsDirectory(conversationID: conversationID)
+            .appendingPathComponent("VoiceDraft", isDirectory: true))
+        voiceRecorders[conversationID] = recorder
+        return recorder
+    }
 
     let repository: WorkspaceRepository
     @ObservationIgnored private let transcriptPositions: TranscriptPositionStore
@@ -411,6 +421,23 @@ final class NoodleStore {
             return "\u{201c}\(name)\u{201d}, its workspace, and its direct conversation will be permanently deleted. It will also be removed from every group. This cannot be undone."
         }
         return "\u{201c}\(name)\u{201d}, its messages, and its attachments will be permanently deleted. The bots in the group will not be deleted. This cannot be undone."
+    }
+
+    func sendVoiceMessage(from url: URL, voice: VoiceMessage, to conversationID: UUID) throws {
+        guard let conversation = conversations.first(where: { $0.id == conversationID }) else {
+            throw WorkspaceError.missingConversation(conversationID)
+        }
+        let attachment = try repository.importAttachment(from: url, into: conversationID, mediaType: "audio/x-caf", voice: voice)
+        attachmentsByConversation[conversationID, default: []].append(attachment)
+        let message = try repository.sendUserMessage(conversationID: conversationID,
+            body: VoiceMessage.messageBody, attachmentIDs: [attachment.id])
+        messagesByConversation[conversationID, default: []].append(message)
+        if let index = conversations.firstIndex(where: { $0.id == conversationID }) {
+            conversations[index].updatedAt = message.createdAt
+            conversations.sort { $0.updatedAt > $1.updatedAt }
+        }
+        // Existing text and file drafts are independent and remain untouched.
+        runtime.notify(participants(for: conversation), repository: repository)
     }
 
     func sendDraft() {

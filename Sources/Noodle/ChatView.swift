@@ -240,7 +240,17 @@ struct ChatView: View {
                             choosingPhotos = true
                         })
                 }
-            composerInput
+            if #available(macOS 26.0, *) {
+                VoiceMessageComposer(
+                    recorder: store.voiceRecorder(for: conversation.id),
+                    send: { url, voice in try store.sendVoiceMessage(from: url, voice: voice, to: conversation.id) }
+                ) { start in
+                    composerInput(microphoneAction: start)
+                }
+                .id(conversation.id)
+            } else {
+                composerInput()
+            }
         }
     }
 
@@ -273,15 +283,15 @@ struct ChatView: View {
         }
     }
 
-    @ViewBuilder private var composerInput: some View {
+    @ViewBuilder private func composerInput(microphoneAction: (() -> Void)? = nil) -> some View {
         if #available(macOS 26.0, *) {
-            composerInputContents
+            composerInputContents(microphoneAction: microphoneAction)
                 .glassEffect(
                     .regular,
                     in: RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
                 )
         } else {
-            composerInputContents
+            composerInputContents(microphoneAction: microphoneAction)
                 .background(
                     .quaternary.opacity(0.10),
                     in: RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
@@ -293,7 +303,7 @@ struct ChatView: View {
         }
     }
 
-    private var composerInputContents: some View {
+    private func composerInputContents(microphoneAction: (() -> Void)? = nil) -> some View {
         ZStack(alignment: .bottomTrailing) {
             ScrollableChatComposer(
                 text: Binding(
@@ -310,10 +320,22 @@ struct ChatView: View {
                 focusSidebar: focusSidebar
             )
             .padding(.leading, 12)
-            .padding(.trailing, composerSendControlWidth + 14)
+            .padding(.trailing, composerSendControlWidth + 14 + (microphoneAction == nil ? 0 : 31))
             .padding(.vertical, 6)
             .frame(minHeight: composerControlHeight, alignment: .center)
 
+            HStack(spacing: 4) {
+            if let microphoneAction {
+                Button(action: microphoneAction) {
+                    Image(systemName: "mic")
+                        .font(.system(size: 16))
+                        .frame(width: 27, height: composerControlHeight)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Record Voice Message")
+                .accessibilityLabel("Record voice message")
+            }
             if cannotSend {
                 Image(systemName: "arrow.up.circle")
                     .font(.system(size: 22))
@@ -331,6 +353,7 @@ struct ChatView: View {
                 .buttonStyle(.plain)
                 .padding(.trailing, 7)
                 .help("Send Message")
+            }
             }
         }
     }
