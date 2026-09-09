@@ -41,6 +41,7 @@ access option in Settings → Security. See [Security and agent access](docs/sec
 
 ## Documentation
 
+- [Noodle Computer — standalone virtual computers (development)](Computer/README.md)
 - [Using Noodle](docs/usage.md)
 - [Harness setup](docs/harness-setup.md)
 - [Development](docs/development.md)

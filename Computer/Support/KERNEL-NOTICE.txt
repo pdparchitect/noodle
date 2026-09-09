@@ -1,0 +1,13 @@
+The bundled Linux kernel is from Kata Containers 3.32.0:
+https://github.com/kata-containers/kata-containers/releases/tag/3.32.0
+
+Kernel version: 6.18.35-197-debug
+Source archive SHA-256:
+8736c054d9223974735394f822000823baef509e1c33405ec798240fa9b6e4b5
+
+Linux is licensed under GPL-2.0-only. Corresponding Linux source is available
+from https://cdn.kernel.org/ and the Kata Containers build configuration and
+patches are available from https://github.com/kata-containers/kata-containers.
+
+This application also incorporates Apple Containerization, licensed under the
+Apache License 2.0. Its license is included alongside this notice.

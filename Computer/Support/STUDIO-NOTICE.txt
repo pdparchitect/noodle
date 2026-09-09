@@ -1,0 +1,6 @@
+Noodle Computer's container runtime follows the architecture of ChatBotKit Studio.
+ChatBotKit Studio, Copyright 2026 CBK.AI LTD, Apache License 2.0.
+https://github.com/chatbotkit/studio
+
+Apple Containerization is pinned to 0.43.0 and licensed under Apache License 2.0.
+The build includes dependency license files in the app's Resources directory.
