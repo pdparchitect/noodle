@@ -12,10 +12,12 @@ swiftc -parse-as-library -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/MCPController.swift" \
     "$project_root/Sources/Noodle/ExternalEventPresentation.swift" \
     "$project_root/Sources/Noodle/MCPSettingsView.swift" \
+    "$project_root/Sources/Noodle/ToolCatalogView.swift" \
     "$project_root/Sources/Noodle/SheetSizing.swift" \
     "$project_root/Tests/mcp-fixture.swift" \
     "${objects[@]}" -o "$app/Contents/MacOS/MCPFixture"
 cp "$project_root/Tests/mcp-fixture-Info.plist" "$app/Contents/Info.plist"
+ditto "$project_root/Support/ToolIcons" "$app/Contents/Resources/ToolIcons"
 cp "$bin_path/NoodleMCPCLI" "$app/Contents/Helpers/mcpshim"
 cp "$bin_path/NoodleMessenger" "$app/Contents/Helpers/messenger"
 identity="${NOODLE_SIGNING_IDENTITY:-$(security find-identity -v -p codesigning | awk -F '"' '/Apple Development:/ { print $2; exit }')}"

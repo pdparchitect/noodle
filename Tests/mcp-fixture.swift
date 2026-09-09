@@ -107,6 +107,7 @@ struct MCPFixtureView: View {
                 do {
                     if live { try await checkLive(store) }
                     else {
+                        try checkToolPresets(store)
                         try await checkBrowserAuthorization()
                         try await checkBridge(store)
                         try? FileManager.default.removeItem(at: temporary)
@@ -133,6 +134,36 @@ struct MCPFixtureView: View {
         }
         withExtendedLifetime(delegate) { app.run() }
     }
+    @MainActor private static func checkToolPresets(_ store: NoodleStore) throws {
+        for tool in ToolCatalog.entries {
+            guard let image = ToolCatalogIcon.image(for: tool), image.size.width > 0, image.size.height > 0 else {
+                throw MCPConnectionError.message("Missing or invalid bundled icon: \(tool.id)")
+            }
+        }
+        let preset = ToolCatalog.matching("Notion")[0]
+        let configuration: MCPToolConfiguration
+        switch preset.configuration { case .mcp(let value): configuration = value }
+        var first = try store.mcp.addPreset(preset, configuration: configuration)
+        let second = try store.mcp.addPreset(preset, configuration: configuration)
+        guard first.id != second.id, first.name != second.name,
+              first.description == preset.summary, first.instructions == preset.defaultInstructions,
+              !store.mcp.connected.contains(first.id), store.mcp.signingIn == nil,
+              !store.mcp.selectedIDs(for: store.agent).contains(first.id) else {
+            throw MCPConnectionError.message("Preset defaults, independent accounts or unassigned state failed")
+        }
+        first.description = "My custom description"
+        first.instructions = "My custom instructions"
+        try store.mcp.save(first)
+        let reloaded = try MCPRegistry.load(root: store.repository.rootURL)
+        guard reloaded.connections.contains(first), reloaded.connections.contains(second),
+              reloaded.assigned(to: store.agent.id).isEmpty else {
+            throw MCPConnectionError.message("Customizing a preset lost data or assigned it without saving the bot")
+        }
+        store.mcp.remove(first)
+        store.mcp.remove(second)
+        print("Tool catalogue: all bundled icons decode; defaults, duplicate accounts, customization and draft-only assignment passed")
+    }
+
     @MainActor private static func checkBrowserAuthorization() async throws {
         let redirect = URL(string: "noodle-mcp-tests://mcp/oauth/callback")!
         let authorization = URL(string: "https://example.com/authorize?state=first-state")!

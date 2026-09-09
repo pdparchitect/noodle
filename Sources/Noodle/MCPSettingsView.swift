@@ -61,7 +61,7 @@ struct MCPSettingsView: View {
             }
         }
         .padding(20)
-        .sheet(isPresented: $showingAdd) { MCPEditor(controller: store.mcp).noodleSheetSizing() }
+        .sheet(isPresented: $showingAdd) { ToolCreationSheet(controller: store.mcp).noodleSheetSizing() }
         .sheet(item: $editing) { connection in MCPEditor(controller: store.mcp, existing: connection).noodleSheetSizing() }
         .confirmationDialog("Remove Tool Connection?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
                             titleVisibility: .visible) {
@@ -79,17 +79,21 @@ struct MCPSettingsView: View {
     }
 }
 
-private struct MCPEditor: View {
+struct MCPEditor: View {
     let controller: MCPController
     let existing: MCPConnectionRecord?
+    let onBack: (() -> Void)?
+    let onSaved: (MCPConnectionRecord) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
     @State private var endpoint: String
     @State private var description: String
     @State private var instructions: String
     @State private var error: String?
-    init(controller: MCPController, existing: MCPConnectionRecord? = nil) {
+    init(controller: MCPController, existing: MCPConnectionRecord? = nil,
+         onBack: (() -> Void)? = nil, onSaved: @escaping (MCPConnectionRecord) -> Void = { _ in }) {
         self.controller = controller; self.existing = existing
+        self.onBack = onBack; self.onSaved = onSaved
         _name = State(initialValue: existing?.name ?? "")
         _endpoint = State(initialValue: existing?.endpoint.absoluteString ?? "")
         _description = State(initialValue: existing?.description ?? "")
@@ -98,9 +102,13 @@ private struct MCPEditor: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                if let onBack {
+                    Button("Back", action: onBack)
+                } else {
+                    Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                }
                 Spacer()
-                Text(existing == nil ? "Add Tools" : "Edit Tools").font(.headline)
+                Text(existing != nil ? "Edit MCP" : "Custom MCP").font(.headline)
                 Spacer()
                 Button(existing == nil ? "Add & Connect" : "Save", action: save)
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || endpoint.isEmpty)
@@ -114,7 +122,7 @@ private struct MCPEditor: View {
                         .help("Use a distinct name for each account")
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Server URL").font(.caption.weight(.semibold))
+                    Text("MCP Server URL").font(.caption.weight(.semibold))
                     TextField("https://…", text: $endpoint, axis: .horizontal).lineLimit(1)
                         .autocorrectionDisabled().disabled(existing != nil)
                 }
@@ -133,7 +141,12 @@ private struct MCPEditor: View {
                         .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.18)) }
                         .help("Optional guidance for bots using this connection. Do not include passwords or tokens.")
                 }
-                Text("Sign-in opens in your browser.").font(.caption).foregroundStyle(.secondary)
+                Text("MCP connection · Sign-in opens in your browser. Requires automatic client registration; API keys are not supported.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if existing != nil {
+                    Text("Changes apply to every bot using this connection.").font(.caption).foregroundStyle(.secondary)
+                }
+                if onBack != nil { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction) }
                 if let error { Text(error).foregroundStyle(.red).font(.caption) }
             }.textFieldStyle(.roundedBorder).padding(20)
         }.frame(width: 480)
@@ -148,6 +161,7 @@ private struct MCPEditor: View {
             record.description = String(description.prefix(1_000))
             record.instructions = String(instructions.prefix(20_000))
             try controller.save(record)
+            onSaved(record)
             let shouldConnect = existing == nil
             dismiss()
             if shouldConnect {
@@ -168,6 +182,8 @@ struct MCPConnectionIcon: View {
         Group {
             if let data = connection.iconData, let image = NSImage(data: data) {
                 Image(nsImage: image).resizable().scaledToFit()
+            } else if let tool = ToolCatalog.definition(forMCPEndpoint: connection.endpoint) {
+                ToolCatalogIcon(tool: tool, size: size)
             } else {
                 Image(systemName: "puzzlepiece.extension.fill").resizable().scaledToFit()
                     .foregroundStyle(.secondary).padding(size * 0.15)
@@ -181,6 +197,9 @@ struct MCPAssignmentPicker: View {
     @Binding var selectedIDs: Set<UUID>
     @State private var showingAdd = false
     @State private var search = ""
+    @State private var wantsNewTool = false
+    @State private var showingNewTool = false
+    @State private var editing: MCPConnectionRecord?
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -208,12 +227,21 @@ struct MCPAssignmentPicker: View {
                                         }.buttonStyle(.plain)
                                     }
                                     if controller.registry.connections.isEmpty {
-                                        Text("Add a connection in Settings → Tools first.").foregroundStyle(.secondary).padding()
+                                        Text("No saved connections. Choose New Tool to add one.").foregroundStyle(.secondary).padding()
                                     }
                                 }
                             }
-                            HStack { Spacer(); Button("Done") { showingAdd = false } }
+                            HStack {
+                                Button("New Tool…") { wantsNewTool = true; showingAdd = false }
+                                Spacer()
+                                Button("Done") { showingAdd = false }
+                            }
                         }.padding(16).frame(width: 330, height: 260)
+                            .onDisappear {
+                                // Wait for the popover to close before presenting a sheet
+                                // on the bot editor. No nested popover or global window.
+                                if wantsNewTool { wantsNewTool = false; showingNewTool = true }
+                            }
                     }
             }
             if selectedIDs.isEmpty {
@@ -226,6 +254,9 @@ struct MCPAssignmentPicker: View {
                                 MCPConnectionIcon(connection: connection, size: 26)
                                 Text(connection.name).lineLimit(1)
                                 Spacer()
+                                Button { editing = connection } label: {
+                                    Image(systemName: "pencil").foregroundStyle(.secondary)
+                                }.buttonStyle(.plain).help("Edit \(connection.name)")
                                 Button { selectedIDs.remove(connection.id) } label: {
                                     Image(systemName: "minus.circle.fill").foregroundStyle(.secondary)
                                 }.buttonStyle(.plain).help("Remove \(connection.name) from this bot")
@@ -237,6 +268,12 @@ struct MCPAssignmentPicker: View {
                 Text("This bot can use these accounts' tools within the permissions you granted at sign-in.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+        }
+        .sheet(isPresented: $showingNewTool) {
+            ToolCreationSheet(controller: controller, onAdded: { selectedIDs.insert($0) }).noodleSheetSizing()
+        }
+        .sheet(item: $editing) { connection in
+            MCPEditor(controller: controller, existing: connection).noodleSheetSizing()
         }
     }
 }

@@ -92,6 +92,7 @@ otool -l "$contents/MacOS/Noodle" \
 cp "$bin_path/NoodleMessenger" "$contents/Helpers/messenger"
 cp "$bin_path/NoodleMCPCLI" "$contents/Helpers/mcpshim"
 cp "$project_root/Support/Info.plist" "$contents/Info.plist"
+ditto "$project_root/Support/ToolIcons" "$contents/Resources/ToolIcons"
 agent_host="$contents/XPCServices/NoodleAgentHost.xpc"
 mkdir -p "$agent_host/Contents/MacOS"
 cp "$bin_path/NoodleAgentHost" "$agent_host/Contents/MacOS/NoodleAgentHost"

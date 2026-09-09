@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- The tool picker offers New Tool beside Done, a searchable catalogue of 35 browser-sign-in MCP services with bundled icons, and a Custom MCP form. Presets add in one step with editable default descriptions and instructions. New connections are selected in the current bot draft; saving that bot still controls assignment. The catalogue separates tool types from MCP-specific setup so other tool types can be added later.
 - Built-in remote MCP connections with native OAuth sign-in, separate credentials for multiple accounts on the same server, and add/remove assignment in bot editors. Assigned bots receive generated skills and a bundled Swift CLI; Noodle holds the credentials and brokers tool calls independently of the selected harness. Server-provided icons are best-effort, with a native fallback.
 - Messenger `--attach` accepts local paths, `file:///` URLs and public HTTP/HTTPS links. Links use the existing native attachment preview and Quick Look interaction, and are delivered to agents with a structured URL; local file previews remain unchanged.
 - The background file picker accepts muted, looping MP4/M4V/MOV videos and HEIC wallpapers. Multi-image HEIC files cycle through their frames with gentle fades; single-image HEIC stays still. Playback pauses when the window is hidden or Reduce Motion is enabled, and imported files are retained inside Noodle.

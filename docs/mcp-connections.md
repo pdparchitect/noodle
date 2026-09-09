@@ -1,6 +1,10 @@
 # Built-in MCP connections
 
-Settings → Tools registers named account connections. Start with
+Settings → Tools → Add Tools offers a searchable [tool catalogue](tool-catalogue.md)
+and a **Custom MCP…** form. The bot assignment picker also offers **New Tool…**
+beside Done. Tools is the umbrella; MCP is a connection type.
+
+The custom MCP form registers named account connections. Start with
 https://mcp.notion.com/mcp: add a name, URL, optional short description and instructions,
 then complete the provider's consent screen. Use distinct names such as **Notion Work**
 and **Notion Personal** when adding the same endpoint twice.

@@ -54,6 +54,9 @@ if otool -L "$app/Contents/Helpers/mcpshim" | grep -Eq '/opt/homebrew|/usr/local
     exit 1
 fi
 test -f "$app/Contents/Resources/swift-sdk-LICENSE.txt"
+for icon in "$project_root"/Support/ToolIcons/*.icon; do
+    cmp "$icon" "$app/Contents/Resources/ToolIcons/${icon:t}"
+done
 
 helper_entitlements="$(codesign -d --entitlements :- "$app/Contents/Helpers/messenger" 2>/dev/null)"
 if print -r -- "$helper_entitlements" | grep -q '<key>'; then
