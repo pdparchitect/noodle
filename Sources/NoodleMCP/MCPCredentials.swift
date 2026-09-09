@@ -45,16 +45,11 @@ struct MCPCredentialStore: MCPCredentialStorage {
         if status == errSecItemNotFound {
             var addition = query(id)
             addition[kSecValueData as String] = data
-            // Noodle is distributed without a provisioning profile. Use the
-            // macOS login Keychain and an explicit signed-app ACL, not the
-            // profile-gated Data Protection Keychain or an on-disk token file.
-            var trusted: SecTrustedApplication?
-            let trustedStatus = SecTrustedApplicationCreateFromPath(nil, &trusted)
-            guard trustedStatus == errSecSuccess, let trusted else { throw MCPServiceError.keychain(trustedStatus) }
-            var access: SecAccess?
-            let accessStatus = SecAccessCreate("Noodle MCP connection" as CFString, [trusted] as CFArray, &access)
-            guard accessStatus == errSecSuccess, let access else { throw MCPServiceError.keychain(accessStatus) }
-            addition[kSecAttrAccess as String] = access
+            // Keep the login Keychain used by existing installations. Omitting
+            // kSecAttrAccess lets Keychain create its default calling-app ACL;
+            // no deprecated SecAccess/SecTrustedApplication setup is needed.
+            // Updates above change only the data, preserving existing item ACLs.
+            addition[kSecAttrLabel as String] = "Noodle MCP connection"
             let added = SecItemAdd(addition as CFDictionary, nil)
             guard added == errSecSuccess else { throw MCPServiceError.keychain(added) }
         } else if status != errSecSuccess { throw MCPServiceError.keychain(status) }

@@ -98,8 +98,13 @@ Redirects are not followed during metadata, registration, token or MCP HTTP requ
 
 Client registration is persisted before opening the browser and reused after restart.
 Access and rotated refresh tokens are saved together in the macOS login Keychain with
-an explicit trusted-app ACL. This matches Noodle's signed, non-provisioned distribution;
+the system-created calling-app ACL. Existing items retain their access controls when
+tokens are refreshed. This matches Noodle's signed, non-provisioned distribution;
 it does not use a plaintext token file or a shared Keychain access group.
+Apple documents the implicit calling-app access list in
+[SecAccessCreate](https://developer.apple.com/documentation/security/secaccesscreate(_:_:_:)).
+The signed MCP fixture checks synthetic credential creation, cross-process reads,
+in-place refresh and metadata preservation, and deletion without touching user sign-ins.
 An invalid refresh grant requires reconnecting and is not repeatedly retried.
 
 The Swift SDK is pinned in Package.swift/Package.resolved. Version 0.12.1 supplies MCP

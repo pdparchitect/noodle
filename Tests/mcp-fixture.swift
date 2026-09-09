@@ -94,6 +94,11 @@ struct MCPFixtureView: View {
 
 @main enum MCPFixtureMain {
     @MainActor static func main() throws {
+        if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--keychain",
+           let id = UUID(uuidString: CommandLine.arguments[3]) {
+            try MCPKeychainChecks.run(phase: CommandLine.arguments[2], id: id)
+            return
+        }
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
         let checking = CommandLine.arguments.contains("--check")

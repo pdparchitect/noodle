@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- MCP credential storage uses Keychain's default calling-app access controls instead of deprecated access-list construction APIs. Existing Keychain items and sign-ins remain in place; token refresh preserves their access controls.
 - Install and Relaunch proceeds through Sparkle without waiting for agent status, chat drafts, attachments, or open editors. Removed the silent restart postponement and quit veto; harness shutdown and recovery are unchanged.
 
 ## [0.10.0] - 2026-09-09

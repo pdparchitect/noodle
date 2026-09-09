@@ -15,6 +15,7 @@ swiftc -parse-as-library -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/ToolCatalogView.swift" \
     "$project_root/Sources/Noodle/SheetSizing.swift" \
     "$project_root/Tests/mcp-fixture.swift" \
+    "$project_root/Tests/mcp-keychain-checks.swift" \
     "${objects[@]}" -o "$app/Contents/MacOS/MCPFixture"
 cp "$project_root/Tests/mcp-fixture-Info.plist" "$app/Contents/Info.plist"
 ditto "$project_root/Support/ToolIcons" "$app/Contents/Resources/ToolIcons"
@@ -32,5 +33,11 @@ codesign --force --options runtime --timestamp=none --sign "$identity" \
 codesign --verify --deep --strict "$app"
 print "Built isolated MCP fixture: $app"
 if [[ "${1:-}" == "--open" ]]; then open "$app"; fi
-if [[ "${1:-}" == "--check" ]]; then "$app/Contents/MacOS/MCPFixture" --check; fi
+if [[ "${1:-}" == "--check" ]]; then
+    keychain_test_id="$(uuidgen)"
+    trap '"$app/Contents/MacOS/MCPFixture" --keychain cleanup "$keychain_test_id"' EXIT
+    "$app/Contents/MacOS/MCPFixture" --keychain seed "$keychain_test_id"
+    "$app/Contents/MacOS/MCPFixture" --keychain verify "$keychain_test_id"
+    "$app/Contents/MacOS/MCPFixture" --check
+fi
 if [[ "${1:-}" == "--check-live" ]]; then "$app/Contents/MacOS/MCPFixture" --check-live; fi
