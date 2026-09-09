@@ -16,6 +16,8 @@ private struct BotEditorTabPicker: View {
         Picker("Bot settings", selection: $selection.animation(reduceMotion ? nil : .easeInOut(duration: 0.22))) {
             ForEach(BotEditorTab.allCases, id: \.self) { tab in Text(tab.rawValue).tag(tab) }
         }.pickerStyle(.segmented).labelsHidden()
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 }
 

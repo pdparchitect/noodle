@@ -8,6 +8,10 @@ final class GrokExecutableTrustTests: XCTestCase {
             let requested = home.appendingPathComponent(entry)
             XCTAssertTrue(GrokExecutableTrust.supportsInstallation(requested: requested,
                 resolved: home.appendingPathComponent(".grok/bin/grok"), home: home))
+            for name in ["grok-1.0.13", "grok-12.34.567"] {
+                XCTAssertTrue(GrokExecutableTrust.supportsInstallation(requested: requested,
+                    resolved: home.appendingPathComponent(".grok/bin/\(name)"), home: home), name)
+            }
             for name in ["grok-macos-aarch64", "grok-macos-x86_64",
                          "grok-1.0.24-macos-aarch64", "grok-1.0.24-macos-x86_64",
                          "grok-12.34.567-macos-aarch64"] {
@@ -21,6 +25,12 @@ final class GrokExecutableTrustTests: XCTestCase {
         let home = URL(fileURLWithPath: "/Users/fixture", isDirectory: true)
         let requested = home.appendingPathComponent(".grok/bin/grok")
         for destination in [
+            ".grok/bin-other/grok-1.0.13",
+            ".grok/bin/nested/grok-1.0.13",
+            ".grok/bin/grok-1.0",
+            ".grok/bin/grok-latest",
+            ".grok/bin/grok-1.0.13.sh",
+            ".grok/bin/grok-1.0.13\n",
             ".grok/downloads-other/grok-1.0.24-macos-aarch64",
             ".grok/downloads/nested/grok-1.0.24-macos-aarch64",
             ".grok/downloads/grok-1.0.24-linux-aarch64",
@@ -53,7 +63,7 @@ final class GrokExecutableTrustTests: XCTestCase {
         try fm.createSymbolicLink(atPath: link.path, withDestinationPath: "../downloads/\(download.lastPathComponent)")
         XCTAssertEqual(link.resolvingSymlinksInPath(), download)
         XCTAssertThrowsError(try GrokExecutableTrust.executable(at: link.path, home: root)) {
-            XCTAssertEqual($0.localizedDescription, "Grok Build’s xAI signature could not be verified.")
+            XCTAssertTrue($0.localizedDescription.hasPrefix("Grok Build’s xAI signature could not be verified. macOS error "))
         }
         // A correctly named download that is itself a symlink outside downloads
         // must fail layout validation, before it reaches signature verification.
@@ -70,6 +80,29 @@ final class GrokExecutableTrustTests: XCTestCase {
         try fm.createDirectory(at: redirected, withIntermediateDirectories: true)
         try Data().write(to: redirected.appendingPathComponent(download.lastPathComponent))
         try fm.createSymbolicLink(at: download.deletingLastPathComponent(), withDestinationURL: redirected)
+        XCTAssertThrowsError(try GrokExecutableTrust.executable(at: link.path, home: root)) {
+            XCTAssertEqual($0.localizedDescription, "Grok Build requires its official native installation at ~/.grok/bin/grok.")
+        }
+    }
+
+    func testVersionedSiblingSymlinkRequiresSignatureAndRejectsRedirects() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("grok-sibling-trust-\(UUID())", isDirectory: true)
+            .resolvingSymlinksInPath()
+        defer { try? fm.removeItem(at: root) }
+        let link = root.appendingPathComponent(".grok/bin/grok")
+        let binary = root.appendingPathComponent(".grok/bin/grok-1.0.13")
+        try fm.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("not a signed executable".utf8).write(to: binary)
+        try fm.createSymbolicLink(atPath: link.path, withDestinationPath: binary.lastPathComponent)
+        XCTAssertEqual(link.resolvingSymlinksInPath(), binary)
+        XCTAssertThrowsError(try GrokExecutableTrust.executable(at: link.path, home: root)) {
+            XCTAssertTrue($0.localizedDescription.hasPrefix("Grok Build’s xAI signature could not be verified. macOS error "))
+        }
+        try fm.removeItem(at: binary)
+        let outside = root.appendingPathComponent("grok-1.0.13")
+        try Data().write(to: outside)
+        try fm.createSymbolicLink(at: binary, withDestinationURL: outside)
         XCTAssertThrowsError(try GrokExecutableTrust.executable(at: link.path, home: root)) {
             XCTAssertEqual($0.localizedDescription, "Grok Build requires its official native installation at ~/.grok/bin/grok.")
         }

@@ -6,12 +6,16 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-09-09
+
 ### Added
 
 - Pipedream in the Tools catalogue, with its public MCP endpoint, bundled icon, editable description and account-aware instructions. OAuth discovery accepts a canonical root resource on the same HTTPS origin without changing the MCP endpoint or allowing cross-origin resource substitutions.
 
 ### Fixed
 
+- Centered the General, Harness and Tools tabs in both New Bot and Edit Bot dialogs.
+- Grok Build recognizes versioned binaries beside its native launcher, while preserving xAI signature verification. FX and Grok signature failures now include the underlying macOS error and failing check instead of an opaque warning.
 - MCP credential storage uses Keychain's default calling-app access controls instead of deprecated access-list construction APIs. Existing Keychain items and sign-ins remain in place; token refresh preserves their access controls.
 - Install and Relaunch proceeds through Sparkle without waiting for agent status, chat drafts, attachments, or open editors. Removed the silent restart postponement and quit veto; harness shutdown and recovery are unchanged.
 
