@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Removed the explanatory media-format footer from the background editor; progress and errors remain visible when needed.
 - Bot sidebar menus show Edit Bot, Change Background, then a separator before Show Workspace in Finder.
 - Icon and background editors use matching button bezels, heights and equal widths for image selection and creation, without the chooser's extra left gap. Background swatches fill the preview width and idle progress no longer reserves empty space beside the buttons. Background Cancel and Apply use the same plain text style as other dialog headers.
 - Muse no longer endlessly restarts a failed turn. Incompatible private model context gets one fresh-session recovery with old session IDs and chat history preserved; other terminal failures remain visible until Retry Startup. Model changes start new native context instead of replaying route-specific reasoning.

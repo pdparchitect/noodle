@@ -229,8 +229,6 @@ struct ConversationBackgroundSheet: View {
             }
             .disabled(busy)
             if busy { ProgressView().controlSize(.small) }
-            Text("Images, HEIC and MP4/M4V/MOV files. Videos loop silently; dynamic HEIC frames cycle every 8 seconds. Motion pauses when hidden or Reduce Motion is on.")
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let failure { Text(failure).font(.caption).foregroundStyle(.red) }
         }
         .padding(24).frame(width: 520)
