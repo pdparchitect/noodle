@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Check out source and LFS assets
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           lfs: true
 
@@ -100,7 +100,7 @@ jobs:
       - name: Save verified release assets
         run: cp "$NOODLE_RELEASE_NOTES" dist/release-notes.md
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: noodle-release-assets
           path: dist/

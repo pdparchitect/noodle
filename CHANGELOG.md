@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Upgrade release workflow actions to Node.js 24 versions, removing Node.js 20 deprecation warnings during preparation, publication and recovery.
+
 - Require successful publication of every selected product before a release workflow can report success, including when GitHub skips a publication job.
 
 - Scope release tests by product and run independent suites concurrently: Noodle-only releases skip Computer compilation, and image-only releases skip app compilation. Computer releases retain Noodle integration coverage.

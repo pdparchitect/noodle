@@ -143,10 +143,10 @@ class WorkflowTests(unittest.TestCase):
             rendered = json.dumps(prepare)
             for write in ['gh release create', 'docker push', 'git push']:
                 self.assertNotIn(write, rendered)
-            self.assertIn('actions/upload-artifact@v4', rendered)
+            self.assertIn('actions/upload-artifact@v6', rendered)
         for job in ['publish-noodle', 'publish-computer', 'publish-images']:
             self.assertIn('tag', self.jobs[job]['needs'])
-            self.assertIn('actions/download-artifact@v4', json.dumps(self.jobs[job]))
+            self.assertIn('actions/download-artifact@v7', json.dumps(self.jobs[job]))
 
     def test_file_versions_drive_main_push_without_tag_event_recursion(self):
         # YAML 1.1 interprets the key "on" as true.

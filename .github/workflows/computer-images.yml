@@ -13,10 +13,10 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           lfs: true
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - name: Validate image version
         id: version
         shell: bash
@@ -52,7 +52,7 @@ jobs:
           set -euo pipefail
           docker save noodle-computer-shell-image:check noodle-computer-desktop-image:check | gzip > computer-images.tar.gz
           shasum -a 256 computer-images.tar.gz > computer-images.tar.gz.sha256
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: github.event_name != 'pull_request'
         with:
           name: computer-image-builds

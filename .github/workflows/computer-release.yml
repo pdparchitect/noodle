@@ -11,7 +11,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           lfs: true
 
@@ -88,7 +88,7 @@ jobs:
       - name: Save verified release assets
         run: cp "$RUNNER_TEMP/computer-notes.md" "dist/computer-$COMPUTER_VERSION/release-notes.md"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: computer-release-assets
           path: dist/computer-${{ env.COMPUTER_VERSION }}/
