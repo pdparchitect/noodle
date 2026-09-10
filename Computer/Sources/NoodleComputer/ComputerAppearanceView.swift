@@ -1,6 +1,8 @@
 import AppKit
+import Combine
 import ComputerCore
 import ImageIO
+import NoodleWallpaper
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
@@ -157,40 +159,40 @@ struct ComputerIconSheet: View {
 
 struct ComputerWallpaper: View {
     let appearance: ComputerAppearance
+    var directory: URL?
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                Color(nsColor: .textBackgroundColor)
-                if let data = appearance.backgroundImage, let image = NSImage(data: data) {
-                    Image(nsImage: image).resizable().scaledToFill()
-                        .frame(width: geometry.size.width, height: geometry.size.height).clipped()
-                } else if let preset = appearance.backgroundPreset {
-                    LinearGradient(colors: colours(preset), startPoint: .topLeading, endPoint: .bottomTrailing)
-                    Ellipse().fill(colours(preset)[1].opacity(0.5))
-                        .frame(width: geometry.size.width * 1.4, height: geometry.size.height * 1.1)
-                        .rotationEffect(.degrees(-35)).offset(x: geometry.size.width * 0.35).blur(radius: 50)
-                }
-                if appearance.backgroundImage != nil || appearance.backgroundPreset != nil { Color.black.opacity(0.25) }
-            }.clipped()
-        }.allowsHitTesting(false).accessibilityHidden(true)
-    }
-    private func colours(_ preset: String) -> [Color] {
-        switch preset {
-        case "sunset": [Color(red: 0.96, green: 0.52, blue: 0.15), Color(red: 0.77, green: 0.43, blue: 0.67), Color(red: 0.46, green: 0.35, blue: 0.75)]
-        case "ocean": [Color(red: 0.04, green: 0.26, blue: 0.50), Color(red: 0.08, green: 0.60, blue: 0.66), Color(red: 0.14, green: 0.30, blue: 0.62)]
-        case "forest": [Color(red: 0.08, green: 0.24, blue: 0.18), Color(red: 0.34, green: 0.53, blue: 0.30), Color(red: 0.14, green: 0.34, blue: 0.39)]
-        default: [Color(red: 0.18, green: 0.16, blue: 0.39), Color(red: 0.47, green: 0.29, blue: 0.60), Color(red: 0.73, green: 0.37, blue: 0.47)]
-        }
+        ConversationBackgroundView(background: appearance.background,
+            imageURL: appearance.backgroundURL(in: directory),
+            previewImage: appearance.backgroundImage.flatMap { NSImage(data: $0) })
     }
 }
 
 struct ComputerWindowWallpaper: View {
-    @ObservedObject var session: ComputerSession
-    var body: some View { ComputerWallpaper(appearance: session.computer.appearance ?? .init()) }
+    @ObservedObject var store: ComputerStore
+    private struct Selection: Equatable {
+        var appearance = ComputerAppearance()
+        var directory: URL?
+    }
+    @State private var selection = Selection()
+    var body: some View {
+        ConversationWallpaper(background: selection.appearance.background,
+            imageURL: selection.appearance.backgroundURL(in: selection.directory),
+            imageData: selection.appearance.backgroundImage)
+            .onReceive(appearancePublisher) { if selection != $0 { selection = $0 } }
+    }
+
+    private var appearancePublisher: AnyPublisher<Selection, Never> {
+        if let session = store.selected {
+            let directory = store.library.directory(for: session.id)
+            return session.$computer.map { Selection(appearance: $0.appearance ?? .init(), directory: directory) }.eraseToAnyPublisher()
+        }
+        return Just(Selection()).eraseToAnyPublisher()
+    }
 }
 
 struct ComputerAppearanceRow: View {
     @Binding var appearance: ComputerAppearance
+    var directory: URL?
     @State private var editing = false
     var body: some View {
         Button { editing = true } label: {
@@ -200,28 +202,34 @@ struct ComputerAppearanceRow: View {
                 Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
             }.padding(12).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
         }.buttonStyle(.plain)
-            .sheet(isPresented: $editing) { ComputerAppearanceSheet(appearance: $appearance) }
+            .sheet(isPresented: $editing) { ComputerAppearanceSheet(appearance: $appearance, directory: directory) }
     }
 }
 
 struct ComputerAppearanceSheet: View {
     @Binding var appearance: ComputerAppearance
+    let directory: URL?
     @Environment(\.dismiss) private var dismiss
     @State private var draft: ComputerAppearance
+    @State private var imageData: Data?
     @State private var failure: String?
+    @State private var busy = false
+    @State private var choosingFile = false
     @State private var choosingPhoto = false
     @State private var photoSelection: PhotosPickerItem?
-    init(appearance: Binding<ComputerAppearance>) {
+    init(appearance: Binding<ComputerAppearance>, directory: URL? = nil) {
+        self.directory = directory
         _appearance = appearance; _draft = State(initialValue: appearance.wrappedValue)
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
-                Button("Cancel") { dismiss() }.foregroundStyle(.blue)
+                Button("Cancel") { dismiss() }.foregroundStyle(.blue).disabled(busy)
                 Spacer(); Text("Background & Terminal").font(.headline).foregroundStyle(.primary); Spacer()
                 Button("Apply") { appearance = draft; dismiss() }.keyboardShortcut(.defaultAction).foregroundStyle(.blue)
+                    .disabled(busy || draft == appearance)
             }.buttonStyle(.plain)
-            ComputerWallpaper(appearance: draft).overlay {
+            ComputerWallpaper(appearance: draft, directory: directory).overlay {
                 Text("/workspace # Hello, world!").font(.system(.body, design: .monospaced))
                     .foregroundStyle(Color(computerColour(draft.terminalForeground)))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(14)
@@ -231,25 +239,22 @@ struct ComputerAppearanceSheet: View {
             }.frame(height: 150).clipShape(RoundedRectangle(cornerRadius: 16))
             HStack(spacing: 12) {
                 choice(nil)
-                ForEach(["sunset", "ocean", "forest", "dusk"], id: \.self) { choice($0) }
+                ForEach(ConversationBackgroundPreset.allCases, id: \.self) { choice($0.rawValue) }
             }
             HStack(spacing: 8) {
                 ImageSourceMenu(
                     title: "Choose Background…",
-                    chooseFile: {
-                        do {
-                            if let data = try ComputerImageImport.choose(maxDimension: 2560) { useBackground(data) }
-                        } catch { failure = error.localizedDescription }
-                    },
+                    chooseFile: { choosingFile = true },
                     choosePhoto: {
                         photoSelection = nil; choosingPhoto = true
                     }
                 ).frame(minWidth: 0, maxWidth: .infinity)
-                NoodleImagePlaygroundButton(sourceImageData: draft.backgroundImage) { url in
-                    do { useBackground(try ComputerImageImport.load(url, maxDimension: 2560)) }
-                    catch { failure = error.localizedDescription }
+                NoodleImagePlaygroundButton(sourceImageData: imageData) { url in
+                    busy = true
+                    Task { await loadGeneratedImage(url) }
                 }.frame(minWidth: 0, maxWidth: .infinity)
             }
+            .disabled(busy)
             GroupBox("Terminal") {
                 VStack(alignment: .leading, spacing: 12) {
                     colourRow("Text colour", key: \.terminalForeground)
@@ -267,22 +272,61 @@ struct ComputerAppearanceSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }.padding(8)
             }
+            if busy { ProgressView().controlSize(.small) }
             if let failure { Text(failure).font(.caption).foregroundStyle(.red) }
         }.padding(24).frame(width: 520).controlSize(.regular).noodleSheetSizing()
+            .interactiveDismissDisabled(busy)
+            .fileImporter(isPresented: $choosingFile, allowedContentTypes: BackgroundMedia.allowedContentTypes) { result in
+                switch result {
+                case .success(let url):
+                    busy = true
+                    Task {
+                        defer { busy = false }
+                        do { useBackground(try await Task.detached { try await PreparedBackgroundFile.prepare(url) }.value) }
+                        catch { failure = error.localizedDescription }
+                    }
+                case .failure(let error): failure = error.localizedDescription
+                }
+            }
             .photosPicker(isPresented: $choosingPhoto, selection: $photoSelection, matching: .images, preferredItemEncoding: .current)
             .task(id: photoSelection) {
                 guard let photoSelection else { return }
+                busy = true; failure = nil
+                defer { busy = false }
                 do {
-                    guard let photo = try await photoSelection.loadTransferable(type: ComputerBackgroundPhoto.self) else {
-                        throw ComputerError("Photos could not provide this image. Try Choose File instead.")
+                    guard let photo = try await photoSelection.loadTransferable(type: BackgroundPhoto.self) else {
+                        throw ConversationBackgroundError.invalidImage
                     }
                     guard !Task.isCancelled else { return }
-                    useBackground(try ComputerImageImport.prepare(photo.data, maxDimension: 2560))
+                    let file = try await Task.detached { try PreparedBackgroundFile.prepare(imageData: photo.data) }.value
+                    guard !Task.isCancelled else { return }
+                    useBackground(file)
+                    imageData = photo.data
                 } catch { if !Task.isCancelled { failure = error.localizedDescription } }
             }
     }
-    private func useBackground(_ data: Data) {
-        draft.backgroundImage = data; draft.backgroundPreset = nil; failure = nil
+    private func useBackground(_ file: PreparedBackgroundFile) {
+        imageData = nil
+        draft.backgroundFile = file
+        draft.backgroundImage = nil; draft.backgroundPreset = nil
+        draft.backgroundFilename = nil; draft.backgroundMediaKind = nil
+        failure = nil
+    }
+    private func loadGeneratedImage(_ url: URL) async {
+        defer { busy = false }
+        do {
+            let (file, data) = try await Task.detached {
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                guard (try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0) <= 50 * 1024 * 1024 else {
+                    throw ConversationBackgroundError.invalidImage
+                }
+                let data = try Data(contentsOf: url)
+                return (try PreparedBackgroundFile.prepare(imageData: data), data)
+            }.value
+            useBackground(file)
+            imageData = data
+        } catch { failure = error.localizedDescription }
     }
     private func colourRow(_ title: String, key: WritableKeyPath<ComputerAppearance, String>) -> some View {
         HStack {
@@ -302,15 +346,22 @@ struct ComputerAppearanceSheet: View {
     private func choice(_ preset: String?) -> some View {
         var sample = ComputerAppearance()
         sample.backgroundPreset = preset
-        return Button { draft.backgroundPreset = preset; draft.backgroundImage = nil } label: {
+        return Button {
+            draft.backgroundPreset = preset; draft.backgroundImage = nil
+            draft.backgroundFilename = nil; draft.backgroundMediaKind = nil; draft.backgroundFile = nil
+            imageData = nil
+            failure = nil
+        } label: {
             VStack(spacing: 6) {
                 ComputerWallpaper(appearance: sample).frame(maxWidth: .infinity).frame(height: 48)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(
-                        draft.backgroundImage == nil && draft.backgroundPreset == preset ? Color.accentColor : .clear, lineWidth: 2))
+                        draft.background.imageFilename == nil && draft.backgroundPreset == preset ? Color.accentColor : .clear, lineWidth: 2))
                 Text(preset?.capitalized ?? "Default").font(.caption)
             }.contentShape(Rectangle())
-        }.buttonStyle(.plain).frame(minWidth: 0, maxWidth: .infinity)
+        }.buttonStyle(.plain).frame(minWidth: 0, maxWidth: .infinity).disabled(busy)
+            .accessibilityLabel(preset?.capitalized ?? "Default")
+            .accessibilityValue(draft.background.imageFilename == nil && draft.backgroundPreset == preset ? "Selected" : "Not selected")
     }
 }
 
@@ -321,14 +372,6 @@ func computerColour(_ hex: String) -> NSColor {
 }
 
 @MainActor private enum ComputerImageImport {
-    static func choose(maxDimension: Int) throws -> Data? {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.image]
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return nil }
-        return try load(url, maxDimension: maxDimension)
-    }
     static func load(_ url: URL, maxDimension: Int) throws -> Data {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }

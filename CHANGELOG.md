@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- Share background import, presets, transitions and animated playback with Noodle Computer so both apps support the same media formats and behavior.
+
 ## [0.11.1] - 2026-09-11
 
 ### Fixed

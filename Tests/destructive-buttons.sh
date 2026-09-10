@@ -7,7 +7,7 @@ swift build --disable-sandbox --package-path "$project_root" --target NoodleCore
 bin_path="$(swift build --disable-sandbox --package-path "$project_root" --show-bin-path)"
 swiftc -I "$bin_path/Modules" "$project_root/Sources/Noodle/DestructiveActionButton.swift" \
     "$project_root/Sources/Noodle/GroupMemberPicker.swift" \
-    "$project_root/Tests/destructive-buttons.swift" "$bin_path"/NoodleCore.build/*.swift.o \
+    "$project_root/Tests/destructive-buttons.swift" "$bin_path"/NoodleCore.build/*.swift.o "$bin_path"/NoodleWallpaperCore.build/*.swift.o \
     -o "$fixture_app/Contents/MacOS/DestructiveButtons"
 cp "$project_root/Tests/destructive-buttons-Info.plist" "$fixture_app/Contents/Info.plist"
 codesign --force --sign - --entitlements "$project_root/Tests/mcp-window-routing.entitlements" "$fixture_app"

@@ -235,6 +235,17 @@ verifies that recovery terminal input and session-preserving switching still wor
 
 ### Noodle UI parity
 
+Both apps use `Shared/Wallpaper` for background presets, image preparation,
+crossfades and playback. Choose Background accepts still images and multi-frame
+HEIC/HEIF up to 512 MB, and playable MP4, M4V and MOV files up to 1 GB.
+Photos and Image Playground use the same still-image import as Noodle (50 MB).
+Videos loop silently; HEIC frames cycle every eight seconds with a one-second
+fade. Playback pauses when hidden or when Reduce Motion is enabled. Background
+changes crossfade over 0.35 seconds unless Reduce Motion is enabled.
+Imports are copied into the computer's private `Backgrounds` directory; canceled
+drafts release their temporary media and existing embedded PNG backgrounds remain
+supported. Wallpaper packages and streaming playlists are not supported.
+
 The icon and background editors use Noodle's `ImageSourceMenu` control (ported
 from `4e7e4ff`), including matching 20-point labels and equal flexible widths for
 Choose/Create Image. Keep that control aligned with `Sources/Noodle/ImageSourceMenu.swift`.

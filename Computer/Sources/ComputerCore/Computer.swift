@@ -148,23 +148,54 @@ public struct ComputerLibrary: Sendable {
         }.sorted { $0.createdAt < $1.createdAt }
     }
 
-    public func save(_ computer: Computer) throws {
+    @discardableResult public func save(_ computer: Computer) throws -> Computer {
         try computer.validate()
         let directory = directory(for: computer.id)
         guard FileManager.default.fileExists(atPath: directory.path) else { throw ComputerError("Computer storage is missing.") }
-        try Self.write(computer, to: directory)
+        let previous = try JSONDecoder().decode(Computer.self, from: Data(contentsOf: directory.appendingPathComponent("computer.json")))
+        let saved = try Self.write(computer, to: directory)
+        if previous.appearance?.backgroundFilename != saved.appearance?.backgroundFilename,
+           let old = previous.appearance?.backgroundURL(in: directory) {
+            try? FileManager.default.removeItem(at: old)
+        }
+        return saved
     }
 
-    public func commit(_ computer: Computer) throws {
+    @discardableResult public func commit(_ computer: Computer) throws -> Computer {
         try computer.validate()
         let staging = stagingDirectory(for: computer.id)
-        try Self.write(computer, to: staging)
+        let saved = try Self.write(computer, to: staging)
         try FileManager.default.moveItem(at: staging, to: directory(for: computer.id))
+        return saved
     }
 
-    private static func write(_ computer: Computer, to directory: URL) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(computer).write(to: directory.appendingPathComponent("computer.json"), options: .atomic)
+    private static func write(_ computer: Computer, to directory: URL) throws -> Computer {
+        var computer = computer
+        var importedURL: URL?
+        do {
+            if let file = computer.appearance?.backgroundFile {
+                let name = "\(UUID().uuidString.lowercased()).\(file.url.pathExtension)"
+                guard ComputerAppearance.validBackgroundFilename(name) else {
+                    throw ComputerError("Invalid computer background file.")
+                }
+                let folder = directory.appendingPathComponent("Backgrounds", isDirectory: true)
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let target = folder.appendingPathComponent(name)
+                importedURL = target
+                try FileManager.default.copyItem(at: file.url, to: target)
+                computer.appearance?.backgroundFilename = name
+                computer.appearance?.backgroundMediaKind = file.kind
+                computer.appearance?.backgroundFile = nil
+                computer.appearance?.backgroundImage = nil
+                computer.appearance?.backgroundPreset = nil
+            }
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(computer).write(to: directory.appendingPathComponent("computer.json"), options: .atomic)
+            return computer
+        } catch {
+            if let importedURL { try? FileManager.default.removeItem(at: importedURL) }
+            throw error
+        }
     }
 }

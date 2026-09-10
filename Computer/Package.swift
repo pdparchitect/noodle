@@ -7,15 +7,17 @@ let package = Package(
     platforms: [.macOS("26.0")],
     products: [.executable(name: "NoodleComputer", targets: ["NoodleComputer"])],
     dependencies: [
+        .package(path: "../Shared/Wallpaper"),
         .package(path: "Bridge"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
         .package(url: "https://github.com/apple/containerization.git", exact: "0.43.0"),
         .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", exact: "1.20.0")
     ],
     targets: [
-        .target(name: "ComputerCore", resources: [.process("Resources")]),
+        .target(name: "ComputerCore", dependencies: [.product(name: "NoodleWallpaperCore", package: "Wallpaper")], resources: [.process("Resources")]),
         .executableTarget(name: "NoodleComputer", dependencies: [
             "ComputerCore",
+            .product(name: "NoodleWallpaper", package: "Wallpaper"),
             .product(name: "Sparkle", package: "Sparkle"),
             .product(name: "ComputerBridge", package: "Bridge"),
             .product(name: "SwiftTerm", package: "SwiftTerm"),

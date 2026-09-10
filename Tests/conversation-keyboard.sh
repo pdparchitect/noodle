@@ -9,6 +9,6 @@ swiftc -parse-as-library -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/ScrollableChatComposer.swift" \
     "$project_root/Sources/Noodle/ConversationListKeyboardNavigation.swift" \
     "$project_root/Tests/conversation-keyboard.swift" \
-    "$bin_path"/NoodleCore.build/*.swift.o \
+    "$bin_path"/NoodleCore.build/*.swift.o "$bin_path"/NoodleWallpaperCore.build/*.swift.o \
     -o "$project_root/.build/ConversationKeyboardChecks"
 "$project_root/.build/ConversationKeyboardChecks"

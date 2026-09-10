@@ -2,7 +2,7 @@ import AppKit
 import AVFoundation
 import ImageIO
 import UniformTypeIdentifiers
-import NoodleCore
+import NoodleWallpaper
 
 @main enum AnimatedBackgroundChecks {
     @MainActor static func main() {

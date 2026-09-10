@@ -284,7 +284,7 @@ enum ComputerPhase: Equatable {
                 }
             }
             try Task.checkCancellation()
-            try library.commit(computer)
+            computer = try library.commit(computer)
             let session = ComputerSession(computer)
             sessions.append(session)
             selection = computer.id
@@ -496,8 +496,7 @@ enum ComputerPhase: Equatable {
         var computer = session.computer
         computer.installationComplete = true
         do {
-            try library.save(computer)
-            session.computer = computer
+            session.computer = try library.save(computer)
         } catch { self.error = error.localizedDescription }
     }
 
@@ -506,8 +505,7 @@ enum ComputerPhase: Equatable {
         computer.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if let appearance { computer.appearance = appearance }
         do {
-            try library.save(computer)
-            session.computer = computer
+            session.computer = try library.save(computer)
         } catch { self.error = error.localizedDescription }
     }
 

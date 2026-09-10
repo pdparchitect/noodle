@@ -282,13 +282,8 @@ struct ComputerLibraryView: View {
     }
     .navigationSplitViewStyle(.balanced)
     .background {
-      if let session = store.selected {
-        ComputerWindowWallpaper(session: session).ignoresSafeArea()
-      } else {
-        // The compositing window is clear even without a selected computer.
-        // Keep the library opaque using the same base as a default wallpaper.
-        ComputerWallpaper(appearance: ComputerAppearance()).ignoresSafeArea()
-      }
+      // Keep the wallpaper's identity when selection changes or becomes empty.
+      ComputerWindowWallpaper(store: store).ignoresSafeArea()
     }
     .background(ComputerWindowCompositing())
     .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
@@ -374,7 +369,8 @@ struct ComputerRow: View {
     .sheet(isPresented: $changingBackground) {
       ComputerAppearanceSheet(appearance: Binding(
         get: { session.computer.appearance ?? .init() },
-        set: { store.rename(session, name: session.computer.name, appearance: $0) }))
+        set: { store.rename(session, name: session.computer.name, appearance: $0) }),
+        directory: store.library.directory(for: session.id))
     }
     .alert("Move \(session.computer.name) to Trash?", isPresented: $deleting) {
       Button("Cancel", role: .cancel) {}
@@ -577,7 +573,7 @@ struct EditComputerView: View {
           ProgressView(value: session.updateProgress)
           Text(session.updateStatus ?? "Updating…").font(.caption).foregroundStyle(.secondary)
         }
-        ComputerAppearanceRow(appearance: $appearance)
+        ComputerAppearanceRow(appearance: $appearance, directory: store.library.directory(for: session.id))
         if !session.computer.installationComplete && session.phase == .stopped {
           Button("Installation Finished — Eject ISO") { store.finishInstallation(session) }
         }

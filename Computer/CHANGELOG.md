@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Match Noodle's full background support through a shared importer and renderer: still images, multi-frame HEIC/HEIF, and muted looping MP4/M4V/MOV video, with the same limits, Photos and Image Playground choices, hidden-window pausing, and Reduce Motion behavior. Keep media in each computer's private library and preserve existing image backgrounds.
+
+- Crossfade window backgrounds when switching computers or applying a background, matching Noodle's timing and respecting Reduce Motion. Prepare images before fading and keep the empty library's default background opaque.
+
 ## [0.2.1] - 2026-09-11
 
 - Run Computer, Noodle integration and shared-protocol release tests concurrently; image preparation starts without waiting for app compilation.

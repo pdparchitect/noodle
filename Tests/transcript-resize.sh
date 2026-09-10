@@ -6,6 +6,6 @@ bin_path="$(swift build --disable-sandbox --package-path "$project_root" --show-
 swiftc -parse-as-library -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/TranscriptScrollView.swift" \
     "$project_root/Tests/transcript-resize.swift" \
-    "$bin_path"/NoodleCore.build/*.swift.o \
+    "$bin_path"/NoodleCore.build/*.swift.o "$bin_path"/NoodleWallpaperCore.build/*.swift.o \
     -o "$project_root/.build/TranscriptResizeChecks"
 "$project_root/.build/TranscriptResizeChecks"

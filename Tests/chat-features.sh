@@ -13,7 +13,7 @@ swiftc -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/ComposerAttachmentMenu.swift" \
     "$project_root/Sources/Noodle/AgentProfileSheet.swift" \
     "$project_root/Tests/chat-features.swift" \
-    "$bin_path"/NoodleCore.build/*.swift.o \
+    "$bin_path"/NoodleCore.build/*.swift.o "$bin_path"/NoodleWallpaperCore.build/*.swift.o \
     -o "$fixture_app/Contents/MacOS/ChatFeaturesTest"
 cp "$project_root/Tests/chat-features-Info.plist" "$fixture_app/Contents/Info.plist"
 codesign --force --sign - --entitlements "$project_root/Tests/chat-features.entitlements" "$fixture_app"

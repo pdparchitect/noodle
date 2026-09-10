@@ -8,7 +8,7 @@ swiftc -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/SheetSizing.swift" \
     "$project_root/Sources/Noodle/GroupMemberPicker.swift" \
     "$project_root/Tests/sheet-sizing.swift" \
-    "$bin_path"/NoodleCore.build/*.swift.o \
+    "$bin_path"/NoodleCore.build/*.swift.o "$bin_path"/NoodleWallpaperCore.build/*.swift.o \
     -o "$project_root/.build/sheet-sizing-tests"
 "$project_root/.build/sheet-sizing-tests"
 "$project_root/.build/sheet-sizing-tests" --animated

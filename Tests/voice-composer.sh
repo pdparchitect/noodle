@@ -9,6 +9,6 @@ swiftc -parse-as-library -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/VoiceMessagePlayer.swift" \
     "$project_root/Sources/Noodle/VoiceMessageComposer.swift" \
     "$project_root/Tests/voice-composer.swift" \
-    "$bin_path"/NoodleCore.build/*.swift.o \
+    "$bin_path"/NoodleCore.build/*.swift.o "$bin_path"/NoodleWallpaperCore.build/*.swift.o \
     -o "$project_root/.build/voice-composer-tests"
 "$project_root/.build/voice-composer-tests"
