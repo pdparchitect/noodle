@@ -425,7 +425,8 @@ struct ComputerDetailView: View {
     .padding(.trailing, 8)
     // The native toolbar already leaves 8 points below its controls.
     .padding(.top, 4)
-    .padding(.bottom, 8)
+    // The clip adds one point, placing the visible bottom at the sidebar's 8-point inset.
+    .padding(.bottom, 7)
     .toolbar {
       ToolbarItem(id: "computer-edit", placement: .primaryAction) {
         Button {

@@ -590,8 +590,8 @@ import WebKit
             guard frame.height > 100, abs(usable.maxY - frame.maxY - 4) < 1 else {
                 throw ComputerError("Desktop overlaps native toolbar: \(frame), usable \(usable)")
             }
-            guard abs(frame.minY - 8) < 1 else {
-                throw ComputerError("Display bottom must match the sidebar's 8-point inset: \(frame)")
+            guard abs(frame.minY - 7) < 0.5 else {
+                throw ComputerError("Display bottom plus its 1-point clip must match the sidebar's 8-point inset: \(frame)")
             }
             guard abs(usable.maxX - frame.maxX - 8) < 1, abs(frame.minX - usable.minX - 12) < 1 else {
                 throw ComputerError("Display must keep an 8-point outer margin and 12-point panel gap: \(frame)")
@@ -656,7 +656,7 @@ import WebKit
         guard try await browser.view.evaluateJavaScript("window.noodleRetainedState") as? String == "unchanged" else {
             throw ComputerError("Switching computers reloaded the page.")
         }
-        print("DISPLAY LAYOUT TEST PASSED: identical Shell/WebKit bounds, 8-point collapsed side/outer/bottom margins, restored 12-point expanded panel gap and terminal inset, retained browser and page state")
+        print("DISPLAY LAYOUT TEST PASSED: identical Shell/WebKit bounds, 8-point collapsed side/outer margins, 7-point bottom margin plus 1-point clip, restored 12-point expanded panel gap and terminal inset, retained browser and page state")
     }
 
     static func checkDesktop() async throws {

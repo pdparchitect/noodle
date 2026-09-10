@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Align the visible bottom edge of the WebKit and terminal panels with the sidebar by correcting the extra one-point bottom inset.
+
 - Include the current application ZIP and checksum in the `computer-latest` release Assets, alongside the update feed, so manual downloads are easy to find.
 
 - New Desktop and Shell computers fetch the current `:latest` image from GHCR, including refreshed network setup files, so image fixes no longer require an app release. Existing computer disks and recognition of previously pinned images are preserved.
