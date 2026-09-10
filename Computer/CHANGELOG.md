@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Repository-owned Shell and Desktop image sources, pinned upstream bases, and an independent ARM64 GHCR publishing workflow. The Desktop overlay adds a lighter wallpaper and terminal palette; app defaults remain on tested upstream images until the first image publication is verified.
+
 - Real-desktop snapshot verification now requires an actual rendered preview and exercises forced browser letterboxing and stretching; an icon fallback no longer counts as success in this integration test.
 
 - Desktop snapshots capture the native remote framebuffer rather than the browser viewport, removing baked-in grey letterboxing and avoiding browser-scale distortion.

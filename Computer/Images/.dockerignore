@@ -1,0 +1,7 @@
+**
+!shell/
+!shell/**
+!desktop/
+!desktop/**
+!shared/
+!shared/**

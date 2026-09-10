@@ -98,6 +98,10 @@ future VM templates. They are not selectable in the v1 New Computer dialog.
 
 ## Container display
 
+Repository-owned Shell/Desktop image definitions, wallpaper sources and GHCR
+publishing live in [`Images/`](Images/README.md). They release independently;
+the app keeps its current upstream defaults until the first publication is tested.
+
 A digest-pinned Launcher desktop image (Ubuntu, Openbox,
   Chromium, terminal and file manager), running through embedded Containerization
   and Apple vminit 0.43.0. The app displays the live KasmVNC screen using a private
