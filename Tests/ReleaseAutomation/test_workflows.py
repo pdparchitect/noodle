@@ -1,6 +1,7 @@
 """Exercise the real workflow dependency conditions, without GitHub or secrets."""
 import itertools
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -24,7 +25,7 @@ def condition(text, values):
     text = text.replace('&&', ' and ').replace('||', ' or ')
     if re.search(r'\b(needs|github)\.', text):
         raise AssertionError('Unbound workflow context: ' + text)
-    return eval(text, {'__builtins__': {}}, {})
+    return eval('(' + text + ')', {'__builtins__': {}}, {})
 
 
 class WorkflowTests(unittest.TestCase):
@@ -38,6 +39,7 @@ class WorkflowTests(unittest.TestCase):
             'github.event_name': 'push', 'github.ref': 'refs/heads/main',
             'needs.versions.outputs.any': 'true', 'needs.checks.result': 'success',
             'needs.workflow-lint.result': 'success',
+            **{f'needs.test-{p}.result': 'success' for p in ['noodle', 'computer', 'bridge']},
             **{f'needs.versions.outputs.{p}': 'true' for p in ['noodle', 'computer', 'images']},
             **{f'needs.prepare-{p}.result': 'success' for p in ['noodle', 'computer', 'images']},
         }
@@ -90,6 +92,50 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(condition(noodle['if'], values))
         self.assertFalse(condition(noodle['if'], {**values, 'needs.publish-computer.result': 'failure'}))
 
+    def test_product_selection_and_parallel_tests(self):
+        for selected, expected in [
+            (['noodle'], ['noodle', 'bridge']),
+            (['computer'], ['noodle', 'computer', 'bridge']),
+            (['images'], []),
+            ([], []),
+        ]:
+            values = {**self.base(), **{f'needs.versions.outputs.{p}': str(p in selected).lower()
+                                      for p in ['noodle', 'computer', 'images']}}
+            for product in ['noodle', 'computer', 'bridge']:
+                job = self.jobs['test-' + product]
+                self.assertEqual(condition(job['if'], values), product in expected)
+                self.assertEqual(job['needs'], ['versions', 'checks'])
+        self.assertNotIn('test-computer', self.jobs['prepare-noodle']['needs'])
+        self.assertEqual(self.jobs['prepare-images']['needs'], ['versions', 'checks'])
+        self.assertNotIn('swift test', json.dumps(self.jobs['checks']))
+
+    def test_selected_test_failures_block_tagging(self):
+        for product in ['noodle', 'computer', 'bridge']:
+            for result in ['failure', 'cancelled', 'skipped']:
+                self.assertFalse(condition(self.jobs['tag']['if'], {
+                    **self.base(), f'needs.test-{product}.result': result}))
+        # A Noodle-only release accepts skipped Computer tests and preparation.
+        self.assertTrue(condition(self.jobs['tag']['if'], {
+            **self.base(), 'needs.versions.outputs.computer': 'false',
+            'needs.test-computer.result': 'skipped', 'needs.prepare-computer.result': 'skipped'}))
+
+    def test_incomplete_publication_cannot_report_release_success(self):
+        complete = self.jobs['complete']
+        self.assertIn('always()', complete['if'])
+        step = complete['steps'][0]
+        source = step['run'].split("\n", 1)[1].rsplit("\nPY", 1)[0]
+        for selected in [['noodle'], ['computer', 'images'], ['images']]:
+            environment = {**os.environ, 'RELEASE_PRODUCTS': json.dumps(selected),
+                           **{p.upper() + '_RESULT': 'success' if p in selected else 'skipped'
+                              for p in ['noodle', 'computer', 'images']}}
+            passed = subprocess.run(['python3', '-c', source], env=environment, capture_output=True)
+            self.assertEqual(passed.returncode, 0, passed.stderr)
+            for product in selected:
+                for failure in ['skipped', 'failure', 'cancelled']:
+                    failed = subprocess.run(['python3', '-c', source], env={
+                        **environment, product.upper() + '_RESULT': failure}, capture_output=True)
+                    self.assertNotEqual(failed.returncode, 0)
+
     def test_preparation_is_read_only_and_publication_uses_artifacts(self):
         for name in ['prepare-noodle-release.yml', 'computer-release.yml', 'computer-images.yml']:
             prepare = workflow(name)
@@ -110,7 +156,8 @@ class WorkflowTests(unittest.TestCase):
             child = workflow(name)
             self.assertNotIn('push', child.get('on', child.get('true')))
         self.assertEqual(self.jobs['tag']['needs'], [
-            'versions', 'workflow-lint', 'checks', 'prepare-noodle', 'prepare-computer', 'prepare-images'])
+            'versions', 'workflow-lint', 'checks', 'test-noodle', 'test-computer', 'test-bridge',
+            'prepare-noodle', 'prepare-computer', 'prepare-images'])
 
 
 if __name__ == '__main__':

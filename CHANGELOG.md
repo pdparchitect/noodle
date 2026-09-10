@@ -8,6 +8,10 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Require successful publication of every selected product before a release workflow can report success, including when GitHub skips a publication job.
+
+- Scope release tests by product and run independent suites concurrently: Noodle-only releases skip Computer compilation, and image-only releases skip app compilation. Computer releases retain Noodle integration coverage.
+
 - Fix image publication being skipped through an unchanged product’s job, and add recovery from verified release artifacts without rebuilding or moving tags.
 
 - Release automation reads the three VERSION files on main, checks and prepares every selected product before minting derived tags, then publishes the verified app archives and images. Manual tagging is no longer required.

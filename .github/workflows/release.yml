@@ -54,21 +54,49 @@ jobs:
         run: |
           python3 -m unittest discover -s Tests/ReleaseAutomation -v
           swift Computer/Tests/ReleaseWorkflowTests.swift "$PWD"
-      - name: Test all application and integration packages
-        if: github.event_name == 'pull_request' || needs.versions.outputs.any == 'true'
-        run: |
-          swift test --disable-sandbox
-          swift test --disable-sandbox --package-path Computer --scratch-path .build/computer
-          swift test --disable-sandbox --package-path Computer/Bridge
+
+  test-noodle:
+    needs: [versions, checks]
+    if: github.event_name == 'pull_request' || needs.versions.outputs.noodle == 'true' || needs.versions.outputs.computer == 'true'
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: Test Noodle and Computer integration
+        run: swift test --disable-sandbox
+
+  test-computer:
+    needs: [versions, checks]
+    if: github.event_name == 'pull_request' || needs.versions.outputs.computer == 'true'
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: Test Computer
+        run: swift test --disable-sandbox --package-path Computer --scratch-path .build/computer
+
+  test-bridge:
+    needs: [versions, checks]
+    if: github.event_name == 'pull_request' || needs.versions.outputs.noodle == 'true' || needs.versions.outputs.computer == 'true'
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test the shared protocol
+        run: swift test --disable-sandbox --package-path Computer/Bridge
 
   prepare-noodle:
-    needs: [versions, checks]
+    needs: [versions, checks, test-noodle, test-bridge]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.noodle == 'true'
     uses: ./.github/workflows/prepare-noodle-release.yml
     secrets: inherit
 
   prepare-computer:
-    needs: [versions, checks]
+    needs: [versions, checks, test-noodle, test-computer, test-bridge]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.computer == 'true'
     uses: ./.github/workflows/computer-release.yml
     secrets: inherit
@@ -79,13 +107,16 @@ jobs:
     uses: ./.github/workflows/computer-images.yml
 
   tag:
-    needs: [versions, workflow-lint, checks, prepare-noodle, prepare-computer, prepare-images]
+    needs: [versions, workflow-lint, checks, test-noodle, test-computer, test-bridge, prepare-noodle, prepare-computer, prepare-images]
     # Explicitly accept unselected/skipped products, never a failed/cancelled build.
     if: >-
       always() && !cancelled() && github.event_name != 'pull_request' &&
       github.ref == 'refs/heads/main' && needs.versions.outputs.any == 'true' &&
       needs.workflow-lint.result == 'success' &&
       needs.checks.result == 'success' &&
+      ((needs.versions.outputs.noodle != 'true' && needs.versions.outputs.computer != 'true') ||
+       (needs.test-noodle.result == 'success' && needs.test-bridge.result == 'success')) &&
+      (needs.versions.outputs.computer != 'true' || needs.test-computer.result == 'success') &&
       (needs.versions.outputs.noodle != 'true' || needs.prepare-noodle.result == 'success') &&
       (needs.versions.outputs.computer != 'true' || needs.prepare-computer.result == 'success') &&
       (needs.versions.outputs.images != 'true' || needs.prepare-images.result == 'success')
@@ -200,3 +231,24 @@ jobs:
             "dist/Noodle-$version-macOS.zip.sha256" dist/appcast.xml \
             --draft --verify-tag --notes-file dist/release-notes.md --title "Noodle $version"
           gh release edit "$tag" --draft=false --latest
+
+  complete:
+    needs: [versions, tag, publish-images, publish-computer, publish-noodle]
+    if: always() && github.event_name != 'pull_request' && needs.versions.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every selected product to be published
+        env:
+          RELEASE_PRODUCTS: ${{ needs.versions.outputs.products }}
+          IMAGES_RESULT: ${{ needs.publish-images.result }}
+          COMPUTER_RESULT: ${{ needs.publish-computer.result }}
+          NOODLE_RESULT: ${{ needs.publish-noodle.result }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          for product in json.loads(os.environ['RELEASE_PRODUCTS']):
+              result = os.environ[product.upper() + '_RESULT']
+              if result != 'success':
+                  raise SystemExit(f'{product} publication did not complete: {result}')
+          print('Every selected product was published successfully.')
+          PY

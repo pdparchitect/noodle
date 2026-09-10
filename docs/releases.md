@@ -21,14 +21,21 @@ product's existing version tags and have nonempty dated release notes. PRs run
 validation and tests without creating tags or publishing. A manual workflow run
 on `main` follows the same checks and reads the same files; it has no version input.
 
-All selected products must pass the shared application/integration tests and
-finish their preparation before any tag is minted. Application preparation
+All selected products must pass their required tests and finish preparation
+before any tag is minted. Noodle releases run Noodle and shared-protocol tests;
+they do not compile Computer. Computer releases run Computer, Noodle integration
+and shared-protocol tests concurrently. Image-only releases run no application
+package builds. Image preparation can start while application suites run.
+PRs retain the full test matrix. The lightweight release-guard job runs separately
+from application compilation. Application preparation
 includes signing, notarization, stapling, Gatekeeper checks, and Sparkle archive
 and feed verification. Image preparation builds both ARM64 images and verifies
 their contracts, interactive terminals, wallpaper and window rendering. The
 prepared app archives and container images are saved as workflow artifacts.
 The gate accepts skipped preparation only for products whose version is unchanged.
 A failed or cancelled required job prevents every selected tag and publication.
+A final completion check fails the run if any selected publication was skipped,
+failed or cancelled; a green run must mean every selected product was published.
 
 After that gate, the workflow atomically pushes the derived tags at the checked
 source commit. Existing tags are never moved; retries accept only tags already
