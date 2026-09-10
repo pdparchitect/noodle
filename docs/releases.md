@@ -35,6 +35,11 @@ source commit. Existing tags are never moved; retries accept only tags already
 pointing to that commit. Publication continues in the same pipeline using the
 exact prepared artifacts, because tags pushed by `GITHUB_TOKEN` do not trigger
 another workflow. No personal access token or separate tagging workflow is needed.
+If a workflow finishes after tagging but skips publication, run **Publish verified
+release artifacts** with the original run ID. Recovery validates the original
+checks, preparation jobs and tag commits, verifies archive checksums, and publishes
+those existing artifacts without rebuilding. Existing app releases still require
+inspection rather than automatic replacement.
 Images publish first, followed by Computer, then Noodle when those products are
 selected together. Public image references are verified before Computer ships.
 Computer's channel never replaces Noodle's repository-wide latest release.

@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Fix image publication being skipped through an unchanged product’s job, and add recovery from verified release artifacts without rebuilding or moving tags.
+
 - Release automation reads the three VERSION files on main, checks and prepares every selected product before minting derived tags, then publishes the verified app archives and images. Manual tagging is no longer required.
 
 - README download links open the latest Noodle and Noodle Computer release pages, with installation instructions, so they stay current across releases.

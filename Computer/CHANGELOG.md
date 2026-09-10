@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recover publication from already verified release artifacts when a workflow stops after tagging.
+
 ## [0.2.0] - 2026-09-10
 
 - Publish Computer automatically from its VERSION file after all selected release checks and packaging succeed, with derived tags and verified images published first.

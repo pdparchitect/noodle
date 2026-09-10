@@ -69,6 +69,14 @@ class WorkflowTests(unittest.TestCase):
             self.assertFalse(condition(self.jobs['tag']['if'], {**self.base(), **changes}))
 
     def test_publication_requires_tags_and_image_success(self):
+        images = self.jobs['publish-images']
+        # Explicit status handling is needed even when a direct dependency
+        # succeeded: skipped preparation ancestors propagate through success().
+        self.assertIn('always()', images['if'])
+        self.assertTrue(condition(images['if'], {
+            **self.base(), 'needs.tag.result': 'success'}))
+        self.assertFalse(condition(images['if'], {
+            **self.base(), 'needs.tag.result': 'failure'}))
         computer = self.jobs['publish-computer']
         values = {**self.base(), 'needs.tag.result': 'success', 'needs.publish-images.result': 'success'}
         self.assertTrue(condition(computer['if'], values))

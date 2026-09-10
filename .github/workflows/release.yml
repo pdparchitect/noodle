@@ -43,7 +43,7 @@ jobs:
         run: test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = false
 
   checks:
-    needs: workflow-lint
+    needs: [workflow-lint, versions]
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -55,6 +55,7 @@ jobs:
           python3 -m unittest discover -s Tests/ReleaseAutomation -v
           swift Computer/Tests/ReleaseWorkflowTests.swift "$PWD"
       - name: Test all application and integration packages
+        if: github.event_name == 'pull_request' || needs.versions.outputs.any == 'true'
         run: |
           swift test --disable-sandbox
           swift test --disable-sandbox --package-path Computer --scratch-path .build/computer
@@ -104,7 +105,9 @@ jobs:
 
   publish-images:
     needs: [versions, tag]
-    if: needs.versions.outputs.images == 'true'
+    if: >-
+      always() && !cancelled() && needs.tag.result == 'success' &&
+      needs.versions.outputs.images == 'true'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
     permissions:
