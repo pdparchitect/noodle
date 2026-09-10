@@ -90,15 +90,16 @@ import WebKit
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = self; view.uiDelegate = self
         view.underPageBackgroundColor = .black; view.focusRingType = .none
+        // Keep the loading surface visible while WebKit creates and loads its page.
+        view.wantsLayer = true; view.alphaValue = 0
         view.setAccessibilityLabel("Live display for \(card.computer.name)")
         surface.addSubview(view); view.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             view.leadingAnchor.constraint(equalTo: surface.leadingAnchor), view.trailingAnchor.constraint(equalTo: surface.trailingAnchor),
             view.topAnchor.constraint(equalTo: surface.topAnchor), view.bottomAnchor.constraint(equalTo: surface.bottomAnchor)
         ])
-        self.view = view; status.isHidden = true; retry.isHidden = true
+        self.view = view; retry.isHidden = true
         view.load(URLRequest(url: connection.url))
-        surface.window?.makeFirstResponder(view)
     }
     func stop() {
         active = false; task?.cancel(); task = nil
@@ -130,7 +131,25 @@ import WebKit
                  decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
         decisionHandler(response.canShowMIMEType ? .allow : .cancel)
     }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard active, webView === view, !webView.isHidden, controller.permits(card), webView.alphaValue == 0 else { return }
+        status.isHidden = true
+        retry.isHidden = true
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.25
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            webView.animator().alphaValue = 1
+        }
+        surface.window?.makeFirstResponder(webView)
+    }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        showNavigationError(error, in: webView)
+    }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        showNavigationError(error, in: webView)
+    }
+    private func showNavigationError(_ error: Error, in webView: WKWebView) {
+        guard active, webView === view else { return }
         status.stringValue = error.localizedDescription; status.isHidden = false
         retry.isHidden = false
         webView.isHidden = true

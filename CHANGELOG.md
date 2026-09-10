@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Computer web previews keep their loading message visible until the page finishes loading, then fade in smoothly to avoid startup flashing. Reduce Motion skips the fade.
+
 ### Changed
 
 - Unread conversations show a blue dot centered beside the avatar, like Messages. The Dock icon shows the unread conversation count and clears when all conversations are read.
