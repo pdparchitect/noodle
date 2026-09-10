@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Keep the networking requirement beside its toggle so switching computer types does not resize Advanced Options.
+
+- Smoothly animate the create-computer dialog's size, Advanced Options expansion and collapse, and disclosure chevron, respecting Reduce Motion.
+
 - Choose what to create with selectable computer cards showing each option's icon, name and description, replacing the Template dropdown.
 
 - Simplify template and networking descriptions, remove redundant settings help, and load template names, types, images and resource settings from an extensible container registry instead of fixed presets.

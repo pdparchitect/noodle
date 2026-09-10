@@ -762,10 +762,14 @@ struct NewComputerView: View {
                   )
                   .foregroundStyle(.secondary)
                   Divider()
-                  Toggle("Networking", isOn: $network).toggleStyle(.switch).controlSize(.small)
-                    .disabled(requiresNetworking)
-                  if requiresNetworking {
-                    Text("Required for this computer.").font(.caption).foregroundStyle(.secondary)
+                  HStack {
+                    Toggle("Networking", isOn: $network).toggleStyle(.switch).controlSize(.small)
+                      .fixedSize().disabled(requiresNetworking)
+                    Spacer()
+                    if requiresNetworking {
+                      Text("Required for this computer.").font(.caption).foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    }
                   }
                   Text(
                     "Allows this computer to connect to the internet and your local network."
@@ -787,7 +791,7 @@ struct NewComputerView: View {
         .frame(width: 580)
       }
     }
-    .noodleSheetSizing()
+    .noodleSheetSizing(animated: true)
     .interactiveDismissDisabled(creating)
     .onChange(of: requiresNetworking) { _, required in if required { network = true } }
     .onChange(of: template) { oldValue, value in
@@ -853,14 +857,20 @@ struct ComputerChoicePicker: View {
 
 /// Make the label, chevron and empty space one keyboard-accessible disclosure.
 struct ComputerDisclosureStyle: DisclosureGroupStyle {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
   func makeBody(configuration: Configuration) -> some View {
     VStack(alignment: .leading, spacing: 0) {
       Button {
-        configuration.isExpanded.toggle()
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
+          configuration.isExpanded.toggle()
+        }
       } label: {
         HStack(spacing: 6) {
-          Image(systemName: configuration.isExpanded ? "chevron.down" : "chevron.right")
-            .font(.caption.weight(.semibold)).frame(width: 10).accessibilityHidden(true)
+          Image(systemName: "chevron.right")
+            .font(.caption.weight(.semibold))
+            .rotationEffect(.degrees(configuration.isExpanded ? 90 : 0))
+            .frame(width: 10).accessibilityHidden(true)
           configuration.label
           Spacer(minLength: 0)
         }
@@ -871,7 +881,14 @@ struct ComputerDisclosureStyle: DisclosureGroupStyle {
       .buttonStyle(.plain)
       .accessibilityIdentifier("computer-advanced-options")
       .accessibilityValue(configuration.isExpanded ? "Expanded" : "Collapsed")
-      if configuration.isExpanded { configuration.content }
+      configuration.content
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(height: configuration.isExpanded ? nil : 0, alignment: .top)
+        .clipped()
+        .opacity(configuration.isExpanded ? 1 : 0)
+        .disabled(!configuration.isExpanded)
+        .allowsHitTesting(configuration.isExpanded)
+        .accessibilityHidden(!configuration.isExpanded)
     }
   }
 }
