@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- Add a prominent Download section for Noodle and Noodle Computer above the README feature list, with separate requirements and getting-started instructions.
+
 ## [0.11.0] - 2026-09-10
 
 ### Fixed
