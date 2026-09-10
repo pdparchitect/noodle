@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Round desktop window corners to match the top panel, keeping maximized and fullscreen windows flush with the screen edges.
 - Publish `:latest` tags for both tested images after their versioned uploads, with serialized publication runs. New computers can receive image fixes independently of app releases.
 
 ## [0.1.2] - 2026-09-10

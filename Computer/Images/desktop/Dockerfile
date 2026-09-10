@@ -12,6 +12,9 @@ LABEL org.opencontainers.image.title="Noodle Computer Desktop" \
       org.opencontainers.image.revision="${SOURCE_REVISION}"
 
 COPY desktop/overlay/ /
+# The session hook owns Picom; disable its generic XDG autostart duplicate.
+RUN chmod 0755 /etc/desktop/session.d/noodle-compositor \
+    && printf '\nHidden=true\n' >> /etc/xdg/autostart/picom.desktop
 COPY shared/noodle-welcome /usr/local/bin/noodle-welcome
 COPY shared/interactive-shell.sh /etc/noodle/interactive-shell.sh
 RUN chmod 0755 /usr/local/bin/noodle-welcome \

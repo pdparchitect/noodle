@@ -4,7 +4,7 @@ The Dockerfiles, overlays and publishing workflow live in this repository.
 These are thin derivatives, not forks of the complete Launcher/Ghost stack:
 
 - `ghcr.io/pdparchitect/noodle-computer-shell-image`: pinned Alpine, preserving the tiny shell/network-bootstrap substrate.
-- `ghcr.io/pdparchitect/noodle-computer-desktop-image`: the currently tested Launcher desktop digest, plus a lighter cream/cobalt wallpaper, black terminal and window borders, and a rounded top panel.
+- `ghcr.io/pdparchitect/noodle-computer-desktop-image`: the currently tested Launcher desktop digest, plus a lighter cream/cobalt wallpaper, black terminal and window borders, and rounded windows and top panel.
 
 Both target `linux/arm64` for Noodle Computer. Upstream digests are literal in the
 Dockerfiles so an upstream tag change cannot silently change a rebuild. Software
@@ -47,6 +47,10 @@ The base re-applies it when the remote screen resizes. Other formats supported b
 `feh` can be used by changing `DESKTOP_WALLPAPER` in the Dockerfile.
 The Linux desktop terminal palette lives in `desktop/overlay/etc/xdg/kitty/theme.conf`.
 This is separate from the wallpaper and native-terminal settings in the macOS app.
+Picom uses `desktop/overlay/etc/xdg/picom.conf` for 12-pixel window corners,
+started through the base's desktop session hook. Its XRender backend needs no
+GPU; shadows and animations are disabled. Maximized and fullscreen windows keep
+square corners, and tint2 retains its own panel shape.
 
 No extra agent harnesses, credentials, host mounts or services are included.
 Further product files can be layered into `desktop/overlay/` later.

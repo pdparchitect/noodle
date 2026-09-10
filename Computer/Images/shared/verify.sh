@@ -11,7 +11,10 @@ case "${1:-}" in
     ;;
   desktop)
     test -x /init
-    for program in Xvnc openbox feh kitty xterm openssl kasmvncpasswd; do command -v "$program" >/dev/null; done
+    for program in Xvnc openbox picom feh kitty xterm openssl kasmvncpasswd; do command -v "$program" >/dev/null; done
+    test -x /etc/desktop/session.d/noodle-compositor
+    grep -q '^Hidden=true$' /etc/xdg/autostart/picom.desktop
+    grep -q '^corner-radius = 12;$' /etc/xdg/picom.conf
     test ! -x /usr/local/bin/desktop-bridge
     test -s /usr/share/backgrounds/desktop-wallpaper.svg
     test -s /etc/xdg/kitty/theme.conf

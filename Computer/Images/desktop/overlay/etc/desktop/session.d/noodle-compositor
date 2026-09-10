@@ -1,0 +1,5 @@
+#!/bin/sh
+# Start once through the base's session hook, with the product configuration.
+# Picom v10's new XRender backend ignores corner-radius. Select its working
+# legacy renderer explicitly (this option is command-line only in v10).
+exec picom --legacy-backends --config /etc/xdg/picom.conf

@@ -42,12 +42,18 @@ x.XGetPixel.argtypes = [c.c_void_p, c.c_int, c.c_int]
 x.XGetPixel.restype = c.c_ulong
 x.XDestroyImage.argtypes = [c.c_void_p]
 x.XCloseDisplay.argtypes = [c.c_void_p]
+x.XTranslateCoordinates.argtypes = [c.c_void_p, c.c_ulong, c.c_ulong, c.c_int, c.c_int,
+                                    c.POINTER(c.c_int), c.POINTER(c.c_int), c.POINTER(c.c_ulong)]
+composite = c.CDLL('libXcomposite.so.1')
+composite.XCompositeGetOverlayWindow.argtypes = [c.c_void_p, c.c_ulong]
+composite.XCompositeGetOverlayWindow.restype = c.c_ulong
 display = x.XOpenDisplay(None)
 assert display, 'No test display'
 snapshot = x.XGetImage(display, x.XDefaultRootWindow(display), 0, 0,
                        1024, 768, c.c_ulong(-1), 2)
 assert snapshot, 'No wallpaper framebuffer'
 try:
+    wallpaper = [[x.XGetPixel(snapshot, px, py) for px in range(1024)] for py in range(768)]
     colours = [x.XGetPixel(snapshot, px, py)
                for py in (100, 380, 650) for px in (100, 500, 900)]
     assert len(set(colours)) >= 4, 'Wallpaper did not render its gradients/ribbons'
@@ -63,18 +69,28 @@ processes = []
 def geometry(name):
     window = sp.check_output(['xdotool', 'search', '--onlyvisible', '--name', name], text=True).splitlines()[-1]
     fields = sp.check_output(['xdotool', 'getwindowgeometry', '--shell', window], text=True)
-    return {key: int(value) for key, value in (line.split('=') for line in fields.splitlines())}
+    result = {key: int(value) for key, value in (line.split('=') for line in fields.splitlines())}
+    # Translate the client origin directly; xdotool adds frame offsets on this WM.
+    connection = x.XOpenDisplay(None)
+    px, py, child = c.c_int(), c.c_int(), c.c_ulong()
+    x.XTranslateCoordinates(connection, int(window), x.XDefaultRootWindow(connection), 0, 0,
+                            c.byref(px), c.byref(py), c.byref(child))
+    x.XCloseDisplay(connection)
+    result.update(X=px.value, Y=py.value)
+    return result
 
 try:
     log = open('/tmp/noodle-theme-test.log', 'w')
     processes.append(sp.Popen(['openbox'], stdout=log, stderr=log))
     time.sleep(1)
+    compositor = sp.Popen(['/etc/desktop/session.d/noodle-compositor'], stdout=log, stderr=log)
+    processes.append(compositor)
     processes.append(sp.Popen(['tint2', '-c', '/etc/xdg/tint2/tint2rc'], stdout=log, stderr=log))
     processes.append(sp.Popen(['kitty', '--config', '/etc/xdg/kitty/theme.conf',
                               '--title', 'Noodle Theme Verification',
                               '-o', 'initial_window_width=640', '-o', 'initial_window_height=420',
                               '-o', 'window_padding_width=8', '-o', 'cursor_blink_interval=0',
-                              '/bin/sh', '-c', 'printf "Noodle Computer\\nBlack terminal. Rounded panel.\\n"; sleep 60'],
+                              '/bin/sh', '-c', 'printf "Noodle Computer\\nBlack terminal. Rounded windows.\\n"; sleep 60'],
                              env={**os.environ, 'LIBGL_ALWAYS_SOFTWARE': '1'}, stdout=log, stderr=log))
     for attempt in range(30):
         try:
@@ -85,8 +101,11 @@ try:
     else:
         raise AssertionError('Panel or terminal did not appear')
     time.sleep(2)
+    assert compositor.poll() is None, 'Desktop compositor exited: ' + open(log.name).read()
     display = x.XOpenDisplay(None)
-    snapshot = x.XGetImage(display, x.XDefaultRootWindow(display), 0, 0, 1024, 768, c.c_ulong(-1), 2)
+    # The root drawable contains uncomposited frames. Read the presentation overlay.
+    overlay = composite.XCompositeGetOverlayWindow(display, x.XDefaultRootWindow(display))
+    snapshot = x.XGetImage(display, overlay, 0, 0, 1024, 768, c.c_ulong(-1), 2)
     def pixel(px, py):
         value = x.XGetPixel(snapshot, px, py)
         return tuple((value >> shift) & 255 for shift in (16, 8, 0))
@@ -95,6 +114,17 @@ try:
         assert min(pixel(px, panel['Y'])) > 80, 'Panel corner must reveal the wallpaper, not a square black corner'
     assert max(pixel(terminal['X'] + terminal['WIDTH'] // 2,
                      terminal['Y'] + terminal['HEIGHT'] // 2)) < 10, 'Terminal background must be black'
+    # Include Openbox decorations: the client rectangle alone misses the frame.
+    extents = sp.check_output(['xprop', '-id', str(terminal['WINDOW']), '_NET_FRAME_EXTENTS'], text=True)
+    left, right, top, bottom = map(int, extents.split('=')[1].split(','))
+    frame_x, frame_y = terminal['X'] - left, terminal['Y'] - top
+    frame_right = terminal['X'] + terminal['WIDTH'] + right - 1
+    frame_bottom = terminal['Y'] + terminal['HEIGHT'] + bottom - 1
+    for px in (frame_x, frame_right):
+        for py in (frame_y, frame_bottom):
+            expected = tuple((wallpaper[py][px] >> shift) & 255 for shift in (16, 8, 0))
+            assert pixel(px, py) == expected, 'Window corner must reveal the wallpaper'
+    assert max(pixel((frame_x + frame_right) // 2, frame_y + 1)) < 30, 'Window titlebar must remain black'
     # Save the guest framebuffer for visual review, without capturing the host.
     rows = b''.join(b'\x00' + bytes(channel for px in range(1024) for channel in pixel(px, py)) for py in range(768))
     def chunk(kind, data):
@@ -105,7 +135,25 @@ try:
         output.write(png)
     x.XDestroyImage(snapshot)
     x.XCloseDisplay(display)
-    print('PASS: real terminal is black and both panel corners are rounded')
+    print('PASS: real terminal is black, panel corners and all four window corners are rounded')
+    # Edge-to-edge states must not expose wallpaper through rounded cutouts.
+    for state in ('maximized_vert,maximized_horz', 'fullscreen'):
+        sp.run(['wmctrl', '-ir', str(terminal['WINDOW']), '-b', 'add,' + state], check=True)
+        time.sleep(1)
+        current = geometry('^Noodle Theme Verification$')
+        extents = sp.check_output(['xprop', '-id', str(current['WINDOW']), '_NET_FRAME_EXTENTS'], text=True)
+        left, right, top, bottom = map(int, extents.split('=')[1].split(','))
+        display = x.XOpenDisplay(None)
+        overlay = composite.XCompositeGetOverlayWindow(display, x.XDefaultRootWindow(display))
+        snapshot = x.XGetImage(display, overlay, 0, 0, 1024, 768, c.c_ulong(-1), 2)
+        for px in (max(0, current['X'] - left), min(1023, current['X'] + current['WIDTH'] + right - 1)):
+            for py in (max(0, current['Y'] - top), min(767, current['Y'] + current['HEIGHT'] + bottom - 1)):
+                assert max(pixel(px, py)) < 30, state + ' window corners must remain square and black'
+        x.XDestroyImage(snapshot)
+        x.XCloseDisplay(display)
+        sp.run(['wmctrl', '-ir', str(terminal['WINDOW']), '-b', 'remove,' + state], check=True)
+        time.sleep(0.5)
+    print('PASS: maximized and fullscreen windows keep square corners')
 finally:
     for process in reversed(processes):
         process.terminate()
