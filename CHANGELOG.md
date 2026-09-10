@@ -8,6 +8,9 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Unread conversations show a blue dot centered beside the avatar, like Messages. The Dock icon shows the unread conversation count and clears when all conversations are read.
+- Request notification badge permission and restore the Dock count after launch and authorization so existing unread conversations appear on the icon.
+
 - Harness capabilities now determine bot access: Claude Code, FX, Grok Build and Muse Code always use autonomous access, overriding old restricted settings. Their Security switches stay on and disabled; creation explains the requirement, and startup errors appear inside the affected bot's row. Codex retains its configurable access setting.
 
 - Upgrade release workflow actions to Node.js 24 versions, removing Node.js 20 deprecation warnings during preparation, publication and recovery.

@@ -50,7 +50,9 @@ final class NoodleStore {
             }
         }
     }
-    private(set) var unreadConversationIDs: Set<UUID> = []
+    private(set) var unreadConversationIDs: Set<UUID> = [] {
+        didSet { updateDockBadge() }
+    }
     var selectedConversationID: UUID?
     var searchText = ""
     private var drafts = ConversationDrafts()
@@ -512,6 +514,12 @@ final class NoodleStore {
 
     func hasUnreadMessages(in conversation: BotConversation) -> Bool {
         unreadConversationIDs.contains(conversation.id)
+    }
+
+    func updateDockBadge() {
+        NSApplication.shared.dockTile.badgeLabel = unreadConversationIDs.isEmpty
+            ? nil
+            : String(unreadConversationIDs.count)
     }
 
     func markConversationRead(_ conversationID: UUID?) {

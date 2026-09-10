@@ -86,24 +86,24 @@ private struct ConversationRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            ZStack(alignment: .bottomTrailing) {
-                ConversationAvatar(
-                    participants: store.participants(for: conversation),
-                    isGroup: conversation.kind == .group,
-                    size: 42
-                )
+            HStack(spacing: 6) {
                 Circle()
-                    .fill(runtimeColor)
-                    .frame(width: 10, height: 10)
-                    .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
-            }
-            .overlay(alignment: .topLeading) {
-                Circle()
-                    .fill(Color.accentColor)
+                    .fill(Color.blue)
                     .frame(width: 8, height: 8)
-                    .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
                     .opacity(store.hasUnreadMessages(in: conversation) ? 1 : 0)
                     .accessibilityHidden(true)
+
+                ZStack(alignment: .bottomTrailing) {
+                    ConversationAvatar(
+                        participants: store.participants(for: conversation),
+                        isGroup: conversation.kind == .group,
+                        size: 42
+                    )
+                    Circle()
+                        .fill(runtimeColor)
+                        .frame(width: 10, height: 10)
+                        .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
+                }
             }
 
             VStack(alignment: .leading, spacing: 2) {

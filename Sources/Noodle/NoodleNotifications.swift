@@ -25,9 +25,13 @@ enum NoodleNotifications {
     static func configure(delegate: any UNUserNotificationCenterDelegate) {
         let center = UNUserNotificationCenter.current()
         center.delegate = delegate
-        center.requestAuthorization(options: [.alert, .sound]) { _, error in
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { _, error in
             if let error {
                 logger.error("Notification authorization failed: \(error.localizedDescription, privacy: .public)")
+            }
+            Task { @MainActor in
+                // The saved unread count may have been applied before badges were authorized.
+                NoodleStore.active?.updateDockBadge()
             }
         }
     }
