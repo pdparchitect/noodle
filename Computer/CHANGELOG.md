@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve Desktop and Shell recognition for computers created with previously released images when the default image digests advance; existing disks remain unchanged.
+
 - Native and agent terminal sessions use the image's interactive shell startup hook, so new images can show the Noodle welcome without changing non-interactive command output.
 
 - Remove automatic centering of the embedded desktop canvas to prevent a dark top strip at odd viewport sizes. Custom web applications are unaffected.

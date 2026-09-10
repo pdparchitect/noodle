@@ -67,6 +67,31 @@ final class ComputerTests: XCTestCase {
         XCTAssertNoThrow(try shell.validate())
     }
 
+    func testReleasedImageRecordsKeepTheirTemplateAfterDefaultPromotion() throws {
+        let released: [(ComputerTemplate, String)] = [
+            (.desktop, "ghcr.io/pdparchitect/noodle-computer-desktop-image@sha256:1ae231d343db6ac9b132029e9b182b374c0add29bd7f7f75ae4ca757f5c2d29d"),
+            (.shell, "ghcr.io/pdparchitect/noodle-computer-shell-image@sha256:9e9333dedb04c8e045e0f775d7c51f1e0d369f32d8c56087d00bb24f9d1598c7"),
+        ]
+        for (template, reference) in released {
+            var computer = template.makeComputer()
+            computer.imageReference = reference
+            let decoded = try JSONDecoder().decode(Computer.self, from: JSONEncoder().encode(computer))
+            XCTAssertEqual(decoded.imageReference, reference)
+            XCTAssertEqual(decoded.template, template)
+            XCTAssertEqual(decoded.hasDesktop, template == .desktop)
+            XCTAssertEqual(decoded.hasWebDisplay, template == .desktop)
+            XCTAssertNoThrow(try decoded.validate())
+
+            computer.customImage = true
+            XCTAssertNil(computer.template)
+            XCTAssertFalse(computer.hasDesktop)
+            computer.customImage = false
+            computer.imageReference = reference + "unrecognised"
+            XCTAssertNil(computer.template)
+            XCTAssertFalse(computer.hasDesktop)
+        }
+    }
+
     func testVMRecordsRemainSupportedWithoutBecomingContainerTemplates() throws {
         for kind in [ComputerKind.macOS, .linux, .omarchy] {
             let computer = Computer(name: "Existing VM", kind: kind)

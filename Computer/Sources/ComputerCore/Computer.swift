@@ -41,12 +41,22 @@ public struct Computer: Codable, Identifiable, Equatable, Sendable {
     public static let desktopImage = "ghcr.io/pdparchitect/noodle-computer-desktop-image@sha256:1ae231d343db6ac9b132029e9b182b374c0add29bd7f7f75ae4ca757f5c2d29d"
     public static let shellImage = "ghcr.io/pdparchitect/noodle-computer-shell-image@sha256:9e9333dedb04c8e045e0f775d7c51f1e0d369f32d8c56087d00bb24f9d1598c7"
     public var isCustomContainer: Bool { kind == .container && customImage == true }
-    public var hasDesktop: Bool { kind == .container && !isCustomContainer && imageReference == Self.desktopImage }
+    // Released image identities remain valid when defaults advance. Existing disks
+    // are not rebuilt, so their saved image references must retain their template.
+    private static let releasedDesktopImages: Set<String> = [
+        desktopImage,
+        "ghcr.io/pdparchitect/noodle-computer-desktop-image@sha256:1ae231d343db6ac9b132029e9b182b374c0add29bd7f7f75ae4ca757f5c2d29d",
+    ]
+    private static let releasedShellImages: Set<String> = [
+        shellImage,
+        "ghcr.io/pdparchitect/noodle-computer-shell-image@sha256:9e9333dedb04c8e045e0f775d7c51f1e0d369f32d8c56087d00bb24f9d1598c7",
+    ]
+    public var hasDesktop: Bool { template == .desktop }
     public var hasWebDisplay: Bool { hasDesktop || (isCustomContainer && webPort != nil) }
     public var template: ComputerTemplate? {
         guard kind == .container, !isCustomContainer else { return nil }
-        if imageReference == Self.desktopImage { return .desktop }
-        if imageReference == Self.shellImage { return .shell }
+        if Self.releasedDesktopImages.contains(imageReference) { return .desktop }
+        if Self.releasedShellImages.contains(imageReference) { return .shell }
         return nil
     }
     public var displayType: String { isCustomContainer ? "Custom Container" : template?.title ?? kind.title }
