@@ -54,9 +54,10 @@ must pass build and contract checks before either is pushed. No moving `latest`
 tag or application release is created. The workflow attaches the resulting
 immutable digests as an Actions artifact and writes them to its summary.
 
-GitHub initially creates packages as **private**, even in a public repository.
-After first publication, set both packages to **Public**, confirm they are linked
-to `pdparchitect/noodle`, then verify anonymous ARM64 pulls. Do not ship registry
+After first publication, check that both packages are **Public** (change their
+visibility if needed), confirm they are linked to `pdparchitect/noodle`, then
+verify anonymous ARM64 pulls. Do not infer package visibility from repository
+visibility. Do not ship registry
 credentials in Noodle. The workflow uses the repository's short-lived
 `GITHUB_TOKEN`, not a new personal access token.
 
