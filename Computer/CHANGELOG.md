@@ -6,7 +6,7 @@
 
 - New Shell and Desktop computers use the public, digest-pinned `noodle-computer-shell-image` and `noodle-computer-desktop-image` packages. Desktop includes a lighter wallpaper and terminal palette. No compatibility aliases for pre-release image names are retained.
 
-- Real-desktop snapshot verification now requires an actual rendered preview and exercises forced browser letterboxing and stretching; an icon fallback no longer counts as success in this integration test.
+- Real-desktop snapshot verification requires an actual rendered preview and exercises forced browser letterboxing and stretching against the captured native pixels, including light wallpapers; an icon fallback no longer counts as success in this integration test.
 
 - Desktop snapshots capture the native remote framebuffer rather than the browser viewport, removing baked-in grey letterboxing and avoiding browser-scale distortion.
 

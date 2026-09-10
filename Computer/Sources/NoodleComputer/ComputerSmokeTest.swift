@@ -61,9 +61,11 @@ import WebKit
                 print("REAL CANVAS: \(String(describing: state))")
                 let began = ProcessInfo.processInfo.systemUptime
                 var nativeSize: NSSize?
+                var nativeCorner: NSColor?
                 if let image = await ComputerPreviewSnapshot.capture(browser.view, desktop: true) {
                     guard let bitmap = NSBitmapImageRep(data: image) else { throw ComputerError("Invalid native snapshot") }
                     nativeSize = NSSize(width: bitmap.pixelsWide, height: bitmap.pixelsHigh)
+                    nativeCorner = bitmap.colorAt(x: 0, y: 0)?.usingColorSpace(.deviceRGB)
                     let ext = image.starts(with: [137, 80, 78, 71]) ? "png" : "jpg"
                     let output = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-desktop-snapshot-test.\(ext)")
                     try image.write(to: output)
@@ -82,7 +84,10 @@ import WebKit
                 guard let bitmap = NSBitmapImageRep(data: cropped),
                       NSSize(width: bitmap.pixelsWide, height: bitmap.pixelsHigh) == nativeSize,
                       let corner = bitmap.colorAt(x: 0, y: 0)?.usingColorSpace(.deviceRGB),
-                      corner.redComponent < 0.1, corner.greenComponent < 0.1, corner.blueComponent < 0.1 else {
+                      let nativeCorner,
+                      abs(corner.redComponent - nativeCorner.redComponent) < 0.02,
+                      abs(corner.greenComponent - nativeCorner.greenComponent) < 0.02,
+                      abs(corner.blueComponent - nativeCorner.blueComponent) < 0.02 else {
                     throw ComputerError("Native framebuffer dimensions changed or grey browser margin entered the snapshot")
                 }
                 try cropped.write(to: FileManager.default.temporaryDirectory.appendingPathComponent("noodle-real-letterbox-result.png"))
