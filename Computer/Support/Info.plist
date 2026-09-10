@@ -23,7 +23,7 @@
     <key>SUEnableAutomaticChecks</key><true/>
     <key>SUScheduledCheckInterval</key><integer>86400</integer>
     <key>SUAutomaticallyUpdate</key><false/>
-    <key>SUAllowsAutomaticUpdates</key><false/>
+    <key>SUAllowsAutomaticUpdates</key><true/>
     <key>SUSendProfileInfo</key><false/>
     <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
 </dict></plist>

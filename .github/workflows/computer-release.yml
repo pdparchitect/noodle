@@ -97,6 +97,10 @@ jobs:
         shell: zsh {0}
         run: zsh scripts/package-computer-release.sh "$GITHUB_REF_NAME"
 
+      - name: Verify application menu and native Update settings
+        timeout-minutes: 2
+        run: '".build/Noodle Computer.app/Contents/MacOS/NoodleComputer" --updater-ui-test'
+
       - name: Publish versioned download and Computer-only update channel
         env:
           GH_TOKEN: ${{ github.token }}

@@ -17,6 +17,6 @@ precondition(entitlements["com.apple.security.application-groups"] as? [String] 
 precondition(entitlements["com.apple.security.temporary-exception.mach-lookup.global-name"] as? [String] == ["\(bundle)-spks", "\(bundle)-spki"])
 precondition(info["CFBundleShortVersionString"] as? String == version && info["CFBundleVersion"] as? String == version)
 precondition(info["LSMinimumSystemVersion"] as? String == "26.0")
-precondition(info["SUAllowsAutomaticUpdates"] as? Bool == false)
+precondition(info["SUAllowsAutomaticUpdates"] as? Bool == true)
 precondition(info["SUAutomaticallyUpdate"] as? Bool == false)
-print("Computer version, six-key sandbox policy and manual-install update policy verified")
+print("Computer version, six-key sandbox policy and opt-in automatic-install update policy verified")

@@ -57,6 +57,10 @@ cp "$package/Support/Info.plist" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$app/Contents/Info.plist"
 updates_enabled=false
 if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == 1 ]]; then updates_enabled=true; fi
+if [[ "${NOODLE_COMPUTER_TEST_UPDATES:-0}" == 1 ]]; then
+    [[ "${NOODLE_COMPUTER_TEST_BUILD:-0}" == 1 ]] || { print -u2 'Updater UI testing requires the isolated test bundle.'; exit 1; }
+    updates_enabled=true
+fi
 /usr/libexec/PlistBuddy -c "Add :NoodleUpdatesEnabled bool $updates_enabled" "$app/Contents/Info.plist"
 cp "$kernel" "$app/Contents/Resources/Runtime/vmlinux-arm64"
 cp "$package/Support/KERNEL-NOTICE.txt" "$app/Contents/Resources/KERNEL-NOTICE.txt"

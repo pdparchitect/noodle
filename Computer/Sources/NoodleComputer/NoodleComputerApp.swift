@@ -17,7 +17,7 @@ struct NoodleComputerApp: App {
     .defaultSize(width: 1080, height: 720)
     .windowToolbarStyle(.unified(showsTitle: false))
     .commands {
-      CommandGroup(after: .appInfo) { ComputerUpdateCommands() }
+      CommandGroup(after: .appSettings) { ComputerCheckForUpdatesButton() }
       CommandGroup(replacing: .appInfo) {
         Button("About Noodle Computer") {
           NSApplication.shared.orderFrontStandardAboutPanel(options: [.applicationName: "Noodle Computer"])
@@ -34,6 +34,11 @@ struct NoodleComputerApp: App {
         Button("New from Container Image…") { NotificationCenter.default.post(name: .newCustomComputer, object: nil) }
       }
     }
+    Settings {
+      ComputerSettingsView()
+        .preferredColorScheme(.dark)
+    }
+    .windowResizability(.contentSize)
   }
 }
 
@@ -111,6 +116,11 @@ struct ComputerRootView: View {
     .task {
       guard store == nil, startupError == nil else { return }
       do {
+        if CommandLine.arguments.contains("--updater-ui-test") {
+          try await ComputerSmokeTest.checkUpdaterUI()
+          if !CommandLine.arguments.contains("--keep-test-window") { NSApplication.shared.terminate(nil) }
+          return
+        }
         if CommandLine.arguments.contains("--noodle-background") {
           // The delegate hides the initial background launch. Do not hide here:
           // this view may first be created by a later explicit Open from Noodle.
@@ -182,6 +192,7 @@ struct ComputerRootView: View {
       } catch {
         startupError = error.localizedDescription
         if CommandLine.arguments.contains("--custom-container-test")
+          || CommandLine.arguments.contains("--updater-ui-test")
           || CommandLine.arguments.contains("--empty-library-test")
           || CommandLine.arguments.contains("--library-layout-test")
           || CommandLine.arguments.contains("--provider-integration-test")

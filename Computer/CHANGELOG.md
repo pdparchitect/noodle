@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Restore the missing Check for Updates menu command and add Settings → Update using Noodle's layout, with the installed version, automatic checks and opt-in automatic download/install. Automatic installation remains off by default; the settings warn that updates stop running computers.
+
 ## [0.1.1] - 2026-09-10
 
 - New computers use the digest-pinned 0.1.2 images, with the Noodle terminal welcome, black desktop terminal and window borders, and rounded desktop panel. Existing computer disks and customisations are not replaced.

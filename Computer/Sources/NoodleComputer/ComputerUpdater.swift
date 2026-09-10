@@ -7,29 +7,78 @@ import SwiftUI
     static let shared = ComputerUpdater()
     @Published private(set) var canCheck = false
     @Published private(set) var automaticallyChecks = false
+    @Published private(set) var automaticallyDownloads = false
+    @Published private(set) var allowsAutomaticUpdates = false
+    var enabled: Bool { Bundle.main.object(forInfoDictionaryKey: "NoodleUpdatesEnabled") as? Bool == true }
     private var started = false
     private lazy var controller = SPUStandardUpdaterController(
         startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
 
     func start() {
-        guard !started, Bundle.main.object(forInfoDictionaryKey: "NoodleUpdatesEnabled") as? Bool == true else { return }
+        guard !started, enabled else { return }
         started = true
         controller.updater.publisher(for: \.canCheckForUpdates).assign(to: &$canCheck)
         controller.updater.publisher(for: \.automaticallyChecksForUpdates).assign(to: &$automaticallyChecks)
+        controller.updater.publisher(for: \.automaticallyDownloadsUpdates).assign(to: &$automaticallyDownloads)
+        controller.updater.publisher(for: \.allowsAutomaticUpdates).assign(to: &$allowsAutomaticUpdates)
         controller.startUpdater()
     }
     func check() { if started { controller.checkForUpdates(nil) } }
     func setAutomaticChecks(_ enabled: Bool) {
         if started { controller.updater.automaticallyChecksForUpdates = enabled }
     }
+    func setAutomaticDownloads(_ enabled: Bool) {
+        if started { controller.updater.automaticallyDownloadsUpdates = enabled }
+    }
 }
 
-struct ComputerUpdateCommands: View {
+struct ComputerCheckForUpdatesButton: View {
     @ObservedObject private var updater = ComputerUpdater.shared
     var body: some View {
         Button("Check for Updates…") { updater.check() }.disabled(!updater.canCheck)
-        Toggle("Automatically Check for Updates", isOn: Binding(
-            get: { updater.automaticallyChecks }, set: updater.setAutomaticChecks))
-            .disabled(Bundle.main.object(forInfoDictionaryKey: "NoodleUpdatesEnabled") as? Bool != true)
+    }
+}
+
+struct ComputerSettingsView: View {
+    var body: some View {
+        TabView {
+            ComputerUpdatesSettingsView()
+                .frame(width: 580)
+                .fixedSize(horizontal: false, vertical: true)
+                .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }
+        }
+        .windowResizeAnchor(.top)
+    }
+}
+
+struct ComputerUpdatesSettingsView: View {
+    @ObservedObject private var updater = ComputerUpdater.shared
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Installed Version") {
+                    Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development")
+                }
+                ComputerCheckForUpdatesButton()
+            }
+            Section {
+                Toggle("Automatically check for updates", isOn: Binding(
+                    get: { updater.automaticallyChecks }, set: updater.setAutomaticChecks
+                ))
+                .disabled(!updater.enabled)
+                Toggle("Automatically download and install updates", isOn: Binding(
+                    get: { updater.automaticallyDownloads }, set: updater.setAutomaticDownloads
+                ))
+                .disabled(!updater.allowsAutomaticUpdates)
+            } footer: {
+                Text("Installing an update stops running computers. Save guest work first; computers are not automatically restarted.")
+                if !updater.enabled {
+                    Text("Update checks are disabled in development builds.")
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { updater.start() }
     }
 }

@@ -54,11 +54,11 @@ move the app to Applications and return to Noodle; discovery refreshes there.
 
 ## Updater and sandbox boundary
 
-Release builds enable **Computer → Check for Updates…** and an automatic-check
-toggle. Local development/test builds leave update checks disabled. The updater
+Release builds enable **Computer → Check for Updates…** and **Settings → Update**,
+matching Noodle's update controls. Local development/test builds leave update checks disabled. The updater
 starts on user activation, not on a quiet agent-driven provider launch.
-Daily checks are enabled by default; automatic installation is disabled. The
-user chooses installation through Sparkle. Save guest work first: updating
+Daily checks are enabled by default; automatic download/install is available as
+an explicit opt-in and remains off by default. Save guest work first: updating
 terminates Computer through its normal guest-shutdown lifecycle. Running guests
 are not automatically restarted after relaunch.
 
@@ -99,6 +99,7 @@ swift test --disable-sandbox
 swift Computer/Tests/ReleaseWorkflowTests.swift "$PWD"
 zsh scripts/build-computer.sh
 zsh scripts/verify-computer-release.sh '.build/Noodle Computer.app'
+".build/Noodle Computer.app/Contents/MacOS/NoodleComputer" --updater-ui-test
 ```
 
 The release workflow tests replace GitHub and git commands with local fixtures;
@@ -106,3 +107,9 @@ they verify first publication, upgrade ordering, isolation from Noodle's latest
 release, rollback refusal and rejection of private/existing releases without
 network access. `--computer-picker-test --computer-download-test` on the Noodle
 executable previews the missing-app entry point without uninstalling Computer.
+
+The release pipeline opens the actual application menu and Settings scene before
+publication. For local isolated UI checks, build with `NOODLE_COMPUTER_TEST_BUILD=1`;
+add `NOODLE_COMPUTER_TEST_UPDATES=1` only to exercise real Sparkle controls in that
+test bundle. This flag is rejected for production bundles. Never install an update
+or restart the user's running computers as part of a UI check.

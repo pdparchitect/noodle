@@ -9,6 +9,34 @@ import WebKit
 
 /// Opt-in signed-app integration fixture. Never opens the user's computer library.
 @MainActor enum ComputerSmokeTest {
+    static func checkUpdaterUI() async throws {
+        setbuf(stdout, nil)
+        NSApp.activate()
+        try await Task.sleep(for: .milliseconds(600))
+        guard let menu = NSApp.mainMenu?.items.first?.submenu else { throw ComputerError("Application menu missing") }
+        menu.update()
+        let titles = menu.items.map(\.title)
+        print("APPLICATION MENU: \(titles)")
+        guard titles.contains("About Noodle Computer"), titles.contains("Check for Updates…"),
+              let settings = menu.items.firstIndex(where: { $0.keyEquivalent == "," && $0.keyEquivalentModifierMask.contains(.command) }) else {
+            throw ComputerError("Application menu must expose About, Settings (⌘,) and Check for Updates")
+        }
+        menu.performActionForItem(at: settings)
+        try await Task.sleep(for: .milliseconds(800))
+        guard let window = NSApp.windows.first(where: {
+            $0.isVisible && ($0.identifier?.rawValue.contains("Settings") == true || $0.title == "Settings" || $0.title == "Update")
+        }), let content = window.contentView else {
+            throw ComputerError("Settings command did not open the native Settings scene")
+        }
+        content.layoutSubtreeIfNeeded()
+        guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else { throw ComputerError("Settings snapshot unavailable") }
+        content.cacheDisplay(in: content.bounds, to: bitmap)
+        let snapshot = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-computer-update-settings.png")
+        try bitmap.representation(using: .png, properties: [:])?.write(to: snapshot)
+        print("PASS: actual application menu includes Check for Updates and Settings; ⌘, command opens native Settings scene")
+        print("SETTINGS SNAPSHOT: \(snapshot.path)")
+    }
+
     static func checkProvider() async throws {
         setbuf(stdout, nil)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("NoodleProvider-Test-\(UUID().uuidString)")
