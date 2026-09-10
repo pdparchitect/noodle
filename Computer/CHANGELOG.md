@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## [0.1.1] - 2026-09-10
+
+- New computers use the digest-pinned 0.1.2 images, with the Noodle terminal welcome, black desktop terminal and window borders, and rounded desktop panel. Existing computer disks and customisations are not replaced.
+
 - Preserve Desktop and Shell recognition for computers created with previously released images when the default image digests advance; existing disks remain unchanged.
 
 - Native and agent terminal sessions use the image's interactive shell startup hook, so new images can show the Noodle welcome without changing non-interactive command output.

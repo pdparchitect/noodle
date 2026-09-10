@@ -71,7 +71,7 @@ credentials in Noodle. The workflow uses the repository's short-lived
 
 ## App promotion is a separate, tested change
 
-The app uses the published 0.1.1 package names and digests after anonymous download checks.
+The app uses the published 0.1.2 package names and digests after anonymous download checks.
 Future promotions must pin the published digests and keep the Alpine network helper working.
 Test creating/starting both presets and the desktop's authenticated display,
 wallpaper and terminal before committing those new defaults.
