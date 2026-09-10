@@ -32,6 +32,14 @@ wallpaper pixels. Test scripts are not included in either production image.
 
 ## Wallpaper and later customisations
 
+Interactive terminals share the Noodle ASCII welcome from `shared/noodle-welcome`.
+The POSIX `ENV` hook covers shell-mode launches and native/provider PTYs; profile
+and Bash hooks cover login shells and the desktop terminal. The logo appears once
+per shell, never clears scrollback, and stays out of redirected or non-interactive
+output. `NO_COLOR=1` disables colour; `NOODLE_BANNER=0` disables the welcome.
+Run `python3 Computer/Images/tests/welcome.py container noodle-computer-shell-image:local noodle-computer-desktop-image:local`
+to verify actual PTY startup in both local images (use `docker` on Linux).
+
 The source wallpaper is `desktop/overlay/usr/share/backgrounds/desktop-wallpaper.svg`.
 It is an editable vector asset with a bright sky, cream sun and blue ribbons.
 Replace this file to change new desktops' default without editing Launcher.

@@ -12,6 +12,12 @@ LABEL org.opencontainers.image.title="Noodle Computer Desktop" \
       org.opencontainers.image.revision="${SOURCE_REVISION}"
 
 COPY desktop/overlay/ /
+COPY shared/noodle-welcome /usr/local/bin/noodle-welcome
+COPY shared/interactive-shell.sh /etc/noodle/interactive-shell.sh
+RUN chmod 0755 /usr/local/bin/noodle-welcome \
+    && ln -s /etc/noodle/interactive-shell.sh /etc/profile.d/noodle-welcome.sh \
+    && ln -s /etc/noodle/interactive-shell.sh /etc/bash.bashrc.d/noodle-welcome.sh
+ENV ENV=/etc/noodle/interactive-shell.sh
 RUN sed -i '$r /usr/share/kasmvnc/www/assets/noodle.css' /usr/share/kasmvnc/www/assets/custom.css
 COPY shared/verify.sh /usr/local/lib/noodle-image-check
 # Keep the pinned base's panel behavior and theme; change only product styling.

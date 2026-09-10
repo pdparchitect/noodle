@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Interactive terminals in both images welcome users with the approved Noodle ASCII logo in cream and cobalt, including standalone shell mode and desktop Bash. Non-interactive commands stay quiet; plain terminals and `NO_COLOR` use uncoloured text, and `NOODLE_BANNER=0` disables the welcome.
+
 - Anchor the remote desktop canvas to the top-left instead of auto-centering it, avoiding a dark top strip at odd viewport sizes.
 
 - Restore the desktop's black terminal with its standard dark palette, use a black focused-window border, and round the top panel corners while retaining the cream/cobalt wallpaper.

@@ -51,6 +51,8 @@ jobs:
           for kind in shell desktop; do
             docker run --rm --network none --entrypoint /bin/sh "noodle-computer-$kind-image:check" /usr/local/lib/noodle-image-check "$kind"
           done
+      - name: Verify interactive welcome in both images
+        run: python3 Computer/Images/tests/welcome.py docker noodle-computer-shell-image:check noodle-computer-desktop-image:check
       - name: Verify desktop wallpaper rendering
         run: docker run --rm -i --network none --entrypoint /bin/sh noodle-computer-desktop-image:check < Computer/Images/tests/desktop.sh
       - name: Sign in to GHCR for an approved image tag

@@ -275,7 +275,8 @@ actor ContainerComputer {
             config.arguments = ["/bin/sh", "-c", "cd /workspace && exec /bin/sh -i"]
             config.environmentVariables = ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
                 // Expand PWD at each prompt; /bin/sh need not support Bash's \w escape.
-                "HOME=/root", "TERM=xterm-256color", "PS1=${PWD} # "]
+                "HOME=/root", "TERM=xterm-256color", "PS1=${PWD} # ",
+                "ENV=/etc/noodle/interactive-shell.sh"]
             config.terminal = true
             config.stdin = io
             config.stdout = io
@@ -315,7 +316,8 @@ actor ContainerComputer {
         let process = try await pod.execInContainer("workspace", processID: "noodle-\(id.uuidString.lowercased())") { config in
             config.arguments = ["/bin/sh", "-c", "cd /workspace && exec /bin/sh -i"]
             config.environmentVariables = ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                "HOME=/root", "TERM=xterm-256color", "PS1=$ "]
+                "HOME=/root", "TERM=xterm-256color", "PS1=$ ",
+                "ENV=/etc/noodle/interactive-shell.sh"]
             config.terminal = true; config.stdin = io; config.stdout = io
         }
         do {
