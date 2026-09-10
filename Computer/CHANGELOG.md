@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Desktop thumbnails fill a consistent card area, anchored at the top-left and cropping overflow instead of fitting the entire desktop. Full live previews are unchanged.
+
 - Sharper display attachment previews preserve up to 1440 pixels with lossless PNG when possible, use larger proportionate cards, and explain when a snapshot is unavailable. Detailed images remain within the existing attachment size limit.
 
 - The personal terminal uses a portable working-directory prompt instead of displaying a literal `\w` in desktop images.

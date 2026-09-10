@@ -272,17 +272,13 @@ struct ComputerAttachmentCard: View {
     let card: ComputerCard
     private var preview: NSImage? { card.previewImage.flatMap(NSImage.init(data:)) }
     private var width: CGFloat { card.view == "web" ? 360 : 280 }
-    private var height: CGFloat {
-        guard card.view == "web" else { return 165 }
-        guard let image = preview, image.size.width > 0 else { return 240 }
-        return min(360, max(180, width * image.size.height / image.size.width))
-    }
+    private var height: CGFloat { card.view == "web" ? 240 : 165 }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .topLeading) {
                 Color.black
                 if let image = preview {
-                    Image(nsImage: image).resizable().interpolation(.high).scaledToFit().frame(width: width, height: height)
+                    ComputerPreviewImage(image: image, width: width, height: height)
                 } else if card.view == "web" {
                     VStack(spacing: 12) {
                         Image(systemName: card.computer.symbol).font(.system(size: 48))

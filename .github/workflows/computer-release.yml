@@ -52,6 +52,8 @@ jobs:
           "$RUNNER_TEMP/computer-snapshot-tests"
           swiftc Sources/Noodle/ComputerPreviewDownload.swift Computer/Tests/PreviewDownloadTests.swift -o "$RUNNER_TEMP/computer-download-tests"
           "$RUNNER_TEMP/computer-download-tests"
+          swiftc Sources/Noodle/ComputerPreviewImage.swift Computer/Tests/PreviewImageTests.swift -o "$RUNNER_TEMP/computer-preview-image-tests"
+          "$RUNNER_TEMP/computer-preview-image-tests"
           swift Computer/Tests/TerminalPromptTests.swift
 
       - name: Prepare signing credentials
