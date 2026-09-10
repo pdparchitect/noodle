@@ -36,6 +36,7 @@ actor ContainerComputer {
 
     static func prepare(computer: Computer, directory: URL, cache: URL,
                         status: @escaping @Sendable (String, TransferProgress?) async -> Void) async throws {
+        let computer = computer.forCreation()
         let store = try ImageStore(path: cache.appendingPathComponent("Images"))
         let initDisk = cache.appendingPathComponent("initfs-0.43.0.ext4")
         if !FileManager.default.fileExists(atPath: initDisk.path) {
@@ -54,12 +55,20 @@ actor ContainerComputer {
             ? "Downloading Alpine Linux…" : "Downloading the workspace image…"
         await status(label, nil)
         let image: Containerization.Image
-        do {
-            image = try await store.get(reference: computer.imageReference)
-        } catch let error as ContainerizationError where error.code == .notFound {
+        if computer.template != nil {
+            // Refresh built-in tags for every new computer. ImageStore.get(pull: true)
+            // only pulls on a cache miss, which would leave :latest stale indefinitely.
             let progress = ImageDownloadProgress(label: label, report: status)
             image = try await store.pull(reference: computer.imageReference, platform: .current,
                                          progress: { await progress.update($0) })
+        } else {
+            do {
+                image = try await store.get(reference: computer.imageReference)
+            } catch let error as ContainerizationError where error.code == .notFound {
+                let progress = ImageDownloadProgress(label: label, report: status)
+                image = try await store.pull(reference: computer.imageReference, platform: .current,
+                                             progress: { await progress.update($0) })
+            }
         }
         try Task.checkCancellation()
         await status("Creating your workspace disk…", nil)
@@ -72,7 +81,7 @@ actor ContainerComputer {
             // Separate filesystem for the one-shot network initializer, as in
             // Studio. Never mount the workspace's writable disk twice.
             let networkImage = computer.hasDesktop || computer.isCustomContainer
-                ? try await store.get(reference: Computer.shellImage, pull: true) : image
+                ? try await store.pull(reference: Computer.shellImage, platform: .current) : image
             _ = try await EXT4Unpacker(capacityInBytes: 256 * 1_048_576, journal: .default)
                 .unpack(networkImage, for: .current, at: directory.appendingPathComponent("Network.ext4"))
         }

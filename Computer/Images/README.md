@@ -57,9 +57,11 @@ Image releases are independent of `Computer/VERSION` and Noodle's `VERSION`.
 Pull requests and manual workflow runs build/test only. To publish, choose an
 unused image version in this directory's `VERSION`, update this directory's `CHANGELOG.md`,
 commit, then push a new `computer-images-vX.Y.Z` tag matching that version.
-Never move/reuse an image tag; use a new version for a correction. Both images
-must pass build and contract checks before either is pushed. No moving `latest`
-tag or application release is created. The workflow attaches the resulting
+Never move/reuse a version tag; use a new version for a correction. Both images
+must pass build and contract checks before either is pushed. After both versioned
+images are published, the workflow updates both `:latest` tags to those tested builds.
+Image publication runs are serialized so their promotions cannot interleave.
+No application release is created. The workflow attaches the resulting
 immutable digests as an Actions artifact and writes them to its summary.
 
 After first publication, check that both packages are **Public** (change their
@@ -69,12 +71,19 @@ visibility. Do not ship registry
 credentials in Noodle. The workflow uses the repository's short-lived
 `GITHUB_TOKEN`, not a new personal access token.
 
-## App promotion is a separate, tested change
+## New computers use latest
 
-The app uses the published 0.1.2 package names and digests after anonymous download checks.
-Future promotions must pin the published digests and keep the Alpine network helper working.
-Test creating/starting both presets and the desktop's authenticated display,
-wallpaper and terminal before committing those new defaults.
+The app pulls `noodle-computer-shell-image:latest` and
+`noodle-computer-desktop-image:latest` for new computers, checking the registry
+even when the tag is cached locally. The Shell image used for network setup is
+refreshed too. A failed pull fails creation instead of silently using an older image.
+Publishing an image fix therefore does not require an app release. Custom image
+references retain their existing cache-first behavior.
+
+Both public `:latest` tags must exist before shipping the app change that uses them.
+Future image releases must keep the Alpine network helper and desktop startup
+contract working. Test creating/starting both presets and the desktop's
+authenticated display, wallpaper and terminal before publishing.
 
 Existing computers retain their writable root filesystems. Publishing a new
 image changes neither their disks nor their wallpapers, and no destructive

@@ -21,7 +21,7 @@ a missing kernel. Its provenance is recorded in `Support/KERNEL-NOTICE.txt`.
 The standard creation dialog offers exactly two container templates. No Docker Desktop installation
 is required: Docker/OCI images run using the embedded Apple Containerization runtime.
 
-- **Desktop:** the digest-pinned Launcher desktop with browser, terminal and file
+- **Desktop:** the latest Noodle desktop based on Launcher, with browser, terminal and file
   manager. Defaults to 4 CPUs, 4 GB memory and a sparse 32 GB disk. Networking is
   required for the embedded desktop viewer.
 - **Shell:** Alpine Linux 3.23.5 with a native interactive terminal. Defaults to
@@ -100,9 +100,12 @@ future VM templates. They are not selectable in the v1 New Computer dialog.
 
 Repository-owned Shell/Desktop image definitions, wallpaper sources and GHCR
 publishing live in [`Images/`](Images/README.md). They release independently;
-new computers use the verified, digest-pinned 0.1.1 images. Existing disks remain unchanged.
+new computers resolve the Shell/Desktop `:latest` tags from GHCR on every creation,
+reusing downloaded layers where possible. Creation requires registry access and
+fails if the current image cannot be fetched, rather than using a stale cached tag.
+Image fixes reach new computers without an app release. Existing disks remain unchanged.
 
-A digest-pinned Noodle desktop image based on Launcher (Ubuntu, Openbox,
+A Noodle desktop image based on Launcher (Ubuntu, Openbox,
   Chromium, terminal and file manager), running through embedded Containerization
   and Apple vminit 0.43.0. The app displays the live KasmVNC screen using a private
   WebKit store, a per-start password and a guest certificate pinned via the

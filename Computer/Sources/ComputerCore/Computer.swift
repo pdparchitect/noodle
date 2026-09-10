@@ -38,20 +38,29 @@ public enum DefaultLinuxInstaller {
 }
 
 public struct Computer: Codable, Identifiable, Equatable, Sendable {
-    public static let desktopImage = "ghcr.io/pdparchitect/noodle-computer-desktop-image@sha256:5f6c23015897924450a19016f103ed530e3769132c5c8c9da4298bba7a22990a"
-    public static let shellImage = "ghcr.io/pdparchitect/noodle-computer-shell-image@sha256:ccf220714abadda58dc2d805d6f90dda5d89acc4ed3ff58eb4a68f7279705084"
+    public static let desktopImage = "ghcr.io/pdparchitect/noodle-computer-desktop-image:latest"
+    public static let shellImage = "ghcr.io/pdparchitect/noodle-computer-shell-image:latest"
     public var isCustomContainer: Bool { kind == .container && customImage == true }
     // Released image identities remain valid when defaults advance. Existing disks
     // are not rebuilt, so their saved image references must retain their template.
     private static let releasedDesktopImages: Set<String> = [
         desktopImage,
+        "ghcr.io/pdparchitect/noodle-computer-desktop-image@sha256:5f6c23015897924450a19016f103ed530e3769132c5c8c9da4298bba7a22990a",
         "ghcr.io/pdparchitect/noodle-computer-desktop-image@sha256:1ae231d343db6ac9b132029e9b182b374c0add29bd7f7f75ae4ca757f5c2d29d",
     ]
     private static let releasedShellImages: Set<String> = [
         shellImage,
+        "ghcr.io/pdparchitect/noodle-computer-shell-image@sha256:ccf220714abadda58dc2d805d6f90dda5d89acc4ed3ff58eb4a68f7279705084",
         "ghcr.io/pdparchitect/noodle-computer-shell-image@sha256:9e9333dedb04c8e045e0f775d7c51f1e0d369f32d8c56087d00bb24f9d1598c7",
     ]
     public var hasDesktop: Bool { template == .desktop }
+    /// Creation always resolves the current template tag, even if a caller passes
+    /// a saved record from a digest-pinned release. Loading/starting never calls this.
+    public func forCreation() -> Computer {
+        var computer = self
+        if let template { computer.imageReference = template.imageReference }
+        return computer
+    }
     public var hasWebDisplay: Bool { hasDesktop || (isCustomContainer && webPort != nil) }
     public var template: ComputerTemplate? {
         guard kind == .container, !isCustomContainer else { return nil }

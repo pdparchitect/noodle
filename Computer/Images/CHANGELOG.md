@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Publish `:latest` tags for both tested images after their versioned uploads, with serialized publication runs. New computers can receive image fixes independently of app releases.
+
 ## [0.1.2] - 2026-09-10
 
 - Interactive terminals in both images welcome users with the approved Noodle ASCII logo in cream and cobalt, including standalone shell mode and desktop Bash. Non-interactive commands stay quiet; plain terminals and `NO_COLOR` use uncoloured text, and `NOODLE_BANNER=0` disables the welcome.

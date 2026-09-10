@@ -130,7 +130,7 @@ enum ComputerPhase: Equatable {
     }
 
     private func performCreation(_ requested: Computer, source: URL?) async -> Bool {
-        var computer = requested
+        var computer = requested.forCreation()
         let directory = library.stagingDirectory(for: computer.id)
         let access = source?.startAccessingSecurityScopedResource() ?? false
         defer {

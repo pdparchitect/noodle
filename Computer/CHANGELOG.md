@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New Desktop and Shell computers fetch the current `:latest` image from GHCR, including refreshed network setup files, so image fixes no longer require an app release. Existing computer disks and recognition of previously pinned images are preserved.
+
 ## [0.1.2] - 2026-09-10
 
 - Restore the missing Check for Updates menu command and add Settings → Update using Noodle's layout, with the installed version, automatic checks and opt-in automatic download/install. Automatic installation remains off by default.

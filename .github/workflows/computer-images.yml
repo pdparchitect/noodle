@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: computer-images-${{ github.ref }}
+  group: computer-images-${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/computer-images-v') && 'publish' || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -78,7 +78,16 @@ jobs:
             echo "$kind=$digest" >> computer-image-digests.txt
             echo "$kind: \`$digest\`" >> "$GITHUB_STEP_SUMMARY"
           done
-          echo 'Set both GHCR packages to Public and verify anonymous pulls before promoting app defaults.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Set both GHCR packages to Public and verify anonymous pulls.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Promote both tested images to latest
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/computer-images-v') && github.repository == 'pdparchitect/noodle'
+        run: |
+          set -eu
+          for kind in shell desktop; do
+            image="ghcr.io/pdparchitect/noodle-computer-$kind-image:latest"
+            docker tag "noodle-computer-$kind-image:check" "$image"
+            docker push "$image"
+          done
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/computer-images-v') && github.repository == 'pdparchitect/noodle'
         with:
