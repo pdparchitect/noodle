@@ -114,6 +114,15 @@ private struct DesktopWebView: NSViewRepresentable {
       document.addEventListener('cut', e => e.preventDefault(), true);
       document.addEventListener('paste', e => e.preventDefault(), true);
       """, injectionTime: .atDocumentStart, forMainFrameOnly: false))
+    if !connection.customWeb {
+      // Kasm centers its canvas using auto margins. Rounding the remote screen
+      // size can otherwise leave a dark strip along an odd-sized viewport.
+      configuration.userContentController.addUserScript(WKUserScript(source: """
+        const style = document.createElement('style');
+        style.textContent = '#noVNC_container canvas { margin: 0 !important; display: block; }';
+        document.head.appendChild(style);
+        """, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+    }
     // Background-only providers still need a renderable viewport for card snapshots.
     view = WKWebView(frame: NSRect(x: 0, y: 0, width: 1024, height: 768), configuration: configuration)
     super.init()

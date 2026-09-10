@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Remove automatic centering of the embedded desktop canvas to prevent a dark top strip at odd viewport sizes. Custom web applications are unaffected.
+
+- Inset terminal and desktop clipping by one point to match the native sidebar's inner glass edge, keeping their shared layout bounds unchanged.
+
+- An empty library or cleared computer selection now has an opaque default background instead of showing other windows through the content area.
+
 ## [0.1.0] - 2026-09-10
 
 - New Shell and Desktop computers use the public, digest-pinned `noodle-computer-shell-image` and `noodle-computer-desktop-image` packages. Desktop includes a lighter wallpaper and terminal palette. No compatibility aliases for pre-release image names are retained.

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Anchor the remote desktop canvas to the top-left instead of auto-centering it, avoiding a dark top strip at odd viewport sizes.
+
+- Restore the desktop's black terminal with its standard dark palette, use a black focused-window border, and round the top panel corners while retaining the cream/cobalt wallpaper.
+
 ## [0.1.1] - 2026-09-10
 
 - Publish under explicit product names: `noodle-computer-shell-image` and `noodle-computer-desktop-image`, avoiding ambiguity with the main Noodle app.

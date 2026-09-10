@@ -125,6 +125,16 @@ struct ComputerRootView: View {
           NSApplication.shared.terminate(nil)
           return
         }
+        if CommandLine.arguments.contains("--library-layout-test") {
+          try await ComputerSmokeTest.checkLibraryLayout()
+          NSApplication.shared.terminate(nil)
+          return
+        }
+        if CommandLine.arguments.contains("--empty-library-test") {
+          try await ComputerSmokeTest.checkEmptyLibraryBackground()
+          NSApplication.shared.terminate(nil)
+          return
+        }
         if CommandLine.arguments.contains("--appearance-preview") {
           try await ComputerSmokeTest.checkAppearancePreview()
           NSApplication.shared.terminate(nil)
@@ -172,6 +182,8 @@ struct ComputerRootView: View {
       } catch {
         startupError = error.localizedDescription
         if CommandLine.arguments.contains("--custom-container-test")
+          || CommandLine.arguments.contains("--empty-library-test")
+          || CommandLine.arguments.contains("--library-layout-test")
           || CommandLine.arguments.contains("--provider-integration-test")
           || CommandLine.arguments.contains("--creation-form-test")
           || CommandLine.arguments.contains("--desktop-smoke-test")
@@ -242,6 +254,10 @@ struct ComputerLibraryView: View {
     .background {
       if let session = store.selected {
         ComputerWindowWallpaper(session: session).ignoresSafeArea()
+      } else {
+        // The compositing window is clear even without a selected computer.
+        // Keep the library opaque using the same base as a default wallpaper.
+        ComputerWallpaper(appearance: ComputerAppearance()).ignoresSafeArea()
       }
     }
     .background(ComputerWindowCompositing())
@@ -389,7 +405,9 @@ struct ComputerDetailView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    // Native sidebar glass paints inside a one-point edge. Match that visible
+    // edge without changing the shared terminal/WebKit layout or hit area.
+    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous).inset(by: 1))
     // Keep the inter-panel gap when expanded; match the outer inset when collapsed.
     .padding(.leading, sidebarCollapsed ? 8 : 12)
     // Match the native sidebar's outer window inset.

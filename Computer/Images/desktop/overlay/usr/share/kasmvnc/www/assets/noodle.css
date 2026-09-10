@@ -1,0 +1,6 @@
+/* Pin the remote framebuffer to the viewport origin. Centering with auto
+   margins can leave a dark subpixel strip above odd-sized desktop views. */
+#noVNC_container canvas {
+  margin: 0 !important;
+  display: block;
+}

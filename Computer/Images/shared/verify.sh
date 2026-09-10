@@ -15,6 +15,10 @@ case "${1:-}" in
     test ! -x /usr/local/bin/desktop-bridge
     test -s /usr/share/backgrounds/desktop-wallpaper.svg
     test -s /etc/xdg/kitty/theme.conf
+    grep -q '^background #000000$' /etc/xdg/kitty/theme.conf
+    grep -q '^rounded = 12$' /etc/xdg/tint2/tint2rc
+    grep -q 'margin: 0 !important;' /usr/share/kasmvnc/www/assets/custom.css
+    grep -q '^window.active.border.color: #000000$' /usr/share/themes/Desktop/openbox-3/themerc
     grep -q 'DESKTOP_WALLPAPER' /etc/xdg/openbox/autostart
     grep -q '/etc/xdg/kitty/theme.conf' /etc/xdg/openbox/autostart
     id agent >/dev/null

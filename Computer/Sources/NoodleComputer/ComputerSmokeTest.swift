@@ -105,6 +105,113 @@ import WebKit
             print("PROVIDER TEST: fixture stopped and removed")
         } catch { await store.stop(session, force: true); throw error }
     }
+    static func checkLibraryLayout() async throws {
+        setbuf(stdout, nil)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("NoodleLibraryLayout-\(UUID().uuidString)")
+        let store = try ComputerStore(root: root)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let session = ComputerSession(ComputerTemplate.desktop.makeComputer())
+        session.desktop = DesktopConnection(url: URL(string: "https://127.0.0.1:1/")!)
+        store.sessions = [session]
+        store.selection = session.id
+        let host = NSHostingView(rootView: ComputerLibraryView(store: store))
+        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 1000, height: 650),
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        window.titlebarAppearsTransparent = true
+        window.toolbar = NSToolbar(identifier: "library-layout-verification")
+        window.contentView = host
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        func find(in view: NSView, matching predicate: (NSView) -> Bool) -> NSView? {
+            if predicate(view) { return view }
+            return view.subviews.compactMap { find(in: $0, matching: predicate) }.first
+        }
+        session.terminal = GuestTerminal()
+        for size in [NSSize(width: 1000, height: 650), NSSize(width: 1001, height: 651)] {
+            window.setContentSize(size)
+            for terminal in [false, true] {
+                session.showingTerminal = terminal
+                try await Task.sleep(for: .milliseconds(400))
+                host.layoutSubtreeIfNeeded()
+                guard let glass = find(in: host, matching: { String(describing: type(of: $0)).contains("ConcentricGlassEffectView") }),
+                      let display = find(in: host, matching: { terminal ? $0 is ComputerTerminalSurface : $0 is WKWebView }) else {
+                    throw ComputerError("Native sidebar or display missing from full-library fixture")
+                }
+                let sidebarFrame = glass.convert(glass.bounds, to: nil)
+                let displayFrame = display.convert(display.bounds, to: nil)
+                guard abs(sidebarFrame.minY - displayFrame.minY) < 0.01 else {
+                    throw ComputerError("Sidebar/display bottom bounds differ: \(sidebarFrame), \(displayFrame)")
+                }
+                print("PASS: full-library \(terminal ? "terminal" : "web") bottom matches native glass at \(displayFrame.minY), size \(size)")
+            }
+        }
+        session.showingTerminal = false
+        let browser = session.browser!
+        browser.view.loadHTMLString("""
+          <html><head><style>html,body{margin:0;width:100%;height:100%}
+          #noVNC_container{display:flex;width:100%;height:100%;background:black}</style></head>
+          <body><div id="noVNC_container"><canvas style="margin:auto" width="100" height="100"></canvas></div></body></html>
+          """, baseURL: browser.connection.url)
+        var anchored = false
+        for _ in 0..<50 {
+            if (try? await browser.view.evaluateJavaScript("""
+              (() => {const c=document.querySelector('canvas');if(!c)return false;
+              const r=c.getBoundingClientRect();return r.top===0 && r.left===0;})()
+              """)) as? Bool == true { anchored = true; break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        guard anchored else { throw ComputerError("Remote canvas was centered instead of anchored at the viewport origin") }
+        print("PASS: embedded desktop canvas has no top/left auto-margin")
+    }
+
+    static func checkEmptyLibraryBackground() async throws {
+        setbuf(stdout, nil)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("NoodleEmptyLibrary-\(UUID().uuidString)")
+        let store = try ComputerStore(root: root)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let host = NSHostingView(rootView: ComputerLibraryView(store: store))
+        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 1000, height: 650),
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        window.title = "Empty Library Verification"
+        window.titlebarAppearsTransparent = true
+        window.toolbar = NSToolbar(identifier: "empty-library-verification")
+        window.contentView = host
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        for name in [NSAppearance.Name.aqua, .darkAqua] {
+            window.appearance = NSAppearance(named: name)
+            let session = ComputerSession(ComputerTemplate.shell.makeComputer(name: "Unstarted fixture"))
+            for state in ["empty", "selected", "deselected", "removed"] {
+                store.sessions = state == "empty" || state == "removed" ? [] : [session]
+                store.selection = state == "selected" ? session.id : nil
+                try await Task.sleep(for: .milliseconds(400))
+                host.layoutSubtreeIfNeeded()
+                guard !window.isOpaque, window.backgroundColor.alphaComponent == 0 else {
+                    throw ComputerError("Fixture must exercise the transparent compositing window")
+                }
+                guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+                    throw ComputerError("Could not allocate library snapshot")
+                }
+                host.cacheDisplay(in: host.bounds, to: bitmap)
+                // Sample blank detail areas away from controls; the view itself
+                // must paint opaque pixels, not rely on the desktop behind it.
+                for (x, y) in [(0.9, 0.2), (0.9, 0.8), (0.55, 0.85)] {
+                    guard let colour = bitmap.colorAt(x: Int(Double(bitmap.pixelsWide) * x),
+                                                      y: Int(Double(bitmap.pixelsHigh) * y)),
+                          colour.alphaComponent > 0.99 else {
+                        throw ComputerError("Transparent library background: \(name.rawValue), \(state)")
+                    }
+                }
+                if state == "empty", let png = bitmap.representation(using: .png, properties: [:]) {
+                    let output = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-empty-library-\(name.rawValue).png")
+                    try png.write(to: output)
+                    print("SNAPSHOT: \(output.path)")
+                }
+                print("PASS: opaque library background — \(name.rawValue), \(state)")
+            }
+        }
+    }
+
     static func checkAppearancePreview() async throws {
         setbuf(stdout, nil)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("NoodleAppearance-\(UUID().uuidString)")

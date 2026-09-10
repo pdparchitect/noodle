@@ -4,7 +4,7 @@ The Dockerfiles, overlays and publishing workflow live in this repository.
 These are thin derivatives, not forks of the complete Launcher/Ghost stack:
 
 - `ghcr.io/pdparchitect/noodle-computer-shell-image`: pinned Alpine, preserving the tiny shell/network-bootstrap substrate.
-- `ghcr.io/pdparchitect/noodle-computer-desktop-image`: the currently tested Launcher desktop digest, plus a lighter cream/cobalt wallpaper and terminal palette.
+- `ghcr.io/pdparchitect/noodle-computer-desktop-image`: the currently tested Launcher desktop digest, plus a lighter cream/cobalt wallpaper, black terminal and window borders, and a rounded top panel.
 
 Both target `linux/arm64` for Noodle Computer. Upstream digests are literal in the
 Dockerfiles so an upstream tag change cannot silently change a rebuild. Software

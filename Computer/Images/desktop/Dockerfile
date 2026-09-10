@@ -12,7 +12,13 @@ LABEL org.opencontainers.image.title="Noodle Computer Desktop" \
       org.opencontainers.image.revision="${SOURCE_REVISION}"
 
 COPY desktop/overlay/ /
+RUN sed -i '$r /usr/share/kasmvnc/www/assets/noodle.css' /usr/share/kasmvnc/www/assets/custom.css
 COPY shared/verify.sh /usr/local/lib/noodle-image-check
+# Keep the pinned base's panel behavior and theme; change only product styling.
+RUN grep -q '^rounded = 0$' /etc/xdg/tint2/tint2rc \
+    && sed -i '0,/^rounded = 0$/s//rounded = 12/' /etc/xdg/tint2/tint2rc \
+    && grep -q '^window.active.border.color: #ffffff$' /usr/share/themes/Desktop/openbox-3/themerc \
+    && sed -i 's/^window.active.border.color: #ffffff$/window.active.border.color: #000000/' /usr/share/themes/Desktop/openbox-3/themerc
 # Noodle owns authenticated VNC startup. Do not expose the inherited,
 # unauthenticated helper or start a desktop merely by running this image.
 RUN chmod -x /usr/local/bin/desktop-bridge && sh /usr/local/lib/noodle-image-check desktop
