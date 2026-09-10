@@ -41,18 +41,52 @@ import WebKit
                 guard session.phase == .running, let browser = session.browser else {
                     throw ComputerError("The isolated desktop did not start.")
                 }
+                // Exercise real remote pixels, not just a synthetic HTML canvas.
+                guard let runtime = session.container else { throw ComputerError("Missing fixture runtime") }
+                let fixture = try await runtime.execute(#"""
+                    command -v xterm && for n in 1 2 3 4 5 6 7 8 9 10; do pgrep -x openbox >/dev/null && break; sleep 1; done
+                    DISPLAY=:1 XAUTHORITY=/run/launcher-desktop/Xauthority xterm -geometry 70x20+40+60 -title 'Preview Verification' -e /bin/sh -c 'printf "Native desktop preview\nNo grey browser bands\nCorrect text proportions\n"; sleep 180' >/tmp/noodle-preview-xterm.log 2>&1 &
+                    """#)
+                print("SNAPSHOT FIXTURE: \(fixture)")
+                var connected = false
+                for _ in 0..<60 {
+                    if (try? await browser.view.evaluateJavaScript("document.documentElement.classList.contains('noVNC_connected')")) as? Bool == true {
+                        connected = true; break
+                    }
+                    try await Task.sleep(for: .seconds(1))
+                }
+                guard connected else { throw ComputerError("Real desktop canvas never connected") }
+                try await Task.sleep(for: .seconds(3))
+                let state = try await browser.view.evaluateJavaScript("JSON.stringify([...document.querySelectorAll('canvas')].map(c=>({pixels:[c.width,c.height],rect:[c.getBoundingClientRect().width,c.getBoundingClientRect().height]})))")
+                print("REAL CANVAS: \(String(describing: state))")
                 let began = ProcessInfo.processInfo.systemUptime
+                var nativeSize: NSSize?
                 if let image = await ComputerPreviewSnapshot.capture(browser.view, desktop: true) {
+                    guard let bitmap = NSBitmapImageRep(data: image) else { throw ComputerError("Invalid native snapshot") }
+                    nativeSize = NSSize(width: bitmap.pixelsWide, height: bitmap.pixelsHigh)
                     let ext = image.starts(with: [137, 80, 78, 71]) ? "png" : "jpg"
                     let output = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-desktop-snapshot-test.\(ext)")
                     try image.write(to: output)
                     print("PASS: real background desktop snapshot saved to \(output.path)")
                 } else {
-                    print("PASS: desktop content not ready; using computer-icon fallback")
+                    throw ComputerError("Ready real desktop must produce a snapshot, not a fallback")
                 }
                 guard ProcessInfo.processInfo.systemUptime - began < 9 else {
                     throw ComputerError("Desktop snapshot exceeded its deadline.")
                 }
+                // Reproduce the reported CSS letterbox/stretch without changing guest pixels.
+                _ = try await browser.view.evaluateJavaScript("document.body.style.background='#272727';for(const c of document.querySelectorAll('canvas')){c.style.setProperty('margin-top','140px','important');c.style.setProperty('width','500px','important');c.style.setProperty('height','250px','important');}")
+                guard let cropped = await ComputerPreviewSnapshot.capture(browser.view, desktop: true) else {
+                    throw ComputerError("Letterboxed real desktop did not produce a snapshot")
+                }
+                guard let bitmap = NSBitmapImageRep(data: cropped),
+                      NSSize(width: bitmap.pixelsWide, height: bitmap.pixelsHigh) == nativeSize,
+                      let corner = bitmap.colorAt(x: 0, y: 0)?.usingColorSpace(.deviceRGB),
+                      corner.redComponent < 0.1, corner.greenComponent < 0.1, corner.blueComponent < 0.1 else {
+                    throw ComputerError("Native framebuffer dimensions changed or grey browser margin entered the snapshot")
+                }
+                try cropped.write(to: FileManager.default.temporaryDirectory.appendingPathComponent("noodle-real-letterbox-result.png"))
+                print("PASS: real remote canvas captured after forced letterboxing and CSS stretching")
             }
             for _ in 0..<(snapshotTest ? 0 : 600) {
                 if FileManager.default.fileExists(atPath: finished.path) {

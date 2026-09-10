@@ -69,6 +69,9 @@ Check delayed pages, canvases, blank/busy fallback and cancellation without a gu
 The signed Computer app also accepts `--noodle-background --provider-integration-test
 --provider-snapshot-test` to create a temporary desktop, capture it without a
 window, and clean up the guest. It never opens the user's computer library.
+This real-desktop check opens a test xterm, requires a native snapshot, then forces
+CSS letterboxing/stretching and verifies that capture dimensions and the native
+top edge remain unchanged. An icon fallback fails this ready-desktop test.
 
 The conversation owns a typed `.noodlecomputer` reference, appearance and bounded
 historical preview. No guest URL, password, certificate or access token is stored
