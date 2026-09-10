@@ -43,16 +43,16 @@ jobs:
           for kind in shell desktop; do
             docker buildx build --platform linux/arm64 --load \
               --build-arg IMAGE_VERSION="$IMAGE_VERSION" --build-arg SOURCE_REVISION="$GITHUB_SHA" \
-              --tag "noodle-$kind:check" --file "Computer/Images/$kind/Dockerfile" Computer/Images
+              --tag "noodle-computer-$kind-image:check" --file "Computer/Images/$kind/Dockerfile" Computer/Images
           done
       - name: Verify both image contracts without networking or host mounts
         run: |
           set -eu
           for kind in shell desktop; do
-            docker run --rm --network none --entrypoint /bin/sh "noodle-$kind:check" /usr/local/lib/noodle-image-check "$kind"
+            docker run --rm --network none --entrypoint /bin/sh "noodle-computer-$kind-image:check" /usr/local/lib/noodle-image-check "$kind"
           done
       - name: Verify desktop wallpaper rendering
-        run: docker run --rm -i --network none --entrypoint /bin/sh noodle-desktop:check < Computer/Images/tests/desktop.sh
+        run: docker run --rm -i --network none --entrypoint /bin/sh noodle-computer-desktop-image:check < Computer/Images/tests/desktop.sh
       - name: Sign in to GHCR for an approved image tag
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/computer-images-v') && github.repository == 'pdparchitect/noodle'
         uses: docker/login-action@v3
@@ -68,11 +68,11 @@ jobs:
         run: |
           set -euo pipefail
           for kind in shell desktop; do
-            image="ghcr.io/pdparchitect/noodle-$kind:$IMAGE_VERSION"
-            docker tag "noodle-$kind:check" "$image"
+            image="ghcr.io/pdparchitect/noodle-computer-$kind-image:$IMAGE_VERSION"
+            docker tag "noodle-computer-$kind-image:check" "$image"
             docker push "$image"
             digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$image")"
-            [[ "$digest" == ghcr.io/pdparchitect/noodle-"$kind"@sha256:* ]]
+            [[ "$digest" == ghcr.io/pdparchitect/noodle-computer-"$kind"-image@sha256:* ]]
             echo "$kind=$digest" >> computer-image-digests.txt
             echo "$kind: \`$digest\`" >> "$GITHUB_STEP_SUMMARY"
           done
