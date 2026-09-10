@@ -18,9 +18,9 @@ until xdpyinfo >/dev/null 2>&1; do
   fi
   sleep 0.5
 done
-feh --no-fehbg --bg-fill /usr/share/backgrounds/desktop-wallpaper.svg
+feh --no-fehbg --bg-fill "$DESKTOP_WALLPAPER"
 xprop -root _XROOTPMAP_ID | grep -q 'PIXMAP'
-# Check rendered pixels, not just whether feh accepted the SVG. XGetImage reads
+# Check rendered pixels, not just whether feh accepted the image. XGetImage reads
 # the isolated guest framebuffer; it never captures the user's host desktop.
 python3 - <<'PY'
 import ctypes as c
@@ -56,7 +56,7 @@ try:
     wallpaper = [[x.XGetPixel(snapshot, px, py) for px in range(1024)] for py in range(768)]
     colours = [x.XGetPixel(snapshot, px, py)
                for py in (100, 380, 650) for px in (100, 500, 900)]
-    assert len(set(colours)) >= 4, 'Wallpaper did not render its gradients/ribbons'
+    assert len(set(colours)) >= 4, 'Wallpaper did not render its landscape colours'
     rgb = [(v >> shift) & 255 for v in colours for shift in (16, 8, 0)]
     assert sum(rgb) / len(rgb) > 120, 'Wallpaper unexpectedly dark or blank'
 finally:

@@ -16,7 +16,7 @@ case "${1:-}" in
     grep -q '^Hidden=true$' /etc/xdg/autostart/picom.desktop
     grep -q '^corner-radius = 12;$' /etc/xdg/picom.conf
     test ! -x /usr/local/bin/desktop-bridge
-    test -s /usr/share/backgrounds/desktop-wallpaper.svg
+    test -s /usr/share/backgrounds/desktop-wallpaper.png
     test -s /etc/xdg/kitty/theme.conf
     grep -q '^background #000000$' /etc/xdg/kitty/theme.conf
     grep -q '^rounded = 12$' /etc/xdg/tint2/tint2rc

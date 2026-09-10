@@ -32,7 +32,7 @@ RUN grep -q '^rounded = 0$' /etc/xdg/tint2/tint2rc \
 # unauthenticated helper or start a desktop merely by running this image.
 RUN chmod -x /usr/local/bin/desktop-bridge && sh /usr/local/lib/noodle-image-check desktop
 ENV DESKTOP_TITLE="Noodle Computer" \
-    DESKTOP_WALLPAPER=/usr/share/backgrounds/desktop-wallpaper.svg
+    DESKTOP_WALLPAPER=/usr/share/backgrounds/desktop-wallpaper.png
 WORKDIR /workspace
 HEALTHCHECK NONE
 ENTRYPOINT ["/bin/sh"]

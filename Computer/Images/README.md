@@ -4,7 +4,7 @@ The Dockerfiles, overlays and publishing workflow live in this repository.
 These are thin derivatives, not forks of the complete Launcher/Ghost stack:
 
 - `ghcr.io/pdparchitect/noodle-computer-shell-image`: pinned Alpine, preserving the tiny shell/network-bootstrap substrate.
-- `ghcr.io/pdparchitect/noodle-computer-desktop-image`: the currently tested Launcher desktop digest, plus a lighter cream/cobalt wallpaper, black terminal and window borders, and rounded windows and top panel.
+- `ghcr.io/pdparchitect/noodle-computer-desktop-image`: the currently tested Launcher desktop digest, plus a textured landscape wallpaper in cream, teal and orange, black terminal and window borders, and rounded windows and top panel.
 
 Both target `linux/arm64` for Noodle Computer. Upstream digests are literal in the
 Dockerfiles so an upstream tag change cannot silently change a rebuild. Software
@@ -40,8 +40,9 @@ output. `NO_COLOR=1` disables colour; `NOODLE_BANNER=0` disables the welcome.
 Run `python3 Computer/Images/tests/welcome.py container noodle-computer-shell-image:local noodle-computer-desktop-image:local`
 to verify actual PTY startup in both local images (use `docker` on Linux).
 
-The source wallpaper is `desktop/overlay/usr/share/backgrounds/desktop-wallpaper.svg`.
-It is an editable vector asset with a bright sky, cream sun and blue ribbons.
+The source wallpaper is `desktop/overlay/usr/share/backgrounds/desktop-wallpaper.png`.
+It is a 1672 × 941 landscape with a cream sky, orange sun, teal hills and lake,
+and warm foreground dunes, finished with a fine paper texture.
 Replace this file to change new desktops' default without editing Launcher.
 The base re-applies it when the remote screen resizes. Other formats supported by
 `feh` can be used by changing `DESKTOP_WALLPAPER` in the Dockerfile.

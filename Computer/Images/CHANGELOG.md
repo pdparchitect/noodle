@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replace the default desktop wallpaper with a widescreen, paper-textured landscape in cream, teal and orange.
+
 - Use bold text in the terminal welcome banner with the terminal's default color, removing the cream and blue styling.
 - Change the terminal welcome tagline to “Your own agentic workspace.”
 
