@@ -22,7 +22,7 @@ account and subscription.
 ## Download
 
 - **[Download Noodle for macOS (.zip)](https://github.com/pdparchitect/noodle/releases/download/v0.11.0/Noodle-0.11.0-macOS.zip)** — the native messenger for your coding agents. Requires macOS 15 or later.
-- **[Download Noodle Computer for macOS (.zip)](https://github.com/pdparchitect/noodle/releases/download/computer-v0.1.1/Noodle-Computer-0.1.1-arm64.zip)** — Linux desktops and terminals for you and your agents. Requires macOS 26 or later and Apple silicon.
+- **[Download Noodle Computer for macOS (.zip)](https://github.com/pdparchitect/noodle/releases/download/computer-v0.1.2/Noodle-Computer-0.1.2-arm64.zip)** — Linux desktops and terminals for you and your agents. Requires macOS 26 or later and Apple silicon.
 
 Unzip the download and move the application to **Applications**.
 
@@ -54,7 +54,7 @@ access option in Settings → Security. See [Security and agent access](docs/sec
 
 Requires an Apple silicon Mac running macOS 26 or later. You do not need Xcode or Docker Desktop.
 
-1. [Download Noodle Computer](https://github.com/pdparchitect/noodle/releases/download/computer-v0.1.1/Noodle-Computer-0.1.1-arm64.zip), unzip it and move **Noodle Computer.app** to Applications.
+1. [Download Noodle Computer](https://github.com/pdparchitect/noodle/releases/download/computer-v0.1.2/Noodle-Computer-0.1.2-arm64.zip), unzip it and move **Noodle Computer.app** to Applications.
 2. Open Noodle Computer and create a **Shell** or **Desktop** computer.
 3. To share it with an agent, add it in the **Computers** tab when creating or editing a bot in Noodle.
 
