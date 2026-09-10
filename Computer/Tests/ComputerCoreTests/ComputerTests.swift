@@ -67,26 +67,6 @@ final class ComputerTests: XCTestCase {
         XCTAssertNoThrow(try shell.validate())
     }
 
-    func testPublishedDefaultsPreserveLegacyTemplatesAndDisks() throws {
-        XCTAssertTrue(Computer.desktopImage.hasPrefix("ghcr.io/pdparchitect/noodle-desktop@sha256:"))
-        XCTAssertTrue(Computer.shellImage.hasPrefix("ghcr.io/pdparchitect/noodle-shell@sha256:"))
-        for (reference, template) in [
-            ("docker.io/library/alpine:3.23.5", ComputerTemplate.shell),
-            ("ghcr.io/pdparchitect/launcher-image-base-desktop@sha256:1c6eeebbdfbbd00426a60e8284b9ffa9ec0619166efeeca179ac5eb132f1f061", .desktop)
-        ] {
-            var computer = template.makeComputer()
-            computer.imageReference = reference
-            let saved = try JSONDecoder().decode(Computer.self, from: JSONEncoder().encode(computer))
-            XCTAssertEqual(saved.imageReference, reference)
-            XCTAssertEqual(saved.template, template)
-            XCTAssertEqual(saved.hasDesktop, template == .desktop)
-            XCTAssertNoThrow(try saved.validate())
-            computer.customImage = true
-            XCTAssertNil(computer.template)
-            XCTAssertFalse(computer.hasDesktop)
-        }
-    }
-
     func testVMRecordsRemainSupportedWithoutBecomingContainerTemplates() throws {
         for kind in [ComputerKind.macOS, .linux, .omarchy] {
             let computer = Computer(name: "Existing VM", kind: kind)

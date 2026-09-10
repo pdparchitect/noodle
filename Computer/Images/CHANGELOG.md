@@ -5,7 +5,7 @@
 ## [0.1.1] - 2026-09-10
 
 - Publish under explicit product names: `noodle-computer-shell-image` and `noodle-computer-desktop-image`, avoiding ambiguity with the main Noodle app.
-- The original 0.1.0 packages remain historical artifacts; app releases use the new names.
+- Supersedes the ambiguous initial package names, which are removed before the first app release; no compatibility aliases are maintained.
 
 ## [0.1.0] - 2026-09-10
 

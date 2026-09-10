@@ -4,7 +4,7 @@
 
 ## [0.1.0] - 2026-09-10
 
-- New Shell and Desktop computers use the public, digest-pinned Noodle images 0.1.0. Desktop includes a lighter wallpaper and terminal palette. Existing upstream-based computers remain recognised without replacing their disks.
+- New Shell and Desktop computers use the public, digest-pinned `noodle-computer-shell-image` and `noodle-computer-desktop-image` packages. Desktop includes a lighter wallpaper and terminal palette. No compatibility aliases for pre-release image names are retained.
 
 - Real-desktop snapshot verification now requires an actual rendered preview and exercises forced browser letterboxing and stretching; an icon fallback no longer counts as success in this integration test.
 

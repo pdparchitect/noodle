@@ -62,9 +62,8 @@ credentials in Noodle. The workflow uses the repository's short-lived
 
 ## App promotion is a separate, tested change
 
-Promote the new 0.1.1 package names after publication and anonymous download checks.
-Future promotions must pin the published digests, preserve recognition of legacy desktop/shell
-references in `Computer.swift`, and keep the Alpine network helper working.
+The app uses the published 0.1.1 package names and digests after anonymous download checks.
+Future promotions must pin the published digests and keep the Alpine network helper working.
 Test creating/starting both presets and the desktop's authenticated display,
 wallpaper and terminal before committing those new defaults.
 
