@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Start newly created computers automatically, with an enabled-by-default toggle in Settings → General.
+
 - Align the visible bottom edge of the WebKit and terminal panels with the sidebar by correcting the extra one-point bottom inset.
 
 - Include the current application ZIP and checksum in the `computer-latest` release Assets, alongside the update feed, so manual downloads are easy to find.

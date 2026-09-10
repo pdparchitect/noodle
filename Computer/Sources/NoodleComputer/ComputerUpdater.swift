@@ -42,12 +42,31 @@ struct ComputerCheckForUpdatesButton: View {
 struct ComputerSettingsView: View {
     var body: some View {
         TabView {
+            ComputerGeneralSettingsView()
+                .frame(width: 580)
+                .fixedSize(horizontal: false, vertical: true)
+                .tabItem { Label("General", systemImage: "gearshape") }
             ComputerUpdatesSettingsView()
                 .frame(width: 580)
                 .fixedSize(horizontal: false, vertical: true)
                 .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }
         }
         .windowResizeAnchor(.top)
+    }
+}
+
+struct ComputerGeneralSettingsView: View {
+    @AppStorage("StartNewComputersAutomatically") private var startNewComputersAutomatically = true
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Start new computers automatically", isOn: $startNewComputersAutomatically)
+            } footer: {
+                Text("Start each computer as soon as it has been created.")
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 

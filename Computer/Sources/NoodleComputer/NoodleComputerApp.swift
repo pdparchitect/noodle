@@ -600,6 +600,7 @@ struct NewComputerView: View {
   @ObservedObject var store: ComputerStore
   let custom: Bool
   @Environment(\.dismiss) private var dismiss
+  @AppStorage("StartNewComputersAutomatically") private var startNewComputersAutomatically = true
   @State private var template = ComputerTemplate.desktop
   @State private var name = "My Desktop"
   @State private var cpus = 4
@@ -654,8 +655,14 @@ struct NewComputerView: View {
             Spacer()
             Button("Create") {
               Task {
-                if await store.create(draft, source: nil) {
+                let computer = draft
+                if await store.create(computer, source: nil) {
                   dismiss()
+                  if startNewComputersAutomatically,
+                    let session = store.sessions.first(where: { $0.id == computer.id })
+                  {
+                    await store.start(session)
+                  }
                 } else {
                   failure = store.creationWasCancelled ? nil : store.error
                   store.error = nil
