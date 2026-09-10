@@ -1,0 +1,118 @@
+name: Prepare Noodle release
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source and LFS assets
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Validate release version
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          if ! grep -Eq "^## \\[$version\\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md; then
+            print -u2 "CHANGELOG.md has no dated section for $version"
+            exit 1
+          fi
+          print "NOODLE_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Import Developer ID certificate
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          : "${MACOS_CERTIFICATE_P12:?Missing MACOS_CERTIFICATE_P12 secret}"
+          : "${MACOS_CERTIFICATE_PASSWORD:?Missing MACOS_CERTIFICATE_PASSWORD secret}"
+          keychain="$RUNNER_TEMP/noodle-signing.keychain-db"
+          certificate="$RUNNER_TEMP/noodle-signing.p12"
+          keychain_password="$(openssl rand -base64 32)"
+          print -rn -- "$MACOS_CERTIFICATE_P12" | base64 --decode > "$certificate"
+          chmod 600 "$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security list-keychains -d user -s "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"
+          identity="$(security find-identity -v -p codesigning "$keychain" | awk -F '"' '/Developer ID Application:/ { print $2; exit }')"
+          if [[ -z "$identity" ]]; then
+            print -u2 "The imported archive does not contain a Developer ID Application identity."
+            exit 1
+          fi
+          print "NOODLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+
+      - name: Prepare notarization key
+        env:
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          : "${APP_STORE_CONNECT_API_KEY_P8:?Missing APP_STORE_CONNECT_API_KEY_P8 secret}"
+          : "${APP_STORE_CONNECT_KEY_ID:?Missing APP_STORE_CONNECT_KEY_ID secret}"
+          : "${APP_STORE_CONNECT_ISSUER_ID:?Missing APP_STORE_CONNECT_ISSUER_ID secret}"
+          key="$RUNNER_TEMP/AuthKey_$APP_STORE_CONNECT_KEY_ID.p8"
+          print -rn -- "$APP_STORE_CONNECT_API_KEY_P8" > "$key"
+          chmod 600 "$key"
+          print "APPLE_API_KEY_PATH=$key" >> "$GITHUB_ENV"
+          print "APPLE_API_KEY_ID=$APP_STORE_CONNECT_KEY_ID" >> "$GITHUB_ENV"
+          print "APPLE_API_ISSUER_ID=$APP_STORE_CONNECT_ISSUER_ID" >> "$GITHUB_ENV"
+
+      - name: Prepare update-signing key
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          : "${SPARKLE_PRIVATE_KEY:?Missing SPARKLE_PRIVATE_KEY secret}"
+          umask 077
+          key="$RUNNER_TEMP/noodle-update.key"
+          print -rn -- "$SPARKLE_PRIVATE_KEY" > "$key"
+          print "SPARKLE_PRIVATE_KEY_PATH=$key" >> "$GITHUB_ENV"
+
+      - name: Build, sign, notarize, and package
+        shell: zsh {0}
+        run: scripts/package-release.sh "v$NOODLE_VERSION"
+
+      - name: Prepare release notes from changelog
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          notes="$RUNNER_TEMP/noodle-release-notes.md"
+          python3 scripts/release-versions.py notes noodle > "$notes"
+          print "NOODLE_RELEASE_NOTES=$notes" >> "$GITHUB_ENV"
+
+      - name: Save verified release assets
+        run: cp "$NOODLE_RELEASE_NOTES" dist/release-notes.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: noodle-release-assets
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove temporary signing material
+        if: always()
+        shell: zsh {0}
+        run: |
+          rm -f "$RUNNER_TEMP/noodle-update.key" "$RUNNER_TEMP/noodle-signing.p12"
+          if [[ -n "${APPLE_API_KEY_PATH:-}" ]]; then rm -f "$APPLE_API_KEY_PATH"; fi
+          if [[ -f "$RUNNER_TEMP/noodle-signing.keychain-db" ]]; then
+            security delete-keychain "$RUNNER_TEMP/noodle-signing.keychain-db"
+          fi

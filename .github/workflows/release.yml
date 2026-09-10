@@ -1,148 +1,199 @@
-name: Release
+name: Validate and release versions
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
+# Serialize the whole pipeline, including promotion of both update channels.
 concurrency:
-  group: noodle-release
+  group: versions-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
   cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: macos-26
-    timeout-minutes: 45
-
+  workflow-lint:
+    runs-on: ubuntu-latest
     steps:
-      - name: Check out source and LFS assets
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - name: Validate workflow syntax and expressions
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck= -pyflakes=
+
+  versions:
+    runs-on: ubuntu-latest
+    outputs:
+      noodle: ${{ steps.versions.outputs.noodle }}
+      computer: ${{ steps.versions.outputs.computer }}
+      images: ${{ steps.versions.outputs.images }}
+      any: ${{ steps.versions.outputs.any }}
+      products: ${{ steps.versions.outputs.products }}
+    steps:
+      - uses: actions/checkout@v4
         with:
-          lfs: true
-
-      - name: Validate release version
-        shell: zsh {0}
-        run: |
-          set -euo pipefail
-          version="$(tr -d '[:space:]' < VERSION)"
-          if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
-            print -u2 "Tag $GITHUB_REF_NAME does not match VERSION v$version"
-            exit 1
-          fi
-          if ! grep -Eq "^## \\[$version\\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md; then
-            print -u2 "CHANGELOG.md has no dated section for $version"
-            exit 1
-          fi
-          print "NOODLE_VERSION=$version" >> "$GITHUB_ENV"
-
-      - name: Import Developer ID certificate
-        env:
-          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
-          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-        shell: zsh {0}
-        run: |
-          set -euo pipefail
-          : "${MACOS_CERTIFICATE_P12:?Missing MACOS_CERTIFICATE_P12 secret}"
-          : "${MACOS_CERTIFICATE_PASSWORD:?Missing MACOS_CERTIFICATE_PASSWORD secret}"
-          keychain="$RUNNER_TEMP/noodle-signing.keychain-db"
-          certificate="$RUNNER_TEMP/noodle-signing.p12"
-          keychain_password="$(openssl rand -base64 32)"
-          print -rn -- "$MACOS_CERTIFICATE_P12" | base64 --decode > "$certificate"
-          chmod 600 "$certificate"
-          security create-keychain -p "$keychain_password" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "$keychain_password" "$keychain"
-          security import "$certificate" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
-          security list-keychains -d user -s "$keychain"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"
-          identity="$(security find-identity -v -p codesigning "$keychain" | awk -F '"' '/Developer ID Application:/ { print $2; exit }')"
-          if [[ -z "$identity" ]]; then
-            print -u2 "The imported archive does not contain a Developer ID Application identity."
-            exit 1
-          fi
-          print "NOODLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
-
-      - name: Prepare notarization key
-        env:
-          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
-          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        shell: zsh {0}
-        run: |
-          set -euo pipefail
-          : "${APP_STORE_CONNECT_API_KEY_P8:?Missing APP_STORE_CONNECT_API_KEY_P8 secret}"
-          : "${APP_STORE_CONNECT_KEY_ID:?Missing APP_STORE_CONNECT_KEY_ID secret}"
-          : "${APP_STORE_CONNECT_ISSUER_ID:?Missing APP_STORE_CONNECT_ISSUER_ID secret}"
-          key="$RUNNER_TEMP/AuthKey_$APP_STORE_CONNECT_KEY_ID.p8"
-          print -rn -- "$APP_STORE_CONNECT_API_KEY_P8" > "$key"
-          chmod 600 "$key"
-          print "APPLE_API_KEY_PATH=$key" >> "$GITHUB_ENV"
-          print "APPLE_API_KEY_ID=$APP_STORE_CONNECT_KEY_ID" >> "$GITHUB_ENV"
-          print "APPLE_API_ISSUER_ID=$APP_STORE_CONNECT_ISSUER_ID" >> "$GITHUB_ENV"
-
-      - name: Prepare update-signing key
-        env:
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        shell: zsh {0}
-        run: |
-          set -euo pipefail
-          : "${SPARKLE_PRIVATE_KEY:?Missing SPARKLE_PRIVATE_KEY secret}"
-          umask 077
-          key="$RUNNER_TEMP/noodle-update.key"
-          print -rn -- "$SPARKLE_PRIVATE_KEY" > "$key"
-          print "SPARKLE_PRIVATE_KEY_PATH=$key" >> "$GITHUB_ENV"
-
-      - name: Test
-        run: swift test --disable-sandbox
-
-      - name: Build, sign, notarize, and package
-        shell: zsh {0}
-        run: scripts/package-release.sh "$GITHUB_REF_NAME"
-
-      - name: Prepare release notes from changelog
-        shell: zsh {0}
-        run: |
-          set -euo pipefail
-          notes="$RUNNER_TEMP/noodle-release-notes.md"
-          awk -v version="$NOODLE_VERSION" '
-            BEGIN { header = "## [" version "]" }
-            index($0, header) == 1 { found = 1; next }
-            found && index($0, "## [") == 1 { exit }
-            found { print }
-            END { if (!found) exit 1 }
-          ' CHANGELOG.md > "$notes"
-          if [[ ! -s "$notes" ]]; then
-            print -u2 "The $NOODLE_VERSION changelog section is empty"
-            exit 1
-          fi
-          print "NOODLE_RELEASE_NOTES=$notes" >> "$GITHUB_ENV"
-
-      - name: Publish GitHub release
+          fetch-depth: 0
+      - id: versions
+        run: python3 scripts/release-versions.py plan
+      - name: Require public distribution
+        if: github.event_name != 'pull_request' && steps.versions.outputs.any == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: zsh {0}
+        run: test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = false
+
+  checks:
+    needs: workflow-lint
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: Verify version automation and publication guards
+        run: |
+          python3 -m unittest discover -s Tests/ReleaseAutomation -v
+          swift Computer/Tests/ReleaseWorkflowTests.swift "$PWD"
+      - name: Test all application and integration packages
+        run: |
+          swift test --disable-sandbox
+          swift test --disable-sandbox --package-path Computer --scratch-path .build/computer
+          swift test --disable-sandbox --package-path Computer/Bridge
+
+  prepare-noodle:
+    needs: [versions, checks]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.noodle == 'true'
+    uses: ./.github/workflows/prepare-noodle-release.yml
+    secrets: inherit
+
+  prepare-computer:
+    needs: [versions, checks]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.computer == 'true'
+    uses: ./.github/workflows/computer-release.yml
+    secrets: inherit
+
+  prepare-images:
+    needs: [versions, checks]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.images == 'true'
+    uses: ./.github/workflows/computer-images.yml
+
+  tag:
+    needs: [versions, workflow-lint, checks, prepare-noodle, prepare-computer, prepare-images]
+    # Explicitly accept unselected/skipped products, never a failed/cancelled build.
+    if: >-
+      always() && !cancelled() && github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main' && needs.versions.outputs.any == 'true' &&
+      needs.workflow-lint.result == 'success' &&
+      needs.checks.result == 'success' &&
+      (needs.versions.outputs.noodle != 'true' || needs.prepare-noodle.result == 'success') &&
+      (needs.versions.outputs.computer != 'true' || needs.prepare-computer.result == 'success') &&
+      (needs.versions.outputs.images != 'true' || needs.prepare-images.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Mint tags from the checked VERSION files
+        env:
+          RELEASE_PRODUCTS: ${{ needs.versions.outputs.products }}
+        run: |
+          git fetch origin --tags
+          python3 scripts/release-versions.py tag
+
+  publish-images:
+    needs: [versions, tag]
+    if: needs.versions.outputs.images == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: computer-image-builds
+      - name: Load the tested images
+        run: |
+          sha256sum -c computer-images.tar.gz.sha256
+          docker load < computer-images.tar.gz
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish and verify public versioned and latest images
+        run: bash scripts/publish-computer-images.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: computer-image-digests
+          path: computer-image-digests.txt
+          if-no-files-found: error
+
+  publish-computer:
+    needs: [versions, tag, publish-images]
+    if: >-
+      always() && !cancelled() && needs.tag.result == 'success' &&
+      needs.versions.outputs.computer == 'true' &&
+      (needs.versions.outputs.images != 'true' || needs.publish-images.result == 'success')
+    runs-on: macos-26
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Read Computer version
+        run: echo "COMPUTER_VERSION=$(cat Computer/VERSION)" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          name: computer-release-assets
+          path: dist/computer-${{ env.COMPUTER_VERSION }}
+      - name: Verify public image channel before releasing Computer
+        run: python3 scripts/computer-image-registry.py channel
+      - name: Publish the verified Computer archive and update channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "dist/computer-$COMPUTER_VERSION"
+          shasum -a 256 -c "Noodle-Computer-$COMPUTER_VERSION-arm64.zip.sha256"
+          cd ../..
+          zsh scripts/publish-computer-release.sh "$COMPUTER_VERSION" "dist/computer-$COMPUTER_VERSION/release-notes.md"
+
+  publish-noodle:
+    needs: [versions, tag, publish-images, publish-computer]
+    if: >-
+      always() && !cancelled() && needs.tag.result == 'success' &&
+      needs.versions.outputs.noodle == 'true' &&
+      (needs.versions.outputs.images != 'true' || needs.publish-images.result == 'success') &&
+      (needs.versions.outputs.computer != 'true' || needs.publish-computer.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: noodle-release-assets
+          path: dist
+      - name: Publish the verified Noodle archive and update channel
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # Keep the previous latest feed available until all new assets are uploaded.
-          gh release create "$GITHUB_REF_NAME" \
-            "dist/Noodle-$NOODLE_VERSION-macOS.zip" \
-            "dist/Noodle-$NOODLE_VERSION-macOS.zip.sha256" \
-            "dist/appcast.xml" \
-            --draft \
-            --verify-tag \
-            --notes-file "$NOODLE_RELEASE_NOTES" \
-            --title "Noodle $NOODLE_VERSION"
-          gh release edit "$GITHUB_REF_NAME" --draft=false --latest
-
-      - name: Remove temporary signing material
-        if: always()
-        shell: zsh {0}
-        run: |
-          rm -f "$RUNNER_TEMP/noodle-update.key" "$RUNNER_TEMP/noodle-signing.p12"
-          if [[ -n "${APPLE_API_KEY_PATH:-}" ]]; then rm -f "$APPLE_API_KEY_PATH"; fi
-          if [[ -f "$RUNNER_TEMP/noodle-signing.keychain-db" ]]; then
-            security delete-keychain "$RUNNER_TEMP/noodle-signing.keychain-db"
+          version="$(cat VERSION)"
+          tag="v$version"
+          cd dist
+          sha256sum -c "Noodle-$version-macOS.zip.sha256"
+          cd ..
+          # Existing releases (including drafts) require recovery, never replacement.
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag exists; inspect it before retrying." >&2
+            exit 1
           fi
+          gh release create "$tag" "dist/Noodle-$version-macOS.zip" \
+            "dist/Noodle-$version-macOS.zip.sha256" dist/appcast.xml \
+            --draft --verify-tag --notes-file dist/release-notes.md --title "Noodle $version"
+          gh release edit "$tag" --draft=false --latest

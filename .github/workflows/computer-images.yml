@@ -1,26 +1,17 @@
-name: Noodle Computer images
+name: Prepare Noodle Computer images
 
 on:
   pull_request:
     paths: ['Computer/Images/**', '.github/workflows/computer-images.yml']
-  push:
-    tags: ['computer-images-v*']
-  workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
-
-concurrency:
-  group: computer-images-${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/computer-images-v') && 'publish' || github.ref }}
-  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 40
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -31,9 +22,6 @@ jobs:
           set -euo pipefail
           version="$(tr -d '[:space:]' < Computer/Images/VERSION)"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            [[ "$GITHUB_REF_NAME" == "computer-images-v$version" ]]
-          fi
           echo "value=$version" >> "$GITHUB_OUTPUT"
       - name: Build both ARM64 images
         env:
@@ -55,41 +43,20 @@ jobs:
         run: python3 Computer/Images/tests/welcome.py docker noodle-computer-shell-image:check noodle-computer-desktop-image:check
       - name: Verify desktop wallpaper rendering
         run: docker run --rm -i --network none --entrypoint /bin/sh noodle-computer-desktop-image:check < Computer/Images/tests/desktop.sh
-      - name: Sign in to GHCR for an approved image tag
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/computer-images-v') && github.repository == 'pdparchitect/noodle'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Publish versioned images and record immutable digests
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/computer-images-v') && github.repository == 'pdparchitect/noodle'
-        env:
-          IMAGE_VERSION: ${{ steps.version.outputs.value }}
-        shell: bash
+      # Export the exact tested builds. Publication loads these; it never rebuilds.
+      - name: Save tested images
+        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
-          for kind in shell desktop; do
-            image="ghcr.io/pdparchitect/noodle-computer-$kind-image:$IMAGE_VERSION"
-            docker tag "noodle-computer-$kind-image:check" "$image"
-            docker push "$image"
-            digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$image")"
-            [[ "$digest" == ghcr.io/pdparchitect/noodle-computer-"$kind"-image@sha256:* ]]
-            echo "$kind=$digest" >> computer-image-digests.txt
-            echo "$kind: \`$digest\`" >> "$GITHUB_STEP_SUMMARY"
-          done
-          echo 'Set both GHCR packages to Public and verify anonymous pulls.' >> "$GITHUB_STEP_SUMMARY"
-      - name: Promote both tested images to latest
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/computer-images-v') && github.repository == 'pdparchitect/noodle'
-        run: |
-          set -eu
-          for kind in shell desktop; do
-            image="ghcr.io/pdparchitect/noodle-computer-$kind-image:latest"
-            docker tag "noodle-computer-$kind-image:check" "$image"
-            docker push "$image"
-          done
+          docker save noodle-computer-shell-image:check noodle-computer-desktop-image:check | gzip > computer-images.tar.gz
+          shasum -a 256 computer-images.tar.gz > computer-images.tar.gz.sha256
       - uses: actions/upload-artifact@v4
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/computer-images-v') && github.repository == 'pdparchitect/noodle'
+        if: github.event_name != 'pull_request'
         with:
-          name: computer-image-digests
-          path: computer-image-digests.txt
+          name: computer-image-builds
+          path: |
+            computer-images.tar.gz
+            computer-images.tar.gz.sha256
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7

@@ -8,25 +8,47 @@ Commands and project paths below are relative to the repository root.
 
 The root `VERSION` file is the canonical stable application version (`X.Y.Z`). Swift Package Manager describes the package and deployment target, but it does not provide a macOS app marketing version. Starting with the updater bootstrap, the build copies `VERSION` into both `CFBundleShortVersionString` and `CFBundleVersion`, so local builds and CI releases use the same ordering. Increase it for every release; never reuse a published version. `NOODLE_BUILD_NUMBER` is a local-testing override only; release packaging always uses `VERSION`.
 
-`CHANGELOG.md` is the source of truth for user-facing release notes. Keep work
-that has landed since the latest release under `Unreleased`. To publish a
-release, move those entries into a dated `## [X.Y.Z] - YYYY-MM-DD` section,
-update `VERSION` to the same version, commit both changes, and run:
+`CHANGELOG.md` owns the user-facing release notes. To release, increment
+`VERSION`, move the relevant Unreleased entries into a dated
+`## [X.Y.Z] - YYYY-MM-DD` section, commit, and push to `main`. Publishing is an
+explicit release action: merging or pushing a new version requests publication.
+Do not create tags by hand. The workflow derives `vX.Y.Z` directly from `VERSION`.
 
-```sh
-scripts/create-release-tag.sh
-```
+The **Validate and release versions** workflow handles all three independent
+version files: `VERSION`, `Computer/VERSION`, and `Computer/Images/VERSION`.
+An unchanged version does not release again. New versions must exceed their
+product's existing version tags and have nonempty dated release notes. PRs run
+validation and tests without creating tags or publishing. A manual workflow run
+on `main` follows the same checks and reads the same files; it has no version input.
 
-The script refuses to tag a version without a matching dated changelog section,
-then creates and pushes a matching `vX.Y.Z` tag. GitHub Actions repeats that
-validation, runs the tests, imports the dedicated Developer ID Application
-identity into an ephemeral keychain, signs the app and every embedded
-executable, submits the archive to Apple's notary service, staples the ticket,
-and verifies Gatekeeper acceptance. Sparkle then signs the final ZIP and
-generates a signed `appcast.xml`. The matching changelog section becomes the
-GitHub Release description. The release stays a draft until its ZIP, checksum,
-appcast, and curated notes have all uploaded, then becomes the latest GitHub
-release.
+All selected products must pass the shared application/integration tests and
+finish their preparation before any tag is minted. Application preparation
+includes signing, notarization, stapling, Gatekeeper checks, and Sparkle archive
+and feed verification. Image preparation builds both ARM64 images and verifies
+their contracts, interactive terminals, wallpaper and window rendering. The
+prepared app archives and container images are saved as workflow artifacts.
+The gate accepts skipped preparation only for products whose version is unchanged.
+A failed or cancelled required job prevents every selected tag and publication.
+
+After that gate, the workflow atomically pushes the derived tags at the checked
+source commit. Existing tags are never moved; retries accept only tags already
+pointing to that commit. Publication continues in the same pipeline using the
+exact prepared artifacts, because tags pushed by `GITHUB_TOKEN` do not trigger
+another workflow. No personal access token or separate tagging workflow is needed.
+Images publish first, followed by Computer, then Noodle when those products are
+selected together. Public image references are verified before Computer ships.
+Computer's channel never replaces Noodle's repository-wide latest release.
+
+Each app release stays a draft until its ZIP, checksum, signed appcast and
+changelog notes have uploaded, then its update channel is promoted. External
+publication can still fail after the checks and tags succeed; GitHub and GHCR
+are not a single transaction. Re-run failed jobs in the original workflow to
+reuse its prepared artifacts (retained for seven days). Do not start a fresh
+build to replace an immutable published archive. Existing drafts and partially
+promoted app channels require inspection and recovery from their existing assets;
+see [Computer recovery](../Computer/RELEASING.md#failure-and-recovery). An image
+retry accepts an existing version only when its config digest matches the exact
+tested build. Never delete or move tags to retry a release.
 
 The release workflow reads signing material only from encrypted GitHub Actions secrets:
 

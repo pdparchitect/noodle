@@ -4,22 +4,30 @@ Computer is a separate product. `Computer/VERSION` and `Computer/CHANGELOG.md`
 own its version and release notes. Standard Noodle's `VERSION`, changelog,
 `v*` tags and repository-wide latest release stay independent.
 
-Nothing is published by a local build. Publishing requires explicit approval,
-approved dated release notes and a pushed `computer-vX.Y.Z` tag.
+Nothing is published by a local build. `Computer/VERSION` is the only source
+of the Computer version; its Git tag is derived automatically after validation.
 
 ## Publish an approved release
 
 1. Set `Computer/VERSION` to a new `X.Y.Z`. Never reuse a published version.
 2. Move the approved notes into `## [X.Y.Z] - YYYY-MM-DD` in
-   `Computer/CHANGELOG.md`, and commit the intended changes.
-3. Run `zsh scripts/create-computer-release-tag.sh`. It requires a clean worktree,
-   refuses existing tags, and pushes only the new Computer tag.
-4. The `Release Noodle Computer` workflow runs Computer, protocol and Noodle
-   tests, imports the existing publisher's Developer ID identity, builds with a
-   secure timestamp, verifies the signed bundle, notarizes, staples and checks
-   Gatekeeper acceptance. It signs the final ZIP and feed using Sparkle 2.9.4.
+   `Computer/CHANGELOG.md`, commit the intended changes, and push to `main`.
+   Pushing the version change requests publication; no manual tag is required.
+3. **Validate and release versions** runs Computer, protocol and Noodle tests.
+   The Computer preparation workflow imports the existing publisher's Developer
+   ID identity, builds with a secure timestamp, verifies the signed bundle,
+   notarizes, staples, checks Gatekeeper acceptance, and verifies the real updater
+   menu/settings. Sparkle 2.9.4 signs the final ZIP and feed.
+4. Only after every selected product's checks and preparation pass does the
+   workflow mint `computer-vX.Y.Z` from the file. It then publishes the exact
+   prepared archive; it does not rebuild after tagging. If image versions change
+   in the same push, both tested images publish and pass anonymous registry
+   verification before the Computer app is published.
 5. The versioned GitHub release is uploaded as a draft and made public only
    after all assets exist. The `computer-latest` channel is updated afterward.
+
+Unchanged versions skip release work. PRs validate without publishing. See the
+[shared release pipeline](../docs/releases.md) for gating and retry behavior.
 
 The workflow uses the same existing secret names as Noodle:
 `MACOS_CERTIFICATE_P12`, `MACOS_CERTIFICATE_PASSWORD`,
@@ -91,9 +99,9 @@ GitHub's asset upload with `--clobber`, so a brief unavailable-feed window is po
 failed checks can be retried. The archive enclosure always references the already
 published immutable version, never a moving ZIP.
 
-Actual notarization, Gatekeeper distribution acceptance, GitHub publication and
-an installed-version-to-new-version update require the first approved release.
-Local signing/build tests do not substitute for those end-to-end release checks.
+Local signing/build tests do not substitute for notarization, Gatekeeper
+distribution acceptance, publication, or an installed-version-to-new-version
+update. The pipeline performs the distribution checks on its prepared archive.
 
 ## Local checks
 

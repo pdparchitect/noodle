@@ -58,15 +58,25 @@ Further product files can be layered into `desktop/overlay/` later.
 ## Publish (explicit approval required)
 
 Image releases are independent of `Computer/VERSION` and Noodle's `VERSION`.
-Pull requests and manual workflow runs build/test only. To publish, choose an
-unused image version in this directory's `VERSION`, update this directory's `CHANGELOG.md`,
-commit, then push a new `computer-images-vX.Y.Z` tag matching that version.
-Never move/reuse a version tag; use a new version for a correction. Both images
-must pass build and contract checks before either is pushed. After both versioned
-images are published, the workflow updates both `:latest` tags to those tested builds.
-Image publication runs are serialized so their promotions cannot interleave.
-No application release is created. The workflow attaches the resulting
-immutable digests as an Actions artifact and writes them to its summary.
+Choose an unused version in this directory's `VERSION`, move the relevant notes
+into a dated section in this directory's `CHANGELOG.md`, commit, and push to
+`main`. That version change requests publication. The shared release workflow
+reads the file and automatically derives `computer-images-vX.Y.Z`; never create,
+move or reuse an image tag manually.
+
+PRs build/test without publishing. On `main`, both ARM64 images must pass build,
+contract, welcome and real desktop rendering checks. All other products selected
+by version changes in the same push must also finish their checks and packaging
+before any tag is minted. The workflow saves and later publishes the exact tested
+images, then promotes both `:latest` tags and verifies anonymous access, image
+versions and matching digests. It never rebuilds between checking and publishing.
+The whole release pipeline is serialized so channel promotions cannot interleave.
+No GitHub application release is created for images. Immutable image digests are
+attached as an Actions artifact and written to the workflow summary.
+
+Unchanged versions skip publishing. Re-run failed jobs in the original workflow
+to reuse its tested image artifact; retries only accept an existing version tag
+with the same image config digest. See the [shared release pipeline](../../docs/releases.md).
 
 After first publication, check that both packages are **Public** (change their
 visibility if needed), confirm they are linked to `pdparchitect/noodle`, then

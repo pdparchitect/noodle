@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Release automation reads the three VERSION files on main, checks and prepares every selected product before minting derived tags, then publishes the verified app archives and images. Manual tagging is no longer required.
+
 - README download links open the latest Noodle and Noodle Computer release pages, with installation instructions, so they stay current across releases.
 
 - Add a prominent Download section for Noodle and Noodle Computer above the README feature list, with separate requirements and getting-started instructions.

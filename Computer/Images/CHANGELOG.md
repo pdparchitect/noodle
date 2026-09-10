@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## [0.1.3] - 2026-09-10
+
+- Derive release tags automatically from Images/VERSION after all selected builds pass, publish the exact tested images, and verify public versioned/latest digests before releasing Computer.
+
 - Round desktop window corners to match the top panel, keeping maximized and fullscreen windows flush with the screen edges.
 - Publish `:latest` tags for both tested images after their versioned uploads, with serialized publication runs. New computers can receive image fixes independently of app releases.
 - Populate the initially missing Desktop and Shell `:latest` tags with the published 0.1.2 images, fixing registry 404 errors during computer creation.
