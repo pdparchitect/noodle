@@ -12,22 +12,29 @@ struct AgentAccessSettingsView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(store.agents) { agent in
-                        Toggle(isOn: Binding(
-                            get: { store.runtime.accessConfiguration.isExtended(agent.id) },
-                            set: { enabled in
-                                store.runtime.setExtendedAccess(enabled, agent: agent, repository: store.repository)
+                        let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")
+                        let requiresAutonomousAccess = provider?.supportsRestrictedAccess == false
+                        VStack(alignment: .leading, spacing: 8) {
+                            Toggle(isOn: Binding(
+                                get: { store.runtime.accessConfiguration.isExtended(for: agent) },
+                                set: { enabled in
+                                    store.runtime.setExtendedAccess(enabled, agent: agent, repository: store.repository)
+                                }
+                            )) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(agent.displayName)
+                                    if requiresAutonomousAccess, let provider {
+                                        Text("Autonomous access · Required by \(provider.displayName)")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    } else {
+                                        Text(store.runtime.changingAccess.contains(agent.id) ? "Restarting runtime…" : (store.runtime.accessConfiguration.isExtended(for: agent) ? "Autonomous access" : "Restricted"))
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
                             }
-                        )) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(agent.displayName)
-                                Text(store.runtime.changingAccess.contains(agent.id) ? "Restarting runtime…" : (store.runtime.accessConfiguration.isExtended(agent.id) ? "Autonomous access" : "Restricted"))
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                        .accessibilityLabel("\(agent.displayName), autonomous access")
-                        .disabled(store.runtime.changingAccess.contains(agent.id))
-                        if store.runtime.snapshot(for: agent.id).phase == .failed {
-                            VStack(alignment: .leading, spacing: 8) {
+                            .accessibilityLabel("\(agent.displayName), autonomous access")
+                            .disabled(requiresAutonomousAccess || store.runtime.changingAccess.contains(agent.id))
+                            if store.runtime.snapshot(for: agent.id).phase == .failed {
                                 Text(store.runtime.snapshot(for: agent.id).detail)
                                     .font(.caption).foregroundStyle(.red)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -43,7 +50,7 @@ struct AgentAccessSettingsView: View {
                     }
                 }
             } footer: {
-                Text("New bots start in restricted mode. Turn on autonomous access for a bot that needs access beyond its private workspace. Claude Code, FX, Grok Build and Muse Code currently require autonomous access. Existing bots keep their access settings.")
+                Text("Harnesses that support restricted mode let you choose autonomous access and start new bots restricted. For other harnesses, autonomous access is required and always on, including for existing bots.")
             }
         }
         .formStyle(.grouped)

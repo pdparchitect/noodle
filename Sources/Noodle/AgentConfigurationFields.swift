@@ -84,6 +84,13 @@ struct AgentConfigurationFields: View {
                     .strokeBorder(Color.secondary.opacity(0.11))
             }
 
+            if let selectedProvider, !selectedProvider.supportsRestrictedAccess {
+                Text("\(selectedProvider.displayName) always uses autonomous access and can work beyond this bot's private workspace.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             if let selectedProvider, let error = store.runtime.capabilityErrors[selectedProvider] {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)

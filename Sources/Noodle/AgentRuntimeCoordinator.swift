@@ -138,7 +138,8 @@ final class AgentRuntimeCoordinator {
     }
 
     func setExtendedAccess(_ enabled: Bool, agent: AgentRecord, repository: WorkspaceRepository) {
-        guard !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id), accessConfiguration.isExtended(agent.id) != enabled else { return }
+        guard HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsRestrictedAccess != false,
+              !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id), accessConfiguration.isExtended(for: agent) != enabled else { return }
         changingAccess.insert(agent.id)
         let lifecycle = lifecycleID
         // Persist revocation before stopping so relaunch cannot restore access.
@@ -441,7 +442,7 @@ final class AgentRuntimeCoordinator {
             let process = MuseAgentProcess(
                 agent: agent, executableURL: URL(fileURLWithPath: executablePath),
                 workspaceURL: repository.directory(for: agent),
-                extendedAccess: accessConfiguration.isExtended(agent.id),
+                extendedAccess: accessConfiguration.isExtended(for: agent),
                 recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
                 onSnapshot: runtimeSnapshotHandler(for: agent.id),
                 onHeartbeat: { [weak self] in self?.recordHeartbeat(for: agent.id) },
@@ -455,7 +456,7 @@ final class AgentRuntimeCoordinator {
             let process = ACPAgentProcess(
                 provider: installation.provider, agent: agent, executableURL: URL(fileURLWithPath: executablePath),
                 workspaceURL: repository.directory(for: agent),
-                extendedAccess: accessConfiguration.isExtended(agent.id),
+                extendedAccess: accessConfiguration.isExtended(for: agent),
                 recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
                 onSnapshot: runtimeSnapshotHandler(for: agent.id),
                 onHeartbeat: { [weak self] in self?.recordHeartbeat(for: agent.id) },
@@ -471,7 +472,7 @@ final class AgentRuntimeCoordinator {
                 agent: agent,
                 executableURL: URL(fileURLWithPath: executablePath),
                 workspaceURL: repository.directory(for: agent),
-                extendedAccess: accessConfiguration.isExtended(agent.id),
+                extendedAccess: accessConfiguration.isExtended(for: agent),
                 recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
                 onSnapshot: { [weak self] snapshot in
                     if self?.snapshots[snapshot.agentID]?.phase == .working,
@@ -508,7 +509,7 @@ final class AgentRuntimeCoordinator {
                 agent: agent,
                 executableURL: URL(fileURLWithPath: executablePath),
                 workspaceURL: repository.directory(for: agent),
-                extendedAccess: accessConfiguration.isExtended(agent.id),
+                extendedAccess: accessConfiguration.isExtended(for: agent),
                 recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
                 onSnapshot: runtimeSnapshotHandler(for: agent.id),
                 onHeartbeat: { [weak self] in self?.recordHeartbeat(for: agent.id) },
@@ -541,7 +542,7 @@ final class AgentRuntimeCoordinator {
         if resetThread {
             let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")
             let prefix = provider == .muse ? "muse-runtime" : (provider == .grokBuild ? "grok-runtime" : (provider == .fx ? "fx-runtime" : (provider == .claudeCode ? "claude-runtime" : "codex-runtime")))
-            let filename = accessConfiguration.isExtended(agent.id)
+            let filename = accessConfiguration.isExtended(for: agent)
                 ? ".agents/\(prefix)-extended.json" : ".agents/\(prefix).json"
             try? FileManager.default.removeItem(at: repository.directory(for: agent).appendingPathComponent(filename))
         }

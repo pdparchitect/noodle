@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Harness capabilities now determine bot access: Claude Code, FX, Grok Build and Muse Code always use autonomous access, overriding old restricted settings. Their Security switches stay on and disabled; creation explains the requirement, and startup errors appear inside the affected bot's row. Codex retains its configurable access setting.
+
 - Upgrade release workflow actions to Node.js 24 versions, removing Node.js 20 deprecation warnings during preparation, publication and recovery.
 
 - Require successful publication of every selected product before a release workflow can report success, including when GitHub skips a publication job.

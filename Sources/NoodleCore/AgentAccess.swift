@@ -6,6 +6,15 @@ public struct AgentAccessConfiguration: Equatable, Sendable {
 
     public init(autonomousAgentIDs: Set<UUID> = []) { self.autonomousAgentIDs = autonomousAgentIDs }
     public func isExtended(_ id: UUID) -> Bool { autonomousAgentIDs.contains(id) }
+
+    /// Resolve access from the current harness before consulting the saved
+    /// preference. Do not persist required access as a discretionary grant:
+    /// switching back to a restricted-capable harness restores its preference.
+    public func isExtended(for agent: AgentRecord) -> Bool {
+        if let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? ""),
+           !provider.supportsRestrictedAccess { return true }
+        return isExtended(agent.id)
+    }
     public mutating func setExtended(_ enabled: Bool, for id: UUID) {
         if enabled { autonomousAgentIDs.insert(id) } else { autonomousAgentIDs.remove(id) }
     }

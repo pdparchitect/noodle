@@ -9,6 +9,15 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
 
     public var id: String { rawValue }
 
+    /// Whether Noodle's adapter can run inside the app sandbox. Providers that
+    /// cannot do so always use autonomous access, including for existing bots.
+    public var supportsRestrictedAccess: Bool {
+        switch self {
+        case .codex: return true
+        case .claudeCode, .fx, .grokBuild, .muse: return false
+        }
+    }
+
     public var displayName: String {
         switch self {
         case .codex: return "Codex"

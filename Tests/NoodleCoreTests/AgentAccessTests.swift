@@ -2,6 +2,50 @@ import XCTest
 @testable import NoodleCore
 
 final class AgentAccessTests: XCTestCase {
+    func testHarnessAccessCapabilities() {
+        XCTAssertTrue(HarnessProvider.codex.supportsRestrictedAccess)
+        for provider in [HarnessProvider.claudeCode, .fx, .grokBuild, .muse] {
+            XCTAssertFalse(provider.supportsRestrictedAccess)
+        }
+    }
+
+    func testRequiredAutonomousAccessOverridesSavedRestrictionAfterRelaunch() {
+        let suite = "Noodle.AccessTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        for provider in HarnessProvider.allCases where !provider.supportsRestrictedAccess {
+            let bot = AgentRecord(displayName: "Existing bot", harnessIdentifier: provider.rawValue)
+            var configuration = AgentAccessConfiguration()
+            XCTAssertTrue(configuration.isExtended(for: bot))
+            configuration.setExtended(false, for: bot.id)
+            configuration.save(to: defaults)
+            let restored = AgentAccessConfiguration.load(from: defaults)
+            XCTAssertTrue(restored.isExtended(for: bot))
+            XCTAssertFalse(restored.isExtended(bot.id), "Required access must not overwrite the saved preference")
+        }
+    }
+
+    func testSwitchingHarnessRestoresDiscretionaryAccessPreference() {
+        var bot = AgentRecord(displayName: "Bot", harnessIdentifier: HarnessProvider.codex.rawValue)
+        var configuration = AgentAccessConfiguration()
+        XCTAssertFalse(configuration.isExtended(for: bot))
+        bot.harnessIdentifier = HarnessProvider.claudeCode.rawValue
+        XCTAssertTrue(configuration.isExtended(for: bot))
+        bot.harnessIdentifier = HarnessProvider.codex.rawValue
+        XCTAssertFalse(configuration.isExtended(for: bot))
+        configuration.setExtended(true, for: bot.id)
+        XCTAssertTrue(configuration.isExtended(for: bot))
+        configuration.setExtended(false, for: bot.id)
+        XCTAssertFalse(configuration.isExtended(for: bot))
+    }
+
+    func testUnknownOrMissingHarnessDoesNotImplyAutonomousAccess() {
+        for identifier in [nil, "unknown"] as [String?] {
+            let bot = AgentRecord(displayName: "Bot", harnessIdentifier: identifier)
+            XCTAssertFalse(AgentAccessConfiguration().isExtended(for: bot))
+        }
+    }
+
     func testNewBotsDefaultToRestrictedAccess() {
         XCTAssertFalse(AgentAccessConfiguration().isExtended(UUID()))
     }
