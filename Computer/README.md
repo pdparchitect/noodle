@@ -100,9 +100,9 @@ future VM templates. They are not selectable in the v1 New Computer dialog.
 
 Repository-owned Shell/Desktop image definitions, wallpaper sources and GHCR
 publishing live in [`Images/`](Images/README.md). They release independently;
-the app keeps its current upstream defaults until the first publication is tested.
+new computers use the verified, digest-pinned 0.1.0 images. Existing disks remain unchanged.
 
-A digest-pinned Launcher desktop image (Ubuntu, Openbox,
+A digest-pinned Noodle desktop image based on Launcher (Ubuntu, Openbox,
   Chromium, terminal and file manager), running through embedded Containerization
   and Apple vminit 0.43.0. The app displays the live KasmVNC screen using a private
   WebKit store, a per-start password and a guest certificate pinned via the

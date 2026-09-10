@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Repository-owned Shell and Desktop image sources, pinned upstream bases, and an independent ARM64 GHCR publishing workflow. The Desktop overlay adds a lighter wallpaper and terminal palette; app defaults remain on tested upstream images until the first image publication is verified.
+## [0.1.0] - 2026-09-10
+
+- New Shell and Desktop computers use the public, digest-pinned Noodle images 0.1.0. Desktop includes a lighter wallpaper and terminal palette. Existing upstream-based computers remain recognised without replacing their disks.
 
 - Real-desktop snapshot verification now requires an actual rendered preview and exercises forced browser letterboxing and stretching; an icon fallback no longer counts as success in this integration test.
 
@@ -31,6 +33,3 @@
 - Shared agent assignments, quiet discovery and interactive computer previews in Noodle.
 - Independent signed releases and a download entry point from Noodle.
 - Signed automatic update checks, with user-controlled installation.
-
-No public release has been approved yet. Before tagging, move the approved notes
-into a dated version section matching `Computer/VERSION`.

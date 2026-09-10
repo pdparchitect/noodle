@@ -38,15 +38,18 @@ public enum DefaultLinuxInstaller {
 }
 
 public struct Computer: Codable, Identifiable, Equatable, Sendable {
-    public static let desktopImage = "ghcr.io/pdparchitect/launcher-image-base-desktop@sha256:1c6eeebbdfbbd00426a60e8284b9ffa9ec0619166efeeca179ac5eb132f1f061"
-    public static let shellImage = "docker.io/library/alpine:3.23.5"
+    public static let desktopImage = "ghcr.io/pdparchitect/noodle-desktop@sha256:8d913cfb33c6a09a2a54c7153c3c5e7d44e6f69df0babe46a87df32d42bfde99"
+    public static let shellImage = "ghcr.io/pdparchitect/noodle-shell@sha256:606d755cddf98f5c3adc5090111f4b41fffbba811c9096ce63c846845fb0970f"
+    // Saved computers keep their original rootfs and image reference across upgrades.
+    private static let desktopImages = [desktopImage, "ghcr.io/pdparchitect/launcher-image-base-desktop@sha256:1c6eeebbdfbbd00426a60e8284b9ffa9ec0619166efeeca179ac5eb132f1f061"]
+    private static let shellImages = [shellImage, "docker.io/library/alpine:3.23.5"]
     public var isCustomContainer: Bool { kind == .container && customImage == true }
-    public var hasDesktop: Bool { kind == .container && !isCustomContainer && imageReference == Self.desktopImage }
+    public var hasDesktop: Bool { kind == .container && !isCustomContainer && Self.desktopImages.contains(imageReference) }
     public var hasWebDisplay: Bool { hasDesktop || (isCustomContainer && webPort != nil) }
     public var template: ComputerTemplate? {
         guard kind == .container, !isCustomContainer else { return nil }
-        if imageReference == Self.desktopImage { return .desktop }
-        if imageReference == Self.shellImage { return .shell }
+        if Self.desktopImages.contains(imageReference) { return .desktop }
+        if Self.shellImages.contains(imageReference) { return .shell }
         return nil
     }
     public var displayType: String { isCustomContainer ? "Custom Container" : template?.title ?? kind.title }

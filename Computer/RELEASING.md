@@ -5,8 +5,7 @@ own its version and release notes. Standard Noodle's `VERSION`, changelog,
 `v*` tags and repository-wide latest release stay independent.
 
 Nothing is published by a local build. Publishing requires explicit approval,
-approved dated release notes and a pushed `computer-vX.Y.Z` tag. The initial
-notes remain Unreleased deliberately.
+approved dated release notes and a pushed `computer-vX.Y.Z` tag.
 
 ## Publish an approved release
 

@@ -1,9 +1,9 @@
 # Noodle Computer release notes
 
-Noodle Computer is not ready for release. Per the user's request, keep its
-development changes out of the main CHANGELOG.md for now. Add final release
-notes only when the user confirms that Computer is ready; preserve unrelated
-Noodle changelog entries.
+Keep Computer app changes in Computer/CHANGELOG.md and image changes in
+Computer/Images/CHANGELOG.md. Noodle-side integration changes belong in the
+main CHANGELOG.md; preserve unrelated entries. Public releases require explicit
+user approval and the checks in Computer/RELEASING.md.
 
 ## Independent versioning
 
