@@ -1,0 +1,106 @@
+name: Release Noodle Computer
+
+on:
+  push:
+    tags:
+      - "computer-v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: noodle-computer-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Validate public release and notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < Computer/VERSION)"
+          [[ "$version" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' ]]
+          [[ "$GITHUB_REF_NAME" == "computer-v$version" ]]
+          grep -Eq "^## \\[$version\\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" Computer/CHANGELOG.md
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" == false ]] || {
+            print -u2 'Public downloads and unauthenticated updates require a public repository.'; exit 1
+          }
+          print "COMPUTER_VERSION=$version" >> "$GITHUB_ENV"
+          awk -v version="$version" '
+            $0 ~ "^## \\[" version "\\] - " { found=1; next }
+            found && /^## / { exit }
+            found { print }
+          ' Computer/CHANGELOG.md > "$RUNNER_TEMP/computer-notes.md"
+          grep -q '[^[:space:]]' "$RUNNER_TEMP/computer-notes.md"
+
+      - name: Test Computer and integration contracts
+        run: |
+          swift Computer/Tests/ReleaseWorkflowTests.swift "$PWD"
+          swift test --disable-sandbox --package-path Computer --scratch-path .build/computer
+          swift test --disable-sandbox --package-path Computer/Bridge
+          swift test --disable-sandbox
+
+      - name: Prepare signing credentials
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          : "${MACOS_CERTIFICATE_P12:?Missing certificate}"
+          : "${MACOS_CERTIFICATE_PASSWORD:?Missing certificate password}"
+          : "${APP_STORE_CONNECT_API_KEY_P8:?Missing notarization key}"
+          : "${APP_STORE_CONNECT_KEY_ID:?Missing notarization key ID}"
+          : "${APP_STORE_CONNECT_ISSUER_ID:?Missing notarization issuer}"
+          : "${SPARKLE_PRIVATE_KEY:?Missing update signing key}"
+          umask 077
+          keychain="$RUNNER_TEMP/computer-signing.keychain-db"
+          password="$(openssl rand -base64 32)"
+          print -rn -- "$MACOS_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/computer-signing.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/computer-signing.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security list-keychains -d user -s "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+          identity="$(security find-identity -v -p codesigning "$keychain" | awk -F '"' '/Developer ID Application:/ { print $2; exit }')"
+          [[ -n "$identity" ]]
+          print -rn -- "$APP_STORE_CONNECT_API_KEY_P8" > "$RUNNER_TEMP/computer-notary.p8"
+          print -rn -- "$SPARKLE_PRIVATE_KEY" > "$RUNNER_TEMP/computer-update.key"
+          print "NOODLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+          print "APPLE_API_KEY_PATH=$RUNNER_TEMP/computer-notary.p8" >> "$GITHUB_ENV"
+          print "APPLE_API_KEY_ID=$APP_STORE_CONNECT_KEY_ID" >> "$GITHUB_ENV"
+          print "APPLE_API_ISSUER_ID=$APP_STORE_CONNECT_ISSUER_ID" >> "$GITHUB_ENV"
+          print "SPARKLE_PRIVATE_KEY_PATH=$RUNNER_TEMP/computer-update.key" >> "$GITHUB_ENV"
+
+      - name: Build, sign, notarize, staple and sign update feed
+        shell: zsh {0}
+        run: zsh scripts/package-computer-release.sh "$GITHUB_REF_NAME"
+
+      - name: Publish versioned download and Computer-only update channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: zsh {0}
+        run: zsh scripts/publish-computer-release.sh "$COMPUTER_VERSION" "$RUNNER_TEMP/computer-notes.md"
+
+      - name: Remove ephemeral signing credentials
+        if: always()
+        shell: zsh {0}
+        run: |
+          rm -f "$RUNNER_TEMP/computer-signing.p12" "$RUNNER_TEMP/computer-notary.p8" "$RUNNER_TEMP/computer-update.key"
+          if [[ -f "$RUNNER_TEMP/computer-signing.keychain-db" ]]; then
+            security delete-keychain "$RUNNER_TEMP/computer-signing.keychain-db"
+          fi

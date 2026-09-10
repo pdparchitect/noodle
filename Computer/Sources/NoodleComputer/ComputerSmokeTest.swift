@@ -1,5 +1,6 @@
 import AppKit
 import ComputerCore
+import ComputerBridge
 import CryptoKit
 import Foundation
 import Virtualization
@@ -8,6 +9,44 @@ import WebKit
 
 /// Opt-in signed-app integration fixture. Never opens the user's computer library.
 @MainActor enum ComputerSmokeTest {
+    static func checkProvider() async throws {
+        setbuf(stdout, nil)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("NoodleProvider-Test-\(UUID().uuidString)")
+        let store = try ComputerStore(root: root)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var computer = ComputerTemplate.shell.makeComputer(name: "Isolated Provider Test")
+        computer.networkEnabled = false
+        if CommandLine.arguments.contains("--provider-web-test") {
+            computer.customImage = true; computer.webPort = 8080; computer.networkEnabled = true
+        }
+        print("PROVIDER TEST: preparing isolated Alpine shell")
+        guard await store.create(computer, source: nil), let session = store.selected else {
+            throw ComputerError(store.error ?? "Could not create the fixture.")
+        }
+        do {
+            let socket = try ComputerConnection.socketURL().deletingLastPathComponent().appendingPathComponent("t.sock")
+            store.provider = try ComputerProvider(store: store, socket: socket)
+            let finished = socket.deletingLastPathComponent().appendingPathComponent("fixture-finished")
+            if FileManager.default.fileExists(atPath: finished.path) { try FileManager.default.removeItem(at: finished) }
+            print("PROVIDER TEST READY: \(session.id)")
+            if CommandLine.arguments.contains("--noodle-background") {
+                guard NSApp.isHidden || NSApp.windows.allSatisfy({ !$0.isVisible }) else {
+                    throw ComputerError("Background launch displayed a window: \(NSApp.windows.filter(\.isVisible).map { String(describing: type(of: $0)) + ":" + $0.title })")
+                }
+                print("PASS: background provider ready with no visible window; fixture computer powered off")
+            }
+            for _ in 0..<600 {
+                if FileManager.default.fileExists(atPath: finished.path) {
+                    try? FileManager.default.removeItem(at: finished)
+                    break
+                }
+                try await Task.sleep(for: .seconds(1))
+            }
+            store.provider = nil
+            await store.stop(session, force: true)
+            print("PROVIDER TEST: fixture stopped and removed")
+        } catch { await store.stop(session, force: true); throw error }
+    }
     static func checkAppearancePreview() async throws {
         setbuf(stdout, nil)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("NoodleAppearance-\(UUID().uuidString)")

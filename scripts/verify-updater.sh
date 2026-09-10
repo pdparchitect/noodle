@@ -1,5 +1,6 @@
 #!/bin/zsh
 set -euo pipefail
+if [[ "${NOODLE_VERIFY_VERBOSE:-0}" == 1 ]]; then set -x; fi
 app="${1:?Pass the built Noodle.app path}"
 bundle_identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")"
 sparkle="$app/Contents/Frameworks/Sparkle.framework"
@@ -9,7 +10,12 @@ team="$(codesign -dv --verbose=4 "$app" 2>&1 | awk -F= '/^TeamIdentifier=/ { pri
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUEnableInstallerLauncherService' "$info")" == true ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SURequireSignedFeed' "$info")" == true ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUVerifyUpdateBeforeExtraction' "$info")" == true ]]
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$info")" == 'https://github.com/pdparchitect/noodle/releases/latest/download/appcast.xml' ]]
+expected_feed='https://github.com/pdparchitect/noodle/releases/latest/download/appcast.xml'
+case "$bundle_identifier" in
+    com.pdparchitect.noodle.computer|com.pdparchitect.noodle.computer.tests)
+        expected_feed='https://github.com/pdparchitect/noodle/releases/download/computer-latest/appcast.xml' ;;
+esac
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$info")" == "$expected_feed" ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$info")" == '1ZT5NrPiDPaQ54iHGSI1a9JIn6kTrmjQvzZRBA9f/sk=' ]]
 if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == "1" ]]; then
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :NoodleUpdatesEnabled' "$info")" == true ]]
@@ -31,7 +37,7 @@ for component in \
         print -u2 "Unexpected entitlement in updater component: $component"; exit 1
     fi
 done
-binary="$app/Contents/MacOS/Noodle"
+binary="$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$info")"
 otool -L "$binary" | grep -Fq '@rpath/Sparkle.framework/Versions/B/Sparkle'
 rpaths="$(otool -l "$binary" | awk '/cmd LC_RPATH/ { found=1; next } found && /path / { print $2; found=0 }')"
 print -r -- "$rpaths" | grep -Fxq '@executable_path/../Frameworks'

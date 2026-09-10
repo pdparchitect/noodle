@@ -1,4 +1,5 @@
 import Darwin
+import ComputerBridge
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
@@ -162,6 +163,7 @@ public struct MessengerReactionChange: Codable, Hashable, Sendable {
 }
 
 public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable {
+    public let computer: ComputerCard?
     public let id: UUID
     public let conversationID: UUID
     public let originalFilename: String
@@ -182,7 +184,8 @@ public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable 
         byteCount: Int64,
         createdAt: Date = Date(),
         url: URL? = nil,
-        voice: VoiceMessage? = nil
+        voice: VoiceMessage? = nil,
+        computer: ComputerCard? = nil
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -193,6 +196,7 @@ public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable 
         self.createdAt = createdAt
         self.url = url
         self.voice = voice
+        self.computer = computer
     }
 }
 
@@ -225,6 +229,7 @@ public struct MessengerIdentity: Codable, Hashable, Sendable {
 }
 
 public struct MessengerAttachment: Codable, Hashable, Sendable {
+    public let computer: ComputerCard?
     public let id: UUID
     public let conversationID: UUID
     public let originalFilename: String
@@ -247,6 +252,7 @@ public struct MessengerAttachment: Codable, Hashable, Sendable {
         self.absolutePath = absolutePath
         url = attachment.url
         voice = attachment.voice
+        computer = attachment.computer
     }
 }
 
@@ -699,8 +705,10 @@ public struct WorkspaceRepository: Sendable {
 
         let backstory = try loadAgentBackstory(agent)
         let mcpRegistry = try MCPRegistry.load(root: rootURL)
+        let computerAssigned = !(try ComputerAssignments.load(root: rootURL)).assigned(to: agent.id).isEmpty
         let agentsFile = directory.appendingPathComponent("AGENTS.md")
-        try Self.renderedAgentInstructions(backstory: backstory, mcpConnections: mcpRegistry.assigned(to: agent.id)).write(
+        let computerInstructions = computerAssigned ? "\n## Assigned computers\nRead `.agents/skills/computer/SKILL.md` to access your assigned computers through Noodle.\n" : ""
+        try (Self.renderedAgentInstructions(backstory: backstory, mcpConnections: mcpRegistry.assigned(to: agent.id)) + computerInstructions).write(
             to: agentsFile,
             atomically: true,
             encoding: .utf8
@@ -716,6 +724,9 @@ public struct WorkspaceRepository: Sendable {
         let mcpExecutable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("mcpshim")
         try MCPSkillWriter.synchronize(workspace: directory, connections: mcpRegistry.assigned(to: agent.id),
             executable: mcpExecutable.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil })
+        let computerExecutable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("computer")
+        try ComputerAgentSkill.synchronize(workspace: directory, enabled: computerAssigned,
+            executable: computerExecutable.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil })
         let claudeSkillPaths = try synchronizeClaudeSkillLinks(in: directory)
 
         let skillFile = messengerDirectory.appendingPathComponent("SKILL.md")
@@ -733,7 +744,7 @@ public struct WorkspaceRepository: Sendable {
                 "CLAUDE.md",
                 ".agents/skills/messenger/SKILL.md",
                 ".agents/skills/messenger/messenger"
-            ] + claudeSkillPaths
+            ] + (computerAssigned ? [".agents/skills/computer/SKILL.md", ".agents/skills/computer/computer", ".agents/skills/computer/.noodle-managed"] : []) + claudeSkillPaths
         )
         try write(manifest, to: agentsDirectory.appendingPathComponent("managed-skills.json"))
     }
@@ -831,8 +842,15 @@ public struct WorkspaceRepository: Sendable {
         into conversationID: UUID,
         mediaType: String,
         now: Date = Date(),
-        linkURL: URL? = nil
+        linkURL: URL? = nil,
+        computer: ComputerCard? = nil
     ) throws -> ConversationAttachment {
+        if let computer {
+            guard computer.version == 1, mediaType == ComputerCard.mediaType, linkURL == nil,
+                  data.count <= 900_000, (try? JSONDecoder().decode(ComputerCard.self, from: data)) == computer else {
+                throw WorkspaceError.invalidAttachment
+            }
+        }
         if let linkURL {
             guard MessageLink.publicWebURL(from: linkURL, preservingFragment: true) == linkURL,
                   mediaType == "application/x-webloc",
@@ -857,7 +875,8 @@ public struct WorkspaceRepository: Sendable {
             mediaType: resolvedMediaType,
             byteCount: Int64(data.count),
             createdAt: now,
-            url: linkURL
+            url: linkURL,
+            computer: computer
         )
         let directory = attachmentsDirectory(conversationID: conversationID)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

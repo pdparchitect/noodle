@@ -307,6 +307,26 @@ actor ContainerComputer {
         }
     }
 
+    // Separate from the app's personal/recovery terminal. Each remote session
+    // owns a distinct PTY, while all sessions share this computer's filesystem.
+    func makeProviderTerminal(io: GuestTerminalIO, id: UUID) async throws -> LinuxProcess {
+        guard let pod else { throw ComputerError("Start the computer first.") }
+        let process = try await pod.execInContainer("workspace", processID: "noodle-\(id.uuidString.lowercased())") { config in
+            config.arguments = ["/bin/sh", "-c", "cd /workspace && exec /bin/sh -i"]
+            config.environmentVariables = ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "HOME=/root", "TERM=xterm-256color", "PS1=$ "]
+            config.terminal = true; config.stdin = io; config.stdout = io
+        }
+        do {
+            try await process.start()
+            try await process.resize(to: .init(width: 100, height: 30))
+            return process
+        } catch {
+            try? await process.kill(.kill); try? await process.delete(); io.finish()
+            throw error
+        }
+    }
+
     private func terminalExited(id: UUID, process: LinuxProcess, io: GuestTerminalIO,
                                 onExit: @escaping @Sendable () async -> Void) async {
         guard terminalID == id else { return }

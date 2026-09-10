@@ -91,6 +91,8 @@ otool -l "$contents/MacOS/Noodle" \
     done
 cp "$bin_path/NoodleMessenger" "$contents/Helpers/messenger"
 cp "$bin_path/NoodleMCPCLI" "$contents/Helpers/mcpshim"
+cp "$bin_path/NoodleComputerCLI" "$contents/Helpers/computer"
+cp -R "$bin_path/SwiftTerm_SwiftTerm.bundle" "$contents/Resources/"
 cp "$project_root/Support/Info.plist" "$contents/Info.plist"
 ditto "$project_root/Support/ToolIcons" "$contents/Resources/ToolIcons"
 agent_host="$contents/XPCServices/NoodleAgentHost.xpc"
@@ -181,12 +183,16 @@ codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/messenger"
 codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/mcpshim"
+codesign --force --options runtime "$timestamp_option" \
+    --sign "$signing_identity" "$contents/Helpers/computer"
 team_id="$(codesign -dv --verbose=4 "$contents/Helpers/messenger" 2>&1 | awk -F= '/^TeamIdentifier=/ { print $2 }')"
 if [[ ! "$team_id" =~ '^[A-Z0-9]{10}$' ]]; then
     print -u2 "Sharing requires an Apple Development or Developer ID identity with a team identifier."
     exit 1
 fi
 shared_group="$team_id.$bundle_identifier.sharing"
+computer_group="$team_id.com.pdparchitect.noodle.computers"
+/usr/libexec/PlistBuddy -c "Add :NoodleComputerGroup string $computer_group" "$contents/Info.plist"
 for file in "$contents/Info.plist" "$agent_host/Contents/Info.plist"; do
     /usr/libexec/PlistBuddy -c "Add :NoodleSigningTeam string $team_id" "$file"
     /usr/libexec/PlistBuddy -c "Add :NoodleApplicationIdentifier string $bundle_identifier" "$file"
@@ -202,6 +208,9 @@ cp "$project_root/Support/ShareExtension.entitlements" "$share_entitlements"
 for file in "$resolved_entitlements" "$share_entitlements"; do
     /usr/libexec/PlistBuddy -c "Set :com.apple.security.application-groups:0 $shared_group" "$file"
 done
+# Only the main broker may connect to Computer. Agent helpers and the sharing
+# extension do not receive this group or the provider's socket.
+/usr/libexec/PlistBuddy -c "Add :com.apple.security.application-groups:1 string $computer_group" "$resolved_entitlements"
 /usr/libexec/PlistBuddy -c "Set :com.apple.security.temporary-exception.mach-lookup.global-name:0 $bundle_identifier-spks" "$resolved_entitlements"
 /usr/libexec/PlistBuddy -c "Set :com.apple.security.temporary-exception.mach-lookup.global-name:1 $bundle_identifier-spki" "$resolved_entitlements"
 for file in "$contents/Info.plist" "$share_extension/Contents/Info.plist"; do

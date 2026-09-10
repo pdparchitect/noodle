@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 import NoodleCore
 
 private enum BotEditorTab: String, CaseIterable {
-    case general = "General", runtime = "Harness", mcp = "Tools"
+    case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers"
 }
 
 private struct BotEditorTabPicker: View {
@@ -48,6 +48,7 @@ struct NewBotSheet: View {
     @State private var avatarImageData: Data?
     @State private var editingAvatar = false
     @State private var mcpConnectionIDs: Set<UUID> = []
+    @State private var computerIDs: Set<UUID> = []
     @State private var selectedTab = BotEditorTab.general
     @FocusState private var nameFocused: Bool
 
@@ -126,6 +127,8 @@ struct NewBotSheet: View {
                     )
                 case .mcp:
                     MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs)
+                case .computers:
+                    ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
                 }
             }
             .padding(20)
@@ -174,7 +177,8 @@ struct NewBotSheet: View {
             avatarImageData: avatarImageData,
             publicDescription: publicDescription,
             backstory: backstory,
-            mcpConnectionIDs: mcpConnectionIDs
+            mcpConnectionIDs: mcpConnectionIDs,
+            computerIDs: computerIDs
         )
     }
 
@@ -220,6 +224,7 @@ struct EditBotSheet: View {
     @State private var avatarImageData: Data?
     @State private var editingAvatar = false
     @State private var mcpConnectionIDs: Set<UUID> = []
+    @State private var computerIDs: Set<UUID> = []
     @State private var confirmingDeletion = false
     @State private var selectedTab = BotEditorTab.general
     @FocusState private var nameFocused: Bool
@@ -306,6 +311,8 @@ struct EditBotSheet: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .mcp:
                     MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs)
+                case .computers:
+                    ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
                 }
             }
             .padding(20)
@@ -315,6 +322,7 @@ struct EditBotSheet: View {
             nameFocused = true
             backstory = store.backstory(for: agent)
             mcpConnectionIDs = store.mcp.selectedIDs(for: agent)
+            computerIDs = store.computers.selectedIDs(for: agent)
             store.runtime.refreshCapabilities()
         }
         .sheet(isPresented: $editingAvatar) {
@@ -378,7 +386,8 @@ struct EditBotSheet: View {
             avatarImageData: avatarImageData,
             publicDescription: publicDescription,
             backstory: backstory,
-            mcpConnectionIDs: mcpConnectionIDs
+            mcpConnectionIDs: mcpConnectionIDs,
+            computerIDs: computerIDs
         ) {
             dismiss()
         }

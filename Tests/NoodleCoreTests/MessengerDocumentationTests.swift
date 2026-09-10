@@ -1,4 +1,5 @@
 import XCTest
+import ComputerBridge
 @testable import NoodleCore
 
 final class MessengerDocumentationTests: XCTestCase {
@@ -64,7 +65,9 @@ final class MessengerDocumentationTests: XCTestCase {
         let link = ConversationAttachment(conversationID: conversation.id, originalFilename: "example.com.webloc",
             storedFilename: "link.webloc", mediaType: "application/x-webloc", byteCount: 100,
             url: URL(string: "https://example.com/page")!,
-            voice: VoiceMessage(transcript: "Encoding coverage", duration: 1, waveform: [0.5], localeIdentifier: "en-GB"))
+            voice: VoiceMessage(transcript: "Encoding coverage", duration: 1, waveform: [0.5], localeIdentifier: "en-GB"),
+            computer: ComputerCard(computer: .init(id: UUID(), name: "Shell", kind: "Shell", state: "Running", symbol: "terminal"),
+                agentID: botID, terminalID: UUID(), terminalPreview: "$"))
         try check(MessengerAttachment(attachment: link, absolutePath: "/fixture/link.webloc"), fields: MessengerDocumentation.attachmentFields)
         XCTAssertEqual(delivery.kind, .reactionChange)
         delivery.reactionChange = nil

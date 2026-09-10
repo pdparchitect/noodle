@@ -2,8 +2,9 @@
 
 Standalone, sandboxed macOS app in the Noodle source repository. Requires an
 Apple silicon Mac, macOS 26, and Xcode 26. It has a separate Swift package and
-build directory: Noodle's existing deployment target, dependencies, entitlements,
-binary and user data do not change.
+build directory. Noodle keeps its existing deployment target and separate user
+data, and now embeds the shared Computer protocol, native terminal renderer and
+an agent CLI. Both signed apps share a narrowly scoped provider App Group.
 
 ## Build and run
 
@@ -31,10 +32,18 @@ Options. Existing Alpine workspaces appear as Shell; existing Launcher workspace
 appear as Desktop. Their records and disks are unchanged. Unknown custom container
 images retain their generic type instead of being relabelled as a known template.
 
-The next stage is exposing these computers to Noodle agents. This stage does not
-ship an agent-facing tool, file-transfer interface or connection protocol. Guest
-execution and lifecycle control remain behind the central store/runtime boundary.
+Noodle discovers the installed Computer app and launches its provider quietly as
+needed. No Computer window needs to be open. Assign computers under the Computers
+tab in New/Edit Bot. Assignments are many-to-many: agents have separate terminal
+sessions but share a computer's files and services. The managed Computer skill
+and bundled CLI provide list, start, open, read, write, resize, close and present.
+There is no host filesystem mount, file-transfer API or agent computer deletion.
 Computer stays out of the release changelog until it is ready.
+
+See [the integration boundary and verification](Bridge/README.md).
+See [the independent release and update process](RELEASING.md) for signing,
+notarization, downloads and Computer-only update feeds. Public release remains
+pending approval; local builds do not publish anything.
 
 ### Custom container images
 
@@ -120,11 +129,14 @@ There is no host port publishing in this first version.
 
 ## Security and lifecycle
 
-Exactly four entitlements: App Sandbox, virtualization, outgoing network, and
-user-selected read-only files for image/installer import. There is no incoming listener,
-host directory share, clipboard bridge, camera/microphone, Docker socket, Agent
-Host escape, or Noodle connection. NAT can reach LAN resources; the create dialog
+The runtime uses App Sandbox, virtualization, outgoing network, and
+user-selected read-only files for image/installer import, plus the scoped Computer
+App Group for Noodle's authenticated Unix-socket connection. There is no incoming
+TCP listener, host directory share, clipboard bridge, camera/microphone, Docker
+socket or Agent Host escape. NAT can reach LAN resources; the create dialog
 offers networking off for Shell and does not claim internet-only isolation.
+The updater additionally uses the approved, narrowly scoped Sparkle installer
+boundary described in [Releasing](RELEASING.md); it does not broaden guest access.
 
 Records and disks live in the app's private Application Support directory. A
 process-held library lock prevents two app instances opening the same disks.
@@ -136,8 +148,8 @@ about unsaved guest data. Quitting stops VMs, with a bounded shutdown deadline.
 
 `ComputerCore` contains Foundation-only records and persistence. Runtime objects
 are separate from views; a future provider extension can call that layer without
-redesigning the library. No extension, agent skill, remote API, or iOS app is
-implemented in this version.
+redesigning the library. The local Noodle bridge and managed agent skill are
+implemented; remote-host access and an iOS app are not.
 
 ## Verification
 

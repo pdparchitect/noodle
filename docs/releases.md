@@ -1,5 +1,9 @@
 # Releases and updates
 
+Noodle Computer has a separate [release process](../Computer/RELEASING.md),
+version, changelog, `computer-v*` tags and update feed. Its releases never become
+the repository-wide latest release used by standard Noodle below.
+
 Commands and project paths below are relative to the repository root.
 
 The root `VERSION` file is the canonical stable application version (`X.Y.Z`). Swift Package Manager describes the package and deployment target, but it does not provide a macOS app marketing version. Starting with the updater bootstrap, the build copies `VERSION` into both `CFBundleShortVersionString` and `CFBundleVersion`, so local builds and CI releases use the same ordering. Increase it for every release; never reuse a published version. `NOODLE_BUILD_NUMBER` is a local-testing override only; release packaging always uses `VERSION`.

@@ -12,9 +12,12 @@ struct NoodleComputerApp: App {
       ComputerRootView()
         .frame(minWidth: 850, minHeight: 580)
     }
+    .defaultLaunchBehavior(CommandLine.arguments.contains("--noodle-background") ? .suppressed : .automatic)
+    .restorationBehavior(CommandLine.arguments.contains("--noodle-background") ? .disabled : .automatic)
     .defaultSize(width: 1080, height: 720)
     .windowToolbarStyle(.unified(showsTitle: false))
     .commands {
+      CommandGroup(after: .appInfo) { ComputerUpdateCommands() }
       CommandGroup(replacing: .appInfo) {
         Button("About Noodle Computer") {
           NSApplication.shared.orderFrontStandardAboutPanel(options: [.applicationName: "Noodle Computer"])
@@ -40,7 +43,34 @@ extension Notification.Name {
 }
 
 @MainActor final class ComputerAppDelegate: NSObject, NSApplicationDelegate {
-  static weak var store: ComputerStore?
+  static var store: ComputerStore?
+  func applicationDidBecomeActive(_ notification: Notification) {
+    // Quiet agent-driven provider launches must not show update prompts.
+    ComputerUpdater.shared.start()
+  }
+  func applicationDidFinishLaunching(_ notification: Notification) {
+    guard CommandLine.arguments.contains("--noodle-background") else { return }
+    // Also cover Launch Services reopening a previously registered single-window
+    // app. This affects only this process; an explicit later open unhides it.
+    NSApp.hide(nil)
+    if CommandLine.arguments.contains("--provider-integration-test") {
+      Task {
+        do { try await ComputerSmokeTest.checkProvider(); NSApp.terminate(nil) }
+        catch { fputs("PROVIDER TEST FAILED: \(error.localizedDescription)\n", stderr); exit(1) }
+      }
+      return
+    }
+    // The provider can own the library without creating a SwiftUI window.
+    do { _ = try Self.loadLibrary() }
+    catch { fputs("Computer provider: \(error.localizedDescription)\n", stderr) }
+  }
+  static func loadLibrary() throws -> ComputerStore {
+    if let store { return store }
+    let model = try ComputerStore()
+    model.provider = try ComputerProvider(store: model)
+    store = model
+    return model
+  }
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     guard let store = Self.store else { return .terminateNow }
@@ -81,6 +111,20 @@ struct ComputerRootView: View {
     .task {
       guard store == nil, startupError == nil else { return }
       do {
+        if CommandLine.arguments.contains("--noodle-background") {
+          // The delegate hides the initial background launch. Do not hide here:
+          // this view may first be created by a later explicit Open from Noodle.
+          // Launch restoration must never run a second provider/fixture through
+          // the view. The app delegate owns background initialization.
+          guard !CommandLine.arguments.contains("--provider-integration-test") else { return }
+          store = try ComputerAppDelegate.loadLibrary()
+          return
+        }
+        if CommandLine.arguments.contains("--provider-integration-test") {
+          try await ComputerSmokeTest.checkProvider()
+          NSApplication.shared.terminate(nil)
+          return
+        }
         if CommandLine.arguments.contains("--appearance-preview") {
           try await ComputerSmokeTest.checkAppearancePreview()
           NSApplication.shared.terminate(nil)
@@ -123,12 +167,12 @@ struct ComputerRootView: View {
           NSApplication.shared.terminate(nil)
           return
         }
-        let model = try ComputerStore()
+        let model = try ComputerAppDelegate.loadLibrary()
         store = model
-        ComputerAppDelegate.store = model
       } catch {
         startupError = error.localizedDescription
         if CommandLine.arguments.contains("--custom-container-test")
+          || CommandLine.arguments.contains("--provider-integration-test")
           || CommandLine.arguments.contains("--creation-form-test")
           || CommandLine.arguments.contains("--desktop-smoke-test")
           || CommandLine.arguments.contains("--self-test")

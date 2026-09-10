@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleName</key><string>Computer Preview Proof</string>
+<key>CFBundleIdentifier</key><string>com.pdparchitect.noodle.computer.previewproof</string>
+<key>CFBundleExecutable</key><string>PreviewProof</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>CFBundleShortVersionString</key><string>0.1</string>
+<key>LSMinimumSystemVersion</key><string>26.0</string>
+<key>NSPrincipalClass</key><string>NSApplication</string>
+<key>UTExportedTypeDeclarations</key><array><dict>
+<key>UTTypeIdentifier</key><string>com.pdparchitect.noodle.previewproof</string>
+<key>UTTypeConformsTo</key><array><string>public.data</string><string>public.content</string></array>
+<key>UTTypeDescription</key><string>Computer Preview Proof</string>
+<key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>noodlepreviewproof</string></array></dict>
+</dict></array>
+</dict></plist>

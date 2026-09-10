@@ -98,6 +98,7 @@ final class NoodleStore {
     let repository: WorkspaceRepository
     @ObservationIgnored private let transcriptPositions: TranscriptPositionStore
     let mcp: MCPController
+    let computers: ComputerController
     let runtime = AgentRuntimeCoordinator()
     private var transcriptRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptGeneration: UInt = 0
@@ -126,6 +127,7 @@ final class NoodleStore {
 
         transcriptPositions = TranscriptPositionStore(fileURL: self.repository.rootURL.appendingPathComponent("scroll-positions.json"))
         mcp = MCPController(repository: self.repository)
+        computers = ComputerController(repository: self.repository)
         reload()
         Self.active = self
     }
@@ -172,6 +174,7 @@ final class NoodleStore {
             runtime.prepareAccessForExistingAgents(agents)
             try repository.synchronizeAgentWorkspaces(agents)
             mcp.start(agents: agents)
+            computers.start(agents: agents)
             conversations = try repository.loadConversations()
             backgrounds = Dictionary(uniqueKeysWithValues: conversations.map {
                 ($0.id, (try? repository.loadBackground(conversationID: $0.id)) ?? ConversationBackground())
@@ -220,7 +223,8 @@ final class NoodleStore {
         avatarImageData: Data?,
         publicDescription: String,
         backstory: String,
-        mcpConnectionIDs: Set<UUID> = []
+        mcpConnectionIDs: Set<UUID> = [],
+        computerIDs: Set<UUID> = []
     ) -> Bool {
         guard runtime.availableInstallations.contains(where: { $0.provider.rawValue == harnessIdentifier }) else {
             errorMessage = "Set up a supported harness in Settings before creating a bot."
@@ -228,6 +232,7 @@ final class NoodleStore {
         }
         do {
             try mcp.validateAssignment(mcpConnectionIDs)
+            try computers.validate(computerIDs)
             runtime.prepareAccessForExistingAgents(agents)
             let created = try repository.createAgent(
                 named: name,
@@ -245,6 +250,8 @@ final class NoodleStore {
             messagesByConversation[created.conversation.id] = []
             attachmentsByConversation[created.conversation.id] = []
             try mcp.assign(mcpConnectionIDs, to: created.agent)
+            try computers.assign(computerIDs, to: created.agent)
+            computers.start(agents: agents)
             mcp.start(agents: agents)
             runtime.refresh(agents: agents)
             runtime.start(agent: created.agent, repository: repository)
@@ -269,10 +276,12 @@ final class NoodleStore {
         avatarImageData: Data?,
         publicDescription: String,
         backstory: String,
-        mcpConnectionIDs: Set<UUID>? = nil
+        mcpConnectionIDs: Set<UUID>? = nil,
+        computerIDs: Set<UUID>? = nil
     ) -> Bool {
         do {
             if let mcpConnectionIDs { try mcp.validateAssignment(mcpConnectionIDs) }
+            if let computerIDs { try computers.validate(computerIDs) }
             let previousBackstory = try repository.loadAgentBackstory(agent)
             let updated = try repository.updateAgent(
                 agent,
@@ -299,6 +308,8 @@ final class NoodleStore {
 
             try repository.updateAgentBackstory(updated, backstory: backstory)
             if let mcpConnectionIDs { try mcp.assign(mcpConnectionIDs, to: updated) }
+            if let computerIDs { try computers.assign(computerIDs, to: updated) }
+            computers.start(agents: agents)
             try repository.synchronizeAgentWorkspace(updated)
             mcp.start(agents: agents)
             runtime.restart(

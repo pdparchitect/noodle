@@ -14,13 +14,16 @@ let package = Package(
         .executable(name: "NoodleDocumentation", targets: ["NoodleDocumentation"])
     ],
     dependencies: [
+        .package(path: "Computer/Bridge"),
+        .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", exact: "1.20.0"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk", exact: "0.12.1")
     ],
     targets: [
         .target(name: "NoodleAgentBridge"),
         .executableTarget(name: "NoodleAgentHost", dependencies: ["NoodleCore", "NoodleAgentBridge"]),
-        .target(name: "NoodleCore"),
+        .target(name: "NoodleCore", dependencies: [.product(name: "ComputerBridge", package: "Bridge")]),
+        .executableTarget(name: "NoodleComputerCLI", dependencies: ["NoodleCore", .product(name: "ComputerBridge", package: "Bridge")]),
         .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "MCP", package: "swift-sdk")]),
         .executableTarget(name: "NoodleMCPCLI", dependencies: ["NoodleCore"]),
         .executableTarget(name: "NoodleDocumentation", dependencies: ["NoodleCore"]),
@@ -33,7 +36,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: ["NoodleCore", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", .product(name: "Sparkle", package: "Sparkle")],
+            dependencies: ["NoodleCore", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "SwiftTerm", package: "SwiftTerm")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",

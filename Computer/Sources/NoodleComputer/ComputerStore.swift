@@ -43,6 +43,7 @@ enum ComputerPhase: Equatable {
 /// One owner for the library and all live machines. No provider discovery,
 /// TCP listener, Noodle agent connection, shared host folders, or clipboard bridge.
 @MainActor final class ComputerStore: ObservableObject {
+    var provider: ComputerProvider?
     @Published var sessions: [ComputerSession] = []
     @Published var selection: UUID?
     @Published var creationStatus: String?

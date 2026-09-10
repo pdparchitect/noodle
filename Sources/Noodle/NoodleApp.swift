@@ -10,6 +10,20 @@ struct NoodleApp: App {
     @State private var store: NoodleStore
 
     init() {
+        if CommandLine.arguments.contains("--computer-integration-test") || CommandLine.arguments.contains("--computer-discovery-test") || CommandLine.arguments.contains("--computer-picker-test") {
+            NSApplication.shared.setActivationPolicy(.regular)
+            Task { @MainActor in
+                do {
+                    if CommandLine.arguments.contains("--computer-picker-test") { try await ComputerIntegrationTest.checkPicker() }
+                    else if CommandLine.arguments.contains("--computer-discovery-test") { try await ComputerIntegrationTest.checkDiscovery() }
+                    else { try await ComputerIntegrationTest.run() }
+                    Darwin.exit(0)
+                }
+                catch { print("COMPUTER INTEGRATION FAILED: \(error.localizedDescription)"); Darwin.exit(1) }
+            }
+            NSApplication.shared.run()
+            Darwin.exit(1)
+        }
         if MessengerCLI.shouldHandle() {
             let result = MessengerCLI.run()
             Self.write(result.standardOutput, to: .standardOutput)
@@ -96,6 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
         attachmentPasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.window?.identifier?.rawValue != "NoodleComputerPreview" else { return event }
             let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
             guard event.charactersIgnoringModifiers?.lowercased() == "v",
                   modifiers == .command || modifiers == .control,

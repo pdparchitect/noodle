@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 
 extension ConversationAttachment {
     var previewSymbolName: String {
+        if let computer { return computer.computer.symbol }
         if mediaType.hasPrefix("image/") { return "photo.fill" }
         if mediaType == "application/pdf" { return "doc.richtext.fill" }
         if mediaType.hasPrefix("audio/") { return "waveform" }
@@ -58,7 +59,9 @@ struct AttachmentInlinePreview: View {
 
     private var filePreview: some View {
         Group {
-            if displaysAsImage {
+            if let card = attachment.computer {
+                ComputerAttachmentCard(card: card)
+            } else if displaysAsImage {
                 imagePreview
             } else {
                 documentPreview
@@ -89,7 +92,7 @@ struct AttachmentInlinePreview: View {
         .accessibilityHint("Click or press Space to preview")
         .accessibilityAddTraits(.isButton)
         .task(id: shouldLoad) {
-            guard shouldLoad else { return }
+            guard shouldLoad, attachment.computer == nil else { return }
             await loadThumbnail()
         }
     }

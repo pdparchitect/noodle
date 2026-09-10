@@ -15,5 +15,15 @@
         <key>NSAllowsLocalNetworking</key><true/>
     </dict>
     <key>NSPrincipalClass</key><string>NSApplication</string>
+    <key>SUFeedURL</key><string>https://github.com/pdparchitect/noodle/releases/download/computer-latest/appcast.xml</string>
+    <key>SUPublicEDKey</key><string>1ZT5NrPiDPaQ54iHGSI1a9JIn6kTrmjQvzZRBA9f/sk=</string>
+    <key>SURequireSignedFeed</key><true/>
+    <key>SUVerifyUpdateBeforeExtraction</key><true/>
+    <key>SUEnableInstallerLauncherService</key><true/>
+    <key>SUEnableAutomaticChecks</key><true/>
+    <key>SUScheduledCheckInterval</key><integer>86400</integer>
+    <key>SUAutomaticallyUpdate</key><false/>
+    <key>SUAllowsAutomaticUpdates</key><false/>
+    <key>SUSendProfileInfo</key><false/>
     <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
 </dict></plist>

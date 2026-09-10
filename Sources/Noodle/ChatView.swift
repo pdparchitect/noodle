@@ -18,6 +18,7 @@ struct ChatView: View {
     @State private var attachmentDestinationID: UUID?
     @State private var selectedAttachmentID: UUID?
     @State private var previewedAttachmentURL: URL?
+    @State private var computerPreview = ComputerPreviewController()
     @State private var bottomOverlayHeight: CGFloat = 0
     @StateObject private var nameCompletion = ComposerNameCompletion()
     @State private var profileAgent: AgentRecord?
@@ -98,8 +99,10 @@ struct ChatView: View {
             .onChange(of: conversation.id) { _, _ in
                 selectedAttachmentID = nil
                 previewedAttachmentURL = nil
+                computerPreview.close()
                 nameCompletion.detach()
             }
+            .onDisappear { computerPreview.close() }
             .onChange(of: composerFocusRequest) { _, request in
                 if request != nil { composerFocused = true }
             }
@@ -360,7 +363,13 @@ struct ChatView: View {
 
     private func showPreview(_ attachment: ConversationAttachment) {
         selectedAttachmentID = attachment.id
-        previewedAttachmentURL = store.attachmentFileURL(attachment)
+        if let card = attachment.computer {
+            previewedAttachmentURL = nil
+            computerPreview.show(card, controller: store.computers)
+        } else {
+            computerPreview.close()
+            previewedAttachmentURL = store.attachmentFileURL(attachment)
+        }
     }
 
     private func finishProfileAction() {
