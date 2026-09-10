@@ -19,13 +19,23 @@ import WebKit
                 lastLayout = view.isLoading ? nil : layout
                 settledSince = now
             } else if now - settledSince >= 0.6, now < deadline {
-                let configuration = WKSnapshotConfiguration()
-                // Capture at the viewport's resolution; encoding below bounds the
-                // actual pixels independently of the Mac's backing scale.
-                configuration.snapshotWidth = NSNumber(value: min(1440, view.bounds.width))
-                configuration.afterScreenUpdates = true
-                let snapshot: NSImage? = await bounded(until: min(deadline, now + 1.5)) { finish in
-                    view.takeSnapshot(with: configuration) { image, _ in finish(image) }
+                let snapshot: NSImage?
+                if desktop {
+                    // The browser may letterbox or CSS-scale the remote desktop.
+                    // Read the native framebuffer, not that surrounding viewport.
+                    let encoded: String? = await bounded(until: min(deadline, now + 1.5)) { finish in
+                        view.evaluateJavaScript(desktopPixelsScript) { value, _ in finish(value as? String) }
+                    }
+                    if let encoded, encoded.utf8.count <= 12_000_000,
+                       let data = Data(base64Encoded: encoded) { snapshot = NSImage(data: data) }
+                    else { snapshot = nil }
+                } else {
+                    let configuration = WKSnapshotConfiguration()
+                    configuration.snapshotWidth = NSNumber(value: min(1440, view.bounds.width))
+                    configuration.afterScreenUpdates = true
+                    snapshot = await bounded(until: min(deadline, now + 1.5)) { finish in
+                        view.takeSnapshot(with: configuration) { image, _ in finish(image) }
+                    }
                 }
                 guard valid(), !Task.isCancelled, ProcessInfo.processInfo.systemUptime < deadline else { return nil }
                 // Navigation or guest resize may have started while WebKit captured.
@@ -42,6 +52,31 @@ import WebKit
         }
         return nil
     }
+
+    private static let desktopPixelsScript = """
+    (() => {
+      if (!document.documentElement.classList.contains('noVNC_connected')) return null;
+      const canvases = [...document.querySelectorAll('canvas')].slice(0, 32).filter(c => {
+        const r = c.getBoundingClientRect(), s = getComputedStyle(c);
+        return c.width > 100 && c.height > 100 && r.width > 0 && r.height > 0 &&
+          r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth &&
+          s.visibility !== 'hidden' && s.display !== 'none' && s.opacity !== '0';
+      }).sort((a, b) => b.width * b.height - a.width * a.height);
+      const source = canvases[0];
+      if (!source) return null;
+      const scale = Math.min(1, 1440 / Math.max(source.width, source.height));
+      const output = document.createElement('canvas');
+      output.width = Math.max(1, Math.round(source.width * scale));
+      output.height = Math.max(1, Math.round(source.height * scale));
+      const context = output.getContext('2d');
+      if (!context) return null;
+      context.imageSmoothingQuality = 'high';
+      try {
+        context.drawImage(source, 0, 0, output.width, output.height);
+        return output.toDataURL('image/png').split(',')[1];
+      } catch { return null; }
+    })()
+    """
 
     /// Preserve text/UI edges with lossless PNG whenever it fits the existing
     /// wire limit. Detailed/photo-heavy pages fall back to high-quality JPEG,

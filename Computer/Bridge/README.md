@@ -62,6 +62,8 @@ and fall back to high-quality JPEG and smaller dimensions to stay within 512 KB.
 Display cards fill a 360 × 240 area, preserving proportions and cropping overflow
 from the right/bottom. The top-left stays visible; full live previews and terminal
 text cards are unchanged.
+Built-in desktops capture native canvas pixels, excluding browser letterboxing
+and CSS stretching. Custom web images still capture the visible browser page.
 Check delayed pages, canvases, blank/busy fallback and cancellation without a guest:
 `swiftc Computer/Sources/NoodleComputer/ComputerPreviewSnapshot.swift Computer/Tests/PreviewSnapshotTests.swift -o /tmp/noodle-preview-snapshot-tests && /tmp/noodle-preview-snapshot-tests`.
 The signed Computer app also accepts `--noodle-background --provider-integration-test

@@ -60,6 +60,27 @@ import WebKit
         let desktop = await ComputerPreviewSnapshot.capture(web, desktop: true, timeout: 5)
         require(desktop != nil && now() - began >= 1.2, "wait for connected desktop canvas and painted frame")
 
+        load("""
+            <style>body{background:#272727!important}canvas{position:absolute;top:160px;left:0;width:100%;height:300px}</style>
+            <canvas id="screen" width="1024" height="768"></canvas>
+            <script>document.documentElement.classList.add('noVNC_connected');const ctx=document.getElementById('screen').getContext('2d');ctx.fillStyle='#0000ff';ctx.fillRect(0,0,1024,768);ctx.fillStyle='#00ff00';ctx.fillRect(50,50,200,200);</script>
+            """)
+        let letterboxed = await ComputerPreviewSnapshot.capture(web, desktop: true, timeout: 3)
+        require(letterboxed != nil, "letterboxed remote desktop produces a snapshot")
+        let pixels = NSBitmapImageRep(data: letterboxed!)!
+        require(pixels.pixelsWide == 1024 && pixels.pixelsHigh == 768,
+                "desktop capture uses native framebuffer proportions, not stretched CSS dimensions")
+        let corner = pixels.colorAt(x: 0, y: 0)!.usingColorSpace(.deviceRGB)!
+        require(corner.blueComponent > 0.95 && corner.redComponent < 0.05,
+                "grey browser letterboxing is excluded from the saved image")
+        var xs: [Int] = [], ys: [Int] = []
+        for y in 0..<pixels.pixelsHigh { for x in 0..<pixels.pixelsWide {
+            let c = pixels.colorAt(x: x, y: y)!.usingColorSpace(.deviceRGB)!
+            if c.greenComponent > 0.95 && c.blueComponent < 0.05 { xs.append(x); ys.append(y) }
+        } }
+        require(xs.max()! - xs.min()! == 199 && ys.max()! - ys.min()! == 199,
+                "native desktop squares remain square despite browser stretching")
+
         load("<div aria-busy='true'>Loading forever</div>")
         began = now()
         let busy = await ComputerPreviewSnapshot.capture(web, desktop: false, timeout: 0.7)
