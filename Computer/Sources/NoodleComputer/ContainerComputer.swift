@@ -274,7 +274,8 @@ actor ContainerComputer {
         let process = try await pod.execInContainer("workspace", processID: "interactive-shell-\(id.uuidString.lowercased())") { config in
             config.arguments = ["/bin/sh", "-c", "cd /workspace && exec /bin/sh -i"]
             config.environmentVariables = ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                "HOME=/root", "TERM=xterm-256color", "PS1=\\w # "]
+                // Expand PWD at each prompt; /bin/sh need not support Bash's \w escape.
+                "HOME=/root", "TERM=xterm-256color", "PS1=${PWD} # "]
             config.terminal = true
             config.stdin = io
             config.stdout = io

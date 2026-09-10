@@ -129,6 +129,10 @@ private struct DesktopWebView: NSViewRepresentable {
     loading = true
     view.load(URLRequest(url: connection.url))
   }
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+      loading = true
+      failure = nil
+    }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
       loading = false
     }

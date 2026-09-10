@@ -124,6 +124,7 @@ import SwiftUI
         let (_, response) = try await URLSession.shared.data(for: request)
         guard let response = response as? HTTPURLResponse else { throw ComputerBridgeError("Could not check Computer downloads. Try again later.") }
         try ComputerDistribution.validateDownloadStatus(response.statusCode)
+        try Task.checkCancellation()
         guard NSWorkspace.shared.open(ComputerDistribution.downloadPage) else { throw ComputerBridgeError("Could not open the Computer download page.") }
     }
     func refresh(launchIfNeeded: Bool = false) async {

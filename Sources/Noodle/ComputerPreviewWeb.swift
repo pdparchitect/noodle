@@ -10,6 +10,7 @@ import WebKit
     private lazy var retry = NSButton(title: "Try Again", target: self, action: #selector(retryConnection))
     private let card: ComputerCard
     private let controller: ComputerController
+    private lazy var download = ComputerPreviewDownload { [controller] in try await controller.openDownload() }
     private var connection: ComputerWebConnection?
     private var view: WKWebView?
     private var task: Task<Void, Never>?
@@ -29,6 +30,7 @@ import WebKit
             retry.centerXAnchor.constraint(equalTo: surface.centerXAnchor),
             retry.topAnchor.constraint(equalTo: status.bottomAnchor, constant: 12)
         ])
+        download.install(in: surface)
     }
     func start() {
         active = true
@@ -50,6 +52,7 @@ import WebKit
                     view?.stopLoading(); view?.removeFromSuperview(); view = nil; connection = nil
                     status.isHidden = false; status.stringValue = error.localizedDescription
                     retry.isHidden = false
+                    download.showIfNeeded(controller.permits(card) && !controller.installed)
                     return
                 }
                 try? await Task.sleep(for: .seconds(2))
@@ -99,10 +102,12 @@ import WebKit
     }
     func stop() {
         active = false; task?.cancel(); task = nil
+        download.stop()
         view?.stopLoading(); view?.removeFromSuperview(); view = nil; connection = nil
     }
     @objc private func retryConnection() {
         stop(); status.stringValue = "Opening display…"; status.isHidden = false; retry.isHidden = true
+        download.showIfNeeded(false)
         start()
     }
     func integrationTestState() async -> String? {

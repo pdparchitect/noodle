@@ -14,12 +14,13 @@ import WebKit
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("NoodleProvider-Test-\(UUID().uuidString)")
         let store = try ComputerStore(root: root)
         defer { try? FileManager.default.removeItem(at: root) }
-        var computer = ComputerTemplate.shell.makeComputer(name: "Isolated Provider Test")
-        computer.networkEnabled = false
+        let snapshotTest = CommandLine.arguments.contains("--provider-snapshot-test")
+        var computer = (snapshotTest ? ComputerTemplate.desktop : .shell).makeComputer(name: "Isolated Provider Test")
+        computer.networkEnabled = snapshotTest
         if CommandLine.arguments.contains("--provider-web-test") {
             computer.customImage = true; computer.webPort = 8080; computer.networkEnabled = true
         }
-        print("PROVIDER TEST: preparing isolated Alpine shell")
+        print("PROVIDER TEST: preparing isolated \(snapshotTest ? "desktop snapshot" : "Alpine shell")")
         guard await store.create(computer, source: nil), let session = store.selected else {
             throw ComputerError(store.error ?? "Could not create the fixture.")
         }
@@ -35,7 +36,24 @@ import WebKit
                 }
                 print("PASS: background provider ready with no visible window; fixture computer powered off")
             }
-            for _ in 0..<600 {
+            if snapshotTest {
+                await store.start(session)
+                guard session.phase == .running, let browser = session.browser else {
+                    throw ComputerError("The isolated desktop did not start.")
+                }
+                let began = ProcessInfo.processInfo.systemUptime
+                if let image = await ComputerPreviewSnapshot.capture(browser.view, desktop: true) {
+                    let output = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-desktop-snapshot-test.jpg")
+                    try image.write(to: output)
+                    print("PASS: real background desktop snapshot saved to \(output.path)")
+                } else {
+                    print("PASS: desktop content not ready; using computer-icon fallback")
+                }
+                guard ProcessInfo.processInfo.systemUptime - began < 9 else {
+                    throw ComputerError("Desktop snapshot exceeded its deadline.")
+                }
+            }
+            for _ in 0..<(snapshotTest ? 0 : 600) {
                 if FileManager.default.fileExists(atPath: finished.path) {
                     try? FileManager.default.removeItem(at: finished)
                     break

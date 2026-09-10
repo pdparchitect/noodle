@@ -51,6 +51,18 @@ message; future capabilities are ignored when the required subset is supported.
 Compatibility errors appear in assignment settings, live previews and CLI errors.
 Historical conversation cards do not require a running or compatible provider.
 
+Display snapshots wait up to eight seconds for document/assets, the built-in
+desktop's connection and canvas, and a settled layout. Nearly uniform frames,
+busy pages, failed navigation and stalled WebKit callbacks produce no snapshot;
+the saved card then uses the normal computer-icon fallback. This is best-effort
+visual readiness, not a guarantee that an arbitrary web app has completed its
+work. Existing historical cards are not rewritten.
+Check delayed pages, canvases, blank/busy fallback and cancellation without a guest:
+`swiftc Computer/Sources/NoodleComputer/ComputerPreviewSnapshot.swift Computer/Tests/PreviewSnapshotTests.swift -o /tmp/noodle-preview-snapshot-tests && /tmp/noodle-preview-snapshot-tests`.
+The signed Computer app also accepts `--noodle-background --provider-integration-test
+--provider-snapshot-test` to create a temporary desktop, capture it without a
+window, and clean up the guest. It never opens the user's computer library.
+
 The conversation owns a typed `.noodlecomputer` reference, appearance and bounded
 historical preview. No guest URL, password, certificate or access token is stored
 in the card. Cards reuse normal attachment selection, click and Space entry.

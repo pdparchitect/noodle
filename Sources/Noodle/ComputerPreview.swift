@@ -163,6 +163,7 @@ private final class ComputerPreviewPanel: NSPanel {
     private let status = NSTextField(labelWithString: "Connecting…")
     private let card: ComputerCard
     private let controller: ComputerController
+    private lazy var download = ComputerPreviewDownload { [controller] in try await controller.openDownload() }
     private var reader: Task<Void, Never>?
     private var writer: Task<Void, Never>?
     private var input = AsyncStream<ComputerRequest>.makeStream()
@@ -190,6 +191,7 @@ private final class ComputerPreviewPanel: NSPanel {
             status.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -12),
             status.bottomAnchor.constraint(equalTo: surface.bottomAnchor, constant: -8)
         ])
+        download.install(in: surface)
     }
     private func request(_ operation: ComputerOperation, data: Data? = nil, offset: Int64? = nil,
                          columns: Int? = nil, rows: Int? = nil) -> ComputerRequest {
@@ -216,6 +218,7 @@ private final class ComputerPreviewPanel: NSPanel {
                 } catch {
                     guard active else { return }
                     acceptingInput = false; status.stringValue = error.localizedDescription
+                    download.showIfNeeded(controller.permits(card) && !controller.installed)
                     return // Reopening retries reads, never uncertain input.
                 }
                 try? await Task.sleep(for: .milliseconds(150))
@@ -231,6 +234,7 @@ private final class ComputerPreviewPanel: NSPanel {
                     guard active else { return }
                     acceptingInput = false; reader?.cancel()
                     status.stringValue = "Input was not retried: \(error.localizedDescription)"
+                    download.showIfNeeded(controller.permits(card) && !controller.installed)
                     return
                 }
             }
@@ -240,6 +244,7 @@ private final class ComputerPreviewPanel: NSPanel {
     }
     func stop() {
         active = false; acceptingInput = false
+        download.stop()
         reader?.cancel(); writer?.cancel(); input.continuation.finish()
     }
     func send(source: TerminalView, data: ArraySlice<UInt8>) {

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The personal terminal uses a portable working-directory prompt instead of displaying a literal `\w` in desktop images.
+
+- Terminal and display previews offer Get Noodle Computer when the app is missing, using the same download flow as setup.
+
+- Display cards wait briefly for a rendered page and use the computer-icon fallback instead of saving blank or loading previews.
+
 - Runtime compatibility checks identify which app needs updating before using unsupported Computer capabilities.
 - Noodle-inspired Computer icon with the shared cobalt and cream palette.
 

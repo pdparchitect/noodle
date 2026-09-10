@@ -109,11 +109,9 @@ import WebKit
             } else {
                 guard session.desktop != nil else { throw ComputerBridgeError("This computer has no web display.") }
                 if let browser = session.browser {
-                    let configuration = WKSnapshotConfiguration(); configuration.snapshotWidth = 560
-                    if let image = try? await browser.view.takeSnapshot(configuration: configuration),
-                       let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
-                       let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.7]), jpeg.count <= 512_000 {
-                        response.previewImage = jpeg
+                    response.previewImage = await ComputerPreviewSnapshot.capture(browser.view, desktop: !browser.connection.customWeb) {
+                        session.phase == .running && session.browser === browser && browser.failure == nil &&
+                        store.sessions.contains(where: { $0 === session })
                     }
                 }
             }
