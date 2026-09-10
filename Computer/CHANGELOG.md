@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.2.1] - 2026-09-11
+
 - Run Computer, Noodle integration and shared-protocol release tests concurrently; image preparation starts without waiting for app compilation.
 
 - Recover publication from already verified release artifacts when a workflow stops after tagging.
