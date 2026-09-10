@@ -6,6 +6,8 @@
 
 - Smoothly animate the create-computer dialog's size, Advanced Options expansion and collapse, and disclosure chevron, respecting Reduce Motion.
 
+- Add Settings → Storage with Studio’s usage summary, cache preview, refresh and confirmed cleanup/restart flow. Remove unused image and installer caches while preserving computer disks, writable layers, recovery copies and startup files.
+
 - Choose what to create with selectable computer cards showing each option's icon, name and description, replacing the Template dropdown.
 
 - Simplify template and networking descriptions, remove redundant settings help, and load template names, types, images and resource settings from an extensible container registry instead of fixed presets.

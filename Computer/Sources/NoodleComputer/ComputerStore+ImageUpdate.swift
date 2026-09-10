@@ -3,7 +3,7 @@ import Foundation
 
 extension ComputerStore {
     func updateImage(_ session: ComputerSession) async {
-        guard session.computer.kind == .container, !session.phase.busy,
+        guard !storageCleaning, session.computer.kind == .container, !session.phase.busy,
               imageUpdateTasks[session.id] == nil else { return }
         error = nil
         session.updateResult = nil

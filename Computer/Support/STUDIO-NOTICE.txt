@@ -1,4 +1,7 @@
 Noodle Computer's container runtime follows the architecture of ChatBotKit Studio.
+Its Storage settings and maintenance flow are adapted from Studio's
+StorageMaintenance.swift, with cleanup targets and runtime coordination changed
+for Noodle Computer.
 ChatBotKit Studio, Copyright 2026 CBK.AI LTD, Apache License 2.0.
 https://github.com/chatbotkit/studio
 

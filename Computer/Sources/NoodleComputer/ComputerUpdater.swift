@@ -39,17 +39,25 @@ struct ComputerCheckForUpdatesButton: View {
     }
 }
 
+enum ComputerSettingsTab: Hashable { case general, storage, updates }
+
 struct ComputerSettingsView: View {
+    @State private var selection: ComputerSettingsTab = .general
     var body: some View {
-        TabView {
+        TabView(selection: $selection.animation(.easeInOut(duration: 0.22))) {
             ComputerGeneralSettingsView()
                 .frame(width: 580)
                 .fixedSize(horizontal: false, vertical: true)
                 .tabItem { Label("General", systemImage: "gearshape") }
+                .tag(ComputerSettingsTab.general)
+            StorageSettingsView()
+                .tabItem { Label("Storage", systemImage: "internaldrive") }
+                .tag(ComputerSettingsTab.storage)
             ComputerUpdatesSettingsView()
                 .frame(width: 580)
                 .fixedSize(horizontal: false, vertical: true)
                 .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }
+                .tag(ComputerSettingsTab.updates)
         }
         .windowResizeAnchor(.top)
     }

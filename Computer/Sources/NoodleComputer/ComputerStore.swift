@@ -61,6 +61,11 @@ enum ComputerPhase: Equatable {
     private var creationTask: Task<Bool, Never>?
     private var creationID: UUID?
     var imageUpdateTasks: [UUID: Task<Void, Never>] = [:]
+    @Published var storageReport: StorageReport?
+    @Published var storageBusy = false
+    @Published var storageCleaning = false
+    @Published var storageError: String?
+    var storageTask: Task<Void, Never>?
     @Published var error: String?
     let library: ComputerLibrary
     let cache: URL
@@ -103,7 +108,7 @@ enum ComputerPhase: Equatable {
     var kernel: URL { Bundle.main.resourceURL!.appendingPathComponent("Runtime/vmlinux-arm64") }
 
     func create(_ requested: Computer, source: URL?) async -> Bool {
-        guard creationTask == nil else { return false }
+        guard !storageCleaning, creationTask == nil else { return false }
         creationID = requested.id
         creationName = requested.name
         creationStartedAt = .now
@@ -336,6 +341,11 @@ enum ComputerPhase: Equatable {
     }
 
     func start(_ session: ComputerSession) async {
+        guard !storageCleaning else { return }
+        await startComputer(session)
+    }
+
+    func startComputer(_ session: ComputerSession) async {
         guard !session.phase.busy, session.phase != .running else { return }
         session.showingTerminal = false
         session.phase = .starting
@@ -390,6 +400,11 @@ enum ComputerPhase: Equatable {
     }
 
     func stop(_ session: ComputerSession, force: Bool = false) async {
+        guard !storageCleaning else { return }
+        await stopComputer(session, force: force)
+    }
+
+    func stopComputer(_ session: ComputerSession, force: Bool = false) async {
         guard !session.phase.busy else { return }
         if let virtual = session.virtual, !force, virtual.machine.canRequestStop {
             do { try virtual.requestShutdown() } catch { self.error = error.localizedDescription }
@@ -497,7 +512,7 @@ enum ComputerPhase: Equatable {
     }
 
     func remove(_ session: ComputerSession) {
-        guard session.phase == .stopped, session.virtual == nil, session.container == nil else { return }
+        guard !storageCleaning, session.phase == .stopped, session.virtual == nil, session.container == nil else { return }
         do {
             // Recoverable deletion, after the UI's explicit confirmation.
             try FileManager.default.trashItem(at: library.directory(for: session.id), resultingItemURL: nil)
@@ -507,6 +522,8 @@ enum ComputerPhase: Equatable {
     }
 
     func shutdown() async {
+        storageTask?.cancel()
+        await storageTask?.value
         cancelCreation()
         for task in imageUpdateTasks.values { task.cancel() }
         for task in Array(imageUpdateTasks.values) { await task.value }

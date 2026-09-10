@@ -24,7 +24,8 @@ let package = Package(
             .product(name: "ContainerizationExtras", package: "containerization"),
             .product(name: "ContainerizationOCI", package: "containerization")
         ]),
-        .testTarget(name: "ComputerCoreTests", dependencies: ["ComputerCore"])
+        .testTarget(name: "ComputerCoreTests", dependencies: ["ComputerCore"]),
+        .testTarget(name: "ComputerStorageTests", dependencies: ["NoodleComputer"])
     ],
     swiftLanguageModes: [.v5]
 )
