@@ -57,6 +57,9 @@ busy pages, failed navigation and stalled WebKit callbacks produce no snapshot;
 the saved card then uses the normal computer-icon fallback. This is best-effort
 visual readiness, not a guarantee that an arbitrary web app has completed its
 work. Existing historical cards are not rewritten.
+Snapshots preserve up to 1440 pixels on their longest edge, prefer lossless PNG,
+and fall back to high-quality JPEG and smaller dimensions to stay within 512 KB.
+Display cards use a larger, proportionate preview; terminal text cards are unchanged.
 Check delayed pages, canvases, blank/busy fallback and cancellation without a guest:
 `swiftc Computer/Sources/NoodleComputer/ComputerPreviewSnapshot.swift Computer/Tests/PreviewSnapshotTests.swift -o /tmp/noodle-preview-snapshot-tests && /tmp/noodle-preview-snapshot-tests`.
 The signed Computer app also accepts `--noodle-background --provider-integration-test

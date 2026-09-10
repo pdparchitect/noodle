@@ -36,7 +36,13 @@ import WebKit
         let delayed = await ComputerPreviewSnapshot.capture(web, desktop: false, timeout: 5)
         require(delayed != nil && now() - began >= 1.2, "wait for delayed content and settling before capture")
         if let delayed {
-            let output = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-preview-snapshot-ready.jpg")
+            require(delayed.starts(with: [137, 80, 78, 71]), "text/UI snapshots prefer lossless PNG")
+            let bitmap = NSBitmapImageRep(data: delayed)!
+            require(bitmap.pixelsWide >= 1024 && bitmap.pixelsWide <= 1440,
+                    "capture retains viewport detail instead of a 560-point thumbnail")
+            require(abs(Double(bitmap.pixelsWide) / Double(bitmap.pixelsHigh) - 4.0 / 3) < 0.01,
+                    "encoding preserves desktop proportions")
+            let output = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-preview-snapshot-ready.png")
             try! delayed.write(to: output)
         }
         require(!window.isVisible, "snapshot does not show or activate a window")
@@ -80,6 +86,30 @@ import WebKit
             """)
         let terminal = await ComputerPreviewSnapshot.capture(web, desktop: false, timeout: 3)
         require(terminal != nil, "real terminal text on dark desktop remains useful")
+        if let terminal {
+            require(terminal.starts(with: [137, 80, 78, 71]), "desktop terminal text is stored without JPEG artifacts")
+            try! terminal.write(to: FileManager.default.temporaryDirectory.appendingPathComponent("noodle-preview-terminal-quality.png"))
+        }
+
+        // Deterministic incompressible content exercises the byte cap and JPEG fallback.
+        let noise = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 1600, pixelsHigh: 1200,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        var seed: UInt32 = 7
+        for y in 0..<noise.pixelsHigh { for x in 0..<noise.pixelsWide {
+            let pixel = noise.bitmapData! + y * noise.bytesPerRow + x * 4
+            for channel in 0..<3 { seed = seed &* 1664525 &+ 1013904223; pixel[channel] = UInt8(truncatingIfNeeded: seed >> 24) }
+            pixel[3] = 255
+        } }
+        let noiseImage = NSImage(size: NSSize(width: 1600, height: 1200)); noiseImage.addRepresentation(noise)
+        let encodedNoise = ComputerPreviewSnapshot.encode(noiseImage)
+        require(encodedNoise != nil && encodedNoise!.count <= 512_000, "detailed images stay under the existing wire limit")
+        require(encodedNoise!.starts(with: [255, 216]), "oversized PNG uses bounded high-quality JPEG fallback")
+        let small = NSImage(size: NSSize(width: 200, height: 150))
+        small.lockFocus(); NSColor.blue.setFill(); NSRect(x: 0, y: 0, width: 200, height: 150).fill(); small.unlockFocus()
+        let smallSource = NSBitmapImageRep(data: small.tiffRepresentation!)!
+        let smallEncoded = NSBitmapImageRep(data: ComputerPreviewSnapshot.encode(small)!)!
+        require(smallEncoded.pixelsWide == smallSource.pixelsWide, "small images are never artificially upscaled")
         if CommandLine.arguments.count == 2, let observed = NSImage(contentsOfFile: CommandLine.arguments[1]) {
             require(!ComputerPreviewSnapshot.isUseful(observed), "reject the loading frame captured from the real desktop")
         }

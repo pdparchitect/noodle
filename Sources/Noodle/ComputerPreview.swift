@@ -270,21 +270,32 @@ private final class ComputerPreviewPanel: NSPanel {
 
 struct ComputerAttachmentCard: View {
     let card: ComputerCard
+    private var preview: NSImage? { card.previewImage.flatMap(NSImage.init(data:)) }
+    private var width: CGFloat { card.view == "web" ? 360 : 280 }
+    private var height: CGFloat {
+        guard card.view == "web" else { return 165 }
+        guard let image = preview, image.size.width > 0 else { return 240 }
+        return min(360, max(180, width * image.size.height / image.size.width))
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .topLeading) {
                 Color.black
-                if let data = card.previewImage, let image = NSImage(data: data) {
-                    Image(nsImage: image).resizable().scaledToFit().frame(width: 280, height: 165)
+                if let image = preview {
+                    Image(nsImage: image).resizable().interpolation(.high).scaledToFit().frame(width: width, height: height)
                 } else if card.view == "web" {
-                    Image(systemName: card.computer.symbol).font(.system(size: 48)).foregroundStyle(.secondary)
-                        .frame(width: 280, height: 165)
+                    VStack(spacing: 12) {
+                        Image(systemName: card.computer.symbol).font(.system(size: 48))
+                        Text("Open live display").font(.caption)
+                        Text("Snapshot unavailable").font(.caption2)
+                    }
+                    .foregroundStyle(.secondary).frame(width: width, height: height)
                 } else {
                     Text(card.terminalPreview.isEmpty ? "$" : card.terminalPreview)
                     .font(.system(size: 10, design: .monospaced)).foregroundStyle(.white)
                     .lineLimit(10).padding(12)
                 }
-            }.frame(width: 280, height: 165).clipShape(RoundedRectangle(cornerRadius: 13))
+            }.frame(width: width, height: height).clipShape(RoundedRectangle(cornerRadius: 13))
             HStack(spacing: 8) {
                 if let data = card.computer.icon, let image = NSImage(data: data) {
                     Image(nsImage: image).resizable().scaledToFill().frame(width: 30, height: 30).clipShape(Circle())
@@ -299,6 +310,6 @@ struct ComputerAttachmentCard: View {
                 }
                 Spacer(minLength: 0)
             }
-        }.frame(width: 280)
+        }.frame(width: width)
     }
 }

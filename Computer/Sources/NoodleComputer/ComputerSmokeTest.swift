@@ -43,7 +43,8 @@ import WebKit
                 }
                 let began = ProcessInfo.processInfo.systemUptime
                 if let image = await ComputerPreviewSnapshot.capture(browser.view, desktop: true) {
-                    let output = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-desktop-snapshot-test.jpg")
+                    let ext = image.starts(with: [137, 80, 78, 71]) ? "png" : "jpg"
+                    let output = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-desktop-snapshot-test.\(ext)")
                     try image.write(to: output)
                     print("PASS: real background desktop snapshot saved to \(output.path)")
                 } else {

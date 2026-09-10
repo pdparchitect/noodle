@@ -20,7 +20,9 @@ import WebKit
                 settledSince = now
             } else if now - settledSince >= 0.6, now < deadline {
                 let configuration = WKSnapshotConfiguration()
-                configuration.snapshotWidth = 560
+                // Capture at the viewport's resolution; encoding below bounds the
+                // actual pixels independently of the Mac's backing scale.
+                configuration.snapshotWidth = NSNumber(value: min(1440, view.bounds.width))
                 configuration.afterScreenUpdates = true
                 let snapshot: NSImage? = await bounded(until: min(deadline, now + 1.5)) { finish in
                     view.takeSnapshot(with: configuration) { image, _ in finish(image) }
@@ -32,13 +34,45 @@ import WebKit
                 }
                 if valid(), !Task.isCancelled, !view.isLoading, current == layout,
                    ProcessInfo.processInfo.systemUptime < deadline,
-                   let snapshot, isUseful(snapshot),
-                   let tiff = snapshot.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
-                   let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.7]), jpeg.count <= 512_000 {
-                    return jpeg
+                   let snapshot, isUseful(snapshot), let data = encode(snapshot) {
+                    return data
                 }
             }
             try? await Task.sleep(for: .milliseconds(150))
+        }
+        return nil
+    }
+
+    /// Preserve text/UI edges with lossless PNG whenever it fits the existing
+    /// wire limit. Detailed/photo-heavy pages fall back to high-quality JPEG,
+    /// reducing dimensions only when necessary. Never upscale a source bitmap.
+    static func encode(_ image: NSImage) -> Data? {
+        guard let tiff = image.tiffRepresentation, let source = NSBitmapImageRep(data: tiff),
+              source.pixelsWide > 0, source.pixelsHigh > 0 else { return nil }
+        var candidates: [NSBitmapImageRep] = []
+        for limit in [1440, 1080, 720] {
+            let scale = min(1, Double(limit) / Double(max(source.pixelsWide, source.pixelsHigh)))
+            let width = max(1, Int(Double(source.pixelsWide) * scale))
+            let height = max(1, Int(Double(source.pixelsHigh) * scale))
+            guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+                let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return nil }
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = context
+            context.imageInterpolation = .high
+            let rect = NSRect(x: 0, y: 0, width: width, height: height)
+            NSColor.black.setFill(); rect.fill()
+            image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
+            NSGraphicsContext.restoreGraphicsState()
+            if let png = bitmap.representation(using: .png, properties: [:]), png.count <= 512_000 { return png }
+            candidates.append(bitmap)
+        }
+        for bitmap in candidates {
+            for quality in [0.92, 0.85] {
+                if let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: quality]),
+                   jpeg.count <= 512_000 { return jpeg }
+            }
         }
         return nil
     }
