@@ -13,7 +13,7 @@ let package = Package(
         .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", exact: "1.20.0")
     ],
     targets: [
-        .target(name: "ComputerCore"),
+        .target(name: "ComputerCore", resources: [.process("Resources")]),
         .executableTarget(name: "NoodleComputer", dependencies: [
             "ComputerCore",
             .product(name: "Sparkle", package: "Sparkle"),

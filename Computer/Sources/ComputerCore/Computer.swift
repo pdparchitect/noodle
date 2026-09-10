@@ -25,7 +25,7 @@ public enum ComputerKind: String, Codable, CaseIterable, Sendable {
         switch self {
         case .macOS: "A private Mac with its own desktop. Automatically downloads the latest compatible macOS from Apple (several GB)."
         case .linux: "An Alpine Linux virtual machine with a command-line console. Automatically downloads the ARM64 installer; no graphical desktop included."
-        case .container: "A ready-to-use Linux desktop with a browser, terminal and file manager, based on Launcher. Downloads about 540 MB."
+        case .container: ContainerRegistry.bundled.defaultTemplate.description
         case .omarchy: "Experimental custom Linux preset. Choose an ARM64 Omarchy installer in Advanced Options. No verified default image is available; a standard x86-64 ISO will not boot."
         }
     }
@@ -38,8 +38,8 @@ public enum DefaultLinuxInstaller {
 }
 
 public struct Computer: Codable, Identifiable, Equatable, Sendable {
-    public static let desktopImage = "ghcr.io/pdparchitect/noodle-computer-desktop-image:latest"
-    public static let shellImage = "ghcr.io/pdparchitect/noodle-computer-shell-image:latest"
+    public static var desktopImage: String { ComputerTemplate.desktop.imageReference }
+    public static var shellImage: String { ComputerTemplate.shell.imageReference }
     public var isCustomContainer: Bool { kind == .container && customImage == true }
     // Released image identities remain valid when defaults advance. Existing disks
     // are not rebuilt, so their saved image references must retain their template.
@@ -53,7 +53,7 @@ public struct Computer: Codable, Identifiable, Equatable, Sendable {
         "ghcr.io/pdparchitect/noodle-computer-shell-image@sha256:ccf220714abadda58dc2d805d6f90dda5d89acc4ed3ff58eb4a68f7279705084",
         "ghcr.io/pdparchitect/noodle-computer-shell-image@sha256:9e9333dedb04c8e045e0f775d7c51f1e0d369f32d8c56087d00bb24f9d1598c7",
     ]
-    public var hasDesktop: Bool { template == .desktop }
+    public var hasDesktop: Bool { template?.type == .desktop }
     /// Creation always resolves the current template tag, even if a caller passes
     /// a saved record from a digest-pinned release. Loading/starting never calls this.
     public func forCreation() -> Computer {
@@ -66,9 +66,9 @@ public struct Computer: Codable, Identifiable, Equatable, Sendable {
         guard kind == .container, !isCustomContainer else { return nil }
         if Self.releasedDesktopImages.contains(imageReference) { return .desktop }
         if Self.releasedShellImages.contains(imageReference) { return .shell }
-        return nil
+        return ContainerRegistry.bundled.template(for: self)
     }
-    public var displayType: String { isCustomContainer ? "Custom Container" : template?.title ?? kind.title }
+    public var displayType: String { isCustomContainer ? "Custom Container" : template?.name ?? kind.title }
     public var displaySymbol: String { isCustomContainer ? "shippingbox" : template?.symbol ?? kind.symbol }
     public var id: UUID
     public var name: String
@@ -119,8 +119,9 @@ public struct Computer: Codable, Identifiable, Equatable, Sendable {
         if kind == .container, imageReference.trimmingCharacters(in: .whitespaces).isEmpty {
             throw ComputerError("A container image is required.")
         }
-        if hasDesktop && (!networkEnabled || memoryGiB < 2 || diskGiB < 8) {
-            throw ComputerError("The Linux desktop needs networking, at least 2 GB memory and an 8 GB disk.")
+        if let template, (template.requiresNetworking && !networkEnabled)
+            || memoryGiB < template.minimumMemoryGiB || diskGiB < template.minimumDiskGiB {
+            throw ComputerError("\(template.name) needs at least \(template.minimumMemoryGiB) GB memory and a \(template.minimumDiskGiB) GB disk\(template.requiresNetworking ? ", with networking enabled" : "").")
         }
         if let webPort, !isCustomContainer || !(1...65535).contains(webPort) || !networkEnabled {
             throw ComputerError("A web display needs networking and a port between 1 and 65535 on a custom container.")

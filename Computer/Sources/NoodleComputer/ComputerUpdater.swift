@@ -62,8 +62,6 @@ struct ComputerGeneralSettingsView: View {
         Form {
             Section {
                 Toggle("Start new computers automatically", isOn: $startNewComputersAutomatically)
-            } footer: {
-                Text("Start each computer as soon as it has been created.")
             }
         }
         .formStyle(.grouped)

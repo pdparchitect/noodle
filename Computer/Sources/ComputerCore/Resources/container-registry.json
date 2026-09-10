@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "defaultTemplateID": "desktop",
+  "templates": [
+    {
+      "id": "desktop",
+      "name": "Desktop",
+      "type": "desktop",
+      "description": "A personal desktop for your apps and files.",
+      "symbol": "desktopcomputer",
+      "defaultName": "My Desktop",
+      "imageReference": "ghcr.io/pdparchitect/noodle-computer-desktop-image:latest",
+      "defaultCPUs": 4,
+      "defaultMemoryGiB": 4,
+      "defaultDiskGiB": 32,
+      "minimumMemoryGiB": 2,
+      "minimumDiskGiB": 8,
+      "requiresNetworking": true
+    },
+    {
+      "id": "shell",
+      "name": "Shell",
+      "type": "shell",
+      "description": "A simple workspace for running tools and tasks.",
+      "symbol": "terminal",
+      "defaultName": "My Shell",
+      "imageReference": "ghcr.io/pdparchitect/noodle-computer-shell-image:latest",
+      "defaultCPUs": 2,
+      "defaultMemoryGiB": 1,
+      "defaultDiskGiB": 4,
+      "minimumMemoryGiB": 1,
+      "minimumDiskGiB": 4,
+      "requiresNetworking": false
+    }
+  ]
+}

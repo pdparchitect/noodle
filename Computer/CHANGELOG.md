@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Simplify template and networking descriptions, remove redundant settings help, and load template names, types, images and resource settings from an extensible container registry instead of fixed presets.
+
 - Start newly created computers automatically, with an enabled-by-default toggle in Settings → General.
 
 - Align the visible bottom edge of the WebKit and terminal panels with the sidebar by correcting the extra one-point bottom inset.

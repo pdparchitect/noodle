@@ -255,7 +255,7 @@ struct ComputerLibraryView: View {
         ContentUnavailableView {
           Label("Your own computers.", systemImage: "desktopcomputer")
         } description: {
-          Text("Create a Desktop or Shell computer.")
+          Text("Create a computer to get started.")
         } actions: {
           Button("Create a Computer…") { showingNew = true }
         }
@@ -601,11 +601,11 @@ struct NewComputerView: View {
   let custom: Bool
   @Environment(\.dismiss) private var dismiss
   @AppStorage("StartNewComputersAutomatically") private var startNewComputersAutomatically = true
-  @State private var template = ComputerTemplate.desktop
-  @State private var name = "My Desktop"
-  @State private var cpus = 4
-  @State private var memory = 4
-  @State private var disk = 32
+  @State private var template: ComputerTemplate
+  @State private var name: String
+  @State private var cpus: Int
+  @State private var memory: Int
+  @State private var disk: Int
   @State private var advanced = false
   @State private var network = true
   @State private var failure: String?
@@ -615,10 +615,12 @@ struct NewComputerView: View {
   init(store: ComputerStore, custom: Bool = false) {
     self.store = store
     self.custom = custom
-    _name = State(initialValue: custom ? "My Container" : "My Desktop")
-    _cpus = State(initialValue: custom ? 2 : 4)
-    _memory = State(initialValue: custom ? 1 : 4)
-    _disk = State(initialValue: custom ? 8 : 32)
+    let initialTemplate = custom ? ComputerTemplate.shell : ContainerRegistry.bundled.defaultTemplate
+    _template = State(initialValue: initialTemplate)
+    _name = State(initialValue: custom ? "My Container" : initialTemplate.defaultName)
+    _cpus = State(initialValue: initialTemplate.defaultCPUs)
+    _memory = State(initialValue: initialTemplate.defaultMemoryGiB)
+    _disk = State(initialValue: custom ? 8 : initialTemplate.defaultDiskGiB)
   }
   private var portText: String { webPort.trimmingCharacters(in: .whitespacesAndNewlines) }
   private var requiresNetworking: Bool { custom ? !portText.isEmpty : template.requiresNetworking }
@@ -687,11 +689,11 @@ struct NewComputerView: View {
                   .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
               } else {
                 Picker("Template", selection: $template) {
-                  ForEach(ComputerTemplate.allCases, id: \.self) { option in
-                    Text(option.title).tag(option)
+                  ForEach(ContainerRegistry.bundled.templates) { option in
+                    Text(option.name).tag(option)
                   }
                 }
-                Text(template.detail).font(.callout).foregroundStyle(.secondary)
+                Text(template.description).font(.callout).foregroundStyle(.secondary)
                   .fixedSize(horizontal: false, vertical: true)
               }
               Divider()
@@ -722,10 +724,10 @@ struct NewComputerView: View {
                   Toggle("Networking", isOn: $network).toggleStyle(.switch).controlSize(.small)
                     .disabled(requiresNetworking)
                   if requiresNetworking {
-                    Text("Required to connect to the web display.").font(.caption).foregroundStyle(.secondary)
+                    Text("Required for this computer.").font(.caption).foregroundStyle(.secondary)
                   }
                   Text(
-                    "NAT networking allows access to the internet and potentially your local network. Host folders, clipboard, microphone, and camera are not shared."
+                    "Allows this computer to connect to the internet and your local network."
                   )
                   .font(.caption).foregroundStyle(.secondary)
                   .fixedSize(horizontal: false, vertical: true)

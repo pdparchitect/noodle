@@ -18,7 +18,7 @@ a missing kernel. Its provenance is recorded in `Support/KERNEL-NOTICE.txt`.
 
 ## v1 scope
 
-The standard creation dialog offers exactly two container templates. No Docker Desktop installation
+The standard creation dialog loads its container templates from the bundled registry. No Docker Desktop installation
 is required: Docker/OCI images run using the embedded Apple Containerization runtime.
 
 - **Desktop:** the latest Noodle desktop based on Launcher, with browser, terminal and file
@@ -31,6 +31,17 @@ Both choose their images automatically and keep resource controls under Advanced
 Options. Existing Alpine workspaces appear as Shell; existing Launcher workspaces
 appear as Desktop. Their records and disks are unchanged. Unknown custom container
 images retain their generic type instead of being relabelled as a known template.
+
+The catalogue lives in [`Sources/ComputerCore/Resources/container-registry.json`](Sources/ComputerCore/Resources/container-registry.json).
+Each entry owns its stable `id`, display `name`, runtime `type`, plain-language
+`description`, icon, default computer name, image reference and resource settings.
+Entries appear in file order; `defaultTemplateID` selects the initial choice.
+To add a template, add an entry with a unique ID and image reference, using the
+existing `desktop` or `shell` runtime type. The picker and image recognition read
+the registry automatically; no UI cases are needed. Desktop images must support
+the existing desktop service contract. New runtime types still need runtime code.
+The registry is validated when loaded and bundled with the signed app; catalogue
+edits take effect in the next build, without a remote catalogue or live reload.
 
 Noodle discovers the installed Computer app and launches its provider quietly as
 needed. No Computer window needs to be open. Assign computers under the Computers

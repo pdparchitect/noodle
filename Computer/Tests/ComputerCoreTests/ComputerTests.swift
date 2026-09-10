@@ -43,12 +43,12 @@ final class ComputerTests: XCTestCase {
         XCTAssertThrowsError(try appearance.validate())
     }
     func testV1TemplatesAreDesktopAndShellContainers() throws {
-        XCTAssertEqual(ComputerTemplate.allCases.map(\.title), ["Desktop", "Shell"])
-        for template in ComputerTemplate.allCases {
+        XCTAssertEqual(ContainerRegistry.bundled.templates.map(\.name), ["Desktop", "Shell"])
+        for template in ContainerRegistry.bundled.templates {
             let computer = template.makeComputer()
             XCTAssertEqual(computer.kind, .container)
             XCTAssertEqual(computer.template, template)
-            XCTAssertEqual(computer.displayType, template.title)
+            XCTAssertEqual(computer.displayType, template.name)
             XCTAssertEqual(computer.name, template.defaultName)
             XCTAssertEqual(computer.imageReference, template.imageReference)
             XCTAssertNoThrow(try computer.validate())
