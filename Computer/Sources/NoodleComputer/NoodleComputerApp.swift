@@ -675,6 +675,9 @@ struct NewComputerView: View {
           }.padding(20)
           Divider()
           VStack(alignment: .leading, spacing: 16) {
+            if !custom {
+              ComputerChoicePicker(selection: $template)
+            }
             VStack(alignment: .leading, spacing: 12) {
               if custom {
                 LabeledContent("Image") {
@@ -687,16 +690,8 @@ struct NewComputerView: View {
                 }
                 Text("A public ARM64 Linux image with /bin/sh. Leave the web port blank for a terminal, or enter the container’s HTTP port to show its web interface.")
                   .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-              } else {
-                Picker("Template", selection: $template) {
-                  ForEach(ContainerRegistry.bundled.templates) { option in
-                    Text(option.name).tag(option)
-                  }
-                }
-                Text(template.description).font(.callout).foregroundStyle(.secondary)
-                  .fixedSize(horizontal: false, vertical: true)
+                Divider()
               }
-              Divider()
               HStack {
                 ComputerIconButton(appearance: $appearance, symbol: custom ? "shippingbox" : template.symbol)
                 TextField("Name", text: $name).autocorrectionDisabled()
@@ -757,6 +752,56 @@ struct NewComputerView: View {
       memory = value.defaultMemoryGiB
       if value.requiresNetworking { network = true }
     }
+  }
+}
+
+/// Present the computers people can create directly, using the registry's choices.
+struct ComputerChoicePicker: View {
+  @Binding var selection: ComputerTemplate
+
+  var body: some View {
+    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 12) {
+      ForEach(ContainerRegistry.bundled.templates) { option in
+        let selected = selection.id == option.id
+        Button {
+          selection = option
+        } label: {
+          VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+              Image(systemName: option.symbol)
+                .font(.system(size: 20)).foregroundStyle(Color.accentColor)
+                .frame(width: 24, height: 24)
+              Text(option.name).font(.headline)
+              Spacer(minLength: 0)
+              Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 16))
+                .foregroundStyle(selected ? Color.accentColor : Color.secondary.opacity(0.5))
+            }
+            Text(option.description).font(.callout).foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
+          .padding(14)
+          .background(selected ? Color.accentColor.opacity(0.1) : Color.secondary.opacity(0.075),
+            in: RoundedRectangle(cornerRadius: 12))
+          .overlay {
+            RoundedRectangle(cornerRadius: 12)
+              .strokeBorder(selected ? Color.accentColor : Color.secondary.opacity(0.15),
+                lineWidth: selected ? 1.5 : 1)
+          }
+          .contentShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(option.name)
+        .accessibilityHint(option.description)
+        .accessibilityValue(selected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : [.isButton])
+        .accessibilityIdentifier("computer-choice-\(option.id)")
+      }
+    }
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel("Computer type")
   }
 }
 

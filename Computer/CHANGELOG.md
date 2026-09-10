@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Choose what to create with selectable computer cards showing each option's icon, name and description, replacing the Template dropdown.
+
 - Simplify template and networking descriptions, remove redundant settings help, and load template names, types, images and resource settings from an extensible container registry instead of fixed presets.
 
 - Start newly created computers automatically, with an enabled-by-default toggle in Settings → General.
