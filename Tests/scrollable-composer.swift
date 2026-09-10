@@ -7,6 +7,7 @@ import NoodleCore
     @Published var focused = false
     @Published var conversationID = UUID()
     @Published var submissions = 0
+    @Published var microphoneClicks = 0
     let completion = ComposerNameCompletion()
 }
 
@@ -16,13 +17,31 @@ struct ScrollableComposerFixture: View {
         VStack(alignment: .leading) {
             Text("Scrollable composer — native editing").font(.headline)
             Spacer()
-            ScrollableChatComposer(text: $model.text, isFocused: $model.focused,
+            ZStack(alignment: .bottomTrailing) {
+                ScrollableChatComposer(text: $model.text, isFocused: $model.focused,
                 conversationID: model.conversationID, placeholder: "Message Test",
                 agents: [AgentRecord(displayName: "Mara")], preferredIDs: [], completion: model.completion,
                 submit: { model.submissions += 1 })
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 18))
+                .padding(.leading, 12).padding(.trailing, 72).padding(.vertical, 6)
+                .frame(minHeight: 36)
+                HStack(spacing: 4) {
+                    Button { model.microphoneClicks += 1 } label: { Text("mic").frame(width: 27, height: 36).contentShape(Rectangle()) }
+                    Button { model.submissions += 1 } label: { Text("send").frame(width: 27, height: 36).contentShape(Rectangle()) }
+                }.buttonStyle(.plain).padding(.trailing, 7)
+            }
+            .modifier(ComposerFixtureStyle())
+            .modifier(ComposerFocusSurface(cornerRadius: 18, controlsWidth: 65) { model.focused = true })
         }.padding(20).frame(width: 500, height: 300)
+    }
+}
+
+private struct ComposerFixtureStyle: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        } else {
+            content.background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 18))
+        }
     }
 }
 
@@ -88,6 +107,40 @@ struct ScrollableComposerFixture: View {
                 model.text = ""
                 try await Task.sleep(for: .milliseconds(150))
                 precondition(abs(scroll.frame.height - singleLineHeight) < 0.5, "Clearing text must restore the same single-line height")
+                @MainActor func click(_ point: NSPoint) async throws {
+                    window.makeFirstResponder(nil)
+                    model.focused = false
+                    try await Task.sleep(for: .milliseconds(100))
+                    for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                        let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+                            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                            context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+                        window.sendEvent(event)
+                    }
+                    try await Task.sleep(for: .milliseconds(200))
+                }
+                let rect = scroll.convert(scroll.bounds, to: nil)
+                @MainActor func paddingTarget(_ root: NSView) -> NSView? {
+                    if String(describing: type(of: root)) == "ComposerPaddingFocusView" { return root }
+                    for child in root.subviews { if let target = paddingTarget(child) { return target } }
+                    return nil
+                }
+                let target = paddingTarget(window.contentView!)!
+                let textPoint = target.superview!.convert(NSPoint(x: rect.minX + 20, y: rect.midY), from: nil)
+                precondition(target.hitTest(textPoint) == nil, "Padding overlay must pass text clicks through")
+                for point in [NSPoint(x: rect.midX, y: rect.minY - 4),
+                              NSPoint(x: rect.midX, y: rect.maxY + 4),
+                              NSPoint(x: rect.minX - 8, y: rect.midY),
+                              NSPoint(x: rect.minX - 5, y: rect.minY - 2)] {
+                    try await click(point)
+                    precondition(window.firstResponder === scroll.editor, "Input padding click must focus the editor: \(point)")
+                }
+                let sends = model.submissions
+                try await click(NSPoint(x: rect.maxX + 72 - 7 - 13.5, y: rect.midY))
+                precondition(model.submissions == sends + 1 && !model.focused, "Send button must not trigger background focus")
+                try await click(NSPoint(x: rect.maxX + 72 - 7 - 13.5 - 31, y: rect.midY))
+                precondition(model.microphoneClicks == 1 && !model.focused, "Microphone must not trigger background focus")
+                print("Composer padding: top, bottom, left and rounded corner focus; send and microphone remain independent")
                 for count in 1...8 {
                     scroll.editor.insertText("\n", replacementRange: scroll.editor.selectedRange())
                     try await Task.sleep(for: .milliseconds(100))

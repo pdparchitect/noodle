@@ -293,6 +293,8 @@ struct ChatView: View {
                     .regular,
                     in: RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
                 )
+                .modifier(ComposerFocusSurface(cornerRadius: composerCornerRadius,
+                    controlsWidth: composerSendControlWidth + 7 + (microphoneAction == nil ? 0 : 31)) { composerFocused = true })
         } else {
             composerInputContents(microphoneAction: microphoneAction)
                 .background(
@@ -302,7 +304,10 @@ struct ChatView: View {
                 .overlay {
                     RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
                         .stroke(.separator.opacity(0.6))
+                        .allowsHitTesting(false)
                 }
+                .modifier(ComposerFocusSurface(cornerRadius: composerCornerRadius,
+                    controlsWidth: composerSendControlWidth + 7 + (microphoneAction == nil ? 0 : 31)) { composerFocused = true })
         }
     }
 
