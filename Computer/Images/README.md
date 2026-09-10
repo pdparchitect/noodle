@@ -47,7 +47,7 @@ Further product files can be layered into `desktop/overlay/` later.
 
 Image releases are independent of `Computer/VERSION` and Noodle's `VERSION`.
 Pull requests and manual workflow runs build/test only. To publish, choose an
-unused image version in this directory's `VERSION`, update the Computer changelog,
+unused image version in this directory's `VERSION`, update this directory's `CHANGELOG.md`,
 commit, then push a new `computer-images-vX.Y.Z` tag matching that version.
 Never move/reuse an image tag; use a new version for a correction. Both images
 must pass build and contract checks before either is pushed. No moving `latest`
