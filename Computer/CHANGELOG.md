@@ -4,7 +4,7 @@
 
 ## [0.1.2] - 2026-09-10
 
-- Restore the missing Check for Updates menu command and add Settings → Update using Noodle's layout, with the installed version, automatic checks and opt-in automatic download/install. Automatic installation remains off by default; the settings warn that updates stop running computers.
+- Restore the missing Check for Updates menu command and add Settings → Update using Noodle's layout, with the installed version, automatic checks and opt-in automatic download/install. Automatic installation remains off by default.
 
 ## [0.1.1] - 2026-09-10
 

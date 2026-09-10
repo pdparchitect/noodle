@@ -71,11 +71,6 @@ struct ComputerUpdatesSettingsView: View {
                     get: { updater.automaticallyDownloads }, set: updater.setAutomaticDownloads
                 ))
                 .disabled(!updater.allowsAutomaticUpdates)
-            } footer: {
-                Text("Installing an update stops running computers. Save guest work first; computers are not automatically restarted.")
-                if !updater.enabled {
-                    Text("Update checks are disabled in development builds.")
-                }
             }
         }
         .formStyle(.grouped)
