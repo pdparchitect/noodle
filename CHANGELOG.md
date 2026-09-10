@@ -8,7 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
-- README download links fetch the actual Noodle and Noodle Computer application ZIPs directly, with installation instructions, instead of opening release pages.
+- README download links open the latest Noodle and Noodle Computer release pages, with installation instructions, so they stay current across releases.
 
 - Add a prominent Download section for Noodle and Noodle Computer above the README feature list, with separate requirements and getting-started instructions.
 

@@ -27,7 +27,8 @@ gh release create "$tag" "$assets/$archive" "$assets/$archive.sha256" "$assets/a
     --repo "$repo" --verify-tag --draft --latest=false --title "Noodle Computer $version" --notes-file "$notes"
 gh release edit "$tag" --repo "$repo" --draft=false --latest=false
 
-# The stable landing page and signed feed only point at the immutable release.
+# The stable landing page includes copies of the current download assets.
+# The signed feed still points at the immutable versioned release.
 # This tag is a channel marker, not a version tag. It never becomes repo latest.
 channel_notes="Noodle Computer $version
 
@@ -40,10 +41,24 @@ Requires macOS 26 or later. Unzip and move Noodle Computer.app to Applications, 
 Updating or quitting Computer stops its running computers. Save guest work first.
 "
 if [[ -z "$channel_title" ]]; then
-    gh release create "$channel" "$assets/appcast.xml" --repo "$repo" --target "$(git -C "$project_root" rev-parse "$tag^{commit}")" \
+    gh release create "$channel" "$assets/$archive" "$assets/$archive.sha256" "$assets/appcast.xml" \
+        --repo "$repo" --target "$(git -C "$project_root" rev-parse "$tag^{commit}")" \
         --draft --latest=false --title "Noodle Computer $version" --notes "$channel_notes"
     gh release edit "$channel" --repo "$repo" --draft=false --latest=false
 else
+    # Keep the previous downloads/feed available until both new downloads exist.
+    gh release upload "$channel" "$assets/$archive" "$assets/$archive.sha256" --repo "$repo"
     gh release upload "$channel" "$assets/appcast.xml" --repo "$repo" --clobber
     gh release edit "$channel" --repo "$repo" --latest=false --title "Noodle Computer $version" --notes "$channel_notes"
+    # Only remove the preceding version's channel copies; immutable releases and
+    # unrelated attachments are retained. Older channels may have no ZIP assets.
+    previous_archive="Noodle-Computer-$previous-arm64.zip"
+    if [[ "$previous_archive" != "$archive" ]]; then
+        channel_assets="$(gh release view "$channel" --repo "$repo" --json assets --jq '.assets[].name')"
+        for asset in "${(@f)channel_assets}"; do
+            if [[ "$asset" == "$previous_archive" || "$asset" == "$previous_archive.sha256" ]]; then
+                gh release delete-asset "$channel" "$asset" --repo "$repo" --yes
+            fi
+        done
+    fi
 fi

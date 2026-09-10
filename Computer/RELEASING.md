@@ -39,7 +39,8 @@ and must not require a GitHub token embedded in either app.
 - Immutable archive: `Noodle-Computer-X.Y.Z-arm64.zip` under `computer-vX.Y.Z`,
   with SHA-256 checksum, signed `appcast.xml`, and release notes.
 - Stable download page: `https://github.com/pdparchitect/noodle/releases/tag/computer-latest`.
-  Its notes link directly to the latest immutable ZIP. The channel tag is a
+  Its Assets include the current version's ZIP, checksum and signed feed. Its
+  notes also link directly to the immutable ZIP. The channel tag is a
   marker, not the source revision for later versions; use version tags for source.
 - Computer feed: `https://github.com/pdparchitect/noodle/releases/download/computer-latest/appcast.xml`.
 - Both Computer releases use `--latest=false`. They must never replace the
@@ -80,9 +81,13 @@ versioned release or a version older than the channel. Failed drafts remain
 unpromoted; never overwrite a published ZIP to retry a release.
 
 If a versioned release succeeded but channel promotion failed, inspect that
-release and promote its **existing signed feed** and download link; do not rebuild
-or replace its ZIP. Channel feed replacement uses GitHub's asset upload with
-`--clobber`, so a brief unavailable-feed window is possible during replacement;
+release and copy its **existing ZIP, checksum and signed feed** to the channel;
+do not rebuild or replace its immutable ZIP. Verify the ZIP against its checksum
+before uploading and update the channel notes/title only after all assets exist.
+Channel upgrades upload both new download assets before replacing the feed and
+notes, then remove only the preceding version's ZIP/checksum copies from the
+channel. Versioned release assets remain untouched. Channel feed replacement uses
+GitHub's asset upload with `--clobber`, so a brief unavailable-feed window is possible during replacement;
 failed checks can be retried. The archive enclosure always references the already
 published immutable version, never a moving ZIP.
 
