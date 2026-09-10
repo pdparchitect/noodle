@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Use bold text in the terminal welcome banner with the terminal's default color, removing the cream and blue styling.
+- Change the terminal welcome tagline to “Your own agentic workspace.”
+
 ## [0.1.3] - 2026-09-10
 
 - Derive release tags automatically from Images/VERSION after all selected builds pass, publish the exact tested images, and verify public versioned/latest digests before releasing Computer.

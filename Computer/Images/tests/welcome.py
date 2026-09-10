@@ -10,7 +10,7 @@ import time
 
 runtime, shell_image, desktop_image = sys.argv[1:]
 mark = 'N O O D L E'
-tagline = 'Your own little workspace.'
+tagline = 'Your own agentic workspace.'
 
 
 def run(image, arguments=(), *, tty=True, entrypoint='/usr/bin/env', environment=(), startup=None):
@@ -60,26 +60,28 @@ def run(image, arguments=(), *, tty=True, entrypoint='/usr/bin/env', environment
         os.close(master)
 
 
-def check(label, output, count=1, colour=None):
+def check(label, output, count=1, bold=None):
     assert output.count(mark) == count, (label, output)
     assert output.count(tagline) == count, (label, output)
-    if colour is not None:
-        assert ('\x1b[38;2;' in output) == colour, (label, output)
+    assert '\x1b[38;2;' not in output, (label, output)
+    if bold is not None:
+        assert ('\x1b[1m' in output) == bold, (label, output)
+        assert ('\x1b[22m' in output) == bold, (label, output)
     if count:
         assert "     '--'    '------'" in output, (label, output)
     print('PASS:', label, flush=True)
 
 
 for image in (shell_image, desktop_image):
-    check(image + ': default shell mode', run(image, entrypoint=None, environment=['TERM=xterm-256color'], startup='exit\n'), colour=True)
-    check(image + ': native/provider environment', run(image, ['-i', 'PATH=/usr/local/bin:/usr/bin:/bin', 'HOME=/root', 'TERM=xterm-256color', 'ENV=/etc/noodle/interactive-shell.sh', '/bin/sh', '-ic', 'exit']), colour=True)
+    check(image + ': default shell mode', run(image, entrypoint=None, environment=['TERM=xterm-256color'], startup='exit\n'), bold=True)
+    check(image + ': native/provider environment', run(image, ['-i', 'PATH=/usr/local/bin:/usr/bin:/bin', 'HOME=/root', 'TERM=xterm-256color', 'ENV=/etc/noodle/interactive-shell.sh', '/bin/sh', '-ic', 'exit']), bold=True)
     check(image + ': login shell prints once', run(image, ['/bin/sh', '-lic', 'exit']))
     check(image + ': repeated hook prints once', run(image, ['/bin/sh', '-ic', '. /etc/noodle/interactive-shell.sh; . /etc/noodle/interactive-shell.sh']))
     check(image + ': nested shell gets its own logo', run(image, ['/bin/sh', '-ic', '/bin/sh -ic exit']), count=2)
     check(image + ': non-interactive stays silent', run(image, ['/bin/sh', '-c', '. /etc/noodle/interactive-shell.sh']), count=0)
     check(image + ': redirected output stays silent', run(image, ['/bin/sh', '-ic', 'exit'], tty=False), count=0)
-    check(image + ': NO_COLOR', run(image, ['/bin/sh', '-ic', 'exit'], environment=['TERM=xterm-256color', 'NO_COLOR=1']), colour=False)
-    check(image + ': dumb terminal', run(image, ['/bin/sh', '-ic', 'exit'], environment=['TERM=dumb']), colour=False)
+    check(image + ': NO_COLOR', run(image, ['/bin/sh', '-ic', 'exit'], environment=['TERM=xterm-256color', 'NO_COLOR=1']), bold=True)
+    check(image + ': dumb terminal', run(image, ['/bin/sh', '-ic', 'exit'], environment=['TERM=dumb']), bold=False)
     check(image + ': opt out', run(image, ['/bin/sh', '-ic', 'exit'], environment=['NOODLE_BANNER=0']), count=0)
 for args in (['/bin/bash', '-ic', 'exit'], ['/bin/bash', '-lic', 'exit'], ['su', '-', 'agent', '-c', '/bin/bash -ic exit']):
     check('Desktop Bash: ' + ' '.join(args), run(desktop_image, args))
