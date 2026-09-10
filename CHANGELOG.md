@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-10
+
 ### Fixed
 
 - Clicking empty padding near the chat input's rounded edges focuses the editor; text selection, microphone and send controls keep their normal behavior.
@@ -20,6 +22,10 @@ All notable changes to Noodle are documented here, following
 - Muse's existing saved login is now detected, including Keychain-backed accounts. Uncertain checks show an unknown status instead of misleading sign-in instructions; credentials never reach Settings.
 
 ### Added
+
+- Noodle Computer integration with shared computer assignments across bots, generated CLI skills, and quiet provider discovery/startup without requiring the Computer window to be open.
+- Interactive terminal and desktop attachment cards with Quick Look-style previews, remembered window geometry, and native-framebuffer thumbnails that avoid browser letterboxing and stretching.
+- Computer setup and unavailable previews offer the public Computer download flow. Capability checks explain incompatible app versions; missing apps, removed computers and revoked assignments remain explicit recoverable states.
 
 - Record voice messages from the composer on supported macOS 26 Macs, with a live waveform, on-device Apple transcription, Return to send and Escape to discard. Unsent recordings stay with their conversation; failed transcription offers retry or explicit audio-only sending. Chats show a compact audio player, with transcripts available from the context menu. Microphone access is requested only when recording is started.
 - Voice-message attachments preserve audio with optional transcript, duration and waveform metadata, including transcript delivery to all harnesses without duplicating the spoken text in the message body.
