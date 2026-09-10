@@ -69,41 +69,6 @@ final class ComputerTests: XCTestCase {
         XCTAssertNoThrow(try shell.validate())
     }
 
-    func testReleasedImageRecordsKeepTheirTemplateAfterDefaultPromotion() throws {
-        let released: [(ComputerTemplate, String)] = [
-            (.desktop, "ghcr.io/pdparchitect/noodle-computer-desktop-image@sha256:5f6c23015897924450a19016f103ed530e3769132c5c8c9da4298bba7a22990a"),
-            (.shell, "ghcr.io/pdparchitect/noodle-computer-shell-image@sha256:ccf220714abadda58dc2d805d6f90dda5d89acc4ed3ff58eb4a68f7279705084"),
-            (.desktop, "ghcr.io/pdparchitect/noodle-computer-desktop-image@sha256:1ae231d343db6ac9b132029e9b182b374c0add29bd7f7f75ae4ca757f5c2d29d"),
-            (.shell, "ghcr.io/pdparchitect/noodle-computer-shell-image@sha256:9e9333dedb04c8e045e0f775d7c51f1e0d369f32d8c56087d00bb24f9d1598c7"),
-        ]
-        for (template, reference) in released {
-            var computer = template.makeComputer()
-            computer.imageReference = reference
-            let decoded = try JSONDecoder().decode(Computer.self, from: JSONEncoder().encode(computer))
-            XCTAssertEqual(decoded.imageReference, reference)
-            XCTAssertEqual(decoded.template, template)
-            XCTAssertEqual(decoded.hasDesktop, template == .desktop)
-            XCTAssertEqual(decoded.hasWebDisplay, template == .desktop)
-            XCTAssertNoThrow(try decoded.validate())
-
-            let recreated = decoded.forCreation()
-            XCTAssertEqual(recreated.imageReference, template.imageReference)
-            XCTAssertTrue(recreated.imageReference.hasSuffix(":latest"))
-            XCTAssertEqual(recreated.id, decoded.id)
-            XCTAssertEqual(recreated.appearance, decoded.appearance)
-            XCTAssertEqual(recreated.diskGiB, decoded.diskGiB)
-
-            computer.customImage = true
-            XCTAssertEqual(computer.forCreation().imageReference, reference)
-            XCTAssertNil(computer.template)
-            XCTAssertFalse(computer.hasDesktop)
-            computer.customImage = false
-            computer.imageReference = reference + "unrecognised"
-            XCTAssertNil(computer.template)
-            XCTAssertFalse(computer.hasDesktop)
-        }
-    }
-
     func testVMRecordsRemainSupportedWithoutBecomingContainerTemplates() throws {
         for kind in [ComputerKind.macOS, .linux, .omarchy] {
             let computer = Computer(name: "Existing VM", kind: kind)

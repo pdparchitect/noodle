@@ -28,9 +28,7 @@ is required: Docker/OCI images run using the embedded Apple Containerization run
   2 CPUs, 1 GB memory and a sparse 4 GB disk. Networking can be disabled.
 
 Both choose their images automatically and keep resource controls under Advanced
-Options. Existing Alpine workspaces appear as Shell; existing Launcher workspaces
-appear as Desktop. Their records and disks are unchanged. Unknown custom container
-images retain their generic type instead of being relabelled as a known template.
+Options. Custom container images retain their own type.
 
 The catalogue lives in [`Sources/ComputerCore/Resources/container-registry.json`](Sources/ComputerCore/Resources/container-registry.json).
 Each entry owns its stable `id`, display `name`, runtime `type`, plain-language
@@ -83,6 +81,23 @@ Transparency affects the default background, not text or explicitly coloured cel
 Choices are saved with each computer. Image imports are user-selected, decoded and
 downsampled before storage; no permanent access to the source file is retained.
 
+## Updating a computer image
+
+Choose **Update** in the computer's context menu or **Edit Computer**. Desktop and
+Shell check their `:latest` tags; custom containers check the reference you supplied.
+A running computer stops for the update and starts again afterward.
+
+The image is a read-only base. A separate writable overlay keeps your files,
+installed software, edits and deletions. Updating prepares the new base with a copy
+of that overlay and verifies that it starts before switching the active disk.
+A failed download or verification leaves the active disk unchanged. One previous
+base/overlay pair is retained for recovery. Cancel is available during preparation.
+
+Local changes take precedence over the new image: a system file you modified can
+hide its updated default, and installed software must remain compatible with the
+new base. The updater checks startup; it cannot validate every installed program.
+The new layout requires newly created computers; older flat disks are not migrated.
+
 ## Retained VM foundations (not offered in v1 creation)
 
 The runtime and storage formats below remain intact for existing computers and
@@ -122,8 +137,7 @@ A Noodle desktop image based on Launcher (Ubuntu, Openbox,
   WebKit store, a per-start password and a guest certificate pinned via the
   virtualization control channel. No host port is published; no public host
   listener is created. The unauthenticated guest preview API is disabled.
-  Existing Alpine workspaces are retained as headless computers; their disks are
-  not replaced or converted. Headless workspaces open an interactive native
+  Shell computers open an interactive native
   terminal connected to a guest PTY, with keyboard input, resize and Control-C.
   There is no Run dialog or startup-log screen. SwiftTerm is pinned and linked
   into the sandboxed app; it never launches a host shell. Guest clipboard escape
@@ -138,9 +152,9 @@ the guest desktop/display server; it cannot recover an unresponsive whole VM.
 
 The container implementation uses Studio's embedded Apple Containerization
 approach: `LinuxPod`, `VZVirtualMachineManager`, the same kernel and vminit image,
-journaled ext4, and NAT with bounded guest DHCP. It does not include Studio's
+journaled ext4 overlays, and NAT with bounded guest DHCP. It does not include Studio's
 web application/Compose stack, host port forwarders, credentials or microphone.
-Each workspace has its own VM and rootfs; images/initfs are cached centrally.
+Each workspace has its own VM, read-only image base and writable overlay; downloaded layers and initfs are cached centrally.
 A separate 256 MB ext4 filesystem runs the one-shot network initializer, so the
 workspace's writable disk is never mounted into two containers simultaneously.
 There is no host port publishing in this first version.
@@ -228,3 +242,13 @@ The existing `Tests/image-source-menu.swift` regression can also be compiled wit
 `Computer/Sources/NoodleComputer/ImageSourceMenu.swift`; it checks both chooser
 titles at three widths, enabled/disabled sizing and independent File/Photos actions.
 The destructive button is likewise identical to Noodle's native control.
+
+`--overlay-test` runs an isolated signed-app fixture that verifies the mounted
+OverlayFS, an unchanged base after guest writes, preserved edits and deletions
+across restarts, a replacement base, staged-write isolation, and the image update
+flow. It uses a temporary library and never opens the user's computers.
+
+`--latest-images-test` checks missing-tag error reporting, then downloads both
+built-in `:latest` images into a fresh temporary library and verifies creation,
+OverlayFS startup, guest writes, Desktop processes, and image update checks.
+Passing runs remove the fixture; failed runs retain it for diagnosis.

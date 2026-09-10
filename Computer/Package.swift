@@ -21,7 +21,8 @@ let package = Package(
             .product(name: "SwiftTerm", package: "SwiftTerm"),
             .product(name: "Containerization", package: "containerization"),
             .product(name: "ContainerizationEXT4", package: "containerization"),
-            .product(name: "ContainerizationExtras", package: "containerization")
+            .product(name: "ContainerizationExtras", package: "containerization"),
+            .product(name: "ContainerizationOCI", package: "containerization")
         ]),
         .testTarget(name: "ComputerCoreTests", dependencies: ["ComputerCore"])
     ],

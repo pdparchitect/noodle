@@ -5,6 +5,7 @@ import Containerization
 import ContainerizationError
 import ContainerizationEXT4
 import ContainerizationExtras
+import ContainerizationOCI
 import Foundation
 
 final class ComputerOutput: Writer, @unchecked Sendable {
@@ -36,60 +37,18 @@ actor ContainerComputer {
 
     static func prepare(computer: Computer, directory: URL, cache: URL,
                         status: @escaping @Sendable (String, TransferProgress?) async -> Void) async throws {
-        let computer = computer.forCreation()
-        let store = try ImageStore(path: cache.appendingPathComponent("Images"))
-        let initDisk = cache.appendingPathComponent("initfs-0.43.0.ext4")
-        if !FileManager.default.fileExists(atPath: initDisk.path) {
-            let label = "Downloading Linux startup files…"
-            await status(label, nil)
-            let progress = ImageDownloadProgress(label: label, report: status)
-            let image = try await store.getInitImage(reference: initReference, progress: { await progress.update($0) })
-            await status("Preparing Linux startup files…", nil)
-            let staging = cache.appendingPathComponent("initfs-\(UUID().uuidString).partial")
-            defer { try? FileManager.default.removeItem(at: staging) }
-            _ = try await image.initBlock(at: staging, for: .linuxArm)
-            try Task.checkCancellation()
-            try FileManager.default.moveItem(at: staging, to: initDisk)
+        guard let state = try await prepareImage(computer: computer, directory: directory, cache: cache,
+                                                previous: nil, status: status) else {
+            throw ComputerError("The computer image could not be prepared.")
         }
-        let label = computer.imageReference.hasPrefix("docker.io/library/alpine:")
-            ? "Downloading Alpine Linux…" : "Downloading the workspace image…"
-        await status(label, nil)
-        let image: Containerization.Image
-        if computer.template != nil {
-            // Refresh built-in tags for every new computer. ImageStore.get(pull: true)
-            // only pulls on a cache miss, which would leave :latest stale indefinitely.
-            let progress = ImageDownloadProgress(label: label, report: status)
-            image = try await store.pull(reference: computer.imageReference, platform: .current,
-                                         progress: { await progress.update($0) })
-        } else {
-            do {
-                image = try await store.get(reference: computer.imageReference)
-            } catch let error as ContainerizationError where error.code == .notFound {
-                let progress = ImageDownloadProgress(label: label, report: status)
-                image = try await store.pull(reference: computer.imageReference, platform: .current,
-                                             progress: { await progress.update($0) })
-            }
-        }
-        try Task.checkCancellation()
-        await status("Creating your workspace disk…", nil)
-        let unpackProgress = ImageDownloadProgress(label: "Creating your workspace disk…", report: status)
-        _ = try await EXT4Unpacker(capacityInBytes: UInt64(computer.diskGiB) * 1_073_741_824, journal: .default)
-            .unpack(image, for: .current, at: directory.appendingPathComponent("Rootfs.ext4"),
-                    progress: { await unpackProgress.update($0) })
-        if computer.networkEnabled {
-            await status("Preparing workspace networking…", nil)
-            // Separate filesystem for the one-shot network initializer, as in
-            // Studio. Never mount the workspace's writable disk twice.
-            let networkImage = computer.hasDesktop || computer.isCustomContainer
-                ? try await store.pull(reference: Computer.shellImage, platform: .current) : image
-            _ = try await EXT4Unpacker(capacityInBytes: 256 * 1_048_576, journal: .default)
-                .unpack(networkImage, for: .current, at: directory.appendingPathComponent("Network.ext4"))
-        }
-        try image.digest.write(to: directory.appendingPathComponent("ImageDigest"), atomically: true, encoding: .utf8)
+        try state.activate(in: directory)
     }
 
-    func start(computer: Computer, directory: URL, cache: URL, kernel: URL) async throws -> String {
+    func start(computer: Computer, directory: URL, cache: URL, kernel: URL,
+               preparedState: ContainerDiskState? = nil) async throws -> String {
         guard pod == nil else { throw ComputerError("This computer is already running.") }
+        let state = try preparedState ?? ContainerDiskState.load(in: directory)
+        let layers = state.directory(in: directory)
         let vmm = VZVirtualMachineManager(kernel: Kernel(path: kernel, platform: .linuxArm),
             initialFilesystem: .block(format: "ext4", source: cache.appendingPathComponent("initfs-0.43.0.ext4").path,
                                       destination: "/", options: ["ro"]))
@@ -98,6 +57,10 @@ actor ContainerComputer {
             config.cpus = computer.cpuCount
             config.memoryInBytes = UInt64(computer.memoryGiB) * 1_073_741_824
             config.hostname = "noodle-computer"
+            config.volumes = [
+                .init(name: "noodle-base", source: .diskImage(path: layers.appendingPathComponent("Base.ext4"), readOnly: true), format: "ext4"),
+                .init(name: "noodle-upper", source: .diskImage(path: layers.appendingPathComponent("Upper.ext4")), format: "ext4")
+            ]
             config.bootLog = .file(path: directory.appendingPathComponent("Boot.log"))
             if computer.networkEnabled {
                 config.interfaces = [NATInterface(ipv4Address: interface, ipv4Gateway: nil)]
@@ -107,7 +70,7 @@ actor ContainerComputer {
         let output = ComputerOutput()
         if computer.networkEnabled {
             try await runtime.addContainer("network-init", rootfs: .block(format: "ext4",
-                source: directory.appendingPathComponent("Network.ext4").path, destination: "/")) { config in
+                source: layers.appendingPathComponent("Network.ext4").path, destination: "/")) { config in
                 config.process.arguments = ["/bin/sh", "-c", """
                     set -eu
                     ip link set eth0 up
@@ -137,7 +100,7 @@ actor ContainerComputer {
             }
         }
         try await runtime.addContainer("workspace", rootfs: .block(format: "ext4",
-            source: directory.appendingPathComponent("Rootfs.ext4").path, destination: "/")) { config in
+            source: layers.appendingPathComponent("Mount.ext4").path, destination: "/")) { config in
             config.memoryInBytes = UInt64(computer.memoryGiB) * 1_073_741_824
             config.process.arguments = ["/bin/sh", "-c", "mkdir -p /workspace; trap 'exit 0' TERM INT; while :; do sleep 1; done"]
             config.process.environmentVariables = ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/root", "TERM=dumb"]
@@ -148,6 +111,7 @@ actor ContainerComputer {
         pod = runtime
         do {
             try await runtime.create()
+            try await Self.mountOverlay(in: runtime)
             try Task.checkCancellation()
             if computer.networkEnabled {
                 try await runtime.startContainer("network-init")
@@ -182,9 +146,9 @@ actor ContainerComputer {
                 return "Linux desktop is ready."
             }
             if computer.isCustomContainer, let port = computer.webPort {
-                let imageStore = try ImageStore(path: cache.appendingPathComponent("Images"))
-                let image = try await imageStore.get(reference: computer.imageReference)
-                guard let imageConfig = try await image.config(for: .current).config else {
+                let saved = try JSONDecoder().decode(ContainerizationOCI.Image.self,
+                    from: Data(contentsOf: layers.appendingPathComponent("ImageConfig.json")))
+                guard let imageConfig = saved.config else {
                     throw ComputerError("The image has no startup configuration.")
                 }
                 let configured = LinuxProcessConfiguration(from: imageConfig)
@@ -416,6 +380,11 @@ actor ContainerComputer {
         try? await pod.killContainer("workspace", signal: .term)
         if (try? await pod.waitContainer("workspace", timeoutInSeconds: 5)) == nil {
             try? await pod.killContainer("workspace", signal: .kill)
+        }
+        try? await pod.withVirtualMachineInstance { vm in
+            let agent = try await vm.dialAgent()
+            do { try await agent.sync(); try await agent.close() }
+            catch { try? await agent.close(); throw error }
         }
         try await pod.stop()
         self.pod = nil

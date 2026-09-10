@@ -181,6 +181,23 @@ struct ComputerRootView: View {
           NSApplication.shared.terminate(nil)
           return
         }
+        if CommandLine.arguments.contains("--overlay-ui-test") {
+          let model = try ComputerOverlaySmokeTest.makeUIStore()
+          store = model
+          ComputerAppDelegate.store = model
+          NSApp.activate()
+          return
+        }
+        if CommandLine.arguments.contains("--latest-images-test") {
+          try await ComputerOverlaySmokeTest.checkLatestTemplates()
+          NSApplication.shared.terminate(nil)
+          return
+        }
+        if CommandLine.arguments.contains("--overlay-test") {
+          try await ComputerOverlaySmokeTest.run()
+          NSApplication.shared.terminate(nil)
+          return
+        }
         if CommandLine.arguments.contains("--self-test") {
           try await ComputerSmokeTest.run(
             networkEnabled: !CommandLine.arguments.contains("--offline"))
@@ -199,6 +216,8 @@ struct ComputerRootView: View {
           || CommandLine.arguments.contains("--creation-form-test")
           || CommandLine.arguments.contains("--desktop-smoke-test")
           || CommandLine.arguments.contains("--self-test")
+          || CommandLine.arguments.contains("--overlay-test")
+          || CommandLine.arguments.contains("--latest-images-test")
           || CommandLine.arguments.contains("--configuration-test")
           || CommandLine.arguments.contains("--download-progress-test")
         {
@@ -311,6 +330,7 @@ struct ComputerRow: View {
   @State private var deleting = false
   @State private var changingBackground = false
   @State private var stopping = false
+  @State private var updating = false
   var body: some View {
     HStack(spacing: 10) {
       ZStack(alignment: .bottomTrailing) {
@@ -337,7 +357,11 @@ struct ComputerRow: View {
       Button("Edit Computer…", systemImage: "slider.horizontal.3") { editing = true }
       Button("Change Background…", systemImage: "photo") { changingBackground = true }
       Divider()
-      Button(session.phase == .running ? "Stop…" : "Start", systemImage: session.phase == .running ? "power" : "play.fill") {
+      if session.computer.kind == .container {
+        ComputerImageUpdateButton(session: session) { updating = true }
+        Divider()
+      }
+      Button(session.phase == .running ? "Stop" : "Start", systemImage: session.phase == .running ? "power" : "play.fill") {
         if session.phase == .running { stopping = true }
         else { Task { await store.start(session) } }
       }.disabled(session.phase.busy)
@@ -345,6 +369,7 @@ struct ComputerRow: View {
       Button("Delete Computer…", systemImage: "trash", role: .destructive) { deleting = true }
         .disabled(session.phase != .stopped || session.virtual != nil || session.container != nil)
     }
+    .computerImageUpdateConfirmation(store: store, session: session, isPresented: $updating)
     .sheet(isPresented: $editing) { EditComputerView(store: store, session: session) }
     .sheet(isPresented: $changingBackground) {
       ComputerAppearanceSheet(appearance: Binding(
@@ -364,7 +389,7 @@ struct ComputerRow: View {
   private var statusColor: Color {
     switch session.phase {
     case .running: .green
-    case .starting, .stopping: .orange
+    case .starting, .stopping, .updating: .orange
     case .failed: .red
     case .stopped: .gray
     }
@@ -380,7 +405,13 @@ struct ComputerDetailView: View {
 
   var body: some View {
     Group {
-      if let virtual = session.virtual {
+      if session.phase == .updating {
+        VStack(spacing: 16) {
+          ProgressView(value: session.updateProgress).frame(width: 240)
+          Text(session.updateStatus ?? "Updating the computer image…")
+          Button("Cancel") { store.cancelImageUpdate(session) }
+        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else if let virtual = session.virtual {
         VirtualMachineDisplay(machine: virtual.machine).ignoresSafeArea(edges: .top)
       } else if let browser = session.browser {
         // Keep the guest's panel below the native toolbar, just like Shell.
@@ -403,7 +434,9 @@ struct ComputerDetailView: View {
             session.phase.busy ? session.phase.label : session.computer.name,
             systemImage: session.computer.displaySymbol)
         } description: {
-          if case .failed(let message) = session.phase {
+          if let result = session.updateResult, session.phase == .stopped {
+            Text(result)
+          } else if case .failed(let message) = session.phase {
             Text(message)
           } else if session.computer.kind == .container && !session.computer.hasDesktop {
             Text(session.phase.busy ? "Opening the terminal…" : "Start this computer to open its terminal.")
@@ -460,8 +493,8 @@ struct ComputerDetailView: View {
                                   busy: session.phase.busy)
           }
           .disabled(session.phase.busy)
-          .help(session.phase.busy ? session.phase.label : session.phase == .running ? "Stop…" : "Start")
-          .accessibilityLabel(session.phase.busy ? session.phase.label : session.phase == .running ? "Stop…" : "Start")
+          .help(session.phase.busy ? session.phase.label : session.phase == .running ? "Stop" : "Start")
+          .accessibilityLabel(session.phase.busy ? session.phase.label : session.phase == .running ? "Stop" : "Start")
       }
     }
     .sheet(isPresented: $editing) {
@@ -501,6 +534,7 @@ struct EditComputerView: View {
   @State private var name = ""
   @State private var deleting = false
   @State private var forceStopping = false
+  @State private var updating = false
   @State private var appearance = ComputerAppearance()
   private var stopLabel: String { session.computer.kind == .container ? "Stop" : "Force Stop" }
 
@@ -535,6 +569,14 @@ struct EditComputerView: View {
           LabeledContent("Disk capacity", value: "\(session.computer.diskGiB) GB")
         }.padding(12).background(
           Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 12))
+        if let result = session.updateResult {
+          Text(result).font(.caption).foregroundStyle(.secondary)
+        }
+        if session.phase == .updating {
+          Button("Cancel Update") { store.cancelImageUpdate(session) }
+          ProgressView(value: session.updateProgress)
+          Text(session.updateStatus ?? "Updating…").font(.caption).foregroundStyle(.secondary)
+        }
         ComputerAppearanceRow(appearance: $appearance)
         if !session.computer.installationComplete && session.phase == .stopped {
           Button("Installation Finished — Eject ISO") { store.finishInstallation(session) }
@@ -544,13 +586,17 @@ struct EditComputerView: View {
           DestructiveActionButton(title: "Delete Computer") { deleting = true }
             .disabled(session.phase != .stopped || session.virtual != nil || session.container != nil)
           Spacer()
+          if session.computer.kind == .container {
+            ComputerImageUpdateButton(session: session) { updating = true }
+          }
           if session.virtual != nil || session.container != nil {
-            Button("\(stopLabel)…") { forceStopping = true }.disabled(session.phase.busy)
+            Button(stopLabel) { forceStopping = true }.disabled(session.phase.busy)
           }
         }
       }.padding(20)
     }
     .frame(width: 520).noodleSheetSizing()
+    .computerImageUpdateConfirmation(store: store, session: session, isPresented: $updating)
     .onAppear { name = session.computer.name; appearance = session.computer.appearance ?? .init() }
     .alert("Move \(session.computer.name) to Trash?", isPresented: $deleting) {
       Button("Cancel", role: .cancel) {}

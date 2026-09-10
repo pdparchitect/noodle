@@ -6,13 +6,19 @@
 
 - Simplify template and networking descriptions, remove redundant settings help, and load template names, types, images and resource settings from an extensible container registry instead of fixed presets.
 
+- Explain image registry failures with the requested image and HTTP status, including missing image tags, instead of an opaque “RegistryClient error 0”.
+
+- Store container images as read-only bases with persistent writable overlays. Update from the computer context menu or Edit Computer pulls the current image, preserves local changes, verifies startup and switches disks atomically. The new layout does not migrate older flat disks.
+
+- Place Update above Start/Stop with a separator in the computer context menu, place Update beside Stop at the bottom of Edit Computer, and remove the ellipsis from Stop.
+
 - Start newly created computers automatically, with an enabled-by-default toggle in Settings → General.
 
 - Align the visible bottom edge of the WebKit and terminal panels with the sidebar by correcting the extra one-point bottom inset.
 
 - Include the current application ZIP and checksum in the `computer-latest` release Assets, alongside the update feed, so manual downloads are easy to find.
 
-- New Desktop and Shell computers fetch the current `:latest` image from GHCR, including refreshed network setup files, so image fixes no longer require an app release. Existing computer disks and recognition of previously pinned images are preserved.
+- New Desktop and Shell computers fetch the current `:latest` image from GHCR, including refreshed network setup files, so image fixes no longer require an app release. Image selection is refreshed for each new computer.
 
 ## [0.1.2] - 2026-09-10
 

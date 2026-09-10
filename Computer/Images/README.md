@@ -82,13 +82,13 @@ The app pulls `noodle-computer-shell-image:latest` and
 even when the tag is cached locally. The Shell image used for network setup is
 refreshed too. A failed pull fails creation instead of silently using an older image.
 Publishing an image fix therefore does not require an app release. Custom image
-references retain their existing cache-first behavior.
+references are also checked against the registry on creation and explicit updates.
 
 Both public `:latest` tags must exist before shipping the app change that uses them.
 Future image releases must keep the Alpine network helper and desktop startup
 contract working. Test creating/starting both presets and the desktop's
 authenticated display, wallpaper and terminal before publishing.
 
-Existing computers retain their writable root filesystems. Publishing a new
-image changes neither their disks nor their wallpapers, and no destructive
-rebuild/migration is automatic.
+Existing computers change only when the user chooses Update. Updates replace the
+read-only base while preserving the writable overlay; publishing an image never
+automatically replaces a running computer or its files.

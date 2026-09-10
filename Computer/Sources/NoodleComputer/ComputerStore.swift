@@ -4,7 +4,7 @@ import Darwin
 import Virtualization
 
 enum ComputerPhase: Equatable {
-    case stopped, starting, running, stopping
+    case stopped, starting, running, stopping, updating
     case failed(String)
     var label: String {
         switch self {
@@ -12,10 +12,11 @@ enum ComputerPhase: Equatable {
         case .starting: "Starting…"
         case .running: "Running"
         case .stopping: "Stopping…"
+        case .updating: "Updating…"
         case .failed: "Needs attention"
         }
     }
-    var busy: Bool { self == .starting || self == .stopping }
+    var busy: Bool { self == .starting || self == .stopping || self == .updating }
 }
 
 @MainActor final class ComputerSession: ObservableObject, Identifiable {
@@ -24,6 +25,9 @@ enum ComputerPhase: Equatable {
     @Published var phase = ComputerPhase.stopped
     @Published var console = ""
     @Published var commandRunning = false
+    @Published var updateResult: String?
+    @Published var updateStatus: String?
+    @Published var updateProgress: Double?
     @Published var desktop: DesktopConnection? {
         didSet { browser = desktop.map { ComputerDesktopBrowser(connection: $0) } }
     }
@@ -56,6 +60,7 @@ enum ComputerPhase: Equatable {
     private(set) var creationWasCancelled = false
     private var creationTask: Task<Bool, Never>?
     private var creationID: UUID?
+    var imageUpdateTasks: [UUID: Task<Void, Never>] = [:]
     @Published var error: String?
     let library: ComputerLibrary
     let cache: URL
@@ -130,7 +135,7 @@ enum ComputerPhase: Equatable {
     }
 
     private func performCreation(_ requested: Computer, source: URL?) async -> Bool {
-        var computer = requested.forCreation()
+        var computer = requested
         let directory = library.stagingDirectory(for: computer.id)
         let access = source?.startAccessingSecurityScopedResource() ?? false
         defer {
@@ -503,6 +508,8 @@ enum ComputerPhase: Equatable {
 
     func shutdown() async {
         cancelCreation()
+        for task in imageUpdateTasks.values { task.cancel() }
+        for task in Array(imageUpdateTasks.values) { await task.value }
         _ = await creationTask?.value
         for session in sessions where session.phase == .running || session.container != nil || session.virtual != nil {
             await stop(session, force: true)
