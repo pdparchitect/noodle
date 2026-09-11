@@ -16,9 +16,17 @@ import NoodleCore
         require(LiveVoiceWaveform.bars(samples: [Float](repeating: 0.04, count: 240), width: 600, height: 22).count == 120)
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { fixtureFailure("Voice composer fixture timed out") }
         Task { @MainActor in
             do {
-                for key: UInt16 in [36, 53] {
+                @MainActor func keyEvent(_ key: UInt16, window: NSWindow) -> NSEvent {
+                    let characters = key == 53 ? "\u{1b}" : (key == 76 ? "\u{3}" : "\r")
+                    return NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                        context: nil, characters: characters, charactersIgnoringModifiers: characters,
+                        isARepeat: false, keyCode: key)!
+                }
+                for (key, moveFocus): (UInt16, Bool) in [(36, false), (53, false), (36, true), (76, true), (53, true)] {
                     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-voice-keys-\(UUID())")
                     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                     defer { try? FileManager.default.removeItem(at: directory) }
@@ -48,12 +56,42 @@ import NoodleCore
                     try await Task.sleep(for: .milliseconds(500))
                     let height = window.contentView!.fittingSize.height
                     require(abs(height - 76) < 1, "Voice bar must be 36pt plus 40pt fixture padding, got \(height)")
-                    let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
-                        windowNumber: window.windowNumber, context: nil, characters: key == 36 ? "\r" : "\u{1b}",
-                        charactersIgnoringModifiers: key == 36 ? "\r" : "\u{1b}", isARepeat: false, keyCode: key)!
-                    window.sendEvent(event)
+                    if moveFocus {
+                        var dialogActions = 0
+                        let dialog = NSWindow(contentViewController: NSHostingController(rootView:
+                            HStack {
+                                Button("Done") { dialogActions += 1 }.keyboardShortcut(.defaultAction)
+                                Button("Cancel") { dialogActions += 1 }.keyboardShortcut(.cancelAction)
+                            }.padding(20)))
+                        // Sheets and other windows must keep their own default
+                        // and cancel actions while this chat has a voice draft.
+                        window.beginSheet(dialog, completionHandler: nil)
+                        try await Task.sleep(for: .milliseconds(200))
+                        app.sendEvent(keyEvent(key, window: dialog))
+                        try await Task.sleep(for: .milliseconds(100))
+                        require(dialogActions == 1 && sends == 0 && recorder.phase == .ready,
+                            "A sheet must not submit or discard the underlying voice draft")
+                        window.endSheet(dialog)
+                        dialog.orderOut(nil)
+                        try await Task.sleep(for: .milliseconds(200))
+                        dialog.makeKeyAndOrderFront(nil)
+                        try await Task.sleep(for: .milliseconds(100))
+                        app.sendEvent(keyEvent(key, window: dialog))
+                        try await Task.sleep(for: .milliseconds(100))
+                        require(dialogActions == 2 && sends == 0 && recorder.phase == .ready,
+                            "Another window must not submit or discard this chat's voice draft")
+                        dialog.orderOut(nil)
+                        window.makeKeyAndOrderFront(nil)
+                    }
+                    // The menu shortcut can start a recording while the sidebar
+                    // or another chat control owns focus. Do not rely on the bar
+                    // becoming first responder before Return/Escape will work.
+                    if moveFocus {
+                        require(window.makeFirstResponder(window), "Could not move focus outside the voice bar")
+                    }
+                    app.sendEvent(keyEvent(key, window: window))
                     try await Task.sleep(for: .milliseconds(400))
-                    require(sends == (key == 36 ? 1 : 0), "Unexpected send count for key \(key): \(sends)")
+                    require(sends == (key == 53 ? 0 : 1), "Unexpected send count for key \(key), focus moved=\(moveFocus): \(sends)")
                     require(recorder.phase == .idle, "Keyboard action did not clear the voice draft")
                     window.orderOut(nil)
                 }
@@ -83,7 +121,7 @@ import NoodleCore
                     print("Waveform preview: \(url.path)")
                 }
                 previewWindow.orderOut(nil)
-                print("PASS: Return sends one voice attachment; Escape discards without sending")
+                print("PASS: Return/keypad Enter send and Escape discards regardless of voice-bar focus; sheets and other windows keep their own actions")
                 exit(0)
             } catch { print(error); exit(1) }
         }

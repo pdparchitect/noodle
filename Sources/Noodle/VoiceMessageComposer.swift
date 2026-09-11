@@ -25,8 +25,11 @@ struct VoiceMessageComposer<Content: View>: View {
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 10) {
+                        // Native default/cancel actions work throughout the chat
+                        // window, including when ⌘⇧D starts from the sidebar.
                         Button { Task { await recorder.discard() } } label: { Image(systemName: "xmark") }
                             .buttonStyle(.plain).help("Discard Recording (Escape)").disabled(sending)
+                            .keyboardShortcut(.cancelAction)
                         if recorder.phase == .preparing || recorder.phase == .finishing {
                             ProgressView().controlSize(.small)
                             Text(recorder.phase == .preparing ? recorder.preparation : "Finishing transcription…")
@@ -58,6 +61,7 @@ struct VoiceMessageComposer<Content: View>: View {
                         .buttonStyle(.plain).foregroundStyle(.blue)
                         .disabled(sending || !(recorder.phase == .recording || recorder.phase == .ready))
                         .help("Send Voice Message (Return)")
+                        .keyboardShortcut(.defaultAction)
                     }
                     .frame(height: 36)
                     .help("Microphone: \(recorder.inputName)")
@@ -76,8 +80,6 @@ struct VoiceMessageComposer<Content: View>: View {
                 .frame(maxWidth: .infinity, minHeight: 36)
                 .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .focusable().focusEffectDisabled().focused($focused)
-                .onKeyPress(.return) { Task { await sendRecording() }; return .handled }
-                .onKeyPress(.escape) { if !sending { Task { await recorder.discard() } }; return .handled }
                 .onAppear { focused = true }
             }
         }
