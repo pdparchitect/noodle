@@ -54,7 +54,6 @@ struct ComputerFilesView: View {
                     }
                 }.padding(3).background(.primary.opacity(0.025), in: Capsule())
                     .overlay(Capsule().strokeBorder(.primary.opacity(0.13), lineWidth: 1))
-                if model.loading { ProgressView().controlSize(.small) }
                 if model.busy {
                     ProgressView().controlSize(.small).help(model.status)
                     Button { model.cancelTransfer() } label: { Image(systemName: "xmark.circle") }.help("Cancel Transfer")

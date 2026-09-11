@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remove the transient folder-loading spinner so the Files toolbar stays still when navigating or refreshing.
+
 - Place Start/Stop before one segmented toolbar control for Desktop, Terminal or Files, showing only available views and keeping the desktop connection and shell session alive. Use standard spacing between Edit and Start/Stop.
 
 - Align file sizes with their rows and keep filenames on one line with ellipsis truncation.
