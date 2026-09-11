@@ -1,6 +1,7 @@
 # Contributing
 
 Bug fixes, documentation improvements, and features are welcome.
+Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Report an issue
 
