@@ -1,12 +1,10 @@
 # Noodle Computer
 
-Standalone, sandboxed macOS app in the Noodle source repository. Requires an
-Apple silicon Mac, macOS 26, and Xcode 26. It has a separate Swift package and
-build directory. Noodle keeps its existing deployment target and separate user
-data, and now embeds the shared Computer protocol, native terminal renderer and
-an agent CLI. Both signed apps share a narrowly scoped provider App Group.
+**Linux computers for you and your AI agents.**
 
-## Screenshots
+Give agents a place to run tools and work on files. Choose a desktop with a browser,
+terminal, and file manager, or a lightweight shell. Files and installed software
+stay with each computer across restarts. No Docker Desktop installation is needed.
 
 <p>
   <img width="32%" alt="Noodle Computer screenshot 1" src="https://github.com/user-attachments/assets/5eb21524-90e3-4eaa-830f-ff2873db3932" />
@@ -14,322 +12,71 @@ an agent CLI. Both signed apps share a narrowly scoped provider App Group.
   <img width="32%" alt="Noodle Computer screenshot 3" src="https://github.com/user-attachments/assets/f4b95e1d-420c-4c00-ad4b-bfb71168860f" />
 </p>
 
-## Build and run
+## Get started
 
-Run `zsh scripts/build-computer.sh` from the repository root, then
-`open ".build/Noodle Computer.app"`. Building also requires Go 1.26 or later for
-the standard-library-only Linux/ARM64 file helper; it runs only inside guests.
-The official bundle uses an optimized release build; set
-`NOODLE_COMPUTER_CONFIGURATION=debug` only when debugging source.
+Requires an Apple silicon Mac running macOS 26 or later.
 
-The runtime kernel is tracked with Git LFS. Run `git lfs pull` if the build reports
-a missing kernel. Its provenance is recorded in `Support/KERNEL-NOTICE.txt`.
+1. [Download Noodle Computer](https://github.com/pdparchitect/noodle/releases/tag/computer-latest), unzip it, and move the app to **Applications**.
+2. Open the app and create a **Desktop** or **Shell** computer.
+3. Start it and use the toolbar to switch between Desktop, Terminal, and Files.
 
-## v1 scope
+Advanced Options lets you adjust CPU, memory, disk size, and networking. Creating
+a computer downloads its image, so you need an internet connection.
 
-The standard creation dialog loads its container templates from the bundled registry. No Docker Desktop installation
-is required: Docker/OCI images run using the embedded Apple Containerization runtime.
+## Give agents a computer
 
-- **Desktop:** the latest Noodle desktop based on Launcher, with browser, terminal and file
-  manager. Defaults to 4 CPUs, 4 GB memory and a sparse 32 GB disk. Networking is
-  required for the embedded desktop viewer.
-- **Shell:** Alpine Linux 3.23.5 with a native interactive terminal. Defaults to
-  2 CPUs, 1 GB memory and a sparse 4 GB disk. Networking can be disabled.
+In Noodle, create or edit a bot and add a computer in its **Computers** tab.
+Noodle starts the Computer app when needed; its window can stay closed.
 
-Both choose their images automatically and keep resource controls under Advanced
-Options. Custom container images retain their own type.
+Assign the same computer to several agents when they need to work on shared files
+and services. Each gets its own terminal sessions. An agent can present a terminal
+or desktop in the conversation for you to review work or take over a step.
+Closing a preview leaves the terminal running.
 
-The catalogue lives in [`Sources/ComputerCore/Resources/container-registry.json`](Sources/ComputerCore/Resources/container-registry.json).
-Each entry owns its stable `id`, display `name`, runtime `type`, plain-language
-`description`, icon, default computer name, image reference and resource settings.
-Entries appear in file order; `defaultTemplateID` selects the initial choice.
-To add a template, add an entry with a unique ID and image reference, using the
-existing `desktop` or `shell` runtime type. The picker and image recognition read
-the registry automatically; no UI cases are needed. Desktop images must support
-the existing desktop service contract. New runtime types still need runtime code.
-The registry is validated when loaded and bundled with the signed app; catalogue
-edits take effect in the next build, without a remote catalogue or live reload.
+## Work with files
 
-Noodle discovers the installed Computer app and launches its provider quietly as
-needed. No Computer window needs to be open. Assign computers under the Computers
-tab in New/Edit Bot. Assignments are many-to-many: agents have separate terminal
-sessions but share a computer's files and services. The managed Computer skill
-and bundled CLI provide list, start, open, read, write, resize, close and present.
-There is no host filesystem mount, agent file-transfer API or agent computer deletion.
-The Computer app's native Files view provides user-directed file transfers.
-Computer stays out of the release changelog until it is ready.
+**Files** opens at `/workspace`. Browse in icons, list, or gallery view. Press
+**Space** to preview a supported image, PDF, or text file; **Command-F** searches,
+**Command-Shift-G** opens a folder path, and **Return** renames the selection.
 
-See [the integration boundary and verification](Bridge/README.md).
-See [the independent release and update process](RELEASING.md) for signing,
-notarization, downloads and Computer-only update feeds. Public release remains
-pending approval; local builds do not publish anything.
+Drag files from Finder to import them, or drag files out to export. The actions
+menu offers the same commands. Transfers support individual files up to 8 GB;
+imports do not overwrite existing files. Folder transfers are not supported.
+Previews support files up to 20 MiB. Editing a preview copy does not update the guest file.
 
-### Custom container images
+Right-click to rename, duplicate, or permanently delete a file or empty folder.
 
-**New from Container Image…** is a separate create-menu action. Enter a public
-ARM64 OCI image reference. A blank web port uses the image as a Shell-style
-workspace; it does not start the image's application command. With a web port,
-the image's entrypoint and command run with its configured environment, user and
-working directory, and the app displays `http://<guest-address>:<port>/`.
-The image must include `/bin/sh`; the web service must listen on the guest network
-interface, not only localhost. Registry credentials and Compose are not supported.
-The application process runs alongside the workspace keeper, not as PID 1.
+## Customize and update
 
-Custom web views are confined to that guest origin, use an ephemeral WebKit store,
-and offer Try Again when the application has not become ready yet. They do not
-publish a host port. Local-network HTTP is allowed for these explicitly selected
-guest services; the built-in Desktop still uses authenticated, pinned HTTPS.
+Edit a computer to change its icon, background, and terminal colours. Backgrounds
+support images, animated HEIC, and muted looping video.
 
-### Appearance
+Choose **Update** from the computer's context menu or editor to fetch its latest
+image. The computer stops during the update and restarts afterward. Your files
+and installed software are preserved; modified system files can override updated
+defaults. A failed update leaves the active disk unchanged. Older flat-disk
+computers do not support this update layout.
 
-Create and Edit both offer Noodle-style icon customisation (symbol, gradient colour
-or imported image) and window wallpaper (Default, Sunset, Ocean, Forest, Dusk or an
-imported image). Wallpaper extends behind both columns. Terminal and web display
-have a 12-point outside margin, below the native toolbar.
-Terminal text colour, background colour and background opacity are independent.
-Transparency affects the default background, not text or explicitly coloured cells.
-Choices are saved with each computer. Image imports are user-selected, decoded and
-downsampled before storage; no permanent access to the source file is retained.
+App updates are separate, under **Settings → Update**. Save guest work first;
+computers are stopped and are not automatically restarted after the app relaunches.
 
-## Files and Quick Look
+## Custom images
 
-Use the segmented toolbar control on a running container to select Desktop,
-Terminal or Files. Shell containers offer Terminal and Files. Switching preserves
-the desktop connection, shell session and Files navigation.
-Files opens at `/workspace` in an icon grid with native macOS folder and file-type
-artwork. File navigation, layout, actions and search appear in the main window
-toolbar only while Files is selected. Grouped controls switch between icons, list
-and gallery. The
-background uses the terminal colour and opacity, with no status bar or bottom
-action buttons. Search opens from the toolbar magnifying glass or Command-F.
-It supports back/forward, enclosing folder, Go to Folder and hidden files. Folder listings are capped at 5,000 entries.
-Double-click a folder to enter it. The menu offers shortcuts to Workspace, Home
-and the filesystem root. Space or double-clicking a file requests the system
-Quick Look panel; gallery displays the selected file above the icons. Arrow keys
-move selection, typing selects a filename, Command-Down opens the selection,
-Command-Up goes to the parent and selects the folder just exited, Command-[ / ]
-navigate history, Return renames, and Command-Shift-G opens Go to Folder.
+Choose **New from Container Image…** and enter a public ARM64 OCI image reference.
+The image must contain `/bin/sh`. Without a web port, it opens as a shell. With a
+web port, Computer runs the image's application command and displays its web app.
+The service must listen on the guest network interface, not only localhost.
+Private registry credentials and Compose are not supported.
 
-Import regular files using the actions menu or by dropping them from Finder; Export
-or dragging a regular file into Finder copies it out. Explicit transfers are
-capped at 8 GB, with a five-minute deadline; imports refuse to overwrite existing
-guest paths. Exports receive macOS quarantine metadata. Folder transfers are not included. The context menu supports rename,
-duplicate, and permanent deletion of files/empty folders. Drag an item onto a
-subfolder to move it there. Nonempty folder deletion is deliberately unsupported.
+## Access and storage
 
-Previews accept PNG, JPEG, PDF and UTF-8 text/code files. Code is staged as plain
-text; HTML, SVG, archives, applications, symlinks and special files receive no
-preview. Files over 20 MiB are rejected from metadata before fetching. Fetches
-have a two-second deadline and are cancelled when selection changes. There is no
-background directory-content download or recursive thumbnail scan.
+Each computer runs in its own virtual machine. Host folders and clipboard are not
+shared; file transfers are explicit. Guest networking can reach your LAN. You can
+disable it for Shell computers; Desktop requires it.
 
-Preview copies live in the app sandbox's Caches directory, with a 100 MiB budget
-including unfinished transfers, at most 128 entries, active preview leases and least-recently-used
-eviction. Unused entries expire after ten minutes, checked every minute. Startup
-removes previous-session leftovers; cache purges are tolerated. Explicit exports
-use separate temporary staging, deleted on completion/failure, with interrupted
-exports cleared on the next app launch. Quick Look may
-maintain its own system-managed derived caches, outside this application budget.
+Closing the window keeps computers running. Quitting stops them. Deleting a
+computer requires confirmation and moves its stopped disk to Trash.
 
-The guest helper uses structured metadata and binary streams over the existing
-virtualization channel. File paths are arguments, never interpolated commands.
-Host-enforced byte limits and regular-file/no-follow checks apply independently
-of guest metadata. Uploads publish atomically without replacement. No host folder
-is mounted, and no new network listener or agent bridge capability is added.
-The sandbox's user-selected file grant is read/write to support explicit exports;
-no broad host filesystem access is granted.
-
-Native Quick Look processes copies of untrusted guest documents on macOS. Format
-and size checks reduce exposure but do not make arbitrary documents safe or keep
-document parsing inside the guest VM. The system panel can offer explicit Open
-and Share actions. Changes to preview copies are never written back to the guest.
-This first version does not promise control over all system/third-party preview
-extensions, their network behavior or system cache retention.
-
-Run the isolated signed integration fixture with
-`".build/Noodle Computer Tests.app/Contents/MacOS/NoodleComputer" --files-test` after
-building with `NOODLE_COMPUTER_TEST_BUILD=1`. Add `--keep-test-window` to retain the
-disposable running guest for visual and drag-and-drop verification.
-
-## Updating a computer image
-
-Choose **Update** in the computer's context menu or **Edit Computer**. Desktop and
-Shell check their `:latest` tags; custom containers check the reference you supplied.
-A running computer stops for the update and starts again afterward.
-
-The image is a read-only base. A separate writable overlay keeps your files,
-installed software, edits and deletions. Updating prepares the new base with a copy
-of that overlay and verifies that it starts before switching the active disk.
-A failed download or verification leaves the active disk unchanged. One previous
-base/overlay pair is retained for recovery. Cancel is available during preparation.
-
-Local changes take precedence over the new image: a system file you modified can
-hide its updated default, and installed software must remain compatible with the
-new base. The updater checks startup; it cannot validate every installed program.
-The new layout requires newly created computers; older flat disks are not migrated.
-
-## Retained VM foundations (not offered in v1 creation)
-
-The runtime and storage formats below remain intact for existing computers and
-future VM templates. They are not selectable in the v1 New Computer dialog.
-
-- **macOS:** the backend accepts an Apple IPSW or downloads the latest compatible
-  restore image. Installation uses its own sparse virtual disk. Initial Apple
-  setup takes place in the computer's desktop. This can download several GB.
-  Creation replaces the setup form with a progress dialog: transferred bytes,
-  percentage and average speed during downloads, Apple's installation progress,
-  elapsed time, and Cancel. Cancellation waits for the installer to stop
-  before cleaning up the unpublished computer. Completed downloads are retained
-  in the private runtime cache; the current Apple restore URL, recorded file size
-  and SHA-256 must match before reuse. Partial or damaged downloads are not reused.
-- **Linux:** automatically downloads the pinned Alpine 3.23.5 ARM64 installer,
-  verifies its published SHA-256, and caches it for reuse. The backend also accepts
-  a custom ARM64 UEFI ISO. Existing installer-backed computers can still install
-  onto their private virtual disk. Shut down, then choose **Installation Finished — Eject
-  ISO** before the next boot. Full desktop and keyboard/pointer input use Apple's
-  `VZVirtualMachineView`.
-- **Omarchy:** experimental Linux runtime for a prepared ARM64 installer.
-  Stock x86-64 ISOs cannot be hardware-virtualized on Apple silicon. A boot-tested
-  Omarchy ARM64 image and Hyprland compatibility are not yet provided.
-
-## Container display
-
-Repository-owned Shell/Desktop image definitions, wallpaper sources and GHCR
-publishing live in [`Images/`](Images/README.md). They release independently;
-new computers resolve the Shell/Desktop `:latest` tags from GHCR on every creation,
-reusing downloaded layers where possible. Creation requires registry access and
-fails if the current image cannot be fetched, rather than using a stale cached tag.
-Image fixes reach new computers without an app release. Existing disks remain unchanged.
-
-A Noodle desktop image based on Launcher (Ubuntu, Openbox,
-  Chromium, terminal and file manager), running through embedded Containerization
-  and Apple vminit 0.43.0. The app displays the live KasmVNC screen using a private
-  WebKit store, a per-start password and a guest certificate pinned via the
-  virtualization control channel. No host port is published; no public host
-  listener is created. The unauthenticated guest preview API is disabled.
-  Shell computers open an interactive native
-  terminal connected to a guest PTY, with keyboard input, resize and Control-C.
-  There is no Run dialog or startup-log screen. SwiftTerm is pinned and linked
-  into the sandboxed app; it never launches a host shell. Guest clipboard escape
-  sequences and host link-opening requests are denied.
-
-Desktop also has a **Show Terminal / Show Desktop** toolbar switch. Its recovery
-shell opens on demand through a separate guest PTY and remains alive when hidden.
-The desktop connection is retained when switching. This works independently of
-the guest desktop/display server; it cannot recover an unresponsive whole VM.
-
-## Studio baseline
-
-The container implementation uses Studio's embedded Apple Containerization
-approach: `LinuxPod`, `VZVirtualMachineManager`, the same kernel and vminit image,
-journaled ext4 overlays, and NAT with bounded guest DHCP. It does not include Studio's
-web application/Compose stack, host port forwarders, credentials or microphone.
-Each workspace has its own VM, read-only image base and writable overlay; downloaded layers and initfs are cached centrally.
-A separate 256 MB ext4 filesystem runs the one-shot network initializer, so the
-workspace's writable disk is never mounted into two containers simultaneously.
-There is no host port publishing in this first version.
-
-## Security and lifecycle
-
-The runtime uses App Sandbox, virtualization, outgoing network, and
-user-selected read/write files for explicit imports/exports, plus the scoped Computer
-App Group for Noodle's authenticated Unix-socket connection. There is no incoming
-TCP listener, host directory share, clipboard bridge, camera/microphone, Docker
-socket or Agent Host escape. NAT can reach LAN resources; the create dialog
-offers networking off for Shell and does not claim internet-only isolation.
-The updater additionally uses the approved, narrowly scoped Sparkle installer
-boundary described in [Releasing](RELEASING.md); it does not broaden guest access.
-
-Records and disks live in the app's private Application Support directory. A
-process-held library lock prevents two app instances opening the same disks.
-Computer IDs determine paths, never user-entered names. Imports use staging and
-atomic publication. Guest files and packages survive restarts; running state is
-not restored automatically. Interrupted creations remain unpublished. Deletion
-requires confirmation and moves stopped computers to Trash. Stop warns
-about unsaved guest data. Quitting stops VMs, with a bounded shutdown deadline.
-
-`ComputerCore` contains Foundation-only records and persistence. Runtime objects
-are separate from views; a future provider extension can call that layer without
-redesigning the library. The local Noodle bridge and managed agent skill are
-implemented; remote-host access and an iOS app are not.
-
-## Verification
-
-`swift test --disable-sandbox --package-path Computer --scratch-path .build/computer`
-
-For the opt-in signed integration test, execute
-`".build/Noodle Computer.app/Contents/MacOS/NoodleComputer" --self-test`.
-It creates a separate temporary library, downloads Alpine/vminit, starts a VM,
-tests DHCP and guest package installation, restarts and verifies disk contents,
-then validates an EFI VM configuration. It never opens the user's library.
-This does **not** substitute for installing and testing a full macOS/Linux desktop
-or Omarchy guest. Test downloads are removed with the temporary fixture library.
-
-Add `--offline` to `--self-test` to test guest execution and disk persistence
-without requiring guest networking (initial OCI image downloads still use the
-host's network). Use `--configuration-test` to validate a macOS configuration
-against Apple's current restore metadata without downloading/installing macOS.
-For a separate test app identity/library, build with
-`NOODLE_COMPUTER_TEST_BUILD=1 zsh scripts/build-computer.sh`.
-`--download-progress-test` verifies actual download progress/cancellation and
-cancelled creation cleanup without downloading a complete macOS image.
-
-### Current validation (9 September 2026)
-
-- Core tests cover the two v1 presets, legacy VM compatibility, desktop/legacy template validation, cached-image reuse, size/hash corruption,
-  replacement and progress calculation. Signed download tests pass for byte
-  progress, cancellation, completed-file ownership and creation cleanup.
-  Signed offline integration passes: filesystem sandbox
-  denial, actual container boot, guest command execution, stop/restart disk
-  persistence, record reload, and EFI configuration.
-- macOS restore metadata/hardware model/auxiliary storage/VZ validation pass.
-  A full macOS installation and Omarchy desktop have not been verified.
-- Guest DHCP, command execution and outbound HTTPS have been verified in the
-  official signed app after an authorized restart of the host's stuck NAT service.
-  The app itself never modifies that service or widens its entitlements.
-- The Launcher desktop has been booted and visually checked through the app's
-  embedded WebKit viewer, including its authenticated, certificate-pinned
-  connection and live desktop canvas.
-
-`--desktop-smoke-test` verifies the Launcher desktop in an isolated temporary
-library: Xvnc/Openbox, authenticated HTTPS, certificate pinning and a connected
-WebKit canvas. Failed runs retain that fixture for diagnosis and reuse; a passing
-run removes it. It does not open the user's computer library.
-
-`--custom-container-test` checks a real nginx image and its HTTP viewer, the recovery
-PTY, transparent terminal appearance and a custom image without a web port.
-`--creation-form-test` checks disclosure hit areas, content-sized sheets, matching
-Shell/WebKit bounds, outer margins, native toolbar sizing, retained page state,
-Stop confirmation and terminal scrollbar visibility. Desktop smoke testing also pauses Xvnc and
-verifies that recovery terminal input and session-preserving switching still work.
-
-### Noodle UI parity
-
-Both apps use `Shared/Wallpaper` for background presets, image preparation,
-crossfades and playback. Choose Background accepts still images and multi-frame
-HEIC/HEIF up to 512 MB, and playable MP4, M4V and MOV files up to 1 GB.
-Photos and Image Playground use the same still-image import as Noodle (50 MB).
-Videos loop silently; HEIC frames cycle every eight seconds with a one-second
-fade. Playback pauses when hidden or when Reduce Motion is enabled. Background
-changes crossfade over 0.35 seconds unless Reduce Motion is enabled.
-Imports are copied into the computer's private `Backgrounds` directory; canceled
-drafts release their temporary media and existing embedded PNG backgrounds remain
-supported. Wallpaper packages and streaming playlists are not supported.
-
-The icon and background editors use Noodle's `ImageSourceMenu` control (ported
-from `4e7e4ff`), including matching 20-point labels and equal flexible widths for
-Choose/Create Image. Keep that control aligned with `Sources/Noodle/ImageSourceMenu.swift`.
-The existing `Tests/image-source-menu.swift` regression can also be compiled with
-`Computer/Sources/NoodleComputer/ImageSourceMenu.swift`; it checks both chooser
-titles at three widths, enabled/disabled sizing and independent File/Photos actions.
-The destructive button is likewise identical to Noodle's native control.
-
-`--overlay-test` runs an isolated signed-app fixture that verifies the mounted
-OverlayFS, an unchanged base after guest writes, preserved edits and deletions
-across restarts, a replacement base, staged-write isolation, and the image update
-flow. It uses a temporary library and never opens the user's computers.
-
-`--latest-images-test` checks missing-tag error reporting, then downloads both
-built-in `:latest` images into a fresh temporary library and verifies creation,
-OverlayFS startup, guest writes, Desktop processes, and image update checks.
-Passing runs remove the fixture; failed runs retain it for diagnosis.
+[Build and test](DEVELOPMENT.md) · [Noodle integration](Bridge/README.md) ·
+[Images](Images/README.md) · [Releases](RELEASING.md) · [Changelog](CHANGELOG.md) ·
+[Noodle](../README.md)

@@ -1,68 +1,59 @@
-# Security and agent access
+# Agent access and privacy
 
-## Built-in MCP connections
+## Choose a bot's access
 
-Noodle brokers assigned remote MCP tools inside its existing sandbox. OAuth registrations and tokens are stored in the macOS login Keychain with the system-created calling-app ACL. Token refresh updates only item data, preserving access controls on existing items. The bundled Swift CLI receives only a per-agent workspace session capability. Credentials never enter skills, request files or the harness configuration. The CLI is separately signed with zero entitlements. No TCP listener, new Agent Host endpoint, Keychain sharing entitlement or incoming-network permission is added. Assignment authorizes tool access within the provider-consented scopes; it does not add a separate per-tool approval system. Unrestricted agents remain outside a hard workspace-isolation guarantee. See [MCP connections](mcp-connections.md) for revocation, at-most-once dispatch, OAuth behavior and trust limits.
+| Harness | Access in Noodle |
+| --- | --- |
+| Codex | Restricted by default; autonomous access is optional |
+| Claude Code, FX, Grok Build, Muse Code | Autonomous access is required |
 
-Harness Settings uses a fixed `inspectHarnessVersion` Agent Host endpoint to read each trusted installation's version and required CLI help. The host validates the provider and executable using the existing signature/path checks; callers cannot supply arbitrary arguments or environment variables. Probes have bounded time/output, disable Claude's automatic updater, and never start agent turns or install software. Only parsed versions and sanitized compatibility diagnostics return to the app. The sandboxed app separately checks public vendor release metadata over HTTPS with bounded requests and responses. Cached results are presentation-only: they neither grant access nor change authentication, and update instructions require the user to act in Terminal. No additional sandbox entitlements are needed.
+Change Codex access in **Settings → Security**. The other harnesses' switches stay
+on because they cannot run in restricted mode. Switching back to Codex restores
+its saved preference.
 
-## File-selected animated backgrounds
+Restricted mode limits the harness to its sandbox. Autonomous mode runs as your
+Mac user outside Noodle's app sandbox. It can reach files, signed-in services, and
+browser sessions beyond the bot's workspace, subject to macOS and tool permissions.
+Noodle accepts supported tool approvals automatically; questions needing your
+input still appear in chat.
 
-Background imports use the existing user-selected read-only permission. Noodle copies the chosen regular file to a private temporary directory during security-scoped access, validates the copy, and copies it into the selected conversation only on Apply. Cancel and replacement release temporary copies; resetting removes only the old UUID-named managed background, never the original file. Still images/HEIC are limited to 512 MB, videos to 1 GB, and HEIC sequences to 120 frames. Image decoding is downsampled to 2560 pixels and only the current/transitioning frame is retained. MOV/MP4/M4V assets forbid all external media references; playlists, wallpaper packages and remote URLs are not accepted. Native AVQueuePlayer/AVPlayerLooper playback is always muted with zero volume, has no controls, and cannot keep the display awake. Hidden/miniaturized windows and Reduce Motion pause playback; teardown cancels frame tasks, removes observers and releases the player queue. HEIC files loop their embedded still frames rather than using Apple's location/time-based schedule. No location, wallpaper-library or new file/network entitlement is added.
+Changing access restarts the bot. Turning autonomous access off does not undo
+completed actions, stop detached applications, or revoke macOS privacy permissions.
+Revoke those separately in System Settings.
 
-The seven existing application entitlement keys remain unchanged: App Sandbox, application groups, user-selected read-only files, outbound network client, the two existing Sparkle Mach lookup names, the existing `.codex` read/write exception, and the existing Claude/FX executable read-only exceptions. This feature runs entirely in the sandboxed app using system AVFoundation/ImageIO; it adds no helper or Agent Host endpoint. Run `zsh Tests/animated-backgrounds.sh` in a logged-in desktop session for the isolated native playback checks (optionally supply a dynamic HEIC file path); core import/persistence tests are included in the normal smoke suite.
+## Connected tools
 
-## Autonomous agent access
+Assigning a tool lets the bot use the permissions you granted during provider
+sign-in. Noodle does not ask again for each tool call. OAuth credentials stay in
+the macOS Keychain and are not written to bot skills or request files.
 
-Harness capabilities determine access. New Codex bots start in **Restricted** mode, and **Settings → Security** lets users change their per-bot **Autonomous access** preference. Claude Code, FX, Grok Build and Muse Code do not support restricted mode in Noodle: they always use autonomous access, including existing bots with a saved restricted setting. Their switches remain visible, on and disabled, with the harness requirement shown. Creation and editing explain this access when selecting the harness. Required access is resolved at use time rather than written over the saved preference, so switching back to Codex restores that preference. Startup errors and retry controls appear within the affected bot's row.
+Removing an assignment blocks future calls; a call already sent may still finish.
+Removing the connection deletes its local credentials. To revoke the provider's
+grant too, use that provider's connected-app settings. An autonomous bot's wider
+system access means workspace assignment checks are not a hard isolation boundary.
 
-Bots with autonomous access run through the separately signed, hardened `NoodleAgentHost.xpc`, outside Noodle's App Sandbox, as the current user (never root). This removes the inherited sandbox that prevented the browser-control runtime from applying its own sandbox. Browser/computer control still depends on the installed integration and macOS privacy permissions; a successful helper check does not prove browser access. Unexpected runtime failures are retried automatically with bounded backoff, while Security keeps a manual **Retry Startup** control. Starting a runtime checks for unread messages without consuming them, recovering pending notifications after a restart.
+## Files, recording, and computers
 
-Autonomous tools may access files and signed-in browser sessions beyond the bot workspace. Connected MCP tools have their own permissions and may run outside Codex's shell sandbox. Codex shell turns use `workspaceWrite` (the bot workspace and Noodle's conversation store), restricted network access, and runtime permission requests. Noodle accepts supported command, file, permission, and empty tool-confirmation requests immediately so the bot does not pause for approval. Permission grants keep the scope requested by Codex and are never made persistent by Noodle. Genuine questions that require information from the user still appear in chat. Unsupported requests fail closed rather than receiving fabricated consent.
+Noodle stores chats and bot workspaces locally. Your harness sends work to its
+model provider under that provider's account and policies. Imported attachments
+and backgrounds are copied into Noodle's storage.
 
-For harnesses that support restricted mode, changing access stops the managed runtime process group before restarting. Restricted and autonomous modes use separate persisted Codex sessions; the conversation and bot workspace remain unchanged. Turning autonomous access off persists the restriction first. Failed termination prevents an automatic replacement process. External applications already opened, detached services, and previously completed side effects are not undone by restriction. OS privacy grants must be revoked separately in System Settings.
+Microphone access is requested when you start a [voice recording](voice-messages.md).
+Transcription is on-device; sending shares the audio and transcript with the chat's bots.
 
-Before dispatching each Codex or Claude turn, Noodle atomically saves an unfinished-turn marker alongside that provider/access mode's session state. Quitting, force-quitting, or losing a harness leaves it intact. On the next startup, the bot receives `runtime-recovered` and is instructed to inspect context and continue safely without waiting for a repeated request. A terminal turn result clears the marker; opening a session does not. Recovery is at-least-once, not an exactly-once guarantee for external actions: agents must check what already completed before repeating side effects. Idle bots and bots whose turns finished do not receive a recovery wake solely because the app reopened. The marker contains only a random turn token, not message content, and introduces no new permissions.
+[Noodle Computer](../Computer/README.md) runs Linux workspaces without mounting host
+folders or sharing the host clipboard. Bots assigned to the same computer share
+its files and services, with separate terminal sessions. Networking can reach your
+LAN; Shell computers can have networking disabled.
 
-The XPC service accepts only Noodle's exact signed identity and signing team, and Noodle verifies the helper's identity. It exposes no arbitrary executable, argument, environment, or shell endpoint. It accepts a bot UUID, validates its existing workspace, and maps a provider identifier plus validated model/session choices to a reviewed fixed command. Codex binaries must carry OpenAI's signature; Claude Code must be Anthropic's signed native binary reached through `~/.local/bin/claude` and its versioned package. Arbitrary PATH shims are not accepted. Claude runs in stream-json mode with the autonomous permissions required by its harness capability. Connections closing stop their managed process groups. **Test Autonomous Runtime**, under **Settings → Dev** in debug builds only, runs a fixed `sandbox-exec … /usr/bin/true` probe, without starting a bot, invoking a model, or opening a browser. Smoke tests separately verify that a Foundation-launched helper starts in its own process group.
+## Implementation boundary
 
-Plain MCP confirmation forms with no input fields (such as a browser destination prompt) are accepted automatically with an empty response object. URL/sign-in flows, forms requesting data, and unknown schema constraints remain unsupported and cannot be accepted. They fail closed without pausing the bot for an approval card.
+The Noodle app stays sandboxed. Autonomous harnesses run through the signed
+`NoodleAgentHost.xpc`, which validates Noodle's identity, the vendor-signed harness,
+and a fixed set of launch options. It runs as the current user, never root.
+Sparkle's signed installer runs outside the sandbox to replace the app during updates.
 
-## Security boundary
+See [architecture](architecture.md) for process boundaries and
+[development](development.md) for bundle verification commands.
 
-### Grok Build
-
-Grok Build always uses autonomous access, as declared by its harness capability. The host accepts only the official `~/.grok/bin/grok` installation (or its `~/.local/bin/grok` alias), resolving to the exact native download path and verifying xAI's signature (`xai-grok-pager`, team `5Y6N3AJ54S`). It launches a dedicated `grok agent --no-leader … stdio` process with validated model/effort settings. Shared leader mode and blanket approval flags are not used. ACP permission responses select only the offered **allow once** option for the active session while autonomous access is enabled.
-
-Discovery, cached authentication and model metadata inspection happen in the existing signed host through a fixed, argument-free `inspectGrok` endpoint. Only the installation path, sign-in boolean and model/effort catalogue cross back into the app; no account identity, tokens or raw authentication errors are exposed. Inspection creates no conversation or model turn. The main app receives **no additional sandbox entitlements** and no access to `~/.grok` credentials. The user-supplied Grok SVG is bundled as a transparent vector template with website CSS and duplicate IDs removed.
-
-### FX
-
-The Agent Host's `XPCService.JoinExistingSession` is enabled so it and the signed harness children run in the app's login security session. This allows normal access to the existing user's Keychain rather than launching in an isolated audit session. Keychain access controls still apply; Noodle does not export credentials or change item permissions. Build verification checks this setting in the signed helper bundle.
-
-FX always uses autonomous access, as declared by its harness capability; a saved restricted preference does not prevent startup. The host validates Vercel's signed native executable at exactly `~/.local/bin/fx` (identifier `com.vercel.fx`, team `JW6Y669B67`) and launches the fixed `fx acp` command with an optional validated model. It does not offer arbitrary execution arguments. FX owns its native tools and reads the bot's workspace instructions and Messenger skill. Noodle handles ACP permission requests only for the current session with **allow once**, and does not disable FX's safety review. Held reviews remain failed turns with unfinished-work recovery preserved, not successful heartbeats.
-
-The main app receives only account availability, model metadata, and a verified Vercel device-code challenge from fixed host commands. It has no access to `~/.fx` or its credential files. The existing read-only executable exception additionally contains `~/.local/bin/fx`; there are still seven entitlement keys. FX uses the same durable unfinished-turn markers and recovery wake behavior described above. Its native template glyph is derived from the user-supplied FX website SVG, without background or animation.
-
-The finished app keeps App Sandbox enabled with these narrowly scoped entitlements:
-
-- App Sandbox
-- User-selected file read access, used only to import attachments
-- Outgoing network client access, required by Codex
-- A home-relative read/write exception restricted to `~/.codex/`, allowing the Codex child to use the user's existing login and persistent thread state
-- Home-relative read-only exceptions for `~/.local/bin/claude`, `~/.local/share/claude/versions/`, and `~/.local/bin/fx`, used only to detect and inspect the signed native executables
-- The existing team-scoped sharing app group, shared only with Noodle's share extension
-- Exactly two update-installer IPC names: `com.pdparchitect.noodle-spks` and `com.pdparchitect.noodle-spki`
-
-There is no broad home-folder, automation, camera, microphone, contacts, incoming-network, or personal-data entitlement. Noodle explicitly points Codex at `~/.codex` but never copies or parses the credentials itself. Noodle has no access to `~/.claude`; the isolated host runs fixed `claude auth` commands and returns only a signed-in boolean or a generic error. The bundled Messenger helper is separately signed without the application entitlements.
-
-The autonomous Agent Host is a second, distinct outside-App-Sandbox boundary. It has no extra entitlements, no root privileges, no login item, and no new global Mach-service exception. Absence of entitlements does **not** mean absence of access: the helper and its tools have ordinary user-process access, subject to macOS privacy controls and the harness/tool policies described above. `scripts/verify-agent-host.sh` verifies the assembled helper; the main app has seven reviewed entitlement keys, including the two exact read-only Claude executable paths.
-
-Sparkle's framework runs inside the app sandbox. Its separately signed `Installer.xpc`, `Autoupdate`, and `Updater.app` form the explicitly approved outside-sandbox installation boundary needed to replace the app bundle. They have hardened runtime, the app's signing team, and no extra entitlement keys. `Downloader.xpc` is omitted because the app already has outgoing network access. `scripts/verify-updater.sh` checks the actual bundle's signatures, exact IPC names, signed-feed configuration, and absence of developer-machine framework search paths.
-
-See [Architecture](architecture.md) for the process and data flow.
-
-
----
-
-[Documentation](README.md) · [Noodle](../README.md)
+[Documentation](README.md)

@@ -1,68 +1,56 @@
 # Releases and updates
 
-Noodle Computer has a separate [release process](../Computer/RELEASING.md),
-version, changelog, `computer-v*` tags and update feed. Its releases never become
-the repository-wide latest release used by standard Noodle below.
+Only publish when explicitly requested. Commands below run from the repository root.
 
-Commands and project paths below are relative to the repository root.
+## Prepare a release
 
-The root `VERSION` file is the canonical stable application version (`X.Y.Z`). Swift Package Manager describes the package and deployment target, but it does not provide a macOS app marketing version. Starting with the updater bootstrap, the build copies `VERSION` into both `CFBundleShortVersionString` and `CFBundleVersion`, so local builds and CI releases use the same ordering. Increase it for every release; never reuse a published version. `NOODLE_BUILD_NUMBER` is a local-testing override only; release packaging always uses `VERSION`.
+Each product has its own version and changelog:
 
-`CHANGELOG.md` owns the user-facing release notes. To release, increment
-`VERSION`, move the relevant Unreleased entries into a dated
-`## [X.Y.Z] - YYYY-MM-DD` section, commit, and push to `main`. Publishing is an
-explicit release action: merging or pushing a new version requests publication.
-Do not create tags by hand. The workflow derives `vX.Y.Z` directly from `VERSION`.
+| Product | Version | Release notes | Generated tag |
+| --- | --- | --- | --- |
+| Noodle | `VERSION` | `CHANGELOG.md` | `vX.Y.Z` |
+| Computer | `Computer/VERSION` | `Computer/CHANGELOG.md` | `computer-vX.Y.Z` |
+| Images | `Computer/Images/VERSION` | `Computer/Images/CHANGELOG.md` | `computer-images-vX.Y.Z` |
 
-The **Validate and release versions** workflow handles all three independent
-version files: `VERSION`, `Computer/VERSION`, and `Computer/Images/VERSION`.
-An unchanged version does not release again. New versions must exceed their
-product's existing version tags and have nonempty dated release notes. PRs run
-validation and tests without creating tags or publishing. A manual workflow run
-on `main` follows the same checks and reads the same files; it has no version input.
+1. Set the product's version to an unused, higher `X.Y.Z`.
+2. Move its relevant Unreleased notes into `## [X.Y.Z] - YYYY-MM-DD`. Leave unrelated work under Unreleased. These notes become the release description.
+3. Run the affected tests and review the changes.
+4. Commit and push to `main`. **Pushing a new version requests publication.**
+5. Watch **Validate and release versions** through completion and verify the public download and update channel.
 
-All selected products must pass their required tests and finish preparation
-before any tag is minted. Noodle releases run Noodle and shared-protocol tests;
-they do not compile Computer. Computer releases run Computer, Noodle integration
-and shared-protocol tests concurrently. Image-only releases run no application
-package builds. Image preparation can start while application suites run.
-PRs retain the full test matrix. The lightweight release-guard job runs separately
-from application compilation. Application preparation
-includes signing, notarization, stapling, Gatekeeper checks, and Sparkle archive
-and feed verification. Image preparation builds both ARM64 images and verifies
-their contracts, interactive terminals, wallpaper and window rendering. The
-prepared app archives and container images are saved as workflow artifacts.
-The gate accepts skipped preparation only for products whose version is unchanged.
-A failed or cancelled required job prevents every selected tag and publication.
-A final completion check fails the run if any selected publication was skipped,
-failed or cancelled; a green run must mean every selected product was published.
+Do not create tags manually or reuse published versions. Unchanged versions skip
+publication. PRs validate and test without publishing. A manual workflow run on
+`main` reads the same version files.
 
-After that gate, the workflow atomically pushes the derived tags at the checked
-source commit. Existing tags are never moved; retries accept only tags already
-pointing to that commit. Publication continues in the same pipeline using the
-exact prepared artifacts, because tags pushed by `GITHUB_TOKEN` do not trigger
-another workflow. No personal access token or separate tagging workflow is needed.
-If a workflow finishes after tagging but skips publication, run **Publish verified
-release artifacts** with the original run ID. Recovery validates the original
-checks, preparation jobs and tag commits, verifies archive checksums, and publishes
-those existing artifacts without rebuilding. Existing app releases still require
-inspection rather than automatic replacement.
-Images publish first, followed by Computer, then Noodle when those products are
-selected together. Public image references are verified before Computer ships.
-Computer's channel never replaces Noodle's repository-wide latest release.
+See [Computer releases](../Computer/RELEASING.md) for its separate download channel
+and [image releases](../Computer/Images/README.md#publish) for registry checks.
 
-Each app release stays a draft until its ZIP, checksum, signed appcast and
-changelog notes have uploaded, then its update channel is promoted. External
-publication can still fail after the checks and tags succeed; GitHub and GHCR
-are not a single transaction. Re-run failed jobs in the original workflow to
-reuse its prepared artifacts (retained for seven days). Do not start a fresh
-build to replace an immutable published archive. Existing drafts and partially
-promoted app channels require inspection and recovery from their existing assets;
-see [Computer recovery](../Computer/RELEASING.md#failure-and-recovery). An image
-retry accepts an existing version only when its config digest matches the exact
-tested build. Never delete or move tags to retry a release.
+## What CI does
 
-The release workflow reads signing material only from encrypted GitHub Actions secrets:
+All selected products must pass tests and preparation before any tag is created.
+App preparation includes signing, notarization, stapling, Gatekeeper, and Sparkle
+verification. Image preparation builds and tests both ARM64 images. Tests are
+scoped by product; Computer releases also run Noodle integration coverage.
+
+CI tags the checked commit and publishes the exact prepared artifacts. When
+released together, images publish first, then Computer, then Noodle. App releases
+remain drafts until their ZIP, checksum, signed feed, and notes are uploaded.
+A successful run requires every selected product to finish publishing.
+Computer releases never replace Noodle's repository-wide latest release.
+
+## Recover a failed release
+
+- **Checks or preparation failed:** fix the cause and rerun the original workflow's failed jobs. No selected tags are created before all preparation passes.
+- **Tagged but publication skipped:** run **Publish verified release artifacts** with the original run ID. It validates the original checks, tags, and checksums before publishing saved artifacts.
+- **Publication partly completed:** inspect existing drafts, assets, and channels before retrying. Follow [Computer channel recovery](../Computer/RELEASING.md#failure-and-recovery) where applicable.
+
+Prepared artifacts are retained for seven days. Reuse them; never rebuild to replace
+a published archive or delete/move tags. Image retries must match the tested config
+digest. GitHub and GHCR publication can fail independently after tagging.
+
+## Signing secrets
+
+GitHub Actions uses these encrypted secrets:
 
 - `MACOS_CERTIFICATE_P12`
 - `MACOS_CERTIFICATE_PASSWORD`
@@ -71,19 +59,23 @@ The release workflow reads signing material only from encrypted GitHub Actions s
 - `APP_STORE_CONNECT_ISSUER_ID`
 - `SPARKLE_PRIVATE_KEY`
 
-The `.p12` secret is used only for code signing; the App Store Connect API key is used only for notarization. The dedicated Sparkle Ed25519 private key signs update archives and feeds; only its public key is embedded in the app. No certificate, private key, password, or notarization credential belongs in the repository. Temporary CI signing material is removed on success or failure.
+CI removes temporary signing material after use. Keep keys out of the repository.
+Back up the Sparkle key securely; changing it requires Sparkle's key-transition
+procedure so existing installations can still update. Both apps must use the same
+signing team for Computer integration. Downloads must be public; the apps contain
+no GitHub token.
 
-### In-app updates
+## In-app updates
 
-Use **Noodle → Check for Updates…** or **Settings → Update**. Automatic daily checks are enabled by default. Automatic download/installation is a separate opt-in setting. Sparkle provides release prompts, progress, signature validation, installation, and relaunch. **Install and Relaunch** proceeds without Noodle checking agent status, drafts, attachments, or open editors, and without an additional confirmation. Harnesses follow the normal shutdown and recovery lifecycle. Unsent drafts and unsaved editor changes are not saved by the updater and can be lost on restart.
+Use **Noodle → Check for Updates…** or **Settings → Update**. Daily checks are on
+by default; automatic download/install is a separate opt-in.
 
-The app fetches `https://github.com/pdparchitect/noodle/releases/latest/download/appcast.xml`; its enclosures point to versioned ZIP assets in the same GitHub repository. There is no separate server, GitHub Pages site, access token in the app, or custom download service. Only publish stable releases as “latest.” The previous release remains available while CI builds and uploads the next one.
+Save drafts and editor changes before **Install and Relaunch**. It restarts
+immediately through the normal harness shutdown/recovery process; unsaved work
+can be lost.
 
-Sparkle is pinned to 2.9.4 in `Package.swift` and `Package.resolved`, from [sparkle-project/Sparkle](https://github.com/sparkle-project/Sparkle). Its complete upstream licence is copied into the signed app's Resources. To regenerate a feed locally without exporting the dedicated Keychain key, use the bundled `generate_appcast --account com.pdparchitect.noodle` tool. Back up the signing key securely: losing it prevents straightforward updates for existing installations. Never rotate the embedded public key without following Sparkle's key-transition procedure.
+Noodle reads the [latest release feed](https://github.com/pdparchitect/noodle/releases/latest/download/appcast.xml).
+Its archive links point to immutable versioned releases. Publish only stable
+Noodle releases as the repository's latest release.
 
-Release assets must be accessible to the app for update checks and downloads to work. While the repository is private, the unauthenticated updater cannot fetch those assets; the app does not embed a GitHub access token.
-
-
----
-
-[Documentation](README.md) · [Noodle](../README.md)
+[Documentation](README.md)

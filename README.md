@@ -4,7 +4,7 @@
 
 # Noodle
 
-**A messaging app for you and your AI agents.**
+**A workspace for you and your AI agents.**
 
 [Download](#download) · [Documentation](docs/README.md) · [Security](docs/security.md)
 
@@ -20,62 +20,31 @@
   <img width="32%" alt="Noodle screenshot 3" src="https://github.com/user-attachments/assets/064f4498-1110-4e39-9d0d-171a700aaab7" />
 </p>
 
-Create persistent bots with their own workspaces and personalities. Chat with
-them individually, bring them together in groups, and share files without
-leaving the conversation. Noodle runs Codex, Claude Code, FX, Grok Build, or Muse Code using your existing
-account and subscription.
+Give an agent a task, or bring several into a group to work toward a shared goal.
+Each agent keeps its own workspace and backstory. Noodle runs Codex, Claude Code,
+FX, Grok Build, or Muse Code using your existing account.
 
 ## Download
 
-- **[Download Noodle for macOS](https://github.com/pdparchitect/noodle/releases/latest)**: the native messenger for your coding agents.
-- **[Download Noodle Computer for macOS](https://github.com/pdparchitect/noodle/releases/tag/computer-latest)**: computers for your AI agents.
+- **[Noodle](https://github.com/pdparchitect/noodle/releases/latest)**: work with agents individually or as a team. Requires macOS 15 or later.
+- **[Noodle Computer](https://github.com/pdparchitect/noodle/releases/tag/computer-latest)**: Linux computers for you and your agents. Requires Apple silicon and macOS 26 or later.
 
-Download the application ZIP from the release page, unzip it and move the application to **Applications**.
+Download the app ZIP, unzip it, and move the app to **Applications**.
+Noodle Computer is optional and also works on its own.
 
-Noodle Computer is optional and can also be used on its own.
+## Get started
 
-## What it does
+1. Open Noodle and follow **Settings → Harness** to install and sign in.
+2. Create a bot, choose its harness, and describe its role in the backstory.
+3. Give it a task and the files or context it needs. For a shared goal, create a group and add the agents you want working together.
 
-- Native direct and group conversations with persistent history
-- Separate workspace, backstory, model and access controls for every bot
-- Images, files, reactions, notifications and conversation backgrounds
-- Configurable heartbeats that preserve true agent idleness across relaunches
-- Commands from Spotlight and Shortcuts
-- Signed, automatic updates through GitHub Releases
+Codex bots start with restricted access. Claude Code, FX, Grok Build, and Muse Code
+require autonomous access, which can reach files and services beyond the bot's
+workspace. See [agent access](docs/security.md).
 
-## Getting started
+To give a bot a computer, create a Shell or Desktop in Noodle Computer, then add it
+in the bot's **Computers** tab. Several bots can share the same computer.
 
-### Noodle
-
-Requires macOS 15 or later with Codex, Claude Code, FX, Grok Build, or Muse Code installed and signed in.
-
-1. Open the [latest Noodle release](https://github.com/pdparchitect/noodle/releases/latest), download the application ZIP, unzip it and move **Noodle.app** to Applications.
-2. Open Noodle and confirm your harness in **Settings → Harness**.
-3. Create a bot and start a conversation.
-
-New bots start restricted. Claude Code, FX, Grok Build, and Muse Code require the per-bot autonomous
-access option in Settings → Security. See [Security and agent access](docs/security.md).
-
-### Noodle Computer
-
-Requires an Apple silicon Mac running macOS 26 or later.
-
-1. Open the [latest Noodle Computer release](https://github.com/pdparchitect/noodle/releases/tag/computer-latest), download the application ZIP, unzip it and move **Noodle Computer.app** to Applications.
-2. Open Noodle Computer and create a **Shell** or **Desktop** computer.
-3. To share it with an agent, add it in the **Computers** tab when creating or editing a bot in Noodle.
-
-A computer can be shared with multiple agents. Noodle discovers the installed app
-automatically; you do not need to keep a Computer window open.
-See the [Noodle Computer documentation](Computer/README.md) for more.
-
-## Documentation
-
-- [Noodle Computer](Computer/README.md)
-- [Using Noodle](docs/usage.md)
-- [Harness setup](docs/harness-setup.md)
-- [Development](docs/development.md)
-- [Architecture](docs/architecture.md)
-- [Storage and Messenger](docs/storage-and-messenger.md)
-- [Security and agent access](docs/security.md)
-- [Changelog](CHANGELOG.md)
-- [Releases and updates](docs/releases.md)
+[Working with agents](docs/usage.md) · [Setup](docs/harness-setup.md) ·
+[Noodle Computer](Computer/README.md) · [All docs](docs/README.md) ·
+[Build from source](docs/development.md) · [Changelog](CHANGELOG.md)

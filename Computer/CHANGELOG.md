@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Simplify the Computer setup, file, integration, and release guides; separate build instructions from the README.
+
 ## [0.3.0] - 2026-09-11
 
 - Install the Go compiler in release preparation so the guest file helper is included in published builds.

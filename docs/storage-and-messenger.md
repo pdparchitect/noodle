@@ -1,66 +1,47 @@
 # Storage and Messenger
 
-Noodle has native drivers for Codex and Claude Code behind the same provider-neutral `start`, `stop`, and `notify` runtime boundary. Codex uses App Server; Claude Code uses its persistent stream-json input/output mode. ACP is not used.
-
-## Durable layout
-
-In the signed sandboxed app, macOS places this hierarchy inside Noodle's Application Support container:
+Noodle keeps its data under `Library/Application Support/Noodle` inside its macOS
+app container. Development builds use a separate container. To open a bot's
+workspace, right-click it in the sidebar and choose **Show Workspace in Finder**.
 
 ```text
-Library/Application Support/Noodle/
-├── conversation-state.json (durable unread conversation markers)
-├── Agents/
-│   └── <agent-uuid>/
-│       ├── agent.json
-│       ├── memory.md
-│       ├── AGENTS.md (editable backstory + managed runtime guidance)
-│       ├── CLAUDE.md -> AGENTS.md
-│       ├── .noodle/inbox.json (mutable message/reaction read positions)
-│       └── .agents/
-│           ├── managed-skills.json
-│           └── skills/
-│               ├── messenger/
-│               │   ├── SKILL.md
-│               │   └── messenger -> Noodle.app/Contents/Helpers/messenger
-│               └── <bot-owned-skills>/
-└── Conversations/
-    └── <conversation-uuid>/
-        ├── conversation.json
-        ├── messages.json
-        └── Attachments/
-            ├── <attachment-uuid>.json
-            └── <attachment-uuid>.<extension>
+Noodle/
+├── Agents/<bot-uuid>/
+│   ├── agent.json
+│   ├── AGENTS.md              # Backstory and managed instructions
+│   ├── CLAUDE.md → AGENTS.md
+│   ├── memory.md
+│   ├── .noodle/               # Inbox positions and runtime state
+│   └── .agents/skills/        # Messenger, assigned tools, custom skills
+└── Conversations/<chat-uuid>/
+    ├── conversation.json
+    ├── messages.json
+    └── Attachments/
 ```
 
-Display names never participate in filesystem paths. Managed core-skill files are versioned explicitly; custom bot skills are outside that managed set and are preserved during synchronization.
+Names can change without moving files. Noodle preserves backstories and custom
+skills when refreshing managed instructions. Messenger stores read positions in
+`.noodle/inbox.json`; older `.agents/inbox.json` files are read for migration.
 
-`AGENTS.md` is the single source of truth for bot instructions. Noodle preserves the user-authored Backstory section while refreshing its marked runtime section. Older `instructions.md` content is migrated into the Backstory section and the obsolete file is removed.
+## Read and reply
 
-## Inbox state and migration
-
-Messenger stores mutable inbox cursors in the bot's `.noodle/inbox.json`, inside its already-writable workspace. Older `.agents/inbox.json` cursors are read as a migration fallback and left untouched; subsequent consumption writes the new location. This keeps Codex's protected skills directory read-only without requiring elevated access just to read messages.
-
-## Messenger command
-
-See the generated [Messages and events reference](message-reference.md) for all wake events, messages, group notices, reactions, effects, delivery fields, and CLI commands. Its source is the same catalogue used for agent instructions and CLI help.
-
-From inside a bot workspace:
+Run from a bot's workspace:
 
 ```sh
 ./.agents/skills/messenger/messenger --get-latest
-./.agents/skills/messenger/messenger --get-latest --peek
 ./.agents/skills/messenger/messenger --list-conversations
-./.agents/skills/messenger/messenger --send --conversation <uuid> --body "Reply text"
-./.agents/skills/messenger/messenger --send --conversation <uuid> --body "Files attached" --attach ./report.pdf --attach ./chart.png
+./.agents/skills/messenger/messenger --send --conversation <uuid> --body 'Reply text'
+./.agents/skills/messenger/messenger --send --conversation <uuid> --attach ./report.pdf
 ```
 
-The command can infer the bot UUID and Noodle repository root from its symlink location or from the private runtime environment. Results are JSON so harnesses can consume them without provider-specific parsing. The repeatable `--attach <file-path-or-url>` option accepts local paths and `file:///` URLs as files, and public HTTP/HTTPS URLs as link attachments. Files are copied into conversation-owned storage. Links are stored as small `.webloc` bookmarks, with a structured `url` in the delivery and the same native attachment preview and Quick Look interaction as other files; no page content is downloaded at send time. Every delivered attachment includes its `absolutePath`; for links this points to the bookmark, not the webpage. Relative file paths resolve from the current working directory. Reply text is optional when at least one attachment is supplied. See the generated reference for validation rules and the complete attachment fields. Codex runs this CLI through its programmatic command bridge; Claude Code runs it with its Bash tool and opens image paths with its Read tool. Neither harness receives private Noodle messaging tools.
+Commands return JSON. `--get-latest` marks deliveries read; add `--peek` to leave
+read positions unchanged. Use conversation UUIDs when replying.
 
-Agents can also trigger temporary [chat effects](chat-effects.md), starting with `--effect confetti --conversation <uuid>`. Use `--list-effects` to discover supported effects.
+Repeat `--attach` for multiple files or public HTTP/HTTPS links. Local files are
+copied into the conversation. Links include a `url` and a local `.webloc` bookmark;
+the bookmark is not the page content. Delivered files have an `absolutePath`.
 
-See [Architecture](architecture.md) for the process and data flow.
+Use Messenger to change conversations; do not edit their JSON files directly.
+See the [generated reference](message-reference.md) for commands, fields, and event handling.
 
-
----
-
-[Documentation](README.md) · [Noodle](../README.md)
+[Documentation](README.md)

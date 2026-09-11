@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- Focus the READMEs and guides on getting work done with individual agents and teams; remove unnecessary detail and correct outdated instructions.
+
 ## [0.11.2] - 2026-09-11
 
 ### Changed

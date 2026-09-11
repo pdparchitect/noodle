@@ -1,15 +1,23 @@
-# Noodle documentation
+# Documentation
 
-[Back to Noodle](../README.md)
+## Use Noodle
 
-- [Using Noodle](usage.md) — features, groups, notifications, heartbeats, and Settings.
-- [Chat effects](chat-effects.md) — agent-triggered conversation celebrations and their runtime limits.
-- [Harness setup](harness-setup.md) — native installation, account status, and sign-in.
-- [MCP connections](mcp-connections.md) — account connections, OAuth, bot assignments and the bundled CLI.
-- [Development](development.md) — requirements, local builds, signing, installation, and tests.
-- [Storage and Messenger](storage-and-messenger.md) — workspace layout, managed skills, inbox state, and the messaging CLI.
-- [Messages and events](message-reference.md) — generated event handling, recipients, delivery fields, and complete Messenger command reference.
-- [Architecture](architecture.md) — process lifecycle, harness discovery, and message flow.
-- [Security and agent access](security.md) — autonomous and restricted modes, entitlements, and helper boundaries.
-- [Releases and updates](releases.md) — versioning, GitHub Actions, signing secrets, notarization, and Sparkle.
-- [Changelog](../CHANGELOG.md) — user-facing changes in released and upcoming versions.
+- [Getting started](../README.md#get-started)
+- [Work with individual agents and teams](usage.md)
+- [Install and sign in to a harness](harness-setup.md)
+- [Connect tools](mcp-connections.md)
+- [Voice messages](voice-messages.md)
+- [Agent access and privacy](security.md)
+- [Noodle Computer](../Computer/README.md)
+
+## Develop Noodle
+
+- [Build and test](development.md)
+- [Architecture](architecture.md)
+- [Storage and Messenger](storage-and-messenger.md)
+- [Message and command reference](message-reference.md)
+- [Chat effects](chat-effects.md)
+- [Add a tool preset](tool-catalogue.md)
+- [Releases](releases.md)
+
+[Changelog](../CHANGELOG.md) · [Noodle](../README.md)

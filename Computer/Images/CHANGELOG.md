@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Shorten the image build, customization, and publishing guide.
+
 ## [0.1.4] - 2026-09-10
 
 - Replace the default desktop wallpaper with a widescreen, paper-textured landscape in cream, teal and orange.
