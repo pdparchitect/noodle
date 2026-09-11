@@ -7,7 +7,8 @@ import NoodleCore
 /// Optional metadata artwork. No HTML scraping, SVG execution, or authenticated
 /// third-party image requests. Missing/unsupported artwork uses a system symbol.
 enum MCPIcon {
-    static func load(_ icons: [Icon], endpoint: URL) async -> Data? {
+    static func load(_ icons: [Icon], endpoint: URL,
+                     sessionConfiguration: () -> URLSessionConfiguration = { .ephemeral }) async -> Data? {
         for icon in icons.prefix(3) {
             let data: Data?
             if icon.src.hasPrefix("data:image/png;base64,") || icon.src.hasPrefix("data:image/jpeg;base64,") {
@@ -15,7 +16,7 @@ enum MCPIcon {
                 data = Data(base64Encoded: String(icon.src[icon.src.index(after: comma)...]))
             } else if let url = URL(string: icon.src), url.host == endpoint.host, url.port == endpoint.port,
                       (try? MCPConnectionRecord.validatedEndpoint(url)) != nil {
-                let configuration = URLSessionConfiguration.ephemeral
+                let configuration = sessionConfiguration()
                 configuration.httpCookieStorage = nil
                 configuration.urlCredentialStorage = nil
                 configuration.timeoutIntervalForRequest = 3
