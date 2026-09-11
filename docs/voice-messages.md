@@ -13,7 +13,7 @@ Transcription runs on your Mac.
 The shortcut controls the active chat window. It is unavailable while preparing,
 finishing transcription, sending, or reviewing an existing voice draft.
 
-Choose a microphone in **Settings → General**. If Noodle reports no sound, check
+Choose a microphone in **Settings → Chat**. If Noodle reports no sound, check
 the microphone selection and hardware mute switch. Recordings stop after ten
 minutes without sending automatically.
 

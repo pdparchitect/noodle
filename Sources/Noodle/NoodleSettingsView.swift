@@ -3,7 +3,7 @@ import SwiftUI
 import NoodleCore
 
 enum NoodleSettingsTab: Hashable {
-    case general, harnesses, mcps, heartbeats, security, updates
+    case general, chat, harnesses, mcps, heartbeats, security, updates
 }
 
 struct NoodleSettingsView: View {
@@ -19,6 +19,12 @@ struct NoodleSettingsView: View {
                     Label("General", systemImage: "gearshape")
                 }
                 .tag(NoodleSettingsTab.general)
+            ChatSettingsView()
+                .settingsContentSize()
+                .tabItem {
+                    Label("Chat", systemImage: "bubble.left.and.bubble.right")
+                }
+                .tag(NoodleSettingsTab.chat)
             HarnessesSettingsView()
                 .settingsContentSize()
                 .tabItem {
@@ -51,6 +57,31 @@ struct NoodleSettingsView: View {
 private struct GeneralSettingsView: View {
     @Environment(NoodleStore.self) private var store
     @AppStorage(BotNameStyle.defaultsKey) private var botNameStyle = BotNameStyle.real.rawValue
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Generated bot names", selection: $botNameStyle) {
+                    ForEach(BotNameStyle.allCases) { style in
+                        Text(style.displayName).tag(style.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            Section {
+                Toggle("Keep Mac awake while agents work", isOn: Binding(
+                    get: { store.runtime.preventIdleSleepWhileWorking },
+                    set: { store.runtime.configurePreventIdleSleepWhileWorking($0) }
+                ))
+            } footer: {
+                Text("Prevents automatic idle sleep only while an agent is working. Closing the lid or choosing Sleep still suspends the Mac.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+private struct ChatSettingsView: View {
     @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showBotDescriptions = true
     @AppStorage(LinkPreviewSettings.timeoutKey) private var linkPreviewTimeout = LinkPreviewSettings.defaultTimeout
     @AppStorage(VoiceInputDevice.defaultsKey) private var microphoneUID = ""
@@ -91,14 +122,6 @@ private struct GeneralSettingsView: View {
                 }
             }
             Section {
-                Picker("Generated bot names", selection: $botNameStyle) {
-                    ForEach(BotNameStyle.allCases) { style in
-                        Text(style.displayName).tag(style.rawValue)
-                    }
-                }
-                .pickerStyle(.segmented)
-            }
-            Section {
                 Toggle("Show descriptions in the @ name menu", isOn: $showBotDescriptions)
             } footer: {
                 Text("Show each bot's public description beside its name. Private backstories are never shown.")
@@ -111,14 +134,6 @@ private struct GeneralSettingsView: View {
                 }
             } footer: {
                 Text("Maximum time for new link previews, including images. Unavailable previews remain clickable without a loading spinner.")
-            }
-            Section {
-                Toggle("Keep Mac awake while agents work", isOn: Binding(
-                    get: { store.runtime.preventIdleSleepWhileWorking },
-                    set: { store.runtime.configurePreventIdleSleepWhileWorking($0) }
-                ))
-            } footer: {
-                Text("Prevents automatic idle sleep only while an agent is working. Closing the lid or choosing Sleep still suspends the Mac.")
             }
         }
         .formStyle(.grouped)

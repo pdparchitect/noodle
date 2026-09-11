@@ -41,7 +41,7 @@ struct VoiceMessageComposer<Content: View>: View {
                                 Text("No sound from \(recorder.inputName) — check Microphone in Settings")
                                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    .help("Check the microphone’s mute switch, or choose another in Settings → General.")
+                                    .help("Check the microphone’s mute switch, or choose another in Settings → Chat.")
                             } else {
                                 if recorder.phase == .recording {
                                     LiveVoiceWaveform(samples: recorder.liveLevels).frame(height: 22)

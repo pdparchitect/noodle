@@ -55,8 +55,9 @@ and **Retry Startup** appear in **Settings → Security**.
 After launching Noodle once, search Spotlight for **Send Noodle Command** to send
 a message without opening the chat window. The same action is available in Shortcuts.
 
-**Settings → General** includes bot naming, the recording microphone, link-preview
-timeout, and **Keep Mac awake while agents work**. See [agent access](security.md)
+**Settings → General** includes bot naming and **Keep Mac awake while agents work**.
+**Settings → Chat** includes message delivery, the recording microphone, bot
+descriptions in the @ menu, and link-preview timeout. See [agent access](security.md)
 for permissions and [updates](releases.md#in-app-updates) for update settings.
 
 [Documentation](README.md)

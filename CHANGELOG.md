@@ -14,7 +14,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
-- Choose Automatic, Send immediately, or Queue message delivery in General settings. Automatic is the default and uses on-device Apple Intelligence to recognize urgent messages and changes to ongoing work, falling back to queueing when unavailable. Immediate delivery steers Codex and Muse, and interrupts Claude Code, FX, and Grok before checking the inbox.
+- Choose Automatic, Send immediately, or Queue message delivery in Chat settings. Automatic is the default and uses on-device Apple Intelligence to recognize urgent messages and changes to ongoing work, falling back to queueing when unavailable. Immediate delivery steers Codex and Muse, and interrupts Claude Code, FX, and Grok before checking the inbox.
 
 - Start and stop voice recording in the active chat with ⌘⇧D, also shown in the Conversation menu and microphone tooltip. Stopping keeps the recording for review; Return sends and Escape discards.
 
@@ -26,6 +26,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Move message delivery, microphone, @ menu descriptions, and link preview timeout into a new Chat settings tab. General now contains bot naming and the keep-awake option.
 - Separate current group members from other agents in the composer’s @ menu.
 - Document local web URL sharing from assigned computers.
 - Organize the README documentation links as a list.

@@ -39,8 +39,8 @@ struct VoiceInputDevice: Identifiable, Equatable {
     static func resolve(uid: String, devices: [Self], defaultID: AudioDeviceID) throws -> Self {
         guard let device = devices.first(where: { uid.isEmpty ? $0.audioID == defaultID : $0.id == uid }) else {
             throw VoiceFailure(uid.isEmpty
-                ? "No microphone is available. Connect one and choose it in Settings → General."
-                : "The selected microphone is disconnected. Choose another in Settings → General.")
+                ? "No microphone is available. Connect one and choose it in Settings → Chat."
+                : "The selected microphone is disconnected. Choose another in Settings → Chat.")
         }
         return device
     }
@@ -53,7 +53,7 @@ struct VoiceInputDevice: Identifiable, Equatable {
         let status = AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice,
             kAudioUnitScope_Global, 0, &id, UInt32(MemoryLayout.size(ofValue: id)))
         guard status == noErr else {
-            throw VoiceFailure("Couldn’t open \(device.name) (\(status)). Choose another microphone in Settings → General.")
+            throw VoiceFailure("Couldn’t open \(device.name) (\(status)). Choose another microphone in Settings → Chat.")
         }
         return device
     }
