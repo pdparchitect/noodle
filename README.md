@@ -14,6 +14,12 @@
   <img width="1490" alt="image" src="https://github.com/user-attachments/assets/0de27633-37f4-41d5-91fe-f16774d217dd" />
 </p>
 
+<p align="center">
+  <img width="32%" alt="Noodle screenshot 1" src="https://github.com/user-attachments/assets/cc993ca9-0ab2-4939-9a40-1edc9c7843d1" />
+  <img width="32%" alt="Noodle screenshot 2" src="https://github.com/user-attachments/assets/1abafd1e-a02b-41c1-82c1-7937a5dd8be2" />
+  <img width="32%" alt="Noodle screenshot 3" src="https://github.com/user-attachments/assets/064f4498-1110-4e39-9d0d-171a700aaab7" />
+</p>
+
 Create persistent bots with their own workspaces and personalities. Chat with
 them individually, bring them together in groups, and share files without
 leaving the conversation. Noodle runs Codex, Claude Code, FX, Grok Build, or Muse Code using your existing

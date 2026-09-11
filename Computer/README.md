@@ -6,6 +6,14 @@ build directory. Noodle keeps its existing deployment target and separate user
 data, and now embeds the shared Computer protocol, native terminal renderer and
 an agent CLI. Both signed apps share a narrowly scoped provider App Group.
 
+## Screenshots
+
+<p>
+  <img width="32%" alt="Noodle Computer screenshot 1" src="https://github.com/user-attachments/assets/5eb21524-90e3-4eaa-830f-ff2873db3932" />
+  <img width="32%" alt="Noodle Computer screenshot 2" src="https://github.com/user-attachments/assets/bc262efa-51fa-474c-9c5e-1560a7fce52b" />
+  <img width="32%" alt="Noodle Computer screenshot 3" src="https://github.com/user-attachments/assets/f4b95e1d-420c-4c00-ad4b-bfb71168860f" />
+</p>
+
 ## Build and run
 
 Run `zsh scripts/build-computer.sh` from the repository root, then
