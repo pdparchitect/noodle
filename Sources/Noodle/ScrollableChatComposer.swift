@@ -33,22 +33,26 @@ struct ScrollableChatComposer: NSViewRepresentable {
         let requestFocus = isFocused && !context.coordinator.lastRequestedFocus
         context.coordinator.lastRequestedFocus = isFocused
         let focusRevision = context.coordinator.focusRevision
-        view.editor.placeholder = placeholder
-        view.editor.setAccessibilityLabel(placeholder)
+        if view.editor.placeholder != placeholder {
+            view.editor.placeholder = placeholder
+            view.editor.setAccessibilityLabel(placeholder)
+        }
+        var replacedText = false
         if context.coordinator.conversationID != conversationID {
             completion.detach()
             context.coordinator.conversationID = conversationID
             view.editor.undoManager?.removeAllActions()
             view.editor.string = text
+            replacedText = true
             view.editor.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
             view.editor.scrollRangeToVisible(view.editor.selectedRange())
         } else if view.editor.string != text, !view.editor.hasMarkedText() {
             view.editor.string = text
+            replacedText = true
             view.editor.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
             view.editor.scrollRangeToVisible(view.editor.selectedRange())
         }
-        view.editor.needsDisplay = true
-        view.invalidateIntrinsicContentSize()
+        if replacedText { view.invalidateIntrinsicContentSize() }
         DispatchQueue.main.async { [weak view, weak coordinator = context.coordinator] in
             guard let view, let coordinator else { return }
             if requestFocus, coordinator.focusRevision == focusRevision,
@@ -128,6 +132,8 @@ struct ScrollableChatComposer: NSViewRepresentable {
     let editor = ComposerTextView(frame: .zero)
     var focusChanged: ((Bool) -> Void)?
     private let composerFont = NSFont.systemFont(ofSize: 14)
+    private let measurementLayout = NSLayoutManager()
+    private let measurementContainer = NSTextContainer(size: .zero)
 
     init() {
         super.init(frame: .zero)
@@ -159,18 +165,27 @@ struct ScrollableChatComposer: NSViewRepresentable {
         editor.isAutomaticSpellingCorrectionEnabled = true
         documentView = editor
         editor.focusChanged = { [weak self] in self?.focusChanged?($0) }
+
+        // SwiftUI probes several widths while sizing nested stacks. Measuring
+        // the live container reflows the editor at those speculative widths and
+        // changes its scroll position. Share the text, but keep layout separate.
+        measurementContainer.lineFragmentPadding = 0
+        measurementContainer.maximumNumberOfLines = 6
+        measurementLayout.addTextContainer(measurementContainer)
+        editor.textStorage?.addLayoutManager(measurementLayout)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func fittingHeight(width: CGFloat) -> CGFloat {
-        guard let container = editor.textContainer, let layout = editor.layoutManager else { return 17 }
-        container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
-        layout.ensureLayout(for: container)
-        let line = ceil(layout.defaultLineHeight(for: composerFont))
+        let size = NSSize(width: max(1, width), height: .greatestFiniteMagnitude)
+        if measurementContainer.containerSize != size { measurementContainer.containerSize = size }
+        measurementLayout.ensureLayout(for: measurementContainer)
+        let line = ceil(measurementLayout.defaultLineHeight(for: composerFont))
         // The extra fragment overlaps the used rect for an empty editor. Adding
         // their heights counts that line twice and shifts the transcript as the
         // first character is entered. Measure their union's bottom instead.
-        let used = ceil(max(layout.usedRect(for: container).maxY, layout.extraLineFragmentRect.maxY))
+        let used = ceil(max(measurementLayout.usedRect(for: measurementContainer).maxY,
+                            measurementLayout.extraLineFragmentRect.maxY))
         return min(line * 6, max(line, used))
     }
 }

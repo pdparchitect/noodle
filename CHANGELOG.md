@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep the chat cursor visible when typing beyond the input's six-line height limit, including after manual scrolling. Isolate height measurement from the live editor and limit it to six lines to reduce typing work for long drafts.
+
 ### Added
 
 - Add a code of conduct for the Noodle community.

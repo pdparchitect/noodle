@@ -56,6 +56,7 @@ Run native UI fixtures from a logged-in Mac. They use isolated test data.
 | Area | Command | Check |
 | --- | --- | --- |
 | Chat | `zsh Tests/chat-features.sh` | Name menu, profiles, Markdown, draft and keyboard behavior |
+| Chat input | `zsh Tests/scrollable-composer.sh` | Cursor visibility beyond six lines, scrolling, wrapping, resize, IME, undo and paste |
 | Sheets | `zsh Tests/sheet-sizing.sh` | Growing/shrinking content and group member selection |
 | Backgrounds | `zsh Tests/animated-backgrounds.sh` | Import, playback, and Reduce Motion |
 | Voice | `zsh Tests/voice-recording.sh` | Audio conversion, waveform, and restored drafts |
@@ -67,6 +68,10 @@ Run native UI fixtures from a logged-in Mac. They use isolated test data.
 Real microphone recording, live provider sign-in, and model calls need separate
 manual checks. For bundle boundaries, use `scripts/verify-agent-host.sh` and
 `scripts/verify-updater.sh` on the built app; the smoke suite runs these too.
+
+Use `zsh Tests/scrollable-composer.sh --benchmark` for repeatable edit and height
+measurement timings on short and long drafts. These timings exclude display
+latency and are informational rather than pass/fail thresholds.
 
 ## Runtime logs
 
