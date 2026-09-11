@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Cancel active and queued MCP work on disconnect or caller cancellation, enforce request deadlines during queue waits and token refresh, and reject late sign-in callbacks.
 - Make submitted annotation previews read-only. Remove Edit Comment and Save to Draft from sent notes, revoke editing in an open preview on submission, and reject later edits without creating a copy.
 - Stop Grok and Muse inspection promptly when output closes, ignore unsolicited replies, and reject malformed responses instead of reporting misleading account or model status.
 - Publish Computer CLI bridge messages only after their JSON is complete, preventing intermittent empty-response failures during file transfers and other commands.
@@ -21,6 +22,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Cover MCP cancellation, disconnect, timeout, and sign-in races with controlled local HTTP fixtures and synthetic credentials; no accounts, browser sign-in, or Keychain access are required.
 - Test Grok and Muse inspection with isolated local process fixtures in the default Swift suite, without installed harnesses, provider logins, or network requests.
 - Transfer files directly between a bot's workspace and its assigned Computer with CLI `upload` and `download`, including binary files up to 8 GiB, assignment checks, and protection against overwriting existing files.
 - Add broker regression tests for interrupted file transfers, revocation during a transfer, concurrent agents, invalid provider responses, and forged requests.

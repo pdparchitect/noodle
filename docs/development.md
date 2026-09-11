@@ -78,6 +78,10 @@ handshakes, invalid replies, timeouts, and process cleanup without installed
 harnesses, authentication, or network requests. Live harness probes remain
 explicitly opt-in and are not required by release CI.
 
+MCP lifecycle tests likewise use intercepted HTTP requests and an in-memory
+credential store. Controlled response gates exercise disconnect, cancellation,
+and timeout races without browser sign-in, Keychain access, or external services.
+
 ## Focused checks
 
 Run native UI fixtures from a logged-in Mac. They use isolated test data.
