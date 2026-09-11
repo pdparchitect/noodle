@@ -10,6 +10,8 @@ export SWIFTPM_MODULECACHE_OVERRIDE="$module_cache"
 
 swift test --disable-sandbox --package-path "$project_root"
 zsh "$project_root/Tests/scrollable-composer.sh"
+zsh "$project_root/Tests/voice-shortcut.sh"
+zsh "$project_root/Tests/voice-composer.sh"
 zsh "$project_root/Tests/link-previews.sh"
 zsh "$project_root/Tests/harness-presentation.sh"
 zsh "$project_root/Tests/transcript-resize.sh"

@@ -61,6 +61,7 @@ Run native UI fixtures from a logged-in Mac. They use isolated test data.
 | Backgrounds | `zsh Tests/animated-backgrounds.sh` | Import, playback, and Reduce Motion |
 | Voice | `zsh Tests/voice-recording.sh` | Audio conversion, waveform, and restored drafts |
 | Voice composer | `zsh Tests/voice-composer.sh` | Return/Escape behavior |
+| Voice shortcut | `zsh Tests/voice-shortcut.sh` | ⌘⇧D menu dispatch, recording states, chat/window routing and key repeat |
 | Voice sandbox | `zsh Tests/voice-sandbox.sh` | Synthetic speech in a signed sandbox |
 | Tools | `zsh Tests/mcp-fixture.sh --check` | Signed CLI and broker with disposable data |
 | Muse runtime | `zsh Tests/muse-runtime.sh` | Session recovery and failure handling |

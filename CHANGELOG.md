@@ -12,6 +12,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Start and stop voice recording in the active chat with ⌘⇧D, also shown in the Conversation menu and microphone tooltip. Stopping keeps the recording for review; Return sends and Escape discards.
+
 - Add a code of conduct for the Noodle community.
 - Add README badges for macOS, Swift, persistent agents, and individual or team work.
 - Add a contributing guide for issues, development, and pull requests.

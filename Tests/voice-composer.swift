@@ -8,12 +8,12 @@ import NoodleCore
         guard #available(macOS 26, *) else { return }
         let first = LiveVoiceWaveform.bars(samples: [0.04], width: 600, height: 22)
         let later = LiveVoiceWaveform.bars(samples: [0.04, 0.02], width: 600, height: 22)
-        precondition(first[0].width == 2.5 && later.allSatisfy { $0.width == 2.5 })
-        precondition(first[0].minX - later[0].minX == 5, "Old bars scroll left without shrinking")
-        precondition(first[0].height > 12, "Quiet speech should be visibly taller than silence")
-        precondition(LiveVoiceWaveform.bars(samples: [0], width: 600, height: 22)[0].height == 2)
-        precondition(LiveVoiceWaveform.bars(samples: [], width: 600, height: 22).isEmpty)
-        precondition(LiveVoiceWaveform.bars(samples: [Float](repeating: 0.04, count: 240), width: 600, height: 22).count == 120)
+        require(first[0].width == 2.5 && later.allSatisfy { $0.width == 2.5 })
+        require(first[0].minX - later[0].minX == 5, "Old bars scroll left without shrinking")
+        require(first[0].height > 12, "Quiet speech should be visibly taller than silence")
+        require(LiveVoiceWaveform.bars(samples: [0], width: 600, height: 22)[0].height == 2)
+        require(LiveVoiceWaveform.bars(samples: [], width: 600, height: 22).isEmpty)
+        require(LiveVoiceWaveform.bars(samples: [Float](repeating: 0.04, count: 240), width: 600, height: 22).count == 120)
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
         Task { @MainActor in
@@ -36,8 +36,8 @@ import NoodleCore
                     let recorder = VoiceRecorder(directory: directory)
                     var sends = 0
                     let root = VoiceMessageComposer(recorder: recorder, send: { url, metadata in
-                        precondition(FileManager.default.fileExists(atPath: url.path))
-                        precondition(metadata.transcript == "Keyboard fixture")
+                        require(FileManager.default.fileExists(atPath: url.path))
+                        require(metadata.transcript == "Keyboard fixture")
                         sends += 1
                     }) { _ in Text("Existing text draft") }
                     .frame(width: 500).padding(20)
@@ -47,14 +47,14 @@ import NoodleCore
                     window.makeKeyAndOrderFront(nil)
                     try await Task.sleep(for: .milliseconds(500))
                     let height = window.contentView!.fittingSize.height
-                    precondition(abs(height - 76) < 1, "Voice bar must be 36pt plus 40pt fixture padding, got \(height)")
+                    require(abs(height - 76) < 1, "Voice bar must be 36pt plus 40pt fixture padding, got \(height)")
                     let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
                         windowNumber: window.windowNumber, context: nil, characters: key == 36 ? "\r" : "\u{1b}",
                         charactersIgnoringModifiers: key == 36 ? "\r" : "\u{1b}", isARepeat: false, keyCode: key)!
                     window.sendEvent(event)
                     try await Task.sleep(for: .milliseconds(400))
-                    precondition(sends == (key == 36 ? 1 : 0), "Unexpected send count for key \(key): \(sends)")
-                    precondition(recorder.phase == .idle, "Keyboard action did not clear the voice draft")
+                    require(sends == (key == 36 ? 1 : 0), "Unexpected send count for key \(key): \(sends)")
+                    require(recorder.phase == .idle, "Keyboard action did not clear the voice draft")
                     window.orderOut(nil)
                 }
                 // Visual fixture uses synthetic amplitudes, never microphone audio.

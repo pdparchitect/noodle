@@ -48,8 +48,8 @@ struct VoiceMessageComposer<Content: View>: View {
                             }
                             Text(voiceTime(recorder.duration)).font(.caption.monospacedDigit())
                             if recorder.phase == .recording {
-                                Button { Task { await recorder.finish() } } label: { Image(systemName: "stop.fill") }
-                                    .buttonStyle(.plain).help("Stop Recording")
+                                Button(action: toggleRecording) { Image(systemName: "stop.fill") }
+                                    .buttonStyle(.plain).help("Stop Recording (⌘⇧D)")
                             }
                         }
                         Button { Task { await sendRecording() } } label: {
@@ -81,7 +81,18 @@ struct VoiceMessageComposer<Content: View>: View {
                 .onAppear { focused = true }
             }
         }
+        .focusedSceneValue(\.voiceRecordingCommand,
+            VoiceRecordingCommand(phase: { recorder.phase }, isSending: { sending }, toggle: toggleRecording))
         .onDisappear { Task { await recorder.leaveConversation() } }
+    }
+
+    private func toggleRecording() {
+        guard !sending else { return }
+        switch recorder.phase {
+        case .idle: recorder.start()
+        case .recording: Task { await recorder.finish() }
+        case .preparing, .finishing, .ready, .failed: break
+        }
     }
 
     private func sendRecording(audioOnly: Bool = false) async {

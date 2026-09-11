@@ -342,7 +342,7 @@ struct ChatView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Record Voice Message")
+                .help("Record Voice Message (⌘⇧D)")
                 .accessibilityLabel("Record voice message")
             }
             if cannotSend {

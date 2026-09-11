@@ -70,11 +70,8 @@ struct NoodleApp: App {
                 .keyboardShortcut("n", modifiers: [.command, .shift])
             }
 
-            CommandMenu("Conversation") {
-                Button("Search Conversations") {
-                    NotificationCenter.default.post(name: .focusSearch, object: nil)
-                }
-                .keyboardShortcut("f", modifiers: .command)
+            ConversationCommands {
+                NotificationCenter.default.post(name: .focusSearch, object: nil)
             }
         }
 
