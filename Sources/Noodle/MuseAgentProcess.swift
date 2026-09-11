@@ -16,6 +16,8 @@ final class MuseAgentProcess: AgentRuntimeProcess {
     private var turnRecovery: AgentTurnRecovery
     private var sessionID: String?
     private var activeTurnID: String?
+    private var steeringNotificationID: UUID?
+    private var steeringTimeout: Task<Void, Never>?
     private var earlyCompletions: [String: [String: Any]] = [:]
     private var approvalStages = Set<String>()
     private var connection: ExtendedAgentConnection?
@@ -27,11 +29,12 @@ final class MuseAgentProcess: AgentRuntimeProcess {
     private var needsHistoryRecovery = false
     private var openingExistingSession = false
     private var turnIsActive = false
-    private var notificationPending = false
+    private var notifications = PendingAgentNotification()
+    private var notificationPending: Bool { notifications.isPending }
     private var recoveryPending: Bool
     private var pid: Int32?
     private var sequence = 0
-    private enum Purpose { case initialize, open, model, approvalDecision, prompt(String) }
+    private enum Purpose { case initialize, open, model, approvalDecision, prompt(String), steer(String, UUID, String) }
     private var requests: [Int: Purpose] = [:]
     private var startupTimeout: Task<Void, Never>?
     private struct State: Codable {
@@ -82,8 +85,8 @@ final class MuseAgentProcess: AgentRuntimeProcess {
     }
 
     var isAlive: Bool { running || paused || !extendedAccess }
-    var hasInterruptedWork: Bool { recoveryPending || turnIsActive || notificationPending || turnRecovery.hasUnfinishedTurn }
-    var canReceiveHeartbeat: Bool { running && snapshot.phase == .ready && !turnIsActive && !notificationPending }
+    var hasInterruptedWork: Bool { recoveryPending || turnIsActive || notificationPending || steeringNotificationID != nil || turnRecovery.hasUnfinishedTurn }
+    var canReceiveHeartbeat: Bool { running && snapshot.phase == .ready && !turnIsActive && !notificationPending && steeringNotificationID == nil }
 
     func start() {
         guard connection == nil else { return }
@@ -128,17 +131,26 @@ final class MuseAgentProcess: AgentRuntimeProcess {
         startupTimeout?.cancel()
         trace.finish(.runtimeStopped)
         requests.removeAll(); earlyCompletions.removeAll()
-        turnIsActive = false; notificationPending = false
+        steeringNotificationID = nil
+        steeringTimeout?.cancel()
+        turnIsActive = false; notifications.take()
         let connection = connection
         self.connection = nil
         update(.offline, "Stopped")
         if let connection { connection.stop(reply: completion) } else { completion(true) }
     }
-    func notify() {
+    @discardableResult
+    func notify(immediately: Bool = false) -> UUID {
         RuntimeDiagnostics.notificationQueued(agentID: configuration.id, coalesced: notificationPending)
-        notificationPending = true
-        guard !paused else { return }
+        let notificationID = notifications.enqueue(immediately: immediately)
+        guard !paused else { return notificationID }
         if connection == nil { start() }
+        sendPending()
+        return notificationID
+    }
+
+    func promoteNotification(_ id: UUID) {
+        notifications.promote(id)
         sendPending()
     }
     func heartbeat() { if canReceiveHeartbeat { startTurn(.heartbeat) } }
@@ -159,8 +171,26 @@ final class MuseAgentProcess: AgentRuntimeProcess {
         }
     }
     private func sendPending() {
-        guard notificationPending, running, snapshot.phase == .ready, !turnIsActive else { return }
-        notificationPending = false
+        guard notificationPending, running, steeringNotificationID == nil, let sessionID else { return }
+        if turnIsActive {
+            guard notifications.isImmediate, snapshot.phase == .working, let activeTurnID,
+                  let notificationID = notifications.take() else { return }
+            let commandID = MuseProtocol.commandID()
+            steeringNotificationID = notificationID
+            request(.steer(commandID, notificationID, activeTurnID), method: "turn/steer", params: [
+                "commandId": commandID, "sessionId": sessionID, "expectedTurnId": activeTurnID,
+                "input": [["type": "text", "text": AgentWakeReason.inboxChanged.eventText]]
+            ])
+            trace.record(.inboxSteerSubmitted)
+            steeringTimeout = Task { [weak self] in
+                do { try await Task.sleep(for: .seconds(10)) } catch { return }
+                guard let self, self.steeringNotificationID == notificationID else { return }
+                self.terminated("Muse Code did not acknowledge message steering.")
+            }
+            return
+        }
+        guard snapshot.phase == .ready else { return }
+        notifications.take()
         startTurn(.inboxChanged)
     }
     private func startTurn(_ reason: AgentWakeReason) {
@@ -221,6 +251,14 @@ final class MuseAgentProcess: AgentRuntimeProcess {
         }
         guard let id = object["id"] as? Int, let purpose = requests.removeValue(forKey: id) else { return }
         guard object["error"] == nil, let result = object["result"] as? [String: Any] else {
+            if case .steer(_, let notificationID, _) = purpose {
+                steeringTimeout?.cancel()
+                steeringNotificationID = nil
+                notifications.restore(notificationID)
+                trace.record(.inboxSteerRejected)
+                sendPending()
+                return
+            }
             terminated("Muse Code rejected a session request. Check muse login and the selected model in Terminal, then Retry Startup. Unfinished work is preserved.")
             return
         }
@@ -248,6 +286,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
                 activeTurnID = active; turnIsActive = true; recoveryPending = false
                 do { try turnRecovery.begin() } catch { terminated("Could not track resumed Muse work"); return }
                 startupTimeout?.cancel(); update(.working, "Resuming Muse work")
+                sendPending()
                 return
             }
             if openingExistingSession, let model = configuration.modelIdentifier {
@@ -263,6 +302,16 @@ final class MuseAgentProcess: AgentRuntimeProcess {
             activeTurnID = turnID
             if let completion = earlyCompletions.removeValue(forKey: turnID) { completeTurn(completion) }
             earlyCompletions.removeAll()
+            sendPending()
+        case .steer(let commandID, let notificationID, let expectedTurnID):
+            steeringTimeout?.cancel()
+            steeringNotificationID = nil
+            if result["status"] as? String != "accepted" || result["commandId"] as? String != commandID ||
+                result["turnId"] as? String != expectedTurnID {
+                notifications.restore(notificationID)
+                trace.record(.inboxSteerRejected)
+            }
+            sendPending()
         case .approvalDecision:
             guard result["status"] as? String == "accepted" else { terminated("Muse Code rejected a tool approval"); return }
         }
@@ -303,6 +352,9 @@ final class MuseAgentProcess: AgentRuntimeProcess {
             needsHistoryRecovery: needsHistoryRecovery)).write(to: stateURL, options: .atomic)
     }
     private func recoverModelContext() {
+        steeringTimeout?.cancel()
+        if let steeringNotificationID { notifications.restore(steeringNotificationID) }
+        steeringNotificationID = nil
         guard let oldSession = sessionID else { return }
         projectionRecoveryAttempted = true
         needsHistoryRecovery = true
@@ -321,6 +373,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
         openSession()
     }
     private func pause(_ detail: String) {
+        steeringTimeout?.cancel()
         paused = true; stopped = true; running = false; turnIsActive = false
         startupTimeout?.cancel()
         requests.removeAll(); earlyCompletions.removeAll()
@@ -329,6 +382,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
         update(.failed, detail)
     }
     private func terminated(_ detail: String) {
+        steeringTimeout?.cancel()
         guard !stopped else { return }
         let needsRecovery = hasInterruptedWork
         stopped = true; running = false; turnIsActive = false

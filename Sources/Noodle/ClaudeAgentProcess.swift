@@ -19,9 +19,13 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     private var connection: ExtendedAgentConnection?
     private var running = false
     private var processIdentifier: Int32?
-    private var notificationPending = false
+    private var notifications = PendingAgentNotification()
+    private var notificationPending: Bool { notifications.isPending }
     private var recoveryPending: Bool
     private var turnIsActive = false
+    private var interruptRequested = false
+    private var interruptRequestID: String?
+    private var interruptTimeout: Task<Void, Never>?
     private var intentionallyStopped = false
     private var terminationReported = false
     private var lastErrorText: String?
@@ -121,10 +125,13 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     func stop(completion: @escaping (Bool) -> Void = { _ in }) {
         trace.finish(.runtimeStopped)
         intentionallyStopped = true
+        interruptTimeout?.cancel()
+        interruptRequestID = nil
+        interruptRequested = false
         terminationReported = true
         running = false
         turnIsActive = false
-        notificationPending = false
+        notifications.take()
         processIdentifier = nil
         guard let connection else {
             update(.offline, "Stopped")
@@ -140,15 +147,22 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         }
     }
 
-    func notify() {
+    @discardableResult
+    func notify(immediately: Bool = false) -> UUID {
         RuntimeDiagnostics.notificationQueued(agentID: configuration.id, coalesced: notificationPending)
-        notificationPending = true
+        let notificationID = notifications.enqueue(immediately: immediately)
         if connection == nil { start() }
+        sendPendingNotificationIfPossible()
+        return notificationID
+    }
+
+    func promoteNotification(_ id: UUID) {
+        notifications.promote(id)
         sendPendingNotificationIfPossible()
     }
 
     var canReceiveHeartbeat: Bool {
-        running && snapshot.phase == .ready && !turnIsActive && !notificationPending
+        running && snapshot.phase == .ready && !turnIsActive && !notificationPending && interruptRequestID == nil
     }
 
     // A restricted Claude configuration is deliberately stable (failed), not a
@@ -174,14 +188,33 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     }
 
     private func sendPendingNotificationIfPossible() {
-        guard notificationPending, running, snapshot.phase == .ready, !turnIsActive else { return }
-        notificationPending = false
+        guard notificationPending, running, interruptRequestID == nil else { return }
+        if turnIsActive {
+            guard notifications.isImmediate, !interruptRequested, snapshot.phase == .working, let connection else { return }
+            let id = UUID().uuidString
+            interruptRequestID = id
+            interruptRequested = true
+            do {
+                let request: [String: Any] = ["type": "control_request", "request_id": id,
+                                             "request": ["subtype": "interrupt"]]
+                connection.write(try JSONSerialization.data(withJSONObject: request) + Data([10]))
+                trace.record(.turnInterruptRequested)
+                interruptTimeout = Task { [weak self] in
+                    do { try await Task.sleep(for: .seconds(10)) } catch { return }
+                    guard let self, self.interruptRequested || self.interruptRequestID != nil else { return }
+                    self.reportUnexpectedTermination("Claude Code did not finish interrupting its turn.")
+                }
+            } catch { reportUnexpectedTermination(error.localizedDescription) }
+            return
+        }
+        guard snapshot.phase == .ready else { return }
+        notifications.take()
         startTurn(reason: .inboxChanged)
     }
 
     private func startTurn(reason: AgentWakeReason) {
         guard running, !turnIsActive, let connection else {
-            if reason == .inboxChanged { notificationPending = true }
+            if reason == .inboxChanged { notifications.enqueue() }
             return
         }
         trace.begin(reason: reason)
@@ -206,7 +239,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
             }
             update(.working, detail)
         } catch {
-            if reason == .inboxChanged { notificationPending = true }
+            if reason == .inboxChanged { notifications.enqueue() }
             reportUnexpectedTermination(error.localizedDescription)
         }
     }
@@ -214,6 +247,17 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     private func handle(_ message: [String: Any]) {
         guard !intentionallyStopped, running else { return }
         let type = message["type"] as? String
+        if type == "control_response", let response = message["response"] as? [String: Any],
+           let id = response["request_id"] as? String, id == interruptRequestID {
+            interruptRequestID = nil
+            if response["subtype"] as? String != "success" {
+                interruptRequested = false
+                notifications.deferUntilReady()
+            }
+            if !interruptRequested { interruptTimeout?.cancel() }
+            sendPendingNotificationIfPossible()
+            return
+        }
         if type == "system", message["subtype"] as? String == "init" {
             guard let rawID = message["session_id"] as? String,
                   let confirmedID = UUID(uuidString: rawID), confirmedID == sessionID else {
@@ -245,8 +289,11 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
             return
         }
         turnIsActive = false
+        let wasInterrupted = interruptRequested
+        interruptRequested = false
+        if interruptRequestID == nil { interruptTimeout?.cancel() }
         let failed = message["is_error"] as? Bool == true
-        trace.finish(failed ? .turnFailed : .turnCompleted)
+        trace.finish(wasInterrupted ? .turnInterrupted : (failed ? .turnFailed : .turnCompleted))
         if failed {
             let detail = (message["result"] as? String)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -267,6 +314,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         guard !intentionallyStopped, !terminationReported else { return }
         trace.finish(.runtimeDisconnected)
         terminationReported = true
+        interruptTimeout?.cancel()
         let needsRecovery = hasInterruptedWork
         running = false
         turnIsActive = false

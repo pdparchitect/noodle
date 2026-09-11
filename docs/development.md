@@ -65,6 +65,8 @@ Run native UI fixtures from a logged-in Mac. They use isolated test data.
 | Voice sandbox | `zsh Tests/voice-sandbox.sh` | Synthetic speech in a signed sandbox |
 | Tools | `zsh Tests/mcp-fixture.sh --check` | Signed CLI and broker with disposable data |
 | Muse runtime | `zsh Tests/muse-runtime.sh` | Session recovery and failure handling |
+| Message delivery | `zsh Tests/message-delivery.sh` | All five adapters, active-turn delivery, classification fallback and timing races |
+| Delivery classifier | `zsh Tests/message-delivery.sh --classify` | Synthetic urgency examples using Apple Intelligence in a signed sandbox; skips when unavailable |
 
 Real microphone recording, live provider sign-in, and model calls need separate
 manual checks. For bundle boundaries, use `scripts/verify-agent-host.sh` and

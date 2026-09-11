@@ -7,5 +7,6 @@ swiftc -parse-as-library -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/MuseAgentProcess.swift" \
     "$project_root/Tests/muse-runtime.swift" \
     "$bin_path"/NoodleCore.build/*.swift.o "$bin_path"/NoodleWallpaperCore.build/*.swift.o \
+    "$bin_path"/ComputerBridge.build/*.swift.o \
     -o "$project_root/.build/MuseRuntimeChecks"
 "$project_root/.build/MuseRuntimeChecks"

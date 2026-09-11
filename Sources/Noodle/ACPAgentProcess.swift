@@ -21,8 +21,11 @@ final class ACPAgentProcess: AgentRuntimeProcess {
     private var running = false
     private var stopped = false
     private var turnIsActive = false
+    private var interruptRequested = false
+    private var interruptTimeout: Task<Void, Never>?
     private var reviewHeld = false
-    private var notificationPending = false
+    private var notifications = PendingAgentNotification()
+    private var notificationPending: Bool { notifications.isPending }
     private var recoveryPending: Bool
     private var pid: Int32?
     private var sequence = 0
@@ -109,19 +112,28 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         stopped = true
         running = false
         startupTimeout?.cancel()
+        interruptTimeout?.cancel()
+        interruptRequested = false
         trace.finish(.runtimeStopped)
         requests.removeAll()
         turnIsActive = false
-        notificationPending = false
+        notifications.take()
         let connection = connection
         self.connection = nil
         update(.offline, "Stopped")
         if let connection { connection.stop(reply: completion) } else { completion(true) }
     }
-    func notify() {
+    @discardableResult
+    func notify(immediately: Bool = false) -> UUID {
         RuntimeDiagnostics.notificationQueued(agentID: configuration.id, coalesced: notificationPending)
-        notificationPending = true
+        let notificationID = notifications.enqueue(immediately: immediately)
         if connection == nil { start() }
+        sendPending()
+        return notificationID
+    }
+
+    func promoteNotification(_ id: UUID) {
+        notifications.promote(id)
         sendPending()
     }
     func heartbeat() { if canReceiveHeartbeat { startTurn(.heartbeat) } }
@@ -135,8 +147,21 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         } else { request(.create, method: "session/new", params: params) }
     }
     private func sendPending() {
-        guard notificationPending, running, snapshot.phase == .ready, !turnIsActive else { return }
-        notificationPending = false
+        guard notificationPending, running, let sessionID else { return }
+        if turnIsActive {
+            guard notifications.isImmediate, !interruptRequested, snapshot.phase == .working else { return }
+            interruptRequested = true
+            send(["jsonrpc": "2.0", "method": "session/cancel", "params": ["sessionId": sessionID]])
+            trace.record(.turnInterruptRequested)
+            interruptTimeout = Task { [weak self] in
+                do { try await Task.sleep(for: .seconds(10)) } catch { return }
+                guard let self, self.interruptRequested else { return }
+                self.terminated("\(self.name) did not finish cancelling its turn.")
+            }
+            return
+        }
+        guard snapshot.phase == .ready else { return }
+        notifications.take()
         startTurn(.inboxChanged)
     }
     private func startTurn(_ reason: AgentWakeReason) {
@@ -169,7 +194,10 @@ final class ACPAgentProcess: AgentRuntimeProcess {
             let params = object["params"] as? [String: Any] ?? [:]
             if let id = RuntimeRequestID(object["id"]) {
                 if method == "session/request_permission" {
-                    send(["jsonrpc": "2.0", "id": id.json, "result": FxProtocol.permissionResponse(params: params, sessionID: sessionID, extendedAccess: extendedAccess)])
+                    let response: [String: Any] = interruptRequested
+                        ? ["outcome": ["outcome": "cancelled"]]
+                        : FxProtocol.permissionResponse(params: params, sessionID: sessionID, extendedAccess: extendedAccess)
+                    send(["jsonrpc": "2.0", "id": id.json, "result": response])
                 } else {
                     send(["jsonrpc": "2.0", "id": id.json, "error": ["code": -32601, "message": "Unsupported client request"]])
                 }
@@ -188,6 +216,8 @@ final class ACPAgentProcess: AgentRuntimeProcess {
                 sessionID = nil
                 openSession()
             } else if case .prompt = purpose {
+                interruptTimeout?.cancel()
+                interruptRequested = false
                 turnIsActive = false
                 trace.finish(.turnFailed)
                 update(.failed, provider == .fx ? FxProtocol.turnFailureDescription(error) : "Grok Build could not complete the turn. Check its account and model, then use Retry Startup. Unfinished work is preserved.")
@@ -223,8 +253,11 @@ final class ACPAgentProcess: AgentRuntimeProcess {
             sessionReady()
         case .prompt:
             guard let stopReason = result["stopReason"] as? String else { terminated("\(name) returned no turn completion reason"); return }
+            let wasInterrupted = interruptRequested && stopReason == "cancelled"
+            interruptRequested = false
+            interruptTimeout?.cancel()
             turnIsActive = false
-            guard !reviewHeld, stopReason == "end_turn" else {
+            guard !reviewHeld, stopReason == "end_turn" || wasInterrupted else {
                 trace.finish(.turnFailed)
                 update(.failed, reviewHeld ? "\(name) held tool execution: its safety reviewer is unavailable. Retry when the review service recovers." : "\(name) stopped before completing the turn. Retry Startup to resume.")
                 return
@@ -232,7 +265,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
             do { try turnRecovery.finish() }
             catch { update(.failed, "Could not record finished \(name) work"); return }
             turnIsActive = false
-            trace.finish(.turnCompleted)
+            trace.finish(wasInterrupted ? .turnInterrupted : .turnCompleted)
             update(.ready, "\(name) ready")
             sendPending()
         }
@@ -254,6 +287,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
     private var compatibilityIssue: String?
 
     private func terminated(_ detail: String) {
+        interruptTimeout?.cancel()
         let detail = compatibilityIssue ?? HarnessVersionPolicy.startupIssue(provider: provider, text: detail) ?? detail
         guard !stopped else { return }
         let needsRecovery = hasInterruptedWork

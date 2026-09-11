@@ -16,9 +16,14 @@ protocol AgentRuntimeProcess: AnyObject {
     var canReceiveHeartbeat: Bool { get }
     func start()
     func stop(completion: @escaping (Bool) -> Void)
-    func notify()
+    @discardableResult func notify(immediately: Bool) -> UUID
+    func promoteNotification(_ id: UUID)
     func heartbeat()
     func resolveApproval(_ approval: AgentApprovalRequest, allow: Bool, answers: [String: String])
+}
+
+extension AgentRuntimeProcess {
+    func notify() { _ = notify(immediately: false) }
 }
 
 @MainActor
@@ -50,6 +55,7 @@ final class AgentRuntimeCoordinator {
 
     @ObservationIgnored private var heartbeatScheduler: AgentHeartbeatScheduler
     private let defaults: UserDefaults
+    @ObservationIgnored private lazy var messageDelivery = MessageDeliveryRouter(defaults: defaults)
 
     private var discovery: HarnessDiscovery
     private var processes: [UUID: any AgentRuntimeProcess] = [:]
@@ -565,7 +571,7 @@ final class AgentRuntimeCoordinator {
             if processes[agent.id] == nil {
                 start(agent: agent, repository: repository)
             }
-            processes[agent.id]?.notify()
+            if let process = processes[agent.id] { messageDelivery.notify(process, repository: repository) }
         }
     }
 
@@ -585,6 +591,7 @@ final class AgentRuntimeCoordinator {
     }
 
     func stopAll() {
+        messageDelivery.cancelAll()
         fxCapabilityTask?.cancel()
         grokCapabilityTask?.cancel()
         isStoppingAll = true
@@ -681,6 +688,7 @@ final class AgentRuntimeCoordinator {
     }
 
     private func cancelSupervision(for agentID: UUID) {
+        messageDelivery.cancel(for: agentID)
         restartTasks.removeValue(forKey: agentID)?.cancel()
         stabilityTasks.removeValue(forKey: agentID)?.cancel()
         restartAttempts.removeValue(forKey: agentID)
@@ -722,6 +730,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         case resumeThread
         case setThreadName
         case startTurn(AgentWakeReason)
+        case steerTurn(UUID, String)
     }
 
     private struct PersistedState: Codable {
@@ -756,7 +765,12 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private var purposes: [Int: RequestPurpose] = [:]
     private var threadID: String?
     private var turnIsActive = false
-    private var notificationPending = false
+    private var activeTurnID: String?
+    private var earlyTurnCompletion: [String: Any]?
+    private var steeringNotificationID: UUID?
+    private var steeringTimeout: Task<Void, Never>?
+    private var notifications = PendingAgentNotification()
+    private var notificationPending: Bool { notifications.isPending }
     private var recoveryPending: Bool
     private var intentionallyStopped = false
     private var terminationReported = false
@@ -909,27 +923,38 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         errors = nil
         purposes.removeAll()
         turnIsActive = false
-        notificationPending = false
+        activeTurnID = nil
+        earlyTurnCompletion = nil
+        steeringNotificationID = nil
+        steeringTimeout?.cancel()
+        notifications.take()
         update(.offline, "Stopped")
         if !hadExtendedConnection { completion(true) }
     }
 
-    func notify() {
+    @discardableResult
+    func notify(immediately: Bool = false) -> UUID {
         RuntimeDiagnostics.notificationQueued(agentID: configuration.id, coalesced: notificationPending)
-        notificationPending = true
+        let notificationID = notifications.enqueue(immediately: immediately)
         if process == nil { start() }
+        sendPendingNotificationIfPossible()
+        return notificationID
+    }
+
+    func promoteNotification(_ id: UUID) {
+        notifications.promote(id)
         sendPendingNotificationIfPossible()
     }
 
     var canReceiveHeartbeat: Bool {
         (process?.isRunning == true || extendedRunning) && snapshot.phase == .ready
-            && !turnIsActive && !notificationPending && threadID != nil
+            && !turnIsActive && !notificationPending && steeringNotificationID == nil && threadID != nil
     }
 
     var isAlive: Bool { process?.isRunning == true || extendedRunning }
 
     var hasInterruptedWork: Bool {
-        recoveryPending || turnIsActive || notificationPending || turnRecovery.hasUnfinishedTurn
+        recoveryPending || turnIsActive || notificationPending || steeringNotificationID != nil || turnRecovery.hasUnfinishedTurn
     }
 
     func heartbeat() {
@@ -946,6 +971,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         guard !intentionallyStopped, !terminationReported else { return }
         trace.finish(.runtimeDisconnected)
         terminationReported = true
+        steeringTimeout?.cancel()
         let needsRecovery = hasInterruptedWork
         extendedRunning = false
         extendedConnection?.invalidate()
@@ -996,6 +1022,14 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         if message["method"] == nil, let id = Self.integerID(message["id"]),
            let purpose = purposes.removeValue(forKey: id) {
             if let error = message["error"] as? [String: Any] {
+                if case .steerTurn(let notificationID, _) = purpose {
+                    steeringTimeout?.cancel()
+                    steeringNotificationID = nil
+                    notifications.restore(notificationID)
+                    trace.record(.inboxSteerRejected)
+                    sendPendingNotificationIfPossible()
+                    return
+                }
                 if case .resumeThread = purpose {
                     threadID = nil
                     try? FileManager.default.removeItem(at: stateURL)
@@ -1028,10 +1062,28 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             case .setThreadName:
                 finishOpeningThread()
             case .startTurn(let reason):
+                guard let turn = result["turn"] as? [String: Any], let id = turn["id"] as? String else {
+                    fail("Codex did not return a turn identifier")
+                    return
+                }
+                activeTurnID = id
                 trace.record(.turnAccepted)
                 turnIsActive = true
                 update(.working, snapshot.detail)
                 if reason == .heartbeat { onHeartbeat() }
+                if let completion = earlyTurnCompletion {
+                    earlyTurnCompletion = nil
+                    handle(completion)
+                }
+                sendPendingNotificationIfPossible()
+            case .steerTurn(let notificationID, let expectedTurnID):
+                steeringTimeout?.cancel()
+                steeringNotificationID = nil
+                if result["turnId"] as? String != expectedTurnID {
+                    notifications.restore(notificationID)
+                    trace.record(.inboxSteerRejected)
+                }
+                sendPendingNotificationIfPossible()
             }
             return
         }
@@ -1057,6 +1109,12 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             guard turnIsActive else { return }
             if let reportedThread = (message["params"] as? [String: Any])?["threadId"] as? String,
                reportedThread != threadID { return }
+            let reportedTurn = ((message["params"] as? [String: Any])?["turn"] as? [String: Any])?["id"] as? String
+            guard let activeTurnID else {
+                earlyTurnCompletion = message
+                return
+            }
+            guard reportedTurn == activeTurnID else { return }
             do { try turnRecovery.finish() }
             catch {
                 fail("Could not record finished Codex work: \(error.localizedDescription)")
@@ -1066,6 +1124,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             pendingApprovals = []
             onApprovals([])
             turnIsActive = false
+            self.activeTurnID = nil
             let params = message["params"] as? [String: Any]
             let turn = params?["turn"] as? [String: Any]
             let status = turn?["status"] as? String
@@ -1135,15 +1194,38 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     }
 
     private func sendPendingNotificationIfPossible() {
-        guard notificationPending, !turnIsActive,
-              snapshot.phase == .ready,
-              threadID != nil else { return }
-        notificationPending = false
+        guard notificationPending, steeringNotificationID == nil, let threadID else { return }
+        if turnIsActive {
+            guard notifications.isImmediate, snapshot.phase == .working, let activeTurnID,
+                  let notificationID = notifications.take() else { return }
+            steeringNotificationID = notificationID
+            do {
+                try request(.steerTurn(notificationID, activeTurnID), method: "turn/steer", params: [
+                    "threadId": threadID, "expectedTurnId": activeTurnID,
+                    "input": [["type": "text", "text": AgentWakeReason.inboxChanged.eventText]]
+                ])
+                trace.record(.inboxSteerSubmitted)
+                steeringTimeout = Task { [weak self] in
+                    do { try await Task.sleep(for: .seconds(10)) } catch { return }
+                    guard let self, self.steeringNotificationID == notificationID else { return }
+                    self.reportUnexpectedTermination("Codex did not acknowledge message steering.")
+                }
+            } catch {
+                steeringNotificationID = nil
+                notifications.restore(notificationID)
+                reportUnexpectedTermination(error.localizedDescription)
+            }
+            return
+        }
+        guard snapshot.phase == .ready else { return }
+        notifications.take()
         startTurn(reason: .inboxChanged)
     }
 
     private func startTurn(reason: AgentWakeReason) {
         guard let threadID else { return }
+        activeTurnID = nil
+        earlyTurnCompletion = nil
         trace.begin(reason: reason)
         let policy: [String: Any] = extendedAccess ? [
             "type": "workspaceWrite",
@@ -1175,7 +1257,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             }
             update(.working, detail)
         } catch {
-            if reason == .inboxChanged { notificationPending = true }
+            if reason == .inboxChanged { notifications.enqueue() }
             fail(error.localizedDescription)
         }
     }

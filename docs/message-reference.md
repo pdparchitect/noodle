@@ -23,7 +23,7 @@ Fields: A bodyless `<noodle-event type="inbox-changed" />` notification.
 
 Recipients: The one bot being woken.
 
-An inbox-changed notification means the inbox may have changed; it never contains the user's message. Immediately check Messenger once, prioritize unread deliveries, and finish quietly if none exist. Never reply to the notification text itself. --get-latest consumes the inbox, so do not call it repeatedly for one notification.
+An inbox-changed notification means the inbox may have changed; it never contains the user's message. Immediately check Messenger once and prioritize unread deliveries. A notification can arrive during ongoing work, or after Noodle interrupts a turn to deliver it. Apply corrections, pauses, and changes of direction before continuing; preserve relevant unfinished work and verify completed actions before repeating them. If the inbox is empty, continue any existing work or finish quietly if there is none. Never reply to the notification text itself. --get-latest consumes the inbox, so do not call it repeatedly for one notification.
 
 ### heartbeat
 

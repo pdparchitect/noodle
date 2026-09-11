@@ -9,6 +9,7 @@ export CLANG_MODULE_CACHE_PATH="$module_cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$module_cache"
 
 swift test --disable-sandbox --package-path "$project_root"
+zsh "$project_root/Tests/message-delivery.sh"
 zsh "$project_root/Tests/scrollable-composer.sh"
 zsh "$project_root/Tests/voice-shortcut.sh"
 zsh "$project_root/Tests/voice-composer.sh"

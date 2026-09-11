@@ -54,11 +54,21 @@ private struct GeneralSettingsView: View {
     @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showBotDescriptions = true
     @AppStorage(LinkPreviewSettings.timeoutKey) private var linkPreviewTimeout = LinkPreviewSettings.defaultTimeout
     @AppStorage(VoiceInputDevice.defaultsKey) private var microphoneUID = ""
+    @AppStorage(MessageDeliveryMode.defaultsKey) private var messageDelivery = MessageDeliveryMode.automatic.rawValue
     @State private var microphones: [VoiceInputDevice] = []
     @State private var defaultMicrophoneID: UInt32 = 0
 
     var body: some View {
         Form {
+            Section {
+                Picker("Message delivery", selection: $messageDelivery) {
+                    ForEach(MessageDeliveryMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode.rawValue)
+                    }
+                }
+            } footer: {
+                Text("Automatic uses Apple Intelligence to decide whether new messages should reach a busy agent immediately or wait until its turn finishes. When Apple Intelligence is unavailable, messages wait.")
+            }
             if #available(macOS 26.0, *) {
                 Section {
                     Picker("Microphone", selection: $microphoneUID) {
