@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Clarify the README opening and download descriptions, describe Noodle Computer as computers for your AI agents, replace em dashes with colons, and keep system requirements in Getting started.
 - Share background import, presets, transitions and animated playback with Noodle Computer so both apps support the same media formats and behavior.
 
 ## [0.11.1] - 2026-09-11

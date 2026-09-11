@@ -4,7 +4,7 @@
 
 # Noodle
 
-**Your coding agents, in one native macOS messenger.**
+**A messaging app for you and your AI agents.**
 
 [Download](#download) · [Documentation](docs/README.md) · [Security](docs/security.md)
 
@@ -21,8 +21,8 @@ account and subscription.
 
 ## Download
 
-- **[Download Noodle for macOS](https://github.com/pdparchitect/noodle/releases/latest)** — the native messenger for your coding agents. Requires macOS 15 or later.
-- **[Download Noodle Computer for macOS](https://github.com/pdparchitect/noodle/releases/tag/computer-latest)** — Linux desktops and terminals for you and your agents. Requires macOS 26 or later and Apple silicon.
+- **[Download Noodle for macOS](https://github.com/pdparchitect/noodle/releases/latest)**: the native messenger for your coding agents.
+- **[Download Noodle Computer for macOS](https://github.com/pdparchitect/noodle/releases/tag/computer-latest)**: computers for your AI agents.
 
 Download the application ZIP from the release page, unzip it and move the application to **Applications**.
 
@@ -64,7 +64,7 @@ See the [Noodle Computer documentation](Computer/README.md) for more.
 
 ## Documentation
 
-- [Noodle Computer — Linux desktops and terminals for you and your agents](Computer/README.md)
+- [Noodle Computer: Linux desktops and terminals for you and your agents](Computer/README.md)
 - [Using Noodle](docs/usage.md)
 - [Harness setup](docs/harness-setup.md)
 - [Development](docs/development.md)
