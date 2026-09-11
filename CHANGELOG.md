@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Add README badges for macOS, Swift, persistent agents, and individual or team work.
 - Add a contributing guide for issues, development, and pull requests.
 - Add a security notice covering agent access, privacy, and shared computers.
 - Apache 2.0 license and copyright notice for Petko D. Petkov (pdp).
