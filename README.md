@@ -56,5 +56,3 @@ in the bot's **Computers** tab. Several bots can share the same computer.
 - [Releases](docs/releases.md)
 - [All documentation](docs/README.md)
 - [Changelog](CHANGELOG.md)
-
-[Apache 2.0 license](LICENSE) · [Copyright notice](NOTICE)
