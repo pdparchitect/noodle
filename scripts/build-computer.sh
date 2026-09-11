@@ -1,5 +1,6 @@
 #!/bin/zsh
 set -euo pipefail
+command -v go >/dev/null || { print -u2 'Building Computer requires Go for its Linux guest file helper.'; exit 1; }
 project_root="${0:A:h:h}"
 configuration="${NOODLE_COMPUTER_CONFIGURATION:-release}"
 package="$project_root/Computer"
@@ -64,6 +65,10 @@ if [[ "${NOODLE_COMPUTER_TEST_UPDATES:-0}" == 1 ]]; then
 fi
 /usr/libexec/PlistBuddy -c "Add :NoodleUpdatesEnabled bool $updates_enabled" "$app/Contents/Info.plist"
 cp "$kernel" "$app/Contents/Resources/Runtime/vmlinux-arm64"
+# A static Linux/ARM64 helper runs inside the guest, never as a host executable.
+mkdir -p "$build_root/guest-tools"
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o "$build_root/guest-tools/noodle-files" "$package/GuestFiles/main.go"
+cp "$build_root/guest-tools/noodle-files" "$app/Contents/Resources/Runtime/noodle-files"
 cp "$package/Support/KERNEL-NOTICE.txt" "$app/Contents/Resources/KERNEL-NOTICE.txt"
 cp "$package/Support/STUDIO-NOTICE.txt" "$app/Contents/Resources/STUDIO-NOTICE.txt"
 swift "$package/Support/MakeIcon.swift" "$build_root/Computer.iconset" "$package/Support/AppIcon.png"

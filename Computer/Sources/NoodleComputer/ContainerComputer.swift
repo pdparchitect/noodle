@@ -347,6 +347,19 @@ actor ContainerComputer {
 
     func cancelCommand() async throws { try await commandProcess?.kill(.kill) }
 
+    // Independent, non-PTY binary channel. The guest's paths are argv values.
+    func makeFileProcess(arguments: [String], input: (any ReaderStream)? = nil,
+                         output: any Writer, errors: any Writer) async throws -> LinuxProcess {
+        guard let pod else { throw ComputerError("Start the computer to browse its files.") }
+        return try await pod.execInContainer("workspace", processID: "files-\(UUID().uuidString)") { config in
+            config.arguments = arguments
+            config.environmentVariables = ["PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/root"]
+            config.stdin = input
+            config.stdout = output
+            config.stderr = errors
+        }
+    }
+
     func stop() async throws {
         guard let pod else { return }
         // Invalidate before awaiting cleanup: an exiting shell must not reopen

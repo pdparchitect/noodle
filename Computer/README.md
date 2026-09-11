@@ -9,7 +9,8 @@ an agent CLI. Both signed apps share a narrowly scoped provider App Group.
 ## Build and run
 
 Run `zsh scripts/build-computer.sh` from the repository root, then
-`open ".build/Noodle Computer.app"`.
+`open ".build/Noodle Computer.app"`. Building also requires Go 1.26 or later for
+the standard-library-only Linux/ARM64 file helper; it runs only inside guests.
 The official bundle uses an optimized release build; set
 `NOODLE_COMPUTER_CONFIGURATION=debug` only when debugging source.
 
@@ -46,7 +47,8 @@ needed. No Computer window needs to be open. Assign computers under the Computer
 tab in New/Edit Bot. Assignments are many-to-many: agents have separate terminal
 sessions but share a computer's files and services. The managed Computer skill
 and bundled CLI provide list, start, open, read, write, resize, close and present.
-There is no host filesystem mount, file-transfer API or agent computer deletion.
+There is no host filesystem mount, agent file-transfer API or agent computer deletion.
+The Computer app's native Files view provides user-directed file transfers.
 Computer stays out of the release changelog until it is ready.
 
 See [the integration boundary and verification](Bridge/README.md).
@@ -80,6 +82,64 @@ Terminal text colour, background colour and background opacity are independent.
 Transparency affects the default background, not text or explicitly coloured cells.
 Choices are saved with each computer. Image imports are user-selected, decoded and
 downsampled before storage; no permanent access to the source file is retained.
+
+## Files and Quick Look
+
+Use the segmented toolbar control on a running container to select Desktop,
+Terminal or Files. Shell containers offer Terminal and Files. Switching preserves
+the desktop connection, shell session and Files navigation.
+Files opens at `/workspace` in an icon grid with native macOS folder and file-type
+artwork. Grouped toolbar controls switch between icons, list and gallery. The
+background uses the terminal colour and opacity, with no status bar or bottom
+action buttons. Search opens from the toolbar magnifying glass or Command-F.
+It supports back/forward, enclosing folder, Go to Folder and hidden files. Folder listings are capped at 5,000 entries.
+Double-click a folder to enter it. The menu offers shortcuts to Workspace, Home
+and the filesystem root. Space or double-clicking a file requests the system
+Quick Look panel; gallery displays the selected file above the icons. Arrow keys
+move selection, typing selects a filename, Command-Down opens the selection,
+Command-Up goes to the parent and selects the folder just exited, Command-[ / ]
+navigate history, Return renames, and Command-Shift-G opens Go to Folder.
+
+Import regular files using the actions menu or by dropping them from Finder; Export
+or dragging a regular file into Finder copies it out. Explicit transfers are
+capped at 8 GB, with a five-minute deadline; imports refuse to overwrite existing
+guest paths. Exports receive macOS quarantine metadata. Folder transfers are not included. The context menu supports rename,
+duplicate, and permanent deletion of files/empty folders. Drag an item onto a
+subfolder to move it there. Nonempty folder deletion is deliberately unsupported.
+
+Previews accept PNG, JPEG, PDF and UTF-8 text/code files. Code is staged as plain
+text; HTML, SVG, archives, applications, symlinks and special files receive no
+preview. Files over 20 MiB are rejected from metadata before fetching. Fetches
+have a two-second deadline and are cancelled when selection changes. There is no
+background directory-content download or recursive thumbnail scan.
+
+Preview copies live in the app sandbox's Caches directory, with a 100 MiB budget
+including unfinished transfers, at most 128 entries, active preview leases and least-recently-used
+eviction. Unused entries expire after ten minutes, checked every minute. Startup
+removes previous-session leftovers; cache purges are tolerated. Explicit exports
+use separate temporary staging, deleted on completion/failure, with interrupted
+exports cleared on the next app launch. Quick Look may
+maintain its own system-managed derived caches, outside this application budget.
+
+The guest helper uses structured metadata and binary streams over the existing
+virtualization channel. File paths are arguments, never interpolated commands.
+Host-enforced byte limits and regular-file/no-follow checks apply independently
+of guest metadata. Uploads publish atomically without replacement. No host folder
+is mounted, and no new network listener or agent bridge capability is added.
+The sandbox's user-selected file grant is read/write to support explicit exports;
+no broad host filesystem access is granted.
+
+Native Quick Look processes copies of untrusted guest documents on macOS. Format
+and size checks reduce exposure but do not make arbitrary documents safe or keep
+document parsing inside the guest VM. The system panel can offer explicit Open
+and Share actions. Changes to preview copies are never written back to the guest.
+This first version does not promise control over all system/third-party preview
+extensions, their network behavior or system cache retention.
+
+Run the isolated signed integration fixture with
+`".build/Noodle Computer Tests.app/Contents/MacOS/NoodleComputer" --files-test` after
+building with `NOODLE_COMPUTER_TEST_BUILD=1`. Add `--keep-test-window` to retain the
+disposable running guest for visual and drag-and-drop verification.
 
 ## Updating a computer image
 
@@ -162,7 +222,7 @@ There is no host port publishing in this first version.
 ## Security and lifecycle
 
 The runtime uses App Sandbox, virtualization, outgoing network, and
-user-selected read-only files for image/installer import, plus the scoped Computer
+user-selected read/write files for explicit imports/exports, plus the scoped Computer
 App Group for Noodle's authenticated Unix-socket connection. There is no incoming
 TCP listener, host directory share, clipboard bridge, camera/microphone, Docker
 socket or Agent Host escape. NAT can reach LAN resources; the create dialog

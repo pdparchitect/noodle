@@ -116,6 +116,12 @@ struct ComputerRootView: View {
     .task {
       guard store == nil, startupError == nil else { return }
       do {
+        if CommandLine.arguments.contains("--files-test") {
+          let model = try await ComputerFilesSmokeTest.run()
+          store = model; ComputerAppDelegate.store = model
+          if !CommandLine.arguments.contains("--keep-test-window") { NSApplication.shared.terminate(nil) }
+          return
+        }
         if CommandLine.arguments.contains("--updater-ui-test") {
           try await ComputerSmokeTest.checkUpdaterUI()
           if !CommandLine.arguments.contains("--keep-test-window") { NSApplication.shared.terminate(nil) }
@@ -413,15 +419,19 @@ struct ComputerDetailView: View {
         // Keep the guest's panel below the native toolbar, just like Shell.
         // Only the background may extend into the titlebar area.
         ZStack {
-          // Retain the desktop connection while the recovery terminal is shown.
+          // Retain the desktop connection while Terminal or Files is shown.
           ComputerDesktopView(browser: browser)
-            .opacity(session.showingTerminal ? 0 : 1)
-            .allowsHitTesting(!session.showingTerminal)
-            .accessibilityHidden(session.showingTerminal)
-          if session.showingTerminal, let terminal = session.terminal {
+            .opacity(session.displayMode == .desktop ? 1 : 0)
+            .allowsHitTesting(session.displayMode == .desktop)
+            .accessibilityHidden(session.displayMode != .desktop)
+          if session.showingFiles, session.phase == .running, let runtime = session.container {
+            ComputerFilesView(model: session.filesModel(for: runtime), appearance: session.computer.appearance ?? .init()).id(session.id)
+          } else if session.showingTerminal, let terminal = session.terminal {
             ComputerTerminalView(terminal: terminal, appearance: session.computer.appearance ?? .init())
           }
         }
+      } else if session.showingFiles, session.phase == .running, let runtime = session.container {
+        ComputerFilesView(model: session.filesModel(for: runtime), appearance: session.computer.appearance ?? .init()).id(session.id)
       } else if let terminal = session.terminal {
         ComputerTerminalView(terminal: terminal, appearance: session.computer.appearance ?? .init())
       } else {
@@ -464,19 +474,6 @@ struct ComputerDetailView: View {
           Label("Edit Computer", systemImage: "slider.horizontal.3")
         }.help("Edit Computer")
       }
-      ToolbarSpacer(.fixed, placement: .primaryAction)
-      if session.computer.hasWebDisplay {
-        ToolbarItem(id: "computer-display", placement: .primaryAction) {
-          Button {
-            Task { await store.toggleTerminal(session) }
-          } label: {
-            ComputerToolbarSymbol(systemName: session.showingTerminal ? "desktopcomputer" : "terminal")
-          }
-          .disabled(session.phase != .running || session.openingTerminal)
-          .help(session.showingTerminal ? "Show Desktop" : "Show Terminal")
-          .accessibilityLabel(session.showingTerminal ? "Show Desktop" : "Show Terminal")
-        }
-      }
       ToolbarItem(id: "computer-power", placement: .primaryAction) {
           Button {
             if session.phase == .running {
@@ -491,6 +488,22 @@ struct ComputerDetailView: View {
           .disabled(session.phase.busy)
           .help(session.phase.busy ? session.phase.label : session.phase == .running ? "Stop" : "Start")
           .accessibilityLabel(session.phase.busy ? session.phase.label : session.phase == .running ? "Stop" : "Start")
+      }
+      if session.computer.kind == .container {
+        ToolbarItem(id: "computer-display", placement: .primaryAction) {
+          Picker("Computer View", selection: Binding(
+            get: { session.displayMode },
+            set: { mode in Task { await store.selectDisplay(mode, in: session) } }
+          )) {
+            ForEach(session.availableDisplayModes, id: \.self) { mode in
+              Image(systemName: mode.symbol).tag(mode)
+                .accessibilityLabel(mode.rawValue).help(mode.rawValue)
+            }
+          }
+          .pickerStyle(.segmented).labelsHidden().fixedSize()
+          .disabled(session.phase != .running || session.openingTerminal)
+          .accessibilityValue(session.displayMode.rawValue)
+        }
       }
     }
     .sheet(isPresented: $editing) {

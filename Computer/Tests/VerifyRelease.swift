@@ -6,7 +6,7 @@ func plist(_ path: String) throws -> [String: Any] {
 let info = try plist(CommandLine.arguments[1]), entitlements = try plist(CommandLine.arguments[2])
 let version = try String(contentsOfFile: CommandLine.arguments[3], encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
 let required: Set<String> = ["com.apple.security.app-sandbox", "com.apple.security.virtualization",
-    "com.apple.security.network.client", "com.apple.security.files.user-selected.read-only",
+    "com.apple.security.network.client", "com.apple.security.files.user-selected.read-write",
     "com.apple.security.application-groups", "com.apple.security.temporary-exception.mach-lookup.global-name"]
 precondition(Set(entitlements.keys) == required, "Unexpected Computer entitlement set")
 for key in required where !key.contains("application-groups") && !key.contains("mach-lookup") {

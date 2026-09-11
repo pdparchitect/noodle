@@ -72,7 +72,7 @@ terminates Computer through its normal guest-shutdown lifecycle. Running guests
 are not automatically restarted after relaunch.
 
 The approved boundary matches Noodle's Sparkle integration: the main app retains
-sandbox, virtualization, outbound network, user-selected read-only imports and
+sandbox, virtualization, outbound network, user-selected read/write imports/exports and
 the Computer App Group. Its sole added entitlement is the two exact
 `com.pdparchitect.noodle.computer-spks` / `-spki` Mach lookup names. Sparkle's
 same-team signed, hardened installer components run outside the app sandbox to

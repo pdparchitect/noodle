@@ -19,6 +19,13 @@ enum ComputerPhase: Equatable {
     var busy: Bool { self == .starting || self == .stopping || self == .updating }
 }
 
+enum ComputerDisplayMode: String {
+    case desktop = "Desktop", terminal = "Terminal", files = "Files"
+    var symbol: String {
+        switch self { case .desktop: "desktopcomputer"; case .terminal: "terminal"; case .files: "folder" }
+    }
+}
+
 @MainActor final class ComputerSession: ObservableObject, Identifiable {
     nonisolated let id: UUID
     @Published var computer: Computer
@@ -34,9 +41,26 @@ enum ComputerPhase: Equatable {
     @Published var browser: ComputerDesktopBrowser?
     @Published var terminal: GuestTerminal?
     @Published var showingTerminal = false
+    @Published var showingFiles = false
     @Published var openingTerminal = false
+    var displayMode: ComputerDisplayMode {
+        if showingFiles { return .files }
+        return computer.hasWebDisplay && !showingTerminal ? .desktop : .terminal
+    }
+    var availableDisplayModes: [ComputerDisplayMode] {
+        computer.hasWebDisplay ? [.desktop, .terminal, .files] : [.terminal, .files]
+    }
     var virtual: VirtualComputer?
-    var container: ContainerComputer?
+    var container: ContainerComputer? {
+        didSet { if container == nil { fileBrowser?.disappear(); fileBrowser?.cancelTransfer(); fileBrowser = nil } }
+    }
+    private var fileBrowser: ComputerFilesModel?
+    func filesModel(for runtime: ContainerComputer) -> ComputerFilesModel {
+        if let fileBrowser { return fileBrowser }
+        let model = ComputerFilesModel(runtime: runtime, computerID: id)
+        fileBrowser = model
+        return model
+    }
     init(_ computer: Computer) {
         self.id = computer.id
         self.computer = computer
@@ -88,6 +112,7 @@ enum ComputerPhase: Equatable {
             throw ComputerError("This computer library is already open in another Noodle Computer process.")
         }
         lease = fd
+        try? FileExportStaging.prepare()
         do { sessions = try library.load().map(ComputerSession.init) } catch {
             close(fd)
             lease = -1
@@ -348,6 +373,7 @@ enum ComputerPhase: Equatable {
     func startComputer(_ session: ComputerSession) async {
         guard !session.phase.busy, session.phase != .running else { return }
         session.showingTerminal = false
+        session.showingFiles = false
         session.phase = .starting
         do {
             let computer = session.computer
@@ -419,6 +445,7 @@ enum ComputerPhase: Equatable {
             session.desktop = nil
             session.terminal = nil
             session.showingTerminal = false
+            session.showingFiles = false
             session.phase = .stopped
         } catch { session.phase = .failed(error.localizedDescription) }
     }
@@ -430,6 +457,26 @@ enum ComputerPhase: Equatable {
         defer { session.commandRunning = false }
         do { session.append(try await runtime.execute(text)) } catch {
             session.append("\n\(error.localizedDescription)\n")
+        }
+    }
+
+    /// Select an available surface without replacing its existing session.
+    func selectDisplay(_ mode: ComputerDisplayMode, in session: ComputerSession) async {
+        guard session.computer.kind == .container, session.phase == .running,
+              !session.openingTerminal, session.container != nil,
+              session.availableDisplayModes.contains(mode), session.displayMode != mode else { return }
+        switch mode {
+        case .desktop:
+            session.showingFiles = false
+            session.showingTerminal = false
+        case .terminal:
+            if session.computer.hasWebDisplay {
+                await toggleTerminal(session)
+                if session.showingTerminal { session.showingFiles = false }
+            } else { session.showingFiles = false }
+        case .files:
+            session.showingFiles = true
+            session.showingTerminal = false
         }
     }
 

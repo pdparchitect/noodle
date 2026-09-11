@@ -2,7 +2,14 @@
 
 ## Unreleased
 
+- Place Start/Stop before one segmented toolbar control for Desktop, Terminal or Files, showing only available views and keeping the desktop connection and shell session alive. Use standard spacing between Edit and Start/Stop.
+
+- Align file sizes with their rows and keep filenames on one line with ellipsis truncation.
+- Keep Files uncluttered with a single compact navigation bar, an animated expanding search field, and file actions in menus. Match the terminal's background colour and opacity, add a gallery layout, and support Finder-style arrow keys, type-to-select, Command-Up/Down, history and rename shortcuts.
+
 - Match Noodle's full background support through a shared importer and renderer: still images, multi-frame HEIC/HEIF, and muted looping MP4/M4V/MOV video, with the same limits, Photos and Image Playground choices, hidden-window pausing, and Reduce Motion behavior. Keep media in each computer's private library and preserve existing image backgrounds.
+
+- Add a Finder-style Files view for running containers, with native folder/file icons, icon and list layouts, folder navigation, file imports/exports and Finder drag-and-drop, rename, duplicate, move, and empty-folder/file deletion. Preview supported images, PDFs and text with Quick Look, capped at 20 MB per file and a 100 MB expiring private cache.
 
 - Crossfade window backgrounds when switching computers or applying a background, matching Noodle's timing and respecting Reduce Motion. Prepare images before fading and keep the empty library's default background opaque.
 

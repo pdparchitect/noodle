@@ -92,8 +92,8 @@ final class StorageMaintenanceTests: XCTestCase {
         var computer = ComputerTemplate.shell.makeComputer(name: "Kept")
         computer.imageReference = "example.com/active:latest"
         let directory = library.directory(for: computer.id)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try library.save(computer)
+        try FileManager.default.createDirectory(at: library.stagingDirectory(for: computer.id), withIntermediateDirectories: true)
+        try library.commit(computer)
         let previous = ContainerDiskState(imageReference: "example.com/recovery:old", imageDigest: recovery)
         let state = ContainerDiskState(previousGeneration: previous.generation, imageReference: computer.imageReference, imageDigest: active)
         for generation in [previous, state] {

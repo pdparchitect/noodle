@@ -121,7 +121,7 @@ Both apps need an Apple Development or Developer ID identity from the same team.
 `scripts/build-app.sh` includes and signs `Contents/Helpers/computer`; only the
 main app gets the Computer group, not Agent Host, the CLI, or the share extension.
 `scripts/build-computer.sh` adds that group to its four runtime grants (sandbox,
-virtualization, outbound networking and user-selected read-only imports), plus
+virtualization, outbound networking and user-selected read/write imports/exports), plus
 the approved two-service Sparkle Mach lookup entitlement. Computer's signed
 installer boundary and independent feed are described in [Releasing](../RELEASING.md).
 Existing Noodle Agent Host and updater exceptions are unchanged.
