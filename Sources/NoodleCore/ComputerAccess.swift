@@ -59,6 +59,9 @@ public enum ComputerAgentSkill {
     text plus Enter (for example Aw== sends Control-C). `resize` accepts --columns
     and --rows; `close` ends only the named terminal. After exit, open a new shell.
 
+    For web apps, discover the computer's current IP using the guest's available
+    tools and share a local URL with the server's port.
+
     For terminal interaction run `present --terminal SESSION_ID
     --conversation UUID --message 'Please complete the sign-in in this terminal.'`.
     It sends a visual Computer card in that conversation. The user opens a live

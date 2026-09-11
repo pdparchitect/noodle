@@ -16,6 +16,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Document local web URL sharing from assigned computers.
 - Organize the README documentation links as a list.
 - Focus the READMEs and guides on getting work done with individual agents and teams; remove unnecessary detail and correct outdated instructions.
 
