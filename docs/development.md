@@ -129,3 +129,5 @@ NOODLE_SIMULATE_NO_HARNESSES=1 '.build/Noodle Local.app/Contents/MacOS/Noodle'
 excluding app-bundled copies. Relaunch without the flag to restore normal detection.
 
 [Releases](releases.md) · [Documentation](README.md)
+
+Attachment annotation checks: `Tests/attachment-annotations.sh` exercises the native Quick Look flow in an isolated sandboxed fixture. See [attachment annotations](attachment-annotations.md) for behavior and capture limits.

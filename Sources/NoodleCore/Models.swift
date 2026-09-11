@@ -163,6 +163,7 @@ public struct MessengerReactionChange: Codable, Hashable, Sendable {
 }
 
 public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable {
+    public let annotation: AttachmentAnnotation?
     public let computer: ComputerCard?
     public let id: UUID
     public let conversationID: UUID
@@ -185,7 +186,8 @@ public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable 
         createdAt: Date = Date(),
         url: URL? = nil,
         voice: VoiceMessage? = nil,
-        computer: ComputerCard? = nil
+        computer: ComputerCard? = nil,
+        annotation: AttachmentAnnotation? = nil
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -197,6 +199,7 @@ public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable 
         self.url = url
         self.voice = voice
         self.computer = computer
+        self.annotation = annotation
     }
 }
 
@@ -229,6 +232,7 @@ public struct MessengerIdentity: Codable, Hashable, Sendable {
 }
 
 public struct MessengerAttachment: Codable, Hashable, Sendable {
+    public let annotation: AttachmentAnnotation?
     public let computer: ComputerCard?
     public let id: UUID
     public let conversationID: UUID
@@ -253,6 +257,7 @@ public struct MessengerAttachment: Codable, Hashable, Sendable {
         url = attachment.url
         voice = attachment.voice
         computer = attachment.computer
+        annotation = attachment.annotation
     }
 }
 
@@ -843,8 +848,23 @@ public struct WorkspaceRepository: Sendable {
         mediaType: String,
         now: Date = Date(),
         linkURL: URL? = nil,
-        computer: ComputerCard? = nil
+        computer: ComputerCard? = nil,
+        annotation: AttachmentAnnotation? = nil
     ) throws -> ConversationAttachment {
+        if let annotation {
+            guard annotation.isValid, computer == nil, linkURL == nil, mediaType == annotation.mediaType,
+                  let source = try loadAttachments(conversationID: conversationID).first(where: { $0.id == annotation.sourceAttachmentID }),
+                  source.originalFilename == annotation.sourceFilename else { throw WorkspaceError.invalidAttachment }
+            if annotation.version == 1 {
+                guard data.starts(with: Data("%PDF-".utf8)) else { throw WorkspaceError.invalidAttachment }
+            } else if annotation.region != nil {
+                guard detectedImageMediaType(in: data) == "image/png",
+                      let image = CGImageSourceCreateWithData(data as CFData, nil),
+                      CGImageSourceCreateImageAtIndex(image, 0, nil) != nil else { throw WorkspaceError.invalidAttachment }
+            } else {
+                guard data == Data(annotation.textRepresentation.utf8) else { throw WorkspaceError.invalidAttachment }
+            }
+        }
         if let computer {
             guard computer.version == 1, mediaType == ComputerCard.mediaType, linkURL == nil,
                   data.count <= 900_000, (try? JSONDecoder().decode(ComputerCard.self, from: data)) == computer else {
@@ -876,7 +896,8 @@ public struct WorkspaceRepository: Sendable {
             byteCount: Int64(data.count),
             createdAt: now,
             url: linkURL,
-            computer: computer
+            computer: computer,
+            annotation: annotation
         )
         let directory = attachmentsDirectory(conversationID: conversationID)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -884,7 +905,12 @@ public struct WorkspaceRepository: Sendable {
             to: directory.appendingPathComponent(attachment.storedFilename),
             options: .atomic
         )
-        try write(attachment, to: directory.appendingPathComponent("\(attachment.id.uuidString.lowercased()).json"))
+        do {
+            try write(attachment, to: directory.appendingPathComponent("\(attachment.id.uuidString.lowercased()).json"))
+        } catch {
+            try? FileManager.default.removeItem(at: directory.appendingPathComponent(attachment.storedFilename))
+            throw error
+        }
         return attachment
     }
 
@@ -893,6 +919,44 @@ public struct WorkspaceRepository: Sendable {
         let data = try PropertyListSerialization.data(fromPropertyList: ["URL": url.absoluteString], format: .xml, options: 0)
         return try importAttachment(data: data, originalFilename: "\(url.host ?? "Link").webloc", into: conversationID,
             mediaType: "application/x-webloc", now: now, linkURL: url)
+    }
+
+    /// Only unsent annotations can change. Check message references under the
+    /// same lock as submission, including edits from an already-open preview.
+    public func reviseAnnotationComment(_ expected: ConversationAttachment, comment: String, content: Data) throws -> ConversationAttachment {
+        try withConversationLock(expected.conversationID) {
+            guard let current = try loadAttachments(conversationID: expected.conversationID).first(where: { $0.id == expected.id }),
+                  let original = current.annotation, original == expected.annotation,
+                  current.storedFilename == expected.storedFilename else { throw WorkspaceError.invalidAttachment }
+            guard try !loadMessages(conversationID: current.conversationID)
+                .contains(where: { $0.attachments.contains(current.id) }) else { throw WorkspaceError.invalidAttachment }
+            let annotation = original.replacingComment(comment)
+            guard annotation.isValid else { throw WorkspaceError.invalidAttachment }
+            if annotation == original { return current }
+            if annotation.version == 1 {
+                guard content.starts(with: Data("%PDF-".utf8)) else { throw WorkspaceError.invalidAttachment }
+            } else if annotation.region == nil {
+                guard content == Data(annotation.textRepresentation.utf8) else { throw WorkspaceError.invalidAttachment }
+            } else {
+                guard content == (try Data(contentsOf: attachmentFileURL(current))) else { throw WorkspaceError.invalidAttachment }
+            }
+            let updated = ConversationAttachment(id: current.id,
+                conversationID: current.conversationID, originalFilename: current.originalFilename,
+                storedFilename: storedAttachmentName(id: UUID(), originalFilename: current.originalFilename),
+                mediaType: current.mediaType, byteCount: Int64(content.count),
+                createdAt: current.createdAt, annotation: annotation)
+            let file = attachmentFileURL(updated)
+            try content.write(to: file, options: .atomic)
+            do {
+                try write(updated, to: attachmentsDirectory(conversationID: current.conversationID)
+                    .appendingPathComponent("\(updated.id.uuidString.lowercased()).json"))
+            } catch {
+                try? FileManager.default.removeItem(at: file)
+                throw error
+            }
+            try? FileManager.default.removeItem(at: attachmentFileURL(current))
+            return updated
+        }
     }
 
     public func loadAttachments(conversationID: UUID) throws -> [ConversationAttachment] {
@@ -918,7 +982,10 @@ public struct WorkspaceRepository: Sendable {
                 storedFilename: attachment.storedFilename,
                 mediaType: detectedMediaType,
                 byteCount: attachment.byteCount,
-                createdAt: attachment.createdAt
+                createdAt: attachment.createdAt,
+                voice: attachment.voice,
+                computer: attachment.computer,
+                annotation: attachment.annotation
             )
             try? write(repaired, to: metadataURL)
             return repaired

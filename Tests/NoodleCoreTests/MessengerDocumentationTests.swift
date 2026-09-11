@@ -67,7 +67,10 @@ final class MessengerDocumentationTests: XCTestCase {
             url: URL(string: "https://example.com/page")!,
             voice: VoiceMessage(transcript: "Encoding coverage", duration: 1, waveform: [0.5], localeIdentifier: "en-GB"),
             computer: ComputerCard(computer: .init(id: UUID(), name: "Shell", kind: "Shell", state: "Running", symbol: "terminal"),
-                agentID: botID, terminalID: UUID(), terminalPreview: "$"))
+                agentID: botID, terminalID: UUID(), terminalPreview: "$"),
+            annotation: AttachmentAnnotation(source: ConversationAttachment(conversationID: conversation.id,
+                originalFilename: "source.pdf", storedFilename: "source.pdf", mediaType: "application/pdf", byteCount: 10),
+                quote: "Source text", comment: "Feedback"))
         try check(MessengerAttachment(attachment: link, absolutePath: "/fixture/link.webloc"), fields: MessengerDocumentation.attachmentFields)
         XCTAssertEqual(delivery.kind, .reactionChange)
         delivery.reactionChange = nil

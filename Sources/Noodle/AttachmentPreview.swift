@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 
 extension ConversationAttachment {
     var previewSymbolName: String {
+        if annotation != nil { return "text.bubble.fill" }
         if let computer { return computer.computer.symbol }
         if mediaType.hasPrefix("image/") { return "photo.fill" }
         if mediaType == "application/pdf" { return "doc.richtext.fill" }
@@ -59,7 +60,9 @@ struct AttachmentInlinePreview: View {
 
     private var filePreview: some View {
         Group {
-            if let card = attachment.computer {
+            if let note = attachment.annotation {
+                annotationPreview(note)
+            } else if let card = attachment.computer {
                 ComputerAttachmentCard(card: card)
             } else if displaysAsImage {
                 imagePreview
@@ -92,9 +95,35 @@ struct AttachmentInlinePreview: View {
         .accessibilityHint("Click or press Space to preview")
         .accessibilityAddTraits(.isButton)
         .task(id: shouldLoad) {
-            guard shouldLoad, attachment.computer == nil else { return }
+            guard shouldLoad, attachment.computer == nil,
+                  attachment.annotation == nil || attachment.mediaType.hasPrefix("image/") else { return }
             await loadThumbnail()
         }
+    }
+
+    private func annotationPreview(_ note: AttachmentAnnotation) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Annotation", systemImage: "text.bubble.fill")
+                .font(.caption.weight(.semibold)).foregroundStyle(.orange)
+            Text(note.sourceFilename).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            if let quote = note.quote {
+                Text(quote).font(.callout).foregroundStyle(.secondary).lineLimit(3)
+                    .padding(.leading, 9)
+                    .overlay(alignment: .leading) { Rectangle().fill(.orange.opacity(0.6)).frame(width: 2) }
+            } else if note.region != nil {
+                if let thumbnail {
+                    Image(nsImage: thumbnail).resizable().scaledToFit().frame(maxHeight: 190)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .accessibilityLabel("Marked preview region")
+                } else {
+                    Label("Marked preview region", systemImage: "viewfinder").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Text(note.comment).font(.callout).lineLimit(4)
+        }
+        .padding(14).frame(width: 280, alignment: .leading)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 13))
+        .overlay(RoundedRectangle(cornerRadius: 13).stroke(.orange.opacity(0.2)))
     }
 
     private var imagePreview: some View {

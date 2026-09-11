@@ -1,5 +1,4 @@
 import AppKit
-import QuickLook
 import PhotosUI
 import SwiftUI
 import NoodleCore
@@ -8,6 +7,7 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     @Environment(NoodleStore.self) private var store
     let conversation: BotConversation
+    let attachmentPreview: AttachmentPreviewController
     var composerFocusRequest: UUID? = nil
     var focusSidebar: (() -> Void)? = nil
     @State private var composerFocused = false
@@ -17,7 +17,6 @@ struct ChatView: View {
     @State private var photoSelection: [PhotosPickerItem] = []
     @State private var attachmentDestinationID: UUID?
     @State private var selectedAttachmentID: UUID?
-    @State private var previewedAttachmentURL: URL?
     @State private var computerPreview = ComputerPreviewController()
     @State private var bottomOverlayHeight: CGFloat = 0
     @StateObject private var nameCompletion = ComposerNameCompletion()
@@ -69,7 +68,6 @@ struct ChatView: View {
                     if let firstError { store.errorMessage = firstError.localizedDescription }
                 }
             }
-            .quickLookPreview($previewedAttachmentURL)
             .sheet(item: $profileAgent, onDismiss: finishProfileAction) { agent in
                 let direct = store.conversations.first {
                     $0.kind == .direct && $0.participantIDs == [agent.id]
@@ -98,7 +96,6 @@ struct ChatView: View {
             }
             .onChange(of: conversation.id) { _, _ in
                 selectedAttachmentID = nil
-                previewedAttachmentURL = nil
                 computerPreview.close()
                 nameCompletion.detach()
             }
@@ -370,11 +367,19 @@ struct ChatView: View {
     private func showPreview(_ attachment: ConversationAttachment) {
         selectedAttachmentID = attachment.id
         if let card = attachment.computer {
-            previewedAttachmentURL = nil
+            attachmentPreview.close()
             computerPreview.show(card, controller: store.computers)
         } else {
             computerPreview.close()
-            previewedAttachmentURL = store.attachmentFileURL(attachment)
+            let edit: ((ConversationAttachment, String) throws -> ConversationAttachment)? = store.canEditAnnotation(attachment) ? { [weak store] attachment, comment in
+                guard let store else { throw WorkspaceError.missingConversation(attachment.conversationID) }
+                return try store.reviseAnnotationComment(attachment, comment: comment)
+            } : nil
+            attachmentPreview.show(attachment, url: store.attachmentFileURL(attachment), edit: edit,
+                canEdit: { [weak store] in store?.canEditAnnotation($0) == true }) { [weak store] note, content, source in
+                guard let store else { throw WorkspaceError.missingConversation(source.conversationID) }
+                try store.saveAnnotation(note, content: content, source: source)
+            }
         }
     }
 
@@ -503,14 +508,19 @@ private struct PendingAttachmentChip: View {
                 HStack(spacing: 6) {
                     Image(systemName: attachment.previewSymbolName)
                         .foregroundStyle(.blue)
-                    Text(attachment.originalFilename)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(attachment.annotation.map { "Annotation · " + $0.sourceFilename } ?? attachment.originalFilename)
+                            .lineLimit(1)
+                        if let note = attachment.annotation {
+                            Text(note.comment).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Preview Attachment")
-            .accessibilityLabel("Preview (attachment.originalFilename)")
+            .help(attachment.annotation?.comment ?? "Preview Attachment")
+            .accessibilityLabel("Preview \(attachment.originalFilename)")
 
             Button(action: remove) {
                 Image(systemName: "xmark.circle.fill")

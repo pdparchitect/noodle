@@ -194,6 +194,10 @@ final class NoodleStore {
             transcriptRevisions = Dictionary(uniqueKeysWithValues: conversations.map {
                 ($0.id, Self.transcriptRevision(for: $0.id, repository: repository))
             })
+            for conversation in conversations {
+                drafts.restoreAnnotations(attachmentsByConversation[conversation.id, default: []],
+                    messages: messagesByConversation[conversation.id, default: []], conversationID: conversation.id)
+            }
             let knownConversationIDs = Set(conversations.map(\.id))
             drafts.retainConversations(knownConversationIDs)
             try? transcriptPositions.retainConversations(knownConversationIDs)
@@ -666,6 +670,37 @@ final class NoodleStore {
         )
         attachmentsByConversation[conversationID, default: []].append(attachment)
         drafts[conversationID].attachments.append(attachment)
+    }
+
+    /// Save to the originating draft even if the selected conversation changed.
+    func saveAnnotation(_ annotation: AttachmentAnnotation, content: Data, source: ConversationAttachment) throws {
+        guard conversations.contains(where: { $0.id == source.conversationID }) else {
+            throw WorkspaceError.missingConversation(source.conversationID)
+        }
+        let stem = URL(fileURLWithPath: source.originalFilename).deletingPathExtension().lastPathComponent
+        let attachment = try repository.importAttachment(data: content,
+            originalFilename: "Annotation — \(stem.prefix(160)).\(annotation.fileExtension)", into: source.conversationID,
+            mediaType: annotation.mediaType, annotation: annotation)
+        attachmentsByConversation[source.conversationID, default: []].append(attachment)
+        drafts[source.conversationID].attachments.append(attachment)
+    }
+
+    func canEditAnnotation(_ attachment: ConversationAttachment) -> Bool {
+        drafts.canEditAnnotation(attachment, messages: messagesByConversation[attachment.conversationID, default: []])
+    }
+
+    func reviseAnnotationComment(_ attachment: ConversationAttachment, comment: String) throws -> ConversationAttachment {
+        guard canEditAnnotation(attachment), let annotation = attachment.annotation else { throw WorkspaceError.invalidAttachment }
+        let updated = try repository.reviseAnnotationComment(attachment, comment: comment,
+            content: AnnotationContent.editedData(for: annotation.replacingComment(comment), originalURL: attachmentFileURL(attachment)))
+        let conversationID = updated.conversationID
+        if let index = attachmentsByConversation[conversationID, default: []].firstIndex(where: { $0.id == updated.id }) {
+            attachmentsByConversation[conversationID]![index] = updated
+        } else { attachmentsByConversation[conversationID, default: []].append(updated) }
+        if let index = drafts[conversationID].attachments.firstIndex(where: { $0.id == updated.id }) {
+            drafts[conversationID].attachments[index] = updated
+        }
+        return updated
     }
 
     func removePendingAttachment(_ attachment: ConversationAttachment) {

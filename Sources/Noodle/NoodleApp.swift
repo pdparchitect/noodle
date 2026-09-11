@@ -70,6 +70,8 @@ struct NoodleApp: App {
                 .keyboardShortcut("n", modifiers: [.command, .shift])
             }
 
+            AnnotationCommands()
+
             ConversationCommands {
                 NotificationCenter.default.post(name: .focusSearch, object: nil)
             }
@@ -108,7 +110,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
         attachmentPasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            guard event.window?.identifier?.rawValue != "NoodleComputerPreview" else { return event }
+            guard event.window?.identifier?.rawValue != "NoodleComputerPreview",
+                  !AttachmentPreviewController.containsPreviewWindow(event.window) else { return event }
             let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
             guard event.charactersIgnoringModifiers?.lowercased() == "v",
                   modifiers == .command || modifiers == .control,
@@ -220,14 +223,20 @@ struct RootView: View {
     @State private var sidebarFocusRequest = UUID()
 
     var body: some View {
+        AttachmentPreviewScope(conversationID: store.selectedConversationID) { attachmentPreview in
+            content(attachmentPreview: attachmentPreview)
+        }
+    }
+
+    private func content(attachmentPreview: AttachmentPreviewController) -> some View {
         @Bindable var store = store
 
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        return NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(focusComposer: { composerFocusRequest = UUID() }, focusRequest: sidebarFocusRequest)
                 .navigationSplitViewColumnWidth(min: 280, ideal: 326, max: 380)
         } detail: {
             if let conversation = store.selectedConversation {
-                ChatView(conversation: conversation, composerFocusRequest: composerFocusRequest, focusSidebar: {
+                ChatView(conversation: conversation, attachmentPreview: attachmentPreview, composerFocusRequest: composerFocusRequest, focusSidebar: {
                     columnVisibility = .all
                     sidebarFocusRequest = UUID()
                 })

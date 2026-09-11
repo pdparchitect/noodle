@@ -8,9 +8,13 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Make submitted annotation previews read-only. Remove Edit Comment and Save to Draft from sent notes, revoke editing in an open preview on submission, and reject later edits without creating a copy.
 - Stop Grok and Muse inspection promptly when output closes, ignore unsolicited replies, and reject malformed responses instead of reporting misleading account or model status.
 - Publish Computer CLI bridge messages only after their JSON is complete, preventing intermittent empty-response failures during file transfers and other commands.
+- Let Quick Look finish its native close without requesting a second hide or bringing the preview forward from a delayed callback.
+- Preserve consumed annotation keyboard events at the AppKit monitor boundary so Escape cancels the comment without also closing and flashing Quick Look. Save and Cancel return focus to the source attachment; holding Escape dismisses only the annotation, and a separate press can close the preview.
 - Show bot runtime failures under the affected harness in Settings, with status details on sidebar avatars and a separate Kick action in failed bots' sidebar menus. Recognize Grok Build's exhausted usage allowance and pause automatic reconnect retries while preserving unfinished work.
+- Keep ordinary attachments and annotations openable after closing a preview, switching conversations and returning, with one preview owner per chat window. Anchor annotation popovers at the pointer or the last selection point when invoked from the menu. Remove the redundant “Preview annotation” caption from annotation cards.
 - Return sends and Escape discards voice recordings even when keyboard focus stays outside the recording bar after ⌘⇧D.
 - Place sidebar unread dots in the left padding with a small gap before the avatar, keeping read and unread conversations aligned without excess indentation.
 - Keep the chat cursor visible when typing beyond the input's six-line height limit, including after manual scrolling. Isolate height measurement from the live editor and limit it to six lines to reduce typing work for long drafts.
@@ -22,6 +26,9 @@ All notable changes to Noodle are documented here, following
 - Add broker regression tests for interrupted file transfers, revocation during a transfer, concurrent agents, invalid provider responses, and forged requests.
 - Add regression tests for MCP HTTP redirects, response limits and cancellation, plus FX account/model inspection failures. Verify redirect blocking through URLSession and distinguish rejected icon responses from fallback artwork. Publish Noodle coverage summaries and downloadable reports in CI.
 - Add regression tests for saved harness status, MCP icon validation, version probes, and attachment import failures.
+- Edit unsent annotation comments from the preview. Draft notes update in place; submitted annotations are read-only.
+- Annotate attachments in native Quick Look with ⌘⇧A for selected text or ⌘⇧R for a visual region. Save returns focus to the preview and adds a durable, clickable annotation attachment to the conversation draft. Text notes use plain text; visual notes use marked PNGs with comments and source metadata visible through the CLI. Composer and transcript attachments open a Quick Look-style annotation viewer with a compact translucent frame and a separate comment strip.
+
 - Choose Automatic, Send immediately, or Queue message delivery in Chat settings. Automatic is the default and uses on-device Apple Intelligence to recognize urgent messages and changes to ongoing work, falling back to queueing when unavailable. Immediate delivery steers Codex and Muse, and interrupts Claude Code, FX, and Grok before checking the inbox.
 
 - Start and stop voice recording in the active chat with ⌘⇧D, also shown in the Conversation menu and microphone tooltip. Stopping keeps the recording for review; Return sends and Escape discards.
