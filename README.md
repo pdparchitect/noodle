@@ -45,6 +45,16 @@ workspace. See [agent access](docs/security.md).
 To give a bot a computer, create a Shell or Desktop in Noodle Computer, then add it
 in the bot's **Computers** tab. Several bots can share the same computer.
 
-[Working with agents](docs/usage.md) · [Setup](docs/harness-setup.md) ·
-[Noodle Computer](Computer/README.md) · [All docs](docs/README.md) ·
-[Build from source](docs/development.md) · [Changelog](CHANGELOG.md)
+## Documentation
+
+- [Working with agents](docs/usage.md)
+- [Harness setup](docs/harness-setup.md)
+- [Noodle Computer](Computer/README.md)
+- [Architecture](docs/architecture.md)
+- [Security and privacy](docs/security.md)
+- [Development and testing](docs/development.md)
+- [Releases](docs/releases.md)
+- [All documentation](docs/README.md)
+- [Changelog](CHANGELOG.md)
+
+[Apache 2.0 license](LICENSE) · [Copyright notice](NOTICE)

@@ -6,8 +6,13 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Apache 2.0 license and copyright notice for Petko D. Petkov (pdp).
+
 ### Changed
 
+- Organize the README documentation links as a list.
 - Focus the READMEs and guides on getting work done with individual agents and teams; remove unnecessary detail and correct outdated instructions.
 
 ## [0.11.2] - 2026-09-11
