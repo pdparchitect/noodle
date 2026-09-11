@@ -25,6 +25,9 @@ public struct RemoteComputer: Codable, Hashable, Identifiable, Sendable {
 
 public enum ComputerOperation: String, Codable, Sendable {
     case list, start, terminalOpen, terminalRead, terminalWrite, terminalResize, terminalClose, terminalResolve, revoke, preview, display
+    case fileUpload, fileDownload
+    public var isFileTransfer: Bool { self == .fileUpload || self == .fileDownload }
+    public var timeout: Int { isFileTransfer ? 600 : (self == .start ? 180 : 120) }
 }
 
 public struct ComputerRequest: Codable, Sendable {
@@ -40,6 +43,9 @@ public struct ComputerRequest: Codable, Sendable {
     public var rows: Int?
     public var view: String?
     public var capabilitiesOnly: Bool?
+    public var path: String?
+    /// Broker-generated reference in the shared App Group, never a host path.
+    public var transferID: UUID?
     public init(_ operation: ComputerOperation, computerID: UUID? = nil, agentID: UUID? = nil,
                 terminalID: UUID? = nil, data: Data? = nil, offset: Int64? = nil, columns: Int? = nil, rows: Int? = nil) {
         self.operation = operation; self.computerID = computerID; self.agentID = agentID
@@ -61,6 +67,14 @@ public struct ComputerRequest: Codable, Sendable {
         if operation == .terminalResize && (!(1...500).contains(columns ?? 0) || !(1...200).contains(rows ?? 0)) {
             throw ComputerBridgeError("Invalid terminal dimensions.")
         }
+        if operation.isFileTransfer {
+            guard let path, path.hasPrefix("/"), !path.utf8.contains(0), path.utf8.count <= 4096,
+                  terminalID == nil, data == nil else {
+                throw ComputerBridgeError("Specify an absolute guest file path; file transfers do not use a terminal or inline data.")
+            }
+        } else if path != nil || transferID != nil {
+            throw ComputerBridgeError("File fields require a file-transfer operation.")
+        }
     }
 }
 
@@ -79,6 +93,8 @@ public struct ComputerResponse: Codable, Sendable {
     public var previewImage: Data?
     /// UI-only ephemeral credentials, never stored in a card or returned to agents.
     public var display: ComputerWebConnection?
+    public var path: String?
+    public var byteCount: Int64?
     public init(computers: [RemoteComputer]? = nil, terminalID: UUID? = nil, data: Data? = nil,
                 offset: Int64? = nil, truncated: Bool? = nil, exited: Bool? = nil, error: String? = nil) {
         self.computers = computers; self.terminalID = terminalID; self.data = data; self.offset = offset
@@ -96,7 +112,8 @@ public struct ComputerResponse: Codable, Sendable {
 public struct ComputerCapabilities: Codable, Equatable, Sendable {
     public var minimumProtocol = 1
     public var maximumProtocol = 1
-    public var features: Set<String> = ["agent-terminals-v1", "presentation-v2", "guest-display-v1"]
+    private static let requiredFeatures: Set<String> = ["agent-terminals-v1", "presentation-v2", "guest-display-v1"]
+    public var features: Set<String> = requiredFeatures.union(["file-transfer-v1"])
     public init() {}
     public static func requireCompatible(_ capabilities: Self?) throws {
         guard let capabilities else {
@@ -108,8 +125,14 @@ public struct ComputerCapabilities: Codable, Equatable, Sendable {
         guard capabilities.minimumProtocol <= 1 else {
             throw ComputerBridgeError("Update Noodle: Noodle Computer requires a newer connection protocol.")
         }
-        guard capabilities.maximumProtocol >= 1, Self().features.isSubset(of: capabilities.features) else {
+        guard capabilities.maximumProtocol >= 1, requiredFeatures.isSubset(of: capabilities.features) else {
             throw ComputerBridgeError("Update Noodle Computer: this version does not support the computer and preview features Noodle needs.")
+        }
+    }
+    public static func requireFileTransfer(_ capabilities: Self?) throws {
+        try requireCompatible(capabilities)
+        guard capabilities?.features.contains("file-transfer-v1") == true else {
+            throw ComputerBridgeError("Update Noodle Computer to upload and download files.")
         }
     }
 }

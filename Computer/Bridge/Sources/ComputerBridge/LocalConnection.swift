@@ -111,7 +111,7 @@ public enum ComputerConnection {
             let fd = socket(AF_UNIX, SOCK_STREAM, 0)
             guard fd >= 0 else { throw ComputerBridgeError("Cannot open computer connection.") }
             defer { Darwin.close(fd) }
-            configure(fd, seconds: request.operation == .start ? 180 : 30)
+            configure(fd, seconds: request.operation.isFileTransfer ? request.operation.timeout : (request.operation == .start ? 180 : 30))
             var address = try address(url)
             guard withAddress(&address, { Darwin.connect(fd, $0, $1) }) == 0 else {
                 throw ComputerBridgeError("Computer is unavailable.", unavailable: true)

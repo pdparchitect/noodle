@@ -1,6 +1,7 @@
 import AppKit
 import ComputerBridge
 import Containerization
+import Darwin
 import Foundation
 import WebKit
 
@@ -8,11 +9,14 @@ import WebKit
     private weak var store: ComputerStore?
     private var server: ComputerConnectionServer?
     private var terminals: [UUID: ProviderTerminal] = [:]
+    private let transferRoot: URL
 
     init(store: ComputerStore, socket: URL? = nil) throws {
         self.store = store
+        let endpoint = try socket ?? ComputerConnection.socketURL()
+        transferRoot = endpoint.deletingLastPathComponent()
         let clients = socket == nil ? ComputerConnection.clientIDs : ComputerConnection.clientIDs + ["com.pdparchitect.noodle.integration"]
-        server = try ComputerConnectionServer(socket: socket ?? ComputerConnection.socketURL(), team: ComputerConnection.signingTeam(), clientIDs: clients) {
+        server = try ComputerConnectionServer(socket: endpoint, team: ComputerConnection.signingTeam(), clientIDs: clients) {
             [weak self] request, peer in
             guard let self else { return .init(error: "Computer is closing.") }
             return await self.respond(request, peer: peer)
@@ -65,6 +69,26 @@ import WebKit
         }
         guard session.phase == .running, let runtime = session.container else {
             throw ComputerBridgeError("Computer is stopped. Start it in Noodle Computer or with computer start --computer \(session.id.uuidString).")
+        }
+        if request.operation.isFileTransfer {
+            guard let id = request.transferID, let path = request.path else {
+                throw ComputerBridgeError("Missing broker file-transfer reference.")
+            }
+            let staging = try ComputerTransferFiles.staging(root: transferRoot, id: id, create: false)
+            let files = GuestFiles(runtime: runtime)
+            var response = ComputerResponse()
+            response.path = try GuestFile.normalize(path)
+            if request.operation == .fileUpload {
+                let fd = try ComputerTransferFiles.openSource(staging)
+                let count: Int64
+                do { count = try ComputerTransferFiles.size(fd) } catch { Darwin.close(fd); throw error }
+                Darwin.close(fd)
+                try await files.upload(staging, to: response.path!)
+                response.byteCount = count
+            } else {
+                response.byteCount = try await files.download(response.path!, to: staging)
+            }
+            return response
         }
         if request.operation == .terminalOpen {
             // Retain completed output, but don't let abandoned sessions grow indefinitely.

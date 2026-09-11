@@ -190,6 +190,12 @@ func run(args []string) error {
 			return errors.New("file changed during transfer")
 		}
 		return nil
+	case "stat":
+		info, err := os.Lstat(name)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(metadata(info))
 	case "write":
 		if len(args) != 3 {
 			return errors.New("missing transfer size")

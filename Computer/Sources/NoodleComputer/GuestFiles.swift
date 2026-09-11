@@ -178,6 +178,15 @@ actor GuestFiles {
         _ = try await run(arguments: [helper, "read", path, file.version, String(limit)], limit: min(limit, file.size), destination: destination, expected: file.size, timeout: preview ? 2 : 300)
     }
 
+    func download(_ path: String, to destination: URL) async throws -> Int64 {
+        let helper = try await helper()
+        let data = try await run(arguments: [helper, "stat", path], limit: 8192)
+        let file = try JSONDecoder().decode(GuestFile.self, from: data)
+        guard file.size >= 0, file.version.utf8.count <= 200 else { throw ComputerError("Invalid file metadata.") }
+        try await read(file, path: path, to: destination, preview: false)
+        return file.size
+    }
+
     func upload(_ source: URL, to path: String) async throws {
         let values = try source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
         guard values.isRegularFile == true, values.isSymbolicLink != true, let size = values.fileSize, size <= 8 * 1024 * 1024 * 1024 else {

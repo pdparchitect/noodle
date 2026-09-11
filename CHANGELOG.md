@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Publish Computer CLI bridge messages only after their JSON is complete, preventing intermittent empty-response failures during file transfers and other commands.
 - Show bot runtime failures under the affected harness in Settings, with status details on sidebar avatars and a separate Kick action in failed bots' sidebar menus. Recognize Grok Build's exhausted usage allowance and pause automatic reconnect retries while preserving unfinished work.
 - Return sends and Escape discards voice recordings even when keyboard focus stays outside the recording bar after ⌘⇧D.
 - Place sidebar unread dots in the left padding with a small gap before the avatar, keeping read and unread conversations aligned without excess indentation.
@@ -15,6 +16,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Transfer files directly between a bot's workspace and its assigned Computer with CLI `upload` and `download`, including binary files up to 8 GiB, assignment checks, and protection against overwriting existing files.
+- Add broker regression tests for interrupted file transfers, revocation during a transfer, concurrent agents, invalid provider responses, and forged requests.
 - Add regression tests for MCP HTTP redirects, response limits and cancellation, plus FX account/model inspection failures. Verify redirect blocking through URLSession and distinguish rejected icon responses from fallback artwork. Publish Noodle coverage summaries and downloadable reports in CI.
 - Add regression tests for saved harness status, MCP icon validation, version probes, and attachment import failures.
 - Choose Automatic, Send immediately, or Queue message delivery in Chat settings. Automatic is the default and uses on-device Apple Intelligence to recognize urgent messages and changes to ongoing work, falling back to queueing when unavailable. Immediate delivery steers Codex and Muse, and interrupts Claude Code, FX, and Grok before checking the inbox.

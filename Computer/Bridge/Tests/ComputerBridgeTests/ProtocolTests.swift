@@ -2,6 +2,51 @@ import XCTest
 @testable import ComputerBridge
 
 final class ProtocolTests: XCTestCase {
+    func testTransferCapabilityIsOptionalForExistingOperations() throws {
+        var legacy = ComputerCapabilities()
+        legacy.features.remove("file-transfer-v1")
+        XCTAssertNoThrow(try ComputerCapabilities.requireCompatible(legacy))
+        XCTAssertThrowsError(try ComputerCapabilities.requireFileTransfer(legacy))
+        XCTAssertNoThrow(try ComputerCapabilities.requireFileTransfer(ComputerCapabilities()))
+    }
+    func testTransferWireFieldsRoundTripAndRejectInvalidPaths() throws {
+        for operation in [ComputerOperation.fileUpload, .fileDownload] {
+            var request = ComputerRequest(operation, computerID: UUID(), agentID: UUID())
+            XCTAssertThrowsError(try request.validate())
+            request.path = "/workspace/binary ' $()\n.dat"; request.transferID = UUID()
+            XCTAssertNoThrow(try request.validate())
+            let encoded = try JSONEncoder().encode(request)
+            let fields = try JSONSerialization.jsonObject(with: encoded) as! [String: Any]
+            XCTAssertEqual(fields["path"] as? String, request.path)
+            XCTAssertEqual(fields["transferID"] as? String, request.transferID?.uuidString)
+            XCTAssertNil(fields["data"])
+            let decoded = try JSONDecoder().decode(ComputerRequest.self, from: encoded)
+            XCTAssertEqual(decoded.path, request.path); XCTAssertEqual(decoded.transferID, request.transferID)
+            for path in ["relative", "", "/a\0b", "/" + String(repeating: "x", count: 4096)] {
+                request.path = path; XCTAssertThrowsError(try request.validate())
+            }
+            request.path = "/valid"; request.data = Data([1])
+            XCTAssertThrowsError(try request.validate())
+        }
+        var response = ComputerResponse(); response.path = "/workspace/file"; response.byteCount = 1_250_000
+        let decoded = try JSONDecoder().decode(ComputerResponse.self, from: JSONEncoder().encode(response))
+        XCTAssertEqual(decoded.path, response.path); XCTAssertEqual(decoded.byteCount, response.byteCount)
+    }
+    func testTransferStagingRejectsSymlinksAndRecoversAbandonedFiles() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = UUID(), first = try ComputerTransferFiles.staging(root: root, id: id, create: true)
+        XCTAssertEqual(try ComputerTransferFiles.staging(root: root, id: id, create: false), first)
+        XCTAssertThrowsError(try ComputerTransferFiles.staging(root: root, id: id, create: true))
+        try Data([1]).write(to: first)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-7200)], ofItemAtPath: first.deletingLastPathComponent().path)
+        let current = try ComputerTransferFiles.staging(root: root, id: UUID(), create: true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: first.path))
+        let linkID = UUID(), link = current.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent(linkID.uuidString.lowercased())
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: root)
+        XCTAssertThrowsError(try ComputerTransferFiles.staging(root: root, id: linkID, create: false))
+    }
     func testCompatibilityNegotiationDoesNotRequireMatchingAppVersions() throws {
         XCTAssertNoThrow(try ComputerCapabilities.requireCompatible(ComputerCapabilities()))
         var newer = ComputerCapabilities()

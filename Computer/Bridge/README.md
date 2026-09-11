@@ -19,6 +19,35 @@ an assigned computer and open, read, write, resize, or close its own terminal
 sessions. It cannot stop/delete the computer or access another bot's terminal.
 Files and services inside a shared computer are shared by design.
 
+## Transfer files
+
+```sh
+./.agents/skills/computer/computer upload --computer COMPUTER_ID --source wallpaper.png --destination /workspace/wallpaper.png
+./.agents/skills/computer/computer download --computer COMPUTER_ID --source /workspace/result.zip --destination output/result.zip
+```
+
+Transfers preserve exact bytes without opening a terminal. Local paths resolve
+from the CLI's current directory, or may be absolute within that bot's workspace.
+The broker independently restricts access to the workspace and refuses symlinks
+in local paths. Guest paths must be absolute. Parent folders must exist and an
+existing destination is never replaced. Regular files up to 8 GiB are supported;
+archive directories before transferring them. Files arrive with private permissions;
+set guest executable permissions separately when needed.
+
+Success JSON includes `path` (guest), `localPath` (workspace-relative), and
+`byteCount`. `list` exposes provider capabilities; these commands require
+`file-transfer-v1`. Older providers remain usable for existing terminal/display
+commands and return an update message for transfers.
+
+The broker assigns a fresh transfer UUID and stages the payload in the apps'
+existing private App Group. Only the UUID and guest path cross the authenticated
+socket; agents cannot select provider host paths. The provider streams bytes
+through its bundled guest helper. The broker removes staging after success or
+failure and expires crash leftovers after one hour. Downloads are published
+atomically only after a complete copy and a fresh assignment check. Transfers
+time out after ten minutes; an upload with an uncertain result is never retried
+automatically. Check the guest destination before retrying.
+
 Removing an assignment closes that bot's terminals and live previews. Already
 sent input cannot be undone and is never automatically retried. Assignment checks
 are not hard isolation against a bot with autonomous host access.
@@ -54,13 +83,26 @@ Run from the repository root:
 swift test --disable-sandbox --package-path Computer/Bridge
 zsh Computer/Bridge/test-signed-connection.sh
 swift test --disable-sandbox --filter 'ComputerAccessTests|MessengerDocumentationTests'
+swift test --disable-sandbox --filter ComputerTransferTests
+swift test --disable-sandbox --filter ComputerBrokerTransferTests
+swift test --disable-sandbox --filter ComputerAgentFilesTests
 ```
 
 For guest integration, launch the signed Computer executable with
 `--noodle-background --provider-integration-test`. After `PROVIDER TEST READY`,
 launch the signed Noodle executable with `--computer-integration-test`.
-These use temporary libraries and test assignment, terminals, revocation, and cards.
+These use temporary libraries and test assignment, binary and empty-file CLI
+transfers, overwrite/path errors, terminals, revocation, and cards.
 The provider cleans up after completion or ten minutes.
+
+The broker suite also runs under the ordinary root `swift test` and CI. It uses
+real workspace IPC, file I/O and assignment checks with a controlled provider
+connection to test interrupted uploads/downloads, revocation during a transfer,
+concurrent agents, forged envelopes, incorrect byte counts and older providers.
+Concurrent IPC reader/writer tests also check that scanners only see complete
+JSON messages, and that publication never follows a destination symlink.
+These tests require no signing identity or running guest. The signed guest
+fixture above verifies the actual transport and sandbox boundary separately.
 
 Noodle's `--computer-picker-test` opens an isolated assignment UI fixture.
 Computer's `--provider-snapshot-test`, alongside its provider integration flags,

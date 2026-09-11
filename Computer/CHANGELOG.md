@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Support native file upload/download requests from Noodle agents using the existing guest file helper, with bounded streaming, private staging, and capability discovery.
+
 ### Changed
 
 - Simplify the Computer setup, file, integration, and release guides; separate build instructions from the README.

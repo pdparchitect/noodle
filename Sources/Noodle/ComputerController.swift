@@ -20,13 +20,18 @@ import SwiftUI
     @ObservationIgnored private var claimed: [UUID: Date] = [:]
     @ObservationIgnored private var launch: Task<Void, Error>?
     @ObservationIgnored private let applicationLookup: () -> URL?
+    /// Injectable connection boundary for deterministic broker failure tests.
+    /// Normal app construction always uses the authenticated signed-app socket.
+    @ObservationIgnored private let connection: (@Sendable (ComputerRequest) async throws -> ComputerResponse)?
     var installed: Bool { applicationLookup() != nil }
 
     init(repository: WorkspaceRepository, socket: URL? = nil,
-         applicationLookup: @escaping () -> URL? = { NSWorkspace.shared.urlForApplication(withBundleIdentifier: ComputerConnection.providerID) }) {
+         applicationLookup: @escaping () -> URL? = { NSWorkspace.shared.urlForApplication(withBundleIdentifier: ComputerConnection.providerID) },
+         connection: (@Sendable (ComputerRequest) async throws -> ComputerResponse)? = nil) {
         self.repository = repository
         self.socket = socket
         self.applicationLookup = applicationLookup
+        self.connection = connection
         do { registry = try ComputerAssignments.load(root: repository.rootURL) }
         catch { readable = false; failure = "Could not read Computer assignments; they were not changed." }
     }
@@ -71,10 +76,12 @@ import SwiftUI
         handshake.capabilitiesOnly = request.operation != .list
         let discovery = try await connect(handshake, launchIfNeeded: launchIfNeeded)
         try ComputerCapabilities.requireCompatible(discovery.capabilities)
+        if request.operation.isFileTransfer { try ComputerCapabilities.requireFileTransfer(discovery.capabilities) }
         if request.operation == .list { return discovery }
         return try await connect(request, launchIfNeeded: false)
     }
     private func connect(_ request: ComputerRequest, launchIfNeeded: Bool) async throws -> ComputerResponse {
+        if let connection { return try await connection(request) }
         let endpoint = try socket ?? ComputerConnection.socketURL(), team = try ComputerConnection.signingTeam()
         do { return try await ComputerConnection.call(request, socket: endpoint, team: team) }
         catch let error as ComputerBridgeError where error.unavailable && launchIfNeeded && socket == nil {
@@ -171,7 +178,7 @@ import SwiftUI
         return response
     }
     private func scan() {
-        claimed = claimed.filter { Date().timeIntervalSince($0.value) < 180 }
+        claimed = claimed.filter { Date().timeIntervalSince($0.value) < 700 }
         for agent in agents {
             guard !pending.contains(agent.id), let token = tokens[agent.id],
                   let directory = try? ComputerAgentSkill.bridge(workspace: repository.directory(for: agent)),
@@ -183,7 +190,7 @@ import SwiftUI
                 do {
                     let envelope = try JSONDecoder().decode(ComputerAgentRequest.self, from: MCPBridgeFiles.read(file, limit: 150_000))
                     guard envelope.id == id, envelope.token == token, envelope.expiresAt > Date(),
-                          envelope.expiresAt.timeIntervalSinceNow <= (envelope.request.operation == .start ? 185 : 125) else { throw ComputerBridgeError("Invalid or expired Computer session.") }
+                          envelope.expiresAt.timeIntervalSinceNow <= Double(envelope.request.operation.timeout + 5) else { throw ComputerBridgeError("Invalid or expired Computer session.") }
                     pending.insert(agent.id)
                     Task { [weak self] in
                         guard let self else { return }
@@ -191,10 +198,10 @@ import SwiftUI
                         let response: ComputerResponse
                         do { response = try await self.perform(envelope, agent: agent) }
                         catch { response = .init(error: error.localizedDescription) }
-                        try? MCPBridgeFiles.write(response, to: resultURL)
+                        try? ComputerAgentFiles.write(response, to: resultURL)
                     }
                     break
-                } catch { try? MCPBridgeFiles.write(ComputerResponse(error: error.localizedDescription), to: resultURL) }
+                } catch { try? ComputerAgentFiles.write(ComputerResponse(error: error.localizedDescription), to: resultURL) }
             }
         }
     }
@@ -206,7 +213,9 @@ import SwiftUI
         guard ![.revoke, .display, .terminalResolve].contains(request.operation) else { throw ComputerBridgeError("This operation is user-only.") }
         if request.operation == .list {
             let response = try await call(.init(.list))
-            return .init(computers: response.computers?.filter { registry.permits($0.id, agent: agent.id) })
+            var result = ComputerResponse(computers: response.computers?.filter { registry.permits($0.id, agent: agent.id) })
+            result.capabilities = response.capabilities
+            return result
         }
         if let conversation = envelope.conversationID {
             guard request.operation == .preview, envelope.view == nil || ["terminal", "web"].contains(envelope.view!) else {
@@ -225,7 +234,14 @@ import SwiftUI
             }
         }
         guard registry.permits(request.computerID, agent: agent.id) else { throw ComputerBridgeError("This computer is not assigned to you.") }
-        let response = try await call(request)
+        let response: ComputerResponse
+        if request.operation.isFileTransfer {
+            guard let localPath = envelope.localPath else { throw ComputerBridgeError("Specify a local workspace file.") }
+            response = try await transfer(request, localPath: localPath, agent: agent)
+        } else {
+            guard envelope.localPath == nil else { throw ComputerBridgeError("Local paths require upload or download.") }
+            response = try await call(request)
+        }
         guard registry.permits(request.computerID, agent: agent.id), agents.contains(where: { $0.id == agent.id }) else {
             _ = try? await call(.init(.revoke, computerID: request.computerID, agentID: agent.id))
             throw ComputerBridgeError("Computer access was revoked during the request.")
@@ -247,6 +263,42 @@ import SwiftUI
                     body: String((envelope.message ?? "Open \(computer.name)").prefix(10_000)), attachmentIDs: [attachment.id])
             } catch { try? repository.removeAttachment(attachment); throw error }
         }
+        return response
+    }
+    private func transfer(_ input: ComputerRequest, localPath: String, agent: AgentRecord) async throws -> ComputerResponse {
+        func checkAccess() throws {
+            guard registry.permits(input.computerID, agent: agent.id), agents.contains(where: { $0.id == agent.id }) else {
+                throw ComputerBridgeError("Computer access was revoked during the transfer.")
+            }
+        }
+        // Reject old providers before copying a potentially large local file.
+        let discovery = try await call(.init(.list))
+        try ComputerCapabilities.requireFileTransfer(discovery.capabilities)
+        try checkAccess()
+        let root = try (socket ?? ComputerConnection.socketURL()).deletingLastPathComponent()
+        var request = input
+        request.transferID = UUID() // Ignore any agent-supplied staging reference.
+        let staging = try ComputerTransferFiles.staging(root: root, id: request.transferID!, create: true)
+        defer { try? FileManager.default.removeItem(at: staging.deletingLastPathComponent()) }
+        let workspace = repository.directory(for: agent)
+        if request.operation == .fileUpload {
+            let count = try await Task.detached {
+                try ComputerWorkspaceFiles.upload(workspace: workspace, path: localPath, to: staging)
+            }.value
+            try checkAccess()
+            let response = try await call(request)
+            guard response.byteCount == count else { throw ComputerBridgeError("The provider did not confirm the complete upload. Check the guest file before retrying.") }
+            return response
+        }
+        let destination = try ComputerWorkspaceDownload(workspace: workspace, path: localPath)
+        let response = try await call(request)
+        try checkAccess()
+        guard let count = response.byteCount, count >= 0, count <= ComputerTransferFiles.limit else {
+            throw ComputerBridgeError("The provider returned an invalid download size.")
+        }
+        _ = try await Task.detached { try destination.copy(from: staging, expected: count) }.value
+        try checkAccess()
+        try destination.publish()
         return response
     }
     deinit { monitor?.cancel(); bridge?.cancel() }

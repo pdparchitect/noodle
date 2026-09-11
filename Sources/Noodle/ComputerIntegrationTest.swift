@@ -92,6 +92,30 @@ import SwiftUI
         guard (list["computers"] as? [[String: Any]])?.count == 1 else { throw ComputerBridgeError("Discovery failed.") }
         _ = try await cli(["start"] + base)
         await controller.refresh()
+        // Exercise the real CLI, broker, App Group and guest helper before any
+        // terminal exists. Include NUL, non-UTF8 bytes and shell metacharacters.
+        let workspace = repository.directory(for: a.agent)
+        let guestPath = "/workspace/transfer ' $()\n.bin"
+        let binary = Data((0..<1_250_017).map { UInt8(truncatingIfNeeded: $0) })
+        try binary.write(to: workspace.appendingPathComponent("upload.bin"))
+        let began = Date()
+        let uploaded = try await cli(["upload"] + base + ["--source", "upload.bin", "--destination", guestPath])
+        guard (uploaded["byteCount"] as? NSNumber)?.intValue == binary.count else { throw ComputerBridgeError("Upload byte count is incorrect.") }
+        let downloaded = try await cli(["download"] + base + ["--source", guestPath, "--destination", "download.bin"])
+        guard (downloaded["byteCount"] as? NSNumber)?.intValue == binary.count,
+              try Data(contentsOf: workspace.appendingPathComponent("download.bin")) == binary else {
+            throw ComputerBridgeError("CLI binary transfer was corrupted.")
+        }
+        try await expectDenied(["upload"] + base + ["--source", "upload.bin", "--destination", guestPath], a.agent)
+        try await expectDenied(["download"] + base + ["--source", guestPath, "--destination", "download.bin"], a.agent)
+        try await expectDenied(["download"] + base + ["--source", "/workspace/missing-transfer-file", "--destination", "missing.bin"], a.agent)
+        try await expectDenied(["download"] + base + ["--source", "/workspace", "--destination", "folder.bin"], a.agent)
+        try await expectDenied(["download"] + base + ["--source", guestPath, "--destination", "../escape.bin"], a.agent)
+        try Data().write(to: workspace.appendingPathComponent("empty"))
+        _ = try await cli(["upload"] + base + ["--source", "empty", "--destination", "/workspace/empty-transfer"])
+        _ = try await cli(["download"] + base + ["--source", "/workspace/empty-transfer", "--destination", "empty-copy"])
+        guard try Data(contentsOf: workspace.appendingPathComponent("empty-copy")).isEmpty else { throw ComputerBridgeError("Empty file transfer failed.") }
+        print("PASS: native CLI binary/empty transfers, exact byte counts, literal filenames, no overwrite, missing/directory/escape errors (\(Date().timeIntervalSince(began))s)")
         let openedA = try await cli(["open"] + base), openedB = try await cli(["open"] + base, b.agent)
         guard let idA = openedA["terminalID"] as? String, let idB = openedB["terminalID"] as? String, idA != idB else {
             throw ComputerBridgeError("Agents did not receive separate terminals.")
@@ -127,6 +151,7 @@ import SwiftUI
         try await expectDenied(["present"] + terminalB + ["--conversation", a.conversation.id.uuidString], b.agent)
         try controller.assign([], to: b.agent)
         try await expectDenied(["read"] + terminalB, b.agent)
+        try await expectDenied(["download"] + base + ["--source", guestPath, "--destination", "revoked.bin"], b.agent)
         _ = try await cli(["read"] + terminalA)
         print("PASS: discovery, two assignments, separate PTYs, shared guest files, CLI input/read/resize, typed card, membership checks and revocation")
 
