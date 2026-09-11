@@ -3,6 +3,20 @@ import XCTest
 @testable import NoodleCore
 
 final class JSONLineReaderTests: XCTestCase {
+    func testEndOfStreamDeliversCompleteMessagesBeforeCompletionAndDiscardsPartialFrame() async {
+        let message = expectation(description: "complete final message")
+        let finished = expectation(description: "end of stream")
+        message.assertForOverFulfill = true
+        let reader = JSONLineReader { object in
+            XCTAssertEqual(object["id"] as? Int, 1)
+            message.fulfill()
+        }
+        reader.receive(Data(#"{"id":1}"#.utf8))
+        reader.receive(Data("\n{\"id\":2}".utf8))
+        reader.finish { finished.fulfill() }
+        await fulfillment(of: [message, finished], timeout: 3, enforceOrder: true)
+    }
+
     func testFragmentedUnicodeAndMultipleLinesRemainOrdered() async {
         let first = expectation(description: "First message")
         let second = expectation(description: "Second message")

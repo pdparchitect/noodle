@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Stop Grok and Muse inspection promptly when output closes, ignore unsolicited replies, and reject malformed responses instead of reporting misleading account or model status.
 - Publish Computer CLI bridge messages only after their JSON is complete, preventing intermittent empty-response failures during file transfers and other commands.
 - Show bot runtime failures under the affected harness in Settings, with status details on sidebar avatars and a separate Kick action in failed bots' sidebar menus. Recognize Grok Build's exhausted usage allowance and pause automatic reconnect retries while preserving unfinished work.
 - Return sends and Escape discards voice recordings even when keyboard focus stays outside the recording bar after ⌘⇧D.
@@ -16,6 +17,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Test Grok and Muse inspection with isolated local process fixtures in the default Swift suite, without installed harnesses, provider logins, or network requests.
 - Transfer files directly between a bot's workspace and its assigned Computer with CLI `upload` and `download`, including binary files up to 8 GiB, assignment checks, and protection against overwriting existing files.
 - Add broker regression tests for interrupted file transfers, revocation during a transfer, concurrent agents, invalid provider responses, and forged requests.
 - Add regression tests for MCP HTTP redirects, response limits and cancellation, plus FX account/model inspection failures. Verify redirect blocking through URLSession and distinguish rejected icon responses from fallback artwork. Publish Noodle coverage summaries and downloadable reports in CI.

@@ -67,9 +67,16 @@ JSON export. To compare against a saved report, pass
 
 Each Noodle CI test job, including pull requests, publishes the summary and a
 `noodle-coverage` artifact retained for 30 days. Coverage counts root source
-modules linked into the test bundle, excluding test code and dependencies.
-The main app/UI and separate native fixtures are outside that measurement.
+modules linked into the test bundle, including app code pulled in by integration
+tests, and excludes test code and dependencies. Separate native fixtures do not
+contribute to that report.
 Reporting does not impose a minimum percentage; test failures still fail CI.
+
+Grok and Muse inspection regression tests run in the default Swift suite using
+temporary local stdio fixtures and isolated home directories. They exercise
+handshakes, invalid replies, timeouts, and process cleanup without installed
+harnesses, authentication, or network requests. Live harness probes remain
+explicitly opt-in and are not required by release CI.
 
 ## Focused checks
 

@@ -26,4 +26,13 @@ public final class JSONLineReader: @unchecked Sendable {
             pending.append(contentsOf: data[start...])
         }
     }
+
+    /// Signal EOF only after queued complete messages have been delivered.
+    /// A trailing unterminated frame is incomplete and must not become a response.
+    func finish(_ completion: @escaping @Sendable () -> Void) {
+        queue.async { [self] in
+            pending.removeAll()
+            completion()
+        }
+    }
 }
