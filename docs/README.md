@@ -13,6 +13,7 @@
 ## Develop Noodle
 
 - [Build and test](development.md)
+- [Contributing](../CONTRIBUTING.md)
 - [Architecture](architecture.md)
 - [Storage and Messenger](storage-and-messenger.md)
 - [Message and command reference](message-reference.md)

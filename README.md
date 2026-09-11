@@ -53,6 +53,7 @@ in the bot's **Computers** tab. Several bots can share the same computer.
 - [Architecture](docs/architecture.md)
 - [Security and privacy](docs/security.md)
 - [Development and testing](docs/development.md)
+- [Contributing](CONTRIBUTING.md)
 - [Releases](docs/releases.md)
 - [All documentation](docs/README.md)
 - [Changelog](CHANGELOG.md)
