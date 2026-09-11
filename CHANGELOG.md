@@ -6,7 +6,11 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-09-11
+
 ### Changed
+
+- Add a screenshot gallery to the Noodle README.
 
 - Clarify the README opening and download descriptions, describe Noodle Computer as computers for your AI agents, replace em dashes with colons, and keep system requirements in Getting started.
 - Share background import, presets, transitions and animated playback with Noodle Computer so both apps support the same media formats and behavior.

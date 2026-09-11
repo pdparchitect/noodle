@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## [0.3.0] - 2026-09-11
+
+- Add a screenshot gallery to the Computer README.
+
 - Use consistent native toolbar styling and sizing for file navigation, the view selector, actions and search, keep the collapsed search button round, and vertically center the search text and caret.
 
 - Show file navigation, layout, actions and search in the main window toolbar only while Files is selected, with Back/Forward on the left, the remaining file controls on the right, and no folder-name label.
