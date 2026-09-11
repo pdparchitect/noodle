@@ -86,24 +86,16 @@ private struct ConversationRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            HStack(spacing: 6) {
+            ZStack(alignment: .bottomTrailing) {
+                ConversationAvatar(
+                    participants: store.participants(for: conversation),
+                    isGroup: conversation.kind == .group,
+                    size: 42
+                )
                 Circle()
-                    .fill(Color.blue)
-                    .frame(width: 8, height: 8)
-                    .opacity(store.hasUnreadMessages(in: conversation) ? 1 : 0)
-                    .accessibilityHidden(true)
-
-                ZStack(alignment: .bottomTrailing) {
-                    ConversationAvatar(
-                        participants: store.participants(for: conversation),
-                        isGroup: conversation.kind == .group,
-                        size: 42
-                    )
-                    Circle()
-                        .fill(runtimeColor)
-                        .frame(width: 10, height: 10)
-                        .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
-                }
+                    .fill(runtimeColor)
+                    .frame(width: 10, height: 10)
+                    .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
             }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -127,8 +119,19 @@ private struct ConversationRow: View {
             }
         }
         .frame(height: 66)
+        .overlay(alignment: .leading) {
+            if store.hasUnreadMessages(in: conversation) {
+                Circle()
+                    .fill(Color.blue)
+                    .frame(width: 8, height: 8)
+                    // Keep the dot in the leading inset, 5 points before the avatar.
+                    .offset(x: -13)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
         .contentShape(Rectangle())
-        .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10))
+        .listRowInsets(EdgeInsets(top: 2, leading: 14, bottom: 2, trailing: 10))
         .listRowSeparator(.visible, edges: .bottom)
         .listRowSeparatorTint(Color.primary.opacity(0.12))
         .accessibilityElement(children: .combine)
