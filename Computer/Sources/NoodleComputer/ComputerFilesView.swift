@@ -16,7 +16,7 @@ struct ComputerFilesView: View {
     @State private var enteringPath = false
     @State private var searching = false
     @State private var previewNotice: String?
-    @FocusState private var searchFocused: Bool
+    @State private var searchFocused = false
     @State private var fileFocusRequest = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var appearance: ComputerAppearance
@@ -26,82 +26,30 @@ struct ComputerFilesView: View {
         self.appearance = appearance
     }
     var body: some View {
+        observedContent
+        .alert("File operation failed", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
+            Button("OK") { model.error = nil }
+        } message: { Text(model.error ?? "") }
+        .alert("Preview unavailable", isPresented: Binding(get: { previewNotice != nil }, set: { if !$0 { previewNotice = nil } })) {
+            Button("OK") { previewNotice = nil }
+        } message: { Text(previewNotice ?? "") }
+        .alert(naming ?? "Name", isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
+            TextField("Name", text: $name)
+            Button("Cancel", role: .cancel) { naming = nil }
+            Button("Save") { if naming == "New Folder" { model.createFolder(name) } else { model.rename(name) }; naming = nil }
+        }
+        .alert("Go to Folder", isPresented: $enteringPath) {
+            TextField("/workspace", text: $path)
+            Button("Cancel", role: .cancel) {}
+            Button("Go") { model.navigate(path) }
+        } message: { Text("Enter a path inside this computer.") }
+        .confirmationDialog(deleteTitle, isPresented: $deleting) {
+            Button("Delete", role: .destructive) { model.removeSelected() }
+        } message: { Text("This permanently removes the guest file or empty folder. Nonempty folders cannot be deleted here.") }
+    }
+    private var deleteTitle: String { "Delete \(model.selected?.name ?? "item")?" }
+    private var fileContent: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                HStack(spacing: 0) {
-                    Button { model.back() } label: { Image(systemName: "chevron.left").frame(width: 34, height: 32) }
-                        .disabled(model.history.isEmpty).help("Back (⌘[)")
-                    Rectangle().fill(.primary.opacity(0.12)).frame(width: 1, height: 16)
-                    Button { model.forward() } label: { Image(systemName: "chevron.right").frame(width: 34, height: 32) }
-                        .disabled(model.forwardHistory.isEmpty).help("Forward (⌘])")
-                }.background(.primary.opacity(0.025), in: Capsule())
-                    .overlay(Capsule().strokeBorder(.primary.opacity(0.13), lineWidth: 1))
-                Button { path = model.folder; enteringPath = true } label: {
-                    Text(model.folder == "/" ? "Filesystem" : (model.folder as NSString).lastPathComponent)
-                        .font(.headline).lineLimit(1).truncationMode(.middle)
-                }.help("Go to Folder")
-                Spacer(minLength: 8)
-                HStack(spacing: 2) {
-                    viewButton("square.grid.2x2", title: "Icons", selected: model.iconView && !model.previewEnabled) {
-                        model.iconView = true; model.previewEnabled = false
-                    }
-                    viewButton("list.bullet", title: "List", selected: !model.iconView && !model.previewEnabled) {
-                        model.iconView = false; model.previewEnabled = false
-                    }
-                    viewButton("rectangle.bottomthird.inset.filled", title: "Gallery", selected: model.previewEnabled) {
-                        model.previewEnabled = true
-                        if model.selected == nil { model.choose(model.visible.first) }
-                    }
-                }.padding(3).background(.primary.opacity(0.025), in: Capsule())
-                    .overlay(Capsule().strokeBorder(.primary.opacity(0.13), lineWidth: 1))
-                if model.busy {
-                    ProgressView().controlSize(.small).help(model.status)
-                    Button { model.cancelTransfer() } label: { Image(systemName: "xmark.circle") }.help("Cancel Transfer")
-                }
-                Menu {
-                    Button("New Folder…") { name = "Untitled Folder"; naming = "New Folder" }.disabled(model.busy)
-                    Button("Import Files…") { model.importPanel() }.disabled(model.busy)
-                    Button("Export…") { model.exportPanel() }.disabled(model.selected?.regular != true || model.busy)
-                    Divider()
-                    Button("Rename…") { name = model.selected?.name ?? ""; naming = "Rename" }.disabled(model.selected == nil || model.busy)
-                    Button("Duplicate") { model.duplicateSelected() }.disabled(model.selected?.regular != true || model.busy)
-                    Button("Delete…", role: .destructive) { deleting = true }.disabled(model.selected == nil || model.busy)
-                    Divider()
-                    Button("Enclosing Folder") { model.navigate(model.parent) }.disabled(model.folder == "/")
-                    Button("Workspace") { model.navigate("/workspace") }
-                    Button("Home") { model.navigate("/root") }
-                    Button("Filesystem") { model.navigate("/") }
-                    Divider()
-                    Button("Refresh") { model.navigate(model.folder, record: false) }
-                    Toggle("Show Hidden Files", isOn: $model.showHidden)
-                } label: { Image(systemName: "ellipsis").font(.system(size: 16)) }
-                    .menuStyle(.borderlessButton).menuIndicator(.hidden)
-                    .frame(width: 42, height: 34).contentShape(Capsule())
-                    .background(.primary.opacity(0.025), in: Capsule())
-                    .overlay(Capsule().strokeBorder(.primary.opacity(0.13), lineWidth: 1)).help("File Actions")
-                HStack(spacing: 7) {
-                    Button { searching = true; searchFocused = true } label: {
-                        Image(systemName: "magnifyingglass").font(.system(size: 15))
-                            .frame(width: 16, height: 24)
-                    }.help("Search (⌘F)")
-                    if searching {
-                        TextField("Search", text: $model.filter).textFieldStyle(.plain)
-                            .focused($searchFocused).frame(minWidth: 0)
-                            .onExitCommand { searching = false; model.filter = "" }
-                            .transition(.opacity)
-                        Button { searching = false; model.filter = "" } label: {
-                            Image(systemName: "xmark.circle.fill").font(.system(size: 13)).foregroundStyle(.secondary)
-                        }.help("Close Search").transition(.opacity)
-                    }
-                }.padding(.horizontal, 9)
-                    .frame(minWidth: searching ? 120 : 34, idealWidth: searching ? 240 : 34, maxWidth: searching ? 240 : 34)
-                    .frame(height: 34)
-                    .background(.primary.opacity(searching ? 0.06 : 0.025), in: Capsule())
-                    .overlay(Capsule().strokeBorder(.primary.opacity(searchFocused ? 0.4 : 0.13), lineWidth: searchFocused ? 2 : 1))
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: searching)
-
-            }.buttonStyle(.borderless).padding(.horizontal, 18).padding(.vertical, 12)
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: searching)
             VStack(spacing: 0) {
                 if model.previewEnabled { galleryPreview.frame(maxWidth: .infinity, maxHeight: .infinity) }
                 VStack(spacing: 0) {
@@ -125,7 +73,11 @@ struct ComputerFilesView: View {
 
             }
         }
+    }
+    private var observedContent: some View {
+        fileContent
         .background(Color(computerColour(appearance.terminalBackground)).opacity(appearance.terminalOpacity))
+        .toolbar { fileToolbar }
         .quickLookPreview($panelURL)
         .onChange(of: searching) { _, active in if !active { searchFocused = false; fileFocusRequest += 1 } }
         .onChange(of: model.previewURL) { _, url in
@@ -140,30 +92,91 @@ struct ComputerFilesView: View {
         .onChange(of: model.selection) { _, _ in quickLookRequested = false }
         .task { model.navigate(model.folder, record: false) }
         .onDisappear { panelURL = nil; model.disappear() }
-        .alert("File operation failed", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
-            Button("OK") { model.error = nil }
-        } message: { Text(model.error ?? "") }
-        .alert("Preview unavailable", isPresented: Binding(get: { previewNotice != nil }, set: { if !$0 { previewNotice = nil } })) {
-            Button("OK") { previewNotice = nil }
-        } message: { Text(previewNotice ?? "") }
-        .alert(naming ?? "Name", isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
-            TextField("Name", text: $name)
-            Button("Cancel", role: .cancel) { naming = nil }
-            Button("Save") { if naming == "New Folder" { model.createFolder(name) } else { model.rename(name) }; naming = nil }
-        }
-        .alert("Go to Folder", isPresented: $enteringPath) {
-            TextField("/workspace", text: $path)
-            Button("Cancel", role: .cancel) {}
-            Button("Go") { model.navigate(path) }
-        } message: { Text("Enter a path inside this computer.") }
-        .confirmationDialog("Delete \(model.selected?.name ?? "item")?", isPresented: $deleting) {
-            Button("Delete", role: .destructive) { model.removeSelected() }
-        } message: { Text("This permanently removes the guest file or empty folder. Nonempty folders cannot be deleted here.") }
     }
-    private func viewButton(_ symbol: String, title: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: symbol).font(.system(size: 16)).frame(width: 32, height: 28)
-                .background(selected ? Color.primary.opacity(0.16) : .clear, in: Capsule()) }
-            .accessibilityLabel(title).help(title)
+    @ToolbarContentBuilder private var fileToolbar: some ToolbarContent {
+        ToolbarItem(id: "files-navigation", placement: .automatic) {
+            ControlGroup {
+                Button { model.back() } label: { Label("Back", systemImage: "chevron.left") }
+                    .disabled(model.history.isEmpty).help("Back (⌘[)")
+                Button { model.forward() } label: { Label("Forward", systemImage: "chevron.right") }
+                    .disabled(model.forwardHistory.isEmpty).help("Forward (⌘])")
+            }
+            .controlGroupStyle(.navigation)
+            .labelStyle(.iconOnly)
+        }
+        ToolbarSpacer(.flexible, placement: .automatic)
+        ToolbarItem(id: "files-layout", placement: .automatic) {
+            Picker("File View", selection: Binding(
+                get: { model.previewEnabled ? 2 : model.iconView ? 0 : 1 },
+                set: { mode in
+                    model.iconView = mode != 1
+                    model.previewEnabled = mode == 2
+                    if mode == 2, model.selected == nil { model.choose(model.visible.first) }
+                }
+            )) {
+                Image(systemName: "square.grid.2x2").tag(0).accessibilityLabel("Icons").help("Icons")
+                Image(systemName: "list.bullet").tag(1).accessibilityLabel("List").help("List")
+                Image(systemName: "rectangle.bottomthird.inset.filled").tag(2).accessibilityLabel("Gallery").help("Gallery")
+            }
+            .pickerStyle(.segmented).labelsHidden().fixedSize()
+        }
+        ToolbarItem(id: "files-actions", placement: .automatic) {
+                Menu {
+                    Button("New Folder…") { name = "Untitled Folder"; naming = "New Folder" }.disabled(model.busy)
+                    Button("Import Files…") { model.importPanel() }.disabled(model.busy)
+                    Button("Export…") { model.exportPanel() }.disabled(model.selected?.regular != true || model.busy)
+                    Divider()
+                    Button("Rename…") { name = model.selected?.name ?? ""; naming = "Rename" }.disabled(model.selected == nil || model.busy)
+                    Button("Duplicate") { model.duplicateSelected() }.disabled(model.selected?.regular != true || model.busy)
+                    Button("Delete…", role: .destructive) { deleting = true }.disabled(model.selected == nil || model.busy)
+                    Divider()
+                    Button("Go to Folder…") { path = model.folder; enteringPath = true }
+                    Button("Enclosing Folder") { model.navigate(model.parent) }.disabled(model.folder == "/")
+                    Button("Workspace") { model.navigate("/workspace") }
+                    Button("Home") { model.navigate("/root") }
+                    Button("Filesystem") { model.navigate("/") }
+                    Divider()
+                    Button("Refresh") { model.navigate(model.folder, record: false) }
+                    Toggle("Show Hidden Files", isOn: $model.showHidden)
+                } label: { Label("File Actions", systemImage: "ellipsis") }
+                .menuIndicator(.hidden).help("File Actions")
+        }
+        ToolbarSpacer(.fixed, placement: .automatic)
+        ToolbarItem(id: "files-search", placement: .automatic) {
+            Group {
+                if searching {
+                    HStack(spacing: 7) {
+                        Image(systemName: "magnifyingglass")
+                        ComputerFileSearchField(text: $model.filter, focused: $searchFocused) {
+                            searching = false; model.filter = ""
+                        }.frame(minWidth: 0)
+                        Button { searching = false; model.filter = "" } label: {
+                            Image(systemName: "xmark.circle.fill").font(.system(size: 13)).foregroundStyle(.secondary)
+                        }.help("Close Search")
+                    }
+                    .padding(.horizontal, 9)
+                    .frame(minWidth: 120, idealWidth: 240, maxWidth: 240)
+                    .frame(height: 34)
+                    .overlay(Capsule().strokeBorder(.primary.opacity(searchFocused ? 0.4 : 0), lineWidth: 2))
+                    .buttonStyle(.borderless)
+                    .transition(.opacity)
+                } else {
+                    Button { openSearch() } label: {
+                        Label("Search", systemImage: "magnifyingglass")
+                    }.help("Search (⌘F)")
+                    .transition(.opacity)
+                }
+            }
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: searching)
+        }
+        if model.busy {
+            ToolbarItem(id: "files-transfer", placement: .automatic) {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small).help(model.status)
+                    Button { model.cancelTransfer() } label: { Image(systemName: "xmark.circle") }.help("Cancel Transfer")
+                }
+            }
+        }
     }
     @ViewBuilder private var galleryPreview: some View {
         if let file = model.selected {
@@ -181,6 +194,10 @@ struct ComputerFilesView: View {
             }.padding(20)
         } else { Color.clear }
     }
+    private func openSearch() {
+        if searching { searchFocused = true }
+        else { searching = true }
+    }
     private func keyboardAction(_ event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
         if modifiers == .command {
@@ -192,7 +209,7 @@ struct ComputerFilesView: View {
             switch event.charactersIgnoringModifiers?.lowercased() {
             case "[": model.back(); return true
             case "]": model.forward(); return true
-            case "f": searching = true; searchFocused = true; return true
+            case "f": openSearch(); return true
             default: break
             }
         }

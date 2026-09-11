@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Use consistent native toolbar styling and sizing for file navigation, the view selector, actions and search, keep the collapsed search button round, and vertically center the search text and caret.
+
+- Show file navigation, layout, actions and search in the main window toolbar only while Files is selected, with Back/Forward on the left, the remaining file controls on the right, and no folder-name label.
+
 - Remove the transient folder-loading spinner so the Files toolbar stays still when navigating or refreshing.
 
 - Place Start/Stop before one segmented toolbar control for Desktop, Terminal or Files, showing only available views and keeping the desktop connection and shell session alive. Use standard spacing between Edit and Start/Stop.

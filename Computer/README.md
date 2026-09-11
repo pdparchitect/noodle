@@ -89,7 +89,9 @@ Use the segmented toolbar control on a running container to select Desktop,
 Terminal or Files. Shell containers offer Terminal and Files. Switching preserves
 the desktop connection, shell session and Files navigation.
 Files opens at `/workspace` in an icon grid with native macOS folder and file-type
-artwork. Grouped toolbar controls switch between icons, list and gallery. The
+artwork. File navigation, layout, actions and search appear in the main window
+toolbar only while Files is selected. Grouped controls switch between icons, list
+and gallery. The
 background uses the terminal colour and opacity, with no status bar or bottom
 action buttons. Search opens from the toolbar magnifying glass or Command-F.
 It supports back/forward, enclosing folder, Go to Folder and hidden files. Folder listings are capped at 5,000 entries.
