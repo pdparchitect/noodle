@@ -148,6 +148,17 @@ class WorkflowTests(unittest.TestCase):
             self.assertIn('tag', self.jobs[job]['needs'])
             self.assertIn('actions/download-artifact@v7', json.dumps(self.jobs[job]))
 
+    def test_computer_packaging_has_guest_helper_toolchain(self):
+        steps = workflow('computer-release.yml')['jobs']['release']['steps']
+        setup = next(i for i, step in enumerate(steps)
+                     if step.get('uses', '').startswith('actions/setup-go@'))
+        package = next(i for i, step in enumerate(steps)
+                       if 'scripts/package-computer-release.sh' in step.get('run', ''))
+        self.assertLess(setup, package)
+        self.assertEqual(steps[setup]['with']['go-version'], '1.26.x')
+        # The helper builds directly from standard-library-only source, without go.mod.
+        self.assertFalse(steps[setup]['with']['cache'])
+
     def test_file_versions_drive_main_push_without_tag_event_recursion(self):
         # YAML 1.1 interprets the key "on" as true.
         triggers = self.flow.get('on', self.flow.get('true'))

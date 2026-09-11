@@ -4,6 +4,8 @@
 
 ## [0.3.0] - 2026-09-11
 
+- Install the Go compiler in release preparation so the guest file helper is included in published builds.
+
 - Add a screenshot gallery to the Computer README.
 
 - Use consistent native toolbar styling and sizing for file navigation, the view selector, actions and search, keep the collapsed search button round, and vertically center the search text and caret.
