@@ -21,6 +21,7 @@ import NoodleCore
     var interruptID: String?
     var promptID: Int?
     var permissionReply: [String: Any]?
+    var invalidated = false
     init() throws { Self.current = self }
     func start(provider: HarnessProvider, agentID: UUID, executablePath: String,
                sessionID: UUID? = nil, resumeSession: Bool = false,
@@ -55,7 +56,10 @@ import NoodleCore
                 : ["protocolVersion": 1]
         case "thread/start", "thread/resume": result = ["thread": ["id": session]]
         case "thread/name/set", "authenticate": break
-        case "session/new", "session/load": result = ["sessionId": session]
+        case "session/new": result = ["sessionId": session]
+        case "session/load":
+            session = params["sessionId"] as! String
+            result = ["sessionId": session]
         case "session/start", "session/resume":
             result = ["session": ["sessionId": session, "workspaceRoot": Self.workspace], "pendingRequests": []]
         case "session/prompt": prompts += 1; promptID = id; return
@@ -104,7 +108,7 @@ import NoodleCore
     func emit(_ object: [String: Any]) {
         onData?(try! JSONSerialization.data(withJSONObject: object) + Data([10]), false)
     }
-    func invalidate() {}
+    func invalidate() { invalidated = true }
     func stop(reply: @escaping (Bool) -> Void) { reply(true) }
 }
 
@@ -293,6 +297,85 @@ import NoodleCore
             process.stop { _ in }
         }
         print("PASS: ACP permissions are cancelled while interruption drains")
+
+        // Replay Grok's actual billing-failure shapes without contacting an
+        // account. A disconnected, exhausted bot must wait for a manual kick.
+        for failureMode in 0..<4 {
+            let process = try await make(.grokBuild, root: root)
+            let workspace = URL(fileURLWithPath: ExtendedAgentConnection.workspace)
+            let wire = ExtendedAgentConnection.current!
+            let stateURL = workspace.appendingPathComponent(".agents/grok-runtime-extended.json")
+            let savedState = try Data(contentsOf: stateURL)
+            process.notify()
+            await eventually { wire.prompts == 1 && process.snapshot.phase == .working }
+            let message = "API error (status 402 Payment Required): Grok Build usage balance exhausted"
+            if failureMode == 0 {
+                wire.emit(["id": wire.promptID!, "error": ["code": -32603, "message": "Internal error",
+                    "data": ["http_status": 402, "message": message]]])
+            } else {
+                let update: [String: Any] = failureMode == 2
+                    ? ["sessionUpdate": "turn_completed", "stop_reason": "error", "agent_result": message]
+                    : ["sessionUpdate": "retry_state", "type": "failed", "error_type": "api", "message": message]
+                wire.emit(["method": "_x.ai/session/update", "params": ["sessionId": wire.session, "update": update]])
+                await settle()
+                if failureMode == 3 { wire.onExit?(1) }
+                else if failureMode == 2 { wire.emit(["id": wire.promptID!, "result": ["stopReason": "error"]]) }
+                else { wire.emit(["id": wire.promptID!, "error": ["code": -32603, "message": "Internal error"]]) }
+            }
+            await eventually { process.snapshot.phase == .failed }
+            precondition(process.snapshot.detail.contains("usage limit") && process.snapshot.detail.contains("Kick"))
+            precondition(process.isAlive && process.hasInterruptedWork && !process.canReceiveHeartbeat)
+            precondition(wire.invalidated, "Pause must close the exhausted transport")
+            let failure = process.snapshot
+            process.notify(immediately: true)
+            process.heartbeat()
+            process.start()
+            wire.onExit?(1)
+            wire.onFailure?("Late disconnect")
+            wire.complete()
+            await settle()
+            precondition(process.snapshot == failure && wire.prompts == 1, "No automatic retry or stale completion may clear the failure")
+            let stateAfterFailure = try Data(contentsOf: stateURL)
+            precondition(stateAfterFailure == savedState, "Keep the saved session")
+            process.stop { _ in }
+
+            let restarted = ACPAgentProcess(provider: .grokBuild, agent: process.configuration,
+                executableURL: URL(fileURLWithPath: "/fixture/harness"), workspaceURL: workspace,
+                extendedAccess: true, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
+                onUnexpectedTermination: { _, _, _ in preconditionFailure("Unexpected recovery termination") })
+            restarted.start()
+            await eventually { restarted.snapshot.phase == .working }
+            let resumedWire = ExtendedAgentConnection.current!
+            precondition(resumedWire.session == wire.session && resumedWire.prompts == 1, "Kick must resume the saved session and unfinished work")
+            resumedWire.complete()
+            await eventually { restarted.canReceiveHeartbeat }
+            precondition(!restarted.hasInterruptedWork && !restarted.snapshot.detail.contains("usage limit"))
+            restarted.stop { _ in }
+        }
+        print("PASS: Grok usage limits pause reconnects and preserve work for a successful kick")
+
+        // Ignore failure text from another session, historical replay while
+        // idle, and non-Grok providers.
+        for provider in [HarnessProvider.grokBuild, .fx] {
+            let process = try await make(provider, root: root)
+            let wire = ExtendedAgentConnection.current!
+            let update: [String: Any] = ["sessionUpdate": "retry_state", "type": "failed", "error_type": "api",
+                "message": "Grok Build usage balance exhausted"]
+            wire.emit(["method": "_x.ai/session/update", "params": ["sessionId": wire.session, "update": update]])
+            await settle()
+            process.notify()
+            await eventually { wire.prompts == 1 && process.snapshot.phase == .working }
+            wire.emit(["method": "_x.ai/session/update", "params": ["sessionId": "other-session", "update": update]])
+            if provider == .fx {
+                wire.emit(["method": "_x.ai/session/update", "params": ["sessionId": wire.session, "update": update]])
+            }
+            await settle()
+            wire.complete()
+            await eventually { process.canReceiveHeartbeat }
+            precondition(!wire.invalidated)
+            process.stop { _ in }
+        }
+        print("PASS: Grok billing updates are scoped to the active provider, session and turn")
 
         let process = try await make(.codex, root: root)
         let wire = ExtendedAgentConnection.current!

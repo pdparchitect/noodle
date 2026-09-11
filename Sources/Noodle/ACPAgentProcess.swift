@@ -20,6 +20,8 @@ final class ACPAgentProcess: AgentRuntimeProcess {
     private var connection: ExtendedAgentConnection?
     private var running = false
     private var stopped = false
+    private var paused = false
+    private var usageLimitDetail: String?
     private var turnIsActive = false
     private var interruptRequested = false
     private var interruptTimeout: Task<Void, Never>?
@@ -62,12 +64,12 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         snapshot = .init(agentID: agent.id, phase: .offline, detail: "Not started")
     }
 
-    var isAlive: Bool { running || !extendedAccess }
+    var isAlive: Bool { running || paused || !extendedAccess }
     var hasInterruptedWork: Bool { recoveryPending || turnIsActive || notificationPending || turnRecovery.hasUnfinishedTurn }
     var canReceiveHeartbeat: Bool { running && snapshot.phase == .ready && !turnIsActive && !notificationPending }
 
     func start() {
-        guard connection == nil else { return }
+        guard connection == nil, !paused else { return }
         guard extendedAccess else { update(.failed, "\(name) requires autonomous access in Settings → Security"); return }
         stopped = false
         compatibilityIssue = nil
@@ -111,6 +113,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
     func stop(completion: @escaping (Bool) -> Void) {
         stopped = true
         running = false
+        paused = false
         startupTimeout?.cancel()
         interruptTimeout?.cancel()
         interruptRequested = false
@@ -127,6 +130,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
     func notify(immediately: Bool = false) -> UUID {
         RuntimeDiagnostics.notificationQueued(agentID: configuration.id, coalesced: notificationPending)
         let notificationID = notifications.enqueue(immediately: immediately)
+        guard !paused else { return notificationID }
         if connection == nil { start() }
         sendPending()
         return notificationID
@@ -170,6 +174,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         catch { update(.failed, "Could not persist unfinished \(name) work: \(error.localizedDescription)"); return }
         turnIsActive = true
         reviewHeld = false
+        usageLimitDetail = nil
         trace.begin(reason: reason)
         request(.prompt(reason), method: "session/prompt", params: ["sessionId": sessionID, "prompt": [["type": "text", "text": reason.eventText]]])
         guard running else { return }
@@ -204,6 +209,11 @@ final class ACPAgentProcess: AgentRuntimeProcess {
             } else if method == "session/update", params["sessionId"] as? String == sessionID, turnIsActive {
                 trace.outputObserved()
                 if let update = params["update"] as? [String: Any], FxProtocol.reviewWasHeld(update) { reviewHeld = true }
+            } else if provider == .grokBuild, method == "_x.ai/session/update",
+                      params["sessionId"] as? String == sessionID, turnIsActive,
+                      let update = params["update"] as? [String: Any],
+                      let detail = GrokProtocol.usageLimitDescription(fromUpdate: update) {
+                usageLimitDetail = detail
             }
             return
         }
@@ -216,6 +226,11 @@ final class ACPAgentProcess: AgentRuntimeProcess {
                 sessionID = nil
                 openSession()
             } else if case .prompt = purpose {
+                if provider == .grokBuild,
+                   let detail = GrokProtocol.usageLimitDescription(error) ?? usageLimitDetail {
+                    pauseForUsageLimit(detail)
+                    return
+                }
                 interruptTimeout?.cancel()
                 interruptRequested = false
                 turnIsActive = false
@@ -252,6 +267,10 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         case .effort:
             sessionReady()
         case .prompt:
+            if let usageLimitDetail {
+                pauseForUsageLimit(usageLimitDetail)
+                return
+            }
             guard let stopReason = result["stopReason"] as? String else { terminated("\(name) returned no turn completion reason"); return }
             let wasInterrupted = interruptRequested && stopReason == "cancelled"
             interruptRequested = false
@@ -286,7 +305,28 @@ final class ACPAgentProcess: AgentRuntimeProcess {
     }
     private var compatibilityIssue: String?
 
+    private func pauseForUsageLimit(_ detail: String) {
+        // A billing failure cannot be repaired by reconnecting. Keep the bot
+        // paused for an explicit retry, including if the old transport exits.
+        paused = true
+        stopped = true
+        running = false
+        turnIsActive = false
+        interruptRequested = false
+        interruptTimeout?.cancel()
+        startupTimeout?.cancel()
+        requests.removeAll()
+        connection?.invalidate()
+        connection = nil
+        trace.finish(.turnFailed)
+        update(.failed, detail)
+    }
+
     private func terminated(_ detail: String) {
+        if let usageLimitDetail, !stopped {
+            pauseForUsageLimit(usageLimitDetail)
+            return
+        }
         interruptTimeout?.cancel()
         let detail = compatibilityIssue ?? HarnessVersionPolicy.startupIssue(provider: provider, text: detail) ?? detail
         guard !stopped else { return }

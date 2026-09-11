@@ -2,6 +2,44 @@ import XCTest
 @testable import NoodleCore
 
 final class GrokTests: XCTestCase {
+    func testUsageLimitClassifiesHTTPDataWithoutExposingRawErrors() throws {
+        let detail = try XCTUnwrap(GrokProtocol.usageLimitDescription([
+            "code": -32603, "message": "Internal error",
+            "data": ["http_status": 402, "message": "private account information"]
+        ]))
+        XCTAssertTrue(detail.contains("usage limit"))
+        XCTAssertTrue(detail.contains("Kick"))
+        XCTAssertFalse(detail.contains("private"))
+        XCTAssertEqual(GrokProtocol.usageLimitDescription([
+            "message": "API error (status 402 Payment Required): Grok Build usage balance exhausted"
+        ]), detail)
+        XCTAssertNil(GrokProtocol.usageLimitDescription(["code": 402, "message": "Unrelated RPC error"]))
+        XCTAssertNil(GrokProtocol.usageLimitDescription([
+            "data": ["http_status": 429, "message": "Too many requests"]
+        ]))
+        XCTAssertNil(GrokProtocol.usageLimitDescription(["message": "private unknown error"]))
+    }
+
+    func testUsageLimitRecognizesOnlyTerminalProviderUpdates() {
+        let message = "API error (status 402 Payment Required): Grok Build usage balance exhausted"
+        let failure: [String: Any] = ["sessionUpdate": "retry_state", "type": "failed",
+                                      "error_type": "api", "message": message]
+        XCTAssertNotNil(GrokProtocol.usageLimitDescription(fromUpdate: failure))
+        XCTAssertNotNil(GrokProtocol.usageLimitDescription(fromUpdate: [
+            "sessionUpdate": "turn_completed", "stop_reason": "error", "agent_result": message
+        ]))
+        var retry = failure
+        retry["type"] = "retrying"
+        XCTAssertNil(GrokProtocol.usageLimitDescription(fromUpdate: retry))
+        XCTAssertNil(GrokProtocol.usageLimitDescription(fromUpdate: [
+            "sessionUpdate": "turn_completed", "stop_reason": "end_turn", "agent_result": message
+        ]))
+        XCTAssertNil(GrokProtocol.usageLimitDescription(fromUpdate: [
+            "sessionUpdate": "agent_message_chunk", "message": message
+        ]))
+        XCTAssertNil(GrokProtocol.usageLimitDescription(fromUpdate: [:]))
+    }
+
     func testModelCataloguePreservesPerModelEffortsAndDefault() throws {
         let fixture: [String: Any] = ["_meta": ["modelState": [
             "currentModelId": "grok-4.6", "availableModels": [

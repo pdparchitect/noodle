@@ -3,6 +3,39 @@ import Foundation
 public enum GrokProtocol {
     public static let efforts: Set<String> = ["low", "medium", "high", "xhigh"]
 
+    /// Classify the provider's billing failure without displaying its raw payload,
+    /// which can include private account or request data. ACP uses an internal
+    /// JSON-RPC error with the HTTP status in `data`, not in the RPC error code.
+    public static func usageLimitDescription(_ error: [String: Any]) -> String? {
+        let data = error["data"] as? [String: Any] ?? [:]
+        guard data["http_status"] as? Int == 402 ||
+                isUsageLimitMessage(data["message"] as? String) ||
+                isUsageLimitMessage(error["message"] as? String) else { return nil }
+        return usageLimitDetail
+    }
+
+    /// Grok also reports terminal failures through its extended session updates
+    /// before completing the prompt's JSON-RPC request.
+    public static func usageLimitDescription(fromUpdate update: [String: Any]) -> String? {
+        switch update["sessionUpdate"] as? String {
+        case "retry_state":
+            guard update["type"] as? String == "failed",
+                  update["error_type"] as? String == "api",
+                  isUsageLimitMessage(update["message"] as? String) else { return nil }
+        case "turn_completed":
+            guard update["stop_reason"] as? String == "error",
+                  isUsageLimitMessage(update["agent_result"] as? String) else { return nil }
+        default: return nil
+        }
+        return usageLimitDetail
+    }
+
+    private static let usageLimitDetail = "Grok Build's usage limit has been reached. Once usage is available again, right-click the bot and choose Kick to resume. Unfinished work is preserved."
+
+    private static func isUsageLimitMessage(_ message: String?) -> Bool {
+        message?.localizedCaseInsensitiveContains("Grok Build usage balance exhausted") == true
+    }
+
     /// ACP metadata is the source of truth, including model-specific efforts.
     /// Never return account metadata, tokens, machine details, or raw errors.
     public static func models(from initialization: [String: Any]) throws -> [HarnessModel] {

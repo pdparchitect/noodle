@@ -29,6 +29,13 @@ struct SidebarView: View {
                                     Button("Show Workspace in Finder") {
                                         store.revealWorkspace(for: agent)
                                     }
+                                    if store.runtime.snapshot(for: agent.id).phase == .failed {
+                                        Divider()
+                                        Button("Kick") {
+                                            store.runtime.restart(agent: agent, repository: store.repository)
+                                        }
+                                        .disabled(store.runtime.changingAccess.contains(agent.id))
+                                    }
                                 }
                             }
                     }
@@ -97,6 +104,7 @@ private struct ConversationRow: View {
                     .frame(width: 10, height: 10)
                     .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
             }
+            .help(runtimeHelp)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -136,6 +144,7 @@ private struct ConversationRow: View {
         .listRowSeparatorTint(Color.primary.opacity(0.12))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(runtimeHelp)
     }
 
     private var timestamp: String {
@@ -153,6 +162,13 @@ private struct ConversationRow: View {
         if phases.contains(.failed) { return .red }
         if !phases.isEmpty, phases.allSatisfy({ $0 == .ready }) { return .green }
         return .gray
+    }
+
+    private var runtimeHelp: String {
+        if hasPendingApproval { return "Waiting for your response" }
+        return store.participants(for: conversation).map { agent in
+            "\(agent.displayName): \(store.runtime.snapshot(for: agent.id).detail)"
+        }.joined(separator: "\n")
     }
 
     private var accessibilityLabel: String {

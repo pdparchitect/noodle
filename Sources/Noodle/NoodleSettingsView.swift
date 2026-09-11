@@ -306,6 +306,7 @@ private struct HarnessesSettingsView: View {
 }
 
 private struct HarnessInstallationRow: View {
+    @Environment(NoodleStore.self) private var store
     let installation: HarnessInstallation
     let liveInstallation: HarnessInstallation?
     let isRefreshing: Bool
@@ -318,6 +319,12 @@ private struct HarnessInstallationRow: View {
     @Environment(\.openURL) private var openURL
 
     private var id: HarnessProvider { installation.provider }
+
+    private var failedAgents: [AgentRecord] {
+        store.agents.filter {
+            $0.harnessIdentifier == id.rawValue && store.runtime.snapshot(for: $0.id).phase == .failed
+        }
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -352,6 +359,15 @@ private struct HarnessInstallationRow: View {
                 if let error = setup.errors[id] {
                     Text(error).font(.caption).foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+                ForEach(failedAgents) { agent in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(agent.displayName).font(.caption.weight(.semibold))
+                        Text(store.runtime.snapshot(for: agent.id).detail)
+                            .font(.caption).foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    }
                 }
                 if installation.isAvailable {
                     versionDetails
@@ -478,7 +494,7 @@ private struct HarnessInstallationRow: View {
 
     private var statusText: String {
         if setup.activity[id] != nil { return "Setting up" }
-        if setup.errors[id] != nil { return "Needs attention" }
+        if setup.errors[id] != nil || !failedAgents.isEmpty { return "Needs attention" }
         if setup.snapshots[id] == nil { return "Checking…" }
         if !installation.isAvailable { return "Not installed" }
         switch setup.authentication[id] {
@@ -491,7 +507,7 @@ private struct HarnessInstallationRow: View {
     }
 
     private var statusIcon: String {
-        if setup.errors[id] != nil { return "exclamationmark.triangle" }
+        if setup.errors[id] != nil || !failedAgents.isEmpty { return "exclamationmark.triangle" }
         if setup.snapshots[id] == nil { return "ellipsis.circle" }
         if !installation.isAvailable { return "arrow.down.circle" }
         return setup.authentication[id] == .authenticated || setup.authentication[id] == .notRequired
@@ -499,7 +515,7 @@ private struct HarnessInstallationRow: View {
     }
 
     private var statusColor: Color {
-        if setup.errors[id] != nil { return .orange }
+        if setup.errors[id] != nil || !failedAgents.isEmpty { return .orange }
         if setup.authentication[id] == .authenticated || setup.authentication[id] == .notRequired { return .green }
         return .secondary
     }
