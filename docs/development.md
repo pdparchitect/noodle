@@ -49,6 +49,28 @@ For reader-facing docs, lead with the task and steps. Keep protocol details in
 references, link to existing explanations, and omit implementation history and old
 test reports. Add user-visible changes to the appropriate Unreleased changelog.
 
+## Coverage
+
+Run the Swift suite with coverage and generate a source-only report:
+
+```sh
+swift test --disable-sandbox --enable-code-coverage
+python3 scripts/coverage-report.py \
+  --input "$(swift test --disable-sandbox --show-codecov-path)" \
+  --output .build/coverage/noodle
+```
+
+Open `.build/coverage/noodle/summary.md` for module totals and the largest gaps.
+The directory also contains a complete file summary and the original SwiftPM
+JSON export. To compare against a saved report, pass
+`--baseline /path/to/previous/summary.json`; changes are percentage points.
+
+Each Noodle CI test job, including pull requests, publishes the summary and a
+`noodle-coverage` artifact retained for 30 days. Coverage counts root source
+modules linked into the test bundle, excluding test code and dependencies.
+The main app/UI and separate native fixtures are outside that measurement.
+Reporting does not impose a minimum percentage; test failures still fail CI.
+
 ## Focused checks
 
 Run native UI fixtures from a logged-in Mac. They use isolated test data.

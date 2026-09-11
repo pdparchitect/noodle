@@ -92,7 +92,8 @@ final class MCPIconTests: XCTestCase {
 
     func testFailedAndOversizedDownloadsFallBackToEmbeddedArtwork() async throws {
         let remote = Icon(src: "https://service.invalid/noodle-test-icon.png")
-        let fallback = try dataIcon()
+        // Use a portrait fallback so accepting a rejected landscape response cannot pass.
+        let fallback = try dataIcon(width: 32, height: 128)
         let original = try image()
         let cases: [(Int, Data, URLError?)] = [
             (404, original, nil),
@@ -104,7 +105,7 @@ final class MCPIconTests: XCTestCase {
         for (status, data, error) in cases {
             IconFixtureProtocol.reset(status: status, data: data, error: error)
             let loaded = await load([remote, fallback])
-            try assertPNG(XCTUnwrap(loaded), width: 64, height: 32)
+            try assertPNG(XCTUnwrap(loaded), width: 16, height: 64)
             XCTAssertEqual(IconFixtureProtocol.requests.count, 1)
         }
     }
@@ -120,8 +121,8 @@ final class MCPIconTests: XCTestCase {
         XCTAssertNil(empty)
     }
 
-    private func dataIcon() throws -> Icon {
-        Icon(src: "data:image/png;base64," + (try image()).base64EncodedString())
+    private func dataIcon(width: Int = 128, height: Int = 64) throws -> Icon {
+        Icon(src: "data:image/png;base64," + (try image(width: width, height: height)).base64EncodedString())
     }
 
     private func load(_ icons: [Icon]) async -> Data? {

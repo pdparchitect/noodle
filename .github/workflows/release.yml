@@ -53,6 +53,7 @@ jobs:
       - name: Verify version automation and publication guards
         run: |
           python3 -m unittest discover -s Tests/ReleaseAutomation -v
+          python3 -m unittest discover -s Tests/CoverageReporting -v
           swift Computer/Tests/ReleaseWorkflowTests.swift "$PWD"
 
   test-noodle:
@@ -65,7 +66,23 @@ jobs:
         with:
           lfs: true
       - name: Test Noodle and Computer integration
-        run: swift test --disable-sandbox
+        id: tests
+        run: swift test --disable-sandbox --enable-code-coverage
+      - name: Summarize Noodle coverage
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        run: |
+          coverage_path="$(swift test --disable-sandbox --show-codecov-path)"
+          python3 scripts/coverage-report.py --input "$coverage_path" --output .build/coverage/noodle
+          cat .build/coverage/noodle/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload Noodle coverage
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: noodle-coverage
+          path: .build/coverage/noodle/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30
 
   test-computer:
     needs: [versions, checks]

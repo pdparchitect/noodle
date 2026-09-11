@@ -7,6 +7,12 @@ final class MCPGuardedHTTP: URLProtocol, URLSessionDataDelegate, @unchecked Send
     private var session: URLSession?
     private var loadingTask: URLSessionDataTask?
     private var received = 0
+    // Per-instance configuration lets transport tests run without shared session state.
+    var sessionConfiguration: () -> URLSessionConfiguration = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = []
+        return configuration
+    }
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -14,8 +20,7 @@ final class MCPGuardedHTTP: URLProtocol, URLSessionDataDelegate, @unchecked Send
             client?.urlProtocol(self, didFailWithError: MCPServiceError.invalidMetadata)
             return
         }
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = []
+        let configuration = sessionConfiguration()
         configuration.httpCookieStorage = nil
         configuration.urlCredentialStorage = nil
         configuration.timeoutIntervalForRequest = 30

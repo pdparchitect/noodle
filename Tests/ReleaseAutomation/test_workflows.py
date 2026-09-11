@@ -119,6 +119,21 @@ class WorkflowTests(unittest.TestCase):
             **self.base(), 'needs.versions.outputs.computer': 'false',
             'needs.test-computer.result': 'skipped', 'needs.prepare-computer.result': 'skipped'}))
 
+    def test_noodle_coverage_is_collected_without_masking_test_failures(self):
+        steps = self.jobs['test-noodle']['steps']
+        tests = next(step for step in steps if step.get('id') == 'tests')
+        self.assertIn('--enable-code-coverage', tests['run'])
+        self.assertFalse(tests.get('continue-on-error', False))
+        report = next(step for step in steps if 'scripts/coverage-report.py' in step.get('run', ''))
+        for outcome in ['success', 'failure']:
+            self.assertTrue(condition(report['if'].removeprefix('${{').removesuffix('}}'), {'steps.tests.outcome': outcome}))
+        self.assertIn('GITHUB_STEP_SUMMARY', report['run'])
+        upload = next(step for step in steps if step.get('uses', '').startswith('actions/upload-artifact@'))
+        self.assertIn('!cancelled()', upload['if'])
+        self.assertEqual(upload['with']['path'], '.build/coverage/noodle/')
+        self.assertTrue(upload['with']['include-hidden-files'])
+        self.assertEqual(upload['with']['name'], 'noodle-coverage')
+
     def test_incomplete_publication_cannot_report_release_success(self):
         complete = self.jobs['complete']
         self.assertIn('always()', complete['if'])
