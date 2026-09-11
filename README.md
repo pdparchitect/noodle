@@ -52,7 +52,7 @@ access option in Settings → Security. See [Security and agent access](docs/sec
 
 ### Noodle Computer
 
-Requires an Apple silicon Mac running macOS 26 or later. You do not need Xcode or Docker Desktop.
+Requires an Apple silicon Mac running macOS 26 or later.
 
 1. Open the [latest Noodle Computer release](https://github.com/pdparchitect/noodle/releases/tag/computer-latest), download the application ZIP, unzip it and move **Noodle Computer.app** to Applications.
 2. Open Noodle Computer and create a **Shell** or **Desktop** computer.
@@ -64,7 +64,7 @@ See the [Noodle Computer documentation](Computer/README.md) for more.
 
 ## Documentation
 
-- [Noodle Computer: Linux desktops and terminals for you and your agents](Computer/README.md)
+- [Noodle Computer](Computer/README.md)
 - [Using Noodle](docs/usage.md)
 - [Harness setup](docs/harness-setup.md)
 - [Development](docs/development.md)
