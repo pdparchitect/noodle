@@ -323,6 +323,7 @@ struct ChatView: View {
                 placeholder: composerPrompt,
                 agents: store.agents,
                 preferredIDs: Set(conversation.participantIDs),
+                separatesPreferredAgents: conversation.kind == .group,
                 completion: nameCompletion,
                 submit: store.sendDraft,
                 focusSidebar: focusSidebar

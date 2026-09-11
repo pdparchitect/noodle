@@ -10,15 +10,17 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
     private var menu: NSMenu?
     private var agents: [AgentRecord] = []
     private var preferredIDs: Set<UUID> = []
+    private var separatesPreferredAgents = false
     private var showDescriptions = true
     private var dismissedRequest: AgentNameCompletion?
     private var observers: [NSObjectProtocol] = []
     private var returnKeyMonitor: Any?
     private var presentationScheduled = false
 
-    func attach(to editor: NSTextView, anchor: NSView, agents: [AgentRecord], preferredIDs: Set<UUID>, showDescriptions: Bool) {
+    func attach(to editor: NSTextView, anchor: NSView, agents: [AgentRecord], preferredIDs: Set<UUID>, separatesPreferredAgents: Bool = false, showDescriptions: Bool) {
         self.agents = agents
         self.preferredIDs = preferredIDs
+        self.separatesPreferredAgents = separatesPreferredAgents
         self.showDescriptions = showDescriptions
         if self.editor !== editor {
             detach()
@@ -90,7 +92,11 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
         let picker = NSMenu(title: "Bot names")
         picker.autoenablesItems = false
         picker.minimumWidth = showDescriptions ? 360 : 220
-        for agent in candidates {
+        let separatorIndex = separatesPreferredAgents ? candidates.firstIndex { !preferredIDs.contains($0.id) } : nil
+        for (index, agent) in candidates.enumerated() {
+            if index > 0, index == separatorIndex {
+                picker.addItem(.separator())
+            }
             let item = NSMenuItem(title: Self.menuTitle(for: agent, showDescriptions: showDescriptions),
                                   action: #selector(selectName(_:)), keyEquivalent: "")
             if showDescriptions {
