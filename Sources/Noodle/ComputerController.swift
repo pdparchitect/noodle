@@ -9,6 +9,7 @@ import SwiftUI
     private(set) var registry = ComputerAssignments()
     private(set) var available = false
     private(set) var failure: String?
+    private(set) var needsFileTransferUpdate = false
     @ObservationIgnored private let repository: WorkspaceRepository
     @ObservationIgnored private let socket: URL?
     @ObservationIgnored private var readable = true
@@ -144,8 +145,12 @@ import SwiftUI
                 var next = registry; next.computers = computers
                 try next.save(root: repository.rootURL); registry = next
             }
+            needsFileTransferUpdate = response.capabilities?.features.contains("file-transfer-v1") == false
             if readable { failure = nil }
-        } catch { available = false; failure = error.localizedDescription }
+        } catch {
+            available = false; failure = error.localizedDescription
+            needsFileTransferUpdate = false
+        }
     }
     func selectedIDs(for agent: AgentRecord) -> Set<UUID> { registry.assigned(to: agent.id) }
     func validate(_ ids: Set<UUID>) throws {
@@ -372,6 +377,22 @@ struct ComputerAssignmentPicker: View {
                     }
                     .padding(16).frame(width: 300, height: 280)
                 }
+            }
+            if controller.needsFileTransferUpdate {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Update Noodle Computer to enable file transfers.", systemImage: "arrow.down.circle")
+                        .font(.callout.weight(.medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("In Noodle Computer, choose Check for Updates… from the app menu.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    openLibraryButton
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("ComputerUpdateNotice")
             }
             ScrollView {
                 if selected.isEmpty {

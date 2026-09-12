@@ -25,6 +25,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Show an update notice in Noodle's computer picker when Noodle Computer needs updating for file transfers, with an action to open the app and automatic dismissal after compatibility checks detect the update.
 - Run message-delivery routing regressions in the default Swift suite with fake runtimes and classifiers, covering cancellation, deadlines, stale results, settings changes, and isolation between bots without harnesses or Apple Intelligence.
 - Add Settings → Keybindings immediately before Update, with a direct list of command descriptions and custom shortcuts for annotations, conversation search, bot/group creation, and voice recording. Changes update menus and hints immediately, persist across launches, and support clearing, per-command reset, and Restore Defaults with conflict checks.
 - Cover MCP cancellation, disconnect, timeout, and sign-in races with controlled local HTTP fixtures and synthetic credentials; no accounts, browser sign-in, or Keychain access are required.

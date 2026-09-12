@@ -105,6 +105,9 @@ import XCTest
 
     func testOldProviderRejectsTransfersButKeepsTerminalOperationsWorking() async throws {
         let f = try await fixture(supportsTransfers: false)
+        XCTAssertTrue(f.controller.needsFileTransferUpdate)
+        XCTAssertTrue(f.controller.available)
+        XCTAssertNil(f.controller.failure)
         let sent = try f.send(agent: f.a, operation: .fileUpload, localPath: "missing.bin")
         let response = try await sent.response()
         XCTAssertEqual(response.error, "Update Noodle Computer to upload and download files.")

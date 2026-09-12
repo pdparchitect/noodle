@@ -8,6 +8,10 @@ import SwiftUI
 @MainActor enum ComputerIntegrationTest {
     /// UI-only fixture: no real agents, assignments, provider or guest operations.
     static func checkPicker() async throws {
+        if CommandLine.arguments.contains("--computer-update-notice-test") {
+            try await checkUpdateNotice()
+            return
+        }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("NoodlePicker-Test-\(UUID().uuidString)")
         let repository = WorkspaceRepository(rootURL: root)
         try repository.prepare()
@@ -40,6 +44,48 @@ import SwiftUI
             try await Task.sleep(for: .milliseconds(500))
         }
         window.close()
+    }
+    private static func checkUpdateNotice() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("NoodleUpdateNotice-Test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let computer = RemoteComputer(id: UUID(), name: "Design Desktop", kind: "Desktop", state: "Running", symbol: "desktopcomputer", colour: 1)
+        func controller(updated: Bool) async throws -> ComputerController {
+            let repository = WorkspaceRepository(rootURL: root.appendingPathComponent(updated ? "updated" : "older"))
+            try repository.prepare()
+            let controller = ComputerController(repository: repository, applicationLookup: { nil }, connection: { _ in
+                var response = ComputerResponse(computers: [computer])
+                var capabilities = ComputerCapabilities()
+                if !updated { capabilities.features.remove("file-transfer-v1") }
+                response.capabilities = capabilities
+                return response
+            })
+            await controller.refresh()
+            return controller
+        }
+        let older = try await controller(updated: false), updated = try await controller(updated: true)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 520),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.title = "Computer Update Notice Preview"
+        window.appearance = NSAppearance(named: .darkAqua)
+        let host = NSHostingView(rootView: ComputerPickerFixture(controller: older, emptyController: updated, updateComparison: true))
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.close() }
+        try await Task.sleep(for: .milliseconds(300))
+        host.layoutSubtreeIfNeeded()
+        guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+            throw ComputerBridgeError("Could not capture the update notice preview.")
+        }
+        host.effectiveAppearance.performAsCurrentDrawingAppearance {
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+        }
+        guard let png = bitmap.representation(using: .png, properties: [:]) else {
+            throw ComputerBridgeError("Could not encode the update notice preview.")
+        }
+        let output = FileManager.default.temporaryDirectory.appendingPathComponent("NoodleComputerUpdateNotice-\(UUID().uuidString).png")
+        try png.write(to: output)
+        print("COMPUTER UPDATE NOTICE SNAPSHOT: \(output.path)")
     }
     static func checkDiscovery() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("NoodleDiscovery-Test-\(UUID().uuidString)")
@@ -211,12 +257,27 @@ import SwiftUI
 private struct ComputerPickerFixture: View {
     let controller: ComputerController
     let emptyController: ComputerController
+    var updateComparison = false
     @State private var selected: Set<UUID> = []
     @State private var emptySelected: Set<UUID> = []
     var body: some View {
         HStack(alignment: .top, spacing: 24) {
-            ComputerAssignmentPicker(controller: controller, selectedIDs: $selected)
-            ComputerAssignmentPicker(controller: emptyController, selectedIDs: $emptySelected)
-        }.padding(24).frame(width: 960, height: 420).preferredColorScheme(.dark)
+            VStack(alignment: .leading, spacing: 16) {
+                if updateComparison { Text("Update required").font(.headline) }
+                ComputerAssignmentPicker(controller: controller, selectedIDs: $selected)
+            }
+            VStack(alignment: .leading, spacing: 16) {
+                if updateComparison { Text("After updating").font(.headline) }
+                ComputerAssignmentPicker(controller: emptyController, selectedIDs: $emptySelected)
+            }
+        }
+        .padding(24).frame(width: 960, height: updateComparison ? 520 : 420)
+        .background(Color(nsColor: .windowBackgroundColor)).preferredColorScheme(.dark)
+        .onAppear {
+            if updateComparison {
+                selected = Set(controller.registry.computers.map(\.id))
+                emptySelected = Set(emptyController.registry.computers.map(\.id))
+            }
+        }
     }
 }

@@ -39,6 +39,12 @@ Success JSON includes `path` (guest), `localPath` (workspace-relative), and
 `file-transfer-v1`. Older providers remain usable for existing terminal/display
 commands and return an update message for transfers.
 
+Noodle's computer picker also shows “Update Noodle Computer to enable file
+transfers” as soon as discovery finds a compatible provider missing that feature.
+Open Noodle Computer from the notice and choose **Check for Updates…** in its app
+menu. The notice clears when the refreshed provider supports transfers; existing
+terminals and displays remain usable while the update is pending.
+
 The broker assigns a fresh transfer UUID and stages the payload in the apps'
 existing private App Group. Only the UUID and guest path cross the authenticated
 socket; agents cannot select provider host paths. The provider streams bytes
@@ -104,7 +110,9 @@ JSON messages, and that publication never follows a destination symlink.
 These tests require no signing identity or running guest. The signed guest
 fixture above verifies the actual transport and sandbox boundary separately.
 
-Noodle's `--computer-picker-test` opens an isolated assignment UI fixture.
+Noodle's `--computer-picker-test` opens an isolated assignment UI fixture. Add
+`--computer-update-notice-test` to save a before/after update notice snapshot using
+synthetic providers, without opening real computers or bot workspaces.
 Computer's `--provider-snapshot-test`, alongside its provider integration flags,
 checks native desktop capture. Snapshot and preview geometry checks are in
 `Computer/Tests/PreviewSnapshotTests.swift` and `PreviewGeometryTests.swift`.
