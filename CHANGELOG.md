@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Guide users with no installed harness from the empty chat area straight to Harness settings.
 - Keep late automatic message-delivery decisions queued after their deadline, even when the timeout callback is delayed, and skip context loading for cancelled routing work.
 - Size Keybindings settings to its contents, removing the empty space above Restore Defaults.
 - Keep Space in the annotation comment editor instead of reopening the attachment and cancelling the popup, including image and 3D-model region annotations.

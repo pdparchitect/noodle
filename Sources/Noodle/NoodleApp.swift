@@ -217,6 +217,7 @@ private struct WindowConfiguration: NSViewRepresentable {
 
 struct RootView: View {
     @Environment(NoodleStore.self) private var store
+    @Environment(\.openSettings) private var openSettings
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var isFileDropTargeted = false
     @State private var composerFocusRequest = UUID()
@@ -241,8 +242,16 @@ struct RootView: View {
                     sidebarFocusRequest = UUID()
                 })
             } else {
-                Color(nsColor: .textBackgroundColor).opacity(0.28)
-                    .accessibilityHidden(true)
+                ZStack {
+                    Color(nsColor: .textBackgroundColor).opacity(0.28)
+                        .accessibilityHidden(true)
+                    if !store.canCreateBot {
+                        HarnessSetupPrompt {
+                            store.selectedSettingsTab = .harnesses
+                            openSettings()
+                        }
+                    }
+                }
             }
         }
         .navigationSplitViewStyle(.balanced)
