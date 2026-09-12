@@ -6,6 +6,7 @@ struct ComposerAttachmentMenu: NSViewRepresentable {
     @Binding var isPresented: Bool
     let attachFile: () -> Void
     let choosePhoto: () -> Void
+    let capture: () -> Void
 
     func makeNSView(context: Context) -> MenuAnchor { MenuAnchor() }
 
@@ -32,9 +33,11 @@ struct ComposerAttachmentMenu: NSViewRepresentable {
         func show(configuration: ComposerAttachmentMenu) {
             let menu = NSMenu()
             menu.autoenablesItems = false
-            actions = [configuration.attachFile, configuration.choosePhoto]
+            actions = [configuration.attachFile, configuration.choosePhoto, configuration.capture]
             selectedAction = nil
-            for (index, entry) in [("Attach File…", "doc"), ("Choose Photo…", "photo.on.rectangle")].enumerated() {
+            for (index, entry) in [("Attach File…", "doc"), ("Choose Photo…", "photo.on.rectangle"),
+                                   ("Capture…", "macwindow")].enumerated() {
+                if index == 2 { menu.addItem(.separator()) }
                 let item = NSMenuItem(title: entry.0, action: #selector(selectItem(_:)), keyEquivalent: "")
                 item.image = NSImage(systemSymbolName: entry.1, accessibilityDescription: nil)
                 item.target = self
@@ -45,7 +48,7 @@ struct ComposerAttachmentMenu: NSViewRepresentable {
             let action = selectedAction
             selectedAction = nil
             actions = []
-            // File and Photos panels must open after menu tracking finishes.
+            // Panels must open after menu tracking finishes.
             if let action { DispatchQueue.main.async(execute: action) }
         }
 

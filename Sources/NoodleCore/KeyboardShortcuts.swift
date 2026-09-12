@@ -75,7 +75,7 @@ public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiabl
         case .searchConversations: "Focus the conversation search field."
         case .recordVoice: "Start or stop recording in the current chat."
         case .annotateSelection: "Comment on selected preview text; select a region for images."
-        case .annotateRegion: "Mark an area of the current attachment preview."
+        case .annotateRegion: "Mark an attachment preview or freeze and annotate a live screen/window preview."
         case .saveAnnotation: "Save a new annotation or an unsent comment edit."
         }
     }

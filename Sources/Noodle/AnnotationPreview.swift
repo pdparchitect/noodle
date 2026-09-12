@@ -238,7 +238,7 @@ struct AnnotationPreviewContent: View {
 /// Uses the same native HUD material and compact chrome as Noodle's other
 /// preview panels. The header is draggable; feedback stays outside the image.
 @MainActor final class AnnotationPreviewFrame: NSVisualEffectView {
-    init(content: NSView, filename: String) {
+    init(content: NSView, filename: String, kindLabel: String = "Annotation", closeHint: String = "Close Preview (Esc or ⌘W)") {
         super.init(frame: .zero)
         material = .hudWindow; blendingMode = .behindWindow; state = .active
         appearance = NSAppearance(named: .darkAqua)
@@ -250,11 +250,11 @@ struct AnnotationPreviewContent: View {
         let close = NSButton(image: NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Close Preview")!,
                              target: header, action: #selector(AnnotationPreviewHeader.closePreview))
         close.isBordered = false; close.contentTintColor = .secondaryLabelColor
-        close.toolTip = "Close Preview (Esc or ⌘W)"; close.setAccessibilityLabel("Close Preview")
+        close.toolTip = closeHint; close.setAccessibilityLabel("Close Preview")
         let title = NSTextField(labelWithString: filename)
         title.font = .systemFont(ofSize: 13, weight: .semibold); title.lineBreakMode = .byTruncatingMiddle
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let kind = NSTextField(labelWithString: "Annotation")
+        let kind = NSTextField(labelWithString: kindLabel)
         kind.font = .systemFont(ofSize: 11, weight: .medium); kind.textColor = .secondaryLabelColor
         kind.setContentCompressionResistancePriority(.required, for: .horizontal)
         let inset = NSView(); inset.wantsLayer = true

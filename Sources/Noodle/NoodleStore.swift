@@ -649,6 +649,15 @@ final class NoodleStore {
         }
     }
 
+    func importCapture(image: CGImage, title: String, region: AttachmentAnnotation.Region?, comment: String,
+                       into conversationID: UUID) throws {
+        let saved = try CaptureAttachment.save(image: image, title: title, region: region, comment: comment,
+                                               into: conversationID, repository: repository)
+        if let source = saved.source { attachmentsByConversation[conversationID, default: []].append(source) }
+        attachmentsByConversation[conversationID, default: []].append(saved.attachment)
+        drafts[conversationID].attachments.append(saved.attachment)
+    }
+
     private func importAttachmentFile(from url: URL, into conversationID: UUID) throws {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }

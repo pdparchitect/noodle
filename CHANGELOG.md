@@ -6,9 +6,17 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Make the capture comment divider span the preview width, removing the inset border at the image edge.
+
+- Hide unavailable, transparent, and tiny helper-window previews from Capture. Prioritize the current display, then other desktop windows, then windows filling other displays or Spaces, with larger areas first and app/title tie-breaks. Validate previews with a short live stream, recover from temporary capture pauses, and remove sources that fail on selection until Refresh retries them. Use one Capture menu item that opens the Windows tab, with Screens available in the picker.
+
 ### Added
 
 - Add a Companions tab immediately before Update in Settings, showing installed companion app versions and offering an install link for missing apps, starting with Noodle Computer.
+
+- Capture screens and app windows from the attachment menu with thumbnail selection and a live preview. Include windows across all displays and Spaces, including full-screen apps, with a compact, resizable preview utility available across Spaces and a single close control. Capture a plain PNG or freeze the displayed frame with the annotation shortcut, mark a region, and add a comment before adding it to the message draft.
 
 ### Changed
 

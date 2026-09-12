@@ -6,10 +6,15 @@ import Observation
 import OSLog
 import NoodleCore
 
+@MainActor protocol PreviewAnnotationTarget: AnyObject {
+    func annotate()
+    func startRegion()
+}
+
 @MainActor @Observable final class AnnotationCommandsState {
     static let shared = AnnotationCommandsState()
     var enabled = false
-    weak var owner: AttachmentPreviewController?
+    weak var owner: (any PreviewAnnotationTarget)?
 }
 
 struct AnnotationCommands: Commands {
@@ -70,7 +75,7 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
 }
 
 @MainActor final class AttachmentPreviewController: NSViewController,
-    @preconcurrency QLPreviewPanelDataSource, @preconcurrency QLPreviewPanelDelegate, NSPopoverDelegate {
+    @preconcurrency QLPreviewPanelDataSource, @preconcurrency QLPreviewPanelDelegate, NSPopoverDelegate, PreviewAnnotationTarget {
     struct Pending {
         let source: ConversationAttachment
         var quote: String?
@@ -85,6 +90,7 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
     private static weak var active: AttachmentPreviewController?
 
     static func containsPreviewWindow(_ window: NSWindow?) -> Bool {
+        if window?.identifier?.rawValue == "NoodleScreenCapture" { return true }
         guard let window, let owner = active else { return false }
         return window === owner.panel || window === owner.overlay ||
             window === owner.annotationPreview.window ||
@@ -300,6 +306,7 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
         content.window?.makeKey(); content.window?.makeFirstResponder(commentInput)
     }
     func updateCommands() {
+        if NSApp.keyWindow?.identifier?.rawValue == "NoodleScreenCapture" { return }
         guard Self.active === self || AnnotationCommandsState.shared.owner === self else { return }
         AnnotationCommandsState.shared.owner = Self.active
         AnnotationCommandsState.shared.enabled = canAnnotate

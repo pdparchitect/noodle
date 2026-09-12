@@ -119,7 +119,8 @@ private struct FixtureView: View {
             Button("Attachments") { attachmentMenu = true }
                 .background(ComposerAttachmentMenu(isPresented: $attachmentMenu,
                     attachFile: { attachmentAction = "File" },
-                    choosePhoto: { attachmentAction = "Photo" }))
+                    choosePhoto: { attachmentAction = "Photo" },
+                    capture: { attachmentAction = "Capture" }))
             Text("Attachment action: \(attachmentAction)")
             Spacer()
             TextField("Message", text: $draft, axis: .vertical)

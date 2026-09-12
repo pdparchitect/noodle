@@ -4,7 +4,7 @@ import Foundation
 /// visual context as a marked PNG; the comment and source remain in metadata.
 public struct AttachmentAnnotation: Codable, Hashable, Sendable {
     public struct Region: Codable, Hashable, Sendable {
-        /// Fractions of the captured Quick Look window, with a bottom-left origin.
+        /// Fractions of the captured preview image, with a bottom-left origin.
         /// These are not PDF page coordinates or original-image pixel coordinates.
         public let x: Double
         public let y: Double

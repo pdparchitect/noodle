@@ -18,6 +18,7 @@ struct ChatView: View {
     @State private var attachmentDestinationID: UUID?
     @State private var selectedAttachmentID: UUID?
     @State private var computerPreview = ComputerPreviewController()
+    @State private var screenCapturePreview = ScreenCapturePreviewController()
     @State private var bottomOverlayHeight: CGFloat = 0
     @StateObject private var nameCompletion = ComposerNameCompletion()
     @State private var profileAgent: AgentRecord?
@@ -97,9 +98,10 @@ struct ChatView: View {
             .onChange(of: conversation.id) { _, _ in
                 selectedAttachmentID = nil
                 computerPreview.close()
+                screenCapturePreview.close()
                 nameCompletion.detach()
             }
-            .onDisappear { computerPreview.close() }
+            .onDisappear { computerPreview.close(); screenCapturePreview.close() }
             .onChange(of: composerFocusRequest) { _, request in
                 if request != nil { composerFocused = true }
             }
@@ -225,6 +227,15 @@ struct ChatView: View {
         }
     }
 
+    private func showCapture(_ kind: ScreenCaptureKind) {
+        guard let host = attachmentPreview.resolveHostWindow() else { return }
+        let destination = conversation.id
+        attachmentPreview.close(); computerPreview.close()
+        screenCapturePreview.show(kind: kind, relativeTo: host) { image, title, region, comment in
+            try store.importCapture(image: image, title: title, region: region, comment: comment, into: destination)
+        }
+    }
+
     private var composerControlRow: some View {
         HStack(alignment: .bottom, spacing: composerControlSpacing) {
             attachmentButton
@@ -238,7 +249,8 @@ struct ChatView: View {
                             attachmentDestinationID = conversation.id
                             photoSelection = []
                             choosingPhotos = true
-                        })
+                        },
+                        capture: { showCapture(.window) })
                 }
             if #available(macOS 26.0, *) {
                 VoiceMessageComposer(
