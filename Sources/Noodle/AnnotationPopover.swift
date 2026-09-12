@@ -191,9 +191,6 @@ private struct AnnotationShortcutHint: View {
         if let selected {
             NSColor.systemOrange.withAlphaComponent(0.14).setFill(); selected.fill()
             NSColor.systemOrange.setStroke(); let path = NSBezierPath(rect: selected); path.lineWidth = 3; path.stroke()
-            let pin = NSRect(x: selected.minX - 13, y: selected.maxY - 13, width: 26, height: 26)
-            NSColor.systemOrange.setFill(); NSBezierPath(ovalIn: pin).fill()
-            ("1" as NSString).draw(at: NSPoint(x: pin.minX + 8, y: pin.minY + 4), withAttributes: [.font: NSFont.boldSystemFont(ofSize: 15), .foregroundColor: NSColor.white])
         }
         let hint = "Drag around a detail · Click to place a pin · Esc to cancel"
         let pill = NSRect(x: 25, y: 20, width: 500, height: 38)

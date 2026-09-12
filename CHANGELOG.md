@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Remove the fixed “1” badge from annotation region selections, leaving the orange outline and highlight.
+
 ## [0.12.0] - 2026-09-12
 
 ### Fixed
