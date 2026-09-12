@@ -61,13 +61,13 @@ struct NoodleApp: App {
                 Button("New Bot") {
                     NotificationCenter.default.post(name: .newBot, object: nil)
                 }
-                .keyboardShortcut("n", modifiers: .command)
+                .appShortcut(.newBot)
                 .disabled(!store.canCreateBot)
 
                 Button("New Group") {
                     NotificationCenter.default.post(name: .newGroup, object: nil)
                 }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .appShortcut(.newGroup)
             }
 
             AnnotationCommands()
@@ -281,13 +281,13 @@ struct RootView: View {
                     Button("New Bot", systemImage: "person.crop.circle.badge.plus") {
                         store.showNewBot()
                     }
-                    .keyboardShortcut("n", modifiers: .command)
+                    .appShortcut(.newBot)
                     .disabled(!store.canCreateBot)
 
                     Button("New Group", systemImage: "person.3.fill") {
                         store.creationSheet = .group
                     }
-                    .keyboardShortcut("n", modifiers: [.command, .shift])
+                    .appShortcut(.newGroup)
                     .disabled(store.agents.isEmpty)
                 } label: {
                     Label("Create", systemImage: "square.and.pencil")

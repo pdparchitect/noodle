@@ -24,14 +24,12 @@ struct VoiceRecordingCommand {
     }
 
     @MainActor func perform() {
-        guard isEnabled, NSApp.modalWindow == nil, let window = NSApp.keyWindow,
+        guard isEnabled, KeyboardBindings.shared.recordingAction == nil, NSApp.modalWindow == nil, let window = NSApp.keyWindow,
               window.attachedSheet == nil, window.sheetParent == nil else { return }
         // Holding the shortcut must not stop a recording as soon as startup
         // completes and the command becomes enabled again.
         if let event = NSApp.currentEvent, event.type == .keyDown {
             if event.isARepeat { return }
-            let modifiers = event.modifierFlags.intersection([.command, .shift, .control, .option])
-            if modifiers.contains(.command), modifiers != [.command, .shift] { return }
         }
         toggle()
     }
@@ -55,11 +53,11 @@ struct ConversationCommands: Commands {
     var body: some Commands {
         CommandMenu("Conversation") {
             Button("Search Conversations", action: search)
-                .keyboardShortcut("f", modifiers: .command)
+                .appShortcut(.searchConversations)
             if #available(macOS 26.0, *) {
                 Divider()
                 Button(command?.title ?? "Record Voice Message") { command?.perform() }
-                    .keyboardShortcut("d", modifiers: [.command, .shift])
+                    .appShortcut(.recordVoice)
                     .disabled(command?.isEnabled != true)
             }
         }

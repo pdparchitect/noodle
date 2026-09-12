@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Keep Space in the annotation comment editor instead of reopening the attachment and cancelling the popup, including image and 3D-model region annotations.
 - Cancel active and queued MCP work on disconnect or caller cancellation, enforce request deadlines during queue waits and token refresh, and reject late sign-in callbacks.
 - Make submitted annotation previews read-only. Remove Edit Comment and Save to Draft from sent notes, revoke editing in an open preview on submission, and reject later edits without creating a copy.
 - Stop Grok and Muse inspection promptly when output closes, ignore unsolicited replies, and reject malformed responses instead of reporting misleading account or model status.
@@ -22,6 +23,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Add Settings → Keybindings immediately before Update, with a direct list of command descriptions and custom shortcuts for annotations, conversation search, bot/group creation, and voice recording. Changes update menus and hints immediately, persist across launches, and support clearing, per-command reset, and Restore Defaults with conflict checks.
 - Cover MCP cancellation, disconnect, timeout, and sign-in races with controlled local HTTP fixtures and synthetic credentials; no accounts, browser sign-in, or Keychain access are required.
 - Test Grok and Muse inspection with isolated local process fixtures in the default Swift suite, without installed harnesses, provider logins, or network requests.
 - Transfer files directly between a bot's workspace and its assigned Computer with CLI `upload` and `download`, including binary files up to 8 GiB, assignment checks, and protection against overwriting existing files.

@@ -52,7 +52,7 @@ struct VoiceMessageComposer<Content: View>: View {
                             Text(voiceTime(recorder.duration)).font(.caption.monospacedDigit())
                             if recorder.phase == .recording {
                                 Button(action: toggleRecording) { Image(systemName: "stop.fill") }
-                                    .buttonStyle(.plain).help("Stop Recording (⌘⇧D)")
+                                    .buttonStyle(.plain).help(KeyboardBindings.shared.help("Stop Recording", for: .recordVoice))
                             }
                         }
                         Button { Task { await sendRecording() } } label: {

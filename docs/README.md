@@ -7,6 +7,8 @@
 - [Install and sign in to a harness](harness-setup.md)
 - [Connect tools](mcp-connections.md)
 - [Voice messages](voice-messages.md)
+- [Keyboard shortcuts](keyboard-shortcuts.md)
+- [Attachment annotations](attachment-annotations.md)
 - [Agent access and privacy](security.md)
 - [Noodle Computer](../Computer/README.md)
 

@@ -11,12 +11,15 @@ bin_path="$(swift build --disable-sandbox --package-path "$project_root" --scrat
 fixture_app="$project_root/.build/Noodle Annotation Tests.app"
 mkdir -p "$fixture_app/Contents/MacOS"
 swiftc -parse-as-library -target "$(uname -m)-apple-macosx15.0" -I "$bin_path/Modules" \
+    "$project_root/Sources/Noodle/KeyboardBindings.swift" \
+    "$project_root/Sources/Noodle/KeybindingsSettingsView.swift" \
     "$project_root/Sources/Noodle/AttachmentPreviewController.swift" \
     "$project_root/Sources/Noodle/AnnotationPopover.swift" \
     "$project_root/Sources/Noodle/AnnotationContent.swift" \
     "$project_root/Sources/Noodle/AnnotationPreview.swift" \
     "$project_root/Tests/NativeFixtureChecks.swift" \
     "$project_root/Tests/AnnotationContentChecks.swift" \
+    "$project_root/Tests/KeyboardBindingChecks.swift" \
     "$project_root/Tests/AnnotationVisualChecks.swift" \
     "$project_root/Tests/attachment-annotations.swift" \
     "$bin_path"/NoodleCore.build/*.swift.o "$bin_path"/NoodleWallpaperCore.build/*.swift.o \

@@ -227,7 +227,7 @@ struct AnnotationPreviewContent: View {
                         isEditing = false; editError = nil
                     } catch { editError = error.localizedDescription }
                 }
-                .keyboardShortcut(.return, modifiers: .command)
+                .appShortcut(.saveAnnotation)
                 .disabled(draftComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .controlSize(.small)

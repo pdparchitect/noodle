@@ -76,6 +76,21 @@ import NoodleCore
         NSApp.postEvent(release, atStart: false)
         try await wait()
     }
+    func typeComment(_ text: String, on controller: AttachmentPreviewController) async throws {
+        let letters = "abcdefghijklmnopqrstuvwxyz"
+        let codes: [UInt16] = [0, 11, 8, 2, 14, 3, 5, 4, 34, 38, 40, 37, 46, 45, 31, 35, 12, 15, 1, 17, 32, 9, 13, 7, 16, 6]
+        let keyCodes = Dictionary(uniqueKeysWithValues: zip(letters.map(String.init), codes))
+        guard let input = controller.commentInput, let window = input.window else { fixtureFailure("Missing comment editor") }
+        let sourceURL = controller.currentURL
+        for character in text {
+            let value = String(character)
+            let code = value == " " ? UInt16(49) : value == "." ? UInt16(47) : keyCodes[value.lowercased()]!
+            try await key(code, characters: value, flags: value != value.lowercased() ? .shift : [], window: window)
+            require(controller.commentInput === input && controller.commentPopover?.isShown == true && controller.currentURL == sourceURL,
+                "Typing a comment must not reopen the attachment or dismiss its annotation")
+        }
+        require(input.string == text, "The native event queue must deliver the complete comment, including spaces")
+    }
     func run() async throws {
         directory = FileManager.default.temporaryDirectory.appendingPathComponent("annotation-fixture-\(UUID())")
         repository = WorkspaceRepository(rootURL: directory)
@@ -132,7 +147,7 @@ import NoodleCore
         require(board.string(forType: .string) == "Original clipboard sentinel", "Copy capture must restore the clipboard")
         require(first.commentPopover?.contentViewController?.view.window?.firstResponder === first.commentInput,
             "Popover must focus its editor")
-        first.commentInput?.string = "Make the date more specific."
+        try await typeComment("Make the date more specific.", on: first)
         try await key(36, characters: "\r", flags: .command, window: first.commentInput!.window!)
         try await until("Save focus: active=\(NSApp.isActive), key=\(NSApp.keyWindow?.title ?? "nil"), visible=\(preview.isVisible), controller=\(String(describing: preview.currentController))") { preview.isKeyWindow && first.commentPopover == nil && first.commentPanel == nil }
         require(stored.count == 1 && first.overlay == nil && first.canAnnotate, "Save must create one annotation and remove all transient controls")
@@ -205,7 +220,7 @@ import NoodleCore
         try await until("Region selection must open popover") { first.commentPopover?.isShown == true }
         require(first.pending?.region?.isValid == true && first.pendingImage != nil, "Region must carry normalized coordinates and snapshot")
         try await until("Region editor must receive keyboard focus") { first.commentInput?.window?.isKeyWindow == true }
-        first.commentInput?.string = "Move the orange circle."
+        try await typeComment("Move the orange circle.", on: first)
         try await key(36, characters: "\r", flags: .command, window: first.commentInput!.window!)
         try await until("Region save focus: active=\(NSApp.isActive), key=\(NSApp.keyWindow?.title ?? "nil"), visible=\(preview.isVisible), controller=\(String(describing: preview.currentController))") { preview.isKeyWindow && first.overlay == nil }
         require(stored.count == 2 && stored[1].mediaType == "image/png" && NSBitmapImageRep(data: savedContent!) != nil,
@@ -295,7 +310,8 @@ import NoodleCore
             app.setActivationPolicy(.prohibited)
             do {
                 try AnnotationContentChecks.run()
-                print("PASS: Quick Look annotations — headless content, navigation, anchors, popover dismissal and native close lifecycle")
+                try KeyboardBindingChecks.run()
+                print("PASS: Quick Look annotations — headless content, navigation, anchors, dismissal, native close lifecycle and keybindings")
             } catch { fixtureFailure(error.localizedDescription) }
             return
         }

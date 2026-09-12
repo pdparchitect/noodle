@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import NoodleCore
 
 extension AttachmentPreviewController {
@@ -92,7 +93,7 @@ extension AttachmentPreviewController {
         scroll.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         scroll.heightAnchor.constraint(equalToConstant: 88).isActive = true
         let footer = NSStackView(); footer.orientation = .horizontal
-        let hint = annotationLabel("⌘↩ to save  ·  Esc to cancel", size: 10); hint.textColor = .secondaryLabelColor
+        let hint = NSHostingView(rootView: AnnotationShortcutHint())
         footer.addArrangedSubview(hint)
         let footerSpace = NSView(); footerSpace.setContentHuggingPriority(.init(1), for: .horizontal); footer.addArrangedSubview(footerSpace)
         let save = NSButton(title: "Save", target: self, action: #selector(saveComment)); save.bezelStyle = .rounded
@@ -134,6 +135,14 @@ extension AttachmentPreviewController {
     let field = NSTextField(wrappingLabelWithString: text)
     field.font = .systemFont(ofSize: size, weight: weight)
     return field
+}
+
+private struct AnnotationShortcutHint: View {
+    var body: some View {
+        Text(KeyboardBindings.shared.binding(for: .saveAnnotation)
+            .map { "\($0.displayName) to save  ·  Esc to cancel" } ?? "Esc to cancel")
+            .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize()
+    }
 }
 
 // MARK: - Native popover content

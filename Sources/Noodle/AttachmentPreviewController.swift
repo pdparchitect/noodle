@@ -17,10 +17,10 @@ struct AnnotationCommands: Commands {
     var body: some Commands {
         CommandMenu("Preview") {
             Button("Add Annotation…") { state.owner?.annotate() }
-                .keyboardShortcut("a", modifiers: [.command, .shift])
+                .appShortcut(.annotateSelection)
                 .disabled(!state.enabled)
             Button("Annotate Region…") { state.owner?.startRegion() }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .appShortcut(.annotateRegion)
                 .disabled(!state.enabled)
         }
     }
@@ -345,15 +345,23 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
             previewWillStartClosing()
             return event
         }
-        if flags == .command, event.keyCode == 36, commentPopover != nil {
+        let bindings = KeyboardBindings.shared
+        if commentPopover != nil, bindings.matches(.saveAnnotation, event: event) {
             if !event.isARepeat { saveComment() }; return nil
         }
-        guard canAnnotate, !event.isARepeat, flags == [.command, .shift] else { return event }
-        switch event.charactersIgnoringModifiers?.lowercased() {
-        case "a": annotate(); return nil
-        case "r": startRegion(); return nil
-        default: return event
+        // The popover shares QL's responder owner with the chat. SwiftUI can
+        // retain the attachment card's Space action across that window handoff.
+        // Deliver text entry to NSTextView before it can reopen the attachment
+        // (and dismiss its annotation), preserving selection and input methods.
+        if event.keyCode == 49, flags.intersection([.command, .control]).isEmpty,
+           let input = commentInput, input.window === window, window.firstResponder === input {
+            input.keyDown(with: event)
+            return nil
         }
+        guard canAnnotate, !event.isARepeat else { return event }
+        if bindings.matches(.annotateSelection, event: event) { annotate(); return nil }
+        if bindings.matches(.annotateRegion, event: event) { startRegion(); return nil }
+        return event
     }
     @objc func annotate() {
         guard canAnnotate, let source else { return }

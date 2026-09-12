@@ -2,6 +2,8 @@
 
 Open an attachment in a Noodle conversation to use the system Quick Look preview.
 
+Shortcuts below are defaults. Discover or change them in **Settings → Keybindings**; menus and annotation hints show your current bindings. See [keyboard shortcuts](keyboard-shortcuts.md).
+
 - Select text and press **⌘⇧A**, or choose **Preview → Add Annotation**. For an image, this starts region selection. If the preview does not supply selected text, the editor clearly labels the comment as applying to the whole attachment.
 - Press **⌘⇧R** for a visual region in any preview. Drag a rectangle or click to place a small marker on the frozen preview. Check that the snapshot shows the intended content before saving; Escape returns to the live preview.
 - Enter a comment and click **Save** or press **⌘Return**. **Escape** or the close button cancels. Both return keyboard focus to the same attachment in Quick Look after the popup closes. Holding Escape dismisses only the annotation; release it and press again to close the preview.
@@ -37,6 +39,8 @@ The full native fixture takes desktop focus to simulate input and requires an id
 `Tests/attachment-annotations.sh --visual-cancellation` is a focused foreground regression. It posts ⌘⇧A, Escape and ⌘Return through the real AppKit event queue against a native diff preview. It records only the fixture's own windows at 60 fps and logs lifecycle/state changes, waits through each close animation, and checks that the source item and focus survive four cancellations and two saves without refocusing the preview from the test. A separate Escape and ⌘W must close it permanently. The printed `VISUAL_EVIDENCE` directory contains the MP4 and `lifecycle.jsonl` even when an assertion fails. Run this only when desktop focus is available; `--build-only` prepares the signed fixture without launching it. Its build objects are isolated from concurrent application and coverage builds.
 
 The hidden checks exercise the exact weak-owner callback installed as the AppKit event monitor, in addition to the controller's event handler. A consumed event must stay nil through that boundary, including held Escape and its release; unrelated input and events after owner deallocation must pass through. A nil-coalescing fallback at this boundary previously reintroduced consumed Escape into AppKit despite passing the inner handler checks.
+
+The hidden typing regression sends native key events through that callback and the real comment text view for image and USDA region annotations. It checks spaces, repeated spaces, selection replacement, deletion, cancellation and unrelated-window passthrough. The attachment card's Space action ignores preview windows so a retained SwiftUI focus cannot reopen the source while a comment is being typed. The foreground fixture also types complete comments through the application event queue instead of filling the field directly; running that full presentation path still requires desktop focus.
 
 The hidden fixture also renders the production annotation viewer before and after submission without recreating it. Native text recognition verifies that Edit Comment disappears while the saved feedback and selected source remain readable. Core tests cover draft edits, rejected saves from stale previews, submitted text and image immutability, queued messages, and the absence of newly created revision files or deliveries.
 

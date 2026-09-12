@@ -65,6 +65,7 @@ import Vision
         checkPopoverAnchors()
         checkPopoverDismissal(source: source)
         checkEventMonitorBoundary(source: source)
+        checkCommentTyping(source: source)
         checkSubmittedPreviewBecomesReadOnly(source: source)
         checkNativePreviewClosing()
         if CommandLine.arguments.contains("--render-previews") {
@@ -99,6 +100,70 @@ import Vision
         owner = nil
         require(releasedOwner == nil, "The event monitor must not retain its controller")
         require(handler(unrelated) === unrelated, "Input must pass through after owner deallocation")
+    }
+
+    private static func checkCommentTyping(source: ConversationAttachment) {
+        for filename in ["Example.png", "Scene.usda"] {
+            let source = ConversationAttachment(conversationID: source.conversationID, originalFilename: filename,
+                storedFilename: filename, mediaType: filename.hasSuffix("png") ? "image/png" : "model/vnd.usda", byteCount: 0)
+            let controller = AttachmentPreviewController()
+            let content = AnnotationCommentController()
+            content.owner = controller
+            let input = AnnotationCommentTextView(frame: NSRect(x: 0, y: 0, width: 320, height: 100))
+            input.isRichText = false
+            content.view = input
+            let editor = NSPanel(contentRect: input.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            editor.isReleasedWhenClosed = false; editor.contentViewController = content
+            require(editor.makeFirstResponder(input), "The hidden comment editor must accept keyboard focus")
+            let popover = DeferredAnnotationPopover()
+            popover.contentViewController = content; popover.delegate = controller
+            controller.commentPopover = popover; controller.commentInput = input
+            controller.pending = .init(source: source, region: .init(x: 0.1, y: 0.2, width: 0.3, height: 0.4))
+            let overlay = AnnotationCapturePanel(contentRect: input.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            overlay.isReleasedWhenClosed = false; controller.overlay = overlay
+            let handler = controller.eventMonitorHandler()
+            func key(_ code: UInt16, _ characters: String, flags: NSEvent.ModifierFlags = [],
+                     type: NSEvent.EventType = .keyDown, repeating: Bool = false, in window: NSWindow? = nil) -> NSEvent {
+                NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: (window ?? editor).windowNumber, context: nil, characters: characters,
+                    charactersIgnoringModifiers: characters, isARepeat: repeating, keyCode: code)!
+            }
+            func type(_ event: NSEvent) {
+                let forwarded = handler(event)
+                if event.keyCode == 49 {
+                    require(forwarded == nil, "Typing Space in a \(filename) comment must not reach Quick Look")
+                }
+                if let forwarded { editor.sendEvent(forwarded) }
+                require(controller.pending != nil && controller.commentPopover === popover && popover.closeCount == 0,
+                    "Typing must preserve the \(filename) annotation and its popup")
+            }
+            for (code, text): (UInt16, String) in [(46, "m"), (31, "o"), (9, "v"), (14, "e"), (49, " "), (17, "t"), (4, "h"), (8, "c")] {
+                type(key(code, text))
+            }
+            type(key(51, "\u{8}"))
+            type(key(14, "e"))
+            type(key(49, " "))
+            for (code, text): (UInt16, String) in [(35, "p"), (23, "i"), (45, "n")] { type(key(code, text)) }
+            require(input.string == "move the pin", "Real native typing must preserve spaces and deletion: \(input.string)")
+            input.setSelectedRange(NSRange(location: 5, length: 3))
+            type(key(49, " "))
+            require(input.string == "move   pin", "Space must replace the selected text through NSTextView")
+            type(key(49, " ", repeating: true))
+            require(input.string == "move    pin", "Held Space must insert another space without dismissing the popup")
+            let copy = key(8, "c", flags: .command)
+            require(handler(copy) === copy, "Command shortcuts must remain available to native editing")
+            let otherWindow = NSPanel(contentRect: input.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            otherWindow.isReleasedWhenClosed = false
+            let otherSpace = key(49, " ", in: otherWindow)
+            require(handler(otherSpace) === otherSpace, "Typing in another window must not be captured")
+            editor.makeFirstResponder(nil)
+            let unfocusedSpace = key(49, " ")
+            require(handler(unfocusedSpace) === unfocusedSpace, "Space outside the comment editor must retain native behavior")
+            editor.makeFirstResponder(input)
+            require(handler(key(53, "\u{1b}")) == nil && controller.pending == nil,
+                "Escape must still cancel the comment after ordinary typing")
+            controller.close(); editor.close(); overlay.close(); otherWindow.close()
+        }
     }
 
     private static func checkSubmittedPreviewBecomesReadOnly(source: ConversationAttachment) {

@@ -86,6 +86,10 @@ struct AttachmentInlinePreview: View {
             preview()
         }
         .onKeyPress(.space) {
+            // Native preview children share our responder chain, but typing
+            // in their editors must not activate the selected attachment card.
+            guard !AttachmentPreviewController.containsPreviewWindow(NSApp.keyWindow),
+                  !AttachmentPreviewController.containsPreviewWindow(NSApp.currentEvent?.window) else { return .ignored }
             select()
             preview()
             return .handled
