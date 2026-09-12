@@ -7,14 +7,20 @@ struct SettingsBotList<Row: View>: View {
     let agents: [AgentRecord]
     @ViewBuilder var row: (AgentRecord) -> Row
 
+    private let scrollIndicatorGutter: CGFloat = 20
+
     var body: some View {
         SettingsBotListLayout {
             ViewThatFits(in: .vertical) {
                 rows
                 ScrollView {
                     rows
+                        .padding(.trailing, scrollIndicatorGutter)
                 }
                 .scrollBounceBehavior(.basedOnSize)
+                // Extend the scrollbar into the form's trailing margin while
+                // keeping the rows aligned with the other settings controls.
+                .padding(.trailing, -scrollIndicatorGutter)
             }
         }
         .toggleStyle(.switch)

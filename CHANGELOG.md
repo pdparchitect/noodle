@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Place the Heartbeat and Security bot-list scrollbars beside the rows so they no longer overlap the toggles.
+
 - Give draft annotation and attachment chips a frosted glass background so conversation text scrolling behind them stays blurred and their labels remain readable.
 
 - Use consistent status icons and text in Harness, Tools, and Companions settings, with green checks and labels for signed-in, ready, connected, and installed states.
