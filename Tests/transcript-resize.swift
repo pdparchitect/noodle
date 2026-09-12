@@ -126,8 +126,55 @@ struct TranscriptResizeFixture: View {
             model.ids.append(UUID())
             await settle()
             precondition(atBottom(), "New messages must still follow when already at the bottom")
+
+            @MainActor func atTop() -> Bool {
+                let inset = scroll.contentInsets
+                return TranscriptScrollMetrics(contentOffset: scroll.contentView.bounds.minY,
+                    contentHeight: scroll.documentView!.frame.height, viewportHeight: scroll.contentView.bounds.height,
+                    topInset: inset.top, bottomInset: inset.bottom).isAtTop
+            }
+            // SwiftUI builds no accessibility tree without a client, so click where the
+            // bottom-anchored controls sit: 18 pt from the edge, 12 pt above the overlay.
+            @MainActor func click(_ control: Int) {
+                let point = NSPoint(x: window.contentView!.bounds.width - 33,
+                                    y: model.overlayHeight + 27 + CGFloat(control) * 38)
+                func event(_ type: NSEvent.EventType) -> NSEvent {
+                    NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                        context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+                }
+                // Queue the mouse-up first: a click on message text runs a nested
+                // tracking loop that would otherwise wait for it forever.
+                NSApp.postEvent(event(.leftMouseUp), atStart: false)
+                window.sendEvent(event(.leftMouseDown))
+            }
+            let latest = 0, top = 1
+            wheel(0, phase: .began)
+            wheel(2400, phase: .changed)
+            await settle()
+            wheel(0, phase: .ended)
+            await settle()
+            click(top)
+            try? await Task.sleep(for: .milliseconds(900))
+            precondition(atTop() && !model.saved.isAtBottom, "Scroll to Top must reach and save the start")
+            click(latest)
+            try? await Task.sleep(for: .milliseconds(900))
+            precondition(atBottom() && model.saved.isAtBottom, "Scroll to Latest must reach and save the bottom")
+            model.ids.append(UUID())
+            await settle()
+            precondition(atBottom(), "Jumping to latest must resume following new messages")
+            wheel(0, phase: .began)
+            wheel(1200, phase: .changed)
+            await settle()
+            wheel(0, phase: .ended)
+            try? await Task.sleep(for: .milliseconds(2600))
+            click(top)
+            click(latest)
+            try? await Task.sleep(for: .milliseconds(900))
+            precondition(!atTop() && !atBottom(), "Both controls must hide after scrolling stops")
+
             window.orderOut(nil)
-            print("Transcript resize checks passed: message anchoring, width/height reflow, incoming messages, composer growth and follow-latest")
+            print("Transcript resize checks passed: message anchoring, width/height reflow, incoming messages, composer growth, follow-latest and jump controls")
             exit(0)
         }
         app.run()

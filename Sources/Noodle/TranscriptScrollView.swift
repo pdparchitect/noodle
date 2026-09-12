@@ -14,8 +14,46 @@ enum TranscriptScrollTarget: Hashable, Sendable {
 
 private struct TranscriptGeometry: Equatable {
     let viewport: TranscriptViewport
+    let isAtTop: Bool
     let contentHeight: CGFloat
     let containerHeight: CGFloat
+}
+
+/// Changes only at the edges, so jump controls don't update on every scrolled pixel.
+private struct TranscriptEdges: Equatable {
+    var isAtTop: Bool
+    var isAtBottom: Bool
+}
+
+/// Kept out of the scroll view's own state, so showing or fading a control
+/// re-renders only the controls, never the ScrollView.
+@MainActor @Observable
+private final class TranscriptJumpState {
+    var edges: TranscriptEdges
+    var recentlyScrolled = false
+    @ObservationIgnored private var hovering = false
+    @ObservationIgnored private var hideTask: Task<Void, Never>?
+
+    init(isAtBottom: Bool) { edges = TranscriptEdges(isAtTop: false, isAtBottom: isAtBottom) }
+
+    func scrollingBegan() {
+        hideTask?.cancel()
+        if !recentlyScrolled { recentlyScrolled = true }
+    }
+
+    func scheduleHide() {
+        hideTask?.cancel()
+        hideTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(2)) } catch { return }
+            guard let self, !self.hovering else { return }
+            self.recentlyScrolled = false
+        }
+    }
+
+    func setHovering(_ hovering: Bool) {
+        self.hovering = hovering
+        if hovering { hideTask?.cancel() } else if recentlyScrolled { scheduleHide() }
+    }
 }
 
 /// Records geometry without publishing a SwiftUI update for every scrolled pixel.
@@ -41,6 +79,8 @@ struct TranscriptScrollView<Content: View>: View {
     @State private var userIsScrolling = false
     @State private var userHasScrolled = false
     @State private var didRestoreInitialViewport = false
+    @State private var jumpState: TranscriptJumpState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(initialViewport: TranscriptViewport, lastMessageID: UUID?, lastMessageIsFromUser: Bool,
          bottomOverlayHeight: CGFloat, saveViewport: @escaping (TranscriptViewport) -> Void,
@@ -57,6 +97,7 @@ struct TranscriptScrollView<Content: View>: View {
         _position = State(initialValue: initialPosition)
         _viewportRecorder = State(initialValue: TranscriptViewportRecorder(initialViewport))
         _followsLatest = State(initialValue: initialViewport.isAtBottom)
+        _jumpState = State(initialValue: TranscriptJumpState(isAtBottom: initialViewport.isAtBottom))
     }
 
     var body: some View {
@@ -98,16 +139,11 @@ struct TranscriptScrollView<Content: View>: View {
             position.scrollTo(id: target, anchor: initialViewport.isAtBottom ? .bottom : .top)
         }
         .onScrollGeometryChange(for: TranscriptGeometry.self) { geometry in
-            let metrics = TranscriptScrollMetrics(
-                contentOffset: geometry.contentOffset.y,
-                contentHeight: geometry.contentSize.height,
-                viewportHeight: geometry.containerSize.height,
-                topInset: geometry.contentInsets.top,
-                bottomInset: geometry.contentInsets.bottom
-            )
+            let metrics = Self.metrics(geometry)
             return TranscriptGeometry(
                 // ScrollPosition(y:) uses the inset-adjusted top, not raw offset.
                 viewport: TranscriptViewport(offset: metrics.offset, isAtBottom: metrics.isAtBottom),
+                isAtTop: metrics.isAtTop,
                 contentHeight: geometry.contentSize.height,
                 containerHeight: geometry.containerSize.height
             )
@@ -122,6 +158,9 @@ struct TranscriptScrollView<Content: View>: View {
             }
             // Never write ScrollPosition here: native identity anchoring handles
             // reflow without a geometry -> corrective scroll -> geometry loop.
+            // Published only at the edges, not for every scrolled pixel.
+            let edges = TranscriptEdges(isAtTop: updated.isAtTop, isAtBottom: updated.viewport.isAtBottom)
+            if jumpState.edges != edges { jumpState.edges = edges }
         }
         .onScrollPhaseChange { oldPhase, newPhase in
             let wasUserScrolling = oldPhase != .idle && oldPhase != .animating
@@ -130,13 +169,20 @@ struct TranscriptScrollView<Content: View>: View {
             if isUserScrolling {
                 userHasScrolled = true
                 didRestoreInitialViewport = true
+                jumpState.scrollingBegan()
             }
             if wasUserScrolling && !isUserScrolling {
                 let finalViewport = readingViewport()
                 followsLatest = finalViewport.isAtBottom
                 viewportRecorder.lastUserViewport = finalViewport
                 saveViewport(finalViewport)
+                jumpState.scheduleHide()
             }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            TranscriptJumpControls(state: jumpState, jump: jump)
+                .padding(.trailing, 18)
+                .padding(.bottom, bottomOverlayHeight + 12)
         }
         .onChange(of: lastMessageID) { _, _ in
             // Initial hydration isn't a newly sent message, even if the last
@@ -168,5 +214,77 @@ struct TranscriptScrollView<Content: View>: View {
 
     private func saveLastUserViewport() {
         if let viewport = viewportRecorder.lastUserViewport { saveViewport(viewport) }
+    }
+
+    private func jump(to target: TranscriptScrollTarget) {
+        let toBottom = target == .bottom
+        userHasScrolled = true
+        didRestoreInitialViewport = true
+        followsLatest = toBottom
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.35)) {
+            // The top edge needs no row: content may not provide a `.start` target,
+            // and no estimated lazy-row height lies above offset zero.
+            if toBottom { position.scrollTo(id: target, anchor: .bottom) } else { position.scrollTo(edge: .top) }
+        }
+        let viewport = TranscriptViewport(offset: 0, isAtBottom: toBottom)
+        viewportRecorder.lastUserViewport = viewport
+        saveViewport(viewport)
+        jumpState.scheduleHide()
+    }
+
+    private static func metrics(_ geometry: ScrollGeometry) -> TranscriptScrollMetrics {
+        TranscriptScrollMetrics(
+            contentOffset: geometry.contentOffset.y,
+            contentHeight: geometry.contentSize.height,
+            // containerSize excludes the titlebar inset (758 vs 810 pt measured),
+            // which kept isAtBottom false at the real bottom; visibleRect is full height.
+            viewportHeight: geometry.visibleRect.height,
+            topInset: geometry.contentInsets.top,
+            bottomInset: geometry.contentInsets.bottom
+        )
+    }
+}
+
+private struct TranscriptJumpControls: View {
+    let state: TranscriptJumpState
+    let jump: (TranscriptScrollTarget) -> Void
+
+    var body: some View {
+        let showsTop = state.recentlyScrolled && !state.edges.isAtTop
+        let showsBottom = state.recentlyScrolled && !state.edges.isAtBottom
+        VStack(spacing: 8) {
+            if showsTop { button("chevron.up", title: "Scroll to Top", target: .start) }
+            if showsBottom { button("chevron.down", title: "Scroll to Latest", target: .bottom) }
+        }
+        .onHover { state.setHovering($0) }
+        .animation(.easeOut(duration: 0.2), value: showsTop)
+        .animation(.easeOut(duration: 0.2), value: showsBottom)
+    }
+
+    private func button(_ symbol: String, title: String, target: TranscriptScrollTarget) -> some View {
+        Button { jump(target) } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 30, height: 30)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .modifier(JumpControlBackground())
+        .help(title)
+        .accessibilityLabel(title)
+        .transition(.opacity)
+    }
+}
+
+private struct JumpControlBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.regular.interactive(), in: Circle())
+        } else {
+            content
+                .background(.regularMaterial, in: Circle())
+                .overlay(Circle().stroke(.separator.opacity(0.5)))
+        }
     }
 }
