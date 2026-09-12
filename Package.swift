@@ -22,6 +22,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "NoodleAgentBridge"),
+        .target(name: "NoodleAudioCapture", cSettings: [.unsafeFlags(["-fobjc-arc"])]),
         .executableTarget(name: "NoodleAgentHost", dependencies: ["NoodleCore", "NoodleAgentBridge"]),
         .target(name: "NoodleCore", dependencies: [.product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper")]),
         .executableTarget(name: "NoodleComputerCLI", dependencies: ["NoodleCore", .product(name: "ComputerBridge", package: "Bridge")]),
@@ -37,7 +38,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: ["NoodleCore", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "SwiftTerm", package: "SwiftTerm")],
+            dependencies: ["NoodleCore", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", "NoodleAudioCapture", .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "SwiftTerm", package: "SwiftTerm")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",
@@ -57,7 +58,7 @@ let package = Package(
         ),
         .testTarget(
             name: "NoodleAppTests",
-            dependencies: ["Noodle", "NoodleCore"]
+            dependencies: ["Noodle", "NoodleCore", "NoodleAudioCapture"]
         ),
         .testTarget(
             name: "NoodleComputerIntegrationTests",

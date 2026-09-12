@@ -48,7 +48,7 @@ import NoodleCore
         let integerFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: false)!
         let integerStream = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .bufferingOldest(64))
         let integerSink = try VoiceAudioSink(url: directory.appendingPathComponent("integer.caf"),
-            sourceFormat: integerFormat, targetFormat: integerFormat, continuation: integerStream.continuation)
+            targetFormat: integerFormat, continuation: integerStream.continuation)
         let integerBuffer = AVAudioPCMBuffer(pcmFormat: integerFormat, frameCapacity: 16_000)!
         integerBuffer.frameLength = 16_000
         for i in 0..<16_000 { integerBuffer.int16ChannelData![0][i] = 0 }
@@ -92,7 +92,7 @@ import NoodleCore
             let liveFile = try AVAudioFile(forReading: audio)
             let stream = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .bufferingOldest(64))
             let sink = try VoiceAudioSink(url: directory.appendingPathComponent("live.caf"),
-                sourceFormat: liveFile.processingFormat, targetFormat: format, continuation: stream.continuation)
+                targetFormat: format, continuation: stream.continuation)
             let analyzer = SpeechAnalyzer(modules: [transcriber])
             let text = Task { () throws -> String in
                 var parts: [String] = []
@@ -118,7 +118,7 @@ import NoodleCore
         let source = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)!
         let target = AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1)!
         let stream = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .bufferingOldest(64))
-        let sink = try VoiceAudioSink(url: audio, sourceFormat: source, targetFormat: target, continuation: stream.continuation)
+        let sink = try VoiceAudioSink(url: audio, targetFormat: target, continuation: stream.continuation)
         for _ in 0..<12 {
             let buffer = AVAudioPCMBuffer(pcmFormat: source, frameCapacity: 4096)!
             buffer.frameLength = 4096

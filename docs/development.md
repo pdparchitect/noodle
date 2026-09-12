@@ -88,6 +88,11 @@ callbacks and a monotonic test clock exercise cancellation, deadlines, and
 stale decisions without installed harnesses or Apple Intelligence. These tests
 run in the default Swift suite; native presentation fixtures remain separate.
 
+Voice capture regressions also run in `NoodleAppTests`. Offline audio engines
+exercise stale microphone formats, native tap exceptions, stop/restart cleanup,
+buffer conversion after format changes, and cancellation before startup. They
+do not open a microphone or load speech models.
+
 ## Focused checks
 
 Run native UI fixtures from a logged-in Mac. They use isolated test data.

@@ -30,6 +30,10 @@ struct VoiceRecordingCommand {
         // completes and the command becomes enabled again.
         if let event = NSApp.currentEvent, event.type == .keyDown {
             if event.isARepeat { return }
+            // NSMenu can match a key equivalent with extra modifiers. Honor
+            // the saved binding exactly, while allowing Return in an open menu.
+            if !event.modifierFlags.intersection([.command, .control]).isEmpty,
+               !KeyboardBindings.shared.matches(.recordVoice, event: event) { return }
         }
         toggle()
     }

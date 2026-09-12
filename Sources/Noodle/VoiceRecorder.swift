@@ -3,6 +3,7 @@ import AVFoundation
 import Speech
 import Observation
 import NoodleCore
+import NoodleAudioCapture
 
 struct VoiceRecordingDraft: Codable {
     let voice: VoiceMessage
@@ -27,7 +28,7 @@ struct VoiceRecordingDraft: Codable {
     var metadata: VoiceMessage { .init(transcript: transcript, duration: duration, waveform: levels, localeIdentifier: localeIdentifier) }
 
     private var localeIdentifier: String?
-    private var engine: AVAudioEngine?
+    private var capture: NoodleAudioCapture?
     private var sink: VoiceAudioSink?
     private var analyzer: SpeechAnalyzer?
     private var results: Task<Void, Never>?
@@ -62,37 +63,36 @@ struct VoiceRecordingDraft: Codable {
         generation = token
         preparationTask = Task {
             do {
-                let transcriber = try await prepareTranscriber()
+                try check(token)
+                let transcriber = try await prepareTranscriber(token: token)
                 try check(token)
                 guard await AVCaptureDevice.requestAccess(for: .audio) else {
                     throw VoiceFailure("Microphone access is off. Enable Noodle in System Settings → Privacy & Security → Microphone.")
                 }
                 try check(token)
-                let engine = AVAudioEngine()
-                inputName = try VoiceInputDevice.configure(engine).name
-                let inputFormat = engine.inputNode.outputFormat(forBus: 0)
-                guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0,
-                      let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber]) else {
+                guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber]) else {
                     throw VoiceFailure("No supported microphone format is available.")
                 }
                 try check(token)
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 let stream = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .bufferingOldest(64))
-                let sink = try VoiceAudioSink(url: audioURL, sourceFormat: inputFormat, targetFormat: format,
+                let sink = try VoiceAudioSink(url: audioURL, targetFormat: format,
                                              continuation: stream.continuation)
                 self.sink = sink
                 let analyzer = SpeechAnalyzer(modules: [transcriber])
                 self.analyzer = analyzer
                 listen(to: transcriber, token: token)
                 try await analyzer.prepareToAnalyze(in: format)
+                try check(token)
                 try await analyzer.start(inputSequence: stream.stream)
                 try check(token)
-                self.engine = engine
-                engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { buffer, _ in
+                let engine = AVAudioEngine()
+                inputName = try VoiceInputDevice.configure(engine).name
+                let capture = NoodleAudioCapture(engine: engine)
+                self.capture = capture
+                try capture.start(withBufferSize: 4096) { buffer, _ in
                     sink.consume(buffer)
                 }
-                engine.prepare()
-                try engine.start()
                 phase = .recording
                 try persist()
                 meterTask = Task {
@@ -121,23 +121,27 @@ struct VoiceRecordingDraft: Codable {
             } catch {
                 guard generation == token else { return }
                 await stopEngineAndAnalysis()
+                guard generation == token else { return }
                 self.error = error.localizedDescription
                 phase = .failed
             }
         }
     }
 
-    private func prepareTranscriber() async throws -> SpeechTranscriber {
+    private func prepareTranscriber(token: UUID) async throws -> SpeechTranscriber {
         guard SpeechTranscriber.isAvailable,
               let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale.current) else {
             throw VoiceFailure("On-device transcription isn’t available for this Mac or its current language.")
         }
+        try check(token)
         localeIdentifier = locale.identifier
         let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
         if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+            try check(token)
             preparation = "Downloading speech model…"
             try await request.downloadAndInstall()
         }
+        try check(token)
         preparation = "Starting microphone…"
         return transcriber
     }
@@ -171,6 +175,8 @@ struct VoiceRecordingDraft: Codable {
     private func finalizeAnalysis() async {
         let current = generation
         let analyzer = analyzer
+        let results = results
+        let sink = sink
         // Finalization must not leave a recording stuck indefinitely.
         let timeout = Task {
             do { try await Task.sleep(for: .seconds(30)) } catch { return }
@@ -180,11 +186,14 @@ struct VoiceRecordingDraft: Codable {
         }
         defer { timeout.cancel() }
         do { try await analyzer?.finalizeAndFinishThroughEndOfInput() }
-        catch { recognitionError = recognitionError ?? error.localizedDescription }
+        catch {
+            guard generation == current else { return }
+            recognitionError = recognitionError ?? error.localizedDescription
+        }
         await results?.value
         guard generation == current else { return }
         self.analyzer = nil
-        results = nil
+        self.results = nil
         transcript = metadata.transcript
         if let failure = sink?.snapshot().error { recognitionError = failure }
         if recognitionError != nil || transcript == nil || !hasAudio {
@@ -207,17 +216,19 @@ struct VoiceRecordingDraft: Codable {
         transcript = nil
         sink = nil
         do {
-            let transcriber = try await prepareTranscriber()
+            let transcriber = try await prepareTranscriber(token: token)
             try check(token)
             let analyzer = SpeechAnalyzer(modules: [transcriber])
             self.analyzer = analyzer
             listen(to: transcriber, token: generation)
             let file = try AVAudioFile(forReading: audioURL)
             try await analyzer.start(inputAudioFile: file, finishAfterFile: false)
+            try check(token)
             await finalizeAnalysis()
         } catch {
             guard generation == token else { return }
             await stopEngineAndAnalysis()
+            guard generation == token else { return }
             self.error = error.localizedDescription
             phase = .failed
         }
@@ -229,10 +240,12 @@ struct VoiceRecordingDraft: Codable {
     }
 
     func discard() async {
-        generation = UUID()
+        let token = UUID()
+        generation = token
         preparationTask?.cancel()
         meterTask?.cancel()
         await stopEngineAndAnalysis()
+        guard generation == token else { return }
         // Only this recorder's two owned draft files are removed.
         for file in [audioURL, directory.appendingPathComponent("draft.json")] {
             if FileManager.default.fileExists(atPath: file.path) { try? FileManager.default.removeItem(at: file) }
@@ -247,19 +260,20 @@ struct VoiceRecordingDraft: Codable {
     }
 
     private func stopCapture() {
-        engine?.stop()
-        engine?.inputNode.removeTap(onBus: 0)
-        engine = nil
+        capture?.stop()
+        capture = nil
         sink?.finish()
         if let snapshot = sink?.snapshot() { duration = snapshot.duration; levels = snapshot.waveform }
     }
 
     private func stopEngineAndAnalysis() async {
         stopCapture()
+        let analyzer = self.analyzer
+        let results = self.results
+        self.analyzer = nil
+        self.results = nil
         await analyzer?.cancelAndFinishNow()
         results?.cancel()
-        results = nil
-        analyzer = nil
     }
 
     private func check(_ token: UUID) throws {
@@ -292,7 +306,7 @@ final class VoiceAudioSink: @unchecked Sendable {
     }
     private let lock = NSLock()
     private var file: AVAudioFile?
-    private let converter: AVAudioConverter
+    private var converter: AVAudioConverter?
     private let target: AVAudioFormat
     private let continuation: AsyncStream<AnalyzerInput>.Continuation
     private var frames: Int64 = 0
@@ -304,12 +318,8 @@ final class VoiceAudioSink: @unchecked Sendable {
     private var liveBucketFrames = 0
     private var liveBucketPeak: Float = 0
 
-    init(url: URL, sourceFormat: AVAudioFormat, targetFormat: AVAudioFormat,
+    init(url: URL, targetFormat: AVAudioFormat,
          continuation: AsyncStream<AnalyzerInput>.Continuation) throws {
-        guard let converter = AVAudioConverter(from: sourceFormat, to: targetFormat) else {
-            throw VoiceFailure("The microphone audio format couldn’t be converted.")
-        }
-        self.converter = converter
         target = targetFormat
         self.continuation = continuation
         file = try AVAudioFile(forWriting: url, settings: targetFormat.settings,
@@ -320,6 +330,14 @@ final class VoiceAudioSink: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         guard !finished else { return }
         do {
+            // Use the format actually delivered by the tap, including route
+            // changes. A format captured before speech preparation can be stale.
+            if converter?.inputFormat != input.format {
+                converter = AVAudioConverter(from: input.format, to: target)
+            }
+            guard let converter else {
+                throw VoiceFailure("The microphone audio format couldn’t be converted.")
+            }
             let capacity = AVAudioFrameCount(ceil(Double(input.frameLength) * target.sampleRate / input.format.sampleRate)) + 64
             guard let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return }
             var supplied = false
