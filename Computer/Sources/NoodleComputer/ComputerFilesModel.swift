@@ -11,6 +11,8 @@ import CoreServices
     @Published var selection: String?
     @Published var loading = false
     @Published var busy = false
+    @Published var importProgress: FileImportProgress?
+    @Published var cancellingTransfer = false
     @Published var status = ""
     @Published var error: String?
     @Published var previewURL: URL?
@@ -33,7 +35,7 @@ import CoreServices
     var visible: [GuestFile] { files.filter { (showHidden || !$0.name.hasPrefix(".")) && (filter.isEmpty || $0.name.localizedCaseInsensitiveContains(filter)) } }
     var parent: String { folder == "/" ? "/" : (folder as NSString).deletingLastPathComponent }
 
-    func navigate(_ path: String, record: Bool = true, selecting: String? = nil) {
+    func navigate(_ path: String, record: Bool = true, selecting: String? = nil, clearStatus: Bool = true) {
         let destination: String
         do { destination = try GuestFile.normalize(path) } catch { self.error = error.localizedDescription; return }
         listing?.cancel()
@@ -46,7 +48,8 @@ import CoreServices
                 try Task.checkCancellation()
                 guard listingID == id else { return }
                 if record, folder != destination { history.append(folder); forwardHistory = [] }
-                folder = destination; files = items; filter = ""; status = ""
+                folder = destination; files = items; filter = ""
+                if clearStatus, !busy { status = "" }
                 if let selected = items.first(where: { $0.name == selecting }) ?? (previewEnabled ? visible.first : nil) { choose(selected) }
             } catch {
                 if !Task.isCancelled, listingID == id { self.error = error.localizedDescription }
@@ -96,29 +99,39 @@ import CoreServices
         }
     }
 
-    func perform(_ message: String, action: @escaping () async throws -> Void) {
+    func perform(_ message: String, cancellationMessage: String = "Cancelled", action: @escaping () async throws -> Void) {
         guard !busy else { return }
-        busy = true; status = message
+        busy = true; status = message; importProgress = nil; cancellingTransfer = false
         transfer = Task {
-            do { try await action(); status = "Done" }
-            catch { if !Task.isCancelled { self.error = error.localizedDescription }; status = Task.isCancelled ? "Cancelled" : "Could not complete operation" }
-            busy = false; transfer = nil; navigate(folder, record: false)
+            do { try await action(); try Task.checkCancellation(); status = "Done" }
+            catch {
+                let cancelled = Task.isCancelled || error is CancellationError
+                if !cancelled { self.error = error.localizedDescription }
+                status = cancelled ? cancellationMessage : "Could not complete operation"
+            }
+            busy = false; transfer = nil; importProgress = nil; cancellingTransfer = false
+            navigate(folder, record: false, clearStatus: false)
         }
     }
-    func cancelTransfer() { transfer?.cancel() }
+    func cancelTransfer() {
+        guard busy, !cancellingTransfer else { return }
+        cancellingTransfer = true; status = "Cancelling…"; transfer?.cancel()
+    }
     func importFiles(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
         let folder = folder
-        perform("Importing files…") {
-            for url in urls {
-                try Task.checkCancellation()
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                try await self.service.upload(url, to: GuestFile.path(folder, url.lastPathComponent))
+        perform("Preparing import…", cancellationMessage: "Import cancelled. Completed items were kept.") {
+            try await self.service.importItems(urls, to: folder) { [weak self] progress in
+                await self?.updateImportProgress(progress)
             }
         }
     }
+    private func updateImportProgress(_ progress: FileImportProgress) {
+        guard busy, !cancellingTransfer else { return }
+        importProgress = progress; status = "Importing \(progress.currentPath)"
+    }
     func importPanel() {
-        let panel = NSOpenPanel(); panel.canChooseDirectories = false; panel.allowsMultipleSelection = true
+        let panel = NSOpenPanel(); panel.canChooseFiles = true; panel.canChooseDirectories = true; panel.allowsMultipleSelection = true
         panel.prompt = "Import"
         panel.begin { [weak self] response in if response == .OK { self?.importFiles(panel.urls) } }
     }

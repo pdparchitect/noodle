@@ -78,29 +78,41 @@ final class FileOutput: Writer, @unchecked Sendable {
 final class FileInput: ReaderStream, @unchecked Sendable {
     private let handle: FileHandle
     private let limit: Int64
-    init(url: URL, limit: Int64) throws {
+    private let progress: @Sendable (Int64) async -> Void
+    private let lock = NSLock()
+    private var cancelled = false
+    init(url: URL, limit: Int64, progress: @escaping @Sendable (Int64) async -> Void = { _ in }) throws {
         let fd = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard fd >= 0 else { throw ComputerError("Cannot read the selected file.") }
         var info = stat()
         guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_size == limit else {
             Darwin.close(fd); throw ComputerError("The selected file changed or is not a regular file.")
         }
-        handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true); self.limit = limit
+        handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true); self.limit = limit; self.progress = progress
     }
+    func cancel() { lock.withLock { cancelled = true } }
     func stream() -> AsyncStream<Data> {
         let handle = handle
+        let limit = limit
         var remaining = limit
+        var lastUpdate = ContinuousClock.now
         return AsyncStream(unfolding: {
-            guard !Task.isCancelled, remaining > 0 else { return nil }
+            guard !Task.isCancelled, !self.lock.withLock({ self.cancelled }), remaining > 0 else { return nil }
             guard let data = try? handle.read(upToCount: Int(min(remaining, 65_536))), !data.isEmpty else { return nil }
             remaining -= Int64(data.count)
+            let now = ContinuousClock.now
+            if remaining == 0 || now - lastUpdate >= .milliseconds(100) {
+                lastUpdate = now
+                await self.progress(limit - remaining)
+            }
+            guard !Task.isCancelled, !self.lock.withLock({ self.cancelled }) else { return nil }
             return data
         })
     }
     deinit { try? handle.close() }
 }
 
-actor GuestFiles {
+actor GuestFiles: FileImportDestination {
     let runtime: ContainerComputer
     private var installation: Task<String, Error>?
     init(runtime: ContainerComputer) { self.runtime = runtime }
@@ -130,6 +142,7 @@ actor GuestFiles {
         let process = try await runtime.makeFileProcess(arguments: arguments, input: input, output: output, errors: errors)
         let deadline = Task {
             do { try await Task.sleep(for: .seconds(timeout)) } catch { return }
+            input?.cancel()
             output.cancel()
             try? await process.kill(.term)
             try? await Task.sleep(for: .milliseconds(200))
@@ -149,11 +162,13 @@ actor GuestFiles {
                 }
                 return try output.finish(expected: expected)
             } catch {
+                input?.cancel()
                 try? await process.kill(.term)
                 try? await process.delete()
                 throw error
             }
         } onCancel: {
+            input?.cancel()
             output.cancel()
             Task { try? await process.kill(.term) }
         }
@@ -187,13 +202,24 @@ actor GuestFiles {
         return file.size
     }
 
-    func upload(_ source: URL, to path: String) async throws {
+    func upload(_ source: URL, to path: String, progress: @escaping @Sendable (Int64) async -> Void = { _ in }) async throws {
         let values = try source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
         guard values.isRegularFile == true, values.isSymbolicLink != true, let size = values.fileSize, size <= 8 * 1024 * 1024 * 1024 else {
-            throw ComputerError("Choose a regular file up to 8 GB. Folder imports are not supported yet.")
+            throw ComputerError("Choose a regular file up to 8 GB.")
         }
         let helper = try await helper()
-        _ = try await run(arguments: [helper, "write", path, String(size)], input: FileInput(url: source, limit: Int64(size)), limit: 4096, timeout: 300)
+        _ = try await run(arguments: [helper, "write", path, String(size)], input: FileInput(url: source, limit: Int64(size), progress: progress), limit: 4096, timeout: 300)
+    }
+
+    func importItems(_ urls: [URL], to folder: String, progress: @escaping @Sendable (FileImportProgress) async -> Void) async throws {
+        let scoped = urls.filter { $0.startAccessingSecurityScopedResource() }
+        defer { for url in scoped { url.stopAccessingSecurityScopedResource() } }
+        let plan = try FileImportPlan.prepare(urls, folder: folder)
+        try await plan.send(to: self, progress: progress)
+    }
+
+    func createImportDirectory(_ path: String) async throws {
+        try await change("mkdir", path: path)
     }
 
     func change(_ operation: String, path: String, extra: [String] = []) async throws {

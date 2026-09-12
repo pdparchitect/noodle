@@ -59,7 +59,7 @@ struct ComputerFilesView: View {
                     }
                         .contextMenu {
                             Button("New Folder…") { name = "Untitled Folder"; naming = "New Folder" }.disabled(model.busy)
-                            Button("Import Files…") { model.importPanel() }.disabled(model.busy)
+                            Button("Import Files or Folders…") { model.importPanel() }.disabled(model.busy)
                             Divider()
                             Button("Open Folder") { if let file = model.selected { model.open(file) } }.disabled(model.selected?.directory != true)
                             Button("Quick Look", action: requestQuickLook).disabled(model.selected?.regular != true)
@@ -72,6 +72,33 @@ struct ComputerFilesView: View {
                 }.frame(minWidth: 260).frame(height: model.previewEnabled ? 150 : nil)
 
             }
+            if model.busy || !model.status.isEmpty { transferStatus }
+        }
+    }
+    private var transferStatus: some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(model.status).font(.callout).lineLimit(1).truncationMode(.middle).help(model.status)
+                    if model.busy {
+                        ProgressView(value: model.importProgress?.fraction)
+                            .progressViewStyle(.linear)
+                            .accessibilityLabel("Transfer progress")
+                        if let progress = model.importProgress {
+                            Text("\(progress.completedItems) of \(progress.totalItems) items · \(ByteCountFormatter.string(fromByteCount: progress.transferredBytes, countStyle: .file)) of \(ByteCountFormatter.string(fromByteCount: progress.totalBytes, countStyle: .file))")
+                                .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                        }
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                if model.busy {
+                    Button("Cancel") { model.cancelTransfer() }.disabled(model.cancellingTransfer)
+                        .help("Stop the transfer; completed items are kept")
+                } else {
+                    Button { model.status = "" } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.borderless).accessibilityLabel("Dismiss transfer status")
+                }
+            }.padding(12)
         }
     }
     private var observedContent: some View {
@@ -123,7 +150,7 @@ struct ComputerFilesView: View {
         ToolbarItem(id: "files-actions", placement: .automatic) {
                 Menu {
                     Button("New Folder…") { name = "Untitled Folder"; naming = "New Folder" }.disabled(model.busy)
-                    Button("Import Files…") { model.importPanel() }.disabled(model.busy)
+                    Button("Import Files or Folders…") { model.importPanel() }.disabled(model.busy)
                     Button("Export…") { model.exportPanel() }.disabled(model.selected?.regular != true || model.busy)
                     Divider()
                     Button("Rename…") { name = model.selected?.name ?? ""; naming = "Rename" }.disabled(model.selected == nil || model.busy)
@@ -168,14 +195,6 @@ struct ComputerFilesView: View {
                 }
             }
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: searching)
-        }
-        if model.busy {
-            ToolbarItem(id: "files-transfer", placement: .automatic) {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small).help(model.status)
-                    Button { model.cancelTransfer() } label: { Image(systemName: "xmark.circle") }.help("Cancel Transfer")
-                }
-            }
         }
     }
     @ViewBuilder private var galleryPreview: some View {

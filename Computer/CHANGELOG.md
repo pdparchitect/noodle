@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Import folders from Finder or the file picker, preserving nested and empty folders, with byte/item progress and cancellation. Completed items are kept when cancelled; existing items are never overwritten.
+
 ## [0.4.0] - 2026-09-12
 
 ### Added

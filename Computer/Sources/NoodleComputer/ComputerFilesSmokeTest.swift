@@ -48,6 +48,43 @@ import Foundation
             try await files.change("rename", path: "/workspace/Documents/Copy.bin", extra: ["/workspace/Documents/Moved.bin"])
             try await files.change("remove", path: "/workspace/Documents/Moved.bin")
             print("PASS: no-overwrite imports, folder creation, duplicate, move and deletion")
+            let importFolder = root.appendingPathComponent("Imported Folder")
+            try FileManager.default.createDirectory(at: importFolder.appendingPathComponent("Nested/Empty"), withIntermediateDirectories: true)
+            try bytes.write(to: importFolder.appendingPathComponent("Nested/bytes.bin"))
+            try Data().write(to: importFolder.appendingPathComponent(".hidden"))
+            try await files.importItems([importFolder], to: "/workspace") { _ in }
+            let imported = try await files.list("/workspace/Imported Folder/Nested")
+            guard imported.contains(where: { $0.name == "Empty" && $0.directory }),
+                  let importedFile = imported.first(where: { $0.name == "bytes.bin" }) else { throw ComputerError("Nested folder import was incomplete") }
+            let importedBytes = root.appendingPathComponent("imported.bin")
+            try await files.read(importedFile, path: "/workspace/Imported Folder/Nested/bytes.bin", to: importedBytes, preview: false)
+            guard try Data(contentsOf: importedBytes) == bytes,
+                  try await files.list("/workspace/Imported Folder").contains(where: { $0.name == ".hidden" }) else { throw ComputerError("Folder contents did not round trip") }
+            do { try await files.importItems([importFolder], to: "/workspace") { _ in }; throw ComputerError("TEST: folder import merged an existing folder") }
+            catch { if error.localizedDescription.hasPrefix("TEST:") { throw error } }
+            print("PASS: nested, empty and hidden folder contents; existing folders are not merged")
+
+            let cancelFolder = root.appendingPathComponent("Cancelled Import")
+            try FileManager.default.createDirectory(at: cancelFolder, withIntermediateDirectories: false)
+            try Data([1]).write(to: cancelFolder.appendingPathComponent("a-completed"))
+            let largeImport = cancelFolder.appendingPathComponent("b-incomplete")
+            try Data().write(to: largeImport)
+            let largeHandle = try FileHandle(forWritingTo: largeImport)
+            try largeHandle.truncate(atOffset: 32 * 1024 * 1024)
+            try largeHandle.close()
+            try Data([2]).write(to: cancelFolder.appendingPathComponent("c-later"))
+            let cancellation = FileImportSmokeCancellation()
+            let cancelledImport = Task {
+                try await files.importItems([cancelFolder], to: "/workspace") { progress in
+                    if progress.currentPath.hasSuffix("b-incomplete"), progress.transferredBytes > 1 { await cancellation.cancel() }
+                }
+            }
+            await cancellation.setTask(cancelledImport)
+            do { try await cancelledImport.value; throw ComputerError("TEST: cancelled folder import succeeded") }
+            catch { if error.localizedDescription.hasPrefix("TEST:") { throw error } }
+            let cancelledItems = try await files.list("/workspace/Cancelled Import")
+            guard cancelledItems.map(\.name) == ["a-completed"] else { throw ComputerError("Cancellation left partial bytes or imported later files") }
+            print("PASS: cancellation keeps completed files and removes unfinished upload bytes")
             _ = try await runtime.execute("printf 'Welcome to Files\\n\\nBrowse, drag files in and out, and press Space for Quick Look.\\n' > /workspace/Welcome.txt; ln -s /workspace/Welcome.txt /workspace/link.txt; mkfifo /workspace/pipe.txt; truncate -s 22020096 /workspace/Large.txt")
             listing = try await files.list("/workspace")
             for name in ["link.txt", "pipe.txt", "Large.txt"] {
@@ -93,4 +130,10 @@ import Foundation
             throw error
         }
     }
+}
+
+private actor FileImportSmokeCancellation {
+    private var task: Task<Void, Error>?
+    func setTask(_ task: Task<Void, Error>) { self.task = task }
+    func cancel() { task?.cancel(); task = nil }
 }
