@@ -580,8 +580,7 @@ private struct PendingAttachmentChip: View {
         .padding(.leading, 9)
         .padding(.trailing, 5)
         .frame(height: 28)
-        .background(.quaternary.opacity(0.35), in: Capsule())
-        .overlay(Capsule().stroke(.separator.opacity(0.45)))
+        .modifier(PendingAttachmentSurface())
         .frame(maxWidth: 260)
         .contextMenu {
             Button("Copy", systemImage: "doc.on.doc") {
@@ -590,6 +589,21 @@ private struct PendingAttachmentChip: View {
             Divider()
             Button("Quick Look", systemImage: "eye", action: preview)
             Button("Remove Attachment", systemImage: "xmark", role: .destructive, action: remove)
+        }
+    }
+}
+
+private struct PendingAttachmentSurface: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.regular, in: Capsule())
+        } else {
+            content
+                .background(.regularMaterial, in: Capsule())
+                .overlay {
+                    Capsule().stroke(.separator.opacity(0.45))
+                        .allowsHitTesting(false)
+                }
         }
     }
 }
