@@ -1,7 +1,37 @@
 import XCTest
+import AppletBridge
 @testable import NoodleCore
 
 final class URLAttachmentTests: XCTestCase {
+    func testNoodletCLIStoresOnlyTheLinkAndNeverOverwritesSameNamedAttachments() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = WorkspaceRepository(rootURL: root)
+        try repository.prepare()
+        let bot = try repository.createAgent(named: "Creator")
+        let url = NoodletLink.url(for: UUID())
+        let args = ["messenger", "--agent-directory", repository.directory(for: bot.agent).path,
+                    "--send", "--conversation", bot.conversation.id.uuidString, "--attach", url.absoluteString]
+        for _ in 0..<2 {
+            let result = MessengerCLI.run(arguments: args, environment: [:])
+            XCTAssertEqual(result.exitCode, 0, result.standardError)
+        }
+        let attachments = try repository.loadAttachments(conversationID: bot.conversation.id)
+        XCTAssertEqual(attachments.count, 2)
+        XCTAssertEqual(Set(attachments.map(\.storedFilename)).count, 2)
+        for attachment in attachments {
+            XCTAssertEqual(attachment.originalFilename, "Noodlet.webloc")
+            XCTAssertEqual(attachment.url, url)
+            let data = try Data(contentsOf: repository.attachmentFileURL(attachment))
+            XCTAssertLessThan(data.count, 1024)
+            XCTAssertEqual(try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String],
+                           ["URL": url.absoluteString])
+        }
+        for invalid in ["noodlet:///tmp/Test.noodlet", url.absoluteString + "/", "noodlet://wrong"] {
+            XCTAssertThrowsError(try AttachmentSource.resolve(invalid, relativeTo: root))
+            XCTAssertThrowsError(try repository.importLinkAttachment(URL(string: invalid)!, into: bot.conversation.id))
+        }
+    }
     func testPathsAndFileURLsRemainLocal() throws {
         let directory = URL(fileURLWithPath: "/tmp/work", isDirectory: true)
         XCTAssertEqual(try AttachmentSource.resolve("image.png", relativeTo: directory).path, "/tmp/work/image.png")

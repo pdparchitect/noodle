@@ -1,4 +1,5 @@
 import Darwin
+import AppletBridge
 import ComputerBridge
 import Foundation
 import ImageIO
@@ -401,7 +402,7 @@ public struct WorkspaceRepository: Sendable {
     public let launcherExecutableURL: URL?
     private let discoverAppletApplication: @Sendable () -> URL?
 
-    public static let managedSkillVersion = 23
+    public static let managedSkillVersion = 24
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil,
                 discoverAppletApplication: @escaping @Sendable () -> URL? = { AppletAgentSkill.installedApplicationURL() }) {
@@ -893,7 +894,7 @@ public struct WorkspaceRepository: Sendable {
             }
         }
         if let linkURL {
-            guard MessageLink.publicWebURL(from: linkURL, preservingFragment: true) == linkURL,
+            guard MessageLink.publicWebURL(from: linkURL, preservingFragment: true) == linkURL || NoodletLink.id(in: linkURL) != nil,
                   mediaType == "application/x-webloc",
                   let bookmark = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String],
                   bookmark["URL"] == linkURL.absoluteString else { throw WorkspaceError.invalidAttachment }
@@ -936,9 +937,10 @@ public struct WorkspaceRepository: Sendable {
     }
 
     public func importLinkAttachment(_ url: URL, into conversationID: UUID, now: Date = Date()) throws -> ConversationAttachment {
-        guard let url = MessageLink.publicWebURL(from: url, preservingFragment: true) else { throw AttachmentSource.InvalidSource() }
+        guard let url = NoodletLink.id(in: url).map(NoodletLink.url)
+            ?? MessageLink.publicWebURL(from: url, preservingFragment: true) else { throw AttachmentSource.InvalidSource() }
         let data = try PropertyListSerialization.data(fromPropertyList: ["URL": url.absoluteString], format: .xml, options: 0)
-        return try importAttachment(data: data, originalFilename: "\(url.host ?? "Link").webloc", into: conversationID,
+        return try importAttachment(data: data, originalFilename: NoodletLink.id(in: url) != nil ? "Noodlet.webloc" : "\(url.host ?? "Link").webloc", into: conversationID,
             mediaType: "application/x-webloc", now: now, linkURL: url)
     }
 

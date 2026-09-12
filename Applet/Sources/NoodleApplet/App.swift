@@ -10,6 +10,7 @@ import SwiftUI
   var body: some Scene {
     Window("Noodle Applet", id: "library") {
       LibraryView(library: delegate.library, runtime: delegate.runtime)
+        .handlesExternalEvents(preferring: [], allowing: [])
         .frame(minWidth: 850, minHeight: 580)
         .preferredColorScheme(.dark)
         .task {
@@ -24,12 +25,10 @@ import SwiftUI
           }
         }
     }
-    .defaultLaunchBehavior(
-      CommandLine.arguments.contains("--noodle-background") ? .suppressed : .presented
-    )
-    .restorationBehavior(
-      CommandLine.arguments.contains("--noodle-background") ? .disabled : .automatic
-    )
+    // AppKit distinguishes an app launch from a file/URL launch below.
+    .defaultLaunchBehavior(.suppressed)
+    .restorationBehavior(.disabled)
+    .handlesExternalEvents(matching: [])
     .defaultSize(width: 1080, height: 720)
     .windowToolbarStyle(.unified(showsTitle: false))
     .commands {
@@ -48,9 +47,11 @@ import SwiftUI
       AppletSettingsView().preferredColorScheme(.dark)
     }
     .windowResizability(.contentSize)
+    .handlesExternalEvents(matching: [])
     MenuBarExtra("Noodle Applet", systemImage: "square.grid.2x2.fill", isInserted: $showMenuBar) {
       AppletMenu(library: delegate.library, runtime: delegate.runtime)
     }
+    .handlesExternalEvents(matching: [])
   }
 }
 
@@ -94,6 +95,7 @@ private struct AppletMenu: View {
   var openLibrary: (() -> Void)?
   let library = AppletLibrary()
   lazy var runtime = AppletRuntime(library: library)
+  private var openedExternalItem = false
 
   func applicationDidBecomeActive(_ notification: Notification) {
     // Quiet agent launches must not display update prompts.
@@ -107,11 +109,25 @@ private struct AppletMenu: View {
       }
     } else {
       runtime.startServer()
+      if !CommandLine.arguments.contains("--noodle-background"),
+        notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true {
+        DispatchQueue.main.async { [weak self] in
+          guard let self, !self.openedExternalItem else { return }
+          self.reopenLibrary()
+        }
+      }
     }
     if CommandLine.arguments.contains("--noodle-background") { NSApp.hide(nil) }
+    if CommandLine.arguments.contains("--launch-check") {
+      Task { @MainActor in
+        try? await Task.sleep(for: .seconds(2))
+        AppletUITest.captureLaunch(isDefault: notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool,
+          external: self.openedExternalItem)
+      }
+    }
   }
 
-  private func reopenLibrary() {
+  func reopenLibrary() {
     if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "library" }) {
       window.makeKeyAndOrderFront(nil)
     } else {
@@ -128,11 +144,19 @@ private struct AppletMenu: View {
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
   func applicationWillTerminate(_ notification: Notification) { runtime.shutdown() }
   func application(_ application: NSApplication, open urls: [URL]) {
+    openedExternalItem = true
     for url in urls {
       do {
-        try library.grant(url)
-        runtime.open(try NoodletPackage(url: url))
-      } catch { runtime.error = error.localizedDescription }
+        if let id = NoodletLink.id(in: url) {
+          runtime.open(try library.package(for: id))
+        } else if url.isFileURL {
+          try library.grant(url)
+          runtime.open(try NoodletPackage(url: url))
+        } else { throw AppletError("Invalid noodlet link.") }
+      } catch {
+        runtime.error = error.localizedDescription
+        NSAlert(error: error).runModal()
+      }
     }
   }
 }
@@ -392,6 +416,7 @@ private struct LibraryView: View {
     let action = openWindow
     let _ = delegate.openLibrary = { action(id: "library") }
     CommandGroup(replacing: .newItem) {
+      Button("Open Library") { delegate.reopenLibrary() }
       Button("Open Noodlet…") {
         delegate.library.choosePackage(open: delegate.runtime.open)
       }.keyboardShortcut("o")

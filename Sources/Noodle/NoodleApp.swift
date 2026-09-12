@@ -10,6 +10,15 @@ struct NoodleApp: App {
     @State private var store: NoodleStore
 
     init() {
+        if CommandLine.arguments.contains("--applet-link-test") {
+            NSApplication.shared.setActivationPolicy(.regular)
+            Task { @MainActor in
+                do { try await AppletLinkIntegrationTest.run(); Darwin.exit(0) }
+                catch { print("APPLET LINK INTEGRATION FAILED: \(error.localizedDescription)"); Darwin.exit(1) }
+            }
+            NSApplication.shared.run()
+            Darwin.exit(1)
+        }
         if CommandLine.arguments.contains("--computer-integration-test") || CommandLine.arguments.contains("--computer-discovery-test") || CommandLine.arguments.contains("--computer-picker-test") {
             NSApplication.shared.setActivationPolicy(.regular)
             Task { @MainActor in

@@ -1,4 +1,5 @@
 import AppKit
+import AppletBridge
 import PhotosUI
 import SwiftUI
 import NoodleCore
@@ -18,6 +19,7 @@ struct ChatView: View {
     @State private var attachmentDestinationID: UUID?
     @State private var selectedAttachmentID: UUID?
     @State private var computerPreview = ComputerPreviewController()
+    @State private var noodletOpenTask: Task<Void, Never>?
     @State private var screenCapturePreview = ScreenCapturePreviewController()
     @State private var conversationAnnotations = ConversationAnnotationController()
     @State private var bottomOverlayHeight: CGFloat = 0
@@ -104,13 +106,14 @@ struct ChatView: View {
                 store.importAttachments(from: providers)
             }
             .onChange(of: conversation.id) { _, _ in
+                noodletOpenTask?.cancel()
                 conversationAnnotations.cancel()
                 selectedAttachmentID = nil
                 computerPreview.close()
                 screenCapturePreview.close()
                 nameCompletion.detach()
             }
-            .onDisappear { computerPreview.close(); screenCapturePreview.close(); conversationAnnotations.cancel() }
+            .onDisappear { noodletOpenTask?.cancel(); computerPreview.close(); screenCapturePreview.close(); conversationAnnotations.cancel() }
             .onChange(of: composerFocusRequest) { _, request in
                 if request != nil { composerFocused = true }
             }
@@ -237,6 +240,7 @@ struct ChatView: View {
     }
 
     private func showCapture(_ kind: ScreenCaptureKind) {
+        noodletOpenTask?.cancel()
         if screenCapturePreview.focusIfOpen() { return }
         guard let host = attachmentPreview.resolveHostWindow() else { return }
         let destination = conversation.id
@@ -387,7 +391,21 @@ struct ChatView: View {
     }
 
     private func showPreview(_ attachment: ConversationAttachment) {
+        noodletOpenTask?.cancel()
         selectedAttachmentID = attachment.id
+        if let url = attachment.url, NoodletLink.id(in: url) != nil {
+            attachmentPreview.close()
+            computerPreview.close()
+            screenCapturePreview.close()
+            noodletOpenTask = Task { @MainActor in
+                do {
+                    try await store.applets.openNoodlet(url)
+                } catch {
+                    if !Task.isCancelled { store.errorMessage = error.localizedDescription }
+                }
+            }
+            return
+        }
         if let card = attachment.computer {
             attachmentPreview.close()
             computerPreview.show(card, controller: store.computers)

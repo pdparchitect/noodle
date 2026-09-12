@@ -32,13 +32,18 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual(library!.entries.map(\.id), [package.key])
         XCTAssertEqual((defaults.array(forKey: "libraryBookmarks") as? [Data])?.count, 1)
         library!.remember(package)
+        let linkID = try library!.linkID(for: package)
         library!.pin(package.key)
         library = nil
         library = AppletLibrary(
             root: root.appendingPathComponent("Library"), defaults: defaults,
             installExamples: false, watchChanges: false)
         XCTAssertEqual(library!.entries.map(\.id), [package.key])
-        try FileManager.default.removeItem(at: package.url)
+        let moved = root.appendingPathComponent("External/Moved.noodlet")
+        try FileManager.default.moveItem(at: package.url, to: moved)
+        XCTAssertEqual(try library!.package(for: linkID).url.path, moved.resolvingSymlinksInPath().path)
+        XCTAssertEqual(try library!.linkID(for: NoodletPackage(url: moved)), linkID)
+        try FileManager.default.removeItem(at: moved)
         library!.scan()
         XCTAssertTrue(library!.entries.isEmpty)
         XCTAssertTrue(library!.recent.isEmpty)

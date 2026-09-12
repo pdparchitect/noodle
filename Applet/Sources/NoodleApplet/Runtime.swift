@@ -47,12 +47,14 @@ import AppletCore
   private var artifacts: [UUID: (owner: String, url: URL)] = [:]
   private var origins: [String: String]
   private var owners: [String: String]
-  init(library: AppletLibrary) {
+  private let defaults: UserDefaults
+  init(library: AppletLibrary, defaults: UserDefaults = .standard) {
+    self.defaults = defaults
     self.library = library
     origins =
-      UserDefaults.standard.dictionary(forKey: "sourceOrigins") as? [String: String] ?? [:]
+      defaults.dictionary(forKey: "sourceOrigins") as? [String: String] ?? [:]
     owners =
-      UserDefaults.standard.dictionary(forKey: "packageOwners") as? [String: String] ?? [:]
+      defaults.dictionary(forKey: "packageOwners") as? [String: String] ?? [:]
   }
   func startServer() {
     for entry in library.entries {
@@ -78,6 +80,49 @@ import AppletCore
         identity == "com.pdparchitect.noodle" || identity == "com.pdparchitect.noodle.local"
         ? (request.owner ?? "local") : "local"
       request.owner = owner
+      if let id = request.noodletID {
+        let package = try library.package(for: id)
+        guard owner == "local" || belongs(package, owner: owner) else {
+          throw AppletError("This noodlet is unavailable to this caller.")
+        }
+        request.path = package.url.path
+        request.noodletID = nil
+      }
+      if request.operation == .info {
+        let package: NoodletPackage
+        if let session = find(request, owner: owner) { package = session.package }
+        else if let path = request.path {
+          let url = URL(fileURLWithPath: origins[owner + "\0" + path] ?? path)
+            .resolvingSymlinksInPath().standardizedFileURL
+          library.scan()
+          guard let entry = library.entries.first(where: { $0.package.url == url }),
+                owner == "local" || belongs(entry.package, owner: owner) else {
+            throw AppletError("Noodlet not registered. Validate the package first.")
+          }
+          package = entry.package
+        } else { throw AppletError("Provide --id, --path, or --session for info.") }
+        var response = try packageInfo(package)
+        if let session = find(request, owner: owner) {
+          response.sessionID = session.id
+          response.state = session.state
+        }
+        if request.includePreview == true {
+          guard owner == "local", identity == "com.pdparchitect.noodle" || identity == "com.pdparchitect.noodle.local" else {
+            throw AppletError("Preview access is reserved for the Noodle interface.")
+          }
+          // A plain bookmark carries an ephemeral scope for cross-process handoff.
+          // App-scoped persistent bookmarks belong to the creating application.
+          response.previewBookmark = try package.url.bookmarkData(options: [],
+            includingResourceValuesForKeys: nil, relativeTo: nil)
+          if let cached = PreviewCache.file(for: package.url),
+             let size = try? cached.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+             size <= 4 * 1_048_576 {
+            response.data = try? Data(contentsOf: cached)
+            response.mediaType = "image/png"
+          }
+        }
+        return response
+      }
       if request.operation == .artifact {
         guard let id = request.artifactID, let artifact = artifacts[id],
           owner == "local" || artifact.owner == owner
@@ -97,17 +142,20 @@ import AppletCore
       if request.operation == .list {
         library.scan()
         var response = AppletResponse()
-        response.items = library.entries.filter {
+        response.items = try library.entries.filter {
           owner == "local" || belongs($0.package, owner: owner)
         }.map { entry in
           let session = sessions.values.first {
             $0.package.key == entry.id
               && ["starting", "building", "running"].contains($0.state)
           }
-          return AppletItem(
+          var item = AppletItem(
             path: entry.package.url.path, title: entry.title,
             runtime: entry.package.manifest.runtime, sessionID: session?.id,
             state: session?.state)
+          item.noodletID = try library.linkID(for: entry.package)
+          item.url = item.noodletID.map(NoodletLink.url)
+          return item
         }
         return response
       }
@@ -132,7 +180,7 @@ import AppletCore
             "Imports/\(ownerKey(owner))/\(key).noodlet")
           package = try NoodletPackage.install(files, to: destination)
           origins[owner + "\0" + path] = package.url.path
-          UserDefaults.standard.set(origins, forKey: "sourceOrigins")
+          defaults.set(origins, forKey: "sourceOrigins")
         } else {
           let canonical = URL(fileURLWithPath: origins[owner + "\0" + path] ?? path)
             .resolvingSymlinksInPath().standardizedFileURL
@@ -147,12 +195,13 @@ import AppletCore
         }
         if owners[package.key] == nil {
           owners[package.key] = owner
-          UserDefaults.standard.set(owners, forKey: "packageOwners")
+          defaults.set(owners, forKey: "packageOwners")
         }
         _ = try package.files()
+        _ = try library.linkID(for: package)
+        library.scan()
         if request.operation == .validate {
-          var response = AppletResponse()
-          response.path = package.url.path
+          var response = try packageInfo(package)
           response.state = "valid"
           return response
         }
@@ -291,6 +340,16 @@ import AppletCore
     } catch { return AppletResponse(error: error.localizedDescription) }
   }
   private func ownerKey(_ owner: String) -> String { NoodletPackage.digest(Data(owner.utf8)) }
+  private func packageInfo(_ package: NoodletPackage) throws -> AppletResponse {
+    var response = AppletResponse()
+    response.noodletID = try library.linkID(for: package)
+    response.url = response.noodletID.map(NoodletLink.url)
+    response.path = package.url.path
+    response.title = package.manifest.title
+    response.runtime = package.manifest.runtime
+    response.state = "available"
+    return response
+  }
   private func belongs(_ package: NoodletPackage, owner: String) -> Bool {
     package.url.path.hasPrefix(
       library.documents.appendingPathComponent("Imports/\(ownerKey(owner))").path + "/")
@@ -331,9 +390,9 @@ import AppletCore
         let storeKey =
           "store.\(package.key).\(session.mode == "headless" ? "test" : "user")"
         let storeID =
-          UserDefaults.standard.string(forKey: storeKey).flatMap(UUID.init(uuidString:))
+          defaults.string(forKey: storeKey).flatMap(UUID.init(uuidString:))
           ?? UUID()
-        UserDefaults.standard.set(storeID.uuidString, forKey: storeKey)
+        defaults.set(storeID.uuidString, forKey: storeKey)
         let runner = WebRunner(
           package: package, dataRoot: session.dataRoot, log: session.log,
           size: session.size, storeID: storeID,
@@ -427,7 +486,7 @@ import AppletCore
     session.mode = "foreground"
   }
   private func status(_ session: AppletSession) -> AppletResponse {
-    var response = AppletResponse()
+    var response = (try? packageInfo(session.package)) ?? AppletResponse()
     response.sessionID = session.id
     response.state = session.state
     response.path = session.package.url.path

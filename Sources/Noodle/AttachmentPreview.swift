@@ -1,4 +1,5 @@
 import QuickLookThumbnailing
+import AppletBridge
 import ImageIO
 import SwiftUI
 import NoodleCore
@@ -69,6 +70,8 @@ struct AttachmentInlinePreview: View {
                 annotationPreview(note)
             } else if let card = attachment.computer {
                 ComputerAttachmentCard(card: card)
+            } else if let url = attachment.url, NoodletLink.id(in: url) != nil {
+                NoodletAttachmentCard(url: url, shouldLoad: shouldLoad)
             } else if displaysAsImage {
                 imagePreview
             } else {
@@ -99,12 +102,13 @@ struct AttachmentInlinePreview: View {
             preview()
             return .handled
         }
-        .help("Click or press Space to preview")
+        .help(attachment.url.flatMap(NoodletLink.id) != nil ? "Click or press Space to open in Noodle Applet" : "Click or press Space to preview")
         .accessibilityLabel("Attachment \(attachment.originalFilename)")
-        .accessibilityHint("Click or press Space to preview")
+        .accessibilityHint(attachment.url.flatMap(NoodletLink.id) != nil ? "Click or press Space to open in Noodle Applet" : "Click or press Space to preview")
         .accessibilityAddTraits(.isButton)
         .task(id: shouldLoad) {
             guard shouldLoad, attachment.computer == nil,
+                  attachment.url.flatMap(NoodletLink.id) == nil,
                   attachment.annotation == nil || attachment.mediaType.hasPrefix("image/") else { return }
             await loadThumbnail()
         }

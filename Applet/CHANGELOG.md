@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Show the library when opening Noodle Applet directly; file and noodlet-link launches open only the requested creation without restoring the catalogue.
+
+- Document that clicking a noodlet attachment opens its live Applet window; attaching alone keeps it closed.
+
 - Reopen the library when the app is opened after a quiet agent launch.
 
 - Support CSS `--noodle-app-region: drag` and `no-drag` regions without stealing interaction from controls.
@@ -18,6 +22,9 @@
 - Match Noodle Computer's native sidebar, toolbar search, tabbed General and Update settings, application menu, and repository Help. Remove the library's decorative headings and footer; move menu bar preferences into Settings and remove the manual folder-watching controls.
 
 ### Added
+
+- Register persistent noodlet IDs, handle `noodlet://UUID` links, and expose `info` for resolving a creation without running it. Keep IDs across source updates and tracked moves; give independent copies their own IDs.
+- Add Open Library to the File menu.
 
 - Render `.noodlet` documents in Finder Quick Look: HTML content and captured or authored Swift previews.
 - Support native HTTP(S) fetch without browser CORS, with binary bodies/responses, cancellation, bounded transfers, and per-noodlet network control.

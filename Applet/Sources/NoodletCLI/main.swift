@@ -37,7 +37,7 @@ import Foundation
         let allowed: Set<String> = Set([
             "--path", "--session", "--output", "--file", "--text", "--target", "--mode", "--x",
             "--y", "--to-x", "--to-y", "--width", "--height", "--duration", "--offset",
-            "--artifact", "--conversation", "--socket", "--team",
+            "--artifact", "--conversation", "--socket", "--team", "--id",
         ]).union(booleans)
         var flags: [String: String] = [:]
         while !args.isEmpty {
@@ -74,6 +74,10 @@ import Foundation
             return n
         }
         var request = AppletRequest(operation, sessionID: try uuid("--session"))
+        if let value = flags["--id"] {
+            request.noodletID = UUID(uuidString: value) ?? URL(string: value).flatMap(NoodletLink.id)
+            guard request.noodletID != nil else { throw AppletError("Invalid noodlet ID or URL.") }
+        }
         request.path = flags["--path"].map {
             URL(fileURLWithPath: $0).resolvingSymlinksInPath().standardizedFileURL.path
         }

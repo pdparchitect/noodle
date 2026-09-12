@@ -17,6 +17,9 @@ precondition(entitlements["com.apple.security.application-groups"] as? [String] 
 precondition(entitlements["com.apple.security.temporary-exception.mach-lookup.global-name"] as? [String] == ["\(bundle)-spks", "\(bundle)-spki"])
 precondition(info["CFBundleShortVersionString"] as? String == version && info["CFBundleVersion"] as? String == version)
 precondition(info["LSMinimumSystemVersion"] as? String == "15.0")
+precondition((info["CFBundleURLTypes"] as? [[String: Any]])?.contains {
+    $0["CFBundleURLSchemes"] as? [String] == ["noodlet"]
+} == true, "Missing noodlet URL handler")
 precondition(info["SUAllowsAutomaticUpdates"] as? Bool == true)
 precondition(info["SUAutomaticallyUpdate"] as? Bool == false)
 print("Applet version, six-key sandbox policy and opt-in automatic-install update policy verified")

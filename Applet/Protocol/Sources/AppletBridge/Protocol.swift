@@ -11,7 +11,7 @@ public struct AppletError: Error, LocalizedError, Sendable {
 }
 
 public enum AppletOperation: String, Codable, CaseIterable, Sendable {
-    case list, validate, build, open, status, logs, inspect, eval, click, type, key, scroll, drag
+    case list, info, validate, build, open, status, logs, inspect, eval, click, type, key, scroll, drag
     case screenshot
     case recordStart = "record-start"
     case recordStop = "record-stop"
@@ -31,6 +31,9 @@ public struct AppletRequest: Codable, Sendable {
     public var version = 1
     public var operation: AppletOperation
     public var sessionID: UUID?
+    public var noodletID: UUID?
+    /// Only the signed Noodle UI may request a temporary preview access bookmark.
+    public var includePreview: Bool?
     public var path: String?
     public var owner: String?
     public var files: [String: Data]?
@@ -52,6 +55,12 @@ public struct AppletRequest: Codable, Sendable {
     }
     public func validate() throws {
         guard version == 1 else { throw AppletError("Unsupported Applet protocol version.") }
+        if noodletID != nil, path != nil || sessionID != nil || files != nil {
+            throw AppletError("Use --id alone, without --path, --session, or package files.")
+        }
+        if includePreview == true, operation != .info {
+            throw AppletError("Preview access is only valid with info.")
+        }
         if let mode, !["background", "foreground", "headless"].contains(mode) {
             throw AppletError("Use background, foreground, or headless mode.")
         }
@@ -91,6 +100,11 @@ public struct AppletResponse: Codable, Sendable {
     public var version = 1
     public var error: String?
     public var sessionID: UUID?
+    public var noodletID: UUID?
+    public var url: URL?
+    public var title: String?
+    public var runtime: String?
+    public var previewBookmark: Data?
     public var state: String?
     public var path: String?
     public var text: String?
@@ -114,6 +128,8 @@ public struct AppletResponse: Codable, Sendable {
 public struct AppletItem: Codable, Sendable, Identifiable {
     public var id: String { path }
     public var path: String
+    public var noodletID: UUID?
+    public var url: URL?
     public var title: String
     public var runtime: String
     public var sessionID: UUID?

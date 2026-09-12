@@ -24,6 +24,7 @@ struct LibraryEntry: Identifiable {
   }
   private var registrations: [Registration] = []
   private var timer: Timer?
+  private var links: NoodletRegistry?
 
   init(
     root: URL? = nil, defaults: UserDefaults = .standard, installExamples: Bool = true,
@@ -40,6 +41,7 @@ struct LibraryEntry: Identifiable {
     do {
       try FileManager.default.createDirectory(
         at: documents, withIntermediateDirectories: true)
+      links = try NoodletRegistry(file: self.root.appendingPathComponent("NoodletLinks.json"))
       if installExamples, !defaults.bool(forKey: "examplesInstalled"),
         let source = AppletResources.bundle.url(
           forResource: "Resources", withExtension: nil)?.appendingPathComponent(
@@ -166,6 +168,22 @@ struct LibraryEntry: Identifiable {
     entries = found.values.sorted {
       $0.title.localizedStandardCompare($1.title) == .orderedAscending
     }
+    for entry in entries {
+      do { _ = try linkID(for: entry.package) } catch { self.error = error.localizedDescription }
+    }
+  }
+  func linkID(for package: NoodletPackage) throws -> UUID {
+    guard let links else { throw NSError(domain: "NoodletRegistry", code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "Noodlet link registry is unavailable."]) }
+    return try links.id(for: package.url)
+  }
+  func package(for id: UUID) throws -> NoodletPackage {
+    guard let url = links?.resolve(id) else { throw NSError(domain: "NoodletRegistry", code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "This noodlet is no longer available."]) }
+    let package = try NoodletPackage(url: url)
+    // A bookmark can follow a moved file before the library's next scan.
+    if !entries.contains(where: { $0.package.url == package.url }) { try grant(url) }
+    return package
   }
   func remember(_ package: NoodletPackage) {
     recent.removeAll { $0 == package.key }

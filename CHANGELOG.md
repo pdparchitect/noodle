@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Open noodlet attachments directly in Noodle Applet with full interaction, reusing an existing window instead of showing Quick Look’s file-information fallback. Keep the thumbnail in the conversation and update the agent skill to explain the behavior.
+
 - Show image stacks as overlapping thumbnails with part of every picture exposed. Each picture opens its normal preview directly.
 
 - Install the Applet skill automatically for every bot only while Noodle Applet is installed; remove its managed instructions and CLI links when the companion is removed, and restore them on reinstallation.
@@ -25,6 +27,8 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - Annotate selected conversation text with ⌘⇧A or a region of the Noodle window with ⌘⇧R, adding comments and source context to the message draft. Select regions inside the existing window with a compact cancel hint.
+
+- Attach live noodlets using `noodlet://UUID` bookmarks. Open their live creations on click, and let conversation participants use the shared creation through the Applet CLI.
 
 - Choose Wrap, Vertical, or Stack for images in Settings → Chat. Wrap is the default and fits previews across each message before starting another row; Vertical keeps the original layout, and Stack overlaps the pictures while keeping each one directly previewable.
 - Document noodlet window styles, sizing and frame restoration, native web requests without browser CORS, and Finder Quick Look for agents.

@@ -15,6 +15,7 @@ import Observation
     @ObservationIgnored private var inFlight: [UUID: Int] = [:]
     @ObservationIgnored private var monitor: Task<Void, Never>?
     @ObservationIgnored private var launching: Task<Void, Error>?
+    @ObservationIgnored private var sharedArtifacts: [UUID: (agent: UUID, conversation: UUID, owner: String, created: Date)] = [:]
     @ObservationIgnored private var skillExecutableURL: URL?
     @ObservationIgnored private var synchronizedSkills: Set<UUID> = []
     @ObservationIgnored private var lastSkillRefresh = Date.distantPast
@@ -78,6 +79,23 @@ import Observation
         _ = try await NSWorkspace.shared.openApplication(
             at: url, configuration: NSWorkspace.OpenConfiguration())
     }
+    func resolvePreview(_ url: URL) async throws -> NoodletPreviewAccess {
+        guard let id = NoodletLink.id(in: url) else { throw AppletError("Invalid noodlet link.") }
+        var request = AppletRequest(.info)
+        request.noodletID = id
+        request.includePreview = true
+        let response = try await call(request).checked()
+        return try NoodletPreviewAccess(response: response, expectedID: id)
+    }
+    @discardableResult
+    func openNoodlet(_ url: URL) async throws -> AppletResponse {
+        guard let id = NoodletLink.id(in: url) else { throw AppletError("Invalid noodlet link.") }
+        var request = AppletRequest(.open)
+        request.noodletID = id
+        request.mode = "foreground"
+        try Task.checkCancellation()
+        return try await call(request).checked()
+    }
     private func call(_ request: AppletRequest) async throws -> AppletResponse {
         if let connection { return try await connection(request) }
         let socket = try AppletConnection.socketURL()
@@ -124,6 +142,7 @@ import Observation
     }
     private func scan() {
         if Date().timeIntervalSince(lastSkillRefresh) >= 5 { refreshSkills() }
+        sharedArtifacts = sharedArtifacts.filter { Date().timeIntervalSince($0.value.created) < 3600 }
         claimed = claimed.filter { Date().timeIntervalSince($0.value) < 300 }
         for agent in agents {
             guard (inFlight[agent.id] ?? 0) < 3, let token = tokens[agent.id],
@@ -173,47 +192,53 @@ import Observation
             throw AppletError("This bot is no longer active.")
         }
         var request = envelope.request
+        request.includePreview = nil
         request.owner = agent.id.uuidString.lowercased()
         try request.validate()
         if let conversation = envelope.conversationID {
-            guard request.operation == .present else {
-                throw AppletError("--conversation is only valid with present.")
-            }
             _ = try repository.participantRoster(for: agent.id, conversationID: conversation)
+            if request.operation == .artifact {
+                guard let id = request.artifactID, let grant = sharedArtifacts[id],
+                      grant.agent == agent.id, grant.conversation == conversation,
+                      Date().timeIntervalSince(grant.created) < 3600 else {
+                    throw AppletError("This capture is unavailable to the conversation.")
+                }
+                request.owner = grant.owner
+            } else if request.operation != .present {
+                guard let id = request.noodletID, request.files == nil,
+                      ![.build, .validate, .list, .artifact].contains(request.operation) else {
+                    throw AppletError("Use --id with a shared noodlet link and --conversation.")
+                }
+                let messages = try repository.loadMessages(conversationID: conversation)
+                let sent = Set(messages.flatMap(\.attachments))
+                guard try repository.loadAttachments(conversationID: conversation).contains(where: {
+                    sent.contains($0.id) && $0.url.flatMap(NoodletLink.id) == id
+                }) else { throw AppletError("This noodlet has not been shared with the conversation.") }
+                // The signed broker authorizes the specific shared package, never a caller-supplied path/session.
+                request.owner = "local"
+            }
         }
         if request.operation == .present, envelope.conversationID == nil {
             throw AppletError("Specify --conversation to share a preview.")
         }
-        let response = try await call(request)
+        var response = try await call(request)
+        response.previewBookmark = nil
         if response.error != nil { return response }
         guard agents.contains(where: { $0.id == agent.id }) else {
             throw AppletError("This bot was removed during the request.")
         }
-        if let conversation = envelope.conversationID, let artifactID = response.artifactID {
-            var data = Data()
-            var offset = 0
-            while true {
-                var read = AppletRequest(.artifact, sessionID: response.sessionID)
-                read.owner = request.owner
-                read.artifactID = artifactID
-                read.offset = offset
-                let chunk = try await call(read).checked()
-                guard let bytes = chunk.data, let next = chunk.offset, next == offset + bytes.count,
-                    !bytes.isEmpty || chunk.done == true, data.count + bytes.count <= 16 * 1_048_576
-                else { throw AppletError("Invalid preview image transfer.") }
-                data.append(bytes)
-                offset = next
-                if chunk.done == true { break }
+        if let conversation = envelope.conversationID, let artifact = response.artifactID {
+            sharedArtifacts[artifact] = (agent.id, conversation, request.owner!, Date())
+        }
+        if request.operation == .present, let conversation = envelope.conversationID {
+            guard let url = response.url, NoodletLink.id(in: url) != nil else {
+                throw AppletError("Update Noodle Applet to share noodlet links.")
             }
             _ = try repository.participantRoster(for: agent.id, conversationID: conversation)
-            let title = String((response.text ?? "Noodlet").prefix(200))
-            let attachment = try repository.importAttachment(
-                data: data, originalFilename: "Noodlet preview.png", into: conversation,
-                mediaType: "image/png")
+            let attachment = try repository.importLinkAttachment(url, into: conversation)
             do {
-                _ = try repository.sendAgentMessage(
-                    agentID: agent.id, conversationID: conversation,
-                    body: title + " — available in Noodle Applet.", attachmentIDs: [attachment.id])
+                _ = try repository.sendAgentMessage(agentID: agent.id, conversationID: conversation,
+                    body: response.title ?? response.text ?? "Noodlet", attachmentIDs: [attachment.id])
             } catch {
                 try? repository.removeAttachment(attachment)
                 throw error

@@ -3,6 +3,16 @@ import AppletBridge
 import AppletCore
 
 @MainActor enum AppletUITest {
+    /// Opt-in observation for real Launch Services app/URL launches. No window actions.
+    static func captureLaunch(isDefault: Bool?, external: Bool) {
+        let windows = NSApp.windows.filter(\.isVisible).map {
+            ["title": $0.title, "id": $0.identifier?.rawValue ?? ""]
+        }
+        let report: [String: Any] = ["defaultLaunch": isDefault ?? false, "external": external,
+            "windows": windows, "processID": ProcessInfo.processInfo.processIdentifier]
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-applet-launch-check.json")
+        try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: file, options: .atomic)
+    }
     static func run() async throws {
         setbuf(stdout, nil)
         var options = NoodletWindowOptions()
@@ -32,6 +42,11 @@ import AppletCore
             throw AppletError("Application menu missing")
         }
         menu.update()
+        guard let file = NSApp.mainMenu?.items.first(where: { $0.title == "File" })?.submenu,
+              file.items.contains(where: { $0.title == "Open Library" }),
+              file.items.contains(where: { $0.title == "Open Noodlet…" }) else {
+            throw AppletError("File menu must expose Open Library and Open Noodlet")
+        }
         let titles = menu.items.map(\.title)
         print("APPLICATION MENU: \(titles)")
         guard titles.contains("About Noodle Applet"), titles.contains("Check for Updates…"),

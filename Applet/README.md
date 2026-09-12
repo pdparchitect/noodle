@@ -192,9 +192,49 @@ console messages, uncaught errors, and rejected promises. Logs are JSON lines on
 disk, with byte cursors for streaming. Session IDs remain usable for logs after
 the companion restarts. Check status before retrying a timed-out mutation.
 
-`present --session SESSION_UUID --conversation CONVERSATION_UUID` sends a PNG
-preview into an authorized Noodle conversation. It sends a real message and needs
-the user's authorization. The live creation is opened from the Applet library.
+### Sharing without launching
+
+```sh
+noodlet validate Hello.noodlet
+noodlet info --path Hello.noodlet
+# Use the returned url; do not invent an ID.
+messenger --send --conversation CONVERSATION_UUID --attach 'noodlet://RETURNED_UUID'
+noodlet info --id 'noodlet://RETURNED_UUID'
+```
+
+Validation registers the source without running it; HTML needs no build step.
+Responses include `noodletID`, `url`, `title`, `runtime`, and `path`. The persistent
+noodlet ID is separate from a running `sessionID`. `list` also returns IDs and URLs.
+Source updates and tracked moves retain the ID; independent copies get new IDs.
+Missing packages resolve as unavailable, and restoring the package can restore
+its link. IDs are stored in Applet's registry, not in authored manifests.
+
+Messenger copies only a small `.webloc` bookmark into the conversation. Noodle
+resolves its ID through the signed Applet connection to display a thumbnail.
+Clicking the attachment opens the live creation in Noodle Applet, or brings its
+existing window forward. Both HTML and Swift run with full interaction and saved
+data; the click does not use Quick Look. Attaching the link alone does not launch
+the creation. Capturing first gives the card a current image. Finder's preview
+of the `.webloc` itself does not resolve the custom URL.
+
+Conversation participants use `--id URL --conversation CONVERSATION_UUID` with
+`info`, `open`, inspection, input, captures, or closing. The broker checks that
+the link was sent in that conversation and that the caller is a participant.
+It grants access to that specific creation, not another bot's workspace or source
+replacement. Links refer to this Mac's registry and are not portable copies.
+
+`present --session SESSION_UUID --conversation CONVERSATION_UUID` refreshes the
+cached preview and sends the same live link. It sends a real message and needs
+the user's authorization. Opening a `noodlet://UUID` URL outside Noodle opens the
+registered creation in Applet without showing the library. Opening the application
+directly, or choosing File → Open Library, shows the collection.
+
+The signed integration fixture can be run with
+`'.build/Noodle Local.app/Contents/MacOS/Noodle' --applet-link-test` after building
+both apps. It creates temporary agents and a package, exercises the shipped CLI,
+sharing, captures, sandbox bookmark handoff, opening the live creation, window
+reuse, interaction, and saved data, then cleans up.
+It never starts real agents or opens the user's repository.
 
 Run `noodlet --help` for all commands. CLI help and the bot skill are generated
 from the root project's `Sources/NoodleCore/MessengerDocumentation.swift`.
