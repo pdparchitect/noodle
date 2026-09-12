@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Use consistent status icons and text in Harness, Tools, and Companions settings, with green checks and labels for signed-in, ready, connected, and installed states.
+
 - Use matching single-line chips for draft annotations and files. Show annotation comment excerpts, with the full comment and source filename available on hover and in the preview.
 
 - Align draft annotations and attachment cards with the chat input, including while scrolling the attachment row.
@@ -53,6 +55,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Shorten the generated bot name options in General settings to “Real” and “Playful”.
 - Display harness installation and update commands in a distinct inset box with larger monospaced text and an inline copy button.
 - Describe the Applet skill explicitly as creative coding for utilities, games, interactive websites, prototypes, examples, and demos.
 - Align Noodle Applet with Noodle Computer's native interface, settings, and menus; add Applet to the shared signed update and release pipeline.

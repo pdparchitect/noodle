@@ -19,7 +19,11 @@ struct MCPSettingsView: View {
                         HStack(alignment: .top, spacing: 12) {
                             MCPConnectionIcon(connection: connection, size: 32)
                             VStack(alignment: .leading, spacing: 5) {
-                                Text(connection.name).font(.headline)
+                                HStack {
+                                    Text(connection.name).font(.headline)
+                                    Spacer(minLength: 4)
+                                    connectionStatus(connection)
+                                }
                                 Text(connection.endpoint.absoluteString).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                 if !connection.description.isEmpty {
                                     Text(connection.description).font(.caption).foregroundStyle(.secondary).lineLimit(2)
@@ -36,16 +40,6 @@ struct MCPSettingsView: View {
                                     Button("Edit…") { editing = connection }
                                     Button("Remove…") { removing = connection }
                                 }.controlSize(.small).padding(.top, 3)
-                            }
-                            Spacer(minLength: 4)
-                            if store.mcp.signingIn == connection.id {
-                                VStack { ProgressView().controlSize(.small); Button("Cancel") { store.mcp.cancelSignIn() }.controlSize(.small) }
-                            } else {
-                                Image(systemName: store.mcp.errors[connection.id] != nil ? "exclamationmark.triangle" :
-                                    store.mcp.connected.contains(connection.id) ? "checkmark.circle.fill" : "person.crop.circle.badge.questionmark")
-                                    .foregroundStyle(store.mcp.errors[connection.id] != nil ? .orange :
-                                        store.mcp.connected.contains(connection.id) ? .green : .secondary)
-                                    .help(store.mcp.connected.contains(connection.id) ? "Connected" : "Sign-in required")
                             }
                         }.padding(14)
                         if connection.id != store.mcp.registry.connections.last?.id { Divider().padding(.leading, 58) }
@@ -78,6 +72,21 @@ struct MCPSettingsView: View {
         .alert("Tools", isPresented: Binding(get: { store.mcp.errorMessage != nil }, set: { if !$0 { store.mcp.errorMessage = nil } })) {
             Button("OK") { store.mcp.errorMessage = nil }
         } message: { Text(store.mcp.errorMessage ?? "") }
+    }
+
+    @ViewBuilder private func connectionStatus(_ connection: MCPConnectionRecord) -> some View {
+        if store.mcp.signingIn == connection.id {
+            VStack {
+                ProgressView().controlSize(.small)
+                Button("Cancel") { store.mcp.cancelSignIn() }.controlSize(.small)
+            }
+        } else if store.mcp.errors[connection.id] != nil {
+            SettingsStatusLabel(title: "Needs attention", systemImage: "exclamationmark.triangle", color: .orange)
+        } else if store.mcp.connected.contains(connection.id) {
+            SettingsStatusLabel(title: "Connected", systemImage: "checkmark.circle.fill", color: .green)
+        } else {
+            SettingsStatusLabel(title: "Sign-in required", systemImage: "person.crop.circle.badge.questionmark", color: .secondary)
+        }
     }
 }
 

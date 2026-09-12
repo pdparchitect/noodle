@@ -10,8 +10,8 @@ enum BotNameStyle: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .real: "Real names"
-        case .playful: "Playful names"
+        case .real: "Real"
+        case .playful: "Playful"
         }
     }
 }

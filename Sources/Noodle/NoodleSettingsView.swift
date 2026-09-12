@@ -380,9 +380,7 @@ private struct HarnessInstallationRow: View {
                             }
                     }
                     Spacer()
-                    Label(statusText, systemImage: statusIcon)
-                        .font(.caption)
-                        .foregroundStyle(statusColor)
+                    SettingsStatusLabel(title: statusText, systemImage: statusIcon, color: statusColor)
                 }
 
                 if let path = installation.executablePath {

@@ -64,10 +64,11 @@ struct CompanionAppsSettingsView: View {
                 HStack {
                     Text(app.name).fontWeight(.semibold)
                     Spacer()
-                    Label(installation == nil ? "Not installed" : "Installed",
-                          systemImage: installation == nil ? "arrow.down.circle" : "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    SettingsStatusLabel(
+                        title: installation == nil ? "Not installed" : "Installed",
+                        systemImage: installation == nil ? "arrow.down.circle" : "checkmark.circle.fill",
+                        color: installation == nil ? .secondary : .green
+                    )
                 }
                 Text(app.summary)
                     .font(.caption).foregroundStyle(.secondary)
