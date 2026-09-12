@@ -173,8 +173,39 @@ private struct AnnotationShortcutHint: View {
 // MARK: - Frozen capture with coordinate-stable region selection
 
 @MainActor final class AnnotationCapturePanel: NSPanel {
+    private var cursorObserver: CFRunLoopObserver?
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    override func becomeKey() {
+        super.becomeKey()
+        guard let canvas = contentView as? AnnotationRegionCanvas else { return }
+        canvas.updateSelectionCursor()
+        guard cursorObserver == nil else { return }
+        // Quick Look's remote renderer can send cursor changes after losing
+        // focus. Repair those at the end of the event cycle, without polling.
+        let observer = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue,
+            true, CFIndex.max) { [weak canvas] _, _ in
+                MainActor.assumeIsolated { canvas?.updateSelectionCursor() }
+        }
+        cursorObserver = observer
+        CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
+    }
+
+    override func resignKey() {
+        if let cursorObserver {
+            CFRunLoopRemoveObserver(CFRunLoopGetMain(), cursorObserver, .commonModes)
+            self.cursorObserver = nil
+        }
+        super.resignKey()
+        if contentView is AnnotationRegionCanvas, NSCursor.current == .crosshair {
+            NSCursor.arrow.set()
+        }
+    }
+
+    deinit {
+        if let cursorObserver { CFRunLoopRemoveObserver(CFRunLoopGetMain(), cursorObserver, .commonModes) }
+    }
 }
 
 @MainActor final class AnnotationRegionCanvas: NSView {
@@ -186,6 +217,15 @@ private struct AnnotationShortcutHint: View {
     required init?(coder: NSCoder) { fatalError() }
     override var acceptsFirstResponder: Bool { true }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .crosshair) }
+    func updateSelectionCursor() {
+        guard let window, NSApp.isActive, window.isKeyWindow, window.isVisible else { return }
+        if start == nil {
+            let point = NSEvent.mouseLocation
+            guard bounds.contains(convert(window.convertPoint(fromScreen: point), from: nil)),
+                  NSWindow.windowNumber(at: point, belowWindowWithWindowNumber: 0) == window.windowNumber else { return }
+        }
+        if NSCursor.current != .crosshair { NSCursor.crosshair.set() }
+    }
     override func draw(_ dirtyRect: NSRect) {
         image.draw(in: bounds)
         if let selected {

@@ -15,6 +15,12 @@ import NoodleCore
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { @MainActor in
             do {
+                if CommandLine.arguments.contains("--cursor-check") {
+                    try await runCursorCheck()
+                    print("PASS: Quick Look annotations — native region cursor")
+                    NSApp.terminate(nil)
+                    return
+                }
                 if CommandLine.arguments.contains("--visual-cancellation") {
                     try await runVisualCancellation()
                     print("PASS: Quick Look annotations — recorded native cancellation and close transitions")

@@ -11,6 +11,7 @@ All notable changes to Noodle are documented here, following
 - Prevent voice recording from getting stuck or crashing when the microphone format changes during startup. Use the current hardware format, convert captured buffers separately, report audio setup failures safely, and ignore cancelled startup work.
 - Require the exact configured voice shortcut so extra modifiers cannot accidentally start or stop recording.
 - Remove the fixed “1” badge from annotation region selections, leaving the orange outline and highlight.
+- Keep the crosshair visible throughout annotation region selection despite delayed Quick Look cursor updates, and restore the normal cursor when commenting or cancelling.
 
 ## [0.12.0] - 2026-09-12
 

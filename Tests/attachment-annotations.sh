@@ -21,6 +21,7 @@ swiftc -parse-as-library -target "$(uname -m)-apple-macosx15.0" -I "$bin_path/Mo
     "$project_root/Tests/AnnotationContentChecks.swift" \
     "$project_root/Tests/KeyboardBindingChecks.swift" \
     "$project_root/Tests/AnnotationVisualChecks.swift" \
+    "$project_root/Tests/AnnotationCursorChecks.swift" \
     "$project_root/Tests/attachment-annotations.swift" \
     "$bin_path"/NoodleCore.build/*.swift.o "$bin_path"/NoodleWallpaperCore.build/*.swift.o \
     "$bin_path"/ComputerBridge.build/*.swift.o \
