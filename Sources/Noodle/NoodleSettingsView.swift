@@ -192,7 +192,7 @@ private struct HeartbeatsSettingsView: View {
             }
             if !store.agents.isEmpty {
                 Section("Bots") {
-                    ForEach(store.agents) { agent in
+                    SettingsBotList(agents: store.agents) { agent in
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(agent.displayName)
@@ -215,6 +215,7 @@ private struct HeartbeatsSettingsView: View {
                                 set: { store.runtime.setHeartbeatEnabled($0, for: agent.id) }
                             ))
                             .labelsHidden()
+                            .controlSize(.mini)
                         }
                     }
                 }
@@ -251,38 +252,40 @@ private struct HarnessesSettingsView: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                ForEach(setup.displayedInstallations) { installation in
-                    HarnessInstallationRow(installation: installation,
-                        liveInstallation: store.runtime.installations.first { $0.provider == installation.provider },
-                        isRefreshing: isRefreshing, setup: setup) {
-                        Task {
-                            await store.runtime.checkExternalInstallation(installation.provider)
-                            guard !store.runtime.isRefreshingInstallations else { return }
-                            await setup.refresh(store.runtime.installations, discoveryErrors: store.runtime.installationErrors)
-                            await setup.refreshVersions(store.runtime.installations, forceLatest: true)
+        VStack(spacing: 0) {
+            Form {
+                Section {
+                    ForEach(setup.displayedInstallations) { installation in
+                        HarnessInstallationRow(installation: installation,
+                            liveInstallation: store.runtime.installations.first { $0.provider == installation.provider },
+                            isRefreshing: isRefreshing, setup: setup) {
+                            Task {
+                                await store.runtime.checkExternalInstallation(installation.provider)
+                                guard !store.runtime.isRefreshingInstallations else { return }
+                                await setup.refresh(store.runtime.installations, discoveryErrors: store.runtime.installationErrors)
+                                await setup.refreshVersions(store.runtime.installations, forceLatest: true)
+                            }
                         }
                     }
                 }
             }
+            .formStyle(.grouped)
 
-            Section {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                        .controlSize(.small)
-                        .opacity(showRefreshProgress ? 1 : 0)
-                        .accessibilityLabel("Checking for harnesses")
-                        .accessibilityHidden(!showRefreshProgress)
-                    Button("Check Again") {
-                        Task { await refresh(forceLatest: true) }
-                    }
-                    .disabled(isRefreshing)
+            Divider()
+            HStack {
+                Spacer()
+                ProgressView()
+                    .controlSize(.small)
+                    .opacity(showRefreshProgress ? 1 : 0)
+                    .accessibilityLabel("Checking for harnesses")
+                    .accessibilityHidden(!showRefreshProgress)
+                Button("Check Again") {
+                    Task { await refresh(forceLatest: true) }
                 }
+                .disabled(isRefreshing)
             }
+            .padding(.horizontal, 20).padding(.vertical, 12)
         }
-        .formStyle(.grouped)
         .task { await refresh() }
         .task(id: isRefreshing) {
             showRefreshProgress = false

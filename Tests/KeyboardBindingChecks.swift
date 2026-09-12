@@ -68,16 +68,19 @@ import NoodleCore
 
         // Render the actual tab offscreen; native OCR catches missing rows and
         // verifies that the visible recorder label updates on a saved change.
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 580, height: 640),
+        let content = NSHostingView(rootView: KeybindingsSettingsView(bindings: bindings)
+            .frame(width: 580)
+            .fixedSize(horizontal: false, vertical: true)
+            .preferredColorScheme(.dark))
+        let panel = NSPanel(contentRect: NSRect(origin: .zero, size: content.fittingSize),
             styleMask: [.titled], backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false
-        panel.contentView = NSHostingView(rootView: KeybindingsSettingsView(bindings: bindings).preferredColorScheme(.dark))
+        panel.contentView = content
         defer { panel.close() }
         for _ in 0..<8 {
             panel.contentView?.layoutSubtreeIfNeeded()
             RunLoop.main.run(until: Date().addingTimeInterval(0.03))
         }
-        let content = panel.contentView!
         let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds)!
         content.cacheDisplay(in: content.bounds, to: bitmap)
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-keybindings-settings.png")

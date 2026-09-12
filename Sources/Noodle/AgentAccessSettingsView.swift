@@ -11,7 +11,7 @@ struct AgentAccessSettingsView: View {
                     Text("No bots")
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(store.agents) { agent in
+                    SettingsBotList(agents: store.agents) { agent in
                         let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")
                         let requiresAutonomousAccess = provider?.supportsRestrictedAccess == false
                         VStack(alignment: .leading, spacing: 8) {
@@ -22,7 +22,7 @@ struct AgentAccessSettingsView: View {
                                 }
                             )) {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(agent.displayName)
+                                    Text(agent.displayName).font(.body)
                                     if requiresAutonomousAccess, let provider {
                                         Text("Autonomous access · Required by \(provider.displayName)")
                                             .font(.caption).foregroundStyle(.secondary)
@@ -31,7 +31,9 @@ struct AgentAccessSettingsView: View {
                                             .font(.caption).foregroundStyle(.secondary)
                                     }
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
+                            .controlSize(.mini)
                             .accessibilityLabel("\(agent.displayName), autonomous access")
                             .disabled(requiresAutonomousAccess || store.runtime.changingAccess.contains(agent.id))
                             if store.runtime.snapshot(for: agent.id).phase == .failed {

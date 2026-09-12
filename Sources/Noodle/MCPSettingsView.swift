@@ -7,7 +7,7 @@ struct MCPSettingsView: View {
     @State private var editing: MCPConnectionRecord?
     @State private var removing: MCPConnectionRecord?
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 0) {
                     if store.mcp.registry.connections.isEmpty {
@@ -54,15 +54,15 @@ struct MCPSettingsView: View {
             }
             .frame(height: min(430, max(80, CGFloat(store.mcp.registry.connections.count) * 130)))
             .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
+            .padding(20)
+            Divider()
             HStack {
                 Spacer()
                 Button { showingAdd = true } label: { Label("Add Tools…", systemImage: "plus") }
                     .help("Add a service or another account")
             }
-            .padding(10)
-            .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 20).padding(.vertical, 12)
         }
-        .padding(20)
         .sheet(isPresented: $showingAdd) { ToolCreationSheet(controller: store.mcp).noodleSheetSizing() }
         .sheet(item: $editing) { connection in MCPEditor(controller: store.mcp, existing: connection).noodleSheetSizing() }
         .confirmationDialog("Remove Tool Connection?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),

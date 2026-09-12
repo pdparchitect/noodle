@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Size Keybindings settings to its contents, removing the empty space above Restore Defaults.
 - Keep Space in the annotation comment editor instead of reopening the attachment and cancelling the popup, including image and 3D-model region annotations.
 - Cancel active and queued MCP work on disconnect or caller cancellation, enforce request deadlines during queue waits and token refresh, and reject late sign-in callbacks.
 - Make submitted annotation previews read-only. Remove Edit Comment and Save to Draft from sent notes, revoke editing in an open preview on submission, and reject later edits without creating a copy.
@@ -45,6 +46,8 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Cap the bot groups in Heartbeat and Security settings and scroll long lists within them, keeping controls and explanatory text visible. Resolve their height in the first layout pass to avoid a second resize when opening the tabs.
+- Place Add Tools and Check Again in bottom footers with dividers in Tools and Harness settings, matching Keybindings.
 - Move message delivery, microphone, @ menu descriptions, and link preview timeout into a new Chat settings tab. General now contains bot naming and the keep-awake option.
 - Separate current group members from other agents in the composer’s @ menu.
 - Document local web URL sharing from assigned computers.
