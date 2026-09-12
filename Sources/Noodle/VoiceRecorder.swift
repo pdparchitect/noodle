@@ -22,13 +22,14 @@ struct VoiceRecordingDraft: Codable {
     private(set) var preparation = "Preparing speech…"
     private(set) var inputName = "Microphone"
     private(set) var noInputSignal = false
+    private(set) var recoveringInput = false
     let directory: URL
     var audioURL: URL { directory.appendingPathComponent("recording.caf") }
     var hasAudio: Bool { duration > 0 && FileManager.default.fileExists(atPath: audioURL.path) }
     var metadata: VoiceMessage { .init(transcript: transcript, duration: duration, waveform: levels, localeIdentifier: localeIdentifier) }
 
     private var localeIdentifier: String?
-    private var capture: NoodleAudioCapture?
+    private var capture: VoiceCaptureRecovery?
     private var sink: VoiceAudioSink?
     private var analyzer: SpeechAnalyzer?
     private var results: Task<Void, Never>?
@@ -59,6 +60,7 @@ struct VoiceRecordingDraft: Codable {
         phase = .preparing
         error = nil
         noInputSignal = false
+        recoveringInput = false
         let token = UUID()
         generation = token
         preparationTask = Task {
@@ -88,11 +90,16 @@ struct VoiceRecordingDraft: Codable {
                 try check(token)
                 let engine = AVAudioEngine()
                 inputName = try VoiceInputDevice.configure(engine).name
-                let capture = NoodleAudioCapture(engine: engine)
+                let nativeCapture = NoodleAudioCapture(engine: engine)
+                let capture = VoiceCaptureRecovery(
+                    activate: { try nativeCapture.start(withBufferSize: 4096) { buffer, _ in sink.consume(buffer) } },
+                    deactivate: { nativeCapture.stop() },
+                    running: { nativeCapture.isRunning },
+                    duration: { sink.snapshot().duration },
+                    failure: { sink.snapshot().error })
                 self.capture = capture
-                try capture.start(withBufferSize: 4096) { buffer, _ in
-                    sink.consume(buffer)
-                }
+                try await capture.start()
+                try check(token)
                 phase = .recording
                 try persist()
                 meterTask = Task {
@@ -101,7 +108,7 @@ struct VoiceRecordingDraft: Codable {
                     var previousDuration: Double = 0
                     while !Task.isCancelled && phase == .recording {
                         try? await Task.sleep(for: .milliseconds(100))
-                        guard phase == .recording else { break }
+                        guard !Task.isCancelled, generation == token, phase == .recording else { break }
                         let snapshot = sink.snapshot()
                         duration = snapshot.duration
                         levels = snapshot.waveform
@@ -109,7 +116,29 @@ struct VoiceRecordingDraft: Codable {
                         ticks += 1
                         stalledTicks = snapshot.duration == previousDuration ? stalledTicks + 1 : 0
                         previousDuration = snapshot.duration
-                        noInputSignal = ticks >= 30 && (snapshot.silentDuration >= 3 || stalledTicks >= 30)
+                        noInputSignal = snapshot.silentDuration >= 3 && capture.isRunning && stalledTicks < 10
+                        if snapshot.error == nil, !capture.isRunning || stalledTicks >= 10 {
+                            recoveringInput = true
+                            noInputSignal = false
+                            do {
+                                try await capture.start()
+                                try check(token)
+                                guard phase == .recording else { break }
+                                recoveringInput = false
+                                stalledTicks = 0
+                                previousDuration = sink.snapshot().duration
+                            } catch {
+                                guard generation == token, phase == .recording else { break }
+                                recoveringInput = false
+                                await stopEngineAndAnalysis()
+                                guard generation == token, phase == .recording else { break }
+                                transcript = nil
+                                self.error = "The microphone stopped responding. Your audio is preserved; retry transcription or send audio only."
+                                phase = .failed
+                                try? persist()
+                                break
+                            }
+                        }
                         if ticks % 10 == 0 { try? persist() }
                         if snapshot.error != nil || duration >= 600 {
                             // Finish outside the meter task: finish cancels this task.
@@ -256,6 +285,7 @@ struct VoiceRecordingDraft: Codable {
         liveLevels = []
         transcript = nil
         error = nil
+        recoveringInput = false
         phase = .idle
     }
 

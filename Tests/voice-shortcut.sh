@@ -13,6 +13,7 @@ swiftc -parse-as-library -I "$bin_path/Modules" \
     -Xcc -fmodule-map-file="$bin_path/NoodleAudioCapture.build/module.modulemap" \
     "$project_root/Sources/Noodle/KeyboardBindings.swift" \
     "$project_root/Sources/Noodle/VoiceRecorder.swift" \
+    "$project_root/Sources/Noodle/VoiceCaptureRecovery.swift" \
     "$project_root/Sources/Noodle/VoiceInputDevice.swift" \
     "$project_root/Sources/Noodle/VoiceRecordingCommand.swift" \
     "$project_root/Tests/NativeFixtureChecks.swift" \

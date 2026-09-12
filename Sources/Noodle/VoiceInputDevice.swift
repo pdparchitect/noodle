@@ -45,15 +45,25 @@ struct VoiceInputDevice: Identifiable, Equatable {
         return device
     }
 
-    static func configure(_ engine: AVAudioEngine) throws -> Self {
-        let device = try resolve(uid: UserDefaults.standard.string(forKey: defaultsKey) ?? "",
+    static func configure(_ engine: AVAudioEngine,
+                          uid: String = UserDefaults.standard.string(forKey: defaultsKey) ?? "") throws -> Self {
+        let device = try resolve(uid: uid,
                                  devices: available(), defaultID: defaultDeviceID)
+        // AVAudioEngine already follows the system input through its aggregate
+        // device. Re-selecting the physical device needlessly changes that route.
+        if uid.isEmpty { return device }
         guard let unit = engine.inputNode.audioUnit else { throw VoiceFailure("The microphone couldn’t be opened.") }
+        var current = AudioDeviceID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout.size(ofValue: current))
+        if AudioUnitGetProperty(unit, kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global, 0, &current, &size) == noErr, current == device.audioID {
+            return device
+        }
         var id = device.audioID
         let status = AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice,
             kAudioUnitScope_Global, 0, &id, UInt32(MemoryLayout.size(ofValue: id)))
         guard status == noErr else {
-            throw VoiceFailure("Couldn’t open \(device.name) (\(status)). Choose another microphone in Settings → Chat.")
+            throw VoiceFailure("Couldn’t open \(device.name) (\(status)). Try recording again.")
         }
         return device
     }

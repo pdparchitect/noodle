@@ -80,6 +80,22 @@ import XCTest
         XCTAssertEqual(engine.inputNode.outputFormat(forBus: 0).channelCount, 2)
     }
 
+    func testRestartAfterConfigurationStopsEngineReplacesOwnedTap() throws {
+        let engine = try engine()
+        let capture = NoodleAudioCapture(engine: engine)
+        try capture.start(withBufferSize: 4096) { _, _ in }
+        for _ in 0..<4 {
+            // Configuration changes stop the engine without removing its tap.
+            engine.stop()
+            XCTAssertFalse(capture.isRunning)
+            try capture.start(withBufferSize: 4096) { _, _ in }
+            XCTAssertTrue(capture.isRunning)
+            let output = AVAudioPCMBuffer(pcmFormat: engine.manualRenderingFormat, frameCapacity: 4096)!
+            XCTAssertEqual(try engine.renderOffline(4096, to: output), .success)
+        }
+        capture.stop()
+    }
+
     func testCaptureReleaseStopsItsOwnedTap() throws {
         let engine = try engine()
         var capture: NoodleAudioCapture? = NoodleAudioCapture(engine: engine)

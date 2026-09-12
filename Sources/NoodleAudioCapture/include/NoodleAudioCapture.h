@@ -7,6 +7,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// these must be caught before they can unwind through a Swift concurrency task.
 @interface NoodleAudioCapture : NSObject
 - (instancetype)initWithEngine:(AVAudioEngine *)engine;
+@property (nonatomic, readonly, getter=isRunning) BOOL running;
 - (BOOL)startWithBufferSize:(AVAudioFrameCount)bufferSize
                    handler:(AVAudioNodeTapBlock)handler
                      error:(NSError * _Nullable * _Nullable)error;

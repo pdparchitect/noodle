@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Recover automatically when microphone configuration changes interrupt audio startup or recording, and stop misreporting interrupted capture as a microphone settings problem.
 - Prevent voice recording from getting stuck or crashing when the microphone format changes during startup. Use the current hardware format, convert captured buffers separately, report audio setup failures safely, and ignore cancelled startup work.
 - Require the exact configured voice shortcut so extra modifiers cannot accidentally start or stop recording.
 - Remove the fixed “1” badge from annotation region selections, leaving the orange outline and highlight.

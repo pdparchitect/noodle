@@ -93,6 +93,18 @@ exercise stale microphone formats, native tap exceptions, stop/restart cleanup,
 buffer conversion after format changes, and cancellation before startup. They
 do not open a microphone or load speech models.
 
+`VoiceCaptureRecoveryTests` covers asynchronous configuration changes, transient
+start failures, slow or stalled input, bounded retries, and cancellation during
+recovery with a controlled clock and synthetic capture state.
+
+To check real microphone startup with consent, run
+`zsh Tests/voice-startup.sh --live --device-name 'Microphone name'` using the exact
+device name from Sound settings. The signed sandboxed fixture starts and stops
+that input ten times, verifies continued buffer delivery, and counts automatic
+restarts. It inspects buffer lengths only; no audio is saved or transcribed.
+macOS may request microphone access. Without `--live`, the command only builds
+the fixture.
+
 ## Focused checks
 
 Run native UI fixtures from a logged-in Mac. They use isolated test data.

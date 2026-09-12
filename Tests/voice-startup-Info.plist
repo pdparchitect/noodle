@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>CFBundleIdentifier</key><string>com.pdparchitect.noodle.voice-startup-tests</string>
+    <key>CFBundleName</key><string>Noodle Voice Startup Tests</string>
+    <key>CFBundleExecutable</key><string>VoiceStartupTests</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>NSMicrophoneUsageDescription</key><string>Verify microphone startup by counting incoming buffers. No audio is saved or transcribed.</string>
+    <key>LSUIElement</key><true/>
+</dict></plist>

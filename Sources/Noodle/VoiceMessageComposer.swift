@@ -37,11 +37,15 @@ struct VoiceMessageComposer<Content: View>: View {
                             Spacer()
                         } else {
                             if recorder.phase == .recording { Circle().fill(.red).frame(width: 6, height: 6) }
-                            if recorder.noInputSignal && recorder.phase == .recording {
-                                Text("No sound from \(recorder.inputName) — check Microphone in Settings")
+                            if recorder.recoveringInput && recorder.phase == .recording {
+                                Text("Reconnecting microphone…")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            } else if recorder.noInputSignal && recorder.phase == .recording {
+                                Text("No sound from \(recorder.inputName)")
                                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    .help("Check the microphone’s mute switch, or choose another in Settings → Chat.")
+                                    .help("Check the microphone’s mute switch.")
                             } else {
                                 if recorder.phase == .recording {
                                     LiveVoiceWaveform(samples: recorder.liveLevels).frame(height: 22)

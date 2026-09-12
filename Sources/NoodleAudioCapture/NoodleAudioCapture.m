@@ -13,10 +13,15 @@
     return self;
 }
 
+- (BOOL)isRunning { return _tapInstalled && _engine.isRunning; }
+
 - (BOOL)startWithBufferSize:(AVAudioFrameCount)bufferSize
                    handler:(AVAudioNodeTapBlock)handler
                      error:(NSError **)error {
-    if (_tapInstalled) { return YES; }
+    if (self.isRunning) { return YES; }
+    // An asynchronous device-configuration change stops the engine but leaves
+    // its tap installed. Replace that tap using the new format before restarting.
+    [self stop];
     @try {
         _input = _engine.inputNode;
         // Device selection can change the hardware format while speech prepares.
@@ -26,7 +31,7 @@
         if (format.sampleRate <= 0 || format.channelCount == 0) {
             if (error) {
                 *error = [NSError errorWithDomain:@"NoodleAudioCapture" code:1 userInfo:@{
-                    NSLocalizedDescriptionKey: @"The microphone has no usable audio format. Choose another microphone in Settings → Chat."
+                    NSLocalizedDescriptionKey: @"The microphone is still changing its audio format. Try recording again."
                 }];
             }
             return NO;
@@ -43,7 +48,7 @@
         [self stop];
         if (error) {
             *error = [NSError errorWithDomain:@"NoodleAudioCapture" code:2 userInfo:@{
-                NSLocalizedDescriptionKey: @"The microphone changed or could not start. Try recording again, or choose another microphone in Settings → Chat.",
+                NSLocalizedDescriptionKey: @"The microphone changed or could not start. Try recording again.",
                 NSLocalizedFailureReasonErrorKey: exception.reason ?: @"Audio input setup failed."
             }];
         }
