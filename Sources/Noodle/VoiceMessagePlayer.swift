@@ -6,32 +6,61 @@ import NoodleCore
 /// The live meter has a fixed spatial/time scale, unlike the saved overview.
 struct LiveVoiceWaveform: View {
     let samples: [Float]
+    var duration: TimeInterval = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    static func bars(samples: [Float], width: CGFloat, height: CGFloat) -> [CGRect] {
+    static func bars(samples: [Float], width: CGFloat, height: CGFloat,
+                     sampleCount: Int? = nil, position: Double? = nil) -> [CGRect] {
         let spacing: CGFloat = 5
         let barWidth: CGFloat = 2.5
-        let capacity = max(0, Int(width / spacing))
-        let visible = samples.suffix(capacity)
-        let start = width - CGFloat(visible.count) * spacing
-        return visible.enumerated().map { index, sample in
+        let count = sampleCount ?? samples.count
+        let position = position ?? Double(count)
+        // Audio-time indices stay stable when the bounded sample history rolls
+        // over. Only the playhead moves; existing bars keep their amplitudes.
+        return samples.enumerated().compactMap { offset, sample in
+            let index = count - samples.count + offset
+            let age = position - Double(index)
+            let x = width - CGFloat(age) * spacing
+            guard age > 0, x + barWidth > 0, x < width else { return nil }
             // A fixed dB range makes normal quiet speech visible without
             // auto-normalizing silence or changing the recording's audio gain.
             let amplitude = sample.isFinite ? max(0, min(1, sample)) : 0
             let decibels = 20 * log10(max(0.000001, amplitude))
             let normalized = CGFloat(max(0, min(1, (decibels + 60) / 48)))
-            let barHeight = min(height, max(2, normalized * height))
-            return CGRect(x: start + CGFloat(index) * spacing,
+            let reveal = CGFloat(min(1, age))
+            let barHeight = min(height, 2 + max(0, normalized * height - 2) * reveal)
+            return CGRect(x: x,
                           y: (height - barHeight) / 2, width: barWidth, height: barHeight)
         }
     }
 
     var body: some View {
-        Canvas { context, size in
-            for bar in Self.bars(samples: samples, width: size.width, height: size.height) {
-                context.fill(Path(roundedRect: bar, cornerRadius: 1.25), with: .color(.primary.opacity(0.7)))
+        let position = max(Double(samples.count), duration / 0.05)
+        Bars(samples: samples, sampleCount: Int(position + 0.000001), position: position)
+            .fill(.primary.opacity(0.7))
+            .clipped()
+            .animation(reduceMotion ? nil : .linear(duration: 0.1), value: position)
+            .accessibilityLabel("Live microphone waveform")
+    }
+
+    private struct Bars: Shape {
+        let samples: [Float]
+        let sampleCount: Int
+        var position: Double
+
+        var animatableData: Double {
+            get { position }
+            set { position = newValue }
+        }
+
+        func path(in rect: CGRect) -> Path {
+            Path { path in
+                for bar in LiveVoiceWaveform.bars(samples: samples, width: rect.width, height: rect.height,
+                                                  sampleCount: sampleCount, position: position) {
+                    path.addRoundedRect(in: bar, cornerSize: CGSize(width: 1.25, height: 1.25))
+                }
             }
         }
-        .accessibilityLabel("Live microphone waveform")
     }
 }
 

@@ -6,8 +6,11 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-09-12
+
 ### Fixed
 
+- Smooth the live recording waveform with continuous scrolling and gently appearing bars, respecting Reduce Motion.
 - Recover automatically when microphone configuration changes interrupt audio startup or recording, and stop misreporting interrupted capture as a microphone settings problem.
 - Prevent voice recording from getting stuck or crashing when the microphone format changes during startup. Use the current hardware format, convert captured buffers separately, report audio setup failures safely, and ignore cancelled startup work.
 - Require the exact configured voice shortcut so extra modifiers cannot accidentally start or stop recording.
@@ -344,7 +347,8 @@ All notable changes to Noodle are documented here, following
 - Signed and notarized macOS packaging with a dedicated Developer ID identity.
 - Sandboxed messaging and explicit attachment paths for agent file access.
 
-[Unreleased]: https://github.com/pdparchitect/noodle/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/pdparchitect/noodle/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/pdparchitect/noodle/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/pdparchitect/noodle/compare/v0.11.2...v0.12.0
 [0.9.0]: https://github.com/pdparchitect/noodle/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/pdparchitect/noodle/compare/v0.7.0...v0.8.0
