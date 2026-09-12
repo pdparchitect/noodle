@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Show a typing indicator above the composer while a bot works on a reply to that conversation, for every harness. It appears only where the bot was messaged, hides as soon as the bot replies and returns if the bot keeps working, carries over to queued turns, and stays hidden for heartbeats and pending approvals.
+
 ## [0.12.1] - 2026-09-12
 
 ### Fixed

@@ -454,7 +454,7 @@ final class NoodleStore {
             conversations.sort { $0.updatedAt > $1.updatedAt }
         }
         // Existing text and file drafts are independent and remain untouched.
-        runtime.notify(participants(for: conversation), repository: repository)
+        runtime.notify(participants(for: conversation), awaitingReplyIn: conversationID, repository: repository)
     }
 
     func sendDraft() {
@@ -477,7 +477,7 @@ final class NoodleStore {
             }
 
             drafts.clear(conversation.id)
-            runtime.notify(participants(for: conversation), repository: repository)
+            runtime.notify(participants(for: conversation), awaitingReplyIn: conversation.id, repository: repository)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -497,7 +497,7 @@ final class NoodleStore {
             conversations[index].updatedAt = message.createdAt
             conversations.sort { $0.updatedAt > $1.updatedAt }
         }
-        runtime.notify(participants(for: conversation), repository: repository)
+        runtime.notify(participants(for: conversation), awaitingReplyIn: conversation.id, repository: repository)
         return message
     }
 
@@ -877,7 +877,10 @@ final class NoodleStore {
         if snapshot.messagesChanged { messagesByConversation = snapshot.messages }
         if snapshot.attachmentsChanged { attachmentsByConversation = snapshot.attachments }
         for message in newAgentMessages {
-            if case .agent(let id) = message.author { runtime.recordActivity(for: id) }
+            if case .agent(let id) = message.author {
+                runtime.recordActivity(for: id)
+                runtime.agentReplied(id, in: message.conversationID)
+            }
         }
         notifyGroupParticipants(for: newAgentMessages)
         for change in reactionChanges {
@@ -898,6 +901,10 @@ final class NoodleStore {
         conversation.participantIDs.compactMap { id in
             agents.first(where: { $0.id == id })
         }
+    }
+
+    func typingParticipants(in conversation: BotConversation) -> [AgentRecord] {
+        participants(for: conversation).filter { runtime.isTyping($0.id, in: conversation.id) }
     }
 
     func toggleReaction(_ emoji: String, on message: ChatMessage) {
@@ -997,7 +1004,7 @@ final class NoodleStore {
                     }.value
                     refreshTranscripts()
                     if let conversation = conversations.first(where: { $0.id == message.conversationID }) {
-                        runtime.notify(participants(for: conversation), repository: repository)
+                        runtime.notify(participants(for: conversation), awaitingReplyIn: conversation.id, repository: repository)
                     }
                     try await Task.detached { try inbox.acknowledge(request.id) }.value
                 } catch {
@@ -1014,6 +1021,12 @@ final class NoodleStore {
         do {
             let recipientIDs = try repository.notificationRecipientIDs(for: messages)
             let recipients = agents.filter { recipientIDs.contains($0.id) }
+            for message in messages {
+                guard case .agent(let senderID) = message.author,
+                      let conversation = conversations.first(where: { $0.id == message.conversationID }),
+                      conversation.kind == .group else { continue }
+                runtime.expectReply(from: conversation.participantIDs.filter { $0 != senderID }, in: conversation.id)
+            }
             if !recipients.isEmpty {
                 runtime.notify(recipients, repository: repository)
             }

@@ -43,6 +43,7 @@ final class AgentRuntimeCoordinator {
     private(set) var lastHeartbeatDates: [UUID: Date]
     private(set) var accessConfiguration: AgentAccessConfiguration
     private(set) var approvals: [AgentApprovalRequest] = []
+    private(set) var typing = AgentTypingTracker()
     private(set) var changingAccess: Set<UUID> = []
     @ObservationIgnored private let sleepController = AgentActivitySleepController()
     private var lifecycleID = UUID()
@@ -480,16 +481,7 @@ final class AgentRuntimeCoordinator {
                 workspaceURL: repository.directory(for: agent),
                 extendedAccess: accessConfiguration.isExtended(for: agent),
                 recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
-                onSnapshot: { [weak self] snapshot in
-                    if self?.snapshots[snapshot.agentID]?.phase == .working,
-                       snapshot.phase == .ready {
-                        self?.recordActivity(for: snapshot.agentID)
-                    }
-                    self?.snapshots[snapshot.agentID] = snapshot
-                    if snapshot.phase == .ready {
-                        self?.markStable(agentID: snapshot.agentID)
-                    }
-                },
+                onSnapshot: runtimeSnapshotHandler(for: agent.id),
                 onHeartbeat: { [weak self] in
                     self?.recordHeartbeat(for: agent.id)
                 },
@@ -565,7 +557,10 @@ final class AgentRuntimeCoordinator {
         if let old { old.stop(completion: finish) } else { finish(true) }
     }
 
-    func notify(_ agents: [AgentRecord], repository: WorkspaceRepository) {
+    /// Pass the conversation when the bots are expected to answer there, so it
+    /// shows them typing while they work.
+    func notify(_ agents: [AgentRecord], awaitingReplyIn conversationID: UUID? = nil, repository: WorkspaceRepository) {
+        if let conversationID { expectReply(from: agents.map(\.id), in: conversationID) }
         for agent in agents {
             recordActivity(for: agent.id)
             if processes[agent.id] == nil {
@@ -575,11 +570,32 @@ final class AgentRuntimeCoordinator {
         }
     }
 
+    func expectReply(from agentIDs: [UUID], in conversationID: UUID) {
+        typing.expectReply(from: agentIDs, in: conversationID)
+    }
+
+    /// Long tasks often start with a short "on it" reply; typing returns if
+    /// the bot is still working after this delay.
+    func agentReplied(_ agentID: UUID, in conversationID: UUID) {
+        guard let token = typing.pause(agentID, in: conversationID) else { return }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            self?.typing.resume(agentID, in: conversationID, token: token)
+        }
+    }
+
+    /// Hidden while the bot waits on an approval, which already shows above the composer.
+    func isTyping(_ agentID: UUID, in conversationID: UUID) -> Bool {
+        !approvals.contains { $0.agentID == agentID }
+            && typing.isTyping(agentID, in: conversationID, phase: snapshot(for: agentID).phase)
+    }
+
     func stop(agentID: UUID) {
         cancelSupervision(for: agentID)
         recoveryPending.remove(agentID)
         changingAccess.remove(agentID)
         approvals.removeAll { $0.agentID == agentID }
+        typing.remove(agentID)
         accessConfiguration.remove(agentID)
         accessConfiguration.save(to: defaults)
         processes.removeValue(forKey: agentID)?.stop { _ in }
@@ -598,6 +614,7 @@ final class AgentRuntimeCoordinator {
         lifecycleID = UUID()
         changingAccess = []
         approvals = []
+        typing = AgentTypingTracker()
         capabilityProbe?.stop()
         capabilityProbe = nil
         restartTasks.values.forEach { $0.cancel() }
@@ -700,6 +717,7 @@ final class AgentRuntimeCoordinator {
                 self?.recordActivity(for: snapshot.agentID)
             }
             self?.snapshots[snapshot.agentID] = snapshot
+            self?.typing.update(snapshot, hasPendingWork: self?.processes[agentID]?.hasInterruptedWork ?? false)
             if snapshot.phase == .ready { self?.markStable(agentID: agentID) }
         }
     }
