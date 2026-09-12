@@ -60,6 +60,7 @@ struct ConversationAvatar: View {
 
 struct MessageBubble: View {
     @Environment(NoodleStore.self) private var store
+    @AppStorage(ChatImageLayout.defaultsKey) private var imageLayout = ChatImageLayout.defaultValue.rawValue
     @State private var inspectedReaction: String?
     @State private var changingReaction = false
     @State private var isVisible = false
@@ -143,20 +144,24 @@ struct MessageBubble: View {
                     MessageLinkPreview(url: linkPreviewURL, shouldLoad: isVisible)
                 }
 
-                ForEach(attachments) { attachment in
-                    AttachmentInlinePreview(
-                        attachment: attachment,
-                        fileURL: store.attachmentFileURL(attachment),
-                        shouldLoad: isVisible,
-                        isSelected: selectedAttachmentID == attachment.id,
-                        select: { selectedAttachmentID = attachment.id },
-                        preview: { previewAttachment(attachment) }
-                    )
-                    .overlay { reactionContextMenu(attachment: attachment) }
-                    .overlay(alignment: .topTrailing) {
-                        if attachment.id == attachments.last?.id { cornerReactions }
+                ForEach(ImageAttachmentRun.group(attachments, isImage: {
+                    $0.isInlineImage(at: store.attachmentFileURL($0))
+                })) { run in
+                    Group {
+                        if run.isImage {
+                            ImageAttachmentGroup(attachments: run.attachments,
+                                                 mode: ChatImageLayout(rawValue: imageLayout) ?? .defaultValue,
+                                                 alignment: isUser ? .trailing : .leading) { attachment in
+                                attachmentPreview(attachment)
+                            }
+                        } else {
+                            ForEach(run.attachments) { attachment in attachmentPreview(attachment) }
+                        }
                     }
-                    .padding(.top, hasReactions && attachment.id == attachments.last?.id ? 12 : 0)
+                    .overlay(alignment: .topTrailing) {
+                        if run.attachments.last?.id == attachments.last?.id { cornerReactions }
+                    }
+                    .padding(.top, hasReactions && run.attachments.last?.id == attachments.last?.id ? 12 : 0)
                 }
 
                 if isUser {
@@ -181,6 +186,18 @@ struct MessageBubble: View {
 
     private var linkPreviewURL: URL? {
         MessageLink.firstPublicWebURL(in: message.body)
+    }
+
+    private func attachmentPreview(_ attachment: ConversationAttachment) -> some View {
+        AttachmentInlinePreview(
+            attachment: attachment,
+            fileURL: store.attachmentFileURL(attachment),
+            shouldLoad: isVisible,
+            isSelected: selectedAttachmentID == attachment.id,
+            select: { selectedAttachmentID = attachment.id },
+            preview: { previewAttachment(attachment) }
+        )
+        .overlay { reactionContextMenu(attachment: attachment) }
     }
 
     @ViewBuilder private var messageBackground: some View {

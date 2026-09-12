@@ -94,11 +94,22 @@ private struct ChatSettingsView: View {
     @AppStorage(LinkPreviewSettings.timeoutKey) private var linkPreviewTimeout = LinkPreviewSettings.defaultTimeout
     @AppStorage(VoiceInputDevice.defaultsKey) private var microphoneUID = ""
     @AppStorage(MessageDeliveryMode.defaultsKey) private var messageDelivery = MessageDeliveryMode.automatic.rawValue
+    @AppStorage(ChatImageLayout.defaultsKey) private var imageLayout = ChatImageLayout.defaultValue.rawValue
     @State private var microphones: [VoiceInputDevice] = []
     @State private var defaultMicrophoneID: UInt32 = 0
 
     var body: some View {
         Form {
+            Section {
+                Picker("Image layout", selection: $imageLayout) {
+                    ForEach(ChatImageLayout.allCases) { mode in
+                        Text(mode.displayName).tag(mode.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } footer: {
+                Text((ChatImageLayout(rawValue: imageLayout) ?? .defaultValue).explanation)
+            }
             Section {
                 Picker("Message delivery", selection: $messageDelivery) {
                     ForEach(MessageDeliveryMode.allCases) { mode in

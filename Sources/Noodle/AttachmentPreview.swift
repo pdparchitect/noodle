@@ -5,6 +5,11 @@ import NoodleCore
 import UniformTypeIdentifiers
 
 extension ConversationAttachment {
+    @MainActor func isInlineImage(at url: URL) -> Bool {
+        annotation == nil && computer == nil && voice == nil &&
+            (mediaType.hasPrefix("image/") || AttachmentThumbnailCache.isImage(url))
+    }
+
     var previewSymbolName: String {
         if annotation != nil { return "text.bubble.fill" }
         if let computer { return computer.computer.symbol }
@@ -145,7 +150,8 @@ struct AttachmentInlinePreview: View {
                     .foregroundStyle(.secondary.opacity(thumbnailUnavailable ? 0.8 : 0.45))
             }
         }
-        .frame(width: imagePreviewSize.width, height: imagePreviewSize.height)
+        .aspectRatio(imagePreviewSize, contentMode: .fit)
+        .frame(idealWidth: imagePreviewSize.width, maxWidth: imagePreviewSize.width)
         .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
         .accessibilityHidden(true)
     }

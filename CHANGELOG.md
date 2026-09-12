@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Show image stacks as overlapping thumbnails with part of every picture exposed. Each picture opens its normal preview directly.
+
 - Install the Applet skill automatically for every bot only while Noodle Applet is installed; remove its managed instructions and CLI links when the companion is removed, and restore them on reinstallation.
 
 - Fix Runbar and build-and-launch commands failing after a successful build by keeping generated-help progress messages out of the returned application path.
@@ -22,6 +24,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Choose Wrap, Vertical, or Stack for images in Settings → Chat. Wrap is the default and fits previews across each message before starting another row; Vertical keeps the original layout, and Stack overlaps the pictures while keeping each one directly previewable.
 - Document noodlet window styles, sizing and frame restoration, native web requests without browser CORS, and Finder Quick Look for agents.
 
 - Add Noodle Applet as a companion, with a managed noodlet creation skill and authenticated CLI access for bots to build, run, inspect, capture, and share their creations.
