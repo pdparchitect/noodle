@@ -16,6 +16,7 @@ let package = Package(
     dependencies: [
         .package(path: "Shared/Wallpaper"),
         .package(path: "Computer/Bridge"),
+        .package(path: "Applet/Protocol"),
         .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", exact: "1.20.0"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk", exact: "0.12.1")
@@ -26,7 +27,7 @@ let package = Package(
         .executableTarget(name: "NoodleAgentHost", dependencies: ["NoodleCore", "NoodleAgentBridge"]),
         .target(name: "NoodleAppleRuntime", dependencies: ["NoodleCore"]),
         .executableTarget(name: "NoodleAppleAgent", dependencies: ["NoodleAppleRuntime", "NoodleCore"]),
-        .target(name: "NoodleCore", dependencies: [.product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper")]),
+        .target(name: "NoodleCore", dependencies: [.product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper")]),
         .executableTarget(name: "NoodleComputerCLI", dependencies: ["NoodleCore", .product(name: "ComputerBridge", package: "Bridge")]),
         .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "MCP", package: "swift-sdk")]),
         .executableTarget(name: "NoodleMCPCLI", dependencies: ["NoodleCore"]),

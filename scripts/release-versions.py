@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PRODUCTS = {
     "noodle": ("VERSION", "CHANGELOG.md", "v"),
     "computer": ("Computer/VERSION", "Computer/CHANGELOG.md", "computer-v"),
+    "applet": ("Applet/VERSION", "Applet/CHANGELOG.md", "applet-v"),
     "images": ("Computer/Images/VERSION", "Computer/Images/CHANGELOG.md", "computer-images-v"),
 }
 SEMVER = r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
@@ -61,6 +62,10 @@ def plan():
         if previous and number(value) < max(map(number, previous)):
             raise ValueError(f"{product}: VERSION would roll back a released version")
         if value not in previous:
+            # A new product with only Unreleased notes is still in development.
+            # Its first dated version section opts into the normal release flow.
+            if not previous and not re.search(r"^## \[.*\] - ", (ROOT / PRODUCTS[product][1]).read_text(), re.M):
+                continue
             notes(product)
             selected.append(product)
     return selected

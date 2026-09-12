@@ -10,6 +10,7 @@ Each product has its own version and changelog:
 | --- | --- | --- | --- |
 | Noodle | `VERSION` | `CHANGELOG.md` | `vX.Y.Z` |
 | Computer | `Computer/VERSION` | `Computer/CHANGELOG.md` | `computer-vX.Y.Z` |
+| Applet | `Applet/VERSION` | `Applet/CHANGELOG.md` | `applet-vX.Y.Z` |
 | Images | `Computer/Images/VERSION` | `Computer/Images/CHANGELOG.md` | `computer-images-vX.Y.Z` |
 
 1. Set the product's version to an unused, higher `X.Y.Z`.
@@ -19,24 +20,25 @@ Each product has its own version and changelog:
 5. Watch **Validate and release versions** through completion and verify the public download and update channel.
 
 Do not create tags manually or reuse published versions. Unchanged versions skip
-publication. PRs validate and test without publishing. A manual workflow run on
+publication. A new product with no release history and only Unreleased notes
+remains in development until its first dated version section is prepared. PRs validate and test without publishing. A manual workflow run on
 `main` reads the same version files.
 
-See [Computer releases](../Computer/RELEASING.md) for its separate download channel
-and [image releases](../Computer/Images/README.md#publish) for registry checks.
+See [Computer releases](../Computer/RELEASING.md) and [Applet releases](../Applet/RELEASING.md)
+for their separate download channels, and [image releases](../Computer/Images/README.md#publish) for registry checks.
 
 ## What CI does
 
 All selected products must pass tests and preparation before any tag is created.
 App preparation includes signing, notarization, stapling, Gatekeeper, and Sparkle
 verification. Image preparation builds and tests both ARM64 images. Tests are
-scoped by product; Computer releases also run Noodle integration coverage.
+scoped by product; Computer and Applet releases also run Noodle integration coverage.
 
 CI tags the checked commit and publishes the exact prepared artifacts. When
-released together, images publish first, then Computer, then Noodle. App releases
+released together, images publish first, then Computer, then Noodle. Applet publishes independently of images and before Noodle. App releases
 remain drafts until their ZIP, checksum, signed feed, and notes are uploaded.
 A successful run requires every selected product to finish publishing.
-Computer releases never replace Noodle's repository-wide latest release.
+Computer and Applet releases never replace Noodle's repository-wide latest release.
 
 ## Recover a failed release
 
@@ -61,8 +63,8 @@ GitHub Actions uses these encrypted secrets:
 
 CI removes temporary signing material after use. Keep keys out of the repository.
 Back up the Sparkle key securely; changing it requires Sparkle's key-transition
-procedure so existing installations can still update. Both apps must use the same
-signing team for Computer integration. Downloads must be public; the apps contain
+procedure so existing installations can still update. The apps must use the same
+signing team for companion integration. Downloads must be public; the apps contain
 no GitHub token.
 
 ## In-app updates

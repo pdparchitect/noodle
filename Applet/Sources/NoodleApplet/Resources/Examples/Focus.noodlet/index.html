@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>A moment of focus</title>
+<style>
+:root{color-scheme:light dark;font:13px -apple-system,BlinkMacSystemFont,sans-serif;color:CanvasText}
+*{box-sizing:border-box}html,body{margin:0;background:transparent;min-width:0;height:100%;overflow:hidden}
+main{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:42px 22px 20px;gap:16px;text-align:center}
+small{--noodle-app-region:drag;cursor:default;user-select:none;font-size:12px;font-weight:600;opacity:.7}h1{font-size:clamp(54px,21vw,84px);font-weight:300;letter-spacing:-3px;line-height:1;margin:0;font-variant-numeric:tabular-nums}
+input{width:100%;min-width:0;font:inherit;color:inherit;background:light-dark(#ffffff60,#ffffff0b);border:1px solid light-dark(#00000018,#ffffff20);border-radius:7px;padding:9px 10px;text-align:center;outline:none}
+input:focus{outline:3px solid color-mix(in srgb,AccentColor 35%,transparent)}
+.controls{display:flex;gap:9px;width:100%}button{flex:1;font:inherit;font-weight:500;cursor:pointer;border:1px solid #00000012;border-radius:7px;padding:8px 12px;background:AccentColor;color:AccentColorText;box-shadow:0 1px 2px #00000018}
+button.secondary{background:light-dark(#ffffff80,#ffffff20);color:CanvasText}button:active{opacity:.7}footer{font-size:11px;opacity:.5;line-height:1.4;min-height:28px}
+</style>
+<main><small>A moment of focus</small><h1 id="time">25:00</h1><input id="intention" aria-label="Your intention" placeholder="What are you focusing on?"><div class="controls"><button id="start">Begin</button><button class="secondary" id="reset">Reset</button></div><footer id="saved">Your intention stays here for next time.</footer></main>
+<script>let remaining=1500,deadline=null;const time=document.querySelector('#time'),start=document.querySelector('#start'),intention=document.querySelector('#intention');function paint(){if(deadline){remaining=Math.max(0,Math.ceil((deadline-Date.now())/1000));if(!remaining){deadline=null;start.textContent='Begin';console.log('Focus complete');}}time.textContent=String(Math.floor(remaining/60)).padStart(2,'0')+':'+String(remaining%60).padStart(2,'0');}start.onclick=()=>{if(deadline){deadline=null;start.textContent='Continue';}else{deadline=Date.now()+remaining*1000;start.textContent='Pause';}console.log(deadline?'Focus started':'Focus paused');};document.querySelector('#reset').onclick=()=>{remaining=1500;deadline=null;start.textContent='Begin';paint();};intention.onchange=async()=>{await noodle.storage.set('intention',intention.value);document.querySelector('#saved').textContent='Saved. Take your time.';};noodle.storage.get('intention').then(v=>{if(v)intention.value=v;});setInterval(paint,200);console.log('Focus is ready');</script></html>

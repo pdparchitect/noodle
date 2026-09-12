@@ -102,6 +102,7 @@ final class NoodleStore {
     @ObservationIgnored private let transcriptPositions: TranscriptPositionStore
     let mcp: MCPController
     let computers: ComputerController
+    let applets: AppletController
     let runtime = AgentRuntimeCoordinator()
     private var transcriptRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptGeneration: UInt = 0
@@ -131,6 +132,7 @@ final class NoodleStore {
         transcriptPositions = TranscriptPositionStore(fileURL: self.repository.rootURL.appendingPathComponent("scroll-positions.json"))
         mcp = MCPController(repository: self.repository)
         computers = ComputerController(repository: self.repository)
+        applets = AppletController(repository: self.repository)
         reload()
         Self.active = self
     }
@@ -180,6 +182,7 @@ final class NoodleStore {
             try repository.synchronizeAgentWorkspaces(agents)
             mcp.start(agents: agents)
             computers.start(agents: agents)
+            applets.start(agents: agents)
             conversations = try repository.loadConversations()
             backgrounds = Dictionary(uniqueKeysWithValues: conversations.map {
                 ($0.id, (try? repository.loadBackground(conversationID: $0.id)) ?? ConversationBackground())
@@ -263,6 +266,7 @@ final class NoodleStore {
             try mcp.assign(mcpConnectionIDs, to: created.agent)
             try computers.assign(computerIDs, to: created.agent)
             computers.start(agents: agents)
+            applets.start(agents: agents)
             mcp.start(agents: agents)
             runtime.refresh(agents: agents)
             runtime.start(agent: created.agent, repository: repository)
@@ -322,6 +326,7 @@ final class NoodleStore {
             if let mcpConnectionIDs { try mcp.assign(mcpConnectionIDs, to: updated) }
             if let computerIDs { try computers.assign(computerIDs, to: updated) }
             computers.start(agents: agents)
+            applets.start(agents: agents)
             try repository.synchronizeAgentWorkspace(updated)
             mcp.start(agents: agents)
             runtime.restart(

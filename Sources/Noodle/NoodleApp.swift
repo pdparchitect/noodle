@@ -133,6 +133,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NoodleStore.active?.stopMonitoring()
     }
 
+    func applicationDidBecomeActive(_ notification: Notification) {
+        NoodleStore.active?.applets.refreshSkills()
+    }
+
     @objc private func workspaceDidWake(_ notification: Notification) {
         NoodleStore.active?.recoverAgentsAfterWake()
     }

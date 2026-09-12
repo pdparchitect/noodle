@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 
-# Serialize the whole pipeline, including promotion of both update channels.
+# Serialize the whole pipeline, including promotion of all update channels.
 concurrency:
   group: versions-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
   cancel-in-progress: false
@@ -27,6 +27,7 @@ jobs:
     outputs:
       noodle: ${{ steps.versions.outputs.noodle }}
       computer: ${{ steps.versions.outputs.computer }}
+      applet: ${{ steps.versions.outputs.applet }}
       images: ${{ steps.versions.outputs.images }}
       any: ${{ steps.versions.outputs.any }}
       products: ${{ steps.versions.outputs.products }}
@@ -55,10 +56,11 @@ jobs:
           python3 -m unittest discover -s Tests/ReleaseAutomation -v
           python3 -m unittest discover -s Tests/CoverageReporting -v
           swift Computer/Tests/ReleaseWorkflowTests.swift "$PWD"
+          swift Applet/Tests/ReleaseWorkflowTests.swift "$PWD"
 
   test-noodle:
     needs: [versions, checks]
-    if: github.event_name == 'pull_request' || needs.versions.outputs.noodle == 'true' || needs.versions.outputs.computer == 'true'
+    if: github.event_name == 'pull_request' || needs.versions.outputs.noodle == 'true' || needs.versions.outputs.computer == 'true' || needs.versions.outputs.applet == 'true'
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -96,9 +98,21 @@ jobs:
       - name: Test Computer
         run: swift test --disable-sandbox --package-path Computer --scratch-path .build/computer
 
+  test-applet:
+    needs: [versions, checks]
+    if: github.event_name == 'pull_request' || needs.versions.outputs.applet == 'true'
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - name: Test Applet
+        run: swift test --disable-sandbox --package-path Applet --scratch-path .build/applet
+
   test-bridge:
     needs: [versions, checks]
-    if: github.event_name == 'pull_request' || needs.versions.outputs.noodle == 'true' || needs.versions.outputs.computer == 'true'
+    if: github.event_name == 'pull_request' || needs.versions.outputs.noodle == 'true' || needs.versions.outputs.computer == 'true' || needs.versions.outputs.applet == 'true'
     runs-on: macos-26
     timeout-minutes: 10
     steps:
@@ -118,24 +132,32 @@ jobs:
     uses: ./.github/workflows/computer-release.yml
     secrets: inherit
 
+  prepare-applet:
+    needs: [versions, checks, test-noodle, test-applet, test-bridge]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.applet == 'true'
+    uses: ./.github/workflows/applet-release.yml
+    secrets: inherit
+
   prepare-images:
     needs: [versions, checks]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.images == 'true'
     uses: ./.github/workflows/computer-images.yml
 
   tag:
-    needs: [versions, workflow-lint, checks, test-noodle, test-computer, test-bridge, prepare-noodle, prepare-computer, prepare-images]
+    needs: [versions, workflow-lint, checks, test-noodle, test-computer, test-applet, test-bridge, prepare-noodle, prepare-computer, prepare-applet, prepare-images]
     # Explicitly accept unselected/skipped products, never a failed/cancelled build.
     if: >-
       always() && !cancelled() && github.event_name != 'pull_request' &&
       github.ref == 'refs/heads/main' && needs.versions.outputs.any == 'true' &&
       needs.workflow-lint.result == 'success' &&
       needs.checks.result == 'success' &&
-      ((needs.versions.outputs.noodle != 'true' && needs.versions.outputs.computer != 'true') ||
+      ((needs.versions.outputs.noodle != 'true' && needs.versions.outputs.computer != 'true' && needs.versions.outputs.applet != 'true') ||
        (needs.test-noodle.result == 'success' && needs.test-bridge.result == 'success')) &&
       (needs.versions.outputs.computer != 'true' || needs.test-computer.result == 'success') &&
+      (needs.versions.outputs.applet != 'true' || needs.test-applet.result == 'success') &&
       (needs.versions.outputs.noodle != 'true' || needs.prepare-noodle.result == 'success') &&
       (needs.versions.outputs.computer != 'true' || needs.prepare-computer.result == 'success') &&
+      (needs.versions.outputs.applet != 'true' || needs.prepare-applet.result == 'success') &&
       (needs.versions.outputs.images != 'true' || needs.prepare-images.result == 'success')
     runs-on: ubuntu-latest
     permissions:
@@ -213,13 +235,41 @@ jobs:
           cd ../..
           zsh scripts/publish-computer-release.sh "$COMPUTER_VERSION" "dist/computer-$COMPUTER_VERSION/release-notes.md"
 
+  publish-applet:
+    needs: [versions, tag]
+    if: >-
+      always() && !cancelled() && needs.tag.result == 'success' &&
+      needs.versions.outputs.applet == 'true'
+    runs-on: macos-26
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Read Applet version
+        run: echo "APPLET_VERSION=$(cat Applet/VERSION)" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v7
+        with:
+          name: applet-release-assets
+          path: dist/applet-${{ env.APPLET_VERSION }}
+      - name: Publish the verified Applet archive and update channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "dist/applet-$APPLET_VERSION"
+          shasum -a 256 -c "Noodle-Applet-$APPLET_VERSION-arm64.zip.sha256"
+          cd ../..
+          zsh scripts/publish-applet-release.sh "$APPLET_VERSION" "dist/applet-$APPLET_VERSION/release-notes.md"
+
   publish-noodle:
-    needs: [versions, tag, publish-images, publish-computer]
+    needs: [versions, tag, publish-images, publish-computer, publish-applet]
     if: >-
       always() && !cancelled() && needs.tag.result == 'success' &&
       needs.versions.outputs.noodle == 'true' &&
       (needs.versions.outputs.images != 'true' || needs.publish-images.result == 'success') &&
-      (needs.versions.outputs.computer != 'true' || needs.publish-computer.result == 'success')
+      (needs.versions.outputs.computer != 'true' || needs.publish-computer.result == 'success') &&
+      (needs.versions.outputs.applet != 'true' || needs.publish-applet.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -250,7 +300,7 @@ jobs:
           gh release edit "$tag" --draft=false --latest
 
   complete:
-    needs: [versions, tag, publish-images, publish-computer, publish-noodle]
+    needs: [versions, tag, publish-images, publish-computer, publish-applet, publish-noodle]
     if: always() && github.event_name != 'pull_request' && needs.versions.outputs.any == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -259,6 +309,7 @@ jobs:
           RELEASE_PRODUCTS: ${{ needs.versions.outputs.products }}
           IMAGES_RESULT: ${{ needs.publish-images.result }}
           COMPUTER_RESULT: ${{ needs.publish-computer.result }}
+          APPLET_RESULT: ${{ needs.publish-applet.result }}
           NOODLE_RESULT: ${{ needs.publish-noodle.result }}
         run: |
           python3 - <<'PY'

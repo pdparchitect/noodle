@@ -399,12 +399,22 @@ public enum WorkspaceError: LocalizedError, Equatable {
 public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
     public let launcherExecutableURL: URL?
+    private let discoverAppletApplication: @Sendable () -> URL?
 
-    public static let managedSkillVersion = 21
+    public static let managedSkillVersion = 22
 
-    public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
+    public init(rootURL: URL, launcherExecutableURL: URL? = nil,
+                discoverAppletApplication: @escaping @Sendable () -> URL? = { AppletAgentSkill.installedApplicationURL() }) {
         self.rootURL = AgentStorageLayout.canonicalURL(rootURL)
         self.launcherExecutableURL = launcherExecutableURL?.standardizedFileURL
+        self.discoverAppletApplication = discoverAppletApplication
+    }
+
+    public var appletExecutableURL: URL? {
+        guard let executable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("noodlet"),
+              FileManager.default.isExecutableFile(atPath: executable.path),
+              AppletAgentSkill.isCompanionInstalled(at: discoverAppletApplication()) else { return nil }
+        return executable
     }
 
     public var agentsURL: URL {
@@ -713,9 +723,12 @@ public struct WorkspaceRepository: Sendable {
         let backstory = try loadAgentBackstory(agent)
         let mcpRegistry = try MCPRegistry.load(root: rootURL)
         let computerAssigned = !(try ComputerAssignments.load(root: rootURL)).assigned(to: agent.id).isEmpty
+        let appletExecutable = appletExecutableURL
+        let appletEnabled = appletExecutable != nil
+        let appletInstructions = appletEnabled ? "\n## Creative applets\nRead `.agents/skills/applet/SKILL.md` to build and run HTML and native Swift noodlets in Noodle Applet.\n" : ""
         let agentsFile = directory.appendingPathComponent("AGENTS.md")
         let computerInstructions = computerAssigned ? "\n## Assigned computers\nRead `.agents/skills/computer/SKILL.md` to access your assigned computers through Noodle.\n" : ""
-        try (Self.renderedAgentInstructions(backstory: backstory, mcpConnections: mcpRegistry.assigned(to: agent.id)) + computerInstructions).write(
+        try (Self.renderedAgentInstructions(backstory: backstory, mcpConnections: mcpRegistry.assigned(to: agent.id)) + computerInstructions + appletInstructions).write(
             to: agentsFile,
             atomically: true,
             encoding: .utf8
@@ -734,6 +747,7 @@ public struct WorkspaceRepository: Sendable {
         let computerExecutable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("computer")
         try ComputerAgentSkill.synchronize(workspace: directory, enabled: computerAssigned,
             executable: computerExecutable.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil })
+        try AppletAgentSkill.synchronize(workspace: directory, enabled: appletEnabled, executable: appletEnabled ? appletExecutable : nil)
         let claudeSkillPaths = try synchronizeClaudeSkillLinks(in: directory)
 
         let skillFile = messengerDirectory.appendingPathComponent("SKILL.md")
@@ -751,7 +765,7 @@ public struct WorkspaceRepository: Sendable {
                 "CLAUDE.md",
                 ".agents/skills/messenger/SKILL.md",
                 ".agents/skills/messenger/messenger"
-            ] + (computerAssigned ? [".agents/skills/computer/SKILL.md", ".agents/skills/computer/computer", ".agents/skills/computer/.noodle-managed"] : []) + claudeSkillPaths
+            ] + (computerAssigned ? [".agents/skills/computer/SKILL.md", ".agents/skills/computer/computer", ".agents/skills/computer/.noodle-managed"] : []) + (appletEnabled ? [".agents/skills/applet/SKILL.md", ".agents/skills/applet/noodlet", ".agents/skills/applet/.noodle-managed"] : []) + claudeSkillPaths
         )
         try write(manifest, to: agentsDirectory.appendingPathComponent("managed-skills.json"))
     }

@@ -28,6 +28,16 @@ class RecoveryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             recovery.validate(run, jobs, [])
 
+    def test_applet_recovery_requires_its_verified_artifact(self):
+        run = {'status': 'completed', 'head_branch': 'main', 'head_sha': 'a' * 40,
+               'path': '.github/workflows/release.yml'}
+        jobs = [{'name': name, 'conclusion': 'success'} for name in
+                ['workflow-lint', 'versions', 'checks', 'tag', 'prepare-applet / release']]
+        artifacts = [{'name': 'applet-release-assets', 'expired': False}]
+        self.assertEqual(recovery.validate(run, jobs, artifacts), [('applet', 'applet-release-assets')])
+        with self.assertRaises(ValueError):
+            recovery.validate(run, jobs, [{'name': 'applet-release-assets', 'expired': True}])
+
     def test_checksum_mismatch_and_path_escape_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

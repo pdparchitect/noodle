@@ -36,6 +36,7 @@ def validate(run, jobs, artifacts):
     for product, artifact, job in [
         ('images', 'computer-image-builds', 'prepare-images / build'),
         ('computer', 'computer-release-assets', 'prepare-computer / release'),
+        ('applet', 'applet-release-assets', 'prepare-applet / release'),
         ('noodle', 'noodle-release-assets', 'prepare-noodle / release'),
     ]:
         matches = [a for a in artifacts if a['name'] == artifact and not a['expired']]
@@ -107,6 +108,14 @@ def main():
             destination.parent.mkdir(exist_ok=True)
             shutil.copytree(directory, destination)
             command('zsh', 'scripts/publish-computer-release.sh', version, str(destination / 'release-notes.md'))
+        if 'applet' in downloads:
+            version, _ = versions.version('applet')
+            directory = downloads['applet']
+            checksum(directory, f'Noodle-Applet-{version}-arm64.zip.sha256')
+            destination = ROOT / 'dist' / f'applet-{version}'
+            destination.parent.mkdir(exist_ok=True)
+            shutil.copytree(directory, destination)
+            command('zsh', 'scripts/publish-applet-release.sh', version, str(destination / 'release-notes.md'))
         if 'noodle' in downloads:
             version, tag = versions.version('noodle')
             directory = downloads['noodle']

@@ -92,6 +92,10 @@ otool -l "$contents/MacOS/Noodle" \
 cp "$bin_path/NoodleMessenger" "$contents/Helpers/messenger"
 cp "$bin_path/NoodleMCPCLI" "$contents/Helpers/mcpshim"
 cp "$bin_path/NoodleComputerCLI" "$contents/Helpers/computer"
+swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-path "$project_root/.build/applet" -c release --product noodlet >&2
+applet_bin="$(swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-path "$project_root/.build/applet" -c release --show-bin-path)"
+cp "$applet_bin/noodlet" "$contents/Helpers/noodlet"
+"$bin_path/NoodleDocumentation" --write-applet-help "$contents/Resources/NoodletCLIHelp.txt" >&2
 cp "$bin_path/NoodleAppleAgent" "$contents/Helpers/NoodleAppleAgent"
 otool -l "$contents/Helpers/NoodleAppleAgent" \
     | awk '/cmd LC_RPATH/ { found=1; next } found && /path / { print $2; found=0 }' \
@@ -193,6 +197,8 @@ codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/mcpshim"
 codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/computer"
+codesign --force --options runtime "$timestamp_option" --identifier com.pdparchitect.noodle.applet.cli \
+    --sign "$signing_identity" "$contents/Helpers/noodlet"
 team_id="$(codesign -dv --verbose=4 "$contents/Helpers/messenger" 2>&1 | awk -F= '/^TeamIdentifier=/ { print $2 }')"
 # Agent Host applies this helper's own Seatbelt policy before exec. No App
 # Sandbox inheritance entitlement: autonomous access uses the existing bot grant.
@@ -204,6 +210,8 @@ if [[ ! "$team_id" =~ '^[A-Z0-9]{10}$' ]]; then
 fi
 shared_group="$team_id.$bundle_identifier.sharing"
 computer_group="$team_id.com.pdparchitect.noodle.computers"
+applet_group="$team_id.com.pdparchitect.noodle.applets"
+/usr/libexec/PlistBuddy -c "Add :NoodleAppletGroup string $applet_group" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :NoodleComputerGroup string $computer_group" "$contents/Info.plist"
 for file in "$contents/Info.plist" "$agent_host/Contents/Info.plist"; do
     /usr/libexec/PlistBuddy -c "Add :NoodleSigningTeam string $team_id" "$file"
@@ -224,6 +232,7 @@ done
 # Only the main broker may connect to Computer. Agent helpers and the sharing
 # extension do not receive this group or the provider's socket.
 /usr/libexec/PlistBuddy -c "Add :com.apple.security.application-groups:1 string $computer_group" "$resolved_entitlements"
+/usr/libexec/PlistBuddy -c "Add :com.apple.security.application-groups:2 string $applet_group" "$resolved_entitlements"
 /usr/libexec/PlistBuddy -c "Set :com.apple.security.temporary-exception.mach-lookup.global-name:0 $bundle_identifier-spks" "$resolved_entitlements"
 /usr/libexec/PlistBuddy -c "Set :com.apple.security.temporary-exception.mach-lookup.global-name:1 $bundle_identifier-spki" "$resolved_entitlements"
 for file in "$contents/Info.plist" "$share_extension/Contents/Info.plist"; do

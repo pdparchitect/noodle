@@ -95,6 +95,7 @@ struct CompanionAppsSettingsView: View {
     }
 
     private func refresh() {
+        store.applets.refreshSkills()
         let current = discoverInstallations()
         if current != installations { installations = current }
     }
@@ -110,6 +111,9 @@ struct CompanionAppsSettingsView: View {
                 case .computer:
                     if installed { try await store.computers.openLibrary() }
                     else { try await store.computers.openDownload() }
+                case .applet:
+                    if installed { try await store.applets.openLibrary() }
+                    else { NSWorkspace.shared.open(app.documentationURL) }
                 }
             } catch {
                 failedApp = app

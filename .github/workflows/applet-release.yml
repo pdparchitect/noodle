@@ -1,0 +1,99 @@
+name: Prepare Noodle Applet release
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+
+      - name: Validate public release and notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < Applet/VERSION)"
+          [[ "$version" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' ]]
+          grep -Eq "^## \\[$version\\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" Applet/CHANGELOG.md
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" == false ]] || {
+            print -u2 'Public downloads and unauthenticated updates require a public repository.'; exit 1
+          }
+          print "APPLET_VERSION=$version" >> "$GITHUB_ENV"
+          python3 scripts/release-versions.py notes applet > "$RUNNER_TEMP/applet-notes.md"
+
+      - name: Prepare signing credentials
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          : "${MACOS_CERTIFICATE_P12:?Missing certificate}"
+          : "${MACOS_CERTIFICATE_PASSWORD:?Missing certificate password}"
+          : "${APP_STORE_CONNECT_API_KEY_P8:?Missing notarization key}"
+          : "${APP_STORE_CONNECT_KEY_ID:?Missing notarization key ID}"
+          : "${APP_STORE_CONNECT_ISSUER_ID:?Missing notarization issuer}"
+          : "${SPARKLE_PRIVATE_KEY:?Missing update signing key}"
+          umask 077
+          keychain="$RUNNER_TEMP/applet-signing.keychain-db"
+          password="$(openssl rand -base64 32)"
+          print -rn -- "$MACOS_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/applet-signing.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/applet-signing.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security list-keychains -d user -s "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+          identity="$(security find-identity -v -p codesigning "$keychain" | awk -F '"' '/Developer ID Application:/ { print $2; exit }')"
+          [[ -n "$identity" ]]
+          print -rn -- "$APP_STORE_CONNECT_API_KEY_P8" > "$RUNNER_TEMP/applet-notary.p8"
+          print -rn -- "$SPARKLE_PRIVATE_KEY" > "$RUNNER_TEMP/applet-update.key"
+          print "NOODLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+          print "APPLE_API_KEY_PATH=$RUNNER_TEMP/applet-notary.p8" >> "$GITHUB_ENV"
+          print "APPLE_API_KEY_ID=$APP_STORE_CONNECT_KEY_ID" >> "$GITHUB_ENV"
+          print "APPLE_API_ISSUER_ID=$APP_STORE_CONNECT_ISSUER_ID" >> "$GITHUB_ENV"
+          print "SPARKLE_PRIVATE_KEY_PATH=$RUNNER_TEMP/applet-update.key" >> "$GITHUB_ENV"
+
+      - name: Build, sign, notarize, staple and sign update feed
+        shell: zsh {0}
+        run: zsh scripts/package-applet-release.sh "applet-v$APPLET_VERSION"
+
+      - name: Verify application menu and native Update settings
+        timeout-minutes: 2
+        run: '".build/Noodle Applet.app/Contents/MacOS/NoodleApplet" --noodle-background --updater-ui-test'
+
+      - name: Verify signed HTML and Swift runtime behavior
+        timeout-minutes: 8
+        run: python3 Applet/scripts/smoke.py
+
+      - name: Save verified release assets
+        run: cp "$RUNNER_TEMP/applet-notes.md" "dist/applet-$APPLET_VERSION/release-notes.md"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: applet-release-assets
+          path: dist/applet-${{ env.APPLET_VERSION }}/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove ephemeral signing credentials
+        if: always()
+        shell: zsh {0}
+        run: |
+          rm -f "$RUNNER_TEMP/applet-signing.p12" "$RUNNER_TEMP/applet-notary.p8" "$RUNNER_TEMP/applet-update.key"
+          if [[ -f "$RUNNER_TEMP/applet-signing.keychain-db" ]]; then
+            security delete-keychain "$RUNNER_TEMP/applet-signing.keychain-db"
+          fi

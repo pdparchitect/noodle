@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Install the Applet skill automatically for every bot only while Noodle Applet is installed; remove its managed instructions and CLI links when the companion is removed, and restore them on reinstallation.
+
 - Fix Runbar and build-and-launch commands failing after a successful build by keeping generated-help progress messages out of the returned application path.
 
 - Make the capture comment divider span the preview width, removing the inset border at the image edge.
@@ -19,6 +21,10 @@ All notable changes to Noodle are documented here, following
 - Give Apple chat a bounded excerpt of recent user messages, limit history retrieval across each turn, and recover chat context overflow with one tool-free attempt from retrieved messages. Avoid suggesting that a short question caused the harness to fill its context.
 
 ### Added
+
+- Document noodlet window styles, sizing and frame restoration, native web requests without browser CORS, and Finder Quick Look for agents.
+
+- Add Noodle Applet as a companion, with a managed noodlet creation skill and authenticated CLI access for bots to build, run, inspect, capture, and share their creations.
 
 - Add a minimal black Noodle website with a product screenshot and a single download action, automatic GitHub Pages deployment for website changes on main, and custom domain setup instructions.
 
@@ -32,6 +38,8 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Describe the Applet skill explicitly as creative coding for utilities, games, interactive websites, prototypes, examples, and demos.
+- Align Noodle Applet with Noodle Computer's native interface, settings, and menus; add Applet to the shared signed update and release pipeline.
 - Put Codex first and Apple last in harness lists. Default new bots to the first available harness, using Apple when it is the only option, and warn that Apple is experimental and may be slow or unreliable.
 - Show “Local” instead of the bundled executable path for the Apple harness in Settings, and shorten its availability status to “Ready”.
 - Explain Apple’s experimental status in a wider, comfortably padded popover opened from its label, removing the repeated warning text from Harness settings.

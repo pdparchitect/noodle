@@ -39,22 +39,22 @@ class WorkflowTests(unittest.TestCase):
             'github.event_name': 'push', 'github.ref': 'refs/heads/main',
             'needs.versions.outputs.any': 'true', 'needs.checks.result': 'success',
             'needs.workflow-lint.result': 'success',
-            **{f'needs.test-{p}.result': 'success' for p in ['noodle', 'computer', 'bridge']},
-            **{f'needs.versions.outputs.{p}': 'true' for p in ['noodle', 'computer', 'images']},
-            **{f'needs.prepare-{p}.result': 'success' for p in ['noodle', 'computer', 'images']},
+            **{f'needs.test-{p}.result': 'success' for p in ['noodle', 'computer', 'applet', 'bridge']},
+            **{f'needs.versions.outputs.{p}': 'true' for p in ['noodle', 'computer', 'applet', 'images']},
+            **{f'needs.prepare-{p}.result': 'success' for p in ['noodle', 'computer', 'applet', 'images']},
         }
 
     def test_tag_gate_blocks_failed_cancelled_or_skipped_selected_products(self):
         gate = self.jobs['tag']['if']
-        for selected in itertools.product([False, True], repeat=3):
+        for selected in itertools.product([False, True], repeat=4):
             if not any(selected):
                 continue
             values = self.base()
-            for product, active in zip(['noodle', 'computer', 'images'], selected):
+            for product, active in zip(['noodle', 'computer', 'applet', 'images'], selected):
                 values[f'needs.versions.outputs.{product}'] = str(active).lower()
                 values[f'needs.prepare-{product}.result'] = 'success' if active else 'skipped'
             self.assertTrue(condition(gate, values))
-            for product, active in zip(['noodle', 'computer', 'images'], selected):
+            for product, active in zip(['noodle', 'computer', 'applet', 'images'], selected):
                 if active:
                     for failure in ['failure', 'cancelled', 'skipped']:
                         self.assertFalse(condition(gate, {**values, f'needs.prepare-{product}.result': failure}))
@@ -89,19 +89,25 @@ class WorkflowTests(unittest.TestCase):
             **values, 'needs.versions.outputs.images': 'false', 'needs.publish-images.result': 'skipped'}))
         noodle = self.jobs['publish-noodle']
         values['needs.publish-computer.result'] = 'success'
+        values['needs.publish-applet.result'] = 'success'
         self.assertTrue(condition(noodle['if'], values))
         self.assertFalse(condition(noodle['if'], {**values, 'needs.publish-computer.result': 'failure'}))
+        self.assertFalse(condition(noodle['if'], {**values, 'needs.publish-applet.result': 'failure'}))
+        applet = self.jobs['publish-applet']
+        self.assertTrue(condition(applet['if'], values))
+        self.assertFalse(condition(applet['if'], {**values, 'needs.tag.result': 'failure'}))
 
     def test_product_selection_and_parallel_tests(self):
         for selected, expected in [
             (['noodle'], ['noodle', 'bridge']),
             (['computer'], ['noodle', 'computer', 'bridge']),
+            (['applet'], ['noodle', 'applet', 'bridge']),
             (['images'], []),
             ([], []),
         ]:
             values = {**self.base(), **{f'needs.versions.outputs.{p}': str(p in selected).lower()
-                                      for p in ['noodle', 'computer', 'images']}}
-            for product in ['noodle', 'computer', 'bridge']:
+                                      for p in ['noodle', 'computer', 'applet', 'images']}}
+            for product in ['noodle', 'computer', 'applet', 'bridge']:
                 job = self.jobs['test-' + product]
                 self.assertEqual(condition(job['if'], values), product in expected)
                 self.assertEqual(job['needs'], ['versions', 'checks'])
@@ -110,7 +116,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotIn('swift test', json.dumps(self.jobs['checks']))
 
     def test_selected_test_failures_block_tagging(self):
-        for product in ['noodle', 'computer', 'bridge']:
+        for product in ['noodle', 'computer', 'applet', 'bridge']:
             for result in ['failure', 'cancelled', 'skipped']:
                 self.assertFalse(condition(self.jobs['tag']['if'], {
                     **self.base(), f'needs.test-{product}.result': result}))
@@ -139,10 +145,10 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('always()', complete['if'])
         step = complete['steps'][0]
         source = step['run'].split("\n", 1)[1].rsplit("\nPY", 1)[0]
-        for selected in [['noodle'], ['computer', 'images'], ['images']]:
+        for selected in [['noodle'], ['computer', 'images'], ['applet'], ['noodle', 'applet'], ['images']]:
             environment = {**os.environ, 'RELEASE_PRODUCTS': json.dumps(selected),
                            **{p.upper() + '_RESULT': 'success' if p in selected else 'skipped'
-                              for p in ['noodle', 'computer', 'images']}}
+                              for p in ['noodle', 'computer', 'applet', 'images']}}
             passed = subprocess.run(['python3', '-c', source], env=environment, capture_output=True)
             self.assertEqual(passed.returncode, 0, passed.stderr)
             for product in selected:
@@ -152,14 +158,14 @@ class WorkflowTests(unittest.TestCase):
                     self.assertNotEqual(failed.returncode, 0)
 
     def test_preparation_is_read_only_and_publication_uses_artifacts(self):
-        for name in ['prepare-noodle-release.yml', 'computer-release.yml', 'computer-images.yml']:
+        for name in ['prepare-noodle-release.yml', 'computer-release.yml', 'applet-release.yml', 'computer-images.yml']:
             prepare = workflow(name)
             self.assertEqual(prepare['permissions'], {'contents': 'read'})
             rendered = json.dumps(prepare)
             for write in ['gh release create', 'docker push', 'git push']:
                 self.assertNotIn(write, rendered)
             self.assertIn('actions/upload-artifact@v6', rendered)
-        for job in ['publish-noodle', 'publish-computer', 'publish-images']:
+        for job in ['publish-noodle', 'publish-computer', 'publish-applet', 'publish-images']:
             self.assertIn('tag', self.jobs[job]['needs'])
             self.assertIn('actions/download-artifact@v7', json.dumps(self.jobs[job]))
 
@@ -178,12 +184,12 @@ class WorkflowTests(unittest.TestCase):
         # YAML 1.1 interprets the key "on" as true.
         triggers = self.flow.get('on', self.flow.get('true'))
         self.assertEqual(triggers['push'], {'branches': ['main']})
-        for name in ['prepare-noodle-release.yml', 'computer-release.yml', 'computer-images.yml']:
+        for name in ['prepare-noodle-release.yml', 'computer-release.yml', 'applet-release.yml', 'computer-images.yml']:
             child = workflow(name)
             self.assertNotIn('push', child.get('on', child.get('true')))
         self.assertEqual(self.jobs['tag']['needs'], [
-            'versions', 'workflow-lint', 'checks', 'test-noodle', 'test-computer', 'test-bridge',
-            'prepare-noodle', 'prepare-computer', 'prepare-images'])
+            'versions', 'workflow-lint', 'checks', 'test-noodle', 'test-computer', 'test-applet', 'test-bridge',
+            'prepare-noodle', 'prepare-computer', 'prepare-applet', 'prepare-images'])
 
 
 if __name__ == '__main__':

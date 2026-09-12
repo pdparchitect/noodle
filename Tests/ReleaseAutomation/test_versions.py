@@ -118,6 +118,16 @@ class VersionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'modified tracked files'):
             self.module.mint(['computer'])
 
+    def test_first_applet_release_requires_dated_notes(self):
+        self.git('tag', '-d', 'applet-v1.0.0')
+        (self.root / 'Applet/CHANGELOG.md').write_text('## [Unreleased]\n\n- Initial work.\n')
+        self.assertEqual(self.module.plan(), [])
+        with self.assertRaisesRegex(ValueError, 'dated section'):
+            self.module.notes('applet')
+        self.write_version('applet', '1.0.0')
+        self.assertEqual(self.module.plan(), ['applet'])
+        self.assertEqual(self.module.version('applet')[1], 'applet-v1.0.0')
+
     def test_ci_outputs_are_derived_from_version_files(self):
         self.write_version('images', '1.0.1')
         result = run('python3', 'scripts/release-versions.py', 'plan', cwd=self.root)

@@ -1,46 +1,53 @@
 import AppKit
 import ComputerBridge
+import AppletBridge
 
 /// Separately installed apps that extend Noodle. Bundled helpers and harnesses
 /// are managed elsewhere and are not companion apps.
 enum CompanionApp: String, CaseIterable, Identifiable {
-    case computer
+    case computer, applet
 
     var id: String { rawValue }
 
     var name: String {
         switch self {
         case .computer: "Noodle Computer"
+        case .applet: "Noodle Applet"
         }
     }
 
     var summary: String {
         switch self {
         case .computer: "Give your bots Linux desktops and terminals to run tools and work on files."
+        case .applet: "Create and enjoy little tools, websites, games, and native experiments."
         }
     }
 
     var requirements: String {
         switch self {
         case .computer: "Requires Apple silicon and macOS 26 or later."
+        case .applet: "Requires macOS 15 or later. Swift noodlets also require Apple's developer tools."
         }
     }
 
     var systemImage: String {
         switch self {
         case .computer: "desktopcomputer"
+        case .applet: "square.grid.2x2"
         }
     }
 
     var bundleIdentifier: String {
         switch self {
         case .computer: ComputerConnection.providerID
+        case .applet: AppletConnection.providerID
         }
     }
 
     var documentationURL: URL {
         switch self {
         case .computer: ComputerDistribution.documentation
+        case .applet: URL(string: "https://github.com/pdparchitect/noodle/tree/main/Applet")!
         }
     }
 

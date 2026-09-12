@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "title": "A moment of focus",
+  "runtime": "html",
+  "entry": "index.html",
+  "summary": "A quiet timer. One thing at a time.",
+  "symbol": "timer",
+  "network": false,
+  "window": {
+    "type": "floating",
+    "background": "translucent",
+    "titlebar": false,
+    "width": 320,
+    "height": 350,
+    "minWidth": 260,
+    "minHeight": 300,
+    "maxWidth": 480,
+    "maxHeight": 520,
+    "resizable": true,
+    "rememberFrame": true
+  }
+}
