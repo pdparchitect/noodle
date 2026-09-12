@@ -31,6 +31,25 @@ final class TranscriptScrollMetricsTests: XCTestCase {
                                                viewportHeight: 800, topInset: 52, bottomInset: 0).offset, 0)
     }
 
+    func testTopUsesTheInsetAdjustedOffset() {
+        for offset: CGFloat in [-70, -52, -50] {
+            XCTAssertTrue(TranscriptScrollMetrics(contentOffset: offset, contentHeight: 2000,
+                                                  viewportHeight: 800, topInset: 52, bottomInset: 0).isAtTop)
+        }
+        XCTAssertFalse(TranscriptScrollMetrics(contentOffset: -40, contentHeight: 2000,
+                                               viewportHeight: 800, topInset: 52, bottomInset: 0).isAtTop)
+    }
+
+    func testMeasuredAppBottomNeedsFullViewportHeight() {
+        // Measured in the app: 810 pt visible, while SwiftUI's containerSize was 758.
+        for offset: CGFloat in [404, 421] {
+            XCTAssertTrue(TranscriptScrollMetrics(contentOffset: offset, contentHeight: 1214,
+                                                  viewportHeight: 810, topInset: 52, bottomInset: 0).isAtBottom)
+        }
+        XCTAssertFalse(TranscriptScrollMetrics(contentOffset: 421, contentHeight: 1214,
+                                               viewportHeight: 758, topInset: 52, bottomInset: 0).isAtBottom)
+    }
+
     func testGrowingConversationBecomesScrollableWithoutChangingOffset() {
         let short = TranscriptScrollMetrics(contentOffset: -52, contentHeight: 300,
                                            viewportHeight: 800, topInset: 52, bottomInset: 0)

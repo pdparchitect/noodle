@@ -4,6 +4,7 @@ import Foundation
 public struct TranscriptScrollMetrics: Equatable, Sendable {
     public let offset: CGFloat
     public let isAtBottom: Bool
+    public let isAtTop: Bool
 
     public init(contentOffset: CGFloat, contentHeight: CGFloat, viewportHeight: CGFloat,
                 topInset: CGFloat, bottomInset: CGFloat) {
@@ -13,5 +14,6 @@ public struct TranscriptScrollMetrics: Equatable, Sendable {
         // A short conversation is already fully visible, even when its raw
         // offset is negative because of the titlebar/safe-area inset.
         isAtBottom = maximumOffset <= 2 || adjustedOffset >= maximumOffset - 2
+        isAtTop = adjustedOffset <= 2
     }
 }

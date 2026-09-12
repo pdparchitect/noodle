@@ -6,6 +6,14 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Show Scroll to Top and Scroll to Latest buttons above the composer while scrolling a conversation. Each appears only away from its edge, both fade two seconds after scrolling stops, and they stay while hovered.
+
+### Fixed
+
+- Recognize the bottom of a conversation under the window's titlebar inset, so a transcript scrolled back to the bottom by hand follows new messages again.
+
 ## [0.12.1] - 2026-09-12
 
 ### Fixed
