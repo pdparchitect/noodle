@@ -3,7 +3,7 @@ import SwiftUI
 import NoodleCore
 
 enum NoodleSettingsTab: Hashable {
-    case general, chat, harnesses, mcps, heartbeats, security, keybindings, updates
+    case general, chat, harnesses, mcps, heartbeats, security, keybindings, companions, updates
 }
 
 struct NoodleSettingsView: View {
@@ -49,6 +49,10 @@ struct NoodleSettingsView: View {
                 .settingsContentSize()
                 .tabItem { Label("Keybindings", systemImage: "keyboard") }
                 .tag(NoodleSettingsTab.keybindings)
+            CompanionAppsSettingsView()
+                .settingsContentSize()
+                .tabItem { Label("Companions", systemImage: "square.stack.3d.up") }
+                .tag(NoodleSettingsTab.companions)
             UpdatesSettingsView()
                 .settingsContentSize()
                 .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }

@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Add a Companions tab immediately before Update in Settings, showing installed companion app versions and offering an install link for missing apps, starting with Noodle Computer.
+
 ### Changed
 
 - Keep each bot's identity and configuration in a copyable agent package, with separate working files and Noodle-managed runtime state. Automatically migrate existing workspaces before starting bots, preserving memory, skills, inbox positions, and session recovery state; interrupted migrations resume without overwriting files.
