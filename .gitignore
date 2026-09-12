@@ -4,3 +4,5 @@ dist/
 .swiftpm/
 .DS_Store
 *.xcuserstate
+*.profraw
+*.profdata
