@@ -483,7 +483,7 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
                     let scale = min(panel.backingScaleFactor, 2)
                     config.width = max(1, Int(window.frame.width * scale))
                     config.height = max(1, Int(window.frame.height * scale))
-                    config.showsCursor = false; config.ignoreShadowsSingleWindow = true
+                    config.showsCursor = false; config.ignoreShadowsSingleWindow = true; config.scalesToFit = true
                     config.includeChildWindows = false; config.captureResolution = .best
                     let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
                     guard isCurrent() else {

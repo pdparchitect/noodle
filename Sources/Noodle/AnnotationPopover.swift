@@ -28,6 +28,9 @@ extension AttachmentPreviewController {
         let overlay = AnnotationCapturePanel(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
         overlay.isReleasedWhenClosed = false; overlay.title = "Choose annotation region"
         overlay.nextResponder = self; overlay.hidesOnDeactivate = false; overlay.hasShadow = false
+        // Preserve the captured preview's transparent rounded corners and its
+        // existing shadow, instead of filling a second rectangular window.
+        overlay.isOpaque = false; overlay.backgroundColor = .clear
         let canvas = AnnotationRegionCanvas(image: image)
         canvas.onRegion = { [weak self] region, point in
             guard let self else { return }
@@ -243,21 +246,19 @@ private struct AnnotationShortcutHint: View {
     init(image: NSImage, embedded: Bool = false) {
         self.image = image; self.embedded = embedded
         super.init(frame: .zero)
-        if embedded {
-            let hint = AnnotationRegionHint()
-            hint.material = .hudWindow; hint.blendingMode = .withinWindow; hint.state = .active
-            hint.wantsLayer = true; hint.layer?.cornerRadius = 15; hint.layer?.masksToBounds = true
-            let text = annotationLabel("Drag to select · Esc to cancel", size: 12, weight: .medium)
-            text.translatesAutoresizingMaskIntoConstraints = false; hint.addSubview(text)
-            hint.setFrameSize(NSSize(width: text.intrinsicContentSize.width + 26, height: 30))
-            hint.isHidden = true; addSubview(hint); pointerHint = hint
-            NSLayoutConstraint.activate([
-                text.leadingAnchor.constraint(equalTo: hint.leadingAnchor, constant: 13),
-                text.trailingAnchor.constraint(equalTo: hint.trailingAnchor, constant: -13),
-                text.centerYAnchor.constraint(equalTo: hint.centerYAnchor)
-            ])
-            setAccessibilityLabel("Select a conversation region to annotate")
-        }
+        let hint = AnnotationRegionHint()
+        hint.material = .hudWindow; hint.blendingMode = .withinWindow; hint.state = .active
+        hint.wantsLayer = true; hint.layer?.cornerRadius = 15; hint.layer?.masksToBounds = true
+        let text = annotationLabel("Drag to select · Esc to cancel", size: 12, weight: .medium)
+        text.translatesAutoresizingMaskIntoConstraints = false; hint.addSubview(text)
+        hint.setFrameSize(NSSize(width: text.intrinsicContentSize.width + 26, height: 30))
+        hint.isHidden = true; addSubview(hint); pointerHint = hint
+        NSLayoutConstraint.activate([
+            text.leadingAnchor.constraint(equalTo: hint.leadingAnchor, constant: 13),
+            text.trailingAnchor.constraint(equalTo: hint.trailingAnchor, constant: -13),
+            text.centerYAnchor.constraint(equalTo: hint.centerYAnchor)
+        ])
+        setAccessibilityLabel(embedded ? "Select a conversation region to annotate" : "Select an attachment region to annotate")
     }
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -265,7 +266,7 @@ private struct AnnotationShortcutHint: View {
             trackingWindow.acceptsMouseMovedEvents = previousMouseMovedEvents
         }
         trackingWindow = nil; previousMouseMovedEvents = nil
-        guard embedded, let window else { return }
+        guard let window else { return }
         trackingWindow = window; previousMouseMovedEvents = window.acceptsMouseMovedEvents
         window.acceptsMouseMovedEvents = true
         positionHint(at: convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil))
@@ -273,7 +274,6 @@ private struct AnnotationShortcutHint: View {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let pointerTracking { removeTrackingArea(pointerTracking); self.pointerTracking = nil }
-        guard embedded else { return }
         let area = NSTrackingArea(rect: .zero,
             options: [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect], owner: self)
         addTrackingArea(area); pointerTracking = area
@@ -319,11 +319,6 @@ private struct AnnotationShortcutHint: View {
             NSColor.systemOrange.withAlphaComponent(0.14).setFill(); selected.fill()
             NSColor.systemOrange.setStroke(); let path = NSBezierPath(rect: selected); path.lineWidth = 3; path.stroke()
         }
-        guard !embedded else { return }
-        let hint = "Drag around a detail · Click to place a pin · Esc to cancel"
-        let pill = NSRect(x: 25, y: 20, width: 500, height: 38)
-        NSColor.black.withAlphaComponent(0.8).setFill(); NSBezierPath(roundedRect: pill, xRadius: 19, yRadius: 19).fill()
-        (hint as NSString).draw(at: NSPoint(x: 42, y: 31), withAttributes: [.font: NSFont.systemFont(ofSize: 14, weight: .medium), .foregroundColor: NSColor.white])
     }
     override func mouseDown(with event: NSEvent) {
         hasStartedSelection = true; pointerHint?.isHidden = true

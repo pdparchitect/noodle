@@ -13,6 +13,7 @@ mkdir -p "$fixture_app/Contents/MacOS"
 swiftc -parse-as-library -target "$(uname -m)-apple-macosx15.0" -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/KeyboardBindings.swift" \
     "$project_root/Sources/Noodle/AnnotationCommands.swift" \
+    "$project_root/Sources/Noodle/NoodletPreviewAccess.swift" \
     "$project_root/Sources/Noodle/KeybindingsSettingsView.swift" \
     "$project_root/Sources/Noodle/AttachmentPreviewController.swift" \
     "$project_root/Sources/Noodle/AnnotationPopover.swift" \
@@ -25,7 +26,7 @@ swiftc -parse-as-library -target "$(uname -m)-apple-macosx15.0" -I "$bin_path/Mo
     "$project_root/Tests/AnnotationCursorChecks.swift" \
     "$project_root/Tests/attachment-annotations.swift" \
     "$bin_path"/NoodleCore.build/*.swift.o "$bin_path"/NoodleWallpaperCore.build/*.swift.o \
-    "$bin_path"/ComputerBridge.build/*.swift.o \
+    "$bin_path"/ComputerBridge.build/*.swift.o "$bin_path"/AppletBridge.build/*.swift.o \
     -o "$fixture_app/Contents/MacOS/AnnotationTests"
 cp "$project_root/Tests/attachment-annotations-Info.plist" "$fixture_app/Contents/Info.plist"
 codesign --force --sign - --options runtime --entitlements "$project_root/Tests/attachment-annotations.entitlements" "$fixture_app"

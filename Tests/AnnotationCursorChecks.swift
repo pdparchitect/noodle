@@ -15,6 +15,8 @@ import NoodleCore
         text.font = .systemFont(ofSize: 18)
         let pdf = try repository.importAttachment(data: text.dataWithPDF(inside: text.bounds),
             originalFilename: "Cursor.pdf", into: bot.conversation.id, mediaType: "application/pdf")
+        // Let native app registration settle before requesting foreground focus.
+        try await wait()
         let host = window("Isolated annotation cursor check", controller: first)
         try await focus(host)
         try await wait()
@@ -28,8 +30,20 @@ import NoodleCore
         let point = NSPoint(x: preview.frame.midX, y: preview.frame.midY)
         moveCursor(to: point)
         try await wait(0.2)
+        let previewFrame = preview.frame
+        try await captureCursorWindow(preview, name: "preview")
         try await key(15, characters: "r", flags: [.command, .shift], window: preview)
         try await until("Region overlay must open") { first.overlay?.isKeyWindow == true }
+        require(first.overlay!.frame == previewFrame && preview.frame == previewFrame,
+            "Starting a region must preserve the preview's position and size")
+        let canvas = first.overlay!.contentView as! AnnotationRegionCanvas
+        let hint = canvas.subviews.first as! NSVisualEffectView
+        require(!hint.isHidden, "The attachment hint must appear beside the stationary pointer")
+        require(hint.hitTest(.zero) == nil, "The attachment hint must not intercept selection")
+        let snapshot = NSBitmapImageRep(cgImage: first.pendingImage!.cgImage(forProposedRect: nil, context: nil, hints: nil)!)
+        let page = snapshot.colorAt(x: snapshot.pixelsWide / 2, y: snapshot.pixelsHigh * 4 / 5)!.usingColorSpace(.deviceRGB)!
+        require(page.redComponent > 0.8 && page.greenComponent > 0.8 && page.blueComponent > 0.8,
+            "The PDF page must fill the capture without black padding")
         for _ in 0..<3 {
             try await wait(0.1)
             checkCrosshair("Stationary pointer after the shortcut")
@@ -40,9 +54,12 @@ import NoodleCore
         try await wait(0.1)
         checkCrosshair("Late preview cursor update must be repaired without mouse movement")
         try await captureCursorWindow(first.overlay!, name: "selection")
-        moveCursor(to: NSPoint(x: point.x + 50, y: point.y + 50))
+        let hintFrame = hint.frame
+        try await cursorMouse(.mouseMoved, at: NSPoint(x: point.x + 50, y: point.y + 50), in: first.overlay!)
         try await wait(0.2)
         checkCrosshair("Moving within the selection canvas")
+        require(!hint.isHidden && hint.frame != hintFrame, "The attachment hint must follow native mouse movement")
+        require(canvas.bounds.contains(hint.frame), "The hint must stay inside the preview")
 
         // An overlapping window must keep its own cursor even when the canvas
         // remains key, as can happen with floating panels and menus.
@@ -70,12 +87,16 @@ import NoodleCore
         try await key(15, characters: "r", flags: [.command, .shift], window: preview)
         try await until("Region overlay must reopen") { first.overlay?.isKeyWindow == true }
         let overlay = first.overlay!
+        let nextHint = overlay.contentView!.subviews.first as! NSVisualEffectView
         try await cursorMouse(.leftMouseDown, at: point, in: overlay)
+        require(nextHint.isHidden, "The attachment hint must disappear when selection begins")
         let end = NSPoint(x: point.x + 100, y: point.y + 80)
         try await cursorMouse(.leftMouseDragged, at: end, in: overlay)
         checkCrosshair("Dragging a selection")
         try await captureCursorWindow(overlay, name: "dragging")
         try await cursorMouse(.leftMouseUp, at: end, in: overlay)
+        try await cursorMouse(.mouseMoved, at: point, in: overlay)
+        require(nextHint.isHidden, "The hint must stay hidden after a selection")
         try await until("Selecting a region must focus its comment") { first.commentInput?.window?.isKeyWindow == true }
         try await wait(0.2)
         require(NSCursor.current != .crosshair, "The comment editor must not inherit the selection crosshair")
@@ -108,6 +129,7 @@ import NoodleCore
         case .leftMouseDown: canvas.mouseDown(with: event)
         case .leftMouseDragged: canvas.mouseDragged(with: event)
         case .leftMouseUp: canvas.mouseUp(with: event)
+        case .mouseMoved: NSApp.postEvent(event, atStart: false)
         default: fixtureFailure("Unexpected fixture mouse event")
         }
         try await wait(0.15)
@@ -129,6 +151,7 @@ import NoodleCore
         config.width = Int(window.frame.width * window.backingScaleFactor)
         config.height = Int(window.frame.height * window.backingScaleFactor)
         config.showsCursor = true; config.ignoreShadowsSingleWindow = true
+        config.scalesToFit = true; config.captureResolution = .best
         let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("annotation-cursor-\(name).png")
         try NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])!.write(to: url)

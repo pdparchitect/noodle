@@ -9,7 +9,7 @@ Open an attachment in a Noodle conversation to use the system Quick Look preview
 Shortcuts below are defaults. Discover or change them in **Settings → Keybindings**; menus and annotation hints show your current bindings. See [keyboard shortcuts](keyboard-shortcuts.md).
 
 - Select text and press **⌘⇧A**, or choose **Preview → Add Annotation**. For an image, this starts region selection. If the preview does not supply selected text, the editor clearly labels the comment as applying to the whole attachment.
-- Press **⌘⇧R** for a visual region in any preview. Drag a rectangle or click to place a small marker on the frozen preview. Check that the snapshot shows the intended content before saving; Escape returns to the live preview.
+- Press **⌘⇧R** for a visual region in any preview. The frozen preview preserves its size and rounded corners. A hint follows the pointer until you start selecting, then disappears. Drag a rectangle or click to place a small marker. Check that the snapshot shows the intended content before saving; Escape returns to the live preview.
 - Enter a comment and click **Save** or press **⌘Return**. **Escape** or the close button cancels. Both return keyboard focus to the same attachment in Quick Look after the popup closes. Holding Escape dismisses only the annotation; release it and press again to close the preview.
 
 Controls appear only while adding an annotation. Quick Look continues to render the original attachment; Noodle does not change its contents or add controls to its private view hierarchy.
