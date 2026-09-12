@@ -55,6 +55,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Move Tools immediately after Security in Settings.
 - Shorten the generated bot name options in General settings to “Real” and “Playful”.
 - Display harness installation and update commands in a distinct inset box with larger monospaced text and an inline copy button.
 - Describe the Applet skill explicitly as creative coding for utilities, games, interactive websites, prototypes, examples, and demos.
