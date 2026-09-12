@@ -55,8 +55,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         self.onSnapshot = onSnapshot
         self.onHeartbeat = onHeartbeat
         self.onUnexpectedTermination = onUnexpectedTermination
-        let prefix = provider == .fx ? "fx" : "grok"
-        stateURL = workspaceURL.appendingPathComponent(extendedAccess ? ".agents/\(prefix)-runtime-extended.json" : ".agents/\(prefix)-runtime.json")
+        stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: provider, extendedAccess: extendedAccess)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
         recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
         if let data = try? Data(contentsOf: stateURL), let state = try? JSONDecoder().decode(State.self, from: data),

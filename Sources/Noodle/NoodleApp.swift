@@ -102,7 +102,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.servicesProvider = services
         NSUpdateDynamicServices()
         NoodleNotifications.configure(delegate: self)
-        AppUpdater.shared.start()
+        // A migration milestone must finish before Sparkle can offer its successor.
+        if NoodleStore.active?.storageReady == true { AppUpdater.shared.start() }
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
             selector: #selector(workspaceDidWake),

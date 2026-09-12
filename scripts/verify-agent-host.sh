@@ -13,7 +13,7 @@ host_team="$(print -r -- "$host_signature" | awk -F= '/^TeamIdentifier=/ { print
 print -r -- "$host_signature" | grep -q 'runtime'
 host_entitlements="$(codesign -d --entitlements :- "$host" 2>/dev/null)"
 if print -r -- "$host_entitlements" | grep -q '<key>'; then
-    print -u2 "The opt-in Agent Host must have no additional entitlements."
+    print -u2 "The Agent Host must have no additional entitlements."
     exit 1
 fi
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :NoodleSigningTeam' "$host/Contents/Info.plist")" == "$app_team" ]]
@@ -29,4 +29,4 @@ if otool -l "$host/Contents/MacOS/NoodleAgentHost" | grep -Eq 'path .*(\.build|X
     print -u2 "Agent Host contains a development-only library search path."
     exit 1
 fi
-print "Opt-in Agent Host signature, identity, hardened runtime and zero entitlements verified"
+print "Agent Host signature, identity, hardened runtime and zero entitlements verified"

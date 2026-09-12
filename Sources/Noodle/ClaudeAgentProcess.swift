@@ -53,9 +53,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         self.onSnapshot = onSnapshot
         self.onHeartbeat = onHeartbeat
         self.onUnexpectedTermination = onUnexpectedTermination
-        let stateURL = workspaceURL.appendingPathComponent(
-            extendedAccess ? ".agents/claude-runtime-extended.json" : ".agents/claude-runtime.json"
-        )
+        let stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: .claudeCode, extendedAccess: extendedAccess)
         sessionState = ClaudeSessionState(url: stateURL)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
         recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn

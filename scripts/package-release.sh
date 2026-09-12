@@ -101,6 +101,11 @@ ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
     --maximum-deltas 0 \
     "$dist"
 test -s "$dist/appcast.xml"
+python3 "$project_root/scripts/prepare-update-feed.py" \
+    --version "$version" --feed "$dist/appcast.xml" \
+    --milestones "$project_root/Support/update-milestones.json" \
+    --sign-update "$project_root/.build/artifacts/sparkle/Sparkle/bin/sign_update" \
+    --key-file "$SPARKLE_PRIVATE_KEY_PATH"
 grep -q 'sparkle:edSignature=' "$dist/appcast.xml"
 "$project_root/.build/artifacts/sparkle/Sparkle/bin/sign_update" \
     --ed-key-file "$SPARKLE_PRIVATE_KEY_PATH" --verify "$dist/appcast.xml"

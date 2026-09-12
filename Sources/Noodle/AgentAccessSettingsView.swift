@@ -35,7 +35,7 @@ struct AgentAccessSettingsView: View {
                             }
                             .controlSize(.mini)
                             .accessibilityLabel("\(agent.displayName), autonomous access")
-                            .disabled(requiresAutonomousAccess || store.runtime.changingAccess.contains(agent.id))
+                            .disabled((requiresAutonomousAccess && store.runtime.accessConfiguration.isExtended(for: agent)) || store.runtime.changingAccess.contains(agent.id))
                             if store.runtime.snapshot(for: agent.id).phase == .failed {
                                 Text(store.runtime.snapshot(for: agent.id).detail)
                                     .font(.caption).foregroundStyle(.red)
@@ -52,7 +52,7 @@ struct AgentAccessSettingsView: View {
                     }
                 }
             } footer: {
-                Text("Harnesses that support restricted mode let you choose autonomous access and start new bots restricted. For other harnesses, autonomous access is required and always on, including for existing bots.")
+                Text("Codex starts restricted and lets you choose autonomous access. Other harnesses require autonomous access; selecting one in the bot editor authorizes it. Copied bots may need access enabled here.")
             }
         }
         .formStyle(.grouped)

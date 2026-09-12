@@ -2,25 +2,47 @@ import Foundation
 
 public struct AgentAccessConfiguration: Equatable, Sendable {
     public private(set) var autonomousAgentIDs: Set<UUID>
+    public private(set) var requiredHarnessGrants: [String: [String]] = [:]
     private static let storageKey = "Noodle.access.autonomousAgents"
+    private static let harnessGrantsKey = "Noodle.access.requiredHarnessGrants"
 
     public init(autonomousAgentIDs: Set<UUID> = []) { self.autonomousAgentIDs = autonomousAgentIDs }
     public func isExtended(_ id: UUID) -> Bool { autonomousAgentIDs.contains(id) }
 
-    /// Resolve access from the current harness before consulting the saved
-    /// preference. Do not persist required access as a discretionary grant:
-    /// switching back to a restricted-capable harness restores its preference.
+    /// A provider's requirements never grant access. The app records the user's
+    /// harness selection separately from mutable/imported agent configuration.
     public func isExtended(for agent: AgentRecord) -> Bool {
         if let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? ""),
-           !provider.supportsRestrictedAccess { return true }
+           !provider.supportsRestrictedAccess {
+            return requiredHarnessGrants[agent.id.uuidString]?.contains(provider.rawValue) == true
+        }
         return isExtended(agent.id)
     }
     public mutating func setExtended(_ enabled: Bool, for id: UUID) {
         if enabled { autonomousAgentIDs.insert(id) } else { autonomousAgentIDs.remove(id) }
     }
-    public mutating func remove(_ id: UUID) { autonomousAgentIDs.remove(id) }
+    public mutating func authorizeSelectedHarness(for agent: AgentRecord) {
+        guard let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? ""), !provider.supportsRestrictedAccess else { return }
+        var grants = Set(requiredHarnessGrants[agent.id.uuidString] ?? [])
+        grants.insert(provider.rawValue)
+        requiredHarnessGrants[agent.id.uuidString] = grants.sorted()
+    }
+    public mutating func remove(_ id: UUID) {
+        autonomousAgentIDs.remove(id)
+        requiredHarnessGrants.removeValue(forKey: id.uuidString)
+    }
     public static func load(from defaults: UserDefaults) -> Self {
-        .init(autonomousAgentIDs: Set((defaults.stringArray(forKey: storageKey) ?? []).compactMap(UUID.init(uuidString:))))
+        var result = Self(autonomousAgentIDs: Set((defaults.stringArray(forKey: storageKey) ?? []).compactMap(UUID.init(uuidString:))))
+        result.requiredHarnessGrants = defaults.dictionary(forKey: harnessGrantsKey) as? [String: [String]] ?? [:]
+        return result
+    }
+
+    /// Snapshot the previously selected harness once when upgrading. New or
+    /// copied agents on later launches cannot receive an implicit grant.
+    public mutating func migrateRequiredHarnessGrants(_ agents: [AgentRecord], in defaults: UserDefaults) {
+        guard defaults.object(forKey: Self.harnessGrantsKey) == nil else { return }
+        for agent in agents { authorizeSelectedHarness(for: agent) }
+        defaults.set(requiredHarnessGrants, forKey: Self.harnessGrantsKey)
     }
 
     /// Snapshot the previous default-on policy once, after loading the existing
@@ -29,11 +51,12 @@ public struct AgentAccessConfiguration: Equatable, Sendable {
         guard defaults.object(forKey: storageKey) == nil else { return load(from: defaults) }
         let restricted = Set((defaults.stringArray(forKey: "Noodle.access.restrictedAgents") ?? []).compactMap(UUID.init(uuidString:)))
         let configuration = Self(autonomousAgentIDs: ids.subtracting(restricted))
-        configuration.save(to: defaults)
+        defaults.set(configuration.autonomousAgentIDs.map(\.uuidString).sorted(), forKey: storageKey)
         return configuration
     }
     public func save(to defaults: UserDefaults) {
         defaults.set(autonomousAgentIDs.map(\.uuidString).sorted(), forKey: Self.storageKey)
+        defaults.set(requiredHarnessGrants, forKey: Self.harnessGrantsKey)
     }
 }
 

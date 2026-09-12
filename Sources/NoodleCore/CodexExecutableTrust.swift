@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-/// Autonomous access accepts only known installation locations and OpenAI-signed code.
+/// Agent launches accept only known installation locations and OpenAI-signed code.
 public enum CodexExecutableTrust {
     public static func executable(at path: String, home: URL) throws -> URL {
         let bundled = ["/Applications/ChatGPT.app/Contents/Resources/codex", "/Applications/Codex.app/Contents/Resources/codex"]
@@ -11,7 +11,7 @@ public enum CodexExecutableTrust {
             "/usr/local/bin/codex", "/opt/homebrew/bin/codex"
         ]
         guard bundled.contains(path) || standalone.contains(path) else {
-            throw HarnessSetupError("Autonomous access requires an official Codex installation.")
+            throw HarnessSetupError("Noodle requires an official Codex installation.")
         }
         let requested = URL(fileURLWithPath: path)
         let executable = requested.resolvingSymlinksInPath()

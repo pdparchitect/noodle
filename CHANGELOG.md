@@ -6,6 +6,12 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- Keep each bot's identity and configuration in a copyable agent package, with separate working files and Noodle-managed runtime state. Automatically migrate existing workspaces before starting bots, preserving memory, skills, inbox positions, and session recovery state; interrupted migrations resume without overwriting files.
+- Run restricted Codex processes in a dedicated filesystem sandbox that protects agent configuration and runtime state while allowing workspace files and Messenger replies. Store autonomous harness authorizations separately so changing or copying a bot's harness configuration cannot grant broader access.
+- Preserve required migration releases in signed update feeds and require later releases to pass through them. Declare 0.13.0 as the first storage migration milestone and start update checks only after storage is ready.
+
 ## [0.12.1] - 2026-09-12
 
 ### Fixed

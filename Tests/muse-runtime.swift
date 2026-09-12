@@ -13,6 +13,7 @@ import NoodleCore
     static var terminalError: String?
     static var repeatError = false
     static var session = MuseProtocol.commandID()
+    static var resumedWorkspace: String?
     var onData: ((Data, Bool) -> Void)?
     var onExit: ((Int32) -> Void)?
     var onFailure: ((String) -> Void)?
@@ -37,7 +38,7 @@ import NoodleCore
         case "session/start", "session/resume":
             if method == "session/start" { Self.session = MuseProtocol.commandID() }
             precondition(params["approvalMode"] == nil, "Never override Muse's startup approval policy")
-            result = ["session": ["sessionId": Self.session, "workspaceRoot": Self.workspace, "activeTurnId": NSNull()], "pendingRequests": []]
+            result = ["session": ["sessionId": Self.session, "workspaceRoot": method == "session/resume" ? (Self.resumedWorkspace ?? Self.workspace) : Self.workspace, "activeTurnId": NSNull()], "pendingRequests": []]
         case "session/setModel": result = ["status": "accepted"]
         case "turn/start":
             precondition(params["ifBusy"] as? String == "queue")
@@ -75,9 +76,10 @@ import NoodleCore
         preconditionFailure("Timed out waiting for runtime state")
     }
     @MainActor static func main() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("muse-runtime-\(UUID())")
+        let package = FileManager.default.temporaryDirectory.appendingPathComponent("muse-runtime-\(UUID())")
+        let root = package.appendingPathComponent("workspace")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { try? FileManager.default.removeItem(at: package) }
         ExtendedAgentConnection.workspace = root.path
         let agent = AgentRecord(displayName: "Fixture", harnessIdentifier: "muse", modelIdentifier: "muse-spark-1.3", reasoningEffort: "high")
         func make(extended: Bool = true) -> MuseAgentProcess {
@@ -131,7 +133,7 @@ import NoodleCore
         precondition(repairedWire.methods.contains("session/resume") && repairedWire.methods.contains("session/start"))
         precondition(repairedWire.prompts.count == 2)
         precondition(repairedWire.prompts.last!.contains(MessengerDocumentation.recoveredModelContext))
-        let stateURL = root.appendingPathComponent(".agents/muse-runtime-extended.json")
+        let stateURL = AgentStorageLayout(workspace: root).sessionState(provider: .muse, extendedAccess: true)
         let saved = try JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as! [String: Any]
         precondition((saved["previousSessionIDs"] as! [String]).count == 1, "Preserve the incompatible session ID")
         repaired.stop { precondition($0) }
@@ -165,6 +167,22 @@ import NoodleCore
         afterRelaunch.start()
         await eventually { afterRelaunch.snapshot.phase == .failed }
         precondition(!ExtendedAgentConnection.current!.methods.contains("session/start"), "Recovery attempt must survive relaunch")
+        afterRelaunch.stop { precondition($0) }
+
+        // The legacy pointer has no workspace field. A session still bound to
+        // the old package root must recover in the new workspace before work.
+        ExtendedAgentConnection.terminalError = nil
+        ExtendedAgentConnection.repeatError = false
+        ExtendedAgentConnection.resumedWorkspace = package.path
+        try JSONSerialization.data(withJSONObject: ["sessionID": ExtendedAgentConnection.session])
+            .write(to: stateURL)
+        let moved = make(); moved.start()
+        await eventually { moved.snapshot.phase == .ready && !moved.hasInterruptedWork }
+        precondition(ExtendedAgentConnection.current!.methods.contains("session/resume"))
+        precondition(ExtendedAgentConnection.current!.methods.contains("session/start"))
+        precondition(ExtendedAgentConnection.current!.prompts.last!.contains(MessengerDocumentation.recoveredModelContext))
+        moved.stop { precondition($0) }
+        ExtendedAgentConnection.resumedWorkspace = nil
         print("Muse runtime lifecycle, isolated history repair, model-change isolation, bounded recovery and permanent-failure pause passed.")
     }
 }

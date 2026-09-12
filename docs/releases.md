@@ -78,4 +78,27 @@ Noodle reads the [latest release feed](https://github.com/pdparchitect/noodle/re
 Its archive links point to immutable versioned releases. Publish only stable
 Noodle releases as the repository's latest release.
 
+## Storage migration milestones
+
+Treat the agent-package storage change as the next minor release, **0.13.0**.
+Keep published 0.12.x versions intact even if they have not been announced.
+`Support/update-milestones.json` declares releases that users must run before
+installing their successors. The first milestone contains the flat-workspace
+migration in `AgentStorageMigration.swift`.
+
+Release packaging verifies the signed feeds of earlier milestones, preserves
+their signed archive entries and immutable URLs, adds Sparkle's
+`minimumUpdateVersion` to the new release, and signs the assembled feed. Older
+installations therefore receive the required milestone first; ordinary patch
+releases can still be skipped. Noodle enables update checks only after storage
+loads successfully, so the migration release runs its migration before offering
+the next update. Keep milestone assets publicly available.
+
+The migration can be retired in a later release after verifying this upgrade
+chain. Retain the layout-version check and a clear error directing old-layout
+users to the migration release: manual app downloads and clients predating
+Sparkle 2.9 can bypass feed prerequisites. Add future milestones in ascending
+order rather than requiring every minor release. Changing the milestone version
+before its first publication must update the policy file and these instructions.
+
 [Documentation](README.md)

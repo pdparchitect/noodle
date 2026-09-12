@@ -31,6 +31,9 @@ import NoodleCore
         if let sessionID { session = sessionID.uuidString }
         reply(12345, nil)
     }
+    func startRestrictedCodex(agentID: UUID, executablePath: String, reply: @escaping (Int32, String?) -> Void) {
+        start(provider: .codex, agentID: agentID, executablePath: executablePath, reply: reply)
+    }
     func write(_ data: Data) {
         let object = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
         if object["type"] as? String == "user" {
@@ -133,7 +136,7 @@ import NoodleCore
     static func settle() async { try? await Task.sleep(for: .milliseconds(30)) }
 
     @MainActor static func make(_ provider: HarnessProvider, root: URL) async throws -> any AgentRuntimeProcess {
-        let workspace = root.appendingPathComponent(UUID().uuidString)
+        let workspace = root.appendingPathComponent(UUID().uuidString).appendingPathComponent("workspace")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         ExtendedAgentConnection.workspace = workspace.path
         let agent = AgentRecord(displayName: "Fixture", harnessIdentifier: provider.rawValue)
@@ -304,7 +307,7 @@ import NoodleCore
             let process = try await make(.grokBuild, root: root)
             let workspace = URL(fileURLWithPath: ExtendedAgentConnection.workspace)
             let wire = ExtendedAgentConnection.current!
-            let stateURL = workspace.appendingPathComponent(".agents/grok-runtime-extended.json")
+            let stateURL = AgentStorageLayout(workspace: workspace).sessionState(provider: .grokBuild, extendedAccess: true)
             let savedState = try Data(contentsOf: stateURL)
             process.notify()
             await eventually { wire.prompts == 1 && process.snapshot.phase == .working }

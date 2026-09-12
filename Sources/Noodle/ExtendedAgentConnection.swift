@@ -22,11 +22,11 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
         connection.exportedObject = self
         connection.invalidationHandler = { [weak self] in
             guard let self, !self.stopping else { return }
-            self.onFailure?("Autonomous runtime disconnected. Turn autonomous access off and on to reconnect.")
+            self.onFailure?("Agent runtime disconnected. Retry Startup to reconnect.")
         }
         connection.interruptionHandler = { [weak self] in
             guard let self, !self.stopping else { return }
-            self.onFailure?("Autonomous runtime was interrupted.")
+            self.onFailure?("Agent runtime was interrupted.")
         }
         connection.resume()
     }
@@ -57,6 +57,10 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
             effortIdentifier: effortIdentifier,
             withReply: reply
         )
+    }
+    func startRestrictedCodex(agentID: UUID, executablePath: String,
+                              reply: @escaping (Int32, String?) -> Void) {
+        proxy()?.startRestrictedCodex(agentID: agentID.uuidString, executablePath: executablePath, withReply: reply)
     }
     func write(_ data: Data) { proxy()?.write(data) }
     func stop(reply: @escaping (Bool) -> Void) {

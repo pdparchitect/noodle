@@ -151,7 +151,7 @@ Reply through `./.agents/skills/messenger/messenger --send --conversation <uuid>
 
 ## CLI reference
 
-- `messenger --help` — Show this reference. -h is an alias. All commands may use --agent-directory <absolute-agent-workspace-path> for diagnostics.
+- `messenger --help` — Show this reference. -h is an alias. All commands may use --agent-directory <absolute-agent-workspace-path> for diagnostics. This is the workspace subdirectory inside Agents/<bot-uuid>/, not the parent package containing agent.json. Open Noodle first to migrate older flat workspaces.
 - `messenger --effect <kind> --conversation <uuid> [--request-id <uuid>]` — Queue a temporary effect; a receipt confirms queuing, not display. Reuse --request-id for retries. See effect guidance for expiry and delivery rules.
 - `messenger --list-effects` — Return supported effect names as a JSON array: confetti.
 - `messenger --get-latest [--peek] [--inline-images]` — Return unread messages and reaction changes as a JSON array and advance message/reaction cursors. --peek leaves cursors unchanged. --inline-images instead returns { deliveries, images }; images contains attachmentID, originalFilename, mediaType and dataURL for each decodable image, deduplicated by attachment ID.

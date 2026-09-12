@@ -32,6 +32,8 @@ public enum AgentHostIdentity {
 // Deliberately no arbitrary arguments, environment, or shell endpoint. The host
 // maps this typed configuration to a fixed command for each trusted harness.
 @objc public protocol AgentHostService {
+    func startRestrictedCodex(agentID: String, executablePath: String,
+                              withReply reply: @escaping (Int32, String?) -> Void)
     func start(
         harnessIdentifier: String,
         agentID: String,

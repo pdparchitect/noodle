@@ -78,6 +78,7 @@ final class NoodleStore {
     var backgroundBeingEdited: BotConversation?
     private(set) var backgrounds: [UUID: ConversationBackground] = [:]
     var errorMessage: String?
+    private(set) var storageReady = false
     var pendingAttachments: [ConversationAttachment] {
         get { selectedConversationID.map { drafts[$0].attachments } ?? [] }
         set {
@@ -138,7 +139,7 @@ final class NoodleStore {
         conversations.first(where: { $0.id == selectedConversationID })
     }
 
-    var canCreateBot: Bool { !runtime.availableInstallations.isEmpty }
+    var canCreateBot: Bool { storageReady && !runtime.availableInstallations.isEmpty }
 
     func showNewBot() {
         guard canCreateBot else { return }
@@ -170,10 +171,12 @@ final class NoodleStore {
     }
 
     func reload() {
+        storageReady = false
         do {
             try repository.prepare()
+            let migratedIDs = Set(try repository.migrateAgentStorage())
             agents = try repository.loadAgents()
-            runtime.prepareAccessForExistingAgents(agents)
+            runtime.prepareAccessForExistingAgents(agents, migratedIDs: migratedIDs)
             try repository.synchronizeAgentWorkspaces(agents)
             mcp.start(agents: agents)
             computers.start(agents: agents)
@@ -208,6 +211,7 @@ final class NoodleStore {
             }
             runtime.refresh(agents: agents)
             refreshAppShortcuts()
+            storageReady = true
 
             if let selectedConversationID,
                conversations.contains(where: { $0.id == selectedConversationID }) {
@@ -252,6 +256,7 @@ final class NoodleStore {
                 backstory: backstory
             )
             agents.append(created.agent)
+            runtime.authorizeSelectedHarness(created.agent)
             conversations.insert(created.conversation, at: 0)
             messagesByConversation[created.conversation.id] = []
             attachmentsByConversation[created.conversation.id] = []
@@ -303,6 +308,7 @@ final class NoodleStore {
             if let index = agents.firstIndex(where: { $0.id == agent.id }) {
                 agents[index] = updated
             }
+            runtime.authorizeSelectedHarness(updated)
 
             for index in conversations.indices where
                 conversations[index].kind == .direct &&
@@ -1083,6 +1089,7 @@ final class NoodleStore {
     }
 
     func startAgents() {
+        guard storageReady else { return }
         for agent in agents {
             let conversationIDs = Set(conversations.filter {
                 $0.participantIDs.contains(agent.id)

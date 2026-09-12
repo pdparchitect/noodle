@@ -49,12 +49,15 @@ wake path for authorized follow-ups during idle time.
 
 ## Workspaces and access
 
-Each bot has a UUID-named workspace. `AGENTS.md` holds its backstory and managed
+Each bot has a UUID-named package containing `agent.json`, Noodle-owned `runtime`
+state, and a writable `workspace` subdirectory. `AGENTS.md` holds its backstory and managed
 runtime guidance; `CLAUDE.md` points to the same file. Noodle refreshes managed
 skills while preserving custom skills and user-written backstories.
 
-Restricted harnesses inherit the app sandbox. Autonomous harnesses run through
-the signed Agent Host outside it. The app brokers remote tools and Computer
+The signed Agent Host applies a dedicated filesystem sandbox before starting
+restricted Codex, protecting its parent configuration and runtime state.
+Autonomous harnesses use a separate authorized launch path. The app remains in
+App Sandbox and brokers remote tools and Computer
 requests after checking assignments. See [agent access](security.md),
 [MCP connections](mcp-connections.md), and the [Computer bridge](../Computer/Bridge/README.md).
 

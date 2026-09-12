@@ -198,8 +198,9 @@ for file in "$contents/Info.plist" "$agent_host/Contents/Info.plist"; do
     /usr/libexec/PlistBuddy -c "Add :NoodleApplicationIdentifier string $bundle_identifier" "$file"
     /usr/libexec/PlistBuddy -c "Add :NoodleAgentHostService string $bundle_identifier.agent-host" "$file"
 done
-# Explicitly approved opt-in boundary: authenticated, hardened, non-root XPC host.
-# No sandbox inheritance, extra entitlements, or global Mach-service exception.
+# Authenticated, hardened, non-root XPC launcher. It applies the restricted
+# harness sandbox before exec, or uses the separately authorized autonomous path.
+# No extra entitlements or global Mach-service exception.
 codesign --force --options runtime "$timestamp_option" --sign "$signing_identity" "$agent_host"
 resolved_entitlements="$build_root/Noodle.resolved.entitlements"
 share_entitlements="$build_root/ShareExtension.resolved.entitlements"

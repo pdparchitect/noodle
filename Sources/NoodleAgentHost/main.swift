@@ -23,12 +23,9 @@ private enum HostPaths {
     static func workspace(_ id: String) throws -> URL {
         guard let uuid = UUID(uuidString: id) else { throw HostError("Invalid bot identifier.") }
         let root = home.appendingPathComponent("Library/Containers/\(AgentHostIdentity.application)/Data/Library/Application Support/Noodle/Agents", isDirectory: true).resolvingSymlinksInPath()
-        let directory = root.appendingPathComponent(uuid.uuidString.lowercased(), isDirectory: true)
-        guard directory.resolvingSymlinksInPath() == directory,
-              FileManager.default.fileExists(atPath: directory.appendingPathComponent("agent.json").path) else {
-            throw HostError("The bot workspace is missing or redirected.")
-        }
-        return directory
+        let layout = AgentStorageLayout(package: root.appendingPathComponent(uuid.uuidString.lowercased(), isDirectory: true))
+        try layout.validate()
+        return layout.workspace
     }
 }
 
@@ -62,7 +59,7 @@ if CommandLine.arguments == [CommandLine.arguments[0], "--check-process-group"] 
 
 // The child creates a dedicated process group before starting the harness. Disabling
 // extended access terminates this group, including ordinary tool descendants.
-if CommandLine.arguments.count == 9, CommandLine.arguments[1] == "--harness-child" {
+if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-child" {
     do {
         guard let provider = HarnessProvider(rawValue: CommandLine.arguments[2]) else {
             throw HostError("Unsupported harness.")
@@ -73,6 +70,9 @@ if CommandLine.arguments.count == 9, CommandLine.arguments[1] == "--harness-chil
         let resumeSession = CommandLine.arguments[6] == "1"
         let model = CommandLine.arguments[7].isEmpty ? nil : CommandLine.arguments[7]
         let effort = CommandLine.arguments[8].isEmpty ? nil : CommandLine.arguments[8]
+        let restricted = CommandLine.arguments[9] == "restricted"
+        guard restricted || CommandLine.arguments[9] == "autonomous",
+              !restricted || provider == .codex else { throw HostError("Unsupported runtime access mode.") }
         try isolateProcessGroup()
         guard chdir(workspace.path) == 0 else { throw HostError("Could not open the bot workspace: \(String(cString: strerror(errno)))") }
         var strings: [String]
@@ -117,9 +117,29 @@ if CommandLine.arguments.count == 9, CommandLine.arguments[1] == "--harness-chil
             if let model { strings += ["--model", model] }
             if let effort { strings += ["--effort", effort] }
         }
+        if restricted {
+            let layout = AgentStorageLayout(workspace: workspace)
+            let repository = layout.package.deletingLastPathComponent().deletingLastPathComponent()
+            let codexHome = HostPaths.home.appendingPathComponent(".codex", isDirectory: true)
+            guard codexHome.resolvingSymlinksInPath().path == codexHome.path else {
+                throw HostError("Restricted Codex requires an unredirected account directory.")
+            }
+            let temporary = workspace.appendingPathComponent(".noodle/tmp", isDirectory: true)
+            try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+            guard temporary.resolvingSymlinksInPath().path == temporary.path else { throw HostError("The bot temporary directory is redirected.") }
+            // Only fixed paths derived by this host enter the profile. The XPC
+            // caller cannot supply policy text, writable roots, or a command.
+            let profile = RestrictedAgentSandbox.profile(workspace: workspace, repository: repository,
+                codexHome: codexHome, executableDirectory: executable.deletingLastPathComponent().deletingLastPathComponent(),
+                application: Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent(),
+                temporary: temporary)
+            setenv("TMPDIR", temporary.path, 1)
+            setenv("HOME", workspace.path, 1)
+            strings = ["/usr/bin/sandbox-exec", "-p", profile] + strings
+        }
         var arguments: [UnsafeMutablePointer<CChar>?] = strings.map { value in value.withCString { strdup($0) } }
         arguments.append(nil)
-        execv(executable.path, arguments)
+        execv(strings[0], arguments)
         throw HostError("Could not execute \(provider.displayName).")
     } catch {
         fputs("\(error.localizedDescription)\n", stderr)
@@ -155,6 +175,21 @@ private final class HostSession: NSObject, AgentHostService {
         effortIdentifier: String?,
         withReply reply: @escaping (Int32, String?) -> Void
     ) {
+        startRuntime(harnessIdentifier: harnessIdentifier, agentID: agentID, executablePath: executablePath,
+                     sessionID: sessionID, resumeSession: resumeSession, modelIdentifier: modelIdentifier,
+                     effortIdentifier: effortIdentifier, restricted: false, reply: reply)
+    }
+
+    func startRestrictedCodex(agentID: String, executablePath: String,
+                              withReply reply: @escaping (Int32, String?) -> Void) {
+        startRuntime(harnessIdentifier: HarnessProvider.codex.rawValue, agentID: agentID, executablePath: executablePath,
+                     sessionID: nil, resumeSession: false, modelIdentifier: nil, effortIdentifier: nil,
+                     restricted: true, reply: reply)
+    }
+
+    private func startRuntime(harnessIdentifier: String, agentID: String, executablePath: String,
+                              sessionID: String?, resumeSession: Bool, modelIdentifier: String?, effortIdentifier: String?,
+                              restricted: Bool, reply: @escaping (Int32, String?) -> Void) {
         queue.async {
             guard self.process == nil, !self.stopping else { reply(0, "Runtime already started or stopping."); return }
             do {
@@ -171,7 +206,7 @@ private final class HostSession: NSObject, AgentHostService {
                 child.arguments = [
                     "--harness-child", provider.rawValue, executablePath, agentID,
                     sessionID ?? "", resumeSession ? "1" : "0",
-                    modelIdentifier ?? "", effortIdentifier ?? ""
+                    modelIdentifier ?? "", effortIdentifier ?? "", restricted ? "restricted" : "autonomous"
                 ]
                 child.currentDirectoryURL = workspace
                 // Do not inherit DYLD, shell startup hooks, or arbitrary app environment.

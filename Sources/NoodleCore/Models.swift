@@ -400,10 +400,10 @@ public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
     public let launcherExecutableURL: URL?
 
-    public static let managedSkillVersion = 20
+    public static let managedSkillVersion = 21
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
-        self.rootURL = rootURL.standardizedFileURL
+        self.rootURL = AgentStorageLayout.canonicalURL(rootURL)
         self.launcherExecutableURL = launcherExecutableURL?.standardizedFileURL
     }
 
@@ -467,9 +467,10 @@ public struct WorkspaceRepository: Sendable {
             avatarColorIndex: avatarColorIndex,
             avatarImageData: avatarImageData
         )
-        let agentDirectory = directory(for: agent)
-        try FileManager.default.createDirectory(at: agentDirectory, withIntermediateDirectories: false)
-        try write(agent, to: agentDirectory.appendingPathComponent("agent.json"))
+        let layout = storage(for: agent.id)
+        try layout.create()
+        let agentDirectory = layout.workspace
+        try write(agent, to: layout.configuration)
         try "# Memory\n\n".write(
             to: agentDirectory.appendingPathComponent("memory.md"),
             atomically: true,
@@ -526,7 +527,7 @@ public struct WorkspaceRepository: Sendable {
         renamed.avatarSymbolName = avatarSymbolName
         renamed.avatarColorIndex = avatarColorIndex
         renamed.avatarImageData = avatarImageData
-        try write(renamed, to: directory(for: agent).appendingPathComponent("agent.json"))
+        try write(renamed, to: storage(for: agent.id).configuration)
         return renamed
     }
 
@@ -554,7 +555,7 @@ public struct WorkspaceRepository: Sendable {
         // Appearance only: preserve runtime configuration and do not restart the bot.
         agent.avatarImageData = data as Data
         agent.updatedAt = Date()
-        try write(agent, to: directory(for: agent).appendingPathComponent("agent.json"))
+        try write(agent, to: storage(for: agent.id).configuration)
         return agent
     }
 
@@ -697,6 +698,7 @@ public struct WorkspaceRepository: Sendable {
     }
 
     public func synchronizeAgentWorkspace(_ agent: AgentRecord) throws {
+        try storage(for: agent.id).validate()
         let directory = directory(for: agent)
         guard FileManager.default.fileExists(atPath: directory.path) else {
             throw WorkspaceError.missingAgent(agent.id)
@@ -1383,7 +1385,7 @@ public struct WorkspaceRepository: Sendable {
     }
 
     public func deleteAgent(_ agent: AgentRecord) throws {
-        let directory = directory(for: agent)
+        let directory = storage(for: agent.id).package
         guard FileManager.default.fileExists(atPath: directory.path) else {
             throw WorkspaceError.missingAgent(agent.id)
         }
@@ -1403,8 +1405,39 @@ public struct WorkspaceRepository: Sendable {
 
     public func loadAgents() throws -> [AgentRecord] {
         try prepare()
-        return try loadChildren(from: agentsURL, filename: "agent.json", as: AgentRecord.self)
-            .sorted { $0.createdAt < $1.createdAt }
+        return try agentPackages().map { layout in
+            try layout.validate()
+            return try agentRecord(in: layout)
+        }.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    /// App startup only. The CLI deliberately cannot migrate app-owned storage.
+    @discardableResult
+    public func migrateAgentStorage() throws -> [UUID] {
+        try prepare()
+        return try agentPackages().compactMap { layout in
+            let agent = try agentRecord(in: layout)
+            return try AgentStorageMigration.migrate(layout) ? agent.id : nil
+        }
+    }
+
+    private func agentPackages() throws -> [AgentStorageLayout] {
+        try FileManager.default.contentsOfDirectory(at: agentsURL, includingPropertiesForKeys: nil,
+                                                    options: [.skipsHiddenFiles]).compactMap { url in
+            let layout = AgentStorageLayout(package: url)
+            guard AgentStorageLayout.exists(layout.configuration) else { return nil }
+            try AgentStorageLayout.requireDirectory(url)
+            try AgentStorageLayout.requireFile(layout.configuration)
+            return layout
+        }
+    }
+
+    private func agentRecord(in layout: AgentStorageLayout) throws -> AgentRecord {
+        let agent = try read(AgentRecord.self, from: layout.configuration)
+        guard layout.package.lastPathComponent == agent.id.uuidString.lowercased() else {
+            throw AgentStorageError("The bot identifier does not match its storage folder. Restore the original UUID folder name.")
+        }
+        return agent
     }
 
     public func loadConversations() throws -> [BotConversation] {
@@ -1424,7 +1457,11 @@ public struct WorkspaceRepository: Sendable {
     }
 
     public func directory(forAgentID id: UUID) -> URL {
-        agentsURL.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true)
+        storage(for: id).workspace
+    }
+
+    public func storage(for id: UUID) -> AgentStorageLayout {
+        AgentStorageLayout(package: agentsURL.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true))
     }
 
     public func conversationDirectory(id: UUID) -> URL {
@@ -1482,7 +1519,7 @@ public struct WorkspaceRepository: Sendable {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        try encoder.encode(value).write(to: url, options: .atomic)
+        try AtomicFile.write(encoder.encode(value), to: url)
     }
 
     private func read<Value: Decodable>(_ type: Value.Type, from url: URL) throws -> Value {

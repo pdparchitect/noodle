@@ -8,11 +8,14 @@ workspace, right-click it in the sidebar and choose **Show Workspace in Finder**
 Noodle/
 ├── Agents/<bot-uuid>/
 │   ├── agent.json
-│   ├── AGENTS.md              # Backstory and managed instructions
-│   ├── CLAUDE.md → AGENTS.md
-│   ├── memory.md
-│   ├── .noodle/               # Inbox positions and runtime state
-│   └── .agents/skills/        # Messenger, assigned tools, custom skills
+│   ├── .noodle-storage.json   # Storage layout version
+│   ├── runtime/              # Session pointers and unfinished-turn markers
+│   └── workspace/            # Harness working directory
+│       ├── AGENTS.md          # Backstory and managed instructions
+│       ├── CLAUDE.md → AGENTS.md
+│       ├── memory.md
+│       ├── .noodle/           # Inbox positions, diagnostics, tool bridges
+│       └── .agents/skills/    # Messenger, assigned tools, custom skills
 └── Conversations/<chat-uuid>/
     ├── conversation.json
     ├── messages.json
@@ -23,9 +26,26 @@ Names can change without moving files. Noodle preserves backstories and custom
 skills when refreshing managed instructions. Messenger stores read positions in
 `.noodle/inbox.json`; older `.agents/inbox.json` files are read for migration.
 
+On first launch after upgrading, Noodle moves flat agent workspaces into this
+layout before starting any bots. Migration preserves UUIDs, user files, inbox
+positions, and all harness session pointers. Existing user folders named
+`workspace` or `runtime` move inside the new workspace. An interrupted migration
+resumes on the next launch; conflicts stop migration without overwriting files.
+Absolute paths in custom scripts or external links may need updating.
+
+To carry an agent's core to another installation, quit Noodle and copy the entire
+`Agents/<bot-uuid>` package, including hidden files and symlinks, into the other
+installation's `Agents` directory. Use Noodle 0.13.0 or later at the destination;
+older releases do not understand this layout. Keep the UUID folder name. Noodle refreshes its
+managed tool links on launch. Install and sign in to the selected harness and
+authorize autonomous access if needed. Chats and attachments remain in
+`Conversations`; tool/computer assignments and credentials are separate.
+Session pointers do not contain the harness's full history. Muse starts a new
+session after a workspace move and recovers context from Noodle's chat history.
+
 ## Read and reply
 
-Run from a bot's workspace:
+Run from a bot's `workspace` directory:
 
 ```sh
 ./.agents/skills/messenger/messenger --get-latest

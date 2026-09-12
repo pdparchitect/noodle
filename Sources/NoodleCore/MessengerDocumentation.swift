@@ -152,7 +152,7 @@ public enum MessengerCommandKind: String, CaseIterable, Sendable {
 
     public var guidance: String {
         switch self {
-        case .help: return "Show this reference. -h is an alias. All commands may use --agent-directory <absolute-agent-workspace-path> for diagnostics."
+        case .help: return "Show this reference. -h is an alias. All commands may use --agent-directory <absolute-agent-workspace-path> for diagnostics. This is the workspace subdirectory inside Agents/<bot-uuid>/, not the parent package containing agent.json. Open Noodle first to migrate older flat workspaces."
         case .effect: return "Queue a temporary effect; a receipt confirms queuing, not display. Reuse --request-id for retries. See effect guidance for expiry and delivery rules."
         case .listEffects: return "Return supported effect names as a JSON array: \(ConversationEffectKind.allCases.map(\.rawValue).joined(separator: ", "))."
         case .getLatest: return "Return unread messages and reaction changes as a JSON array and advance message/reaction cursors. --peek leaves cursors unchanged. --inline-images instead returns { deliveries, images }; images contains attachmentID, originalFilename, mediaType and dataURL for each decodable image, deduplicated by attachment ID."

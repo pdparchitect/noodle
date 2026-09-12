@@ -39,6 +39,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
     private var startupTimeout: Task<Void, Never>?
     private struct State: Codable {
         let sessionID: String
+        var workspaceRoot: String? = nil
         var modelIdentifier: String? = nil
         var modelRecorded: Bool? = nil
         var previousSessionIDs: [String]? = nil
@@ -63,7 +64,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
         self.onSnapshot = onSnapshot
         self.onHeartbeat = onHeartbeat
         self.onUnexpectedTermination = onUnexpectedTermination
-        stateURL = workspaceURL.appendingPathComponent(extendedAccess ? ".agents/muse-runtime-extended.json" : ".agents/muse-runtime.json")
+        stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: .muse, extendedAccess: extendedAccess)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
         recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
         if let data = try? Data(contentsOf: stateURL), let state = try? JSONDecoder().decode(State.self, from: data),
@@ -74,7 +75,8 @@ final class MuseAgentProcess: AgentRuntimeProcess {
             needsHistoryRecovery = state.needsHistoryRecovery ?? false
             // Muse's opaque reasoning history is route-specific. Keep the old log,
             // but start fresh when the user explicitly changes the selected model.
-            if state.modelRecorded == true, state.modelIdentifier != agent.modelIdentifier {
+            if (state.modelRecorded == true && state.modelIdentifier != agent.modelIdentifier) ||
+                (state.workspaceRoot != nil && state.workspaceRoot != workspaceURL.path) {
                 previousSessionIDs.append(state.sessionID)
                 sessionID = nil
                 needsHistoryRecovery = true
@@ -269,6 +271,15 @@ final class MuseAgentProcess: AgentRuntimeProcess {
             send(["jsonrpc": "2.0", "method": "initialized", "params": [:]])
             openSession()
         case .open:
+            if openingExistingSession, let session = result["session"] as? [String: Any],
+               session["sessionId"] as? String == sessionID,
+               session["workspaceRoot"] as? String == workspaceURL.deletingLastPathComponent().path {
+                // Muse sessions are bound to their original working directory.
+                // Preserve the old pointer and recover from Noodle's chat history
+                // in a fresh session after the flat-workspace migration.
+                recoverModelContext()
+                return
+            }
             guard let session = result["session"] as? [String: Any], let returned = session["sessionId"] as? String,
                   UUID(uuidString: returned) != nil, sessionID == nil || sessionID == returned,
                   session["workspaceRoot"] as? String == workspaceURL.path else {
@@ -346,7 +357,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
     }
     private func saveState() throws {
         guard let sessionID else { return }
-        try JSONEncoder().encode(State(sessionID: sessionID, modelIdentifier: configuration.modelIdentifier,
+        try JSONEncoder().encode(State(sessionID: sessionID, workspaceRoot: workspaceURL.path, modelIdentifier: configuration.modelIdentifier,
             modelRecorded: true, previousSessionIDs: previousSessionIDs,
             projectionRecoveryAttempted: projectionRecoveryAttempted,
             needsHistoryRecovery: needsHistoryRecovery)).write(to: stateURL, options: .atomic)

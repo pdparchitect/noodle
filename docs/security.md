@@ -8,10 +8,22 @@
 | Claude Code, FX, Grok Build, Muse Code | Autonomous access is required |
 
 Change Codex access in **Settings → Security**. The other harnesses' switches stay
-on because they cannot run in restricted mode. Switching back to Codex restores
-its saved preference.
+on after authorization because they cannot run in restricted mode. Selecting
+one in the bot editor authorizes that harness for that bot. Copied bots may need
+authorization in Security settings. Switching back to Codex restores its saved
+preference. Editing `agent.json` alone never grants autonomous access.
 
-Restricted mode limits the harness to its sandbox. Autonomous mode runs as your
+Restricted Codex runs in a dedicated macOS filesystem sandbox applied to the
+whole harness process tree. It can write its `workspace`, shared conversations,
+the existing Codex account/session directory, and its workspace temporary files.
+Its parent `agent.json`, layout metadata, Noodle-owned `runtime`, and Noodle
+preferences are outside the writable boundary. System files, the app and harness
+installation, and Noodle repository data are readable where needed; arbitrary
+personal file contents are not granted. Outbound networking supports the model
+connection and connected tools. This is not isolation between conversation
+participants or between sessions using the same Codex account.
+
+Autonomous mode runs as your
 Mac user outside Noodle's app sandbox. It can reach files, signed-in services, and
 browser sessions beyond the bot's workspace, subject to macOS and tool permissions.
 Noodle accepts supported tool approvals automatically; questions needing your
@@ -48,9 +60,14 @@ LAN; Shell computers can have networking disabled.
 
 ## Implementation boundary
 
-The Noodle app stays sandboxed. Autonomous harnesses run through the signed
+The Noodle app stays sandboxed. Harnesses run through the signed
 `NoodleAgentHost.xpc`, which validates Noodle's identity, the vendor-signed harness,
-and a fixed set of launch options. It runs as the current user, never root.
+and a fixed set of launch options. Restricted Codex receives its filesystem
+policy before the harness executable starts; failure to apply it prevents
+startup. The host accepts no caller-supplied sandbox profile, arbitrary command,
+or writable roots. Autonomous harnesses use the separate authorized launch path.
+The host runs as the current user, never root. App and helper entitlements are
+unchanged by the workspace migration.
 Sparkle's signed installer runs outside the sandbox to replace the app during updates.
 
 See [architecture](architecture.md) for process boundaries and

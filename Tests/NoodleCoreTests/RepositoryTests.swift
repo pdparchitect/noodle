@@ -28,9 +28,11 @@ final class RepositoryTests: XCTestCase {
         let created = try repository.createAgent(named: "Build Bot")
         let directory = repository.directory(for: created.agent)
 
-        XCTAssertEqual(directory.lastPathComponent, created.agent.id.uuidString.lowercased())
+        XCTAssertEqual(directory.lastPathComponent, "workspace")
+        XCTAssertEqual(directory.deletingLastPathComponent().lastPathComponent, created.agent.id.uuidString.lowercased())
         XCTAssertFalse(directory.lastPathComponent.contains("build"))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("agent.json").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: repository.storage(for: created.agent.id).configuration.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("agent.json").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("instructions.md").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("memory.md").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("AGENTS.md").path))

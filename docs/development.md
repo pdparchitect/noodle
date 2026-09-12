@@ -88,6 +88,15 @@ callbacks and a monotonic test clock exercise cancellation, deadlines, and
 stale decisions without installed harnesses or Apple Intelligence. These tests
 run in the default Swift suite; native presentation fixtures remain separate.
 
+Storage migration tests interrupt each move and verify resumption, user-folder
+collisions, hard-link separation, copied packages, and invalid layouts.
+`RestrictedAgentSandboxTests` runs real sandboxed processes against disposable
+data: workspace writes and Messenger replies must succeed while configuration
+and runtime writes, replacements, and links are denied. When Codex is installed,
+an initialization-only check uses an empty account directory; it makes no model
+request and reads no real account credentials. Release automation tests verify
+that signed update-feed entries retain the required migration chain.
+
 Voice capture regressions also run in `NoodleAppTests`. Offline audio engines
 exercise stale microphone formats, native tap exceptions, stop/restart cleanup,
 buffer conversion after format changes, and cancellation before startup. They

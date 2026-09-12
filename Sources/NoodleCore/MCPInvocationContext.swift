@@ -7,15 +7,11 @@ public struct MCPInvocationContext: Equatable, Sendable {
     public let skillName: String?
 
     public static func resolve(invocationPath: String, currentDirectory: URL) throws -> Self {
-        let manager = FileManager.default
         let cwd = currentDirectory.resolvingSymlinksInPath().standardizedFileURL
-        var workspace = cwd
-        while workspace.path != "/", !manager.fileExists(atPath: workspace.appendingPathComponent("agent.json").path) {
-            workspace.deleteLastPathComponent()
-        }
-        guard workspace.path != "/" else {
+        guard let layout = try? AgentStorageLayout.containing(cwd) else {
             throw MCPConnectionError.message("Run mcpshim from this bot's workspace or its skill directory.")
         }
+        let workspace = layout.workspace
         let invoked = URL(fileURLWithPath: invocationPath, relativeTo: cwd).standardizedFileURL
         // Resolve parent aliases (.claude/skills/...) but NOT the mcpshim symlink.
         let parent = invoked.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL

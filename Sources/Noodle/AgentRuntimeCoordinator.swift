@@ -139,13 +139,20 @@ final class AgentRuntimeCoordinator {
 
     private static let preventIdleSleepDefaultsKey = "Noodle.power.preventIdleSleepWhileWorking"
 
-    func prepareAccessForExistingAgents(_ agents: [AgentRecord]) {
-        accessConfiguration = AgentAccessConfiguration.migrateExistingAgents(Set(agents.map(\.id)), in: defaults)
+    func prepareAccessForExistingAgents(_ agents: [AgentRecord], migratedIDs: Set<UUID> = []) {
+        accessConfiguration = AgentAccessConfiguration.migrateExistingAgents(migratedIDs, in: defaults)
+        accessConfiguration.migrateRequiredHarnessGrants(agents.filter { migratedIDs.contains($0.id) }, in: defaults)
+    }
+
+    func authorizeSelectedHarness(_ agent: AgentRecord) {
+        accessConfiguration.authorizeSelectedHarness(for: agent)
+        accessConfiguration.save(to: defaults)
     }
 
     func setExtendedAccess(_ enabled: Bool, agent: AgentRecord, repository: WorkspaceRepository) {
-        guard HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsRestrictedAccess != false,
-              !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id), accessConfiguration.isExtended(for: agent) != enabled else { return }
+        let required = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsRestrictedAccess == false
+        guard (!required || enabled), !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id),
+              accessConfiguration.isExtended(for: agent) != enabled else { return }
         changingAccess.insert(agent.id)
         let lifecycle = lifecycleID
         // Persist revocation before stopping so relaunch cannot restore access.
@@ -166,7 +173,8 @@ final class AgentRuntimeCoordinator {
                 self.snapshots[agent.id] = .init(agentID: agent.id, phase: .failed, detail: "Could not confirm that the old runtime stopped. Quit Noodle before restarting this bot.")
                 return
             }
-            self.accessConfiguration.setExtended(enabled, for: agent.id)
+            if required { self.accessConfiguration.authorizeSelectedHarness(for: agent) }
+            else { self.accessConfiguration.setExtended(enabled, for: agent.id) }
             self.accessConfiguration.save(to: self.defaults)
             self.start(agent: agent, repository: repository)
         }
@@ -424,6 +432,12 @@ final class AgentRuntimeCoordinator {
 
     func start(agent: AgentRecord, repository: WorkspaceRepository) {
         guard processes[agent.id] == nil, !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id) else { return }
+        if HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsRestrictedAccess == false,
+           !accessConfiguration.isExtended(for: agent) {
+            snapshots[agent.id] = .init(agentID: agent.id, phase: .failed,
+                detail: "This harness requires autonomous access. Allow it in Settings → Security before starting this bot.")
+            return
+        }
         do { try repository.synchronizeAgentWorkspace(agent) }
         catch {
             snapshots[agent.id] = AgentRuntimeSnapshot(agentID: agent.id, phase: .failed,
@@ -546,11 +560,11 @@ final class AgentRuntimeCoordinator {
         let lifecycle = lifecycleID
         let old = processes.removeValue(forKey: agent.id)
         if resetThread {
-            let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")
-            let prefix = provider == .muse ? "muse-runtime" : (provider == .grokBuild ? "grok-runtime" : (provider == .fx ? "fx-runtime" : (provider == .claudeCode ? "claude-runtime" : "codex-runtime")))
-            let filename = accessConfiguration.isExtended(for: agent)
-                ? ".agents/\(prefix)-extended.json" : ".agents/\(prefix).json"
-            try? FileManager.default.removeItem(at: repository.directory(for: agent).appendingPathComponent(filename))
+            let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "") ?? .codex
+            let state = repository.storage(for: agent.id).sessionState(provider: provider,
+                extendedAccess: accessConfiguration.isExtended(for: agent))
+            try? FileManager.default.removeItem(at: state)
+            try? FileManager.default.removeItem(at: state.appendingPathExtension("unfinished"))
         }
         let finish: (Bool) -> Void = { [weak self] stopped in
             guard let self else { return }
@@ -745,19 +759,15 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private let onApprovals: @MainActor ([AgentApprovalRequest]) -> Void
     private var pendingApprovals: [AgentApprovalRequest] = []
     private var approvalItemDetails: [String: [String: Any]] = [:]
-    private var extendedConnection: ExtendedAgentConnection?
-    private var extendedRunning = false
-    private var extendedPID: Int32?
+    private var hostConnection: ExtendedAgentConnection?
+    private var hostRunning = false
+    private var hostPID: Int32?
     private let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
     private let onHeartbeat: @MainActor () -> Void
     private let onUnexpectedTermination: @MainActor (CodexAgentProcess, String, Bool) -> Void
     private let stateURL: URL
     private var turnRecovery: AgentTurnRecovery
 
-    private var process: Process?
-    private var input: ProcessInputWriter?
-    private var output: FileHandle?
-    private var errors: FileHandle?
     private lazy var outputReader = JSONLineReader { [weak self] message in
         Task { @MainActor in self?.handle(message) }
     }
@@ -798,7 +808,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         self.onSnapshot = onSnapshot
         self.onHeartbeat = onHeartbeat
         self.onUnexpectedTermination = onUnexpectedTermination
-        stateURL = workspaceURL.appendingPathComponent(extendedAccess ? ".agents/codex-runtime-extended.json" : ".agents/codex-runtime.json")
+        stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: .codex, extendedAccess: extendedAccess)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
         recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
@@ -807,90 +817,41 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     }
 
     func start() {
-        guard process == nil, extendedConnection == nil else { return }
+        guard hostConnection == nil else { return }
         intentionallyStopped = false
         terminationReported = false
         update(.starting, "Starting Codex")
         trace.runtimeStarting()
 
-        if extendedAccess {
-            do {
-                let connection = try ExtendedAgentConnection()
-                extendedConnection = connection
-                connection.onData = { [weak self] data, isError in
-                    Task { @MainActor in
-                        guard let self, !self.intentionallyStopped else { return }
-                        if isError { self.lastErrorText = String(decoding: data, as: UTF8.self) }
-                        else { self.outputReader.receive(data) }
-                    }
-                }
-                connection.onExit = { [weak self] status in Task { @MainActor in self?.didTerminate(status: status) } }
-                connection.onFailure = { [weak self] detail in
-                    Task { @MainActor in self?.reportUnexpectedTermination(detail) }
-                }
-                extendedRunning = true
-                connection.start(provider: .codex, agentID: configuration.id, executablePath: executableURL.path) { [weak self] pid, error in
-                    Task { @MainActor in
-                        guard let self, !self.intentionallyStopped else { return }
-                        if let error { self.reportUnexpectedTermination(error); return }
-                        self.extendedPID = pid
-                        do { try self.initialize() }
-                        catch { self.reportUnexpectedTermination(error.localizedDescription) }
-                    }
-                }
-            } catch { reportUnexpectedTermination(error.localizedDescription) }
-            return
-        }
-
         do {
-            let child = Process()
-            let inputPipe = Pipe()
-            let outputPipe = Pipe()
-            let errorPipe = Pipe()
-            child.executableURL = executableURL
-            child.arguments = ["app-server"]
-            child.currentDirectoryURL = workspaceURL
-            child.standardInput = inputPipe
-            child.standardOutput = outputPipe
-            child.standardError = errorPipe
-
-            var environment = ProcessInfo.processInfo.environment
-            environment["NOODLE_AGENT_ID"] = configuration.id.uuidString.lowercased()
-            environment["NOODLE_WORKSPACE"] = workspaceURL.path
-            environment["CODEX_HOME"] = HostEnvironment.codexHome.path
-            child.environment = environment
-
-            let reader = outputReader
-            outputPipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                guard !data.isEmpty else {
-                    handle.readabilityHandler = nil
-                    return
+            let connection = try ExtendedAgentConnection()
+            hostConnection = connection
+            connection.onData = { [weak self] data, isError in
+                Task { @MainActor in
+                    guard let self, !self.intentionallyStopped else { return }
+                    if isError { self.lastErrorText = String(decoding: data, as: UTF8.self) }
+                    else { self.outputReader.receive(data) }
                 }
-                reader.receive(data)
             }
-            errorPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-                let data = handle.availableData
-                guard !data.isEmpty else {
-                    handle.readabilityHandler = nil
-                    return
+            connection.onExit = { [weak self] status in Task { @MainActor in self?.didTerminate(status: status) } }
+            connection.onFailure = { [weak self] detail in
+                Task { @MainActor in self?.reportUnexpectedTermination(detail) }
+            }
+            hostRunning = true
+            let started: (Int32, String?) -> Void = { [weak self] pid, error in
+                Task { @MainActor in
+                    guard let self, !self.intentionallyStopped else { return }
+                    if let error { self.reportUnexpectedTermination(error); return }
+                    self.hostPID = pid
+                    do { try self.initialize() }
+                    catch { self.reportUnexpectedTermination(error.localizedDescription) }
                 }
-                let text = String(decoding: data, as: UTF8.self)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !text.isEmpty else { return }
-                Task { @MainActor in self?.lastErrorText = text }
             }
-            child.terminationHandler = { [weak self] terminated in
-                Task { @MainActor in self?.didTerminate(status: terminated.terminationStatus) }
+            if extendedAccess {
+                connection.start(provider: .codex, agentID: configuration.id, executablePath: executableURL.path, reply: started)
+            } else {
+                connection.startRestrictedCodex(agentID: configuration.id, executablePath: executableURL.path, reply: started)
             }
-
-            try child.run()
-            process = child
-            input = ProcessInputWriter(handle: inputPipe.fileHandleForWriting)
-            output = outputPipe.fileHandleForReading
-            errors = errorPipe.fileHandleForReading
-            update(.starting, "Connecting to Codex")
-            try initialize()
         } catch { reportUnexpectedTermination(error.localizedDescription) }
     }
 
@@ -907,20 +868,12 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         terminationReported = true
         pendingApprovals = []
         onApprovals([])
-        let hadExtendedConnection = extendedConnection != nil
-        if let connection = extendedConnection {
-            extendedRunning = false
-            extendedConnection = nil
+        let hadHostConnection = hostConnection != nil
+        if let connection = hostConnection {
+            hostRunning = false
+            hostConnection = nil
             connection.stop { stopped in Task { @MainActor in completion(stopped) } }
         }
-        output?.readabilityHandler = nil
-        errors?.readabilityHandler = nil
-        process?.terminationHandler = nil
-        if process?.isRunning == true { process?.terminate() }
-        process = nil
-        input = nil
-        output = nil
-        errors = nil
         purposes.removeAll()
         turnIsActive = false
         activeTurnID = nil
@@ -929,14 +882,14 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         steeringTimeout?.cancel()
         notifications.take()
         update(.offline, "Stopped")
-        if !hadExtendedConnection { completion(true) }
+        if !hadHostConnection { completion(true) }
     }
 
     @discardableResult
     func notify(immediately: Bool = false) -> UUID {
         RuntimeDiagnostics.notificationQueued(agentID: configuration.id, coalesced: notificationPending)
         let notificationID = notifications.enqueue(immediately: immediately)
-        if process == nil { start() }
+        if hostConnection == nil { start() }
         sendPendingNotificationIfPossible()
         return notificationID
     }
@@ -947,11 +900,11 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     }
 
     var canReceiveHeartbeat: Bool {
-        (process?.isRunning == true || extendedRunning) && snapshot.phase == .ready
+        hostRunning && snapshot.phase == .ready
             && !turnIsActive && !notificationPending && steeringNotificationID == nil && threadID != nil
     }
 
-    var isAlive: Bool { process?.isRunning == true || extendedRunning }
+    var isAlive: Bool { hostRunning }
 
     var hasInterruptedWork: Bool {
         recoveryPending || turnIsActive || notificationPending || steeringNotificationID != nil || turnRecovery.hasUnfinishedTurn
@@ -973,19 +926,11 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         terminationReported = true
         steeringTimeout?.cancel()
         let needsRecovery = hasInterruptedWork
-        extendedRunning = false
-        extendedConnection?.invalidate()
-        extendedConnection = nil
+        hostRunning = false
+        hostConnection?.invalidate()
+        hostConnection = nil
         pendingApprovals = []
         onApprovals([])
-        output?.readabilityHandler = nil
-        errors?.readabilityHandler = nil
-        process?.terminationHandler = nil
-        if process?.isRunning == true { process?.terminate() }
-        process = nil
-        input = nil
-        output = nil
-        errors = nil
         purposes.removeAll()
         turnIsActive = false
         fail(detail)
@@ -993,7 +938,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     }
 
     private func handle(_ message: [String: Any]) {
-        guard !intentionallyStopped, process != nil || extendedRunning else { return }
+        guard !intentionallyStopped, hostRunning else { return }
         var approvalMessage = message
         if var params = message["params"] as? [String: Any], let itemID = params["itemId"] as? String,
            let item = approvalItemDetails[itemID] {
@@ -1229,7 +1174,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         trace.begin(reason: reason)
         let policy: [String: Any] = extendedAccess ? [
             "type": "workspaceWrite",
-            "writableRoots": [workspaceURL.path, workspaceURL.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Conversations").path],
+            "writableRoots": [workspaceURL.path, workspaceURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Conversations").path],
             "networkAccess": false
         ] : ["type": "externalSandbox", "networkAccess": "restricted"]
         var params: [String: Any] = [
@@ -1275,17 +1220,8 @@ final class CodexAgentProcess: AgentRuntimeProcess {
 
     private func send(_ object: [String: Any]) throws {
         let data = try JSONSerialization.data(withJSONObject: object)
-        if let extendedConnection {
-            extendedConnection.write(data + Data([0x0A]))
-            return
-        }
-        guard let input else { throw CocoaError(.fileNoSuchFile) }
-        input.write(data + Data([0x0A])) { [weak self] error in
-            Task { @MainActor in
-                guard let self, !self.intentionallyStopped else { return }
-                self.reportUnexpectedTermination("Could not communicate with Codex: \(error.localizedDescription)")
-            }
-        }
+        guard let hostConnection else { throw CocoaError(.fileNoSuchFile) }
+        hostConnection.write(data + Data([0x0A]))
     }
 
     private func saveState(threadID: String) {
@@ -1327,7 +1263,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             agentID: configuration.id,
             phase: phase,
             detail: detail,
-            processIdentifier: extendedPID ?? process?.processIdentifier
+            processIdentifier: hostPID
         )
         onSnapshot(snapshot)
     }
@@ -1343,7 +1279,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private var accessInstructions: String {
         let mode = extendedAccess
             ? "This bot has autonomous extended access. Noodle resolves supported runtime permission requests automatically, so continue without asking the user to approve routine commands, file operations, or tool confirmations. Ask the user only when required information or a consequential product decision is missing. Never change your own access mode."
-            : "This bot is in restricted mode inside Noodle's macOS App Sandbox. Browser/computer-control runtimes may be unavailable. Do not try to bypass the app sandbox; explain the limitation and direct the user to Settings → Security if the task requires autonomous access."
+            : "This bot is in restricted mode inside a dedicated macOS filesystem sandbox. Its workspace, conversations, Codex account/session directory, and temporary files are writable; its configuration and Noodle-owned runtime state are outside that writable boundary. Browser/computer-control runtimes may be unavailable. Do not try to bypass the sandbox; explain the limitation and direct the user to Settings → Security if the task requires autonomous access."
         return mode + " Do not promise browser or connected-tool access merely because a tool is listed. Verify the relevant capability with a safe check before claiming it works; report the actual failure when it does not."
     }
 

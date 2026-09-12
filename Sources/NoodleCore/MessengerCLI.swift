@@ -156,15 +156,12 @@ public enum MessengerCLI {
             let environmentDirectory = environment["NOODLE_WORKSPACE"].map {
                 URL(fileURLWithPath: $0, isDirectory: true)
             }
-            let agentDirectory = try explicitDirectory ?? environmentDirectory ?? Self.agentDirectory(from: executable)
-            guard let id = UUID(uuidString: agentDirectory.lastPathComponent) else {
+            let workspace = try explicitDirectory ?? environmentDirectory ?? Self.agentDirectory(from: executable)
+            let layout = try AgentStorageLayout.containing(workspace)
+            guard let id = UUID(uuidString: layout.package.lastPathComponent) else {
                 throw WorkspaceError.invalidAgentDirectory
             }
-            let agentsDirectory = agentDirectory.deletingLastPathComponent()
-            guard agentsDirectory.lastPathComponent == "Agents" else {
-                throw WorkspaceError.invalidAgentDirectory
-            }
-
+            let agentsDirectory = layout.package.deletingLastPathComponent()
             repositoryRoot = agentsDirectory.deletingLastPathComponent()
             agentID = id
 

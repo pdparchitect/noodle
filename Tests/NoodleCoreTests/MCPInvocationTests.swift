@@ -45,24 +45,26 @@ final class MCPInvocationTests: XCTestCase {
     }
 
     func testInvocationKeepsSkillSymlinkContextAndRejectsOtherWorkspace() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: root) }
+        let repositoryRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: repositoryRoot) }
+        let repository = WorkspaceRepository(rootURL: repositoryRoot)
+        let bot = try repository.createAgent(named: "Invocation")
+        let root = repository.directory(for: bot.agent)
         let skill = root.appendingPathComponent(".agents/skills/mcp-notion")
         try FileManager.default.createDirectory(at: skill, withIntermediateDirectories: true)
-        try Data().write(to: root.appendingPathComponent("agent.json"))
         try FileManager.default.createSymbolicLink(at: skill.appendingPathComponent("mcpshim"), withDestinationURL: URL(fileURLWithPath: "/bin/echo"))
         let context = try MCPInvocationContext.resolve(invocationPath: "./mcpshim", currentDirectory: skill)
         XCTAssertEqual(context.skillName, "mcp-notion")
         XCTAssertEqual(context.workspace, root.resolvingSymlinksInPath())
         XCTAssertEqual(try MCPInvocationContext.resolve(invocationPath: skill.appendingPathComponent("mcpshim").path, currentDirectory: root), context)
         let aliases = root.appendingPathComponent(".claude/skills")
+        try FileManager.default.removeItem(at: aliases)
         try FileManager.default.createDirectory(at: aliases, withIntermediateDirectories: true)
         let alias = aliases.appendingPathComponent("mcp-notion")
         try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: skill)
         XCTAssertEqual(try MCPInvocationContext.resolve(invocationPath: alias.appendingPathComponent("mcpshim").path, currentDirectory: root), context)
-        let other = root.appendingPathComponent("other-agent")
-        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
-        try Data().write(to: other.appendingPathComponent("agent.json"))
+        let otherBot = try repository.createAgent(named: "Other")
+        let other = repository.directory(for: otherBot.agent)
         XCTAssertNil(try MCPInvocationContext.resolve(invocationPath: skill.appendingPathComponent("mcpshim").path, currentDirectory: other).skillName)
         XCTAssertNil(try MCPInvocationContext.resolve(invocationPath: "/app/Helpers/mcpshim", currentDirectory: root).skillName)
     }

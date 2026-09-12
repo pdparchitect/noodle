@@ -107,8 +107,8 @@ fi
 entitlements="$(codesign -d --entitlements :- "$app" 2>/dev/null)"
 compact_entitlements="$(print -r -- "$entitlements" | tr -d '[:space:]')"
 entitlement_count="$(print -r -- "$compact_entitlements" | grep -o '<key>' | wc -l | tr -d '[:space:]')"
-if [[ "$entitlement_count" != "7" ]]; then
-    print -u2 "The app must contain exactly the seven reviewed sandbox entitlements."
+if [[ "$entitlement_count" != "8" ]]; then
+    print -u2 "The app must contain exactly the eight reviewed sandbox entitlements."
     exit 1
 fi
 zsh "$project_root/scripts/verify-updater.sh" "$app"
