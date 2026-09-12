@@ -131,12 +131,21 @@ struct ChatView: View {
     }
 
     private var pinnedBottomContent: some View {
-        VStack(spacing: 0) {
+        let typing = store.typingParticipants(in: conversation)
+        return VStack(spacing: 0) {
             if let request = store.runtime.approvals.first(where: { conversation.participantIDs.contains($0.agentID) }) {
                 AgentApprovalView(request: request).id(request.id)
             }
+            if !typing.isEmpty {
+                TypingIndicator(agents: typing)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
+                    .transition(.opacity)
+            }
             composerFooter
         }
+        .animation(.easeOut(duration: 0.2), value: typing.map(\.id))
     }
 
     private var topFadedTranscript: some View {
