@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Keep late automatic message-delivery decisions queued after their deadline, even when the timeout callback is delayed, and skip context loading for cancelled routing work.
 - Size Keybindings settings to its contents, removing the empty space above Restore Defaults.
 - Keep Space in the annotation comment editor instead of reopening the attachment and cancelling the popup, including image and 3D-model region annotations.
 - Cancel active and queued MCP work on disconnect or caller cancellation, enforce request deadlines during queue waits and token refresh, and reject late sign-in callbacks.
@@ -24,6 +25,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Run message-delivery routing regressions in the default Swift suite with fake runtimes and classifiers, covering cancellation, deadlines, stale results, settings changes, and isolation between bots without harnesses or Apple Intelligence.
 - Add Settings → Keybindings immediately before Update, with a direct list of command descriptions and custom shortcuts for annotations, conversation search, bot/group creation, and voice recording. Changes update menus and hints immediately, persist across launches, and support clearing, per-command reset, and Restore Defaults with conflict checks.
 - Cover MCP cancellation, disconnect, timeout, and sign-in races with controlled local HTTP fixtures and synthetic credentials; no accounts, browser sign-in, or Keychain access are required.
 - Test Grok and Muse inspection with isolated local process fixtures in the default Swift suite, without installed harnesses, provider logins, or network requests.

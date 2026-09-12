@@ -82,6 +82,12 @@ MCP lifecycle tests likewise use intercepted HTTP requests and an in-memory
 credential store. Controlled response gates exercise disconnect, cancellation,
 and timeout races without browser sign-in, Keychain access, or external services.
 
+`NoodleAppTests` covers message-delivery routing with fake runtimes and
+classifiers, temporary repositories, and isolated preferences. Controlled
+callbacks and a monotonic test clock exercise cancellation, deadlines, and
+stale decisions without installed harnesses or Apple Intelligence. These tests
+run in the default Swift suite; native presentation fixtures remain separate.
+
 ## Focused checks
 
 Run native UI fixtures from a logged-in Mac. They use isolated test data.

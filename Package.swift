@@ -56,6 +56,10 @@ let package = Package(
             dependencies: ["NoodleCore"]
         ),
         .testTarget(
+            name: "NoodleAppTests",
+            dependencies: ["Noodle", "NoodleCore"]
+        ),
+        .testTarget(
             name: "NoodleComputerIntegrationTests",
             dependencies: ["Noodle", "NoodleCore", .product(name: "ComputerBridge", package: "Bridge")]
         ),
