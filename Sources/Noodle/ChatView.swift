@@ -19,6 +19,7 @@ struct ChatView: View {
     @State private var selectedAttachmentID: UUID?
     @State private var computerPreview = ComputerPreviewController()
     @State private var screenCapturePreview = ScreenCapturePreviewController()
+    @State private var conversationAnnotations = ConversationAnnotationController()
     @State private var bottomOverlayHeight: CGFloat = 0
     @StateObject private var nameCompletion = ComposerNameCompletion()
     @State private var profileAgent: AgentRecord?
@@ -31,6 +32,12 @@ struct ChatView: View {
 
     var body: some View {
         chatContent
+            .environment(\.conversationAnnotations, conversationAnnotations)
+            .background(ConversationAnnotationHost(controller: conversationAnnotations,
+                conversationID: conversation.id, title: store.title(for: conversation),
+                save: { note, content, source, raw in
+                    try store.saveConversationAnnotation(note, content: content, source: source, sourceData: raw)
+                }).frame(width: 0, height: 0))
             .background(CaptureShortcut(capture: { showCapture(.window) }).frame(width: 0, height: 0))
             .background(Color(nsColor: .textBackgroundColor).opacity(0.28))
             .overlay {
@@ -97,12 +104,13 @@ struct ChatView: View {
                 store.importAttachments(from: providers)
             }
             .onChange(of: conversation.id) { _, _ in
+                conversationAnnotations.cancel()
                 selectedAttachmentID = nil
                 computerPreview.close()
                 screenCapturePreview.close()
                 nameCompletion.detach()
             }
-            .onDisappear { computerPreview.close(); screenCapturePreview.close() }
+            .onDisappear { computerPreview.close(); screenCapturePreview.close(); conversationAnnotations.cancel() }
             .onChange(of: composerFocusRequest) { _, request in
                 if request != nil { composerFocused = true }
             }

@@ -15,18 +15,22 @@ import NoodleCore
     static let shared = AnnotationCommandsState()
     var enabled = false
     weak var owner: (any PreviewAnnotationTarget)?
+    weak var conversationOwner: (any PreviewAnnotationTarget)?
+    var conversationEnabled = false
+
+    var target: (any PreviewAnnotationTarget)? { enabled ? owner : conversationEnabled ? conversationOwner : nil }
 }
 
 struct AnnotationCommands: Commands {
     private let state = AnnotationCommandsState.shared
     var body: some Commands {
         CommandMenu("Preview") {
-            Button("Add Annotation…") { state.owner?.annotate() }
+            Button("Add Annotation…") { state.target?.annotate() }
                 .appShortcut(.annotateSelection)
-                .disabled(!state.enabled)
-            Button("Annotate Region…") { state.owner?.startRegion() }
+                .disabled(!state.enabled && !state.conversationEnabled)
+            Button("Annotate Region…") { state.target?.startRegion() }
                 .appShortcut(.annotateRegion)
-                .disabled(!state.enabled)
+                .disabled(!state.enabled && !state.conversationEnabled)
         }
     }
 }
@@ -79,6 +83,7 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
     struct Pending {
         let source: ConversationAttachment
         var quote: String?
+        var sourceMessageID: UUID?
         var region: AttachmentAnnotation.Region?
         var file: String { source.originalFilename }
     }
@@ -88,9 +93,14 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
         init(url: URL, title: String) { previewItemURL = url; previewItemTitle = title }
     }
     private static weak var active: AttachmentPreviewController?
+    private static let conversationEditors = NSHashTable<AttachmentPreviewController>.weakObjects()
 
     static func containsPreviewWindow(_ window: NSWindow?) -> Bool {
         if window?.identifier?.rawValue == "NoodleScreenCapture" { return true }
+        if let window, conversationEditors.allObjects.contains(where: {
+            window === $0.overlay || window === $0.commentPopover?.contentViewController?.view.window ||
+                window === $0.closingPopover?.contentViewController?.view.window
+        }) { return true }
         guard let window, let owner = active else { return false }
         return window === owner.panel || window === owner.overlay ||
             window === owner.annotationPreview.window ||
@@ -113,6 +123,12 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
     private let lifecycleLog = Logger(subsystem: "com.pdparchitect.noodle", category: "AttachmentPreview")
     let annotationPreview = AnnotationPreviewController()
     var panel: QLPreviewPanel?
+    private weak var conversationWindow: NSWindow?
+    var annotationWindow: NSWindow? { conversationWindow ?? panel }
+    var isConversationAnnotation: Bool { conversationWindow != nil }
+    var conversationCanvas: AnnotationRegionCanvas?
+    var onAnnotationStateChange: (() -> Void)?
+    var hasPendingAnnotation: Bool { busy || pending != nil || commentPanel != nil || closingPopover != nil || overlay != nil || conversationCanvas != nil }
     var commentPanel: NSPanel?
     var commentPopover: NSPopover?
     private var closingPopover: NSPopover?
@@ -215,6 +231,27 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
         }
         updateCommands()
     }
+    /// Use the shared editor with an in-memory conversation source. Nothing is
+    /// persisted until Save, and this session never acquires Quick Look control.
+    func annotateConversation(in window: NSWindow, source: ConversationAttachment, quote: String?,
+                              messageID: UUID? = nil, snapshot: NSImage? = nil,
+                              save: @escaping (AttachmentAnnotation, Data, ConversationAttachment) throws -> Void) {
+        close()
+        conversationWindow = window
+        Self.conversationEditors.add(self)
+        previewResponder = window.firstResponder
+        self.save = save
+        pending = Pending(source: source, quote: quote, sourceMessageID: messageID)
+        pendingImage = snapshot
+        textAnchorInPreview = AnnotationPopoverAnchor.point(in: window.frame,
+            screenPointer: NSEvent.mouseLocation, lastPoint: nil)
+        if monitor == nil {
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp], handler: eventMonitorHandler())
+        }
+        if let snapshot { showRegion(image: snapshot, frame: window.frame) }
+        else { showComment() }
+    }
+
     func close() {
         trace("close requested")
         annotationPreview.close()
@@ -231,7 +268,8 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
         // This also runs inside the native close notification. Do not order
         // out, show, or reconfigure QL here: its own close is already underway.
         // Native endPreviewPanelControl is responsible for releasing bindings.
-        item = nil; source = nil; save = nil
+        item = nil; source = nil; save = nil; conversationWindow = nil
+        Self.conversationEditors.remove(self)
         lastPointerInPreview = nil
         if hostWindow?.firstResponder === view { hostWindow?.makeFirstResponder(hostResponder) }
         hostResponder = nil
@@ -306,6 +344,7 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
         content.window?.makeKey(); content.window?.makeFirstResponder(commentInput)
     }
     func updateCommands() {
+        onAnnotationStateChange?()
         if NSApp.keyWindow?.identifier?.rawValue == "NoodleScreenCapture" { return }
         guard Self.active === self || AnnotationCommandsState.shared.owner === self else { return }
         AnnotationCommandsState.shared.owner = Self.active
@@ -327,10 +366,13 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
         if event.type == .keyUp, event.keyCode == 53 {
             let consumed = annotationEscapeDown
             annotationEscapeDown = false
+            if consumed, conversationWindow == nil, item == nil, !hasPendingAnnotation, let monitor {
+                NSEvent.removeMonitor(monitor); self.monitor = nil
+            }
             return consumed ? nil : event
         }
         if event.type == .keyDown, event.keyCode == 53, annotationEscapeDown { return nil }
-        guard let window = event.window, window === panel || window === overlay ||
+        guard let window = event.window, window === annotationWindow || window === overlay ||
                 window === commentPopover?.contentViewController?.view.window ||
                 window === closingPopover?.contentViewController?.view.window else { return event }
         if event.type == .keyUp { return event }
@@ -504,14 +546,14 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
     func showAnnotationError(_ error: Error) {
         let alert = NSAlert(); alert.messageText = "Annotation couldn’t be completed"
         alert.informativeText = error.localizedDescription
-        if let window = commentPopover?.contentViewController?.view.window ?? panel {
+        if let window = commentPopover?.contentViewController?.view.window ?? annotationWindow {
             alert.beginSheetModal(for: window) { _ in }
         }
     }
     @objc func saveComment() {
         guard let pending, let commentInput, let save else { return }
         let note = AttachmentAnnotation(source: pending.source, quote: pending.quote,
-            comment: commentInput.string, region: pending.region)
+            comment: commentInput.string, region: pending.region, sourceMessageID: pending.sourceMessageID)
         guard note.isValid else { NSSound.beep(); return }
         do {
             try save(note, AnnotationContent.data(for: note, snapshot: pendingImage), pending.source)
@@ -526,7 +568,7 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
         guard !isDismissing else { return }
         if returnFocus {
             guard closingPopover == nil,
-                  pending != nil || busy || commentPopover != nil || overlay != nil else { return }
+                  pending != nil || busy || commentPopover != nil || overlay != nil || conversationCanvas != nil else { return }
         }
         isDismissing = true
         defer { isDismissing = false }
@@ -534,7 +576,14 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
         let token = generation
         let responder = previewResponder
         let expectedURL = currentURL
+        let conversation = conversationWindow
         let restore: @MainActor @Sendable () -> Void = { [weak self] in
+            if let conversation, let self, self.generation == token, NSApp.isActive,
+               conversation.isVisible, !self.hasPendingAnnotation, conversation.attachedSheet == nil {
+                conversation.makeKey()
+                if let responder { conversation.makeFirstResponder(responder) }
+                return
+            }
             guard let self, self.generation == token, Self.active === self,
                   NSApp.isActive, let panel = self.panel, panel.isVisible,
                   let expectedURL, self.currentURL == expectedURL,
@@ -568,6 +617,20 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
                 child.delegate = nil; child.parent?.removeChildWindow(child); child.orderOut(nil)
             }
             self.commentPanel = nil; self.overlay = nil
+            if let canvas = self.conversationCanvas {
+                canvas.window?.invalidateCursorRects(for: canvas)
+                canvas.removeFromSuperview(); self.conversationCanvas = nil
+                if NSCursor.current == .crosshair { NSCursor.arrow.set() }
+            }
+            if conversation != nil {
+                self.conversationWindow = nil; self.save = nil
+                Self.conversationEditors.remove(self)
+                // Keep the monitor through Escape's key-up so a single press
+                // cannot also dismiss the underlying conversation.
+                if !self.annotationEscapeDown, let monitor = self.monitor {
+                    NSEvent.removeMonitor(monitor); self.monitor = nil
+                }
+            }
             if returnFocus { DispatchQueue.main.async(execute: restore) }
             self.updateCommands()
         }

@@ -24,15 +24,18 @@ public struct AttachmentAnnotation: Codable, Hashable, Sendable {
     public let version: Int
     public let sourceAttachmentID: UUID
     public let sourceFilename: String
+    /// Original conversation message, when the source is a transcript excerpt.
+    public let sourceMessageID: UUID?
     public let quote: String?
     public private(set) var comment: String
     public let region: Region?
 
     public init(source: ConversationAttachment, quote: String? = nil, comment: String, region: Region? = nil,
-                version: Int = 2) {
+                version: Int = 2, sourceMessageID: UUID? = nil) {
         self.version = version
         sourceAttachmentID = source.id
         sourceFilename = source.originalFilename
+        self.sourceMessageID = sourceMessageID
         self.quote = quote
         self.comment = comment.trimmingCharacters(in: .whitespacesAndNewlines)
         self.region = region
@@ -62,7 +65,8 @@ public struct AttachmentAnnotation: Codable, Hashable, Sendable {
     public var textRepresentation: String {
         let context = quote.map { "Selected text\n\($0)" } ?? (region == nil
             ? "This comment refers to the whole attachment." : "The marked preview snapshot follows on the next page.")
-        return "Annotation — \(sourceFilename)\n\nComment\n\(comment)\n\n\(context)\n\nSource attachment: \(sourceAttachmentID.uuidString)\n"
+        let messageReference = sourceMessageID.map { "Source message: \($0.uuidString)\n" } ?? ""
+        return "Annotation — \(sourceFilename)\n\nComment\n\(comment)\n\n\(context)\n\nSource attachment: \(sourceAttachmentID.uuidString)\n\(messageReference)"
     }
 }
 

@@ -401,7 +401,7 @@ public struct WorkspaceRepository: Sendable {
     public let launcherExecutableURL: URL?
     private let discoverAppletApplication: @Sendable () -> URL?
 
-    public static let managedSkillVersion = 22
+    public static let managedSkillVersion = 23
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil,
                 discoverAppletApplication: @escaping @Sendable () -> URL? = { AppletAgentSkill.installedApplicationURL() }) {
@@ -871,6 +871,11 @@ public struct WorkspaceRepository: Sendable {
             guard annotation.isValid, computer == nil, linkURL == nil, mediaType == annotation.mediaType,
                   let source = try loadAttachments(conversationID: conversationID).first(where: { $0.id == annotation.sourceAttachmentID }),
                   source.originalFilename == annotation.sourceFilename else { throw WorkspaceError.invalidAttachment }
+            if let messageID = annotation.sourceMessageID {
+                guard try loadMessages(conversationID: conversationID).contains(where: { $0.id == messageID }) else {
+                    throw WorkspaceError.invalidAttachment
+                }
+            }
             if annotation.version == 1 {
                 guard data.starts(with: Data("%PDF-".utf8)) else { throw WorkspaceError.invalidAttachment }
             } else if annotation.region != nil {

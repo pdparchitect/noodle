@@ -166,4 +166,6 @@ excluding app-bundled copies. Relaunch without the flag to restore normal detect
 
 [Releases](releases.md) · [Documentation](README.md)
 
+Conversation annotation checks: `Tests/conversation-annotations.sh` exercises selected transcript text and region capture in a sandboxed native fixture.
+
 Attachment annotation checks: `Tests/attachment-annotations.sh` exercises the native Quick Look flow in an isolated sandboxed fixture. See [attachment annotations](attachment-annotations.md) for behavior and capture limits.

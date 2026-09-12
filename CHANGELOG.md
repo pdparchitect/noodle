@@ -24,6 +24,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Annotate selected conversation text with ⌘⇧A or a region of the Noodle window with ⌘⇧R, adding comments and source context to the message draft. Select regions inside the existing window with a compact cancel hint.
+
 - Choose Wrap, Vertical, or Stack for images in Settings → Chat. Wrap is the default and fits previews across each message before starting another row; Vertical keeps the original layout, and Stack overlaps the pictures while keeping each one directly previewable.
 - Document noodlet window styles, sizing and frame restoration, native web requests without browser CORS, and Finder Quick Look for agents.
 

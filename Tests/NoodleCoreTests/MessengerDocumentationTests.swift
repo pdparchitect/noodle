@@ -82,6 +82,25 @@ final class MessengerDocumentationTests: XCTestCase {
         XCTAssertEqual(notice.kind, .systemNotice)
     }
 
+    func testAnnotationMetadataEncodingIsDocumented() throws {
+        let source = ConversationAttachment(conversationID: UUID(), originalFilename: "Message.txt",
+            storedFilename: "Message.txt", mediaType: "text/plain", byteCount: 10)
+        let notes = [
+            AttachmentAnnotation(source: source, quote: "Selected text", comment: "Feedback", sourceMessageID: UUID()),
+            AttachmentAnnotation(source: source, comment: "Visual feedback", region: .init(x: 0, y: 0, width: 1, height: 1))
+        ]
+        let guidance = try XCTUnwrap(MessengerDocumentation.attachmentFields.first { $0.0 == "annotation" }?.1)
+        let stored = Set(Mirror(reflecting: notes[0]).children.compactMap(\.label))
+        var encoded = Set<String>()
+        for note in notes {
+            let wire = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(note)) as? [String: Any])
+            encoded.formUnion(wire.keys)
+            XCTAssertEqual(try JSONDecoder().decode(AttachmentAnnotation.self, from: JSONEncoder().encode(note)), note)
+        }
+        XCTAssertEqual(encoded, stored)
+        for field in stored { XCTAssertTrue(guidance.contains(field), field) }
+    }
+
     func testWorkspaceRefreshUsesCatalogueAndPreservesBotContent() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-docs-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }

@@ -23,7 +23,7 @@ struct KeybindingsSettingsView: View {
                 } header: {
                     Text("Annotations")
                 } footer: {
-                    Text("Annotation shortcuts work in the attachment preview. Escape cancels an annotation; a separate Escape closes the preview.")
+                    Text("Select conversation text to add an annotation, or annotate a region of the Noodle window. The same shortcuts work in attachment previews. Escape cancels an annotation.")
                 }
             }
             .formStyle(.grouped)

@@ -8,8 +8,8 @@ Open **Noodle → Settings → Keybindings** to discover commands and change the
 | New Group | ⇧⌘N | Noodle |
 | Search Conversations | ⌘F | The current chat window |
 | Record / Stop Voice Message | ⇧⌘D | The current chat, on macOS 26 or later |
-| Add Annotation | ⇧⌘A | Selected text in an attachment preview; starts region selection for images |
-| Annotate Region | ⇧⌘R | The current attachment preview |
+| Add Annotation | ⇧⌘A | Selected conversation text or attachment-preview text; starts region selection for previewed images |
+| Annotate Region | ⇧⌘R | The current conversation window or attachment preview |
 | Save Annotation Comment | ⌘Return | The annotation popup or an unsent annotation's comment editor |
 
 Click a binding, then press the new combination using Command (⌘) or Control (⌃). Escape cancels recording; Delete clears the binding. Right-click a binding to reset that command or clear it. **Restore Defaults** resets all commands. Conflicting assignments and common system/editing shortcuts are rejected with an explanation; the existing binding stays intact.

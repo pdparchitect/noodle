@@ -4,7 +4,28 @@ import NoodleCore
 
 extension AttachmentPreviewController {
     func showRegion(image: NSImage, frame: NSRect) {
-        guard let panel else { return }
+        guard let panel = annotationWindow else { return }
+        if isConversationAnnotation, let content = panel.contentView {
+            let canvas = AnnotationRegionCanvas(image: image, embedded: true)
+            // Keep the original window, toolbar and rounded window silhouette.
+            // Draw the frozen window at its original coordinates, clipped to
+            // the existing content area instead of showing a duplicate window.
+            canvas.frame = content.convert(panel.contentLayoutRect, from: nil)
+            content.addSubview(canvas, positioned: .above, relativeTo: nil)
+            canvas.imageRect = canvas.convert(NSRect(origin: .zero, size: frame.size), from: nil)
+            canvas.onRegion = { [weak self] region, point in
+                guard let self, self.commentPopover == nil else { return }
+                self.pending?.region = .init(x: region.minX, y: region.minY, width: region.width, height: region.height)
+                self.textAnchorInPreview = NSPoint(x: point.x * frame.width, y: point.y * frame.height)
+                self.showComment()
+            }
+            canvas.onCancel = { [weak self] in self?.cancelAnnotation() }
+            conversationCanvas = canvas
+            panel.makeFirstResponder(canvas)
+            panel.invalidateCursorRects(for: canvas)
+            updateCommands()
+            return
+        }
         let overlay = AnnotationCapturePanel(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
         overlay.isReleasedWhenClosed = false; overlay.title = "Choose annotation region"
         overlay.nextResponder = self; overlay.hidesOnDeactivate = false; overlay.hasShadow = false
@@ -23,7 +44,7 @@ extension AttachmentPreviewController {
     }
 
     func showComment(message: String? = nil) {
-        guard commentPopover == nil, let panel, let pending else { return }
+        guard commentPopover == nil, let panel = annotationWindow, let pending else { return }
         // A clear child window provides a public AppKit anchor without altering Quick Look's view hierarchy.
         let editor = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 1, height: 1),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -112,7 +133,7 @@ extension AttachmentPreviewController {
     }
 
     func positionComment() {
-        guard let editor = commentPanel, let panel, let popover = commentPopover else { return }
+        guard let editor = commentPanel, let panel = annotationWindow, let popover = commentPopover else { return }
         let visible = panel.screen?.visibleFrame ?? panel.frame
         let anchor: NSRect
         if let point = textAnchorInPreview {
@@ -210,10 +231,41 @@ private struct AnnotationShortcutHint: View {
 
 @MainActor final class AnnotationRegionCanvas: NSView {
     let image: NSImage
+    let embedded: Bool
+    var imageRect: NSRect?
+    var onCancel: (() -> Void)?
     var start: NSPoint?
     var selected: NSRect?
     var onRegion: ((NSRect, NSPoint) -> Void)?
-    init(image: NSImage) { self.image = image; super.init(frame: .zero) }
+    init(image: NSImage, embedded: Bool = false) {
+        self.image = image; self.embedded = embedded
+        super.init(frame: .zero)
+        if embedded {
+            let hint = NSVisualEffectView()
+            hint.material = .hudWindow; hint.blendingMode = .withinWindow; hint.state = .active
+            hint.wantsLayer = true; hint.layer?.cornerRadius = 15; hint.layer?.masksToBounds = true
+            let text = annotationLabel("Drag to select · Esc to cancel", size: 12, weight: .medium)
+            let cancel = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: "Cancel selection")!,
+                target: self, action: #selector(cancelSelection))
+            cancel.isBordered = false; cancel.contentTintColor = .secondaryLabelColor
+            cancel.setAccessibilityLabel("Cancel selection")
+            let stack = NSStackView(views: [text, cancel]); stack.spacing = 12
+            stack.translatesAutoresizingMaskIntoConstraints = false; hint.addSubview(stack)
+            hint.translatesAutoresizingMaskIntoConstraints = false; addSubview(hint)
+            NSLayoutConstraint.activate([
+                hint.centerXAnchor.constraint(equalTo: centerXAnchor),
+                hint.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16),
+                hint.heightAnchor.constraint(equalToConstant: 30),
+                stack.leadingAnchor.constraint(equalTo: hint.leadingAnchor, constant: 13),
+                stack.trailingAnchor.constraint(equalTo: hint.trailingAnchor, constant: -10),
+                stack.centerYAnchor.constraint(equalTo: hint.centerYAnchor),
+                cancel.widthAnchor.constraint(equalToConstant: 16), cancel.heightAnchor.constraint(equalToConstant: 16)
+            ])
+            setAccessibilityLabel("Select a conversation region to annotate")
+        }
+    }
+    @objc private func cancelSelection() { onCancel?() }
+    override func scrollWheel(with event: NSEvent) { /* Keep the frozen selection stationary. */ }
     required init?(coder: NSCoder) { fatalError() }
     override var acceptsFirstResponder: Bool { true }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .crosshair) }
@@ -227,11 +279,18 @@ private struct AnnotationShortcutHint: View {
         if NSCursor.current != .crosshair { NSCursor.crosshair.set() }
     }
     override func draw(_ dirtyRect: NSRect) {
-        image.draw(in: bounds)
+        image.draw(in: imageRect ?? bounds)
+        if embedded {
+            let dimming = NSBezierPath(rect: bounds)
+            if let selected { dimming.appendRect(selected) }
+            dimming.windingRule = .evenOdd
+            NSColor.black.withAlphaComponent(0.15).setFill(); dimming.fill()
+        }
         if let selected {
             NSColor.systemOrange.withAlphaComponent(0.14).setFill(); selected.fill()
             NSColor.systemOrange.setStroke(); let path = NSBezierPath(rect: selected); path.lineWidth = 3; path.stroke()
         }
+        guard !embedded else { return }
         let hint = "Drag around a detail · Click to place a pin · Esc to cancel"
         let pill = NSRect(x: 25, y: 20, width: 500, height: 38)
         NSColor.black.withAlphaComponent(0.8).setFill(); NSBezierPath(roundedRect: pill, xRadius: 19, yRadius: 19).fill()
@@ -252,9 +311,12 @@ private struct AnnotationShortcutHint: View {
         self.start = nil; needsDisplay = true
         let rect = selected!
         let pointer = convert(event.locationInWindow, from: nil)
-        onRegion?(NSRect(x: rect.minX / bounds.width, y: rect.minY / bounds.height,
-                         width: rect.width / bounds.width, height: rect.height / bounds.height),
-                  NSPoint(x: min(1, max(0, pointer.x / bounds.width)), y: min(1, max(0, pointer.y / bounds.height))))
+        let imageFrame = imageRect ?? bounds
+        onRegion?(NSRect(x: (rect.minX - imageFrame.minX) / imageFrame.width,
+                         y: (rect.minY - imageFrame.minY) / imageFrame.height,
+                         width: rect.width / imageFrame.width, height: rect.height / imageFrame.height),
+                  NSPoint(x: min(1, max(0, (pointer.x - imageFrame.minX) / imageFrame.width)),
+                          y: min(1, max(0, (pointer.y - imageFrame.minY) / imageFrame.height))))
     }
 }
 

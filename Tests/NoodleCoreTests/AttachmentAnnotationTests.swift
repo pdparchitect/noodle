@@ -44,7 +44,7 @@ final class AttachmentAnnotationTests: XCTestCase {
         drafts.clear(bot.conversation.id)
         drafts.restoreAnnotations(try repository.loadAttachments(conversationID: bot.conversation.id), messages: [sent], conversationID: bot.conversation.id)
         XCTAssertTrue(drafts[bot.conversation.id].attachments.isEmpty, "No revised draft is created")
-        let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC0sAAAAASUVORK5CYII=")!
+        let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP438DwHwAGgAJ/EEwb4QAAAABJRU5ErkJggg==")!
         let visual = AttachmentAnnotation(source: source, comment: "Visual comment", region: .init(x: 0, y: 0, width: 1, height: 1))
         let image = try repository.importAttachment(data: png, originalFilename: "note.png", into: bot.conversation.id, mediaType: "image/png", annotation: visual)
         let updatedImage = try repository.reviseAnnotationComment(image, comment: "New visual comment", content: png)
@@ -188,7 +188,7 @@ final class AttachmentAnnotationTests: XCTestCase {
         let repository = WorkspaceRepository(rootURL: root)
         try repository.prepare()
         let bot = try repository.createAgent(named: "Image reviewer")
-        let png = try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC0sAAAAASUVORK5CYII="))
+        let png = try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP438DwHwAGgAJ/EEwb4QAAAABJRU5ErkJggg=="))
         let source = try repository.importAttachment(data: png, originalFilename: "source.png", into: bot.conversation.id, mediaType: "image/png")
         let note = AttachmentAnnotation(source: source, comment: "Use a warmer colour", region: .init(x: 0, y: 0, width: 1, height: 1))
         let file = try repository.importAttachment(data: png, originalFilename: "note.png", into: bot.conversation.id,

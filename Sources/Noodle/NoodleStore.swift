@@ -705,6 +705,15 @@ final class NoodleStore {
         drafts[source.conversationID].attachments.append(attachment)
     }
 
+    func saveConversationAnnotation(_ note: AttachmentAnnotation, content: Data,
+                                    source: ConversationAttachment, sourceData: Data) throws {
+        let saved = try ConversationAnnotationContent.save(note, content: content, source: source,
+            sourceData: sourceData, repository: repository)
+        let id = source.conversationID
+        attachmentsByConversation[id, default: []].append(contentsOf: [saved.source, saved.attachment])
+        drafts[id].attachments.append(saved.attachment)
+    }
+
     func canEditAnnotation(_ attachment: ConversationAttachment) -> Bool {
         drafts.canEditAnnotation(attachment, messages: messagesByConversation[attachment.conversationID, default: []])
     }

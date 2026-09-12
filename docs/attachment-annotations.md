@@ -1,4 +1,8 @@
-# Attachment annotations
+# Conversation and attachment annotations
+
+Select text in a conversation and press **⌘⇧A** to comment on that excerpt. The annotation keeps the exact quote, the original message ID, and a saved copy of the message. With the conversation active, **⌘⇧R** freezes the content inside the existing Noodle window so you can mark a visible region and add a comment. The toolbar and window controls stay in place, and a compact hint offers cancellation. Saving adds an annotation to that conversation's draft; **⌘Return** saves and **Escape** cancels. Neither action sends a message. Switching conversations cancels unfinished annotations, and cancelled selections do not save source files.
+
+These shortcuts follow the active window. A focused attachment preview keeps its existing annotation behavior below. Conversation text selection uses the rendered message and preserves the clipboard. Region capture includes only the current Noodle window and uses the existing app sandbox permissions.
 
 Open an attachment in a Noodle conversation to use the system Quick Look preview.
 
@@ -27,6 +31,8 @@ Native Quick Look close notifications only release the Noodle preview session; t
 Choose **Edit Comment** inside an unsent draft's viewer to change feedback. **Save** updates that draft annotation in place. Submitted annotations are read-only, including messages waiting for delivery: they have no edit action and cannot be saved as revised drafts. Submitting a draft also removes editing controls from an already-open viewer; stale save attempts are rejected by storage. Quoted text, the source reference and the marked image are preserved. Older PDF drafts retain their file format when edited. Cancel or Escape in the editor discards the edit.
 
 ## Validation
+
+`Tests/conversation-annotations.sh` checks native SwiftUI selection, identical quotes in different messages, clipboard preservation, own-window capture, comment focus, Save/Cancel, custom bindings, preview routing and navigation cancellation in an isolated sandboxed app. It uses synthetic messages and does not start agents or send messages. `ConversationAnnotationTests` checks source snapshots, draft recovery, edits, delivery metadata, legacy decoding, and rollback of invalid message references.
 
 `Tests/attachment-annotations.sh --headless` checks text/PNG encoding, marker position, image orientation, long/Unicode feedback, legacy edits, preview-host remounting, and the production window scope across repeated `NavigationSplitView` conversation changes. It verifies retained callbacks still reach the mounted responder, navigation clears pending annotation state, and pointer/menu/region anchors use the expected coordinates. A deferred test popover exercises Escape repeats, immediate/delayed close completion, anchor retention during the animation, navigation during dismissal, and stale callbacks; its content routes through the same preview owner. It does not open or focus windows; actual Quick Look presentation still needs the foreground fixture or a manual check. Add `--render-previews` to render the actual annotation frame offscreen for inspection. Use this mode while the desktop is in use.
 

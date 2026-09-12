@@ -126,6 +126,7 @@ struct MessageBubble: View {
                     .lineSpacing(2)
                     .foregroundStyle(.white)
                     .textSelection(.enabled)
+                    .background(ConversationAnnotationText(message: message))
                     .padding(.horizontal, 13)
                     .padding(.vertical, 8)
                     .background { messageBackground }
