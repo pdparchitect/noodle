@@ -436,15 +436,8 @@ private struct HarnessInstallationRow: View {
                         if showsInstallationGuide, let guide = setup.installationGuide(for: id) {
                             Text(guide.instructions).font(.caption).foregroundStyle(.secondary)
                             if let command = guide.command {
-                                Text(command).font(.system(.caption, design: .monospaced))
-                                    .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                                HStack {
-                                    Button("Copy Command") {
-                                        NSPasteboard.general.clearContents()
-                                        NSPasteboard.general.setString(command, forType: .string)
-                                    }
-                                    Button("Open Terminal") { openTerminal() }
-                                }
+                                HarnessCommandView(command: command)
+                                Button("Open Terminal") { openTerminal() }
                             }
                             HStack {
                                 Link("Installation Guide", destination: guide.documentationURL)
@@ -517,15 +510,8 @@ private struct HarnessInstallationRow: View {
             let guide = HarnessVersionPolicy.updateGuide(for: installation)
             Text(guide.instructions).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let command = guide.command {
-                Text(command).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack {
-                    Button("Copy Command") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(command, forType: .string)
-                    }
-                    Button("Open Terminal") { openTerminal() }
-                }
+                HarnessCommandView(command: command)
+                Button("Open Terminal") { openTerminal() }
             }
             Link("Official Update Guide", destination: guide.documentationURL)
             if let terminalError { Text(terminalError).font(.caption).foregroundStyle(.red) }
@@ -558,5 +544,37 @@ private struct HarnessInstallationRow: View {
         if setup.errors[id] != nil || !failedAgents.isEmpty { return .orange }
         if setup.authentication[id] == .authenticated || setup.authentication[id] == .notRequired { return .green }
         return .secondary
+    }
+}
+
+private struct HarnessCommandView: View {
+    let command: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: "terminal")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+
+            Text(command)
+                .font(.system(.callout, design: .monospaced))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button("Copy Command", systemImage: "doc.on.doc") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(command, forType: .string)
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .help("Copy command")
+        }
+        .padding(10)
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+        .overlay {
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(.primary.opacity(0.1), lineWidth: 1)
+        }
     }
 }

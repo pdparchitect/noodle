@@ -49,6 +49,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Display harness installation and update commands in a distinct inset box with larger monospaced text and an inline copy button.
 - Describe the Applet skill explicitly as creative coding for utilities, games, interactive websites, prototypes, examples, and demos.
 - Align Noodle Applet with Noodle Computer's native interface, settings, and menus; add Applet to the shared signed update and release pipeline.
 - Put Codex first and Apple last in harness lists. Default new bots to the first available harness, using Apple when it is the only option, and warn that Apple is experimental and may be slow or unreliable.
