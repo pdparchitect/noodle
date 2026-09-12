@@ -8,6 +8,10 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Use matching single-line chips for draft annotations and files. Show annotation comment excerpts, with the full comment and source filename available on hover and in the preview.
+
+- Align draft annotations and attachment cards with the chat input, including while scrolling the attachment row.
+
 - Keep attachment region annotations aligned with the preview and preserve its rounded corners. Replace the bottom banner with the same pointer-following hint used in conversations, hiding it when selection begins.
 
 - Open noodlet attachments directly in Noodle Applet with full interaction, reusing an existing window instead of showing Quick Look’s file-information fallback. Keep the thumbnail in the conversation and update the agent skill to explain the behavior.

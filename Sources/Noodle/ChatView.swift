@@ -209,8 +209,8 @@ struct ChatView: View {
                             )
                         }
                     }
-                    .padding(.horizontal, 38)
                 }
+                .padding(.leading, composerControlHeight + composerControlSpacing)
             }
 
             composerControls
@@ -542,25 +542,32 @@ private struct PendingAttachmentChip: View {
     let preview: () -> Void
     let remove: () -> Void
 
+    private var title: String {
+        attachment.annotation.map { $0.comment.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
+            ?? attachment.originalFilename
+    }
+
+    private var previewDescription: String {
+        guard let note = attachment.annotation else { return attachment.originalFilename }
+        return "Annotation on \(note.sourceFilename)\n\n\(note.comment)"
+    }
+
     var body: some View {
         HStack(spacing: 6) {
             Button(action: preview) {
                 HStack(spacing: 6) {
                     Image(systemName: attachment.previewSymbolName)
                         .foregroundStyle(.blue)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(attachment.annotation.map { "Annotation · " + $0.sourceFilename } ?? attachment.originalFilename)
-                            .lineLimit(1)
-                        if let note = attachment.annotation {
-                            Text(note.comment).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                    }
+                        .frame(width: 14)
+                    Text(title)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(attachment.annotation?.comment ?? "Preview Attachment")
-            .accessibilityLabel("Preview \(attachment.originalFilename)")
+            .help(previewDescription)
+            .accessibilityLabel("Preview \(previewDescription)")
 
             Button(action: remove) {
                 Image(systemName: "xmark.circle.fill")
@@ -572,7 +579,7 @@ private struct PendingAttachmentChip: View {
         .font(.caption)
         .padding(.leading, 9)
         .padding(.trailing, 5)
-        .padding(.vertical, 6)
+        .frame(height: 28)
         .background(.quaternary.opacity(0.35), in: Capsule())
         .overlay(Capsule().stroke(.separator.opacity(0.45)))
         .frame(maxWidth: 260)
