@@ -52,7 +52,7 @@ struct AgentAccessSettingsView: View {
                     }
                 }
             } footer: {
-                Text("Codex starts restricted and lets you choose autonomous access. Other harnesses require autonomous access; selecting one in the bot editor authorizes it. Copied bots may need access enabled here.")
+                Text("Apple and Codex start restricted and let you choose autonomous access. Other harnesses require autonomous access; selecting one in the bot editor authorizes it. Copied bots may need access enabled here.")
             }
         }
         .formStyle(.grouped)

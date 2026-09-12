@@ -75,6 +75,7 @@ public enum HarnessVersionPolicy {
 
     public static func requiredOptions(for provider: HarnessProvider) -> [String] {
         switch provider {
+        case .apple: return ["--serve", "--inspect"]
         case .codex: return ["app-server"]
         case .claudeCode: return ["--input-format", "--output-format", "--permission-mode", "--permission-prompts", "--session-id"]
         case .fx: return ["acp"]
@@ -114,6 +115,7 @@ public enum HarnessVersionPolicy {
         if isBundledCodex(installation) { return nil }
         let address: String
         switch installation.provider {
+        case .apple: return nil
         case .codex: address = "https://api.github.com/repos/openai/codex/releases/latest"
         case .claudeCode: address = "https://api.github.com/repos/anthropics/claude-code/releases/latest"
         case .fx: address = "https://releases.fx.sh/latest.txt"
@@ -147,6 +149,8 @@ public enum HarnessVersionPolicy {
         }
         let command: String, link: String
         switch installation.provider {
+        case .apple:
+            return .init(command: nil, instructions: "The Apple harness is included with Noodle. Update or reinstall Noodle to update this executable. Enable Apple Intelligence in System Settings to use its on-device model.", documentationURL: URL(string: "https://support.apple.com/121115")!)
         case .codex:
             command = "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
             link = "https://developers.openai.com/codex/cli/"

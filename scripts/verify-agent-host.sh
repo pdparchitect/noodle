@@ -30,3 +30,20 @@ if otool -l "$host/Contents/MacOS/NoodleAgentHost" | grep -Eq 'path .*(\.build|X
     exit 1
 fi
 print "Agent Host signature, identity, hardened runtime and zero entitlements verified"
+apple_helper="$app/Contents/Helpers/NoodleAppleAgent"
+codesign --verify --strict -R "=anchor apple generic and identifier \"$app_identifier.apple-agent\" and certificate leaf[subject.OU] = \"$app_team\"" "$apple_helper"
+apple_signature="$(codesign -dv --verbose=4 "$apple_helper" 2>&1)"
+print -r -- "$apple_signature" | grep -q 'runtime'
+if codesign -d --entitlements :- "$apple_helper" 2>/dev/null | grep -q '<key>'; then
+    print -u2 "The Apple harness must use the Agent Host policy without extra entitlements."
+    exit 1
+fi
+if otool -L "$apple_helper" | grep -Eq '/opt/homebrew|/usr/local'; then
+    print -u2 "The Apple harness links a mutable external library."
+    exit 1
+fi
+if otool -l "$apple_helper" | grep -Eq 'path .*(\.build|Xcode.*Toolchains)'; then
+    print -u2 "The Apple harness contains a development-only library search path."
+    exit 1
+fi
+print "Apple harness signature, bundled identity, hardened runtime and linkage verified"

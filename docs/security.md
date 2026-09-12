@@ -62,12 +62,22 @@ LAN; Shell computers can have networking disabled.
 
 The Noodle app stays sandboxed. Harnesses run through the signed
 `NoodleAgentHost.xpc`, which validates Noodle's identity, the vendor-signed harness,
-and a fixed set of launch options. Restricted Codex receives its filesystem
+and a fixed set of launch options. Restricted Codex and Apple receive their filesystem
 policy before the harness executable starts; failure to apply it prevents
 startup. The host accepts no caller-supplied sandbox profile, arbitrary command,
 or writable roots. Autonomous harnesses use the separate authorized launch path.
 The host runs as the current user, never root. App and helper entitlements are
 unchanged by the workspace migration.
+
+The built-in `NoodleAppleAgent` is verified against this app's exact helper path,
+signing team, and helper identifier. It has no extra entitlements and does not
+inherit the app sandbox. Agent Host applies its own deny-by-default policy before
+execution: system and Noodle repository reads, workspace and conversation writes,
+read-only model-availability and global preferences, and the Apple model-manager
+service. Outbound network and unrelated user files are denied. Its initial
+Default model runs on device through Foundation Models. The existing per-bot
+autonomous setting enables broader user-level access through the same authorized
+launch path as other harnesses. The app's entitlements remain unchanged.
 Sparkle's signed installer runs outside the sandbox to replace the app during updates.
 
 See [architecture](architecture.md) for process boundaries and

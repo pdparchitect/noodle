@@ -6,7 +6,7 @@ struct HarnessProviderIcon: View {
     let provider: HarnessProvider
 
     var body: some View {
-        Image(assetName)
+        (provider == .apple ? Image(systemName: "apple.logo") : Image(assetName))
             .resizable()
             .renderingMode(.template)
             .scaledToFit()
@@ -14,6 +14,8 @@ struct HarnessProviderIcon: View {
 
     private var assetName: String {
         switch provider {
+        case .apple:
+            ""
         case .codex:
             "CodexHarness"
         case .claudeCode:

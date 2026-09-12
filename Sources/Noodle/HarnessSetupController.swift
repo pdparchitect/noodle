@@ -24,6 +24,7 @@ final class HarnessSetupController {
         snapshots = cached
         authentication = cached.compactMapValues(\.authentication)
         self.providers = providers ?? [
+            .apple: AppleSetupProvider(),
             .codex: CodexSetupProvider(codexHome: HarnessStorage.codexHome),
             .claudeCode: ClaudeCodeSetupProvider(),
             .fx: FxSetupProvider(),

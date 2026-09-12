@@ -92,6 +92,14 @@ otool -l "$contents/MacOS/Noodle" \
 cp "$bin_path/NoodleMessenger" "$contents/Helpers/messenger"
 cp "$bin_path/NoodleMCPCLI" "$contents/Helpers/mcpshim"
 cp "$bin_path/NoodleComputerCLI" "$contents/Helpers/computer"
+cp "$bin_path/NoodleAppleAgent" "$contents/Helpers/NoodleAppleAgent"
+otool -l "$contents/Helpers/NoodleAppleAgent" \
+    | awk '/cmd LC_RPATH/ { found=1; next } found && /path / { print $2; found=0 }' \
+    | while IFS= read -r rpath; do
+        if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain_dir/"* ]]; then
+            install_name_tool -delete_rpath "$rpath" "$contents/Helpers/NoodleAppleAgent"
+        fi
+    done
 cp -R "$bin_path/SwiftTerm_SwiftTerm.bundle" "$contents/Resources/"
 cp "$project_root/Support/Info.plist" "$contents/Info.plist"
 ditto "$project_root/Support/ToolIcons" "$contents/Resources/ToolIcons"
@@ -186,6 +194,10 @@ codesign --force --options runtime "$timestamp_option" \
 codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/computer"
 team_id="$(codesign -dv --verbose=4 "$contents/Helpers/messenger" 2>&1 | awk -F= '/^TeamIdentifier=/ { print $2 }')"
+# Agent Host applies this helper's own Seatbelt policy before exec. No App
+# Sandbox inheritance entitlement: autonomous access uses the existing bot grant.
+codesign --force --options runtime "$timestamp_option" --identifier "$bundle_identifier.apple-agent" \
+    --sign "$signing_identity" "$contents/Helpers/NoodleAppleAgent"
 if [[ ! "$team_id" =~ '^[A-Z0-9]{10}$' ]]; then
     print -u2 "Sharing requires an Apple Development or Developer ID identity with a team identifier."
     exit 1

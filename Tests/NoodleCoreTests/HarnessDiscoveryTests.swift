@@ -2,6 +2,24 @@ import XCTest
 @testable import NoodleCore
 
 final class HarnessDiscoveryTests: XCTestCase {
+    func testAppleIsLastAndDiscoveredOnlyInsideThisApp() throws {
+        let app = root.appendingPathComponent("Noodle.app")
+        let binary = app.appendingPathComponent("Contents/Helpers/NoodleAppleAgent")
+        try FileManager.default.createDirectory(at: binary.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: binary)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binary.path)
+        let discovery = HarnessDiscovery(homeDirectory: root, applicationsDirectory: root,
+            executableSearchDirectories: [binary.deletingLastPathComponent()], applicationBundleURL: app, environment: [:])
+        XCTAssertEqual(discovery.discover().first?.provider, .codex)
+        XCTAssertEqual(discovery.discover().last?.provider, .apple)
+        XCTAssertEqual(discovery.discover().first(where: \.isAvailable)?.provider, .apple)
+        XCTAssertEqual(discovery.discover(.apple).executablePath, binary.path)
+        let externalOnly = HarnessDiscovery(homeDirectory: root, applicationsDirectory: root,
+            executableSearchDirectories: [binary.deletingLastPathComponent()], applicationBundleURL: root, environment: [:])
+        XCTAssertFalse(externalOnly.discover(.apple).isAvailable)
+        XCTAssertTrue(HarnessProvider.apple.supportsRestrictedAccess)
+    }
+
     private var root: URL!
 
     override func setUpWithError() throws {

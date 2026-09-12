@@ -6,20 +6,23 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
     case fx
     case grokBuild = "grok-build"
     case muse
+    case apple
 
     public var id: String { rawValue }
 
-    /// Whether Noodle's adapter can run inside the app sandbox. Providers that
-    /// cannot do so always use autonomous access, including for existing bots.
+    public var isExperimental: Bool { self == .apple }
+
+    /// Whether the Agent Host can apply a separate restricted runtime policy.
     public var supportsRestrictedAccess: Bool {
         switch self {
-        case .codex: return true
+        case .apple, .codex: return true
         case .claudeCode, .fx, .grokBuild, .muse: return false
         }
     }
 
     public var displayName: String {
         switch self {
+        case .apple: return "Apple"
         case .codex: return "Codex"
         case .claudeCode: return "Claude Code"
         case .fx: return "FX"
@@ -127,6 +130,7 @@ public enum ClaudeCodeCapabilities {
 }
 
 public struct HarnessDiscovery: Sendable {
+    private let bundledAppleURL: URL
     private let applicationsDirectory: URL
     private let executableSearchDirectories: [URL]
     private let standaloneCodexURL: URL
@@ -143,12 +147,14 @@ public struct HarnessDiscovery: Sendable {
         homeDirectory: URL = HarnessStorage.userHome,
         applicationsDirectory: URL = URL(fileURLWithPath: "/Applications", isDirectory: true),
         executableSearchDirectories: [URL]? = nil,
+        applicationBundleURL: URL = Bundle.main.bundleURL,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
         #if DEBUG
         simulateNoHarnesses = environment["NOODLE_SIMULATE_NO_HARNESSES"] == "1"
         #endif
         self.applicationsDirectory = applicationsDirectory.standardizedFileURL
+        self.bundledAppleURL = applicationBundleURL.appendingPathComponent("Contents/Helpers/NoodleAppleAgent")
         self.standaloneCodexURL = homeDirectory.appendingPathComponent(".codex/packages/standalone/current/bin/codex")
         self.standaloneClaudeURL = homeDirectory.appendingPathComponent(".local/bin/claude")
         self.standaloneFxURL = homeDirectory.appendingPathComponent(".local/bin/fx")
@@ -195,6 +201,7 @@ public struct HarnessDiscovery: Sendable {
 
     private func executableCandidates(for provider: HarnessProvider) -> [URL] {
         switch provider {
+        case .apple: return [bundledAppleURL]
         case .codex:
             return standaloneCandidates(for: provider) + [
                 applicationsDirectory.appendingPathComponent("ChatGPT.app/Contents/Resources/codex"),
@@ -207,6 +214,7 @@ public struct HarnessDiscovery: Sendable {
 
     private func standaloneCandidates(for provider: HarnessProvider) -> [URL] {
         switch provider {
+        case .apple: return []
         // The package location is accessible through the existing ~/.codex grant,
         // even when the sandbox cannot traverse the shell's ~/.local/bin symlink.
         case .codex: return [standaloneCodexURL] + executableSearchDirectories.map { $0.appendingPathComponent("codex") }

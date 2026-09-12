@@ -14,7 +14,8 @@ struct AgentConfigurationFields: View {
     }
 
     private var selectedModel: HarnessModel? {
-        models.first { $0.id == selectedModelIdentifier }
+        if selectedProvider == .apple, selectedModelIdentifier.isEmpty { return models.first(where: \.isDefault) }
+        return models.first { $0.id == selectedModelIdentifier }
     }
 
     private var selectedProvider: HarnessProvider? {
@@ -69,20 +70,24 @@ struct AgentConfigurationFields: View {
                 .popover(isPresented: $choosingModel, arrowEdge: .leading) {
                     ModelChooser(
                         providerName: selectedProvider?.displayName ?? "Harness",
+                        usesCatalogueDefault: selectedProvider == .apple,
                         models: models,
                         selection: $selectedModelIdentifier
                     )
                 }
 
-                Divider().padding(.leading, 44)
-
-                EffortControl(model: selectedModel, selection: $selectedEffort)
+                if selectedProvider != .apple || selectedModel?.supportedEfforts.isEmpty == false {
+                    Divider().padding(.leading, 44)
+                    EffortControl(model: selectedModel, selection: $selectedEffort)
+                }
             }
             .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(Color.secondary.opacity(0.11))
             }
+
+            HarnessExperimentalWarning(provider: selectedProvider)
 
             if let selectedProvider, !selectedProvider.supportsRestrictedAccess {
                 Text("\(selectedProvider.displayName) always uses autonomous access and can work beyond this bot's private workspace.")
@@ -183,6 +188,11 @@ private struct HarnessChooser: View {
                             .foregroundStyle(.secondary)
                             .frame(width: 22, height: 22)
                         Text(installation.provider.displayName)
+                        if installation.provider.isExperimental {
+                            Text("Experimental")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
                         Spacer()
                         if selection == installation.provider.rawValue {
                             Image(systemName: "checkmark")
@@ -199,8 +209,23 @@ private struct HarnessChooser: View {
     }
 }
 
+struct HarnessExperimentalWarning: View {
+    let provider: HarnessProvider?
+
+    var body: some View {
+        if let provider, provider.isExperimental {
+            Label("\(provider.displayName) is experimental. Responses may be slow or unreliable.",
+                  systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 private struct ModelChooser: View {
     let providerName: String
+    var usesCatalogueDefault = false
     let models: [HarnessModel]
     @Binding var selection: String
     @Environment(\.dismiss) private var dismiss
@@ -241,11 +266,9 @@ private struct ModelChooser: View {
             Divider()
 
             List {
-                modelButton(
-                    id: "",
-                    name: "\(providerName) default",
-                    description: "Use the harness default model."
-                )
+                if !usesCatalogueDefault {
+                    modelButton(id: "", name: "\(providerName) default", description: "Use the harness default model.")
+                }
 
                 ForEach(filteredModels) { model in
                     modelButton(id: model.id, name: model.displayName, description: model.description)
@@ -289,7 +312,7 @@ private struct ModelChooser: View {
                     }
                 }
                 Spacer(minLength: 10)
-                if selection == id {
+                if selection == id || (usesCatalogueDefault && selection.isEmpty && models.first(where: \.isDefault)?.id == id) {
                     Image(systemName: "checkmark")
                         .foregroundStyle(.tint)
                 }

@@ -12,7 +12,7 @@ let expected = MessengerDocumentation.referenceMarkdown
 do {
     if arguments[0] == "--write" {
         try expected.write(to: url, atomically: true, encoding: .utf8)
-        print("Generated \(url.path)")
+        FileHandle.standardError.write(Data("Generated \(url.path)\n".utf8))
     } else {
         guard try String(contentsOf: url, encoding: .utf8) == expected else {
             FileHandle.standardError.write(Data("Message reference is out of date. Run: swift run --disable-sandbox NoodleDocumentation --write docs/message-reference.md\n".utf8))

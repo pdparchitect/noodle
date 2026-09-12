@@ -24,6 +24,8 @@ let package = Package(
         .target(name: "NoodleAgentBridge"),
         .target(name: "NoodleAudioCapture", cSettings: [.unsafeFlags(["-fobjc-arc"])]),
         .executableTarget(name: "NoodleAgentHost", dependencies: ["NoodleCore", "NoodleAgentBridge"]),
+        .target(name: "NoodleAppleRuntime", dependencies: ["NoodleCore"]),
+        .executableTarget(name: "NoodleAppleAgent", dependencies: ["NoodleAppleRuntime", "NoodleCore"]),
         .target(name: "NoodleCore", dependencies: [.product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper")]),
         .executableTarget(name: "NoodleComputerCLI", dependencies: ["NoodleCore", .product(name: "ComputerBridge", package: "Bridge")]),
         .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "MCP", package: "swift-sdk")]),
@@ -51,6 +53,10 @@ let package = Package(
         .executableTarget(
             name: "NoodleMessenger",
             dependencies: ["NoodleCore"]
+        ),
+        .testTarget(
+            name: "NoodleAppleRuntimeTests",
+            dependencies: ["NoodleAppleRuntime", "NoodleCore"]
         ),
         .testTarget(
             name: "NoodleCoreTests",

@@ -46,7 +46,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
          onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void,
          onHeartbeat: @escaping @MainActor () -> Void,
          onUnexpectedTermination: @escaping @MainActor (ACPAgentProcess, String, Bool) -> Void) {
-        precondition(provider == .fx || provider == .grokBuild)
+        precondition(provider == .apple || provider == .fx || provider == .grokBuild)
         self.provider = provider
         configuration = agent
         self.executableURL = executableURL
@@ -63,13 +63,13 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         snapshot = .init(agentID: agent.id, phase: .offline, detail: "Not started")
     }
 
-    var isAlive: Bool { running || paused || !extendedAccess }
+    var isAlive: Bool { running || paused || (!extendedAccess && !provider.supportsRestrictedAccess) }
     var hasInterruptedWork: Bool { recoveryPending || turnIsActive || notificationPending || turnRecovery.hasUnfinishedTurn }
     var canReceiveHeartbeat: Bool { running && snapshot.phase == .ready && !turnIsActive && !notificationPending }
 
     func start() {
         guard connection == nil, !paused else { return }
-        guard extendedAccess else { update(.failed, "\(name) requires autonomous access in Settings → Security"); return }
+        guard extendedAccess || provider.supportsRestrictedAccess else { update(.failed, "\(name) requires autonomous access in Settings → Security"); return }
         stopped = false
         compatibilityIssue = nil
         update(.starting, "Starting \(name)")
@@ -96,15 +96,20 @@ final class ACPAgentProcess: AgentRuntimeProcess {
                 guard !Task.isCancelled else { return }
                 self?.terminated("Harness session startup timed out")
             }
-            connection.start(provider: provider, agentID: configuration.id, executablePath: executableURL.path,
-                             modelIdentifier: configuration.modelIdentifier,
-                             effortIdentifier: provider == .grokBuild ? configuration.reasoningEffort : nil) { [weak self] pid, error in
+            let started: (Int32, String?) -> Void = { [weak self] pid, error in
                 Task { @MainActor in
                     guard let self, !self.stopped, self.running else { return }
                     if let error { self.terminated(error); return }
                     self.pid = pid
                     self.request(.initialize, method: "initialize", params: FxProtocol.initializeParameters)
                 }
+            }
+            if provider == .apple, !extendedAccess {
+                connection.startRestrictedApple(agentID: configuration.id, reply: started)
+            } else {
+                connection.start(provider: provider, agentID: configuration.id, executablePath: executableURL.path,
+                                 modelIdentifier: configuration.modelIdentifier,
+                                 effortIdentifier: provider == .grokBuild ? configuration.reasoningEffort : nil, reply: started)
             }
         } catch { terminated(error.localizedDescription) }
     }
@@ -234,8 +239,8 @@ final class ACPAgentProcess: AgentRuntimeProcess {
                 interruptRequested = false
                 turnIsActive = false
                 trace.finish(.turnFailed)
-                update(.failed, provider == .fx ? FxProtocol.turnFailureDescription(error) : "Grok Build could not complete the turn. Check its account and model, then use Retry Startup. Unfinished work is preserved.")
-            } else { terminated("\(name) session setup failed. Check its sign-in and selected model in Settings.") }
+                update(.failed, provider == .apple ? (error["message"] as? String ?? "Apple could not finish this turn. Retry Startup to continue.") : (provider == .fx ? FxProtocol.turnFailureDescription(error) : "Grok Build could not complete the turn. Check its account and model, then use Retry Startup. Unfinished work is preserved."))
+            } else { terminated(provider == .apple ? (error["message"] as? String ?? "Apple session setup failed. Check Apple Intelligence in System Settings.") : "\(name) session setup failed. Check its sign-in and selected model in Settings.") }
             return
         }
         guard let result = object["result"] as? [String: Any] else { terminated("\(name) returned an invalid ACP response"); return }
@@ -254,7 +259,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
                 try FileManager.default.createDirectory(at: stateURL.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try JSONEncoder().encode(State(sessionID: sessionID)).write(to: stateURL, options: .atomic)
             } catch { terminated("Could not save the \(name) session"); return }
-            if provider == .grokBuild, let model = configuration.modelIdentifier {
+            if provider == .grokBuild || provider == .apple, let model = configuration.modelIdentifier {
                 request(.model, method: "session/set_model", params: ["sessionId": sessionID, "modelId": model])
             } else { configureEffort() }
         case .model:

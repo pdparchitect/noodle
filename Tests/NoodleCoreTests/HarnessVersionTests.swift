@@ -66,8 +66,13 @@ final class HarnessVersionTests: XCTestCase {
     func testGuidesAndCache() throws {
         for provider in HarnessProvider.allCases {
             let installed = HarnessInstallation(provider: provider, executablePath: "/fixture/tool")
-            XCTAssertNotNil(HarnessVersionPolicy.updateGuide(for: installed).command)
-            XCTAssertEqual(HarnessVersionPolicy.latestURL(for: installed)?.scheme, "https")
+            if provider == .apple {
+                XCTAssertNil(HarnessVersionPolicy.updateGuide(for: installed).command)
+                XCTAssertNil(HarnessVersionPolicy.latestURL(for: installed))
+            } else {
+                XCTAssertNotNil(HarnessVersionPolicy.updateGuide(for: installed).command)
+                XCTAssertEqual(HarnessVersionPolicy.latestURL(for: installed)?.scheme, "https")
+            }
             let snapshot = HarnessPresentationSnapshot(installation: installed, authentication: .authenticated,
                 version: .init(installedVersion: "1.0.0", latestVersion: "2.0.0"))
             XCTAssertEqual(try JSONDecoder().decode(HarnessPresentationSnapshot.self, from: JSONEncoder().encode(snapshot)), snapshot)

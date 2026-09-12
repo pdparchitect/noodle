@@ -5,6 +5,10 @@ import NoodleCore
 import NoodleAgentBridge
 
 private enum HostPaths {
+    static var application: URL {
+        Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    }
+    static var apple: URL { application.appendingPathComponent("Contents/Helpers/NoodleAppleAgent") }
     static let home: URL = {
         guard let entry = getpwuid(getuid()), let path = entry.pointee.pw_dir else { fatalError("No user home") }
         return URL(fileURLWithPath: String(cString: path), isDirectory: true)
@@ -12,6 +16,11 @@ private enum HostPaths {
 
     static func executable(_ path: String, provider: HarnessProvider) throws -> URL {
         switch provider {
+        case .apple:
+            guard let requirement = AgentHostIdentity.requirement(for: AgentHostIdentity.application + ".apple-agent") else {
+                throw HostError("Apple harness signing configuration is missing.")
+            }
+            return try AppleExecutableTrust.executable(at: path, application: application, requirement: requirement)
         case .codex: return try CodexExecutableTrust.executable(at: path, home: home)
         case .claudeCode: return try ClaudeExecutableTrust.executable(at: path, home: home)
         case .fx: return try FxExecutableTrust.executable(at: path, home: home)
@@ -72,11 +81,14 @@ if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-chi
         let effort = CommandLine.arguments[8].isEmpty ? nil : CommandLine.arguments[8]
         let restricted = CommandLine.arguments[9] == "restricted"
         guard restricted || CommandLine.arguments[9] == "autonomous",
-              !restricted || provider == .codex else { throw HostError("Unsupported runtime access mode.") }
+              !restricted || provider.supportsRestrictedAccess else { throw HostError("Unsupported runtime access mode.") }
         try isolateProcessGroup()
         guard chdir(workspace.path) == 0 else { throw HostError("Could not open the bot workspace: \(String(cString: strerror(errno)))") }
         var strings: [String]
         switch provider {
+        case .apple:
+            guard effort == nil, model.map(FxProtocol.validIdentifier) ?? true else { throw HostError("Unsupported Apple model configuration.") }
+            strings = [executable.path, "--serve"]
         case .muse:
             guard model.map(FxProtocol.validIdentifier) ?? true,
                   effort.map(MuseProtocol.efforts.contains) ?? true else { throw HostError("Unsupported Muse model or effort.") }
@@ -121,7 +133,7 @@ if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-chi
             let layout = AgentStorageLayout(workspace: workspace)
             let repository = layout.package.deletingLastPathComponent().deletingLastPathComponent()
             let codexHome = HostPaths.home.appendingPathComponent(".codex", isDirectory: true)
-            guard codexHome.resolvingSymlinksInPath().path == codexHome.path else {
+            guard provider != .codex || codexHome.resolvingSymlinksInPath().path == codexHome.path else {
                 throw HostError("Restricted Codex requires an unredirected account directory.")
             }
             let temporary = workspace.appendingPathComponent(".noodle/tmp", isDirectory: true)
@@ -129,7 +141,9 @@ if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-chi
             guard temporary.resolvingSymlinksInPath().path == temporary.path else { throw HostError("The bot temporary directory is redirected.") }
             // Only fixed paths derived by this host enter the profile. The XPC
             // caller cannot supply policy text, writable roots, or a command.
-            let profile = RestrictedAgentSandbox.profile(workspace: workspace, repository: repository,
+            let profile = provider == .apple
+                ? AppleAgentSandbox.profile(application: HostPaths.application, workspace: workspace, repository: repository)
+                : RestrictedAgentSandbox.profile(workspace: workspace, repository: repository,
                 codexHome: codexHome, executableDirectory: executable.deletingLastPathComponent().deletingLastPathComponent(),
                 application: Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent(),
                 temporary: temporary)
@@ -185,6 +199,22 @@ private final class HostSession: NSObject, AgentHostService {
         startRuntime(harnessIdentifier: HarnessProvider.codex.rawValue, agentID: agentID, executablePath: executablePath,
                      sessionID: nil, resumeSession: false, modelIdentifier: nil, effortIdentifier: nil,
                      restricted: true, reply: reply)
+    }
+
+    func startRestrictedApple(agentID: String, withReply reply: @escaping (Int32, String?) -> Void) {
+        startRuntime(harnessIdentifier: HarnessProvider.apple.rawValue, agentID: agentID, executablePath: HostPaths.apple.path,
+                     sessionID: nil, resumeSession: false, modelIdentifier: nil, effortIdentifier: nil,
+                     restricted: true, reply: reply)
+    }
+
+    func inspectApple(withReply reply: @escaping (Data?, String?) -> Void) {
+        queue.async {
+            do {
+                let executable = try HostPaths.executable(HostPaths.apple.path, provider: .apple)
+                let result = try AppleHarnessProbe.inspect(executable: executable, application: HostPaths.application)
+                reply(try JSONEncoder().encode(result), nil)
+            } catch { reply(nil, error.localizedDescription) }
+        }
     }
 
     private func startRuntime(harnessIdentifier: String, agentID: String, executablePath: String,
@@ -308,7 +338,9 @@ private final class HostSession: NSObject, AgentHostService {
             do {
                 guard let provider = HarnessProvider(rawValue: harnessIdentifier) else { throw HostError("Unknown harness.") }
                 let executable = try HostPaths.executable(executablePath, provider: provider)
-                let report = try HarnessVersionInspection.inspect(provider: provider, executable: executable, environment: self.accountEnvironment)
+                let report = try provider == .apple
+                    ? HarnessVersionReport(installedVersion: AppleHarnessProbe.inspect(executable: executable, application: HostPaths.application).version)
+                    : HarnessVersionInspection.inspect(provider: provider, executable: executable, environment: self.accountEnvironment)
                 reply(try JSONEncoder().encode(report), nil)
             } catch { reply(nil, error.localizedDescription) }
         }

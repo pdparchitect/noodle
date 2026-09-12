@@ -8,9 +8,15 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Fix Runbar and build-and-launch commands failing after a successful build by keeping generated-help progress messages out of the returned application path.
+
 - Make the capture comment divider span the preview width, removing the inset border at the image edge.
 
 - Hide unavailable, transparent, and tiny helper-window previews from Capture. Prioritize the current display, then other desktop windows, then windows filling other displays or Spaces, with larger areas first and app/title tie-breaks. Validate previews with a short live stream, recover from temporary capture pauses, and remove sources that fail on selection until Refresh retries them. Use one Capture menu item that opens the Windows tab, with Screens available in the picker.
+
+- Fix Apple replies repeating earlier answers or treating chat memory as a file task. Retrieve facts from original messages, preserve native tool sessions, and resume completed replies without repeating commands after interrupted delivery.
+
+- Give Apple chat a bounded excerpt of recent user messages, limit history retrieval across each turn, and recover chat context overflow with one tool-free attempt from retrieved messages. Avoid suggesting that a short question caused the harness to fill its context.
 
 ### Added
 
@@ -22,8 +28,13 @@ All notable changes to Noodle are documented here, following
 
 - Capture screens and app windows from the attachment menu with thumbnail selection and a live preview. Include windows across all displays and Spaces, including full-screen apps, with a compact, resizable preview utility available across Spaces and a single close control. Capture a plain PNG or freeze the displayed frame with the annotation shortcut, mark a region, and add a comment before adding it to the message draft.
 
+- Add an experimental bundled Apple harness using the on-device Apple Intelligence model. Discover models through the helper, with one Default model initially; support reading and writing files, bounded shell commands, and Messenger replies through a separate restricted sandbox or the bot's explicitly enabled autonomous access.
+
 ### Changed
 
+- Put Codex first and Apple last in harness lists. Default new bots to the first available harness, using Apple when it is the only option, and warn that Apple is experimental and may be slow or unreliable.
+- Show “Local” instead of the bundled executable path for the Apple harness in Settings, and shorten its availability status to “Ready”.
+- Explain Apple’s experimental status in a wider, comfortably padded popover opened from its label, removing the repeated warning text from Harness settings.
 - Keep each bot's identity and configuration in a copyable agent package, with separate working files and Noodle-managed runtime state. Automatically migrate existing workspaces before starting bots, preserving memory, skills, inbox positions, and session recovery state; interrupted migrations resume without overwriting files.
 - Run restricted Codex processes in a dedicated filesystem sandbox that protects agent configuration and runtime state while allowing workspace files and Messenger replies. Store autonomous harness authorizations separately so changing or copying a bot's harness configuration cannot grant broader access.
 - Preserve required migration releases in signed update feeds and require later releases to pass through them. Declare 0.13.0 as the first storage migration milestone and start update checks only after storage is ready.

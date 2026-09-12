@@ -19,6 +19,7 @@ public struct AgentStorageLayout: Sendable {
     public func sessionState(provider: HarnessProvider, extendedAccess: Bool) -> URL {
         let prefix: String
         switch provider {
+        case .apple: prefix = "apple"
         case .codex: prefix = "codex"
         case .claudeCode: prefix = "claude"
         case .fx: prefix = "fx"

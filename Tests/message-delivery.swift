@@ -34,6 +34,9 @@ import NoodleCore
     func startRestrictedCodex(agentID: UUID, executablePath: String, reply: @escaping (Int32, String?) -> Void) {
         start(provider: .codex, agentID: agentID, executablePath: executablePath, reply: reply)
     }
+    func startRestrictedApple(agentID: UUID, reply: @escaping (Int32, String?) -> Void) {
+        start(provider: .apple, agentID: agentID, executablePath: "/fixture/apple", reply: reply)
+    }
     func write(_ data: Data) {
         let object = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
         if object["type"] as? String == "user" {
@@ -104,7 +107,7 @@ import NoodleCore
             emit(["method": "turn/completed", "params": ["sessionId": session, "turnId": turnID ?? turn, "terminal": "completed"]])
         case .claudeCode:
             emit(["type": "result", "session_id": session, "is_error": false])
-        case .fx, .grokBuild:
+        case .apple, .fx, .grokBuild:
             emit(["id": promptID!, "result": ["stopReason": cancelled ? "cancelled" : "end_turn"]])
         }
     }
@@ -155,9 +158,9 @@ import NoodleCore
             process = MuseAgentProcess(agent: agent, executableURL: executable, workspaceURL: workspace,
                 extendedAccess: true, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
                 onUnexpectedTermination: { _, _, _ in })
-        case .fx, .grokBuild:
+        case .apple, .fx, .grokBuild:
             process = ACPAgentProcess(provider: provider, agent: agent, executableURL: executable, workspaceURL: workspace,
-                extendedAccess: true, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
+                extendedAccess: provider != .apple, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
                 onUnexpectedTermination: { _, _, _ in })
         }
         process.start()

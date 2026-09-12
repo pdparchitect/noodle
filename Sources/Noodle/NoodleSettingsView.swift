@@ -327,6 +327,7 @@ private struct HarnessInstallationRow: View {
     @State private var hasCheckedInstallation = false
     @State private var terminalError: String?
     @State private var showsUpdateGuide = false
+    @State private var showsExperimentalInfo = false
     @Environment(\.openURL) private var openURL
 
     private var id: HarnessProvider { installation.provider }
@@ -350,6 +351,23 @@ private struct HarnessInstallationRow: View {
                 HStack {
                     Text(installation.provider.displayName)
                         .fontWeight(.semibold)
+                    if id.isExperimental {
+                        Button("Experimental") { showsExperimentalInfo.toggle() }
+                            .buttonStyle(.plain)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .help("Why is this harness experimental?")
+                            .popover(isPresented: $showsExperimentalInfo) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Experimental")
+                                        .font(.headline)
+                                    Text("Apple’s on-device model can respond slowly, miss details from earlier messages, or fail to complete tool tasks. This harness is still being tested.")
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .padding(20)
+                                .frame(width: 360, alignment: .leading)
+                            }
+                    }
                     Spacer()
                     Label(statusText, systemImage: statusIcon)
                         .font(.caption)
@@ -357,7 +375,7 @@ private struct HarnessInstallationRow: View {
                 }
 
                 if let path = installation.executablePath {
-                    Text(path)
+                    Text(id == .apple ? "Local" : path)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
@@ -511,7 +529,7 @@ private struct HarnessInstallationRow: View {
         switch setup.authentication[id] {
         case .authenticated: return "Signed in"
         case .unauthenticated: return "Sign-in required"
-        case .notRequired: return "Ready — no sign-in required"
+        case .notRequired: return "Ready"
         case .managedExternally: return "Sign-in status unknown"
         case nil: return setup.checking.contains(id) ? "Checking sign-in…" : "Installed"
         }

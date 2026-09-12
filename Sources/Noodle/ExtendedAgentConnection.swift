@@ -62,6 +62,12 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
                               reply: @escaping (Int32, String?) -> Void) {
         proxy()?.startRestrictedCodex(agentID: agentID.uuidString, executablePath: executablePath, withReply: reply)
     }
+    func startRestrictedApple(agentID: UUID, reply: @escaping (Int32, String?) -> Void) {
+        proxy()?.startRestrictedApple(agentID: agentID.uuidString, withReply: reply)
+    }
+    func inspectApple(reply: @escaping (Data?, String?) -> Void) {
+        proxy(failure: { reply(nil, $0) })?.inspectApple(withReply: reply)
+    }
     func write(_ data: Data) { proxy()?.write(data) }
     func stop(reply: @escaping (Bool) -> Void) {
         stopping = true

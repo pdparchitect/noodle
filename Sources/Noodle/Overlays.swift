@@ -38,7 +38,8 @@ struct NewBotSheet: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(BotNameStyle.defaultsKey) private var botNameStyle = BotNameStyle.real.rawValue
     @State private var name = ""
-    @State private var selectedHarnessIdentifier = HarnessProvider.codex.rawValue
+    @State private var selectedHarnessIdentifier = ""
+    @State private var hasChosenHarness = false
     @State private var selectedModelIdentifier = ""
     @State private var selectedEffort = ""
     @State private var publicDescription = ""
@@ -121,7 +122,10 @@ struct NewBotSheet: View {
                     BotBackstoryEditor(backstory: $backstory)
                 case .runtime:
                     AgentConfigurationFields(
-                        selectedHarnessIdentifier: $selectedHarnessIdentifier,
+                        selectedHarnessIdentifier: Binding(
+                            get: { selectedHarnessIdentifier },
+                            set: { selectedHarnessIdentifier = $0; hasChosenHarness = true }
+                        ),
                         selectedModelIdentifier: $selectedModelIdentifier,
                         selectedEffort: $selectedEffort
                     )
@@ -130,19 +134,21 @@ struct NewBotSheet: View {
                 case .computers:
                     ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
                 }
+                if selectedTab != .runtime {
+                    HarnessExperimentalWarning(provider: HarnessProvider(rawValue: selectedHarnessIdentifier))
+                }
             }
             .padding(20)
         }
         .frame(width: 520)
         .onAppear {
             if name.isEmpty { name = BotNameGenerator.random(style: selectedBotNameStyle) }
-            if !store.runtime.availableInstallations.contains(where: {
-                $0.provider.rawValue == selectedHarnessIdentifier
-            }), let first = store.runtime.availableInstallations.first {
-                selectedHarnessIdentifier = first.provider.rawValue
-            }
+            selectAvailableHarnessIfNeeded()
             nameFocused = true
             store.runtime.refreshCapabilities()
+        }
+        .onChange(of: store.runtime.availableInstallations) { _, _ in
+            selectAvailableHarnessIfNeeded()
         }
         .sheet(isPresented: $editingAvatar) {
             BotIconEditor(
@@ -160,6 +166,17 @@ struct NewBotSheet: View {
             store.runtime.availableInstallations.contains {
                 $0.provider.rawValue == selectedHarnessIdentifier
             }
+    }
+
+    private func selectAvailableHarnessIfNeeded() {
+        let installations = store.runtime.availableInstallations
+        if hasChosenHarness, installations.contains(where: { $0.provider.rawValue == selectedHarnessIdentifier }) { return }
+        hasChosenHarness = false
+        let preferred = installations.first?.provider.rawValue ?? ""
+        guard selectedHarnessIdentifier != preferred else { return }
+        selectedHarnessIdentifier = preferred
+        selectedModelIdentifier = ""
+        selectedEffort = ""
     }
 
     private var selectedBotNameStyle: BotNameStyle {
@@ -232,7 +249,7 @@ struct EditBotSheet: View {
     init(agent: AgentRecord) {
         self.agent = agent
         _name = State(initialValue: agent.displayName)
-        _selectedHarnessIdentifier = State(initialValue: agent.harnessIdentifier ?? HarnessProvider.codex.rawValue)
+        _selectedHarnessIdentifier = State(initialValue: agent.harnessIdentifier ?? "")
         _selectedModelIdentifier = State(initialValue: agent.modelIdentifier ?? "")
         _selectedEffort = State(initialValue: agent.reasoningEffort ?? "")
         _publicDescription = State(initialValue: agent.publicDescription ?? "")
@@ -323,6 +340,9 @@ struct EditBotSheet: View {
             backstory = store.backstory(for: agent)
             mcpConnectionIDs = store.mcp.selectedIDs(for: agent)
             computerIDs = store.computers.selectedIDs(for: agent)
+            if selectedHarnessIdentifier.isEmpty {
+                selectedHarnessIdentifier = store.runtime.availableInstallations.first?.provider.rawValue ?? ""
+            }
             store.runtime.refreshCapabilities()
         }
         .sheet(isPresented: $editingAvatar) {

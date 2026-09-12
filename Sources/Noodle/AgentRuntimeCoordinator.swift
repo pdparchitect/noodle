@@ -65,6 +65,24 @@ final class AgentRuntimeCoordinator {
     private var hostGrokInstallation: HarnessInstallation?
     private var hostMuseInstallation: HarnessInstallation?
     private var museCapabilityTask: Task<Void, Never>?
+    private var appleCapabilityTask: Task<Void, Never>?
+
+    private func refreshAppleCapabilities() async {
+        guard discovery.discover(.apple).isAvailable else {
+            modelsByProvider[.apple] = []
+            return
+        }
+        do {
+            let result = try await AppleHostProbe().load()
+            guard !Task.isCancelled else { return }
+            modelsByProvider[.apple] = result.models
+            capabilityErrors[.apple] = result.unavailableReason
+        } catch {
+            guard !Task.isCancelled else { return }
+            modelsByProvider[.apple] = []
+            capabilityErrors[.apple] = error.localizedDescription
+        }
+    }
 
     private func discoveredInstallations() -> [HarnessInstallation] {
         discovery.discover().map { installation in
@@ -294,6 +312,7 @@ final class AgentRuntimeCoordinator {
         guard !Task.isCancelled else { return }
         await refreshGrokCapabilities()
         await refreshMuseCapabilities()
+        await refreshAppleCapabilities()
         guard !Task.isCancelled else { return }
         let complete = detected.map { installation in
             installation.provider == .grokBuild ? (hostGrokInstallation ?? installation) :
@@ -367,6 +386,8 @@ final class AgentRuntimeCoordinator {
 
     func refreshCapabilities() {
         installations = discoveredInstallations()
+        appleCapabilityTask?.cancel()
+        appleCapabilityTask = Task { [weak self] in await self?.refreshAppleCapabilities() }
         grokCapabilityTask?.cancel()
         grokCapabilityTask = Task { [weak self] in await self?.refreshGrokCapabilities() }
         museCapabilityTask?.cancel()
@@ -471,7 +492,7 @@ final class AgentRuntimeCoordinator {
                 })
             processes[agent.id] = process
             process.start()
-        case .fx, .grokBuild:
+        case .apple, .fx, .grokBuild:
             restartTasks.removeValue(forKey: agent.id)?.cancel()
             let process = ACPAgentProcess(
                 provider: installation.provider, agent: agent, executableURL: URL(fileURLWithPath: executablePath),

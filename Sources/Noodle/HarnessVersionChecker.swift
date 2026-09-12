@@ -3,6 +3,10 @@ import NoodleCore
 
 @MainActor final class HarnessVersionChecker: HarnessVersionChecking {
     func check(_ installation: HarnessInstallation, previous: HarnessVersionReport?, forceLatest: Bool) async throws -> HarnessVersionReport {
+        if installation.provider == .apple {
+            let result = try await AppleHostProbe().load()
+            return HarnessVersionReport(installedVersion: result.version)
+        }
         var report = try await HarnessVersionHostProbe().load(installation)
         report.latestVersion = previous?.latestVersion
         report.latestCheckedAt = previous?.latestCheckedAt
