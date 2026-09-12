@@ -93,7 +93,19 @@ import SwiftUI
             saved.append(try CaptureAttachment.save(image: image, title: title, region: region, comment: comment,
                 into: conversation.id, repository: repository))
         }
-        controller.show(kind: .window, relativeTo: sourceWindow, service: service, save: save)
+        let shortcut = CaptureShortcutView()
+        shortcut.capture = { self.controller.show(kind: .window, relativeTo: self.sourceWindow, service: service, save: save) }
+        sourceWindow.contentView!.addSubview(shortcut)
+        defer { shortcut.stop(); shortcut.capture = nil }
+        sourceWindow.makeKeyAndOrderFront(nil)
+        try await until("Fixture chat did not receive focus") { sourceWindow.isKeyWindow }
+        func captureKey(_ flags: NSEvent.ModifierFlags) -> NSEvent {
+            NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
+                windowNumber: sourceWindow.windowNumber, context: nil, characters: "s", charactersIgnoringModifiers: "s",
+                isARepeat: false, keyCode: 1)!
+        }
+        try require(shortcut.handle(captureKey([.command, .shift])) == nil && controller.panel != nil,
+            "Capture shortcut must open the picker and consume the key")
         let model = controller.model!, panel = controller.panel!
         let utilityFrame = panel.frame
         panel.zoom(nil); panel.miniaturize(nil); panel.toggleFullScreen(nil)
@@ -112,6 +124,7 @@ import SwiftUI
         try await render(panel, name: "picker")
         model.select(model.sources[0])
         try await until("Live red frame did not arrive: \(model.error ?? "")") { (sample(model.image)?.redComponent ?? 0) > 0.8 }
+        NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         try await until("Preview menu must target live capture when the panel has focus") {
             panel.isKeyWindow && AnnotationCommandsState.shared.owner === controller && AnnotationCommandsState.shared.enabled
@@ -155,6 +168,20 @@ import SwiftUI
         editor.insertText("Move this area to the right", replacementRange: editor.selectedRange())
         try await until("Native comment typing did not update the model") { model.comment == "Move this area to the right" }
         try require(model.region?.isValid == true, "Native region selection must be valid")
+        let region = model.region
+        sourceWindow.contentView!.addSubview(shortcut)
+        sourceWindow.makeKeyAndOrderFront(nil)
+        try await until("Could not refocus the host chat") { sourceWindow.isKeyWindow }
+        try KeyboardBindings.shared.set(KeyBinding("s", modifiers: [.command, .option]), for: .capture)
+        let oldKey = captureKey([.command, .shift])
+        try require(shortcut.handle(oldKey) === oldKey && sourceWindow.isKeyWindow, "Rebinding must release the old Capture shortcut")
+        try require(shortcut.handle(captureKey([.command, .option])) == nil, "Custom Capture shortcut must be consumed")
+        try await until("Opening Capture again did not focus its existing preview") { panel.isKeyWindow }
+        try require(controller.panel === panel && controller.model === model,
+            "Opening Capture again must reuse the existing session")
+        try require(key("s", code: 1, flags: [.command, .option], panel: panel), "Custom capture shortcut must work inside its preview")
+        try require(model.phase == .annotating && model.image === frozen && model.region == region
+            && model.comment == "Move this area to the right", "Refocusing Capture must preserve the frozen image, region and comment")
         try await render(panel, name: "annotation")
         try require(key("\r", code: 36, flags: .command, panel: panel), "Save shortcut was not handled")
         try require(saved.count == 1, "Annotated capture was not saved")

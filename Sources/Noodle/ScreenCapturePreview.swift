@@ -2,6 +2,40 @@ import AppKit
 import SwiftUI
 import NoodleCore
 
+/// Keeps the shortcut scoped to the chat window, including sidebar focus.
+struct CaptureShortcut: NSViewRepresentable {
+    let capture: () -> Void
+    func makeNSView(context: Context) -> CaptureShortcutView { CaptureShortcutView() }
+    func updateNSView(_ view: CaptureShortcutView, context: Context) { view.capture = capture }
+    static func dismantleNSView(_ view: CaptureShortcutView, coordinator: ()) { view.stop(); view.capture = nil }
+}
+
+@MainActor final class CaptureShortcutView: NSView {
+    var capture: (() -> Void)?
+    private var monitor: Any?
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        stop()
+        guard window != nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            return self.handle(event)
+        }
+    }
+    func handle(_ event: NSEvent) -> NSEvent? {
+        guard let window, NSApp.keyWindow === window, let capture,
+              NSApp.modalWindow == nil, window.attachedSheet == nil, window.sheetParent == nil,
+              KeyboardBindings.shared.matches(.capture, event: event) else { return event }
+        if !event.isARepeat { capture() }
+        return nil
+    }
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+    }
+    deinit { if let monitor { NSEvent.removeMonitor(monitor) } }
+}
+
 @MainActor final class ScreenCapturePreviewController: NSObject, NSWindowDelegate, PreviewAnnotationTarget {
     private(set) var panel: ScreenCapturePanel?
     private(set) var model: ScreenCaptureModel?
@@ -10,7 +44,7 @@ import NoodleCore
 
     func show(kind: ScreenCaptureKind, relativeTo host: NSWindow, service: (any ScreenCaptureProviding)? = nil,
               save: @escaping (CGImage, String, AttachmentAnnotation.Region?, String) throws -> Void) {
-        close()
+        if focusIfOpen() { return }
         self.host = host; responder = host.firstResponder
         let panel = ScreenCapturePanel(contentRect: NSRect(x: 0, y: 0, width: 880, height: 660),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
@@ -54,6 +88,11 @@ import NoodleCore
         panel.makeKeyAndOrderFront(nil)
         model.chooseSources()
     }
+    @discardableResult func focusIfOpen() -> Bool {
+        guard let panel else { return false }
+        panel.makeKeyAndOrderFront(nil)
+        return true
+    }
     func close() { panel?.close() }
     func annotate() { model?.annotate() }
     func startRegion() { model?.annotate() }
@@ -95,6 +134,10 @@ import NoodleCore
     }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let bindings = KeyboardBindings.shared
+        if bindings.matches(.capture, event: event) {
+            // The picker is already open; preserve its source and annotations.
+            return true
+        }
         if bindings.matches(.annotateRegion, event: event) || bindings.matches(.annotateSelection, event: event) {
             if !event.isARepeat { model?.annotate() }
             return true

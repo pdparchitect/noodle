@@ -42,6 +42,15 @@ struct ComposerAttachmentMenu: NSViewRepresentable {
                 item.image = NSImage(systemSymbolName: entry.1, accessibilityDescription: nil)
                 item.target = self
                 item.tag = index
+                if index == 2, KeyboardBindings.shared.recordingAction == nil,
+                   let binding = KeyboardBindings.shared.binding(for: .capture) {
+                    item.keyEquivalent = binding.key
+                    item.keyEquivalentModifierMask = []
+                    if binding.modifiers.contains(.command) { item.keyEquivalentModifierMask.insert(.command) }
+                    if binding.modifiers.contains(.shift) { item.keyEquivalentModifierMask.insert(.shift) }
+                    if binding.modifiers.contains(.option) { item.keyEquivalentModifierMask.insert(.option) }
+                    if binding.modifiers.contains(.control) { item.keyEquivalentModifierMask.insert(.control) }
+                }
                 menu.addItem(item)
             }
             menu.popUp(positioning: nil, at: NSPoint(x: bounds.minX, y: bounds.maxY + 5), in: self)
@@ -54,6 +63,11 @@ struct ComposerAttachmentMenu: NSViewRepresentable {
 
         @objc private func selectItem(_ item: NSMenuItem) {
             guard actions.indices.contains(item.tag) else { return }
+            if item.tag == 2, let event = NSApp.currentEvent, event.type == .keyDown {
+                guard !event.isARepeat else { return }
+                if !event.modifierFlags.intersection([.command, .control]).isEmpty,
+                   !KeyboardBindings.shared.matches(.capture, event: event) { return }
+            }
             selectedAction = actions[item.tag]
         }
     }

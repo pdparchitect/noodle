@@ -16,6 +16,8 @@ All notable changes to Noodle are documented here, following
 
 - Add a minimal black Noodle website with a product screenshot and a single download action, automatic GitHub Pages deployment for website changes on main, and custom domain setup instructions.
 
+- Open Capture with ⌘⇧S, defaulting to Windows or focusing an existing preview without losing annotations. Show the shortcut in the existing attachment menu and allow customization in Settings → Keybindings.
+
 - Add a Companions tab immediately before Update in Settings, showing installed companion app versions and offering an install link for missing apps, starting with Noodle Computer.
 
 - Capture screens and app windows from the attachment menu with thumbnail selection and a live preview. Include windows across all displays and Spaces, including full-screen apps, with a compact, resizable preview utility available across Spaces and a single close control. Capture a plain PNG or freeze the displayed frame with the annotation shortcut, mark a region, and add a comment before adding it to the message draft.

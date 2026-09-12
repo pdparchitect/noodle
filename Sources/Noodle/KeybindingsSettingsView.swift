@@ -13,6 +13,7 @@ struct KeybindingsSettingsView: View {
                     row(.newBot)
                     row(.newGroup)
                     row(.searchConversations)
+                    row(.capture)
                     if #available(macOS 26.0, *) { row(.recordVoice) }
                 }
                 Section {

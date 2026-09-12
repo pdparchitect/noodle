@@ -12,6 +12,7 @@ final class KeyboardShortcutsTests: XCTestCase {
             XCTAssertTrue(seen.insert(binding).inserted, action.title)
         }
         XCTAssertEqual(preferences.binding(for: .annotateSelection)?.displayName, "⇧⌘A")
+        XCTAssertEqual(preferences.binding(for: .capture), KeyBinding("s", modifiers: [.command, .shift]))
         XCTAssertEqual(preferences.binding(for: .saveAnnotation)?.displayName, "⌘↩")
     }
 
@@ -37,7 +38,7 @@ final class KeyboardShortcutsTests: XCTestCase {
 
     func testConflictsAndReservedCommandsDoNotChangePreferences() throws {
         var preferences = KeyboardShortcutPreferences()
-        for binding in [NoodleShortcut.annotateRegion.defaultBinding, KeyBinding("q"), KeyBinding("a"),
+        for binding in [NoodleShortcut.annotateRegion.defaultBinding, NoodleShortcut.capture.defaultBinding, KeyBinding("q"), KeyBinding("a"),
                         KeyBinding(","), KeyBinding("z", modifiers: [.command, .shift]),
                         KeyBinding("4", modifiers: [.command, .shift]), KeyBinding("x", modifiers: [])] {
             XCTAssertThrowsError(try preferences.set(binding, for: .annotateSelection))
@@ -64,5 +65,14 @@ final class KeyboardShortcutsTests: XCTestCase {
         let object = try JSONSerialization.jsonObject(with: defaultData)
         let bad = try JSONSerialization.data(withJSONObject: ["overrides": ["annotateSelection": ["binding": object]]])
         XCTAssertTrue(KeyboardShortcutPreferences(data: bad).isDefault)
+    }
+
+    func testCaptureCanBeReboundAndCleared() throws {
+        var preferences = KeyboardShortcutPreferences()
+        let custom = KeyBinding("s", modifiers: [.command, .option])
+        try preferences.set(custom, for: .capture)
+        XCTAssertEqual(KeyboardShortcutPreferences(data: try JSONEncoder().encode(preferences)).binding(for: .capture), custom)
+        try preferences.set(nil, for: .capture)
+        XCTAssertNil(KeyboardShortcutPreferences(data: try JSONEncoder().encode(preferences)).binding(for: .capture))
     }
 }

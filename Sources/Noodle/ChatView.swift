@@ -31,6 +31,7 @@ struct ChatView: View {
 
     var body: some View {
         chatContent
+            .background(CaptureShortcut(capture: { showCapture(.window) }).frame(width: 0, height: 0))
             .background(Color(nsColor: .textBackgroundColor).opacity(0.28))
             .overlay {
                 ConversationEffectsView(conversationID: conversation.id)
@@ -228,6 +229,7 @@ struct ChatView: View {
     }
 
     private func showCapture(_ kind: ScreenCaptureKind) {
+        if screenCapturePreview.focusIfOpen() { return }
         guard let host = attachmentPreview.resolveHostWindow() else { return }
         let destination = conversation.id
         attachmentPreview.close(); computerPreview.close()
