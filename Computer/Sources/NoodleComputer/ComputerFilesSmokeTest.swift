@@ -48,6 +48,11 @@ import Foundation
             try await files.change("rename", path: "/workspace/Documents/Copy.bin", extra: ["/workspace/Documents/Moved.bin"])
             try await files.change("remove", path: "/workspace/Documents/Moved.bin")
             print("PASS: no-overwrite imports, folder creation, duplicate, move and deletion")
+            browser.importFiles([source], into: "/workspace/Documents")
+            while browser.busy { try await Task.sleep(for: .milliseconds(20)) }
+            guard browser.error == nil, try await files.list("/workspace/Documents").contains(where: { $0.name == "source.bin" }),
+                  !(try await files.list("/workspace").contains(where: { $0.name == "source.bin" })) else { throw ComputerError("Import ignored the drop target folder") }
+            print("PASS: imports use the explicit folder drop target")
             let importFolder = root.appendingPathComponent("Imported Folder")
             try FileManager.default.createDirectory(at: importFolder.appendingPathComponent("Nested/Empty"), withIntermediateDirectories: true)
             try bytes.write(to: importFolder.appendingPathComponent("Nested/bytes.bin"))
@@ -63,6 +68,21 @@ import Foundation
             do { try await files.importItems([importFolder], to: "/workspace") { _ in }; throw ComputerError("TEST: folder import merged an existing folder") }
             catch { if error.localizedDescription.hasPrefix("TEST:") { throw error } }
             print("PASS: nested, empty and hidden folder contents; existing folders are not merged")
+
+            guard let importedFolder = try await files.list("/workspace").first(where: { $0.name == "Imported Folder" }),
+                  let folderPromise = FileExportPromise.provider(model: browser, file: importedFolder),
+                  folderPromise.fileType == "public.folder",
+                  let folderDelegate = folderPromise.userInfo as? FileExportPromise else { throw ComputerError("Folder drag did not offer a folder promise") }
+            let exportedFolder = root.appendingPathComponent("Exported Folder")
+            let _: Void = try await withCheckedThrowingContinuation { continuation in
+                folderDelegate.filePromiseProvider(folderPromise, writePromiseTo: exportedFolder) { error in
+                    if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+                }
+            }
+            guard try Data(contentsOf: exportedFolder.appendingPathComponent("Nested/bytes.bin")) == bytes,
+                  FileManager.default.fileExists(atPath: exportedFolder.appendingPathComponent("Nested/Empty").path),
+                  FileManager.default.fileExists(atPath: exportedFolder.appendingPathComponent(".hidden").path) else { throw ComputerError("Folder promise export was incomplete") }
+            print("PASS: Finder folder promise preserves nested, hidden and empty contents")
 
             let cancelFolder = root.appendingPathComponent("Cancelled Import")
             try FileManager.default.createDirectory(at: cancelFolder, withIntermediateDirectories: false)
@@ -85,6 +105,21 @@ import Foundation
             let cancelledItems = try await files.list("/workspace/Cancelled Import")
             guard cancelledItems.map(\.name) == ["a-completed"] else { throw ComputerError("Cancellation left partial bytes or imported later files") }
             print("PASS: cancellation keeps completed files and removes unfinished upload bytes")
+            try await files.upload(largeImport, to: "/workspace/Imported Folder/Nested/large.bin")
+            let exportPlan = try await FileExportPlan.prepare(importedFolder, path: "/workspace/Imported Folder", source: files)
+            let exportCancellation = FileExportSmokeCancellation()
+            let cancelledDestination = root.appendingPathComponent("Cancelled Export")
+            let cancelledExport = Task {
+                try await exportPlan.export(to: cancelledDestination, source: files, stagingRoot: FileExportStaging.root, replace: false) { progress in
+                    if progress.currentPath.hasSuffix("large.bin"), progress.transferredBytes > Int64(bytes.count) { exportCancellation.cancel() }
+                }
+            }
+            exportCancellation.setTask(cancelledExport)
+            do { try await cancelledExport.value; throw ComputerError("TEST: cancelled folder export succeeded") }
+            catch { if error.localizedDescription.hasPrefix("TEST:") { throw error } }
+            guard !FileManager.default.fileExists(atPath: cancelledDestination.path),
+                  try FileManager.default.contentsOfDirectory(atPath: FileExportStaging.root.path).isEmpty else { throw ComputerError("Cancelled export left host files or staging") }
+            print("PASS: cancelling folder export removes its private staging and publishes no partial folder")
             _ = try await runtime.execute("printf 'Welcome to Files\\n\\nBrowse, drag files in and out, and press Space for Quick Look.\\n' > /workspace/Welcome.txt; ln -s /workspace/Welcome.txt /workspace/link.txt; mkfifo /workspace/pipe.txt; truncate -s 22020096 /workspace/Large.txt")
             listing = try await files.list("/workspace")
             for name in ["link.txt", "pipe.txt", "Large.txt"] {
@@ -122,6 +157,7 @@ import Foundation
             print("FILES FIXTURE: \(root.path)")
             if !CommandLine.arguments.contains("--keep-test-window") {
                 await store.shutdown(); try FileManager.default.removeItem(at: root)
+                print("PASS: disposable file fixture stopped and removed")
             }
             return store
         } catch {
@@ -136,4 +172,14 @@ private actor FileImportSmokeCancellation {
     private var task: Task<Void, Error>?
     func setTask(_ task: Task<Void, Error>) { self.task = task }
     func cancel() { task?.cancel(); task = nil }
+}
+
+private final class FileExportSmokeCancellation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var task: Task<Void, Error>?
+    func setTask(_ task: Task<Void, Error>) { lock.withLock { self.task = task } }
+    func cancel() {
+        let task = lock.withLock { let task = self.task; self.task = nil; return task }
+        task?.cancel()
+    }
 }

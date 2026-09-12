@@ -42,8 +42,11 @@ final class FileOutput: Writer, @unchecked Sendable {
     private var buffer = Data()
     private var handle: FileHandle?
     private var failure: Error?
-    init(limit: Int64, url: URL? = nil) throws {
+    private let progress: @Sendable (Int64) -> Void
+    private var lastUpdate = ContinuousClock.now
+    init(limit: Int64, url: URL? = nil, progress: @escaping @Sendable (Int64) -> Void = { _ in }) throws {
         self.limit = limit
+        self.progress = progress
         if let url {
             let fd = Darwin.open(url.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
             guard fd >= 0 else {
@@ -53,14 +56,22 @@ final class FileOutput: Writer, @unchecked Sendable {
         }
     }
     func write(_ data: Data) throws {
-        lock.lock(); defer { lock.unlock() }
-        if let failure { throw failure }
-        guard Int64(data.count) <= limit - count else {
-            let error = ComputerError("Transfer exceeded its size limit."); failure = error; throw error
+        let update: Int64? = try lock.withLock {
+            if let failure { throw failure }
+            guard Int64(data.count) <= limit - count else {
+                let error = ComputerError("Transfer exceeded its size limit."); failure = error; throw error
+            }
+            count += Int64(data.count)
+            do { if let handle { try handle.write(contentsOf: data) } else { buffer.append(data) } }
+            catch { failure = error; throw error }
+            let now = ContinuousClock.now
+            if count == limit || now - lastUpdate >= .milliseconds(100) {
+                lastUpdate = now; return count
+            }
+            return nil
         }
-        count += Int64(data.count)
-        do { if let handle { try handle.write(contentsOf: data) } else { buffer.append(data) } }
-        catch { failure = error; throw error }
+        // Observers may cancel this output; never invoke them under its lock.
+        if let update { progress(update) }
     }
     func close() throws {} // Ownership stays with the operation until all I/O finishes.
     func cancel() { lock.lock(); defer { lock.unlock() }; failure = CancellationError() }
@@ -112,7 +123,7 @@ final class FileInput: ReaderStream, @unchecked Sendable {
     deinit { try? handle.close() }
 }
 
-actor GuestFiles: FileImportDestination {
+actor GuestFiles: FileImportDestination, FileExportSource {
     let runtime: ContainerComputer
     private var installation: Task<String, Error>?
     init(runtime: ContainerComputer) { self.runtime = runtime }
@@ -135,9 +146,10 @@ actor GuestFiles: FileImportDestination {
     }
 
     private func run(arguments: [String], input: FileInput? = nil, limit: Int64,
-                     destination: URL? = nil, expected: Int64? = nil, timeout: Int64 = 15) async throws -> Data {
+                     destination: URL? = nil, expected: Int64? = nil, timeout: Int64 = 15,
+                     progress: @escaping @Sendable (Int64) -> Void = { _ in }) async throws -> Data {
         try Task.checkCancellation()
-        let output = try FileOutput(limit: limit, url: destination)
+        let output = try FileOutput(limit: limit, url: destination, progress: progress)
         let errors = try FileOutput(limit: 8192)
         let process = try await runtime.makeFileProcess(arguments: arguments, input: input, output: output, errors: errors)
         let deadline = Task {
@@ -186,11 +198,12 @@ actor GuestFiles: FileImportDestination {
         return files.sorted { a, b in a.directory != b.directory ? a.directory : a.name.localizedStandardCompare(b.name) == .orderedAscending }
     }
 
-    func read(_ file: GuestFile, path: String, to destination: URL, preview: Bool) async throws {
+    func read(_ file: GuestFile, path: String, to destination: URL, preview: Bool,
+              progress: @escaping @Sendable (Int64) -> Void = { _ in }) async throws {
         let limit: Int64 = preview ? PreviewPolicy.fileLimit : 8 * 1024 * 1024 * 1024
         guard file.regular, file.size <= limit else { throw ComputerError(preview ? "This file is too large to preview." : "Only regular files up to 8 GB can be exported.") }
         let helper = try await helper()
-        _ = try await run(arguments: [helper, "read", path, file.version, String(limit)], limit: min(limit, file.size), destination: destination, expected: file.size, timeout: preview ? 2 : 300)
+        _ = try await run(arguments: [helper, "read", path, file.version, String(limit)], limit: min(limit, file.size), destination: destination, expected: file.size, timeout: preview ? 2 : 300, progress: progress)
     }
 
     func download(_ path: String, to destination: URL) async throws -> Int64 {
@@ -211,7 +224,7 @@ actor GuestFiles: FileImportDestination {
         _ = try await run(arguments: [helper, "write", path, String(size)], input: FileInput(url: source, limit: Int64(size), progress: progress), limit: 4096, timeout: 300)
     }
 
-    func importItems(_ urls: [URL], to folder: String, progress: @escaping @Sendable (FileImportProgress) async -> Void) async throws {
+    func importItems(_ urls: [URL], to folder: String, progress: @escaping @Sendable (FileTransferProgress) async -> Void) async throws {
         let scoped = urls.filter { $0.startAccessingSecurityScopedResource() }
         defer { for url in scoped { url.stopAccessingSecurityScopedResource() } }
         let plan = try FileImportPlan.prepare(urls, folder: folder)

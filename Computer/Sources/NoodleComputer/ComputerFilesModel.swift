@@ -1,7 +1,6 @@
 import AppKit
 import ComputerCore
 import Foundation
-import CoreServices
 
 @MainActor final class ComputerFilesModel: ObservableObject {
     let service: GuestFiles
@@ -11,7 +10,7 @@ import CoreServices
     @Published var selection: String?
     @Published var loading = false
     @Published var busy = false
-    @Published var importProgress: FileImportProgress?
+    @Published var transferProgress: FileTransferProgress?
     @Published var cancellingTransfer = false
     @Published var status = ""
     @Published var error: String?
@@ -29,6 +28,7 @@ import CoreServices
     private var lease: FilePreviewCache.Lease?
     private var listingID = UUID()
     private var previewID = UUID()
+    private var transferID = UUID()
 
     init(runtime: ContainerComputer, computerID: UUID) { service = GuestFiles(runtime: runtime); self.computerID = computerID }
     var selected: GuestFile? { files.first { $0.name == selection } }
@@ -101,7 +101,7 @@ import CoreServices
 
     func perform(_ message: String, cancellationMessage: String = "Cancelled", action: @escaping () async throws -> Void) {
         guard !busy else { return }
-        busy = true; status = message; importProgress = nil; cancellingTransfer = false
+        busy = true; status = message; transferProgress = nil; cancellingTransfer = false; transferID = UUID()
         transfer = Task {
             do { try await action(); try Task.checkCancellation(); status = "Done" }
             catch {
@@ -109,7 +109,7 @@ import CoreServices
                 if !cancelled { self.error = error.localizedDescription }
                 status = cancelled ? cancellationMessage : "Could not complete operation"
             }
-            busy = false; transfer = nil; importProgress = nil; cancellingTransfer = false
+            busy = false; transfer = nil; transferProgress = nil; cancellingTransfer = false
             navigate(folder, record: false, clearStatus: false)
         }
     }
@@ -117,18 +117,21 @@ import CoreServices
         guard busy, !cancellingTransfer else { return }
         cancellingTransfer = true; status = "Cancelling…"; transfer?.cancel()
     }
-    func importFiles(_ urls: [URL]) {
+    func importFiles(_ urls: [URL], into destination: String? = nil) {
         guard !urls.isEmpty else { return }
-        let folder = folder
+        let folder = destination ?? folder
         perform("Preparing import…", cancellationMessage: "Import cancelled. Completed items were kept.") {
+            let id = self.transferID
             try await self.service.importItems(urls, to: folder) { [weak self] progress in
-                await self?.updateImportProgress(progress)
+                await self?.updateTransferProgress(progress, verb: "Importing", id: id)
             }
         }
     }
-    private func updateImportProgress(_ progress: FileImportProgress) {
-        guard busy, !cancellingTransfer else { return }
-        importProgress = progress; status = "Importing \(progress.currentPath)"
+    private func updateTransferProgress(_ progress: FileTransferProgress, verb: String, id: UUID) {
+        guard busy, !cancellingTransfer, transferID == id else { return }
+        if let previous = transferProgress,
+           progress.completedItems < previous.completedItems || progress.transferredBytes < previous.transferredBytes { return }
+        transferProgress = progress; status = "\(verb) \(progress.currentPath)"
     }
     func importPanel() {
         let panel = NSOpenPanel(); panel.canChooseFiles = true; panel.canChooseDirectories = true; panel.allowsMultipleSelection = true
@@ -136,7 +139,20 @@ import CoreServices
         panel.begin { [weak self] response in if response == .OK { self?.importFiles(panel.urls) } }
     }
     func exportPanel() {
-        guard let file = selected, file.regular, let path = try? GuestFile.path(folder, file.name) else { return }
+        guard let file = selected, file.regular || file.directory, let path = try? GuestFile.path(folder, file.name) else { return }
+        if file.directory {
+            let panel = NSOpenPanel(); panel.canChooseFiles = false; panel.canChooseDirectories = true
+            panel.prompt = "Export Here"; panel.message = "Choose where to export “\(file.displayName)”."
+            panel.begin { [weak self] response in
+                guard response == .OK, let parent = panel.url, let self else { return }
+                self.perform("Preparing export…") {
+                    let scoped = parent.startAccessingSecurityScopedResource()
+                    defer { if scoped { parent.stopAccessingSecurityScopedResource() } }
+                    try await self.export(file, path: path, to: parent.appendingPathComponent(file.name), replace: false)
+                }
+            }
+            return
+        }
         let panel = NSSavePanel(); panel.nameFieldStringValue = file.name; panel.prompt = "Export"
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url, let self else { return }
@@ -146,23 +162,12 @@ import CoreServices
     func export(_ file: GuestFile, path: String, to destination: URL, replace: Bool) async throws {
         let scoped = destination.startAccessingSecurityScopedResource()
         defer { if scoped { destination.stopAccessingSecurityScopedResource() } }
-        let fm = FileManager.default
         try FileExportStaging.prepare()
-        let staging = FileExportStaging.root.appendingPathComponent(UUID().uuidString)
-        try fm.createDirectory(at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
-        defer { try? fm.removeItem(at: staging) }
-        let free = try staging.resourceValues(forKeys: [.volumeAvailableCapacityKey]).volumeAvailableCapacity ?? 0
-        guard Int64(free) > file.size + PreviewPolicy.cacheLimit else { throw ComputerError("There isn’t enough disk space to export this file.") }
-        var source = staging.appendingPathComponent("file")
-        try await service.read(file, path: path, to: source, preview: false)
-        try Task.checkCancellation()
-        var attributes = URLResourceValues()
-        attributes.quarantineProperties = [kLSQuarantineTypeKey as String: kLSQuarantineTypeOtherDownload as String,
-                                            kLSQuarantineAgentNameKey as String: "Noodle Computer"]
-        try source.setResourceValues(attributes)
-        if replace, fm.fileExists(atPath: destination.path) {
-            _ = try fm.replaceItemAt(destination, withItemAt: source)
-        } else { try fm.moveItem(at: source, to: destination) }
+        let id = transferID
+        let plan = try await FileExportPlan.prepare(file, path: path, source: service)
+        try await plan.export(to: destination, source: service, stagingRoot: FileExportStaging.root, replace: replace) { [weak self] progress in
+            Task { @MainActor in self?.updateTransferProgress(progress, verb: "Exporting", id: id) }
+        }
     }
     func promisedExport(_ file: GuestFile, path: String, to destination: URL, completion: @escaping (Error?) -> Void) {
         guard !busy else { completion(ComputerError("Wait for the current transfer to finish.")); return }
@@ -194,11 +199,12 @@ import CoreServices
             perform("Duplicating…") { try await self.service.change("copy", path: source, extra: [file.version, destination]) }
         } catch { self.error = error.localizedDescription }
     }
-    func move(_ file: GuestFile, into directory: GuestFile) {
-        guard directory.directory, file.name != directory.name else { return }
+    func move(_ file: GuestFile, intoFolder destinationFolder: String) {
         do {
             let source = try GuestFile.path(folder, file.name)
-            let destination = try GuestFile.path(GuestFile.path(folder, directory.name), file.name)
+            let parent = try GuestFile.normalize(destinationFolder)
+            guard parent != folder, parent != source, !parent.hasPrefix(source + "/") else { return }
+            let destination = try GuestFile.path(parent, file.name)
             perform("Moving…") { try await self.service.change("rename", path: source, extra: [destination]) }
         } catch { self.error = error.localizedDescription }
     }

@@ -122,8 +122,8 @@ final class FileImportTests: XCTestCase {
 }
 
 private actor ImportProgressRecorder {
-    var values: [FileImportProgress] = []
-    func append(_ value: FileImportProgress) { values.append(value) }
+    var values: [FileTransferProgress] = []
+    func append(_ value: FileTransferProgress) { values.append(value) }
 }
 
 private actor ImportFixtureDestination: FileImportDestination {

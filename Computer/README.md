@@ -39,13 +39,18 @@ Closing a preview leaves the terminal running.
 **Space** to preview a supported image, PDF, or text file; **Command-F** searches,
 **Command-Shift-G** opens a folder path, and **Return** renames the selection.
 
-Drag files or folders from Finder to import them into the open folder, or use
+Drag files or folders from Finder onto a folder to import into it, or onto empty
+space to import into the open folder. You can also use
 **Import Files or Folders…** in the actions menu. Imports preserve nested, hidden,
 and empty folders, with a progress bar and **Cancel** button. Cancelling stops the
 current transfer; completed items stay in the computer. Symbolic links and special
-files cannot be imported. Imports do not overwrite or merge existing items.
-Individual files can also be dragged out or exported from the actions menu;
-folder exports are not supported. Each file can be up to 8 GB.
+files cannot be imported or exported. Imports do not overwrite or merge existing items.
+
+Drag files or folders out to Finder, or choose **Export…**, to copy them to your Mac.
+Exports show progress and can be cancelled; incomplete exports are discarded.
+
+Drag an item onto another folder inside Computer to move it. The native **+** cursor
+indicates a copy in or out; internal moves have no **+** badge. Each file can be up to 8 GB.
 Previews support files up to 20 MiB. Editing a preview copy does not update the guest file.
 
 Right-click to rename, duplicate, or permanently delete a file or empty folder.

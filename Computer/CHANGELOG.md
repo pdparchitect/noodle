@@ -5,6 +5,7 @@
 ### Added
 
 - Import folders from Finder or the file picker, preserving nested and empty folders, with byte/item progress and cancellation. Completed items are kept when cancelled; existing items are never overwritten.
+- Export folders to Finder or a chosen location with progress and cancellation, discarding incomplete exports. Drop imports directly onto subfolders, highlight folder targets, and use native copy/move cursor feedback consistently in icon and list views.
 
 ## [0.4.0] - 2026-09-12
 

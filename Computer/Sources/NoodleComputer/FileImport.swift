@@ -1,7 +1,7 @@
 import ComputerCore
 import Foundation
 
-struct FileImportProgress: Sendable {
+struct FileTransferProgress: Sendable {
     var completedItems = 0
     let totalItems: Int
     var transferredBytes: Int64 = 0
@@ -75,8 +75,8 @@ struct FileImportPlan: Sendable {
         return Self(items: items, totalBytes: totalBytes)
     }
 
-    func send(to destination: any FileImportDestination, progress: @escaping @Sendable (FileImportProgress) async -> Void) async throws {
-        var state = FileImportProgress(totalItems: items.count, totalBytes: totalBytes)
+    func send(to destination: any FileImportDestination, progress: @escaping @Sendable (FileTransferProgress) async -> Void) async throws {
+        var state = FileTransferProgress(totalItems: items.count, totalBytes: totalBytes)
         for item in items {
             try Task.checkCancellation()
             state.currentPath = item.relativePath

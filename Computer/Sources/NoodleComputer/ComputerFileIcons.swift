@@ -39,8 +39,12 @@ private final class FileIconItem: NSCollectionViewItem {
         updateSelection()
     }
     override var isSelected: Bool { didSet { updateSelection() } }
+    override var highlightState: NSCollectionViewItem.HighlightState { didSet { updateSelection() } }
     private func updateSelection() {
-        view.layer?.backgroundColor = isSelected ? NSColor.selectedContentBackgroundColor.withAlphaComponent(0.35).cgColor : NSColor.clear.cgColor
+        let dropTarget = highlightState == .asDropTarget
+        view.layer?.backgroundColor = isSelected || dropTarget ? NSColor.selectedContentBackgroundColor.withAlphaComponent(0.35).cgColor : NSColor.clear.cgColor
+        view.layer?.borderWidth = dropTarget ? 2 : 0
+        view.layer?.borderColor = NSColor.controlAccentColor.cgColor
         caption.textColor = .labelColor
     }
 }
@@ -125,7 +129,7 @@ struct GuestFileGrid: NSViewRepresentable {
         let promiseTypes = NSFilePromiseReceiver.readableDraggedTypes.map { NSPasteboard.PasteboardType(rawValue: $0) }
         collection.registerForDraggedTypes([.fileURL, .init("com.pdparchitect.noodle.guest-file")] + promiseTypes)
         collection.setDraggingSourceOperationMask(.copy, forLocal: false)
-        collection.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
+        collection.setDraggingSourceOperationMask(.move, forLocal: true)
         let coordinator = context.coordinator
         collection.selectIndex = { index in
             guard coordinator.items.indices.contains(index) else { return }
@@ -160,6 +164,8 @@ struct GuestFileGrid: NSViewRepresentable {
         var items: [GuestFile] = []
         var focusRequest = 0
         private var dragged: GuestFile?
+        private var draggedFolder: String?
+        private var dropFolder: String?
         init(model: ComputerFilesModel) { self.model = model }
         func collectionView(_ collectionView: NSCollectionView, numberOfItemsInSection section: Int) -> Int { items.count }
         func collectionView(_ collectionView: NSCollectionView, itemForRepresentedObjectAt indexPath: IndexPath) -> NSCollectionViewItem {
@@ -174,33 +180,35 @@ struct GuestFileGrid: NSViewRepresentable {
         }
         func collectionView(_ collectionView: NSCollectionView, pasteboardWriterForItemAt indexPath: IndexPath) -> (any NSPasteboardWriting)? {
             guard !model.busy else { return nil }
-            let file = items[indexPath.item]; dragged = file
-            if file.directory {
-                let item = NSPasteboardItem(); item.setString(file.name, forType: .init("com.pdparchitect.noodle.guest-file")); return item
-            }
-            guard file.regular, let path = try? GuestFile.path(model.folder, file.name) else { return nil }
-            let delegate = FileExportPromise(model: model, file: file, path: path)
-            let provider = NSFilePromiseProvider(fileType: UTType(filenameExtension: (file.name as NSString).pathExtension)?.identifier ?? UTType.data.identifier, delegate: delegate)
-            provider.userInfo = delegate
-            return provider
+            let file = items[indexPath.item]; dragged = file; draggedFolder = model.folder
+            return FileExportPromise.provider(model: model, file: file)
         }
         func collectionView(_ collectionView: NSCollectionView, validateDrop draggingInfo: any NSDraggingInfo,
                             proposedIndexPath: AutoreleasingUnsafeMutablePointer<NSIndexPath>, dropOperation: UnsafeMutablePointer<NSCollectionView.DropOperation>) -> NSDragOperation {
-            guard !model.busy else { return [] }
-            let index = proposedIndexPath.pointee.item
-            if (draggingInfo.draggingSource as? NSCollectionView) === collectionView {
-                guard items.indices.contains(index), items[index].directory, dragged?.name != items[index].name else { return [] }
-                dropOperation.pointee = .on; return .move
-            }
-            return draggingInfo.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) ? .copy : []
+            dropFolder = nil
+            guard !model.busy, !model.loading else { return [] }
+            let local = (draggingInfo.draggingSource as? NSCollectionView) === collectionView
+            if local { guard dragged != nil, draggedFolder == model.folder else { return [] } }
+            else if !draggingInfo.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) { return [] }
+            let operation: NSDragOperation = local ? .move : .copy
+            guard draggingInfo.draggingSourceOperationMask.contains(operation) else { return [] }
+            let hit = collectionView.indexPathForItem(at: collectionView.convert(draggingInfo.draggingLocation, from: nil))
+            let hovered = hit.flatMap { items.indices.contains($0.item) ? items[$0.item] : nil }
+            guard let folder = FileDropDestination.folder(model.folder, hovered: hovered, moving: local ? dragged : nil) else { return [] }
+            dropFolder = folder
+            proposedIndexPath.pointee = (hit ?? IndexPath(item: items.count, section: 0)) as NSIndexPath
+            dropOperation.pointee = hit == nil ? .before : .on
+            return operation
         }
         func collectionView(_ collectionView: NSCollectionView, acceptDrop draggingInfo: any NSDraggingInfo, indexPath: IndexPath, dropOperation: NSCollectionView.DropOperation) -> Bool {
+            guard !model.busy, !model.loading, let folder = dropFolder else { return false }
+            defer { dropFolder = nil }
             if (draggingInfo.draggingSource as? NSCollectionView) === collectionView {
-                guard let dragged, items.indices.contains(indexPath.item) else { return false }
-                model.move(dragged, into: items[indexPath.item]); return true
+                guard let dragged, draggedFolder == model.folder else { return false }
+                model.move(dragged, intoFolder: folder); return true
             }
             guard let urls = draggingInfo.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty else { return false }
-            model.importFiles(urls); return true
+            model.importFiles(urls, into: folder); return true
         }
     }
 }

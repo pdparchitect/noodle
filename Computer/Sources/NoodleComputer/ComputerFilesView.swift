@@ -63,7 +63,7 @@ struct ComputerFilesView: View {
                             Divider()
                             Button("Open Folder") { if let file = model.selected { model.open(file) } }.disabled(model.selected?.directory != true)
                             Button("Quick Look", action: requestQuickLook).disabled(model.selected?.regular != true)
-                            Button("Export…") { model.exportPanel() }.disabled(model.selected?.regular != true || model.busy)
+                            Button("Export…") { model.exportPanel() }.disabled((model.selected?.regular != true && model.selected?.directory != true) || model.busy)
                             Divider()
                             Button("Rename…") { name = model.selected?.name ?? ""; naming = "Rename" }.disabled(model.selected == nil || model.busy)
                             Button("Duplicate") { model.duplicateSelected() }.disabled(model.selected?.regular != true || model.busy)
@@ -82,10 +82,10 @@ struct ComputerFilesView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(model.status).font(.callout).lineLimit(1).truncationMode(.middle).help(model.status)
                     if model.busy {
-                        ProgressView(value: model.importProgress?.fraction)
+                        ProgressView(value: model.transferProgress?.fraction)
                             .progressViewStyle(.linear)
                             .accessibilityLabel("Transfer progress")
-                        if let progress = model.importProgress {
+                        if let progress = model.transferProgress {
                             Text("\(progress.completedItems) of \(progress.totalItems) items · \(ByteCountFormatter.string(fromByteCount: progress.transferredBytes, countStyle: .file)) of \(ByteCountFormatter.string(fromByteCount: progress.totalBytes, countStyle: .file))")
                                 .font(.caption).monospacedDigit().foregroundStyle(.secondary)
                         }
@@ -93,7 +93,7 @@ struct ComputerFilesView: View {
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 if model.busy {
                     Button("Cancel") { model.cancelTransfer() }.disabled(model.cancellingTransfer)
-                        .help("Stop the transfer; completed items are kept")
+                        .help("Cancel this transfer")
                 } else {
                     Button { model.status = "" } label: { Image(systemName: "xmark") }
                         .buttonStyle(.borderless).accessibilityLabel("Dismiss transfer status")
@@ -151,7 +151,7 @@ struct ComputerFilesView: View {
                 Menu {
                     Button("New Folder…") { name = "Untitled Folder"; naming = "New Folder" }.disabled(model.busy)
                     Button("Import Files or Folders…") { model.importPanel() }.disabled(model.busy)
-                    Button("Export…") { model.exportPanel() }.disabled(model.selected?.regular != true || model.busy)
+                    Button("Export…") { model.exportPanel() }.disabled((model.selected?.regular != true && model.selected?.directory != true) || model.busy)
                     Divider()
                     Button("Rename…") { name = model.selected?.name ?? ""; naming = "Rename" }.disabled(model.selected == nil || model.busy)
                     Button("Duplicate") { model.duplicateSelected() }.disabled(model.selected?.regular != true || model.busy)
@@ -307,7 +307,7 @@ private struct GuestFileTable: NSViewRepresentable {
         let promiseTypes = NSFilePromiseReceiver.readableDraggedTypes.map { NSPasteboard.PasteboardType(rawValue: $0) }
         table.registerForDraggedTypes([.fileURL, .init("com.pdparchitect.noodle.guest-file")] + promiseTypes)
         table.setDraggingSourceOperationMask(.copy, forLocal: false)
-        table.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
+        table.setDraggingSourceOperationMask(.move, forLocal: true)
         table.setAccessibilityLabel("Computer files")
         let scroll = NSScrollView(); scroll.documentView = table; scroll.hasVerticalScroller = true; scroll.drawsBackground = false
         return scroll
@@ -331,6 +331,8 @@ private struct GuestFileTable: NSViewRepresentable {
         var items: [GuestFile] = []
         var focusRequest = 0
         var dragged: GuestFile?
+        var draggedFolder: String?
+        var dropFolder: String?
         var quickLook: (() -> Void)?
         init(model: ComputerFilesModel) { self.model = model }
         func numberOfRows(in tableView: NSTableView) -> Int { items.count }
@@ -368,37 +370,46 @@ private struct GuestFileTable: NSViewRepresentable {
         @objc func open(_ table: NSTableView) { if items.indices.contains(table.clickedRow) { let file = items[table.clickedRow]; model.choose(file); if file.directory { model.open(file) } else { quickLook?() } } }
         func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> (any NSPasteboardWriting)? {
             guard !model.busy else { return nil }
-            let file = items[row]; dragged = file
-            if file.directory {
-                let item = NSPasteboardItem(); item.setString(file.name, forType: .init("com.pdparchitect.noodle.guest-file")); return item
-            }
-            guard file.regular, let path = try? GuestFile.path(model.folder, file.name) else { return nil }
-            let delegate = FileExportPromise(model: model, file: file, path: path)
-            let provider = NSFilePromiseProvider(fileType: UTType(filenameExtension: (file.name as NSString).pathExtension)?.identifier ?? UTType.data.identifier, delegate: delegate)
-            provider.userInfo = delegate
-            return provider
+            let file = items[row]; dragged = file; draggedFolder = model.folder
+            return FileExportPromise.provider(model: model, file: file)
         }
         func tableView(_ tableView: NSTableView, validateDrop info: any NSDraggingInfo, proposedRow row: Int, proposedDropOperation operation: NSTableView.DropOperation) -> NSDragOperation {
-            guard !model.busy else { return [] }
-            if (info.draggingSource as? NSTableView) === tableView {
-                guard items.indices.contains(row), items[row].directory, dragged?.name != items[row].name else { return [] }
-                tableView.setDropRow(row, dropOperation: .on); return .move
-            }
-            tableView.setDropRow(-1, dropOperation: .on)
-            return info.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) ? .copy : []
+            dropFolder = nil
+            guard !model.busy, !model.loading else { return [] }
+            let local = (info.draggingSource as? NSTableView) === tableView
+            if local { guard dragged != nil, draggedFolder == model.folder else { return [] } }
+            else if !info.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) { return [] }
+            let dragOperation: NSDragOperation = local ? .move : .copy
+            guard info.draggingSourceOperationMask.contains(dragOperation) else { return [] }
+            let hit = tableView.row(at: tableView.convert(info.draggingLocation, from: nil))
+            let hovered = items.indices.contains(hit) ? items[hit] : nil
+            guard let folder = FileDropDestination.folder(model.folder, hovered: hovered, moving: local ? dragged : nil) else { return [] }
+            dropFolder = folder
+            tableView.setDropRow(hovered == nil ? -1 : hit, dropOperation: .on)
+            return dragOperation
         }
         func tableView(_ tableView: NSTableView, acceptDrop info: any NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
+            guard !model.busy, !model.loading, let folder = dropFolder else { return false }
+            defer { dropFolder = nil }
             if (info.draggingSource as? NSTableView) === tableView {
-                guard let dragged, items.indices.contains(row) else { return false }
-                model.move(dragged, into: items[row]); return true
+                guard let dragged, draggedFolder == model.folder else { return false }
+                model.move(dragged, intoFolder: folder); return true
             }
             guard let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty else { return false }
-            model.importFiles(urls); return true
+            model.importFiles(urls, into: folder); return true
         }
     }
 }
 
 @MainActor final class FileExportPromise: NSObject, NSFilePromiseProviderDelegate {
+    static func provider(model: ComputerFilesModel, file: GuestFile) -> NSFilePromiseProvider? {
+        guard file.regular || file.directory, let path = try? GuestFile.path(model.folder, file.name) else { return nil }
+        let delegate = FileExportPromise(model: model, file: file, path: path)
+        let type = file.directory ? UTType.folder : UTType(filenameExtension: (file.name as NSString).pathExtension) ?? .data
+        let provider = NSFilePromiseProvider(fileType: type.identifier, delegate: delegate)
+        provider.userInfo = delegate
+        return provider
+    }
     private static let queue: OperationQueue = {
         let queue = OperationQueue(); queue.name = "Noodle File Exports"; queue.maxConcurrentOperationCount = 1; return queue
     }()
