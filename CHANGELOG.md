@@ -26,7 +26,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
-- Annotate selected conversation text with ⌘⇧A or a region of the Noodle window with ⌘⇧R, adding comments and source context to the message draft. Select regions inside the existing window with a compact cancel hint.
+- Annotate selected conversation text with ⌘⇧A or a region of the Noodle window with ⌘⇧R, adding comments and source context to the message draft. Both actions are available in the Conversation menu. Select regions inside the existing window with a hint that follows the pointer and disappears when selection begins.
 
 - Attach live noodlets using `noodlet://UUID` bookmarks. Open their live creations on click, and let conversation participants use the shared creation through the Applet CLI.
 

@@ -53,11 +53,19 @@ extension FocusedValues {
 struct ConversationCommands: Commands {
     @FocusedValue(\.voiceRecordingCommand) private var command
     let search: () -> Void
+    private let annotations = AnnotationCommandsState.shared
 
     var body: some Commands {
         CommandMenu("Conversation") {
             Button("Search Conversations", action: search)
                 .appShortcut(.searchConversations)
+            Divider()
+            Button("Add Annotation…") { annotations.conversationOwner?.annotate() }
+                .appShortcut(.annotateSelection)
+                .disabled(!annotations.conversationEnabled)
+            Button("Annotate Region…") { annotations.conversationOwner?.startRegion() }
+                .appShortcut(.annotateRegion)
+                .disabled(!annotations.conversationEnabled)
             if #available(macOS 26.0, *) {
                 Divider()
                 Button(command?.title ?? "Record Voice Message") { command?.perform() }

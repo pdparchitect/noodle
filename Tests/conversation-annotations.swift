@@ -47,6 +47,11 @@ import NoodleCore
     }
 
     func pause() async throws { try await Task.sleep(for: .milliseconds(150)) }
+    func movePointer(to point: NSPoint) {
+        let displayHeight = NSScreen.screens.first!.frame.maxY
+        require(CGWarpMouseCursorPosition(CGPoint(x: point.x, y: displayHeight - point.y)) == .success,
+            "Could not move the pointer within the foreground fixture")
+    }
     func until(_ message: String, _ test: () -> Bool) async throws {
         for _ in 0..<100 { if test() { return }; try await Task.sleep(for: .milliseconds(50)) }
         fixtureFailure(message)
@@ -75,14 +80,35 @@ import NoodleCore
                 modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil,
                 eventNumber: 1, clickCount: 1, pressure: 1)!
         }
+        let hint = canvas.subviews.first as! NSVisualEffectView
+        movePointer(to: window.convertPoint(toScreen: mouse(.mouseMoved, 0.25, 0.55).locationInWindow))
+        NSApp.postEvent(mouse(.mouseMoved, 0.25, 0.55), atStart: false)
+        try await pause()
+        require(!hint.isHidden, "Hint must appear beside the pointer before selection")
+        let firstHintFrame = hint.frame
+        movePointer(to: window.convertPoint(toScreen: mouse(.mouseMoved, 0.9, 0.05).locationInWindow))
+        NSApp.postEvent(mouse(.mouseMoved, 0.9, 0.05), atStart: false)
+        try await pause()
+        require(!hint.isHidden && hint.frame != firstHintFrame, "Hint must follow native pointer movement")
+        require(canvas.bounds.contains(hint.frame), "Hint must stay inside the window near its edges")
+        require(hint.hitTest(.zero) == nil, "Moving hint must not intercept a selection gesture")
         canvas.mouseDown(with: mouse(.leftMouseDown, 0.2, 0.3))
+        require(hint.isHidden, "Hint must disappear as soon as selection begins")
         canvas.mouseDragged(with: mouse(.leftMouseDragged, 0.65, 0.7))
         canvas.mouseUp(with: mouse(.leftMouseUp, 0.65, 0.7))
+        canvas.mouseMoved(with: mouse(.mouseMoved, 0.4, 0.5))
+        require(hint.isHidden, "Hint must remain hidden after selection, including later pointer movement")
         try await until("Region comment must receive focus") { self.controller.editor.commentInput?.window?.isKeyWindow == true }
     }
 
     func captureSelectionEvidence() async throws {
         try await until("Selection must mount before capturing evidence") { self.controller.editor.conversationCanvas?.window === self.window }
+        let canvas = controller.editor.conversationCanvas!
+        let pointer = canvas.convert(NSPoint(x: canvas.bounds.width * 0.55, y: canvas.bounds.height * 0.55), to: nil)
+        movePointer(to: window.convertPoint(toScreen: pointer))
+        NSApp.postEvent(NSEvent.mouseEvent(with: .mouseMoved, location: pointer, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 0, pressure: 0)!, atStart: false)
+        try await pause()
         let snapshot = controller.editor.pendingImage!.cgImage(forProposedRect: nil, context: nil, hints: nil)!
         let pixels = NSBitmapImageRep(cgImage: snapshot)
         let corner = pixels.colorAt(x: pixels.pixelsWide * 9 / 10, y: pixels.pixelsHigh * 9 / 10)!.usingColorSpace(.deviceRGB)!
@@ -100,6 +126,8 @@ import NoodleCore
     }
 
     func run() async throws {
+        let originalPointer = NSEvent.mouseLocation
+        defer { movePointer(to: originalPointer) }
         root = FileManager.default.temporaryDirectory.appendingPathComponent("conversation-annotation-ui-\(UUID())")
         repository = WorkspaceRepository(rootURL: root)
         try repository.prepare()

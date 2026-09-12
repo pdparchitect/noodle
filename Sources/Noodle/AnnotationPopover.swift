@@ -19,7 +19,6 @@ extension AttachmentPreviewController {
                 self.textAnchorInPreview = NSPoint(x: point.x * frame.width, y: point.y * frame.height)
                 self.showComment()
             }
-            canvas.onCancel = { [weak self] in self?.cancelAnnotation() }
             conversationCanvas = canvas
             panel.makeFirstResponder(canvas)
             panel.invalidateCursorRects(for: canvas)
@@ -233,7 +232,11 @@ private struct AnnotationShortcutHint: View {
     let image: NSImage
     let embedded: Bool
     var imageRect: NSRect?
-    var onCancel: (() -> Void)?
+    private var pointerHint: NSVisualEffectView?
+    private var pointerTracking: NSTrackingArea?
+    private weak var trackingWindow: NSWindow?
+    private var previousMouseMovedEvents: Bool?
+    private var hasStartedSelection = false
     var start: NSPoint?
     var selected: NSRect?
     var onRegion: ((NSRect, NSPoint) -> Void)?
@@ -241,30 +244,56 @@ private struct AnnotationShortcutHint: View {
         self.image = image; self.embedded = embedded
         super.init(frame: .zero)
         if embedded {
-            let hint = NSVisualEffectView()
+            let hint = AnnotationRegionHint()
             hint.material = .hudWindow; hint.blendingMode = .withinWindow; hint.state = .active
             hint.wantsLayer = true; hint.layer?.cornerRadius = 15; hint.layer?.masksToBounds = true
             let text = annotationLabel("Drag to select · Esc to cancel", size: 12, weight: .medium)
-            let cancel = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: "Cancel selection")!,
-                target: self, action: #selector(cancelSelection))
-            cancel.isBordered = false; cancel.contentTintColor = .secondaryLabelColor
-            cancel.setAccessibilityLabel("Cancel selection")
-            let stack = NSStackView(views: [text, cancel]); stack.spacing = 12
-            stack.translatesAutoresizingMaskIntoConstraints = false; hint.addSubview(stack)
-            hint.translatesAutoresizingMaskIntoConstraints = false; addSubview(hint)
+            text.translatesAutoresizingMaskIntoConstraints = false; hint.addSubview(text)
+            hint.setFrameSize(NSSize(width: text.intrinsicContentSize.width + 26, height: 30))
+            hint.isHidden = true; addSubview(hint); pointerHint = hint
             NSLayoutConstraint.activate([
-                hint.centerXAnchor.constraint(equalTo: centerXAnchor),
-                hint.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16),
-                hint.heightAnchor.constraint(equalToConstant: 30),
-                stack.leadingAnchor.constraint(equalTo: hint.leadingAnchor, constant: 13),
-                stack.trailingAnchor.constraint(equalTo: hint.trailingAnchor, constant: -10),
-                stack.centerYAnchor.constraint(equalTo: hint.centerYAnchor),
-                cancel.widthAnchor.constraint(equalToConstant: 16), cancel.heightAnchor.constraint(equalToConstant: 16)
+                text.leadingAnchor.constraint(equalTo: hint.leadingAnchor, constant: 13),
+                text.trailingAnchor.constraint(equalTo: hint.trailingAnchor, constant: -13),
+                text.centerYAnchor.constraint(equalTo: hint.centerYAnchor)
             ])
             setAccessibilityLabel("Select a conversation region to annotate")
         }
     }
-    @objc private func cancelSelection() { onCancel?() }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let trackingWindow, let previousMouseMovedEvents {
+            trackingWindow.acceptsMouseMovedEvents = previousMouseMovedEvents
+        }
+        trackingWindow = nil; previousMouseMovedEvents = nil
+        guard embedded, let window else { return }
+        trackingWindow = window; previousMouseMovedEvents = window.acceptsMouseMovedEvents
+        window.acceptsMouseMovedEvents = true
+        positionHint(at: convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil))
+    }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let pointerTracking { removeTrackingArea(pointerTracking); self.pointerTracking = nil }
+        guard embedded else { return }
+        let area = NSTrackingArea(rect: .zero,
+            options: [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect], owner: self)
+        addTrackingArea(area); pointerTracking = area
+    }
+    override func mouseEntered(with event: NSEvent) { positionHint(at: convert(event.locationInWindow, from: nil)) }
+    override func mouseMoved(with event: NSEvent) { positionHint(at: convert(event.locationInWindow, from: nil)) }
+    override func mouseExited(with event: NSEvent) { pointerHint?.isHidden = true }
+    private func positionHint(at pointer: NSPoint) {
+        guard let hint = pointerHint else { return }
+        guard !hasStartedSelection, bounds.contains(pointer) else { hint.isHidden = true; return }
+        let size = hint.frame.size
+        let margin: CGFloat = 8
+        var x = pointer.x + 16
+        var y = pointer.y - size.height - 14
+        if x + size.width > bounds.maxX - margin { x = pointer.x - size.width - 16 }
+        if y < bounds.minY + margin { y = pointer.y + 14 }
+        x = max(bounds.minX + margin, min(x, bounds.maxX - size.width - margin))
+        y = max(bounds.minY + margin, min(y, bounds.maxY - size.height - margin))
+        hint.setFrameOrigin(NSPoint(x: x, y: y)); hint.isHidden = false
+    }
     override func scrollWheel(with event: NSEvent) { /* Keep the frozen selection stationary. */ }
     required init?(coder: NSCoder) { fatalError() }
     override var acceptsFirstResponder: Bool { true }
@@ -296,7 +325,10 @@ private struct AnnotationShortcutHint: View {
         NSColor.black.withAlphaComponent(0.8).setFill(); NSBezierPath(roundedRect: pill, xRadius: 19, yRadius: 19).fill()
         (hint as NSString).draw(at: NSPoint(x: 42, y: 31), withAttributes: [.font: NSFont.systemFont(ofSize: 14, weight: .medium), .foregroundColor: NSColor.white])
     }
-    override func mouseDown(with event: NSEvent) { start = convert(event.locationInWindow, from: nil); selected = nil }
+    override func mouseDown(with event: NSEvent) {
+        hasStartedSelection = true; pointerHint?.isHidden = true
+        start = convert(event.locationInWindow, from: nil); selected = nil
+    }
     override func mouseDragged(with event: NSEvent) {
         guard let start else { return }
         let end = convert(event.locationInWindow, from: nil)
@@ -318,6 +350,11 @@ private struct AnnotationShortcutHint: View {
                   NSPoint(x: min(1, max(0, (pointer.x - imageFrame.minX) / imageFrame.width)),
                           y: min(1, max(0, (pointer.y - imageFrame.minY) / imageFrame.height))))
     }
+}
+
+/// A moving hint is informational; it must never intercept a selection gesture.
+@MainActor private final class AnnotationRegionHint: NSVisualEffectView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 enum AnnotationPopoverAnchor {
