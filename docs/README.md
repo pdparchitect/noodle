@@ -22,5 +22,6 @@
 - [Chat effects](chat-effects.md)
 - [Add a tool preset](tool-catalogue.md)
 - [Releases](releases.md)
+- [Website and GitHub Pages](website.md)
 
 [Changelog](../CHANGELOG.md) · [Noodle](../README.md)

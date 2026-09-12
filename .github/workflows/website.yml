@@ -1,0 +1,45 @@
+name: Deploy website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/website.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out the website
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: website
+      - name: Fetch website images from Git LFS
+        run: git lfs pull --include="website/**" --exclude=""
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+      - name: Upload the website
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: website
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
