@@ -88,8 +88,11 @@ stage, and cannot grant new filesystem access.
 Autonomous mode runs as your
 Mac user outside Noodle's app sandbox. It can reach files, signed-in services, and
 browser sessions beyond the bot's workspace, subject to macOS and tool permissions.
-Noodle accepts supported tool approvals automatically; questions needing your
-input still appear in chat.
+Noodle accepts supported tool approvals automatically under the bot's saved
+access mode. There are no per-action approval or question forms in chat.
+Structured runtime question requests receive an empty response immediately.
+Unknown requests and tool forms requiring user-entered data are declined
+without inventing answers or consent.
 
 Changing access restarts the bot. Turning autonomous access off does not undo
 completed actions, stop detached applications, or revoke macOS privacy permissions.

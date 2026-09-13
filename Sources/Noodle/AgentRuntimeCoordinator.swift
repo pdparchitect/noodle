@@ -19,7 +19,6 @@ protocol AgentRuntimeProcess: AnyObject {
     @discardableResult func notify(immediately: Bool) -> UUID
     func promoteNotification(_ id: UUID)
     func heartbeat()
-    func resolveApproval(_ approval: AgentApprovalRequest, allow: Bool, answers: [String: String])
 }
 
 extension AgentRuntimeProcess {
@@ -38,7 +37,6 @@ struct AgentRuntimeLaunch {
     let recoverInterruptedWork: Bool
     let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
     let onHeartbeat: @MainActor () -> Void
-    let onApprovals: @MainActor ([AgentApprovalRequest]) -> Void
     let onUnexpectedTermination: @MainActor (any AgentRuntimeProcess, String, Bool) -> Void
 
     func makeProcess() -> any AgentRuntimeProcess {
@@ -56,7 +54,7 @@ struct AgentRuntimeLaunch {
         case .codex:
             return CodexAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
                 extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
-                onSnapshot: onSnapshot, onHeartbeat: onHeartbeat, onApprovals: onApprovals,
+                onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
                 onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) })
         case .claudeCode:
             return ClaudeAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
@@ -115,7 +113,6 @@ final class AgentRuntimeCoordinator {
     private(set) var heartbeatConfiguration: AgentHeartbeatConfiguration
     private(set) var lastHeartbeatDates: [UUID: Date]
     private(set) var accessConfiguration: AgentAccessConfiguration
-    private(set) var approvals: [AgentApprovalRequest] = []
     private(set) var changingAccess: Set<UUID> = []
     @ObservationIgnored private let sleepController = AgentActivitySleepController()
     private var lifecycleID = UUID()
@@ -269,7 +266,6 @@ final class AgentRuntimeCoordinator {
         }
         runtimeIDs[agent.id] = nil
         let old = processes.removeValue(forKey: agent.id)
-        approvals.removeAll { $0.agentID == agent.id }
         snapshots[agent.id] = .init(agentID: agent.id, phase: .starting, detail: "Changing agent access…")
         let finish: (Bool) -> Void = { [weak self] stopped in
             guard let self else { return }
@@ -287,11 +283,6 @@ final class AgentRuntimeCoordinator {
             self.start(agent: agent, repository: repository)
         }
         if let old { old.stop(completion: finish) } else { finish(true) }
-    }
-
-    func resolveApproval(_ approval: AgentApprovalRequest, allow: Bool, answers: [String: String] = [:]) {
-        guard approvals.contains(where: { $0.id == approval.id }) else { return }
-        processes[approval.agentID]?.resolveApproval(approval, allow: allow, answers: answers)
     }
 
     func configureHeartbeats(enabled: Bool? = nil, intervalMinutes: Int? = nil) {
@@ -444,7 +435,6 @@ final class AgentRuntimeCoordinator {
             transitionIDs[id] = nil
             recoveryPending.remove(id)
             blockedRecoveries.remove(id)
-            approvals.removeAll { $0.agentID == id }
             heartbeatScheduler.remove(id)
             saveHeartbeatActivityDates()
         }
@@ -589,11 +579,6 @@ final class AgentRuntimeCoordinator {
                 guard let self, self.runtimeIDs[agent.id] == runtimeID else { return }
                 self.recordHeartbeat(for: agent.id)
             },
-            onApprovals: { [weak self] pending in
-                guard let self, self.runtimeIDs[agent.id] == runtimeID else { return }
-                self.approvals.removeAll { $0.agentID == agent.id }
-                self.approvals.append(contentsOf: pending.filter { $0.agentID == agent.id })
-            },
             onUnexpectedTermination: { [weak self] terminated, detail, needsRecovery in
                 self?.runtimeTerminated(terminated, agent: agent, repository: repository,
                     detail: detail, needsRecovery: needsRecovery)
@@ -656,7 +641,6 @@ final class AgentRuntimeCoordinator {
         let lifecycle = lifecycleID
         runtimeIDs[agent.id] = nil
         let old = processes.removeValue(forKey: agent.id)
-        approvals.removeAll { $0.agentID == agent.id }
         if resetThread {
             let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "") ?? .codex
             let state = repository.storage(for: agent.id).sessionState(provider: provider,
@@ -718,7 +702,6 @@ final class AgentRuntimeCoordinator {
         recoveryPending.remove(agentID)
         changingAccess.remove(agentID)
         transitionIDs[agentID] = nil
-        approvals.removeAll { $0.agentID == agentID }
         if revokeAccess {
             accessConfiguration.remove(agentID)
             accessConfiguration.save(to: defaults)
@@ -740,7 +723,6 @@ final class AgentRuntimeCoordinator {
         runtimeIDs.removeAll()
         changingAccess = []
         transitionIDs.removeAll()
-        approvals = []
         capabilityProbe?.stop()
         capabilityProbe = nil
         restartTasks.values.forEach { $0.cancel() }
@@ -763,7 +745,6 @@ final class AgentRuntimeCoordinator {
             if let process = processes[agent.id], process.isAlive { continue }
             if let process = processes.removeValue(forKey: agent.id) {
                 runtimeIDs[agent.id] = nil
-                approvals.removeAll { $0.agentID == agent.id }
                 if process.hasInterruptedWork {
                     recoveryPending.insert(agent.id)
                 }
@@ -791,7 +772,6 @@ final class AgentRuntimeCoordinator {
               ObjectIdentifier(current) == ObjectIdentifier(terminated) else { return }
         processes.removeValue(forKey: agent.id)
         runtimeIDs[agent.id] = nil
-        approvals.removeAll { $0.agentID == agent.id }
         stabilityTasks.removeValue(forKey: agent.id)?.cancel()
         if needsRecovery { recoveryPending.insert(agent.id) }
         scheduleRestart(agent: agent, repository: repository, detail: detail)
@@ -891,9 +871,6 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private let executableURL: URL
     private let workspaceURL: URL
     private let extendedAccess: Bool
-    private let onApprovals: @MainActor ([AgentApprovalRequest]) -> Void
-    private var pendingApprovals: [AgentApprovalRequest] = []
-    private var approvalItemDetails: [String: [String: Any]] = [:]
     private var connectionID: UUID?
     private let sleep: @MainActor (Duration) async throws -> Void
     private let makeConnection: @MainActor () throws -> any HarnessRuntimeConnection
@@ -905,7 +882,6 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private let onUnexpectedTermination: @MainActor (CodexAgentProcess, String, Bool) -> Void
     private let stateURL: URL
     private var turnRecovery: AgentTurnRecovery
-
 
     private var nextRequestID = 1
     private var purposes: [Int: RequestPurpose] = [:]
@@ -937,7 +913,6 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         recoverInterruptedWork: Bool,
         onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void,
         onHeartbeat: @escaping @MainActor () -> Void,
-        onApprovals: @escaping @MainActor ([AgentApprovalRequest]) -> Void,
         onUnexpectedTermination: @escaping @MainActor (CodexAgentProcess, String, Bool) -> Void,
         makeConnection: @escaping @MainActor () throws -> any HarnessRuntimeConnection = { try ExtendedAgentConnection() },
         sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
@@ -948,7 +923,6 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         self.executableURL = executableURL
         self.workspaceURL = workspaceURL
         self.extendedAccess = extendedAccess
-        self.onApprovals = onApprovals
         self.onSnapshot = onSnapshot
         self.onHeartbeat = onHeartbeat
         self.onUnexpectedTermination = onUnexpectedTermination
@@ -1025,8 +999,6 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         startupTimeout?.cancel()
         intentionallyStopped = true
         terminationReported = true
-        pendingApprovals = []
-        onApprovals([])
         let hadHostConnection = hostConnection != nil
         if let connection = hostConnection {
             hostRunning = false
@@ -1092,8 +1064,6 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         hostRunning = false
         hostConnection?.invalidate()
         hostConnection = nil
-        pendingApprovals = []
-        onApprovals([])
         purposes.removeAll()
         turnIsActive = false
         fail(detail)
@@ -1102,30 +1072,11 @@ final class CodexAgentProcess: AgentRuntimeProcess {
 
     private func handle(_ message: [String: Any]) {
         guard !intentionallyStopped, hostRunning else { return }
-        var approvalMessage = message
-        if var params = message["params"] as? [String: Any], let itemID = params["itemId"] as? String,
-           let item = approvalItemDetails[itemID] {
-            for key in ["command", "cwd", "changes"] where params[key] == nil || params[key] is NSNull {
-                params[key] = item[key]
-            }
-            approvalMessage["params"] = params
-        }
-        if message["method"] != nil, let approval = AgentApprovalRequest(agentID: configuration.id, message: approvalMessage) {
-            guard approval.params["threadId"] as? String == threadID,
-                  approval.turnID == nil || (turnIsActive && (activeTurnID == nil || approval.turnID == activeTurnID)) else {
-                try? send(approval.response(allow: false))
-                return
-            }
-            if let response = approval.automaticResponse(extendedAccess: extendedAccess) {
-                do { try send(response) }
-                catch { fail(error.localizedDescription) }
-                return
-            }
-            if !pendingApprovals.contains(where: { $0.requestID == approval.requestID }) {
-                pendingApprovals.append(approval)
-                onApprovals(pendingApprovals)
-                update(.working, "Waiting for your response")
-            }
+        if let request = CodexRuntimeRequest(message: message) {
+            let isCurrent = request.params["threadId"] as? String == threadID
+                && (request.turnID == nil || (turnIsActive && (activeTurnID == nil || request.turnID == activeTurnID)))
+            do { try send(request.response(extendedAccess: extendedAccess, isCurrent: isCurrent)) }
+            catch { fail(error.localizedDescription) }
             return
         }
         if message["method"] == nil, let id = Self.integerID(message["id"]),
@@ -1236,24 +1187,6 @@ final class CodexAgentProcess: AgentRuntimeProcess {
                 sendPendingNotificationIfPossible()
             }
         }
-        if method == "item/started", turnIsActive, let params = message["params"] as? [String: Any],
-           params["threadId"] as? String == threadID, params["turnId"] as? String == activeTurnID,
-           let item = params["item"] as? [String: Any], let id = item["id"] as? String,
-           ["commandExecution", "fileChange"].contains(item["type"] as? String ?? "") {
-            approvalItemDetails[id] = item
-        }
-        if method == "item/completed", turnIsActive, let params = message["params"] as? [String: Any],
-           params["threadId"] as? String == threadID, params["turnId"] as? String == activeTurnID,
-           let item = params["item"] as? [String: Any], let id = item["id"] as? String {
-            approvalItemDetails.removeValue(forKey: id)
-            pendingApprovals.removeAll { $0.params["itemId"] as? String == id }
-            onApprovals(pendingApprovals)
-        }
-        if method == "serverRequest/resolved", let params = message["params"] as? [String: Any],
-           let id = RuntimeRequestID(params["requestId"]) {
-            pendingApprovals.removeAll { $0.requestID == id }
-            onApprovals(pendingApprovals)
-        }
         if method == "turn/completed" {
             guard turnIsActive else { return }
             if let reportedThread = (message["params"] as? [String: Any])?["threadId"] as? String,
@@ -1269,9 +1202,6 @@ final class CodexAgentProcess: AgentRuntimeProcess {
                 fail("Could not record finished Codex work: \(error.localizedDescription)")
                 return
             }
-            approvalItemDetails = [:]
-            pendingApprovals = []
-            onApprovals([])
             turnIsActive = false
             self.activeTurnID = nil
             turnErrorDetail = nil
@@ -1474,19 +1404,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private func fail(_ detail: String) {
         startupTimeout?.cancel()
         trace.finish(.runtimeFailed)
-        pendingApprovals = []
-        onApprovals([])
         update(.failed, detail)
-    }
-
-    func resolveApproval(_ approval: AgentApprovalRequest, allow: Bool, answers: [String: String]) {
-        guard !intentionallyStopped, pendingApprovals.contains(where: { $0.id == approval.id }) else { return }
-        do {
-            try send(approval.response(allow: allow, answers: answers))
-            pendingApprovals.removeAll { $0.id == approval.id }
-            onApprovals(pendingApprovals)
-            update(.working, pendingApprovals.isEmpty ? "Continuing agent work" : "Waiting for your response")
-        } catch { fail(error.localizedDescription) }
     }
 
     private func update(_ phase: AgentRuntimePhase, _ detail: String) {

@@ -195,15 +195,6 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         startTurn(reason: .heartbeat)
     }
 
-    func resolveApproval(
-        _ approval: AgentApprovalRequest,
-        allow: Bool,
-        answers: [String: String]
-    ) {
-        // Claude runs with the bot's explicit Extended access grant and does not
-        // surface harness permission prompts into Noodle.
-    }
-
     private func sendPendingNotificationIfPossible() {
         guard notificationPending, running, interruptRequestID == nil else { return }
         if turnIsActive {

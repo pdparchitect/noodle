@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Cover bot editor save, failed-save retry, blank-name validation, and cancel through native controls in hidden test windows.
+
 - Add persistent `preferences.md` to new and existing bot workspaces, initially containing only a `# Preferences` heading. Keep usage guidance in generated `AGENTS.md`, preserve existing contents across refreshes, and load preferences alongside backstory in Apple.
 
 - Teach assigned agents to automate the Computer desktop's visible, signed-in browser using bundled Puppeteer, hand sign-in to the user, and disconnect without closing shared tabs.
@@ -67,6 +69,8 @@ All notable changes to Noodle are documented here, following
 - Let conversation participants target the exact Applet session returned by shared opens using the shared link, conversation, and session ID together. Document hidden rendering limits, session diagnostics, and explicit headless animation stepping in generated CLI help and agent guidance.
 
 ### Changed
+
+- Remove unused in-chat action approval and question forms, their pending-request queue, and sidebar indicators. Keep runtime permission replies tied to saved bot access, skip structured questions immediately without adding a replacement prompt.
 
 - Store Backstory privately in `agent.json` and generate all of `AGENTS.md` without section markers, warning that edits are overwritten. Migrate existing backstories once before regeneration, preserve damaged sources for recovery, and register 0.14.0 as the migration milestone with conditional cleanup after it.
 

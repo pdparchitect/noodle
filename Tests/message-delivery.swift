@@ -182,7 +182,7 @@ import NoodleCore
         case .codex:
             process = CodexAgentProcess(agent: agent, executableURL: executable, workspaceURL: workspace,
                 extendedAccess: true, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
-                onApprovals: { _ in }, onUnexpectedTermination: { _, _, _ in })
+                onUnexpectedTermination: { _, _, _ in })
         case .claudeCode:
             process = ClaudeAgentProcess(agent: agent, executableURL: executable, workspaceURL: workspace,
                 extendedAccess: true, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
@@ -247,7 +247,7 @@ import NoodleCore
             let agent = AgentRecord(displayName: "Private Codex", harnessIdentifier: "codex")
             let process = CodexAgentProcess(agent: agent, executableURL: URL(fileURLWithPath: "/fixture/codex"),
                 workspaceURL: workspace, extendedAccess: false, recoverInterruptedWork: false,
-                onSnapshot: { _ in }, onHeartbeat: {}, onApprovals: { _ in }, onUnexpectedTermination: { _, _, _ in })
+                onSnapshot: { _ in }, onHeartbeat: {}, onUnexpectedTermination: { _, _, _ in })
             process.start()
             await eventually { ExtendedAgentConnection.current.prompts == 1 && process.snapshot.phase == .working }
             let wire = ExtendedAgentConnection.current!

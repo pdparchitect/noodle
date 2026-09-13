@@ -136,25 +136,25 @@ import XCTest
         p.stop(); complete(wire); await f.drain()
         XCTAssertEqual(p.snapshot.phase, .offline)
     }
-    func testQuestionsResolveOnceAndForeignItemCompletionCannotDismissThem() async throws {
-        let f = try fixture(), wire = HarnessWire(), p = f.codex(wire)
-        try await active(f, wire, p)
-        let question: [String: Any] = ["id": "question", "method": "item/tool/requestUserInput", "params": [
-            "threadId": "fixture-thread", "turnId": "turn-one", "itemId": "item-one",
-            "questions": [["id": "choice", "question": "Which option?"]]]]
-        wire.emit(question); wire.emit(question)
-        try await f.wait { f.approvals.count == 1 }
-        let approval = try XCTUnwrap(f.approvals.first)
-        wire.emit(["method": "item/completed", "params": ["threadId": "foreign-thread", "turnId": "turn-one",
-            "item": ["id": "item-one"]]])
-        await f.drain(); XCTAssertEqual(f.approvals.count, 1)
-        p.resolveApproval(approval, allow: true, answers: ["choice": "A", "unknown": "ignored"])
-        p.resolveApproval(approval, allow: true, answers: ["choice": "B"])
-        let replies = wire.writes.filter { $0["id"] as? String == "question" }
-        XCTAssertEqual(replies.count, 1)
-        let answers = try XCTUnwrap((replies.first?["result"] as? [String: Any])?["answers"] as? [String: Any])
-        XCTAssertEqual(Set(answers.keys), ["choice"])
-        XCTAssertTrue(f.approvals.isEmpty)
+    func testQuestionsAreAnsweredImmediatelyWithoutBlockingTurnCompletion() async throws {
+        for extended in [false, true] {
+            let f = try fixture(), wire = HarnessWire(), p = f.codex(wire, extended: extended)
+            try await active(f, wire, p)
+            for (id, turn) in [("current-question", "turn-one"), ("stale-question", "previous-turn")] {
+                wire.emit(["id": id, "method": "item/tool/requestUserInput", "params": [
+                    "threadId": "fixture-thread", "turnId": turn,
+                    "questions": [["id": "choice", "question": "Which option?"]]]])
+                try await f.wait { wire.writes.contains { $0["id"] as? String == id } }
+                let replies = wire.writes.filter { $0["id"] as? String == id }
+                XCTAssertEqual(replies.count, 1)
+                let answers = try XCTUnwrap((replies.first?["result"] as? [String: Any])?["answers"] as? [String: Any])
+                XCTAssertTrue(answers.isEmpty)
+            }
+            XCTAssertEqual(p.snapshot.phase, .working)
+            XCTAssertFalse(p.snapshot.detail.contains("Waiting for your response"))
+            complete(wire); try await f.wait { p.canReceiveHeartbeat }
+            XCTAssertFalse(f.recovery(.codex, extended: extended).hasUnfinishedTurn)
+        }
     }
 
     func testApprovalsHonorAccessAndRejectRequestsFromOldTurns() async throws {
@@ -171,7 +171,6 @@ import XCTest
             }
             XCTAssertEqual(decision("current"), extended ? "accept" : "decline")
             XCTAssertEqual(decision("stale"), "decline")
-            XCTAssertTrue(f.approvals.isEmpty)
         }
     }
 

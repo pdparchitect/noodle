@@ -15,7 +15,6 @@ import XCTest
     var stops = 0
     var heartbeats = 0
     var notifications: [Bool] = []
-    var resolved: [(UUID, Bool, [String: String])] = []
     private var stopCompletions: [(Bool) -> Void] = []
 
     init(_ launch: AgentRuntimeLaunch) {
@@ -50,9 +49,6 @@ import XCTest
     }
     func promoteNotification(_ id: UUID) { XCTFail("Explicit delivery should not need a classifier") }
     func heartbeat() { heartbeats += 1; launch.onHeartbeat() }
-    func resolveApproval(_ approval: AgentApprovalRequest, allow: Bool, answers: [String: String]) {
-        resolved.append((approval.id, allow, answers))
-    }
 }
 
 @MainActor final class RuntimeFactoryFixture {

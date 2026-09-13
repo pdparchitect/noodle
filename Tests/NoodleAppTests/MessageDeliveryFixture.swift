@@ -86,9 +86,6 @@ import XCTest
     func start() { XCTFail("Routing must never start a harness") }
     func stop(completion: @escaping (Bool) -> Void) { XCTFail("Routing must never stop a harness") }
     func heartbeat() { XCTFail("Routing must not send a heartbeat") }
-    func resolveApproval(_ approval: AgentApprovalRequest, allow: Bool, answers: [String: String]) {
-        XCTFail("Routing must not resolve approvals")
-    }
 }
 
 @MainActor final class RoutingFixture {

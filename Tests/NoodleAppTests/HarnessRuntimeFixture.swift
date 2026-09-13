@@ -47,7 +47,6 @@ import XCTest
     var workspace: URL { root.appendingPathComponent("workspace") }
     var processes: [any AgentRuntimeProcess] = []
     var failures: [(String, Bool)] = []
-    var approvals: [AgentApprovalRequest] = []
     var heartbeats = 0
     let clock = RuntimeClockFixture()
     init() throws { try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true) }
@@ -61,7 +60,6 @@ import XCTest
         let p = CodexAgentProcess(agent: agent(.codex), executableURL: root, workspaceURL: workspace,
             extendedAccess: extended, recoverInterruptedWork: false,
             onSnapshot: { _ in }, onHeartbeat: { [weak self] in self?.heartbeats += 1 },
-            onApprovals: { [weak self] in self?.approvals = $0 },
             onUnexpectedTermination: { [weak self] _, detail, recovery in self?.failures.append((detail, recovery)) },
             makeConnection: { wire.replacement ?? wire }, sleep: { [clock] in try await clock.sleep($0) })
         processes.append(p); return p

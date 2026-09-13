@@ -137,21 +137,12 @@ struct ChatView: View {
     }
 
     private var measuredPinnedBottomContent: some View {
-        pinnedBottomContent
+        composerFooter
             .onGeometryChange(for: CGFloat.self) { geometry in
                 geometry.size.height
             } action: { height in
                 bottomOverlayHeight = height
             }
-    }
-
-    private var pinnedBottomContent: some View {
-        VStack(spacing: 0) {
-            if let request = store.runtime.approvals.first(where: { conversation.participantIDs.contains($0.agentID) }) {
-                AgentApprovalView(request: request).id(request.id)
-            }
-            composerFooter
-        }
     }
 
     private var topFadedTranscript: some View {

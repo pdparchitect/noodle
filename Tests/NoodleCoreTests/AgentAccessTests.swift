@@ -183,105 +183,52 @@ final class AgentAccessTests: XCTestCase {
         XCTAssertNil(RuntimeRequestID(nil))
     }
 
-    func testCommandApprovalIsOneTimeOnly() {
-        let request = approval("item/commandExecution/requestApproval", params: ["command": "touch /tmp/example"])
-        XCTAssertEqual((request.response(allow: true)["result"] as? [String: String])?["decision"], "accept")
-        XCTAssertEqual((request.response(allow: false)["result"] as? [String: String])?["decision"], "decline")
-        XCTAssertTrue(request.detail.contains("touch /tmp/example"))
-    }
-
-    func testUnsupportedOfferedDecisionCannotBeInvented() {
-        let request = approval("item/commandExecution/requestApproval", params: ["availableDecisions": ["decline", "cancel"]])
-        XCTAssertFalse(request.canAllow)
-        XCTAssertEqual((request.response(allow: true)["result"] as? [String: String])?["decision"], "decline")
-    }
-
-    func testPermissionScopeIsNeverSilentlyBroadenedOrPersisted() throws {
-        let permissions: [String: Any] = ["fileSystem": ["read": ["/tmp/one-file"]], "network": ["enabled": true]]
-        let request = approval("item/permissions/requestApproval", params: ["permissions": permissions])
-        let result = try XCTUnwrap(request.response(allow: true)["result"] as? [String: Any])
-        XCTAssertEqual(result["scope"] as? String, "turn")
-        XCTAssertEqual(try JSONSerialization.data(withJSONObject: result["permissions"]!, options: .sortedKeys), try JSONSerialization.data(withJSONObject: permissions, options: .sortedKeys))
-        let denied = request.response(allow: false)["result"] as! [String: Any]
-        XCTAssertTrue((denied["permissions"] as! [String: Any]).isEmpty)
-    }
-
-    func testFullAccessDetailsAreVisible() {
-        let request = approval("item/commandExecution/requestApproval", params: [
-            "reason": "Needs access", "cwd": "/tmp/workspace", "stdin": "content",
-            "additionalPermissions": ["fileSystem": ["write": ["/tmp/output"]]],
-            "networkApprovalContext": ["host": "example.com", "protocol": "https"]
-        ])
-        for value in ["/tmp/workspace", "/tmp/output", "example.com", "https", "content"] {
-            XCTAssertTrue(request.detail.contains(value))
-        }
-    }
-
-    func testUserResponsesAreExplicitAndQuestionScoped() throws {
-        let request = approval("item/tool/requestUserInput", params: ["questions": [["id": "q1", "question": "Proceed?"]]])
-        let response = try XCTUnwrap(request.response(allow: true, answers: ["q1": "Yes", "invented": "Yes"])["result"] as? [String: Any])
-        let answers = try XCTUnwrap(response["answers"] as? [String: [String: [String]]])
-        XCTAssertEqual(answers, ["q1": ["answers": ["Yes"]]])
-        let skipped = request.response(allow: false, answers: ["q1": "Yes"])["result"] as! [String: Any]
-        XCTAssertTrue((skipped["answers"] as! [String: Any]).isEmpty)
-    }
-
-    func testUnsupportedElicitationIsNotAcceptedWithFabricatedContent() {
-        let request = approval("mcpServer/elicitation/request", params: ["mode": "url", "url": "https://example.com"])
-        XCTAssertFalse(request.canAllow)
-        XCTAssertEqual((request.response(allow: true)["result"] as? [String: Any])?["action"] as? String, "decline")
-    }
-
-    func testEmptyToolConfirmationRequiresExplicitAllowAndReturnsEmptyContent() throws {
-        let request = approval("mcpServer/elicitation/request", params: [
-            "mode": "form", "message": "Allow Browser use to access https://www.google.com?",
-            "serverName": "cua_repl", "requestedSchema": ["type": "object", "properties": [String: Any]()]
-        ])
-        XCTAssertTrue(request.canAllow)
-        let declined = request.response(allow: false)["result"] as! [String: Any]
-        XCTAssertEqual(declined["action"] as? String, "decline")
-        let accepted = request.response(allow: true)["result"] as! [String: Any]
-        XCTAssertEqual(accepted["action"] as? String, "accept")
-        XCTAssertTrue(try XCTUnwrap(accepted["content"] as? [String: Any]).isEmpty)
-        XCTAssertTrue(request.detail.contains("https://www.google.com"))
-    }
-
-    func testRoutineToolConfirmationIsAutomaticallyAccepted() throws {
-        let request = approval("mcpServer/elicitation/request", params: [
-            "mode": "form", "message": "Allow Browser use?",
-            "requestedSchema": ["type": "object", "properties": [String: Any]()]
-        ])
-        let response = try XCTUnwrap(request.automaticResponse(extendedAccess: true))
-        XCTAssertEqual((response["result"] as? [String: Any])?["action"] as? String, "accept")
-    }
-
-    func testAutonomousAccessAutomaticallyAllowsRuntimePermissions() {
-        for method in [
-            "item/commandExecution/requestApproval",
-            "item/fileChange/requestApproval",
-            "item/permissions/requestApproval"
-        ] {
-            let request = approval(method, params: ["permissions": ["network": ["enabled": true]]])
-            let response = request.automaticResponse(extendedAccess: true)
-            XCTAssertNotNil(response)
-            if method == "item/permissions/requestApproval" {
-                let permissions = (response?["result"] as? [String: Any])?["permissions"] as? [String: Any]
-                XCTAssertFalse(permissions?.isEmpty ?? true)
-            } else {
-                XCTAssertEqual((response?["result"] as? [String: String])?["decision"], "accept")
+    func testRuntimePermissionsFollowSavedAccessForTheCurrentTurnOnly() throws {
+        for method in ["item/commandExecution/requestApproval", "item/fileChange/requestApproval", "item/permissions/requestApproval"] {
+            let permissions: [String: Any] = ["fileSystem": ["read": ["/tmp/one-file"]], "network": ["enabled": true]]
+            let request = request(method, params: ["permissions": permissions])
+            for extended in [false, true] {
+                for current in [false, true] {
+                    let result = try XCTUnwrap(request.response(extendedAccess: extended, isCurrent: current)["result"] as? [String: Any])
+                    if method == "item/permissions/requestApproval" {
+                        XCTAssertEqual(result["scope"] as? String, "turn")
+                        let actual = try XCTUnwrap(result["permissions"] as? [String: Any])
+                        XCTAssertEqual(try JSONSerialization.data(withJSONObject: actual, options: .sortedKeys),
+                            try JSONSerialization.data(withJSONObject: extended && current ? permissions : [:], options: .sortedKeys))
+                    } else {
+                        XCTAssertEqual(result["decision"] as? String, extended && current ? "accept" : "decline")
+                    }
+                }
             }
         }
     }
 
-    func testRestrictedAccessAutomaticallyDeclinesRuntimePermissions() {
-        let request = approval("item/commandExecution/requestApproval", params: ["command": "open example"])
-        let response = request.automaticResponse(extendedAccess: false)
-        XCTAssertEqual((response?["result"] as? [String: String])?["decision"], "decline")
+    func testUnsupportedOfferedDecisionCannotBeInvented() {
+        let request = request("item/commandExecution/requestApproval", params: ["availableDecisions": ["decline", "cancel"]])
+        XCTAssertEqual((request.response(extendedAccess: true)["result"] as? [String: String])?["decision"], "decline")
     }
 
-    func testOnlyQuestionsPauseForAUserResponse() {
-        let request = approval("item/tool/requestUserInput", params: ["questions": [["id": "q1", "question": "Which account?"]]])
-        XCTAssertNil(request.automaticResponse(extendedAccess: true))
+    func testQuestionsAreSkippedWithoutInventingAnAnswer() throws {
+        let request = request("item/tool/requestUserInput", params: ["questions": [["id": "q1", "question": "Which account?"]]])
+        for extended in [false, true] {
+            let result = try XCTUnwrap(request.response(extendedAccess: extended)["result"] as? [String: Any])
+            XCTAssertTrue(try XCTUnwrap(result["answers"] as? [String: Any]).isEmpty)
+        }
+    }
+
+    func testRoutineToolConfirmationIsAcceptedOnlyForTheCurrentRequest() throws {
+        let request = request("mcpServer/elicitation/request", params: [
+            "mode": "form", "message": "Allow Browser use?",
+            "requestedSchema": ["type": "object", "properties": [String: Any]()]
+        ])
+        for extended in [false, true] {
+            let result = try XCTUnwrap(request.response(extendedAccess: extended)["result"] as? [String: Any])
+            XCTAssertEqual(result["action"] as? String, "accept")
+            XCTAssertTrue(try XCTUnwrap(result["content"] as? [String: Any]).isEmpty)
+            let stale = request.response(extendedAccess: extended, isCurrent: false)["result"] as? [String: Any]
+            XCTAssertEqual(stale?["action"] as? String, "decline")
+            XCTAssertTrue(stale?["content"] is NSNull)
+        }
     }
 
     func testToolFormsWithDataOrUnknownConstraintsRemainBlocked() {
@@ -292,23 +239,26 @@ final class AgentAccessTests: XCTestCase {
             ["type": "object", "properties": [:], "required": "malformed"]
         ]
         for schema in schemas {
-            let request = approval("mcpServer/elicitation/request", params: ["mode": "form", "message": "Confirm", "requestedSchema": schema])
-            XCTAssertFalse(request.canAllow)
-            XCTAssertEqual((request.response(allow: true)["result"] as? [String: Any])?["action"] as? String, "decline")
+            let request = request("mcpServer/elicitation/request", params: ["mode": "form", "message": "Confirm", "requestedSchema": schema])
+            XCTAssertEqual((request.response(extendedAccess: true)["result"] as? [String: Any])?["action"] as? String, "decline")
         }
     }
 
+    func testURLToolElicitationDoesNotManufactureConsent() {
+        let request = request("mcpServer/elicitation/request", params: ["mode": "url", "url": "https://example.invalid/sign-in"])
+        XCTAssertEqual((request.response(extendedAccess: true)["result"] as? [String: Any])?["action"] as? String, "decline")
+    }
+
     func testUnknownRequestFailsClosed() {
-        let request = approval("future/permission/request", params: [:])
-        XCTAssertFalse(request.canAllow)
-        XCTAssertNotNil(request.response(allow: true)["error"])
+        let request = request("future/permission/request", params: [:])
+        XCTAssertNotNil(request.response(extendedAccess: true)["error"])
     }
 
-    func testPlainResponseIsNotAnApproval() {
-        XCTAssertNil(AgentApprovalRequest(agentID: UUID(), message: ["id": 1, "result": [:]]))
+    func testPlainResponseIsNotAServerRequest() {
+        XCTAssertNil(CodexRuntimeRequest(message: ["id": 1, "result": [:]]))
     }
 
-    private func approval(_ method: String, params: [String: Any]) -> AgentApprovalRequest {
-        AgentApprovalRequest(agentID: UUID(), message: ["id": "request-1", "method": method, "params": params])!
+    private func request(_ method: String, params: [String: Any]) -> CodexRuntimeRequest {
+        CodexRuntimeRequest(message: ["id": "request-1", "method": method, "params": params])!
     }
 }

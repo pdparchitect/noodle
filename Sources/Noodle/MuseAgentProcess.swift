@@ -186,7 +186,6 @@ final class MuseAgentProcess: AgentRuntimeProcess {
         sendPending()
     }
     func heartbeat() { if canReceiveHeartbeat { startTurn(.heartbeat) } }
-    func resolveApproval(_ approval: AgentApprovalRequest, allow: Bool, answers: [String: String]) {}
 
     private func openSession() {
         openingExistingSession = sessionID != nil

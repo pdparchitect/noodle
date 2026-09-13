@@ -67,7 +67,7 @@ import XCTest
         XCTAssertTrue(f.runtime.accessConfiguration.isExtended(for: agent))
     }
 
-    func testDeletingOneBotRevokesOnlyItsAccessAndPendingApprovals() throws {
+    func testDeletingOneBotRevokesOnlyItsAccess() throws {
         let f = try fixture(), a = try f.agent("A"), b = try f.agent("B")
         f.runtime.setExtendedAccess(true, agent: a, repository: f.repository)
         f.runtime.setExtendedAccess(true, agent: b, repository: f.repository)

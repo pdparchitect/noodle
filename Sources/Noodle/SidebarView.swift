@@ -126,7 +126,7 @@ private struct ConversationRow: View {
                         .foregroundStyle(.tertiary)
                 }
 
-                Text(hasPendingApproval ? "Waiting for your response" : store.preview(for: conversation))
+                Text(store.preview(for: conversation))
                     .font(.system(size: 12.5))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -163,7 +163,6 @@ private struct ConversationRow: View {
     }
 
     private var runtimeColor: Color {
-        if hasPendingApproval { return .orange }
         let phases = store.participants(for: conversation).map { store.runtime.snapshot(for: $0.id).phase }
         if phases.contains(.working) { return .blue }
         if phases.contains(.failed) { return .red }
@@ -172,7 +171,6 @@ private struct ConversationRow: View {
     }
 
     private var runtimeHelp: String {
-        if hasPendingApproval { return "Waiting for your response" }
         return store.participants(for: conversation).map { agent in
             "\(agent.displayName): \(store.runtime.snapshot(for: agent.id).detail)"
         }.joined(separator: "\n")
@@ -180,10 +178,6 @@ private struct ConversationRow: View {
 
     private var accessibilityLabel: String {
         let unread = store.hasUnreadMessages(in: conversation) ? "Unread, " : ""
-        return "\(unread)\(store.title(for: conversation)), \(hasPendingApproval ? "Waiting for your response" : store.preview(for: conversation))"
-    }
-
-    private var hasPendingApproval: Bool {
-        store.runtime.approvals.contains { conversation.participantIDs.contains($0.agentID) }
+        return "\(unread)\(store.title(for: conversation)), \(store.preview(for: conversation))"
     }
 }
