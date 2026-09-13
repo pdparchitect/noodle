@@ -35,7 +35,7 @@ xcrun stapler staple "$app"
 xcrun stapler validate "$app"
 spctl --assess --type execute --verbose=2 "$app"
 mkdir "$staging/assets"
-archive="Noodle-Computer-$version-arm64.zip"
+archive="Noodle-Computer-arm64.zip"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$staging/assets/$archive"
 (cd "$staging/assets"; shasum -a 256 "$archive" > "$archive.sha256")
 sparkle_tools="$project_root/.build/computer/artifacts/sparkle/Sparkle/bin"

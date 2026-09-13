@@ -22,8 +22,9 @@ must be public for unauthenticated downloads and updates.
 
 ## Downloads and updates
 
-- Versioned release: `computer-vX.Y.Z`, containing `Noodle-Computer-X.Y.Z-arm64.zip`, its checksum, signed `appcast.xml`, and notes.
+- Versioned release: `computer-vX.Y.Z`, containing `Noodle-Computer-arm64.zip`, its checksum, signed `appcast.xml`, and notes.
 - [Download channel](https://github.com/pdparchitect/noodle/releases/tag/computer-latest): copies of the current release's assets.
+- [Direct ZIP download](https://github.com/pdparchitect/noodle/releases/download/computer-latest/Noodle-Computer-arm64.zip): a fixed URL available after the first release with the new filename.
 - [Update feed](https://github.com/pdparchitect/noodle/releases/download/computer-latest/appcast.xml): points to the immutable versioned archive.
 
 Both releases must use `--latest=false` so they never replace Noodle's latest
@@ -45,11 +46,11 @@ Never move tags or replace a published archive.
 If the versioned release exists but channel promotion failed:
 
 1. Inspect the existing release and verify its ZIP against its checksum.
-2. Copy that existing ZIP and checksum to `computer-latest`.
+2. Copy that existing ZIP and checksum to `computer-latest`, replacing only the channel's fixed-name copies.
 3. Replace the channel's signed feed, then its title and notes, after the assets exist.
-4. Verify the download/feed, then remove only the previous version's ZIP/checksum copies from the channel.
+4. Verify the download/feed. When migrating from versioned filenames, remove only the previous version's ZIP/checksum copies from the channel; keep the new fixed-name assets.
 
-Keep all versioned assets intact. A brief feed interruption is possible during
+Keep all assets on version tags intact. A brief download or feed interruption is possible during
 replacement. Existing drafts or partially promoted channels require inspection;
 do not start a new build to recover them. Prepared workflow artifacts last seven days.
 

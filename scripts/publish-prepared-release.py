@@ -49,15 +49,19 @@ def validate(run, jobs, artifacts):
     return products
 
 
-def checksum(directory, filename):
+def checksum(directory, filename, expected_archive=None):
     entries = (directory / filename).read_text().splitlines()
     if not entries:
         raise ValueError('Empty checksum file')
+    if expected_archive is not None and len(entries) != 1:
+        raise ValueError('Expected exactly one archive checksum')
     for entry in entries:
         digest, name = entry.split(maxsplit=1)
         name = name.lstrip('*')
         if Path(name).name != name or not re.fullmatch('[0-9a-f]{64}', digest):
             raise ValueError('Invalid checksum entry')
+        if expected_archive is not None and name != expected_archive:
+            raise ValueError('Checksum does not identify the release archive')
         with (directory / name).open('rb') as file:
             hasher = hashlib.sha256()
             for chunk in iter(lambda: file.read(1024 * 1024), b''):
@@ -65,6 +69,23 @@ def checksum(directory, filename):
             actual = hasher.hexdigest()
         if actual != digest:
             raise ValueError(f'Archive checksum mismatch: {name}')
+
+
+def release_archive(directory, product, version):
+    # Recovery may inspect artifacts prepared before the fixed-name transition.
+    prefix, legacy_platform = {
+        'noodle': ('Noodle', 'macOS'),
+        'computer': ('Noodle-Computer', 'arm64'),
+        'applet': ('Noodle-Applet', 'arm64'),
+    }[product]
+    candidates = [f'{prefix}-arm64.zip', f'{prefix}-{version}-{legacy_platform}.zip']
+    present = [name for name in candidates if (directory / name).exists()
+               or (directory / (name + '.sha256')).exists()]
+    if len(present) != 1:
+        raise ValueError('Missing or ambiguous release archive')
+    archive = present[0]
+    checksum(directory, archive + '.sha256', expected_archive=archive)
+    return archive
 
 
 def main():
@@ -102,7 +123,7 @@ def main():
         if 'computer' in downloads:
             version, _ = versions.version('computer')
             directory = downloads['computer']
-            checksum(directory, f'Noodle-Computer-{version}-arm64.zip.sha256')
+            release_archive(directory, 'computer', version)
             command('python3', 'scripts/computer-image-registry.py', 'channel')
             destination = ROOT / 'dist' / f'computer-{version}'
             destination.parent.mkdir(exist_ok=True)
@@ -111,7 +132,7 @@ def main():
         if 'applet' in downloads:
             version, _ = versions.version('applet')
             directory = downloads['applet']
-            checksum(directory, f'Noodle-Applet-{version}-arm64.zip.sha256')
+            release_archive(directory, 'applet', version)
             destination = ROOT / 'dist' / f'applet-{version}'
             destination.parent.mkdir(exist_ok=True)
             shutil.copytree(directory, destination)
@@ -119,8 +140,7 @@ def main():
         if 'noodle' in downloads:
             version, tag = versions.version('noodle')
             directory = downloads['noodle']
-            archive = f'Noodle-{version}-macOS.zip'
-            checksum(directory, archive + '.sha256')
+            archive = release_archive(directory, 'noodle', version)
             command('gh', 'release', 'create', tag, str(directory / archive),
                     str(directory / (archive + '.sha256')), str(directory / 'appcast.xml'),
                     '--repo', REPO, '--draft', '--verify-tag', '--title', f'Noodle {version}',

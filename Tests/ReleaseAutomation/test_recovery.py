@@ -51,3 +51,40 @@ class RecoveryTests(unittest.TestCase):
             (root / 'checksum').write_text(digest + '  ../archive.zip\n')
             with self.assertRaises(ValueError):
                 recovery.checksum(root, 'checksum')
+
+    def test_recovers_fixed_and_legacy_download_names_for_each_app(self):
+        for product, prefix, platform in [('noodle', 'Noodle', 'macOS'),
+                                          ('computer', 'Noodle-Computer', 'arm64'),
+                                          ('applet', 'Noodle-Applet', 'arm64')]:
+            for name in [f'{prefix}-arm64.zip', f'{prefix}-1.2.3-{platform}.zip']:
+                with self.subTest(product=product, archive=name), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    (root / name).write_bytes(b'verified archive')
+                    digest = hashlib.sha256(b'verified archive').hexdigest()
+                    manifest = root / (name + '.sha256')
+                    manifest.write_text(f'{digest}  {name}\n')
+                    self.assertEqual(recovery.release_archive(root, product, '1.2.3'), name)
+                    (root / name).write_bytes(b'modified archive')
+                    with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+                        recovery.release_archive(root, product, '1.2.3')
+
+    def test_recovery_requires_one_archive_with_its_own_checksum(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(ValueError, 'Missing or ambiguous'):
+                recovery.release_archive(root, 'noodle', '1.2.3')
+            name = 'Noodle-arm64.zip'
+            (root / name).write_bytes(b'verified archive')
+            (root / 'unrelated.zip').write_bytes(b'verified archive')
+            digest = hashlib.sha256(b'verified archive').hexdigest()
+            manifest = root / (name + '.sha256')
+            manifest.write_text(f'{digest}  unrelated.zip\n')
+            with self.assertRaisesRegex(ValueError, 'does not identify'):
+                recovery.release_archive(root, 'noodle', '1.2.3')
+            manifest.write_text(f'{digest}  {name}\n{digest}  unrelated.zip\n')
+            with self.assertRaisesRegex(ValueError, 'exactly one'):
+                recovery.release_archive(root, 'noodle', '1.2.3')
+            manifest.write_text(f'{digest}  {name}\n')
+            (root / 'Noodle-1.2.3-macOS.zip').write_bytes(b'legacy archive')
+            with self.assertRaisesRegex(ValueError, 'Missing or ambiguous'):
+                recovery.release_archive(root, 'noodle', '1.2.3')

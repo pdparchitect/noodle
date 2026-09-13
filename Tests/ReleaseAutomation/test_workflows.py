@@ -1,11 +1,13 @@
 """Exercise the real workflow dependency conditions, without GitHub or secrets."""
 import itertools
 import fnmatch
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -193,6 +195,45 @@ class WorkflowTests(unittest.TestCase):
             self.assertIn('tag', self.jobs[job]['needs'])
             self.assertIn('actions/download-artifact@v7', json.dumps(self.jobs[job]))
 
+    def test_noodle_publishes_fixed_name_assets_only_after_checksum_verification(self):
+        publish = next(step['run'] for step in self.jobs['publish-noodle']['steps']
+                       if 'gh release create' in step.get('run', ''))
+        for scenario in ['valid', 'corrupt', 'existing']:
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / 'dist').mkdir()
+                (root / 'bin').mkdir()
+                (root / 'VERSION').write_text('1.2.3\n')
+                archive = 'Noodle-arm64.zip'
+                (root / 'dist' / archive).write_bytes(b'prepared archive')
+                digest = hashlib.sha256(b'prepared archive').hexdigest()
+                (root / 'dist' / (archive + '.sha256')).write_text(f'{digest}  {archive}\n')
+                for name in ['appcast.xml', 'release-notes.md']:
+                    (root / 'dist' / name).write_text('fixture')
+                if scenario == 'corrupt':
+                    (root / 'dist' / archive).write_bytes(b'modified archive')
+                gh = root / 'bin' / 'gh'
+                gh.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$TEST_GH_LOG"\n'
+                              'if [ "$1 $2" = "release view" ]; then exit "$TEST_RELEASE_EXISTS"; fi\n')
+                gh.chmod(0o700)
+                log = root / 'commands.log'
+                log.touch()
+                result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', publish], cwd=root,
+                    env={**os.environ, 'PATH': str(root / 'bin') + os.pathsep + os.environ['PATH'],
+                         'TEST_GH_LOG': str(log), 'TEST_RELEASE_EXISTS': '0' if scenario == 'existing' else '1'},
+                    capture_output=True, text=True)
+                commands = log.read_text()
+                if scenario == 'valid':
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn('release create v1.2.3 dist/Noodle-arm64.zip dist/Noodle-arm64.zip.sha256 dist/appcast.xml', commands)
+                    self.assertIn('--draft --verify-tag', commands)
+                    self.assertIn('release edit v1.2.3 --draft=false --latest', commands)
+                    self.assertNotIn('--clobber', commands)
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertNotIn('release create', commands)
+                    self.assertNotIn('release edit', commands)
+
     def test_computer_packaging_has_guest_helper_toolchain(self):
         steps = workflow('computer-release.yml')['jobs']['release']['steps']
         setup = next(i for i, step in enumerate(steps)
@@ -267,6 +308,30 @@ class WorkflowTests(unittest.TestCase):
                      'website/CNAME', '.github/workflows/website.yml']:
             with self.subTest(path=path):
                 self.assertTrue(matches_paths(['website/README.md', path], patterns))
+
+    def test_website_waits_for_its_direct_download_before_deploying(self):
+        steps = workflow('website.yml')['jobs']['deploy']['steps']
+        index = next(i for i, step in enumerate(steps) if step.get('id') == 'download')
+        for step in steps[index + 1:]:
+            self.assertEqual(step.get('if'), "steps.download.outputs.ready == 'true'")
+        for available in [True, False]:
+            with self.subTest(available=available), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / 'website').mkdir()
+                (root / 'website/index.html').write_text((ROOT / 'website/index.html').read_text())
+                (root / 'bin').mkdir()
+                curl = root / 'bin/curl'
+                curl.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$TEST_CURL_LOG"\nexit "$TEST_CURL_STATUS"\n')
+                curl.chmod(0o700)
+                output = root / 'outputs'
+                result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', steps[index]['run']], cwd=root,
+                    env={**os.environ, 'PATH': str(root / 'bin') + os.pathsep + os.environ['PATH'],
+                         'GITHUB_OUTPUT': str(output), 'TEST_CURL_LOG': str(root / 'curl.log'),
+                         'TEST_CURL_STATUS': '0' if available else '22'}, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(output.read_text().strip(), 'ready=' + str(available).lower())
+                self.assertIn('https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.zip',
+                              (root / 'curl.log').read_text().splitlines())
 
 
 if __name__ == '__main__':

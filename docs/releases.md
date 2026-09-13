@@ -18,7 +18,7 @@ Each product has its own version and changelog:
 3. Run the affected tests and review the changes.
 4. Commit and push to `main`. **Pushing a new version requests publication.**
 5. Watch **Validate and release versions** through completion and verify the public download and update channel.
-6. After publishing Noodle, update the Download for Mac link in `website/index.html` to the published `Noodle-X.Y.Z-macOS.zip` asset URL, verify it downloads, then commit and push the website change. Keep the previous download link until the new release is available.
+6. Verify the website's [latest ZIP download](https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.zip). After the first release with this filename, run **Deploy website** manually if it deferred deployment while the asset was unavailable. Future releases require no website link changes.
 
 Do not create tags manually or reuse published versions. Unchanged versions skip
 publication. A new product with no release history and only Unreleased notes
@@ -27,6 +27,17 @@ remains in development until its first dated version section is prepared. PRs va
 
 See [Computer releases](../Computer/RELEASING.md) and [Applet releases](../Applet/RELEASING.md)
 for their separate download channels, and [image releases](../Computer/Images/README.md#publish) for registry checks.
+
+## Download filenames
+
+App ZIPs use fixed filenames: `Noodle-arm64.zip`, `Noodle-Computer-arm64.zip`,
+and `Noodle-Applet-arm64.zip`, each with a matching `.zip.sha256` file.
+Versions remain in app metadata, release titles and tags. Signed update feeds
+use immutable tag URLs, such as `releases/download/vX.Y.Z/Noodle-arm64.zip`;
+the website uses `releases/latest/download/Noodle-arm64.zip`.
+
+Keep previously published archives and feed URLs intact. Migration feeds and
+publication recovery accept the old versioned filenames as well as the new names.
 
 ## What CI does
 

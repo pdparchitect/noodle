@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Publish `Noodle-Applet-arm64.zip` and its checksum under stable filenames so download links follow the current release.
+
 ## [0.1.0] - 2026-09-13
 
 ### Fixed

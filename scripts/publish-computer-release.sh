@@ -9,7 +9,7 @@ tag="computer-v$version"
 repo="pdparchitect/noodle"
 channel=computer-latest
 assets="$project_root/dist/computer-$version"
-archive="Noodle-Computer-$version-arm64.zip"
+archive="Noodle-Computer-arm64.zip"
 [[ -s "$notes" && -s "$assets/$archive" && -s "$assets/$archive.sha256" && -s "$assets/appcast.xml" ]]
 [[ "$(gh api "repos/$repo" --jq .private)" == false ]]
 # Refuse to replace immutable published assets, or regress the stable channel.
@@ -46,12 +46,13 @@ if [[ -z "$channel_title" ]]; then
         --draft --latest=false --title "Noodle Computer $version" --notes "$channel_notes"
     gh release edit "$channel" --repo "$repo" --draft=false --latest=false
 else
-    # Keep the previous downloads/feed available until both new downloads exist.
-    gh release upload "$channel" "$assets/$archive" "$assets/$archive.sha256" --repo "$repo"
+    # Replace fixed-name downloads only on the mutable channel. Publish its feed
+    # after both uploads succeed; immutable versioned releases are never replaced.
+    gh release upload "$channel" "$assets/$archive" "$assets/$archive.sha256" --repo "$repo" --clobber
     gh release upload "$channel" "$assets/appcast.xml" --repo "$repo" --clobber
     gh release edit "$channel" --repo "$repo" --latest=false --title "Noodle Computer $version" --notes "$channel_notes"
-    # Only remove the preceding version's channel copies; immutable releases and
-    # unrelated attachments are retained. Older channels may have no ZIP assets.
+    # Remove only legacy version-named copies during the first channel upgrade.
+    # Fixed-name downloads, immutable releases and unrelated attachments remain.
     previous_archive="Noodle-Computer-$previous-arm64.zip"
     if [[ "$previous_archive" != "$archive" ]]; then
         channel_assets="$(gh release view "$channel" --repo "$repo" --json assets --jq '.assets[].name')"

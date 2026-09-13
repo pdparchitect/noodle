@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Publish `Noodle-Computer-arm64.zip` and its checksum under stable filenames so download links follow the current release.
+
 ## [0.5.0] - 2026-09-13
 
 ### Changed

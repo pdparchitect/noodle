@@ -255,7 +255,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd "dist/computer-$COMPUTER_VERSION"
-          shasum -a 256 -c "Noodle-Computer-$COMPUTER_VERSION-arm64.zip.sha256"
+          shasum -a 256 -c Noodle-Computer-arm64.zip.sha256
           cd ../..
           zsh scripts/publish-computer-release.sh "$COMPUTER_VERSION" "dist/computer-$COMPUTER_VERSION/release-notes.md"
 
@@ -282,7 +282,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd "dist/applet-$APPLET_VERSION"
-          shasum -a 256 -c "Noodle-Applet-$APPLET_VERSION-arm64.zip.sha256"
+          shasum -a 256 -c Noodle-Applet-arm64.zip.sha256
           cd ../..
           zsh scripts/publish-applet-release.sh "$APPLET_VERSION" "dist/applet-$APPLET_VERSION/release-notes.md"
 
@@ -311,15 +311,15 @@ jobs:
           version="$(cat VERSION)"
           tag="v$version"
           cd dist
-          sha256sum -c "Noodle-$version-macOS.zip.sha256"
+          sha256sum -c Noodle-arm64.zip.sha256
           cd ..
           # Existing releases (including drafts) require recovery, never replacement.
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release $tag exists; inspect it before retrying." >&2
             exit 1
           fi
-          gh release create "$tag" "dist/Noodle-$version-macOS.zip" \
-            "dist/Noodle-$version-macOS.zip.sha256" dist/appcast.xml \
+          gh release create "$tag" dist/Noodle-arm64.zip \
+            dist/Noodle-arm64.zip.sha256 dist/appcast.xml \
             --draft --verify-tag --notes-file dist/release-notes.md --title "Noodle $version"
           gh release edit "$tag" --draft=false --latest
 

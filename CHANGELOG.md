@@ -8,7 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
-- Make the website's Download for Mac button download the Noodle ZIP directly.
+- Publish Noodle as `Noodle-arm64.zip` with a matching checksum so the website can link directly to the latest download. Preserve existing migration-release downloads and defer website deployment until its download is available.
 
 - Skip app CI for ordinary Markdown, documentation assets, and website-only changes. Skip image builds and website deployment for README-only edits, while retaining checks for release metadata and the generated message reference.
 

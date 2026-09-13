@@ -7,7 +7,7 @@ expected_tag="v$version"
 release_tag="${1:-${GITHUB_REF_NAME:-}}"
 dist="$project_root/dist"
 notary_input="$project_root/.release/Noodle-notarization.zip"
-archive="$dist/Noodle-$version-macOS.zip"
+archive="$dist/Noodle-arm64.zip"
 
 if [[ -n "$release_tag" && "$release_tag" != "$expected_tag" ]]; then
     print -u2 "Release tag $release_tag does not match VERSION ($expected_tag)."
@@ -34,6 +34,11 @@ export NOODLE_DATA_CONTAINER=production
 export NOODLE_CODESIGN_TIMESTAMP=1
 export NOODLE_REQUIRE_DEVELOPER_ID=1
 app="$("$project_root/scripts/build-app.sh")"
+
+if [[ "$(lipo -archs "$app/Contents/MacOS/Noodle")" != arm64 ]]; then
+    print -u2 "Noodle-arm64.zip requires an arm64 app executable."
+    exit 1
+fi
 
 if [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" != "com.pdparchitect.noodle" ]]; then
     print -u2 "Release packaging must use the production data container identity."

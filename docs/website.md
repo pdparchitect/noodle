@@ -38,6 +38,12 @@ The website workflow does not change product versions or publish app releases.
 Existing release workflows still run under their normal triggers; see
 [releases](releases.md) before changing any product's `VERSION` file.
 
+The download button uses GitHub's latest-release URL for `Noodle-arm64.zip`.
+Deployment first checks that this download is available; otherwise it retains
+the existing website. After the first Noodle release with the fixed filename,
+run **Deploy website** manually if the initial deployment was deferred. Later
+releases update the download automatically through GitHub's latest-release URL.
+
 ## Add a custom domain
 
 1. Verify ownership of the domain in your GitHub account's Pages settings.

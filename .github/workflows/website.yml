@@ -33,14 +33,39 @@ jobs:
         uses: actions/checkout@v6
         with:
           sparse-checkout: website
+      - name: Check that the direct download is published
+        id: download
+        run: |
+          download_url="$(python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          class Download(HTMLParser):
+              def handle_starttag(self, tag, attrs):
+                  attrs = dict(attrs)
+                  if tag == 'a' and attrs.get('class') == 'button':
+                      print(attrs['href'])
+          Download().feed(Path('website/index.html').read_text())
+          PY
+          )"
+          test -n "$download_url"
+          if curl --fail --silent --show-error --head --location --connect-timeout 10 --max-time 30 --retry 3 "$download_url" >/dev/null; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::Download unavailable; keeping the existing website. Run Deploy website after the release is published.'
+          fi
       - name: Fetch website images from Git LFS
+        if: steps.download.outputs.ready == 'true'
         run: git lfs pull --include="website/**" --exclude=""
       - name: Configure GitHub Pages
+        if: steps.download.outputs.ready == 'true'
         uses: actions/configure-pages@v6
       - name: Upload the website
+        if: steps.download.outputs.ready == 'true'
         uses: actions/upload-pages-artifact@v5
         with:
           path: website
       - name: Deploy to GitHub Pages
         id: deployment
+        if: steps.download.outputs.ready == 'true'
         uses: actions/deploy-pages@v5

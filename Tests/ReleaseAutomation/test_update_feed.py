@@ -10,12 +10,13 @@ spec.loader.exec_module(feed)
 S = "{" + feed.SPARKLE + "}"
 
 
-def appcast(version, minimum=None):
+def appcast(version, minimum=None, legacy=False):
     root = ET.Element("rss"); channel = ET.SubElement(root, "channel"); item = ET.SubElement(channel, "item")
     ET.SubElement(item, S + "version").text = version
     if minimum:
         ET.SubElement(item, S + "minimumUpdateVersion").text = minimum
-    ET.SubElement(item, "enclosure", {"url": f"{feed.RELEASES}/v{version}/Noodle-{version}-macOS.zip",
+    archive = f"Noodle-{version}-macOS.zip" if legacy else "Noodle-arm64.zip"
+    ET.SubElement(item, "enclosure", {"url": f"{feed.RELEASES}/v{version}/{archive}",
                                      S + "edSignature": "unchanged-archive-signature", "length": "123"})
     return ET.tostring(root)
 
@@ -26,16 +27,18 @@ class UpdateFeedTests(unittest.TestCase):
         self.assertIsNone(ET.fromstring(result).find("channel/item/" + S + "minimumUpdateVersion"))
 
     def test_successor_keeps_signed_milestone_and_requires_it(self):
-        result = feed.prepare(appcast("0.14.0"), "0.14.0", ["0.13.0"], lambda v: appcast(v))
+        result = feed.prepare(appcast("0.14.0"), "0.14.0", ["0.13.0"], lambda v: appcast(v, legacy=True))
         items = ET.fromstring(result).findall("channel/item")
         self.assertEqual([feed.item_version(i) for i in items], ["0.14.0", "0.13.0"])
         self.assertEqual(items[0].findtext(S + "minimumUpdateVersion"), "0.13.0")
         self.assertIsNone(items[1].find(S + "minimumUpdateVersion"))
         self.assertEqual(items[1].find("enclosure").get(S + "edSignature"), "unchanged-archive-signature")
+        self.assertEqual(items[0].find("enclosure").get("url"), f"{feed.RELEASES}/v0.14.0/Noodle-arm64.zip")
+        self.assertEqual(items[1].find("enclosure").get("url"), f"{feed.RELEASES}/v0.13.0/Noodle-0.13.0-macOS.zip")
 
     def test_multiple_migrations_form_a_reachable_chain(self):
         result = feed.prepare(appcast("0.16.0"), "0.16.0", ["0.13.0", "0.15.0"],
-                              lambda v: appcast(v, "0.13.0" if v == "0.15.0" else None))
+                              lambda v: appcast(v, "0.13.0" if v == "0.15.0" else None, legacy=v == "0.13.0"))
         items = ET.fromstring(result).findall("channel/item")
         self.assertEqual([i.findtext(S + "minimumUpdateVersion") for i in items], ["0.15.0", "0.13.0", None])
         # Model Sparkle's version eligibility: skipping releases still visits
@@ -56,7 +59,10 @@ class UpdateFeedTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             feed.prepare(appcast("0.14.0"), "0.14.0", ["0.13.0"], rejected)
         for old in [appcast("0.12.0"), appcast("0.13.0", "0.12.0"),
-                    appcast("0.13.0").replace(b"Noodle-0.13.0-macOS.zip", b"modified.zip")]:
+                    appcast("0.13.0").replace(b"Noodle-arm64.zip", b"modified.zip"),
+                    appcast("0.13.0").replace(b"/v0.13.0/", b"/v0.14.0/"),
+                    appcast("0.13.0").replace(b"/download/v0.13.0/", b"/latest/download/"),
+                    appcast("0.13.0", legacy=True).replace(b"Noodle-0.13.0", b"Noodle-0.12.0")]:
             with self.assertRaises(ValueError):
                 feed.prepare(appcast("0.14.0"), "0.14.0", ["0.13.0"], lambda _: old)
 

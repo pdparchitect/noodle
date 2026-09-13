@@ -60,8 +60,13 @@ def prepare(feed, version, milestones, fetch_verified):
             raise ValueError("Missing or duplicate milestone: " + milestone)
         item = deepcopy(candidates[0])
         enclosure = item.find("enclosure")
-        expected_url = f"{RELEASES}/v{milestone}/Noodle-{milestone}-macOS.zip"
-        if enclosure is None or enclosure.get("url") != expected_url or not enclosure.get(f"{{{SPARKLE}}}edSignature"):
+        # Older published milestones retain their original versioned filenames.
+        # Both names must still point to this milestone's immutable release tag.
+        expected_urls = {
+            f"{RELEASES}/v{milestone}/Noodle-arm64.zip",
+            f"{RELEASES}/v{milestone}/Noodle-{milestone}-macOS.zip",
+        }
+        if enclosure is None or enclosure.get("url") not in expected_urls or not enclosure.get(f"{{{SPARKLE}}}edSignature"):
             raise ValueError("Milestone must retain its signed, immutable release archive")
         expected_minimum = required[index - 1] if index else None
         if item.findtext(f"{{{SPARKLE}}}minimumUpdateVersion") != expected_minimum:

@@ -14,7 +14,7 @@ try fm.copyItem(at: source.appendingPathComponent("scripts/publish-computer-rele
                 to: root.appendingPathComponent("scripts/publish-computer-release.sh"))
 try write("1.2.3\n", "Computer/VERSION")
 try write("Fixture release notes\n", "notes.md")
-for file in ["Noodle-Computer-1.2.3-arm64.zip", "Noodle-Computer-1.2.3-arm64.zip.sha256", "appcast.xml"] {
+for file in ["Noodle-Computer-arm64.zip", "Noodle-Computer-arm64.zip.sha256", "appcast.xml"] {
     try write("fixture", "dist/computer-1.2.3/" + file)
 }
 try write("""
@@ -26,8 +26,10 @@ case "$1 $2 $3" in
     'release view computer-v1.2.3') [[ "$COMPUTER_TEST_MODE" == existing ]] ;;
     'release view computer-latest')
         if [[ "$*" == *'--json assets'* ]]; then
-            print -l Noodle-Computer-1.2.2-arm64.zip Noodle-Computer-1.2.2-arm64.zip.sha256 \\
-                Noodle-Computer-1.2.3-arm64.zip Noodle-Computer-1.2.3-arm64.zip.sha256 appcast.xml other.txt
+            if [[ "$COMPUTER_TEST_MODE" == legacy-upgrade ]]; then
+                print -l Noodle-Computer-1.2.2-arm64.zip Noodle-Computer-1.2.2-arm64.zip.sha256
+            fi
+            print -l Noodle-Computer-arm64.zip Noodle-Computer-arm64.zip.sha256 appcast.xml other.txt
             exit 0
         fi
         case "$COMPUTER_TEST_MODE" in
@@ -37,7 +39,10 @@ case "$1 $2 $3" in
         esac ;;
     'release edit computer-v1.2.3') [[ "$COMPUTER_TEST_MODE" != version-failure ]] ;;
     'release upload computer-latest')
+        # Fixed-name assets already exist on established channels.
+        if [[ "$COMPUTER_TEST_MODE" == upgrade && "$*" != *'--clobber'* ]]; then exit 1; fi
         if [[ "$4" == *.zip && "$COMPUTER_TEST_MODE" == archive-failure ]]; then exit 1; fi
+        if [[ "$5" == *.zip.sha256 && "$COMPUTER_TEST_MODE" == checksum-failure ]]; then exit 1; fi
         if [[ "$4" == */appcast.xml && "$COMPUTER_TEST_MODE" == feed-failure ]]; then exit 1; fi ;;
     *) exit 0 ;;
 esac
@@ -56,54 +61,62 @@ func run(_ mode: String) throws -> (Int32, String) {
     let output = pipe.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
     let log = try String(contentsOf: root.appendingPathComponent("commands.log"), encoding: .utf8)
-    if ["first", "upgrade"].contains(mode), process.terminationStatus != 0 {
+    if ["first", "upgrade", "legacy-upgrade"].contains(mode), process.terminationStatus != 0 {
         fatalError(String(decoding: output, as: UTF8.self))
     }
     return (process.terminationStatus, log)
 }
-for mode in ["first", "upgrade"] {
+for mode in ["first", "upgrade", "legacy-upgrade"] {
     let (status, log) = try run(mode)
     precondition(status == 0)
     let writes = log.split(separator: "\n").filter { $0.hasPrefix("release create") || $0.hasPrefix("release edit") }
     precondition(!writes.isEmpty && writes.allSatisfy { $0.contains("--latest=false") })
     precondition(writes.first!.contains("computer-v1.2.3") && writes.first!.contains("--draft"))
+    precondition(!writes.first!.contains("--clobber"))
+    precondition(writes.first!.contains("/Noodle-Computer-arm64.zip "))
     let publication = log.range(of: "release edit computer-v1.2.3")!
     let channel = log.range(of: mode == "first" ? "release create computer-latest" : "release upload computer-latest")!
     precondition(publication.lowerBound < channel.lowerBound, "Channel must follow version publication")
     let channelCommand = log.split(separator: "\n").first {
         $0.hasPrefix(mode == "first" ? "release create computer-latest" : "release upload computer-latest")
     }!
-    precondition(channelCommand.contains("/Noodle-Computer-1.2.3-arm64.zip "))
-    precondition(channelCommand.contains("/Noodle-Computer-1.2.3-arm64.zip.sha256 "))
+    precondition(channelCommand.contains("/Noodle-Computer-arm64.zip "))
+    precondition(channelCommand.contains("/Noodle-Computer-arm64.zip.sha256 "))
     if mode == "first" {
         precondition(channelCommand.contains("/appcast.xml "))
     } else {
+        precondition(channelCommand.contains("--clobber"))
         let feedCommand = log.split(separator: "\n").first {
             $0.hasPrefix("release upload computer-latest ") && $0.contains("/appcast.xml ")
         }!
         let feed = log.range(of: String(feedCommand))!
         let promotion = log.range(of: "release edit computer-latest")!
-        let cleanup = log.range(of: "release delete-asset computer-latest")!
         precondition(channel.lowerBound < feed.lowerBound && feed.lowerBound < promotion.lowerBound)
-        precondition(promotion.lowerBound < cleanup.lowerBound)
+        precondition(feedCommand.contains("--clobber"))
         let deletions = log.split(separator: "\n").filter { $0.hasPrefix("release delete-asset") }
-        precondition(deletions.count == 2)
-        precondition(deletions.allSatisfy { $0.hasPrefix("release delete-asset computer-latest Noodle-Computer-1.2.2-arm64.zip") })
+        if mode == "legacy-upgrade" {
+            let cleanup = log.range(of: "release delete-asset computer-latest")!
+            precondition(promotion.lowerBound < cleanup.lowerBound)
+            precondition(deletions.count == 2)
+            precondition(deletions.allSatisfy { $0.hasPrefix("release delete-asset computer-latest Noodle-Computer-1.2.2-arm64.zip") })
+        } else {
+            precondition(deletions.isEmpty, "Fixed-name downloads must survive channel cleanup")
+        }
     }
-    precondition(log.contains("releases/download/computer-v1.2.3/Noodle-Computer-1.2.3-arm64.zip"))
+    precondition(log.contains("releases/download/computer-v1.2.3/Noodle-Computer-arm64.zip"))
 }
 for mode in ["rollback", "existing", "private"] {
     let (status, log) = try run(mode)
     precondition(status != 0)
     precondition(!log.contains("release create") && !log.contains("release edit") && !log.contains("release upload"))
 }
-for mode in ["version-failure", "archive-failure", "feed-failure"] {
+for mode in ["version-failure", "archive-failure", "checksum-failure", "feed-failure"] {
     let (status, log) = try run(mode)
     precondition(status != 0)
     precondition(!log.contains("release edit computer-latest"))
     precondition(!log.contains("release delete-asset"))
     if mode == "version-failure" { precondition(!log.contains("release upload computer-latest")) }
-    if mode == "archive-failure" {
+    if mode == "archive-failure" || mode == "checksum-failure" {
         precondition(!log.split(separator: "\n").contains {
             $0.hasPrefix("release upload computer-latest ") && $0.contains("/appcast.xml ")
         })
