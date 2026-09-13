@@ -15,6 +15,7 @@ import XCTest
     let terminal = UUID()
     var requests: [ComputerRequest] = []
     var blockedOperation: ComputerOperation?
+    var blockedListNumber: Int?
     var blocked: ComputerResponseGate?
     var gates: [ComputerResponseGate] = []
     var errorOperation: ComputerOperation?
@@ -22,8 +23,9 @@ import XCTest
     func count(_ operation: ComputerOperation) -> Int { requests.filter { $0.operation == operation }.count }
     func respond(_ request: ComputerRequest) async throws -> ComputerResponse {
         requests.append(request)
-        if blockedOperation == request.operation {
+        if blockedOperation == request.operation || (request.operation == .list && count(.list) == blockedListNumber) {
             blockedOperation = nil
+            blockedListNumber = nil
             let gate = ComputerResponseGate(); gates.append(gate); blocked = gate
             return try await gate.wait()
         }
@@ -53,8 +55,11 @@ import XCTest
         try repository.prepare()
         a = try repository.createAgent(named: "Computer A").agent
         b = try repository.createAgent(named: "Computer B").agent
+        let providerRoot = root.appendingPathComponent("provider")
+        try FileManager.default.createDirectory(at: providerRoot, withIntermediateDirectories: false)
         let provider = provider
-        controller = ComputerController(repository: repository, applicationLookup: { nil }, connection: { try await provider.respond($0) })
+        controller = ComputerController(repository: repository, socket: providerRoot.appendingPathComponent("fixture.sock"),
+            applicationLookup: { nil }, connection: { try await provider.respond($0) })
     }
     func prepare() async throws {
         await controller.refresh()

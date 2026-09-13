@@ -46,6 +46,56 @@ import XCTest
         XCTAssertFalse(f.controller.permits(f.card))
     }
 
+    func testTransfersRevokedDuringDispatchHandshakeNeverReachProvider() async throws {
+        try await assertTransfersRejectedDuringHandshake(replaceSession: false)
+    }
+
+    func testTransfersFromRetiredSessionNeverReachProviderAfterRestart() async throws {
+        try await assertTransfersRejectedDuringHandshake(replaceSession: true)
+    }
+
+    private func assertTransfersRejectedDuringHandshake(replaceSession: Bool) async throws {
+        for operation in [ComputerOperation.fileUpload, .fileDownload] {
+            let f = try await fixture()
+            let workspace = f.repository.directory(for: f.a)
+            try Data([42]).write(to: workspace.appendingPathComponent("source.bin"))
+            // The transfer checks capabilities before staging, then performs a
+            // second handshake immediately before sending the actual command.
+            f.provider.blockedListNumber = f.provider.count(.list) + 2
+            var request = f.request(operation); request.path = "/workspace/fixture.bin"; request.terminalID = nil
+            let sent = try f.send(request) { $0.localPath = operation == .fileUpload ? "source.bin" : "result.bin" }
+            try await f.wait { f.provider.blocked != nil }
+            if replaceSession {
+                f.controller.start(agents: [f.b], monitoring: false)
+                f.controller.start(agents: [f.a, f.b], monitoring: false)
+            } else {
+                try f.controller.assign([], to: f.a)
+            }
+            f.provider.blocked?.finish(.success(f.provider.response(.list)))
+            let response = try await f.response(sent)
+            XCTAssertTrue(response.error?.contains("revoked") == true, "\(operation): \(response.error ?? "success")")
+            XCTAssertEqual(f.provider.count(operation), 0, "Revoked \(operation) was dispatched")
+            XCTAssertFalse(FileManager.default.fileExists(atPath: workspace.appendingPathComponent("result.bin").path))
+            let staging = f.root.appendingPathComponent("provider/file-transfers")
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: staging.path), [])
+        }
+    }
+
+    func testCatalogueFromRetiredSessionIsWithheldAfterRemovalOrRestart() async throws {
+        for restart in [false, true] {
+            let f = try await fixture()
+            f.provider.blockedOperation = .list
+            let sent = try f.send(.init(.list))
+            try await f.wait { f.provider.blocked != nil }
+            f.controller.start(agents: [f.b], monitoring: false)
+            if restart { f.controller.start(agents: [f.a, f.b], monitoring: false) }
+            f.provider.blocked?.finish(.success(f.provider.response(.list)))
+            let response = try await f.response(sent)
+            XCTAssertNotNil(response.error)
+            XCTAssertNil(response.computers)
+        }
+    }
+
     func testUncertainTerminalWriteIsNotRetriedOrReplayedByAnotherScan() async throws {
         let f = try await fixture()
         f.provider.errorOperation = .terminalWrite

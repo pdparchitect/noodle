@@ -232,13 +232,18 @@ import SwiftUI
         }
     }
     private func perform(_ envelope: ComputerAgentRequest, agent: AgentRecord) async throws -> ComputerResponse {
-        guard readable, agents.contains(where: { $0.id == agent.id }) else { throw ComputerBridgeError("Computer access is unavailable.") }
+        func checkSession() throws {
+            guard readable, tokens[agent.id] == envelope.token, agents.contains(where: { $0.id == agent.id }) else {
+                throw ComputerBridgeError("Computer access was revoked during the request.")
+            }
+        }
+        try checkSession()
         var request = envelope.request
         request.agentID = agent.id // Agent identity is broker-owned, never trusted from CLI JSON.
         try request.validate()
         guard ![.revoke, .display, .terminalResolve].contains(request.operation) else { throw ComputerBridgeError("This operation is user-only.") }
         if request.operation == .list {
-            let response = try await call(.init(.list))
+            let response = try await call(.init(.list), authorize: checkSession)
             var result = ComputerResponse(computers: response.computers?.filter { registry.permits($0.id, agent: agent.id) })
             result.capabilities = response.capabilities
             return result
@@ -255,7 +260,7 @@ import SwiftUI
             if request.computerID == nil {
                 // Resolve only the authenticated agent's own session. No output or
                 // credentials are fetched until the resolved assignment is checked.
-                let resolved = try await call(.init(.terminalResolve, agentID: agent.id, terminalID: request.terminalID))
+                let resolved = try await call(.init(.terminalResolve, agentID: agent.id, terminalID: request.terminalID), authorize: checkSession)
                 request.computerID = resolved.computerID
             }
         }
@@ -263,12 +268,12 @@ import SwiftUI
         let response: ComputerResponse
         if request.operation.isFileTransfer {
             guard let localPath = envelope.localPath else { throw ComputerBridgeError("Specify a local workspace file.") }
-            response = try await transfer(request, localPath: localPath, agent: agent)
+            response = try await transfer(request, localPath: localPath, agent: agent, checkSession: checkSession)
         } else {
             guard envelope.localPath == nil else { throw ComputerBridgeError("Local paths require upload or download.") }
             response = try await call(request) {
-                guard self.registry.permits(request.computerID, agent: agent.id),
-                      self.tokens[agent.id] == envelope.token, self.agents.contains(where: { $0.id == agent.id }) else {
+                try checkSession()
+                guard self.registry.permits(request.computerID, agent: agent.id) else {
                     throw ComputerBridgeError("Computer access was revoked during the request.")
                 }
             }
@@ -296,14 +301,16 @@ import SwiftUI
         }
         return response
     }
-    private func transfer(_ input: ComputerRequest, localPath: String, agent: AgentRecord) async throws -> ComputerResponse {
+    private func transfer(_ input: ComputerRequest, localPath: String, agent: AgentRecord,
+                          checkSession: () throws -> Void) async throws -> ComputerResponse {
         func checkAccess() throws {
-            guard registry.permits(input.computerID, agent: agent.id), agents.contains(where: { $0.id == agent.id }) else {
+            try checkSession()
+            guard registry.permits(input.computerID, agent: agent.id) else {
                 throw ComputerBridgeError("Computer access was revoked during the transfer.")
             }
         }
         // Reject old providers before copying a potentially large local file.
-        let discovery = try await call(.init(.list))
+        let discovery = try await call(.init(.list), authorize: checkAccess)
         try ComputerCapabilities.requireFileTransfer(discovery.capabilities)
         try checkAccess()
         let root = try (socket ?? ComputerConnection.socketURL()).deletingLastPathComponent()
@@ -317,12 +324,12 @@ import SwiftUI
                 try ComputerWorkspaceFiles.upload(workspace: workspace, path: localPath, to: staging)
             }.value
             try checkAccess()
-            let response = try await call(request)
+            let response = try await call(request, authorize: checkAccess)
             guard response.byteCount == count else { throw ComputerBridgeError("The provider did not confirm the complete upload. Check the guest file before retrying.") }
             return response
         }
         let destination = try ComputerWorkspaceDownload(workspace: workspace, path: localPath)
-        let response = try await call(request)
+        let response = try await call(request, authorize: checkAccess)
         try checkAccess()
         guard let count = response.byteCount, count >= 0, count <= ComputerTransferFiles.limit else {
             throw ComputerBridgeError("The provider returned an invalid download size.")

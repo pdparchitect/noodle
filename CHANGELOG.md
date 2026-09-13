@@ -22,6 +22,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Reject uploads and downloads when Computer access is revoked during the final provider handshake, and withhold catalogue and transfer results from retired bot sessions after removal or restart.
+
 - Discard annotation preparation results after close, navigation, or replacement, and prevent retired region canvases from modifying a newer draft. Report missing attachments before opening Quick Look; cover preview ownership, save retries, sent-note protection, and missing-image failures with hidden-window tests.
 
 - Restore prior bot settings and assignments when an edit fails, and grant a newly selected harness only after saving succeeds. Remove incomplete bot creations, preserve bot access on failed deletion, and restore staged workspaces and conversations if deletion cannot update every group. Keep successful saves distinct from Messenger startup failures.
