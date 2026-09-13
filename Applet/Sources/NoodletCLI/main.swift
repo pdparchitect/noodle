@@ -123,17 +123,13 @@ import Foundation
             do {
                 return try await AppletConnection.call(input, socket: socket, team: team)
             } catch let error as AppletError where error.unavailable {
-                let config = NSWorkspace.OpenConfiguration()
-                config.activates = false
-                config.arguments = ["--noodle-background"]
                 guard
                     let provider = bundle.bundleIdentifier == AppletConnection.providerID
                         ? bundle.bundleURL
                         : NSWorkspace.shared.urlForApplication(
                             withBundleIdentifier: AppletConnection.providerID)
                 else { throw AppletError("Install Noodle Applet first.") }
-                _ = try await NSWorkspace.shared.openApplication(
-                    at: provider, configuration: config)
+                try await AppletLaunch.openInBackground(at: provider)
                 for _ in 0..<40 {
                     try await Task.sleep(for: .milliseconds(250))
                     do {

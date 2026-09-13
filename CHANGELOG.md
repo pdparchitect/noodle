@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Keep the Applet catalogue closed when loading a conversation's noodlet attachment previews. Use a dedicated background URL so sandboxed launches preserve the request, including when the companion is already starting.
+
 - Prevent conversation annotation updates from reattaching to a window during teardown and crashing Noodle.
 
 - Display the bot or group name as plain title text in separate chat windows, removing the small glass capsule on macOS 26.

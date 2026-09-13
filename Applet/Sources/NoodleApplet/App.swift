@@ -3,6 +3,7 @@ import AppletBridge
 import AppletCore
 import NoodleWallpaper
 import SwiftUI
+import OSLog
 
 @main struct NoodleAppletApp: App {
   @NSApplicationDelegateAdaptor(AppletDelegate.self) private var delegate
@@ -98,13 +99,26 @@ private struct AppletMenu: View {
   lazy var background = AppletBackgroundStore(root: library.root)
   lazy var runtime = AppletRuntime(library: library)
   private var openedExternalItem = false
+  private let launchLog = Logger(subsystem: AppletConnection.providerID, category: "Launch")
 
   func applicationDidBecomeActive(_ notification: Notification) {
     // Quiet agent launches must not display update prompts.
     AppletUpdater.shared.start()
   }
   func applicationDidFinishLaunching(_ notification: Notification) {
-    if CommandLine.arguments.contains("--updater-ui-test") {
+    let defaultLaunch = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true
+    launchLog.notice("Provider launched; default app launch: \(defaultLaunch)")
+    if CommandLine.arguments.contains("--background-launch-ui-test") {
+      Task { @MainActor in
+        do {
+          try await AppletUITest.runBackgroundLaunch()
+          NSApp.terminate(nil)
+        } catch {
+          fputs("APPLET BACKGROUND LAUNCH TEST FAILED: \(error.localizedDescription)\n", stderr)
+          exit(1)
+        }
+      }
+    } else if CommandLine.arguments.contains("--updater-ui-test") {
       Task { @MainActor in
         try? await Task.sleep(for: .milliseconds(250))
         reopenLibrary()
@@ -130,6 +144,7 @@ private struct AppletMenu: View {
   }
 
   func reopenLibrary() {
+    launchLog.notice("Opening catalogue")
     if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "library" }) {
       window.makeKeyAndOrderFront(nil)
     } else {
@@ -139,6 +154,7 @@ private struct AppletMenu: View {
     NSApp.activate(ignoringOtherApps: true)
   }
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    launchLog.notice("Received app reopen event")
     reopenLibrary()
     return true
   }
@@ -148,6 +164,12 @@ private struct AppletMenu: View {
   func application(_ application: NSApplication, open urls: [URL]) {
     openedExternalItem = true
     for url in urls {
+      // A sandboxed Noodle launch arrives as a URL without --noodle-background.
+      // Receiving it is enough: applicationDidFinishLaunching starts the server.
+      if url == AppletLaunch.backgroundURL {
+        launchLog.notice("Received background provider URL")
+        continue
+      }
       do {
         if let id = NoodletLink.id(in: url) {
           runtime.open(try library.package(for: id))

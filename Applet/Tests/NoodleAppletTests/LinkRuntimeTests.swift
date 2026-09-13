@@ -38,6 +38,8 @@ import XCTest
         info.owner = "local"
         let preview = try await runtime.handle(info, identity: identity).checked()
         XCTAssertNotNil(preview.previewBookmark)
+        XCTAssertNil(preview.sessionID)
+        XCTAssertTrue(runtime.sessions.isEmpty, "Loading an attachment preview must not run the creation")
         let cliDenied = await runtime.handle(info, identity: "com.pdparchitect.noodle.applet.cli")
         XCTAssertNotNil(cliDenied.error)
         validate.files?["index.html"] = Data("updated".utf8)

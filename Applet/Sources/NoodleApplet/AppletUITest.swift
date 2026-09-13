@@ -3,6 +3,59 @@ import AppletBridge
 import AppletCore
 
 @MainActor enum AppletUITest {
+    /// Run in a signed bundle with --noodle-background --background-launch-ui-test.
+    /// Exercise Launch Services against this process without starting the shared provider.
+    static func runBackgroundLaunch() async throws {
+        setbuf(stdout, nil)
+        func libraryIsVisible() -> Bool {
+            NSApp.windows.contains { $0.identifier?.rawValue == "library" && $0.isVisible }
+        }
+        func open(_ configuration: NSWorkspace.OpenConfiguration) async throws {
+            configuration.allowsRunningApplicationSubstitution = false
+            let app = try await NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL,
+                configuration: configuration)
+            guard app.processIdentifier == getpid() else { throw AppletError("Launch did not reuse the test process") }
+            try await Task.sleep(for: .milliseconds(700))
+        }
+        func openInBackground() async throws {
+            let app = try await AppletLaunch.openInBackground(at: Bundle.main.bundleURL)
+            guard app.processIdentifier == getpid() else { throw AppletError("Background launch did not reuse the test process") }
+            try await Task.sleep(for: .milliseconds(700))
+        }
+        try await Task.sleep(for: .milliseconds(700))
+        guard !libraryIsVisible() else { throw AppletError("Background startup opened the library") }
+        for _ in 0..<3 { try await openInBackground() }
+        guard !libraryIsVisible(), !NSApp.isActive else {
+            throw AppletError("Background reuse opened the library or activated the app")
+        }
+        print("PASS: background startup and repeated Launch Services requests keep the catalogue closed")
+
+        try await open(NSWorkspace.OpenConfiguration())
+        guard libraryIsVisible() else { throw AppletError("Explicit app open did not show the library") }
+        try await openInBackground()
+        guard libraryIsVisible() else { throw AppletError("Background request hid an already open library") }
+        NSApp.windows.first { $0.identifier?.rawValue == "library" }?.close()
+        NSApp.hide(nil)
+        try await openInBackground()
+        guard !libraryIsVisible() else {
+            throw AppletError("Background request reopened a closed library")
+        }
+        print("PASS: explicit app open shows the library; a later background request leaves it closed")
+
+        let creation = NSWindow(contentRect: CGRect(x: 100, y: 100, width: 240, height: 180),
+            styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        creation.isReleasedWhenClosed = false
+        creation.title = "Background launch test creation"
+        creation.makeKeyAndOrderFront(nil)
+        NSApp.unhide(nil)
+        defer { creation.close() }
+        try await openInBackground()
+        guard creation.isVisible, !NSApp.isHidden, !libraryIsVisible() else {
+            throw AppletError("Background request hid an existing window or opened the library")
+        }
+        print("PASS: background requests preserve existing creation windows")
+    }
+
     /// Opt-in observation for real Launch Services app/URL launches. No window actions.
     static func captureLaunch(isDefault: Bool?, external: Bool) {
         let windows = NSApp.windows.filter(\.isVisible).map {

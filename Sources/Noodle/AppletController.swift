@@ -115,11 +115,7 @@ import Observation
                             "Install Noodle Applet to run noodlets. See Noodle Settings → Companion Apps."
                         )
                     }
-                    let config = NSWorkspace.OpenConfiguration()
-                    config.activates = false
-                    config.hides = true
-                    config.arguments = ["--noodle-background"]
-                    _ = try await NSWorkspace.shared.openApplication(at: url, configuration: config)
+                    try await AppletLaunch.openInBackground(at: url)
                 }
                 launching = task
                 do {

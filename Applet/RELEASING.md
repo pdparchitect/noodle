@@ -67,7 +67,14 @@ swift Applet/Tests/ReleaseWorkflowTests.swift "$PWD"
 zsh scripts/build-applet.sh
 zsh scripts/verify-applet-release.sh '.build/Noodle Applet.app'
 '.build/Noodle Applet.app/Contents/MacOS/NoodleApplet' --noodle-background --updater-ui-test
+'.build/Noodle Applet.app/Contents/MacOS/NoodleApplet' --noodle-background --background-launch-ui-test
+zsh Applet/scripts/test-background-launch.sh
 ```
+
+Quit Applet before the launch checks. The sandboxed sender test verifies a real
+cold launch, repeated background requests, and an explicit library open. It refuses
+to interrupt an existing instance. Pass `--legacy` to reproduce the previous
+argument/custom-Apple-event launch failure; that control is expected to fail.
 
 Local checks do not replace CI notarization and distribution checks.
 
