@@ -1,0 +1,33 @@
+name: Feature or improvement
+description: Propose a feature, interface improvement, or documentation change.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues first. Discuss substantial changes here before starting a pull request.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or unmet need
+      description: Which app or part of the project is affected? Describe what you are trying to accomplish and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What should someone be able to do after this change? Include a concrete example so we can assess whether it solves the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: approach
+    attributes:
+      label: Suggested approach and alternatives
+      description: If you have an approach in mind, describe it and any alternatives or workarounds you considered.
+  - type: textarea
+    id: visuals
+    attributes:
+      label: Visual context
+      description: |
+        For interface proposals, attach a screenshot of the current experience and any proposed mockup or sketch you have. Label mockups as proposals; an implemented after screenshot is only required with a visual pull request. For a new screen, describe the existing workflow it would replace or extend.
+        Drag images into this field. Remove credentials and personal data.

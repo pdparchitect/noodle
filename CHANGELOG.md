@@ -38,6 +38,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Add bug report and feature request forms, and require before and after screenshots when reviewing visual pull requests.
+
 - Press Backspace (⌫) in a live or loading capture preview to return to the window or screen picker. Keep Backspace available for editing annotation comments.
 
 - Annotate selected conversation text with ⌘⇧A or a region of the Noodle window with ⌘⇧R, adding comments and source context to the message draft. Both actions are available in the Conversation menu. Select regions inside the existing window with a hint that follows the pointer and disappears when selection begins.

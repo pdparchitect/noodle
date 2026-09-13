@@ -1,0 +1,70 @@
+name: Bug report
+description: Report a problem with Noodle or a companion app.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues before opening a new report. Remove credentials and personal data from logs and screenshots.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Noodle
+        - Noodle Computer
+        - Noodle Applet
+        - Computer images
+        - Website or documentation
+        - Other or unsure
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the problem and how it affects what you are trying to do.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include relevant settings and how often it happens. If you cannot reproduce it reliably, describe what you were doing when it happened.
+      placeholder: |
+        1. Open ...
+        2. ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Versions and environment
+      description: Include the affected app version (or source commit), macOS version, and Mac model or chip. For agent problems, include the harness and its version; for Computer problems, include the image if relevant. Use N/A for details that do not apply.
+      placeholder: |
+        App version or commit:
+        macOS version:
+        Mac model or chip:
+        Harness and version (if relevant):
+        Computer image (if relevant):
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: |
+        For visual bugs, attach a screenshot of the current problem, or explain why you cannot capture it. Include a screenshot of the earlier working state if available, labeled with its version. You do not need an after screenshot of a fix to report a bug. Add a short recording for motion or interaction problems.
+        Drag images into this field. Include enough surrounding interface to show the context.
+  - type: textarea
+    id: context
+    attributes:
+      label: Logs and additional context
+      description: Attach relevant logs, error messages, or links. If this worked before, include the last known working version.
