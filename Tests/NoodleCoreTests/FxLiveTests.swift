@@ -78,9 +78,13 @@ final class ACPWireFixture {
         if process.isRunning {
             let finished = DispatchSemaphore(value: 0)
             process.terminationHandler = { _ in finished.signal() }
-            process.terminate()
-            if process.isRunning, finished.wait(timeout: .now() + 2) != .success {
-                kill(process.processIdentifier, SIGKILL)
+            // Mirror Agent Host teardown, including native runtime children
+            // that can retain a session lock after their stdio parent exits.
+            let pid = process.processIdentifier
+            let target = getpgid(pid) == pid ? -pid : pid
+            kill(target, SIGTERM)
+            if finished.wait(timeout: .now() + 2) != .success {
+                kill(target, SIGKILL)
                 _ = finished.wait(timeout: .now() + 2)
             }
         }
@@ -88,6 +92,9 @@ final class ACPWireFixture {
     private func send(_ object: [String: Any]) throws {
         writeLock.lock(); defer { writeLock.unlock() }
         try stdin.fileHandleForWriting.write(contentsOf: JSONSerialization.data(withJSONObject: object) + Data([10]))
+    }
+    func notify(_ method: String, _ params: [String: Any] = [:]) throws {
+        try send(["jsonrpc": "2.0", "method": method, "params": params])
     }
     private func receive(_ object: [String: Any]) {
         if object["method"] as? String == "session/update", let params = object["params"] as? [String: Any], let update = params["update"] as? [String: Any] {

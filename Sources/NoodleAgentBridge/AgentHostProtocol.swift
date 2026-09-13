@@ -39,6 +39,8 @@ public enum AgentHostIdentity {
     func startRestrictedACP(harnessIdentifier: String, agentID: String, executablePath: String,
                             modelIdentifier: String?, effortIdentifier: String?,
                             withReply reply: @escaping (Int32, String?) -> Void)
+    func startRestrictedMuse(agentID: String, executablePath: String, modelIdentifier: String?, effortIdentifier: String?,
+                             withReply reply: @escaping (Int32, String?) -> Void)
     func start(
         harnessIdentifier: String,
         agentID: String,

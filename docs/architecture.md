@@ -55,7 +55,7 @@ runtime guidance; `CLAUDE.md` points to the same file. Noodle refreshes managed
 skills while preserving custom skills and user-written backstories.
 
 The signed Agent Host applies a dedicated filesystem sandbox before starting
-restricted Codex, FX, Grok Build, or Apple, protecting its parent configuration and runtime state.
+restricted Codex, FX, Grok Build, Muse Code, or Apple, protecting its parent configuration and runtime state.
 Autonomous harnesses use a separate authorized launch path. The app remains in
 App Sandbox and brokers remote tools and Computer
 requests after checking assignments. See [agent access](security.md),

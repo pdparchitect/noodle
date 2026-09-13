@@ -5,14 +5,15 @@ import Darwin
 /// cannot stack a second Seatbelt sandbox inside the app's inherited sandbox.
 /// The whole harness process tree receives this policy, including its tools.
 public enum RestrictedAgentSandbox {
-    /// FX and Grok discover their existing account through HOME. Only that
-    /// provider's directory is granted, never the surrounding home directory.
+    /// Fixed provider account roots, without granting the surrounding home or
+    /// configuration directory. Muse's session data stays in the workspace.
     public static func accountDirectory(provider: HarnessProvider, home: URL) throws -> URL {
         let name: String
         switch provider {
         case .fx: name = ".fx"
         case .grokBuild: name = ".grok"
-        default: throw HarnessSetupError("Unsupported restricted ACP harness.")
+        case .muse: name = ".config/muse"
+        default: throw HarnessSetupError("Unsupported restricted harness account.")
         }
         let directory = home.appendingPathComponent(name, isDirectory: true)
         guard directory.resolvingSymlinksInPath().path == directory.path else {
@@ -29,7 +30,7 @@ public enum RestrictedAgentSandbox {
         let protected = provider == .grokBuild
             ? ["bin", "downloads", "bundled", "vendor"].map { account.appendingPathComponent($0).path }
             : []
-        var readFiles = [home.path]
+        var readFiles = provider == .muse ? [] : [home.path]
         if provider == .fx {
             // FX opens each directory component with O_NOFOLLOW while
             // discovering skills. Permit traversing the exact workspace and
@@ -39,25 +40,31 @@ public enum RestrictedAgentSandbox {
             // stores directly. SystemRootCertificates is already under
             // /System; the second store needs this exact read-only grant.
             readFiles.append("/Library/Keychains/System.keychain")
-            // FX's native OAuth store uses Security.framework through its
-            // JavaScript helper. securityd checks read access to the backing
+        }
+        if provider == .fx || provider == .muse {
+            // Native OAuth stores use Security.framework (FX through its
+            // JavaScript helper). securityd checks read access to the backing
             // login Keychain even for metadata queries. Grant the two standard
             // filenames only, with no Keychain writes or directory-wide grant.
             for name in ["login.keychain", "login.keychain-db"] {
                 let file = home.appendingPathComponent("Library/Keychains/\(name)")
                 guard file.resolvingSymlinksInPath().path == file.path else {
-                    throw HarnessSetupError("Restricted FX requires an unredirected login Keychain.")
+                    throw HarnessSetupError("Restricted \(provider.displayName) requires an unredirected login Keychain.")
                 }
                 readFiles.append(file.path)
             }
         }
+        // Muse imports global context from other harnesses. Report those
+        // roots as absent: a permission error during discovery aborts startup.
+        // Its workspace skills and own account configuration remain readable.
         return profile(workspace: workspace, repository: repository, account: account,
                        executablePaths: [executable.path], application: application, temporary: temporary,
                        protectedWrites: protected, protectAccountRoot: true, readFiles: Array(Set(readFiles)).sorted(),
-                       services: provider == .fx ? ["com.apple.securityd.xpc"] : [])
+                       hiddenPaths: provider == .muse ? [".agents", ".codex", ".claude"].map { home.appendingPathComponent($0).path } : [],
+                       services: provider == .fx || provider == .muse ? ["com.apple.securityd.xpc"] : [])
     }
 
-    public static func environment(provider: HarnessProvider, home: URL) throws -> [String: String] {
+    public static func environment(provider: HarnessProvider, home: URL, workspace: URL? = nil) throws -> [String: String] {
         _ = try accountDirectory(provider: provider, home: home)
         switch provider {
         case .fx:
@@ -68,7 +75,16 @@ public enum RestrictedAgentSandbox {
             // Seatbelt cannot be stacked. Agent Host already applied the
             // non-optional outer policy before Grok starts.
             return ["HOME": home.path, "GROK_SANDBOX": "off"]
-        default: throw HarnessSetupError("Unsupported restricted ACP harness.")
+        case .muse:
+            guard let workspace else { throw HarnessSetupError("Restricted Muse requires a workspace for its session storage.") }
+            let storage = workspace.appendingPathComponent(".noodle/muse")
+            // Native Keychain discovery needs the real HOME. The policy hides
+            // unrelated personal rules/skills; session storage remains local.
+            return ["HOME": home.path, "XDG_CONFIG_HOME": home.appendingPathComponent(".config").path,
+                    "XDG_DATA_HOME": storage.appendingPathComponent("data").path,
+                    "XDG_STATE_HOME": storage.appendingPathComponent("state").path,
+                    "XDG_RUNTIME_DIR": storage.appendingPathComponent("run").path]
+        default: throw HarnessSetupError("Unsupported restricted harness environment.")
         }
     }
 
@@ -80,7 +96,7 @@ public enum RestrictedAgentSandbox {
 
     private static func profile(workspace: URL, repository: URL, account: URL, executablePaths: [String],
                                 application: URL, temporary: URL, protectedWrites: [String] = [],
-                                protectAccountRoot: Bool = false, readFiles: [String] = [], services: [String] = []) -> String {
+                                protectAccountRoot: Bool = false, readFiles: [String] = [], hiddenPaths: [String] = [], services: [String] = []) -> String {
         let reads = ["/System", "/usr", "/bin", "/sbin", "/dev", "/Library/Apple",
                      "/Library/Preferences", "/private/etc", "/private/var/db/timezone",
                      repository.path, account.path, application.path] + executablePaths
@@ -94,6 +110,7 @@ public enum RestrictedAgentSandbox {
         (allow signal (target same-sandbox))
         (allow sysctl-read)
         (allow file-read-metadata)
+        \(hiddenPaths.map { "(deny file-read* file-test-existence (with errno ENOENT) (subpath \(quoted(sandboxPath($0)))))" }.joined(separator: "\n"))
         (allow file-read* file-map-executable
           \(reads.map { "(subpath \(quoted(sandboxPath($0))))" }.joined(separator: "\n  ")))
         \(readFiles.map { "(allow file-read-data (literal \(quoted(sandboxPath($0)))))" }.joined(separator: "\n"))

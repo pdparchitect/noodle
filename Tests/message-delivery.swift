@@ -23,6 +23,7 @@ import NoodleCore
     var permissionReply: [String: Any]?
     var invalidated = false
     var restrictedACP = false
+    var restrictedMuse = false
     init() throws { Self.current = self }
     func start(provider: HarnessProvider, agentID: UUID, executablePath: String,
                sessionID: UUID? = nil, resumeSession: Bool = false,
@@ -42,6 +43,12 @@ import NoodleCore
                             modelIdentifier: String?, effortIdentifier: String?, reply: @escaping (Int32, String?) -> Void) {
         restrictedACP = true
         start(provider: provider, agentID: agentID, executablePath: executablePath,
+              modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier, reply: reply)
+    }
+    func startRestrictedMuse(agentID: UUID, executablePath: String, modelIdentifier: String?, effortIdentifier: String?,
+                             reply: @escaping (Int32, String?) -> Void) {
+        restrictedMuse = true
+        start(provider: .muse, agentID: agentID, executablePath: executablePath,
               modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier, reply: reply)
     }
     func write(_ data: Data) {

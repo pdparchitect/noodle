@@ -52,7 +52,7 @@ struct AgentAccessSettingsView: View {
                     }
                 }
             } footer: {
-                Text("Codex, FX, Grok Build, and Apple start restricted and let you choose autonomous access. Claude Code and Muse Code require autonomous access; selecting one in the bot editor authorizes it. Copied bots may need access enabled here.")
+                Text("Codex, FX, Grok Build, Muse Code, and Apple start restricted and let you choose autonomous access. Claude Code requires autonomous access; selecting it in the bot editor authorizes it. Copied bots may need access enabled here.")
             }
         }
         .formStyle(.grouped)

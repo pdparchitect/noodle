@@ -4,22 +4,25 @@
 
 | Harness | Access in Noodle |
 | --- | --- |
-| Codex, FX, Grok Build, Apple | Restricted by default; autonomous access is optional |
-| Claude Code, Muse Code | Autonomous access is required |
+| Codex, FX, Grok Build, Muse Code, Apple | Restricted by default; autonomous access is optional |
+| Claude Code | Autonomous access is required |
 
-Change access for Codex, FX, Grok Build, or Apple in **Settings → Security**.
-Claude Code and Muse Code switches stay on after authorization because their
-Noodle integrations do not support restricted mode. Selecting
-one in the bot editor authorizes that harness for that bot. Copied bots may need
+Change access for Codex, FX, Grok Build, Muse Code, or Apple in **Settings → Security**.
+Claude Code's switch stays on after authorization because its Noodle integration
+does not support restricted mode. Selecting it in the bot editor authorizes that
+harness for that bot. Copied bots may need
 authorization in Security settings. Restricted-capable harnesses use the bot's
-saved access preference. Previous required FX/Grok grants do not override that
+saved access preference. Previous required FX/Grok/Muse grants do not override that
 preference. Editing `agent.json` alone never grants autonomous access.
 
-Restricted Codex, FX, and Grok Build run in a dedicated macOS filesystem sandbox applied to the
+Restricted Codex, FX, Grok Build, and Muse Code run in a dedicated macOS filesystem sandbox applied to the
 whole harness process tree. It can write its `workspace`, shared conversations,
-the selected harness's account/session directory (`~/.codex`, `~/.fx`, or `~/.grok`),
+the selected harness's account directory (`~/.codex`, `~/.fx`, `~/.grok`, or `~/.config/muse`),
 and its workspace temporary files. Grok's `bin`, `downloads`, `bundled`, and
 `vendor` installation directories remain read-only.
+Restricted Muse keeps its session data, state, and runtime files under
+`workspace/.noodle/muse` using fixed XDG paths. Its standalone session store and
+native installation remain outside the writable boundary.
 Its parent `agent.json`, layout metadata, Noodle-owned `runtime`, and Noodle
 preferences are outside the writable boundary. System files, the app and harness
 installation, and Noodle repository data are readable where needed; arbitrary
@@ -32,9 +35,13 @@ general home-folder access. They can list the home directory's entries, but this
 does not grant access to its child files. FX also opens each ancestor directory
 of its workspace and account when discovering skills; exact directory-entry
 reads support that traversal without granting reads of sibling file contents.
-FX additionally needs read-only access
+Muse discovers its existing account through a fixed `XDG_CONFIG_HOME`, without
+access to other configuration folders. Its real `HOME` preserves native Keychain
+lookup, while the sandbox reports personal `.agents`, `.codex`, and `.claude`
+directories as absent during discovery. Workspace skills and Muse's own
+account configuration remain available. FX and Muse additionally need read-only access
 to the standard `~/Library/Keychains/login.keychain` and `login.keychain-db` files
-and the local securityd service to discover its existing OAuth sign-in. Its
+and the local securityd service for their existing OAuth sign-ins. FX's
 [Zig TLS certificate scanner](https://github.com/ziglang/zig/blob/master/lib/std/crypto/Certificate/Bundle/macos.zig)
 also reads `/Library/Keychains/System.keychain` in addition to the system root
 certificates already under `/System`. Other personal Keychain files and direct
@@ -44,6 +51,12 @@ offered allow-once action for the current session. Grok uses a dedicated
 `--no-leader` process with its inner sandbox disabled because Agent Host has
 already applied the mandatory outer policy. These tool approvals cannot widen
 the OS sandbox. Cancelled turns and stale-session requests are denied.
+
+Muse starts its verified native binary directly, without the self-updating shell
+launcher. Agent Host applies the outer sandbox before running `serve`; Muse's
+inner shell sandbox is disabled to avoid nesting Seatbelt policies. MSP tool
+approvals select only the offered once-only choice for the current session and
+stage, and cannot grant new filesystem access.
 
 Autonomous mode runs as your
 Mac user outside Noodle's app sandbox. It can reach files, signed-in services, and
@@ -84,7 +97,7 @@ LAN; Shell computers can have networking disabled.
 
 The Noodle app stays sandboxed. Harnesses run through the signed
 `NoodleAgentHost.xpc`, which validates Noodle's identity, the vendor-signed harness,
-and a fixed set of launch options. Restricted Codex, FX, Grok Build, and Apple receive their filesystem
+and a fixed set of launch options. Restricted Codex, FX, Grok Build, Muse Code, and Apple receive their filesystem
 policy before the harness executable starts; failure to apply it prevents
 startup. The host accepts no caller-supplied sandbox profile, arbitrary command,
 or writable roots. Autonomous harnesses use the separate authorized launch path.

@@ -92,7 +92,8 @@ if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-chi
         case .muse:
             guard model.map(FxProtocol.validIdentifier) ?? true,
                   effort.map(MuseProtocol.efforts.contains) ?? true else { throw HostError("Unsupported Muse model or effort.") }
-            // This host is reached only after explicit per-bot autonomous access.
+            // Restricted runs receive the mandatory outer policy below; do not
+            // try to stack Muse's shell sandbox inside the process sandbox.
             strings = [executable.path, "serve", "--disable-sandbox", "--trust-workspace"]
         case .codex:
             strings = [executable.path, "app-server"]
@@ -149,14 +150,14 @@ if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-chi
                 profile = RestrictedAgentSandbox.profile(workspace: workspace, repository: repository,
                     codexHome: codexHome, executableDirectory: executable.deletingLastPathComponent().deletingLastPathComponent(),
                     application: HostPaths.application, temporary: temporary)
-            case .fx, .grokBuild:
+            case .fx, .grokBuild, .muse:
                 profile = try RestrictedAgentSandbox.profile(provider: provider, workspace: workspace, repository: repository,
                     home: HostPaths.home, executable: executable, application: HostPaths.application, temporary: temporary)
             default: throw HostError("Unsupported restricted harness.")
             }
             setenv("TMPDIR", temporary.path, 1)
-            if provider == .fx || provider == .grokBuild {
-                for (key, value) in try RestrictedAgentSandbox.environment(provider: provider, home: HostPaths.home) {
+            if provider == .fx || provider == .grokBuild || provider == .muse {
+                for (key, value) in try RestrictedAgentSandbox.environment(provider: provider, home: HostPaths.home, workspace: workspace) {
                     setenv(key, value, 1)
                 }
             } else { setenv("HOME", workspace.path, 1) }
@@ -238,6 +239,13 @@ private final class HostSession: NSObject, AgentHostService {
                 reply(try JSONEncoder().encode(result), nil)
             } catch { reply(nil, error.localizedDescription) }
         }
+    }
+
+    func startRestrictedMuse(agentID: String, executablePath: String, modelIdentifier: String?, effortIdentifier: String?,
+                             withReply reply: @escaping (Int32, String?) -> Void) {
+        startRuntime(harnessIdentifier: HarnessProvider.muse.rawValue, agentID: agentID, executablePath: executablePath,
+                     sessionID: nil, resumeSession: false, modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier,
+                     restricted: true, reply: reply)
     }
 
     private func startRuntime(harnessIdentifier: String, agentID: String, executablePath: String,

@@ -20,10 +20,16 @@ import NoodleCore
     var methods: [String] = []
     var prompts: [String] = []
     var turn: String?
+    var restrictedMuse = false
+    var approvals: [[String: Any]] = []
     init() throws { Self.current = self }
     func start(provider: HarnessProvider, agentID: UUID, executablePath: String, modelIdentifier: String?,
                effortIdentifier: String?, reply: @escaping (Int32, String?) -> Void) {
         precondition(provider == .muse); reply(12345, nil)
+    }
+    func startRestrictedMuse(agentID: UUID, executablePath: String, modelIdentifier: String?, effortIdentifier: String?,
+                             reply: @escaping (Int32, String?) -> Void) {
+        restrictedMuse = true; reply(12345, nil)
     }
     func write(_ data: Data) {
         let request = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
@@ -40,6 +46,7 @@ import NoodleCore
             precondition(params["approvalMode"] == nil, "Never override Muse's startup approval policy")
             result = ["session": ["sessionId": Self.session, "workspaceRoot": method == "session/resume" ? (Self.resumedWorkspace ?? Self.workspace) : Self.workspace, "activeTurnId": NSNull()], "pendingRequests": []]
         case "session/setModel": result = ["status": "accepted"]
+        case "approval/decide": approvals.append(params); result = ["status": "accepted"]
         case "turn/start":
             precondition(params["ifBusy"] as? String == "queue")
             prompts.append((params["input"] as! [[String: String]])[0]["text"]!)
@@ -89,7 +96,33 @@ import NoodleCore
         }
         let restricted = make(extended: false)
         restricted.start()
-        precondition(restricted.snapshot.phase == .failed && ExtendedAgentConnection.current == nil)
+        await eventually { restricted.snapshot.phase == .ready }
+        let restrictedWire = ExtendedAgentConnection.current!
+        precondition(restrictedWire.restrictedMuse, "Restricted Muse must use its fixed sandbox endpoint")
+        ExtendedAgentConnection.hold = true
+        restricted.notify()
+        await eventually { restrictedWire.prompts.count == 1 && restricted.snapshot.phase == .working }
+        var approval: [String: Any] = ["sessionId": ExtendedAgentConnection.session, "approvalId": "fixture-approval",
+            "currentRequirementId": ["approvalId": "fixture-approval", "sourceIndex": 0],
+            "availableChoices": [["choiceId": "persistent", "decision": "approvedForSession", "scope": "session"],
+                                 ["choiceId": "once", "decision": "approved", "scope": "once"]]]
+        var stale = approval; stale["sessionId"] = MuseProtocol.commandID()
+        restrictedWire.emit(["method": "approval/requested", "params": stale])
+        restrictedWire.emit(["method": "approval/requested", "params": approval])
+        await eventually { restrictedWire.approvals.count == 1 }
+        precondition(restrictedWire.approvals[0]["choiceId"] as? String == "once")
+        restrictedWire.emit(["method": "approval/requested", "params": approval])
+        approval["currentRequirementId"] = ["approvalId": "fixture-approval", "sourceIndex": 1]
+        restrictedWire.emit(["method": "approval/updated", "params": approval])
+        await eventually { restrictedWire.approvals.count == 2 }
+        restricted.stop { precondition($0) }
+        precondition(!restricted.isAlive && restricted.hasInterruptedWork)
+        ExtendedAgentConnection.hold = false
+        let restrictedResumed = make(extended: false); restrictedResumed.start()
+        await eventually { restrictedResumed.snapshot.phase == .ready && !restrictedResumed.hasInterruptedWork }
+        precondition(ExtendedAgentConnection.current!.restrictedMuse && ExtendedAgentConnection.current!.methods.contains("session/resume"))
+        restrictedResumed.stop { precondition($0) }
+        print("Restricted Muse startup, once-only staged approvals, stale-session rejection and interrupted-work recovery passed.")
 
         let first = make(); first.start()
         await eventually { first.snapshot.phase == .ready }

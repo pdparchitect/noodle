@@ -92,15 +92,23 @@ Storage migration tests interrupt each move and verify resumption, user-folder
 collisions, hard-link separation, copied packages, and invalid layouts.
 `RestrictedAgentSandboxTests` runs real sandboxed processes against disposable
 data: workspace writes and Messenger replies must succeed while configuration
-and runtime writes, replacements, and links are denied. FX/Grok checks also deny
+and runtime writes, replacements, and links are denied. FX/Grok/Muse checks also deny
 personal-file access, other account access, and installation replacement. When
 Codex, FX, or Grok Build is installed, initialization-only checks use empty account
 directories; they make no model requests and read no real account credentials.
 FX/Grok initialization fixtures additionally deny all network access. The FX
 fixture verifies workspace skill discovery through its native directory walk.
+`RestrictedMuseSandboxTests` starts the installed native Muse with an empty
+account directory and networking denied, then creates and resumes an echo-provider
+session after restarting the process. Its session store must stay inside the
+workspace; no account credentials or model requests are used.
 `NOODLE_TEST_RESTRICTED_ACP=1 swift test --disable-sandbox --filter RestrictedACPLiveTests`
 opts into two small model turns per installed harness to check Messenger replies
 and session resume using the real accounts, inside disposable repositories.
+`NOODLE_TEST_MUSE_RESTRICTED=1 zsh Tests/muse-live.sh` does the same through the
+real Muse adapter and production sandbox profile. `NOODLE_TEST_MUSE_MODEL` can
+select a model; otherwise Muse uses its default. The autonomous comparison is
+available with `NOODLE_TEST_MUSE_LIVE=1`.
 Release automation tests verify
 that signed update-feed entries retain the required migration chain.
 

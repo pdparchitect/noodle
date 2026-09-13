@@ -80,10 +80,15 @@ final class MuseTests: XCTestCase {
         XCTAssertEqual((decision["requirementId"] as? [String: Any])?["sourceIndex"] as? Int, 42)
         XCTAssertNil(MuseProtocol.approvalParameters(params, sessionID: "other", extendedAccess: true))
         XCTAssertNil(MuseProtocol.approvalParameters(params, sessionID: "s", extendedAccess: false))
+        XCTAssertEqual(MuseProtocol.approvalParameters(params, sessionID: "s", extendedAccess: false,
+                                                       restrictedAccess: true)?["choiceId"] as? String, "once")
+        XCTAssertNil(MuseProtocol.approvalParameters(params, sessionID: "other", extendedAccess: false, restrictedAccess: true))
         var bad = params; bad["currentRequirementId"] = ["approvalId": "other", "sourceIndex": 42]
         XCTAssertNil(MuseProtocol.approvalParameters(bad, sessionID: "s", extendedAccess: true))
+        XCTAssertNil(MuseProtocol.approvalParameters(bad, sessionID: "s", extendedAccess: false, restrictedAccess: true))
         bad = params; bad["availableChoices"] = [["choiceId": "persistent", "decision": "approvedForSession", "scope": "session"]]
         XCTAssertNil(MuseProtocol.approvalParameters(bad, sessionID: "s", extendedAccess: true))
+        XCTAssertNil(MuseProtocol.approvalParameters(bad, sessionID: "s", extendedAccess: false, restrictedAccess: true))
     }
     func testVersionPointerAndUpdateRevisionOrdering() {
         for version in ["1.0.3-R2198.1", "1.0.3-R2198"] { XCTAssertTrue(MuseExecutableTrust.validVersion(version)) }

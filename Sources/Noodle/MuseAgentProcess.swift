@@ -86,13 +86,12 @@ final class MuseAgentProcess: AgentRuntimeProcess {
         snapshot = .init(agentID: agent.id, phase: .offline, detail: "Not started")
     }
 
-    var isAlive: Bool { running || paused || !extendedAccess }
+    var isAlive: Bool { running || paused }
     var hasInterruptedWork: Bool { recoveryPending || turnIsActive || notificationPending || steeringNotificationID != nil || turnRecovery.hasUnfinishedTurn }
     var canReceiveHeartbeat: Bool { running && snapshot.phase == .ready && !turnIsActive && !notificationPending && steeringNotificationID == nil }
 
     func start() {
         guard connection == nil else { return }
-        guard extendedAccess else { update(.failed, "Muse Code requires autonomous access in Settings → Security"); return }
         stopped = false; paused = false
         update(.starting, "Starting Muse Code")
         trace.runtimeStarting()
@@ -116,14 +115,20 @@ final class MuseAgentProcess: AgentRuntimeProcess {
                 guard !Task.isCancelled else { return }
                 self?.terminated("Muse Code session startup timed out")
             }
-            connection.start(provider: .muse, agentID: configuration.id, executablePath: executableURL.path,
-                             modelIdentifier: configuration.modelIdentifier, effortIdentifier: configuration.reasoningEffort) { [weak self] pid, error in
+            let started: (Int32, String?) -> Void = { [weak self] pid, error in
                 Task { @MainActor in
                     guard let self, !self.stopped, self.running else { return }
                     if let error { self.terminated(error); return }
                     self.pid = pid
                     self.request(.initialize, method: "initialize", params: MuseProtocol.initialize)
                 }
+            }
+            if extendedAccess {
+                connection.start(provider: .muse, agentID: configuration.id, executablePath: executableURL.path,
+                                 modelIdentifier: configuration.modelIdentifier, effortIdentifier: configuration.reasoningEffort, reply: started)
+            } else {
+                connection.startRestrictedMuse(agentID: configuration.id, executablePath: executableURL.path,
+                                               modelIdentifier: configuration.modelIdentifier, effortIdentifier: configuration.reasoningEffort, reply: started)
             }
         } catch { terminated(error.localizedDescription) }
     }
@@ -230,7 +235,8 @@ final class MuseAgentProcess: AgentRuntimeProcess {
             let params = object["params"] as? [String: Any] ?? [:]
             guard params["sessionId"] as? String == sessionID, sessionID != nil else { return }
             if method == "approval/requested" || method == "approval/request" || method == "approval/updated" {
-                guard let decision = MuseProtocol.approvalParameters(params, sessionID: sessionID, extendedAccess: extendedAccess) else {
+                guard let decision = MuseProtocol.approvalParameters(params, sessionID: sessionID,
+                                                                    extendedAccess: extendedAccess, restrictedAccess: !extendedAccess) else {
                     terminated("Muse Code requires an approval Noodle cannot safely resolve. Open the session in Muse Terminal."); return
                 }
                 let stage = "\(decision["approvalId"]!):\((decision["requirementId"] as! [String: Any])["sourceIndex"]!)"

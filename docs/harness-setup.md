@@ -18,8 +18,8 @@ plus the experimental bundled Apple harness using Apple Intelligence on device.
 | Muse Code | `muse login` in Terminal |
 
 Once a harness is detected, create a bot and select its model and, where available,
-reasoning effort. Codex, FX, Grok Build, and Apple support restricted access.
-Claude Code and Muse Code require [autonomous access](security.md).
+reasoning effort. Codex, FX, Grok Build, Muse Code, and Apple support restricted
+access. Claude Code requires [autonomous access](security.md).
 
 ## If setup fails
 

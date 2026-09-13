@@ -63,6 +63,10 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         try checkBoundary(provider: .grokBuild)
     }
 
+    func testRestrictedMuseCanWorkAndMessageWithoutAccessToOtherAccounts() throws {
+        try checkBoundary(provider: .muse)
+    }
+
     private func checkBoundary(provider: HarnessProvider) throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -73,15 +77,23 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         let original = try Data(contentsOf: layout.configuration)
         try Data("state".utf8).write(to: state)
         let home = root.appendingPathComponent("Home")
-        let account = home.appendingPathComponent(provider == .codex ? ".codex" : (provider == .fx ? ".fx" : ".grok"))
+        let account = provider == .codex ? home.appendingPathComponent(".codex")
+            : try RestrictedAgentSandbox.accountDirectory(provider: provider, home: home)
         let temp = layout.workspace.appendingPathComponent(".noodle/tmp")
         for directory in [account, temp] { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
         let personal = home.appendingPathComponent("personal.txt")
         try Data("private".utf8).write(to: personal)
-        let siblingAccount = home.appendingPathComponent(".other")
+        let siblingAccount = home.appendingPathComponent(provider == .muse ? ".config/other" : ".other")
         try FileManager.default.createDirectory(at: siblingAccount, withIntermediateDirectories: true)
         let siblingSecret = siblingAccount.appendingPathComponent("credentials")
         try Data("other account".utf8).write(to: siblingSecret)
+        if provider == .muse {
+            for path in [".agents/private", ".codex/AGENTS.md", ".claude/CLAUDE.md", ".local/share/muse/session"] {
+                let file = home.appendingPathComponent(path)
+                try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try Data("private context".utf8).write(to: file)
+            }
+        }
         let keychains = home.appendingPathComponent("Library/Keychains")
         try FileManager.default.createDirectory(at: keychains, withIntermediateDirectories: true)
         let loginKeychain = keychains.appendingPathComponent("login.keychain-db")
@@ -125,6 +137,8 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         if touch "${11}/outside-workspace"; then exit 26; fi
         if [ "${14}" = 1 ]; then
           cat "${12}" > /dev/null
+        elif cat "${12}" > /dev/null; then exit 27; fi
+        if [ "${15}" = 1 ]; then
           # FX's no-follow skill discovery opens every directory component.
           # Listing these ancestors must not expose their other child files.
           for path in "$1" "$5"; do
@@ -133,10 +147,18 @@ final class RestrictedAgentSandboxTests: XCTestCase {
               path=$(dirname "$path")
             done
           done
-        elif cat "${12}" > /dev/null; then exit 27; fi
+        fi
         if printf changed > "${12}"; then exit 28; fi
         if rm "${12}"; then exit 29; fi
         if cat "${13}"; then exit 30; fi
+        if [ "${16}" = 1 ]; then
+          for path in "${11}/.agents" "${11}/.codex" "${11}/.claude"; do
+            if [ -e "$path" ]; then exit 31; fi
+            if ls "$path"; then exit 32; fi
+          done
+          if cat "${11}/.local/share/muse/session"; then exit 33; fi
+          if printf changed > "${11}/.local/share/muse/session"; then exit 34; fi
+        fi
         "$6" --agent-directory "$1" --send --conversation "$7" --body 'sandbox reply'
         "$6" --agent-directory "$1" --get-latest
         """
@@ -145,7 +167,8 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         process.arguments = ["-p", policy, "/bin/sh", "-c", script, "probe", layout.workspace.path,
                              layout.configuration.path, state.path, layout.package.path, account.path, helper.path,
                              created.conversation.id.uuidString, personal.path, binary.path, siblingSecret.path, home.path,
-                             loginKeychain.path, otherKeychain.path, provider == .fx ? "1" : "0"]
+                             loginKeychain.path, otherKeychain.path, provider == .fx || provider == .muse ? "1" : "0",
+                             provider == .fx ? "1" : "0", provider == .muse ? "1" : "0"]
         process.environment = ["PATH": "/usr/bin:/bin", "HOME": layout.workspace.path, "TMPDIR": temp.path]
         process.standardOutput = output; process.standardError = errors
         try process.run(); process.waitUntilExit()
@@ -161,18 +184,19 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         XCTAssertTrue(try repository.loadMessages(conversationID: created.conversation.id).contains { $0.body == "sandbox reply" })
     }
 
-    func testRedirectedACPAccountsAndUnsupportedProvidersAreRejected() throws {
+    func testRedirectedAccountsAndUnsupportedProvidersAreRejected() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
         defer { try? FileManager.default.removeItem(at: root) }
         let home = root.appendingPathComponent("Home"), outside = root.appendingPathComponent("Private")
         for directory in [home, outside] { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
-        for provider in [HarnessProvider.fx, .grokBuild] {
+        for provider in [HarnessProvider.fx, .grokBuild, .muse] {
             let account = try RestrictedAgentSandbox.accountDirectory(provider: provider, home: home)
+            try FileManager.default.createDirectory(at: account.deletingLastPathComponent(), withIntermediateDirectories: true)
             try FileManager.default.createSymbolicLink(at: account, withDestinationURL: outside)
             XCTAssertThrowsError(try RestrictedAgentSandbox.accountDirectory(provider: provider, home: home))
             XCTAssertThrowsError(try RestrictedAgentSandbox.environment(provider: provider, home: home))
         }
-        for provider in [HarnessProvider.claudeCode, .muse, .apple, .codex] {
+        for provider in [HarnessProvider.claudeCode, .apple, .codex] {
             XCTAssertThrowsError(try RestrictedAgentSandbox.accountDirectory(provider: provider, home: home))
         }
     }
@@ -181,7 +205,7 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         try checkInstalledACP(provider: .fx)
     }
 
-    func testRedirectedFXKeychainDoesNotGrantReadAccessElsewhere() throws {
+    func testRedirectedKeychainDoesNotGrantReadAccessElsewhere() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
         defer { try? FileManager.default.removeItem(at: root) }
         let home = root.appendingPathComponent("Home")
@@ -190,8 +214,10 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         let outside = root.appendingPathComponent("private")
         try Data("private".utf8).write(to: outside)
         try FileManager.default.createSymbolicLink(at: keychains.appendingPathComponent("login.keychain-db"), withDestinationURL: outside)
-        XCTAssertThrowsError(try RestrictedAgentSandbox.profile(provider: .fx, workspace: root, repository: root,
-            home: home, executable: root.appendingPathComponent("fx"), application: root, temporary: root))
+        for provider in [HarnessProvider.fx, .muse] {
+            XCTAssertThrowsError(try RestrictedAgentSandbox.profile(provider: provider, workspace: root, repository: root,
+                home: home, executable: root.appendingPathComponent("harness"), application: root, temporary: root))
+        }
     }
 
     func testInstalledGrokCanInitializeInsideItsRestrictedProfile() throws {

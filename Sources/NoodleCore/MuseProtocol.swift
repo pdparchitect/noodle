@@ -61,10 +61,12 @@ public enum MuseProtocol {
         return "Muse: \(reason). Retry \(next)/\(max) scheduled in \(delay / 1000)s."
     }
 
-    /// Autonomous access may satisfy only the current offered once-only choice;
-    /// never mint policies, persist approvals, or bypass Muse's staged requirement.
-    public static func approvalParameters(_ params: [String: Any], sessionID: String?, extendedAccess: Bool) -> [String: Any]? {
-        guard extendedAccess, let sessionID, params["sessionId"] as? String == sessionID,
+    /// Autonomous access or the host's immutable OS sandbox may satisfy only
+    /// the current offered once-only choice. Never persist approvals or bypass
+    /// Muse's staged requirement; approval cannot widen the OS sandbox.
+    public static func approvalParameters(_ params: [String: Any], sessionID: String?, extendedAccess: Bool,
+                                          restrictedAccess: Bool = false) -> [String: Any]? {
+        guard extendedAccess || restrictedAccess, let sessionID, params["sessionId"] as? String == sessionID,
               let approvalID = params["approvalId"] as? String,
               let requirement = params["currentRequirementId"] as? [String: Any],
               requirement["approvalId"] as? String == approvalID, let index = requirement["sourceIndex"] as? Int, index >= 0,

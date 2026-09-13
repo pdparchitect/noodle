@@ -44,6 +44,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Add restricted sandbox support for Muse Code, with optional autonomous access. Keep restricted Muse sessions and runtime files inside the bot workspace while using its existing login and preserving once-only staged tool approvals.
+
 - Add restricted filesystem sandboxes for FX and Grok Build, with optional autonomous access in Security. Permit workspace files, Messenger replies, and the selected harness's account/session storage while protecting bot configuration, Noodle runtime state, unrelated files, and harness installations.
 
 - Open any bot chat or group in a separate window from the sidebar. Keep messages, drafts, attachments, and conversation details synchronized while browsing and scrolling independently.

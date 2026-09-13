@@ -17,31 +17,31 @@ final class AgentAccessTests: XCTestCase {
     }
 
     func testLegacyHarnessGrantSnapshotRunsOnce() {
-        let suite = "Noodle.AccessTests.\(UUID())", bot = AgentRecord(displayName: "Legacy", harnessIdentifier: "muse")
+        let suite = "Noodle.AccessTests.\(UUID())", bot = AgentRecord(displayName: "Legacy", harnessIdentifier: "claude-code")
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         var configuration = AgentAccessConfiguration()
         configuration.migrateRequiredHarnessGrants([bot], in: defaults)
         XCTAssertTrue(configuration.isExtended(for: bot))
-        let imported = AgentRecord(displayName: "Imported", harnessIdentifier: "muse")
+        let imported = AgentRecord(displayName: "Imported", harnessIdentifier: "claude-code")
         configuration = .load(from: defaults)
         configuration.migrateRequiredHarnessGrants([bot, imported], in: defaults)
         XCTAssertFalse(configuration.isExtended(for: imported))
     }
     func testHarnessAccessCapabilities() {
-        for provider in [HarnessProvider.codex, .apple, .fx, .grokBuild] {
+        for provider in [HarnessProvider.codex, .apple, .fx, .grokBuild, .muse] {
             XCTAssertTrue(provider.supportsRestrictedAccess)
         }
-        for provider in [HarnessProvider.claudeCode, .muse] {
+        for provider in [HarnessProvider.claudeCode] {
             XCTAssertFalse(provider.supportsRestrictedAccess)
         }
     }
 
-    func testFormerlyRequiredACPGrantsDoNotOverrideTheSavedRestrictedPreference() {
+    func testFormerlyRequiredGrantsDoNotOverrideTheSavedRestrictedPreference() {
         let suite = "Noodle.AccessTests.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        for provider in [HarnessProvider.fx, .grokBuild] {
+        for provider in [HarnessProvider.fx, .grokBuild, .muse] {
             let bot = AgentRecord(displayName: "Existing", harnessIdentifier: provider.rawValue)
             defaults.set([bot.id.uuidString: [provider.rawValue]], forKey: "Noodle.access.requiredHarnessGrants")
             var access = AgentAccessConfiguration.load(from: defaults)
