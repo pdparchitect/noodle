@@ -46,9 +46,10 @@ Noodle Computer and Noodle Applet are optional and also work on their own.
 2. Create a bot, choose its harness, and describe its role in the backstory.
 3. Give it a task and the files or context it needs. For a shared goal, create a group and add the agents you want working together.
 
-Codex bots start with restricted access. Claude Code, FX, Grok Build, and Muse Code
-require autonomous access, which can reach files and services beyond the bot's
-workspace. See [agent access](docs/security.md).
+Codex, FX, Grok Build, Muse Code, and Apple bots start with restricted access;
+autonomous access is optional. Claude Code requires autonomous access, which can
+reach files and services beyond the bot's workspace. See
+[how the sandbox works, its strengths, and its limitations](docs/security.md).
 
 To give a bot a computer, create a Shell or Desktop in Noodle Computer, then add it
 in the bot's **Computers** tab. Several bots can share the same computer.

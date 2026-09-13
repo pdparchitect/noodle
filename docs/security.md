@@ -15,8 +15,23 @@ authorization in Security settings. Restricted-capable harnesses use the bot's
 saved access preference. Previous required FX/Grok/Muse grants do not override that
 preference. Editing `agent.json` alone never grants autonomous access.
 
-Restricted Codex, FX, Grok Build, and Muse Code run in a dedicated macOS filesystem sandbox applied to the
-whole harness process tree. It can write its `workspace`, shared conversations,
+## How restricted mode works
+
+Noodle uses two separate macOS boundaries. The app stays in App Sandbox. A signed
+launch broker, `NoodleAgentHost.xpc`, runs outside that app sandbox and validates
+the calling app, harness executable, and bot workspace. For restricted runs it
+applies a deny-by-default Seatbelt policy before executing the harness. The
+policy permits fixed paths and system services derived by the host; callers
+cannot supply their own permissions. If validation or policy application fails,
+startup fails instead of falling back to autonomous access.
+
+Shell commands and other child processes inherit the harness's OS restrictions.
+An automatically accepted tool approval cannot add filesystem permissions to
+that policy. The restrictions therefore apply even when a model issues an
+unexpected command or follows misleading instructions.
+
+For restricted Codex, FX, Grok Build, and Muse Code, the policy permits writes to
+the bot's `workspace`, shared conversations,
 the selected harness's account directory (`~/.codex`, `~/.fx`, `~/.grok`, or `~/.config/muse`),
 and its workspace temporary files. Grok's `bin`, `downloads`, `bundled`, and
 `vendor` installation directories remain read-only.
@@ -68,6 +83,48 @@ Changing access restarts the bot. Turning autonomous access off does not undo
 completed actions, stop detached applications, or revoke macOS privacy permissions.
 Revoke those separately in System Settings.
 
+## Strengths
+
+- **Enforced by macOS:** file restrictions apply before harness startup and to
+  its child processes, independently of the model's instructions or approvals.
+- **Protects files outside the allowed roots:** direct writes to bot
+  configuration, Noodle runtime state, and unrelated personal files are denied.
+  Ordinary link, rename, and replacement attempts do not grant access outside
+  the policy. Unrelated personal file contents are also denied.
+- **A controlled launch boundary:** the host verifies executable identity and
+  accepts only supported launch options. Restricted runs cannot request a wider
+  policy, and enabling another restricted harness does not require broader app
+  entitlements.
+
+## Limitations
+
+- **Allowed files remain writable.** A bot can damage or delete data inside its
+  writable workspace, conversation store, and permitted account directory. The
+  sandbox does not validate the meaning of edits or provide rollback.
+- **Bots do not have private repositories or accounts.** The Noodle repository
+  is readable, including other bots' stored data, and conversations are shared.
+  Sessions using the same harness account also share its permitted account
+  storage. This is not a boundary for running mutually untrusted tenants.
+- **Cloud harness networking is open outbound.** Codex, FX, Grok Build, and Muse
+  Code are not limited to a list of model-provider domains. Readable data can be
+  sent to remote services, and the policy does not block outbound LAN access.
+  Restricted Apple denies direct outbound networking and runs its default
+  model on device. Separately assigned tools and computers have their own
+  permissions; the local filesystem policy does not restrict actions they
+  perform on a bot's behalf.
+- **File metadata is less restricted than contents.** The profiles generally
+  allow metadata queries, so file existence and attributes can be visible even
+  when contents cannot be read. Muse's hidden personal-context directories are
+  an explicit exception. FX and Grok can also list home-directory entries.
+- **Some tools will fail inside the boundary.** Dependencies, caches, global
+  skills, services, or files outside the allowed paths may be unavailable.
+  Harness updates can introduce new requirements. A tool approval does not fix
+  an OS permission denial; broader access requires the bot's autonomous setting.
+- **This is a native process sandbox.** It does not provide a separate operating
+  system or set CPU, memory, disk-use, or model-spending quotas. It relies on the
+  macOS sandbox and Noodle's trusted launch and tool brokers. Signature checks
+  identify code; they do not establish that its behavior is harmless.
+
 ## Connected tools
 
 Assigning a tool lets the bot use the permissions you granted during provider
@@ -115,7 +172,14 @@ autonomous setting enables broader user-level access through the same authorized
 launch path as other harnesses. The app's entitlements remain unchanged.
 Sparkle's signed installer runs outside the sandbox to replace the app during updates.
 
-See [architecture](architecture.md) for process boundaries and
-[development](development.md) for bundle verification commands.
+The policies are implemented in
+[`RestrictedAgentSandbox.swift`](../Sources/NoodleCore/RestrictedAgentSandbox.swift)
+and [`AppleHarness.swift`](../Sources/NoodleCore/AppleHarness.swift), with launch
+enforcement in [`NoodleAgentHost`](../Sources/NoodleAgentHost/main.swift).
+[Development](development.md) describes the real-process filesystem boundary
+tests, offline initialization checks, opt-in live Messenger/resume checks, and
+signed-bundle verification. Those checks exercise specific allowed and denied
+operations; they are not an exhaustive security audit. See
+[architecture](architecture.md) for the surrounding process boundaries.
 
 [Documentation](README.md)

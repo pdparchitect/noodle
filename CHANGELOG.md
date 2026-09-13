@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Correct the README's restricted-harness list and document how the sandbox is enforced, what it protects, and its limits around shared data, networking, tool access, and resource use.
+
 - Keep the Applet catalogue closed when loading a conversation's noodlet attachment previews. Use a dedicated background URL so sandboxed launches preserve the request, including when the companion is already starting.
 
 - Prevent conversation annotation updates from reattaching to a window during teardown and crashing Noodle.
