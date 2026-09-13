@@ -13,8 +13,9 @@ extension AttachmentPreviewController {
             canvas.frame = content.convert(panel.contentLayoutRect, from: nil)
             content.addSubview(canvas, positioned: .above, relativeTo: nil)
             canvas.imageRect = canvas.convert(NSRect(origin: .zero, size: frame.size), from: nil)
-            canvas.onRegion = { [weak self] region, point in
-                guard let self, self.commentPopover == nil else { return }
+            canvas.onRegion = { [weak self, weak canvas] region, point in
+                guard let self, let canvas, self.conversationCanvas === canvas,
+                      self.commentPopover == nil else { return }
                 self.pending?.region = .init(x: region.minX, y: region.minY, width: region.width, height: region.height)
                 self.textAnchorInPreview = NSPoint(x: point.x * frame.width, y: point.y * frame.height)
                 self.showComment()
@@ -32,9 +33,9 @@ extension AttachmentPreviewController {
         // existing shadow, instead of filling a second rectangular window.
         overlay.isOpaque = false; overlay.backgroundColor = .clear
         let canvas = AnnotationRegionCanvas(image: image)
-        canvas.onRegion = { [weak self] region, point in
-            guard let self else { return }
-            guard self.commentPopover == nil else { return }
+        canvas.onRegion = { [weak self, weak overlay, weak canvas] region, point in
+            guard let self, let overlay, let canvas, self.overlay === overlay,
+                  overlay.contentView === canvas, self.commentPopover == nil else { return }
             self.pending?.region = .init(x: region.minX, y: region.minY, width: region.width, height: region.height)
             self.textAnchorInPreview = NSPoint(x: point.x * frame.width, y: point.y * frame.height)
             self.showComment()

@@ -84,7 +84,8 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
     private var item: Item?
     private var source: ConversationAttachment?
     private var save: ((AttachmentAnnotation, Data, ConversationAttachment) throws -> Void)?
-    private var operation: Task<Void, Never>?
+    private(set) var operation: Task<Void, Never>?
+    var reportError: ((Error) -> Void)?
     private var generation = UUID()
     private var isDismissing = false
     private var openedAt = Date.distantPast
@@ -147,6 +148,11 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
               canEdit: @escaping (ConversationAttachment) -> Bool = { _ in false },
               save: @escaping (AttachmentAnnotation, Data, ConversationAttachment) throws -> Void) {
         guard let hostWindow = resolveHostWindow() else { return }
+        if attachment.annotation == nil, url.isFileURL, !FileManager.default.isReadableFile(atPath: url.path) {
+            close()
+            showAnnotationError(CocoaError(.fileReadNoSuchFile))
+            return
+        }
         trace("show requested")
         if Self.active !== self { Self.active?.close() }
         if attachment.annotation != nil {
@@ -396,10 +402,47 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
         }
         busy = true
     }
+    struct PreparedAnnotation {
+        var quote: String? = nil
+        var image: NSImage? = nil
+        var frame: NSRect? = nil
+    }
+
+    /// One preparation owns both its async result and its UI callbacks. Closing,
+    /// navigation, and another preparation all invalidate that ownership.
+    func prepareAnnotationContent(
+        source: ConversationAttachment,
+        isCurrent: @escaping @MainActor () -> Bool,
+        load: @escaping @MainActor (@escaping @MainActor () -> Bool) async throws -> PreparedAnnotation,
+        present: @escaping @MainActor (PreparedAnnotation) -> Void
+    ) {
+        operation?.cancel()
+        generation = UUID()
+        let token = generation
+        pending = nil; pendingImage = nil; busy = true
+        let current: @MainActor () -> Bool = { [weak self] in
+            self?.generation == token && isCurrent()
+        }
+        operation = Task { @MainActor [weak self] in
+            do {
+                let content = try await load(current)
+                guard let self, self.generation == token else { return }
+                self.busy = false
+                guard !Task.isCancelled, current() else { return }
+                self.pending = Pending(source: source, quote: content.quote)
+                self.pendingImage = content.image
+                present(content)
+            } catch {
+                guard let self, self.generation == token else { return }
+                self.busy = false
+                if !Task.isCancelled, current(), !(error is CancellationError) { self.showAnnotationError(error) }
+            }
+        }
+    }
+
     private func captureSelection() {
         guard let source, let panel else { return }
         prepareAnnotation()
-        let token = generation
         let board = NSPasteboard.general
         let oldCount = board.changeCount
         let oldItems = (board.pasteboardItems ?? []).map { item in
@@ -411,16 +454,16 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
             return
         }
         let sent = NSApp.sendAction(NSSelectorFromString("copy:"), to: nil, from: self)
-        operation = Task { @MainActor [weak self] in
+        prepareAnnotationContent(source: source, isCurrent: { [weak self] in
+            self?.ownsPanel == true && panel.isVisible && NSApp.keyWindow === panel
+        }, load: { current in
             var copied: String?
             if sent {
                 for _ in 0..<20 {
-                    // Also accept synchronous copy providers without suspending.
+                    // Preserve all clipboard formats and only restore the copy
+                    // while the same preview still owns this preparation.
                     if board.changeCount != oldCount {
-                        // Accept the copy only for this still-focused session.
-                        // Preserve non-text clipboard results too (for example,
-                        // Quick Look copying a file when no text is selected).
-                        if !Task.isCancelled, self?.generation == token, NSApp.keyWindow === panel {
+                        if !Task.isCancelled, current() {
                             let count = board.changeCount
                             let value = board.string(forType: .string)
                             let restored = oldItems.map { values in
@@ -436,73 +479,56 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
                         }
                         break
                     }
-                    if Task.isCancelled { return }
-                    try? await Task.sleep(for: .milliseconds(25))
+                    try Task.checkCancellation()
+                    try await Task.sleep(for: .milliseconds(25))
                 }
             }
-            guard let self, self.generation == token else { return }
-            self.busy = false
-            guard self.canAnnotate else { return }
-            let quote = copied.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
-            self.pending = Pending(source: source, quote: quote)
-            self.showComment(message: quote == nil ? "Whole attachment · no selected text" : nil)
-        }
+            return PreparedAnnotation(quote: copied.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 })
+        }, present: { [weak self] content in
+            self?.showComment(message: content.quote == nil ? "Whole attachment · no selected text" : nil)
+        })
     }
+
     @objc func startRegion() {
         guard canAnnotate, let panel, let source else { return }
-        // Capture only our process; never request access to other apps' windows.
         prepareAnnotation()
-        let token = generation
-        operation = Task { @MainActor [weak self] in
-            guard let self else { return }
-            @MainActor func isCurrent() -> Bool {
-                self.generation == token && panel.isVisible && NSApp.keyWindow === panel &&
-                    self.ownsPanel && panel.currentPreviewItem?.previewItemURL == self.currentURL
-            }
-            do {
-                // QL has no public ready notification. Wait through its initial
-                // crossfade and retry if it resizes while capture is in flight.
-                let remaining = max(0, 0.8 - Date().timeIntervalSince(self.openedAt))
-                if remaining > 0 { try await Task.sleep(for: .seconds(remaining)) }
-                for _ in 0..<4 {
-                    guard isCurrent() else {
-                        if self.generation == token { self.busy = false }; return
-                    }
-                    let captureFrame = panel.frame
-                    try await Task.sleep(for: .milliseconds(150))
-                    guard isCurrent() else {
-                        if self.generation == token { self.busy = false }; return
-                    }
-                    if panel.frame != captureFrame { continue }
-                    let content = try await SCShareableContent.currentProcess
-                    guard let window = content.windows.first(where: { $0.windowID == CGWindowID(panel.windowNumber) }) else {
-                        throw CaptureError.unavailable
-                    }
-                    let filter = SCContentFilter(desktopIndependentWindow: window)
-                    let config = SCStreamConfiguration()
-                    let scale = min(panel.backingScaleFactor, 2)
-                    config.width = max(1, Int(window.frame.width * scale))
-                    config.height = max(1, Int(window.frame.height * scale))
-                    config.showsCursor = false; config.ignoreShadowsSingleWindow = true; config.scalesToFit = true
-                    config.includeChildWindows = false; config.captureResolution = .best
-                    let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
-                    guard isCurrent() else {
-                        if self.generation == token { self.busy = false }; return
-                    }
-                    if panel.frame != captureFrame { continue }
-                    self.busy = false
-                    self.pendingImage = NSImage(cgImage: image, size: captureFrame.size)
-                    self.pending = Pending(source: source)
-                    self.showRegion(image: self.pendingImage!, frame: captureFrame)
-                    return
+        let openedAt = openedAt
+        prepareAnnotationContent(source: source, isCurrent: { [weak self] in
+            guard let self else { return false }
+            return panel.isVisible && NSApp.keyWindow === panel && self.ownsPanel &&
+                panel.currentPreviewItem?.previewItemURL == self.currentURL
+        }, load: { current in
+            // Capture only our process. QL has no public ready notification, so
+            // wait through its crossfade and retry if its frame changes in flight.
+            let remaining = max(0, 0.8 - Date().timeIntervalSince(openedAt))
+            if remaining > 0 { try await Task.sleep(for: .seconds(remaining)) }
+            for _ in 0..<4 {
+                guard current() else { throw CancellationError() }
+                let captureFrame = panel.frame
+                try await Task.sleep(for: .milliseconds(150))
+                guard current() else { throw CancellationError() }
+                if panel.frame != captureFrame { continue }
+                let content = try await SCShareableContent.currentProcess
+                guard let window = content.windows.first(where: { $0.windowID == CGWindowID(panel.windowNumber) }) else {
+                    throw CaptureError.unavailable
                 }
-                throw CaptureError.previewChanged
-            } catch {
-                guard self.generation == token else { return }
-                self.busy = false
-                if !Task.isCancelled { self.showAnnotationError(error) }
+                let filter = SCContentFilter(desktopIndependentWindow: window)
+                let config = SCStreamConfiguration()
+                let scale = min(panel.backingScaleFactor, 2)
+                config.width = max(1, Int(window.frame.width * scale))
+                config.height = max(1, Int(window.frame.height * scale))
+                config.showsCursor = false; config.ignoreShadowsSingleWindow = true; config.scalesToFit = true
+                config.includeChildWindows = false; config.captureResolution = .best
+                let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+                guard current() else { throw CancellationError() }
+                if panel.frame != captureFrame { continue }
+                return PreparedAnnotation(image: NSImage(cgImage: image, size: captureFrame.size), frame: captureFrame)
             }
-        }
+            throw CaptureError.previewChanged
+        }, present: { [weak self] content in
+            guard let image = content.image, let frame = content.frame else { return }
+            self?.showRegion(image: image, frame: frame)
+        })
     }
     enum CaptureError: LocalizedError {
         case unavailable, previewChanged, clipboardChanged
@@ -515,9 +541,10 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
         }
     }
     func showAnnotationError(_ error: Error) {
-        let alert = NSAlert(); alert.messageText = "Annotation couldn’t be completed"
+        if let reportError { reportError(error); return }
+        let alert = NSAlert(); alert.messageText = "Attachment action couldn’t be completed"
         alert.informativeText = error.localizedDescription
-        if let window = commentPopover?.contentViewController?.view.window ?? annotationWindow {
+        if let window = commentPopover?.contentViewController?.view.window ?? annotationWindow ?? hostWindow {
             alert.beginSheetModal(for: window) { _ in }
         }
     }
