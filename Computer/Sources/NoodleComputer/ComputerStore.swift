@@ -179,6 +179,9 @@ enum ComputerDisplayMode: String {
         do {
             try Task.checkCancellation()
             try computer.validate()
+            if computer.kind == .container {
+                try ContainerComputer.validateImageReference(computer.imageReference)
+            }
             guard computer.cpuCount <= VZVirtualMachineConfiguration.maximumAllowedCPUCount,
                 UInt64(computer.memoryGiB) * 1_073_741_824 <= VZVirtualMachineConfiguration.maximumAllowedMemorySize
             else {

@@ -743,7 +743,7 @@ struct NewComputerView: View {
                   TextField("Optional", text: $webPort).textFieldStyle(.roundedBorder)
                     .frame(width: 100)
                 }
-                Text("A public ARM64 Linux image with /bin/sh. Leave the web port blank for a terminal, or enter the container’s HTTP port to show its web interface.")
+                Text("Include the registry (such as docker.io) and a tag (such as :latest). Use a public ARM64 Linux image with /bin/sh. Leave the web port blank for a terminal, or enter the container’s HTTP port to show its web interface.")
                   .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Divider()
               }
@@ -802,6 +802,7 @@ struct NewComputerView: View {
     }
     .noodleSheetSizing(animated: true)
     .interactiveDismissDisabled(creating)
+    .onChange(of: imageReference) { _, _ in failure = nil }
     .onChange(of: requiresNetworking) { _, required in if required { network = true } }
     .onChange(of: template) { oldValue, value in
       failure = nil

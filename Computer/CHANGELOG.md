@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Explain invalid container image names with copyable corrections before downloading, and give recovery steps for missing images, denied access, download limits, and registry failures.
 - Publish `Noodle-Computer-arm64.zip` and its checksum under stable filenames so download links follow the current release.
 
 ## [0.5.0] - 2026-09-13

@@ -18,6 +18,7 @@ extension ContainerComputer {
     static func prepareImage(computer: Computer, directory: URL, cache: URL,
                              previous: ContainerDiskState?,
                              status: @escaping @Sendable (String, TransferProgress?) async -> Void) async throws -> ContainerDiskState? {
+        try validateImageReference(computer.imageReference)
         let store = try ImageStore(path: cache.appendingPathComponent("Images"))
         let initDisk = cache.appendingPathComponent("initfs-0.43.0.ext4")
         if !FileManager.default.fileExists(atPath: initDisk.path) {
@@ -87,19 +88,61 @@ extension ContainerComputer {
         }
     }
 
+    /// ImageStore.pull requires an explicit registry and tag/digest. Validate before
+    /// downloading even the startup image, and offer a complete, copyable correction.
+    static func validateImageReference(_ reference: String) throws {
+        let example = "docker.io/library/nginx:alpine"
+        guard !reference.isEmpty else {
+            throw ComputerError("Enter a container image name, for example \(example).")
+        }
+        guard !reference.contains("://") else {
+            throw ComputerError("Enter the image name from the registry’s pull instructions, without https:// or a web page address. For example: \(example).")
+        }
+        guard !reference.contains(where: \.isWhitespace) else {
+            throw ComputerError("Enter only the container image name, without spaces or the docker pull command. For example: \(example).")
+        }
+        let parsed: Reference
+        do { parsed = try Reference.parse(reference) }
+        catch {
+            throw ComputerError("Invalid container image name: \(reference). Use registry/repository:tag, for example \(example). Repository names must be lowercase.")
+        }
+        guard parsed.domain != nil else {
+            let suggestion = try Reference(path: parsed.path, domain: "docker.io", tag: parsed.tag, digest: parsed.digest)
+            suggestion.normalize()
+            throw ComputerError("Include the registry address in the image name. For Docker Hub, use \(suggestion.description).")
+        }
+        guard parsed.tag != nil || parsed.digest != nil else {
+            parsed.normalize()
+            throw ComputerError("Include an image tag or digest. To use the latest tag, enter \(parsed.description).")
+        }
+    }
+
     static func registryRequest<T>(reference: String, operation: () async throws -> T) async throws -> T {
+        try validateImageReference(reference)
         do { return try await operation() }
         catch let error as RegistryClient.Error {
             // RegistryClient provides CustomStringConvertible but not LocalizedError;
             // localizedDescription otherwise hides every HTTP failure behind "error 0".
             switch error {
             case .invalidStatus(let url, let response, _):
-                if response.code == 404 && url.contains("/manifests/") {
-                    throw ComputerError("Image not found: \(reference). The registry has not published this image tag (HTTP 404).")
+                let advice: String
+                switch response.code {
+                case 401, 403:
+                    advice = "The registry denied access. Check the image name and choose an image that allows public downloads; Noodle Computer does not currently support registry sign-in."
+                case 404 where URL(string: url)?.path.contains("/manifests/") == true:
+                    advice = "The image or tag could not be found. Check the repository name and tag on the registry’s image page, and confirm the image is public."
+                case 404:
+                    advice = "The registry could not find a required download. Try again; if it still fails, choose another published tag or contact the image publisher."
+                case 429:
+                    advice = "The registry’s download limit was reached. Wait a while and try again."
+                case 500...599:
+                    advice = "The image registry is having trouble responding. Try again later."
+                default:
+                    advice = "The registry rejected the download. Check the image name and tag, confirm the image is public, and try again."
                 }
-                throw ComputerError("Could not download \(reference): the image registry returned HTTP \(response.code) (\(response.reasonPhrase)).")
+                throw ComputerError("Could not download \(reference). \(advice) (HTTP \(response.code))")
             case .insecureCredentialExchange:
-                throw ComputerError("Could not download \(reference): \(error.description)")
+                throw ComputerError("Could not download \(reference). The registry requested an unsafe sign-in exchange. Use a public image from a trusted registry, or ask the registry administrator to fix its authentication settings.")
             }
         }
     }
