@@ -6,15 +6,18 @@ import SwiftUI
 /// Uses the attachment's existing selection/click/Space entry point. Quick Look
 /// cannot accept a terminal's keyboard input, so only live computers use this panel.
 @MainActor final class ComputerPreviewController: NSObject, NSWindowDelegate {
-    private var panel: NSPanel?
-    private var connection: ComputerPreviewTerminal?
-    private var web: ComputerPreviewWeb?
+    private(set) var panel: NSPanel?
+    private(set) var connection: ComputerPreviewTerminal?
+    private(set) var web: ComputerPreviewWeb?
+    private let defaults: UserDefaults
     private weak var sourceWindow: NSWindow?
     private weak var sourceResponder: NSResponder?
     private var presentedCard: ComputerCard?
 
-    func show(_ card: ComputerCard, controller: ComputerController) {
-        if presentedCard == card, let panel { panel.makeKeyAndOrderFront(nil); return }
+    init(defaults: UserDefaults = .standard) { self.defaults = defaults; super.init() }
+
+    func show(_ card: ComputerCard, controller: ComputerController, present: Bool = true) {
+        if presentedCard == card, let panel { if present { panel.makeKeyAndOrderFront(nil) }; return }
         close()
         sourceWindow = NSApp.keyWindow
         sourceResponder = sourceWindow?.firstResponder
@@ -46,10 +49,10 @@ import SwiftUI
         }
         panel.contentView = ComputerPreviewFrame(content: content, name: card.computer.name,
                                                 symbol: card.computer.symbol, web: card.view == "web")
-        ComputerPreviewGeometry.restore(panel, preferredScreen: sourceWindow?.screen)
+        ComputerPreviewGeometry.restore(panel, preferredScreen: sourceWindow?.screen, defaults: defaults)
         self.panel = panel; presentedCard = card
         panel.delegate = self
-        panel.makeKeyAndOrderFront(nil)
+        if present { panel.makeKeyAndOrderFront(nil) }
         if let connection { panel.makeFirstResponder(connection.view); connection.start() }
     }
     func close() { panel?.close() }
@@ -58,9 +61,10 @@ import SwiftUI
     func windowDidMove(_ notification: Notification) { saveGeometry(notification) }
     private func saveGeometry(_ notification: Notification) {
         guard let window = notification.object as? NSWindow, window === panel else { return }
-        ComputerPreviewGeometry.save(window)
+        ComputerPreviewGeometry.save(window, defaults: defaults)
     }
     func windowWillClose(_ notification: Notification) {
+        guard let closing = notification.object as? NSWindow, closing === panel else { return }
         saveGeometry(notification)
         connection?.stop(); connection = nil; panel = nil; presentedCard = nil
         web?.stop(); web = nil
@@ -157,23 +161,26 @@ private final class ComputerPreviewPanel: NSPanel {
     }
 }
 
-@MainActor private final class ComputerPreviewTerminal: NSObject, @preconcurrency TerminalViewDelegate {
+@MainActor final class ComputerPreviewTerminal: NSObject, @preconcurrency TerminalViewDelegate {
     let view = TerminalView(frame: .zero, font: .monospacedSystemFont(ofSize: 13, weight: .regular))
     let surface = NSView()
-    private let status = NSTextField(labelWithString: "Connecting…")
+    let status = NSTextField(labelWithString: "Connecting…")
     private let card: ComputerCard
     private let controller: ComputerController
     private lazy var download = ComputerPreviewDownload { [controller] in try await controller.openDownload() }
-    private var reader: Task<Void, Never>?
-    private var writer: Task<Void, Never>?
+    private(set) var reader: Task<Void, Never>?
+    private(set) var writer: Task<Void, Never>?
+    private let sleep: @MainActor (Duration) async throws -> Void
     private var input = AsyncStream<ComputerRequest>.makeStream()
     private var active = false
     private var acceptingInput = false
-    private var pendingBytes = 0
+    private(set) var pendingBytes = 0
     private var dimensions = (0, 0)
 
-    init(card: ComputerCard, controller: ComputerController) {
+    init(card: ComputerCard, controller: ComputerController,
+         sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         self.card = card; self.controller = controller
+        self.sleep = sleep
         super.init()
         view.terminalDelegate = self
         let background = NSColor(calibratedWhite: 0.12, alpha: 1)
@@ -216,12 +223,12 @@ private final class ComputerPreviewPanel: NSPanel {
                         : "This shell has exited. The agent can open a new terminal; this computer is still available."
                     if response.exited == true, (response.data?.count ?? 0) == 0 { return }
                 } catch {
-                    guard active else { return }
+                    guard active, !Task.isCancelled else { return }
                     acceptingInput = false; status.stringValue = error.localizedDescription
                     download.showIfNeeded(controller.permits(card) && !controller.installed)
                     return // Reopening retries reads, never uncertain input.
                 }
-                try? await Task.sleep(for: .milliseconds(150))
+                try? await sleep(.milliseconds(150))
             }
         }
         let stream = input.stream
@@ -229,6 +236,7 @@ private final class ComputerPreviewPanel: NSPanel {
             for await request in stream {
                 guard let self, self.active, !Task.isCancelled else { return }
                 pendingBytes -= request.data?.count ?? 0
+                guard request.operation != .terminalWrite || acceptingInput else { continue }
                 do { _ = try await controller.previewCall(request, card: card) }
                 catch {
                     guard active else { return }

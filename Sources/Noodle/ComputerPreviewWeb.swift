@@ -6,18 +6,23 @@ import WebKit
 /// persistent credentials. Authorization is rechecked while the preview is open.
 @MainActor final class ComputerPreviewWeb: NSObject, WKNavigationDelegate, WKUIDelegate {
     let surface = NSView()
-    private let status = NSTextField(wrappingLabelWithString: "Opening display…")
+    let status = NSTextField(wrappingLabelWithString: "Opening display…")
     private lazy var retry = NSButton(title: "Try Again", target: self, action: #selector(retryConnection))
     private let card: ComputerCard
     private let controller: ComputerController
     private lazy var download = ComputerPreviewDownload { [controller] in try await controller.openDownload() }
     private var connection: ComputerWebConnection?
-    private var view: WKWebView?
-    private var task: Task<Void, Never>?
+    private(set) var view: WKWebView?
+    private(set) var task: Task<Void, Never>?
+    private let sleep: @MainActor (Duration) async throws -> Void
+    private let load: @MainActor (WKWebView, URL) -> Void
     private var active = false
 
-    init(card: ComputerCard, controller: ComputerController) {
+    init(card: ComputerCard, controller: ComputerController,
+         sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+         load: @escaping @MainActor (WKWebView, URL) -> Void = { view, url in view.load(URLRequest(url: url)) }) {
         self.card = card; self.controller = controller
+        self.sleep = sleep; self.load = load
         super.init()
         surface.wantsLayer = true; surface.layer?.backgroundColor = NSColor.black.cgColor
         status.textColor = .secondaryLabelColor
@@ -40,7 +45,8 @@ import WebKit
                 do {
                     let response = try await controller.previewCall(.init(.display, computerID: card.computer.id,
                         agentID: card.agentID, terminalID: card.terminalID), card: card)
-                    guard active, !Task.isCancelled, let current = response.display else { return }
+                    guard active, !Task.isCancelled else { return }
+                    guard let current = response.display else { throw ComputerBridgeError("The computer display is unavailable. Reopen its preview to reconnect.") }
                     if let connection {
                         guard connection.url == current.url, connection.password == current.password,
                               connection.certificate == current.certificate else {
@@ -48,14 +54,14 @@ import WebKit
                         }
                     } else { try await install(current) }
                 } catch {
-                    guard active else { return }
+                    guard active, !Task.isCancelled else { return }
                     view?.stopLoading(); view?.removeFromSuperview(); view = nil; connection = nil
                     status.isHidden = false; status.stringValue = error.localizedDescription
                     retry.isHidden = false
                     download.showIfNeeded(controller.permits(card) && !controller.installed)
                     return
                 }
-                try? await Task.sleep(for: .seconds(2))
+                try? await sleep(.seconds(2))
             }
         }
     }
@@ -99,7 +105,7 @@ import WebKit
             view.topAnchor.constraint(equalTo: surface.topAnchor), view.bottomAnchor.constraint(equalTo: surface.bottomAnchor)
         ])
         self.view = view; retry.isHidden = true
-        view.load(URLRequest(url: connection.url))
+        load(view, connection.url)
     }
     func stop() {
         active = false; task?.cancel(); task = nil
@@ -116,20 +122,26 @@ import WebKit
     }
     func webView(_ webView: WKWebView, didReceive challenge: URLAuthenticationChallenge,
                  completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        guard active, controller.permits(card), let connection else { completionHandler(.cancelAuthenticationChallenge, nil); return }
+        guard active, webView === view, controller.permits(card), let connection else { completionHandler(.cancelAuthenticationChallenge, nil); return }
         connection.authenticate(challenge, completion: completionHandler)
     }
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        guard active, controller.permits(card), let url = action.request.url,
-              connection?.permitsNavigation(to: url) == true, !action.shouldPerformDownload else {
-            decisionHandler(.cancel); return
-        }
-        decisionHandler(.allow)
+        decisionHandler(navigationPolicy(in: webView, url: action.request.url, download: action.shouldPerformDownload))
+    }
+    func navigationPolicy(in webView: WKWebView, url: URL?, download: Bool) -> WKNavigationActionPolicy {
+        guard active, webView === view, controller.permits(card), let url,
+              connection?.permitsNavigation(to: url) == true, !download else { return .cancel }
+        return .allow
     }
     func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse,
                  decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
-        decisionHandler(response.canShowMIMEType ? .allow : .cancel)
+        decisionHandler(responsePolicy(in: webView, url: response.response.url, supported: response.canShowMIMEType))
+    }
+    func responsePolicy(in webView: WKWebView, url: URL?, supported: Bool) -> WKNavigationResponsePolicy {
+        guard active, webView === view, controller.permits(card), supported, let url,
+              connection?.permitsNavigation(to: url) == true else { return .cancel }
+        return .allow
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard active, webView === view, !webView.isHidden, controller.permits(card), webView.alphaValue == 0 else { return }

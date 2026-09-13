@@ -20,6 +20,7 @@ import XCTest
     var gates: [ComputerResponseGate] = []
     var errorOperation: ComputerOperation?
     var catalogue: [RemoteComputer]?
+    var responses: [ComputerOperation: ComputerResponse] = [:]
     func count(_ operation: ComputerOperation) -> Int { requests.filter { $0.operation == operation }.count }
     func respond(_ request: ComputerRequest) async throws -> ComputerResponse {
         requests.append(request)
@@ -33,6 +34,7 @@ import XCTest
         return response(request.operation)
     }
     func response(_ operation: ComputerOperation) -> ComputerResponse {
+        if let response = responses[operation] { return response }
         if operation == .list {
             var response = ComputerResponse(computers: catalogue ?? [computer]); response.capabilities = ComputerCapabilities(); return response
         }
