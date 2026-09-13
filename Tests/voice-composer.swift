@@ -95,6 +95,55 @@ import NoodleCore
                     require(recorder.phase == .idle, "Keyboard action did not clear the voice draft")
                     window.orderOut(nil)
                 }
+                // Reuse the same composer while changing recorder identity. The
+                // selected voice draft and its send closure must change together.
+                let navigationRoot = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-voice-navigation-\(UUID())")
+                defer { try? FileManager.default.removeItem(at: navigationRoot) }
+                @MainActor func readyRecorder(_ name: String) throws -> VoiceRecorder {
+                    let directory = navigationRoot.appendingPathComponent(name)
+                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    let format = AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1)!
+                    do {
+                        let file = try AVAudioFile(forWriting: directory.appendingPathComponent("recording.caf"), settings: format.settings)
+                        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 160)!
+                        buffer.frameLength = 160
+                        buffer.floatChannelData![0].initialize(repeating: 0, count: 160)
+                        try file.write(from: buffer)
+                    }
+                    let voice = VoiceMessage(transcript: name, duration: 0.01, waveform: [0], localeIdentifier: "en-GB")
+                    try JSONEncoder().encode(VoiceRecordingDraft(voice: voice, transcriptionComplete: true))
+                        .write(to: directory.appendingPathComponent("draft.json"))
+                    return VoiceRecorder(directory: directory)
+                }
+                let firstRecorder = try readyRecorder("First"), secondRecorder = try readyRecorder("Second")
+                var sentDrafts: [String] = []
+                @MainActor func navigationContent(_ recorder: VoiceRecorder) -> some View {
+                    VoiceMessageComposer(recorder: recorder, send: { url, metadata in
+                        require(url == recorder.audioURL, "Voice audio must stay with its send destination")
+                        sentDrafts.append(metadata.transcript ?? "")
+                    }) { _ in Text("Text draft") }.frame(width: 500).padding(20)
+                }
+                let navigationHost = NSHostingView(rootView: navigationContent(firstRecorder))
+                let navigationWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 540, height: 76),
+                    styleMask: [.titled], backing: .buffered, defer: false)
+                navigationWindow.isReleasedWhenClosed = false
+                navigationWindow.contentView = navigationHost
+                navigationWindow.makeKeyAndOrderFront(nil)
+                try await Task.sleep(for: .milliseconds(150))
+                navigationHost.rootView = navigationContent(secondRecorder)
+                try await Task.sleep(for: .milliseconds(150))
+                app.sendEvent(keyEvent(36, window: navigationWindow))
+                try await Task.sleep(for: .milliseconds(300))
+                require(sentDrafts == ["Second"] && secondRecorder.phase == .idle && firstRecorder.phase == .ready,
+                    "Switching must send only the selected recorder and preserve the other voice draft")
+                navigationHost.rootView = navigationContent(firstRecorder)
+                try await Task.sleep(for: .milliseconds(150))
+                app.sendEvent(keyEvent(36, window: navigationWindow))
+                try await Task.sleep(for: .milliseconds(300))
+                require(sentDrafts == ["Second", "First"] && firstRecorder.phase == .idle,
+                    "Returning must restore the original voice draft and its send action")
+                navigationWindow.close()
+
                 // Visual fixture uses synthetic amplitudes, never microphone audio.
                 let speech: [Float] = (0..<150).map { index in
                     let envelope = max(0, sin(Float(index) * 0.22))
@@ -121,7 +170,7 @@ import NoodleCore
                     print("Waveform preview: \(url.path)")
                 }
                 previewWindow.orderOut(nil)
-                print("PASS: Return/keypad Enter send and Escape discards regardless of voice-bar focus; sheets and other windows keep their own actions")
+                print("PASS: Return/keypad Enter send and Escape discards regardless of voice-bar focus; sheets and other windows keep their own actions; navigation preserves voice draft destinations")
                 exit(0)
             } catch { print(error); exit(1) }
         }

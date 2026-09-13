@@ -155,13 +155,15 @@ struct ChatView: View {
     }
 
     private var topFadedTranscript: some View {
-        transcript
-            .mask {
-                // Fade the transcript pixels themselves as they pass beneath
-                // the toolbar. The separate window-wide shade remains behind
-                // the sidebar and transcript for wallpaper contrast.
-                ConversationContentTopFade()
-            }
+        ConversationTransition(conversationID: conversation.id) {
+            transcript
+                .mask {
+                    // Fade the transcript pixels themselves as they pass beneath
+                    // the toolbar. The separate window-wide shade remains behind
+                    // the sidebar and transcript for wallpaper contrast.
+                    ConversationContentTopFade()
+                }
+        }
     }
 
     private var composerFooter: some View {
@@ -261,7 +263,6 @@ struct ChatView: View {
                 ) { start in
                     composerInput(microphoneAction: start)
                 }
-                .id(conversation.id)
             } else {
                 composerInput()
             }

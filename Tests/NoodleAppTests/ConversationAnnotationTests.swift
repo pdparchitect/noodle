@@ -1,8 +1,78 @@
+import AppKit
+import SwiftUI
 import XCTest
 import NoodleCore
 @testable import Noodle
 
 final class ConversationAnnotationTests: XCTestCase {
+    @MainActor func testClosedWindowIsNotReattachedByARepresentableUpdate() async throws {
+        let controller = ConversationAnnotationController()
+        let id = UUID()
+        func content(_ title: String) -> some View {
+            ConversationAnnotationHost(controller: controller, conversationID: id,
+                title: title, save: { _, _, _, _ in })
+        }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let hostingView = NSHostingView(rootView: content("Before close"))
+        window.contentView = hostingView
+        hostingView.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertTrue(controller.window === window)
+
+        window.close()
+        XCTAssertNil(controller.window)
+        // Focus changes can ask SwiftUI to update before AppKit has cleared
+        // the view's window pointer, including from inside NSWindow.dealloc.
+        hostingView.rootView = content("Update during teardown")
+        hostingView.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertNil(controller.window, "A content update must not reattach a closed window")
+        window.contentView = nil
+    }
+
+    @MainActor func testPendingAnnotationMountIsCancelledOnDetachAndReplacement() async throws {
+        let first = ConversationAnnotationController(), second = ConversationAnnotationController()
+        let host = ConversationAnnotationHost.Host(controller: first)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close(); window.contentView = nil }
+        window.contentView = host
+        host.setController(second)
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertNil(first.window)
+        XCTAssertTrue(second.window === window)
+
+        host.setController(first)
+        window.contentView = nil
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertNil(first.window)
+        XCTAssertNil(second.window)
+    }
+
+    @MainActor func testAnnotationHostSurvivesRepeatedFocusedWindowTeardown() async throws {
+        for _ in 0..<30 {
+            let controller = ConversationAnnotationController()
+            autoreleasepool {
+                let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
+                    styleMask: [.titled], backing: .buffered, defer: false)
+                window.isReleasedWhenClosed = false
+                let hostingView = NSHostingView(rootView:
+                    TextField("Draft", text: .constant("Focused editor"))
+                        .background(ConversationAnnotationHost(controller: controller, conversationID: UUID(),
+                            title: "Teardown", save: { _, _, _, _ in })))
+                window.contentView = hostingView
+                hostingView.layoutSubtreeIfNeeded()
+                window.makeFirstResponder(hostingView)
+                window.close()
+            }
+            try await Task.sleep(for: .milliseconds(10))
+            XCTAssertNil(controller.window)
+        }
+    }
+
     func testTextSnapshotPersistsMessageReferenceThroughEditingAndDelivery() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("conversation-note-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }

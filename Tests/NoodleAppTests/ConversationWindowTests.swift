@@ -123,6 +123,39 @@ import NoodleCore
         XCTAssertTrue(store.messages(for: direct).isEmpty)
     }
 
+    func testRapidConversationSwitchesPreserveTheFocusedComposerAndDraftDestination() async throws {
+        let (store, direct, group) = try fixture()
+        store.selectedConversationID = direct.id
+        store.setDraft("Direct draft", for: direct.id)
+        store.setDraft("Group draft", for: group.id)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 700),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: SwitchingChatFixture(store: store))
+        defer { window.close(); window.contentView = nil }
+        func editor(in view: NSView?) -> ComposerTextView? {
+            if let editor = view as? ComposerTextView { return editor }
+            return view?.subviews.lazy.compactMap { editor(in: $0) }.first
+        }
+        for _ in 0..<100 where editor(in: window.contentView) == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let originalEditor = try XCTUnwrap(editor(in: window.contentView))
+        XCTAssertTrue(window.makeFirstResponder(originalEditor))
+        for index in 0..<20 {
+            let selected = index.isMultiple(of: 2) ? group : direct
+            store.selectedConversationID = selected.id
+            try await Task.sleep(for: .milliseconds(25))
+            XCTAssertTrue(editor(in: window.contentView) === originalEditor)
+            XCTAssertTrue(window.firstResponder === originalEditor)
+            XCTAssertEqual(originalEditor.string, store.draft(for: selected.id))
+        }
+        originalEditor.string = "Edited after rapid navigation"
+        originalEditor.didChangeText()
+        XCTAssertEqual(store.draft(for: direct.id), originalEditor.string)
+        XCTAssertEqual(store.draft(for: group.id), "Group draft")
+    }
+
     func testWindowRegistryRemovesClosedWindowsAndTracksMainSelection() {
         let registry = ConversationWindowRegistry()
         let firstID = UUID(), nextID = UUID()
@@ -145,5 +178,16 @@ import NoodleCore
         XCTAssertNil(opened, "An existing conversation window must be reused")
         window.close()
         XCTAssertFalse(registry.focus(nextID))
+    }
+}
+
+private struct SwitchingChatFixture: View {
+    let store: NoodleStore
+    @State private var preview = AttachmentPreviewController()
+    var body: some View {
+        if let conversation = store.selectedConversation {
+            ChatView(conversation: conversation, attachmentPreview: preview)
+                .environment(store)
+        }
     }
 }

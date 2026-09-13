@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Prevent conversation annotation updates from reattaching to a window during teardown and crashing Noodle.
+
 - Display the bot or group name as plain title text in separate chat windows, removing the small glass capsule on macOS 26.
 
 - Place the Heartbeat and Security bot-list scrollbars beside the rows so they no longer overlap the toggles.
@@ -68,6 +70,7 @@ All notable changes to Noodle are documented here, following
 ### Changed
 
 - Remove the Open in New Window button from the chat toolbar; the action remains available in the sidebar context menu.
+- Dissolve between conversations without a blank flash, preserving the text editor and keyboard focus while switching drafts and voice recorders, and respecting Reduce Motion.
 - Link Noodle Applet's download and documentation from the main README.
 - Move Tools immediately after Security in Settings.
 - Shorten the generated bot name options in General settings to “Real” and “Playful”.

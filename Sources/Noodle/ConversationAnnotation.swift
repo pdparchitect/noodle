@@ -20,17 +20,53 @@ struct ConversationAnnotationHost: NSViewRepresentable {
     let title: String
     let save: (AttachmentAnnotation, Data, ConversationAttachment, Data) throws -> Void
 
-    func makeNSView(context: Context) -> Host { Host() }
+    func makeNSView(context: Context) -> Host { Host(controller: controller) }
     func updateNSView(_ view: Host, context: Context) {
-        view.controller = controller
+        view.setController(controller)
         controller.configure(conversationID: conversationID, title: title, save: save)
-        controller.attach(to: view.window)
     }
-    static func dismantleNSView(_ view: Host, coordinator: ()) { view.controller?.attach(to: nil) }
+    static func dismantleNSView(_ view: Host, coordinator: ()) { view.setController(nil) }
 
     final class Host: NSView {
-        weak var controller: ConversationAnnotationController?
-        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); controller?.attach(to: window) }
+        private(set) weak var controller: ConversationAnnotationController?
+        private var attachmentGeneration = 0
+
+        init(controller: ConversationAnnotationController) {
+            self.controller = controller
+            super.init(frame: .zero)
+        }
+        required init?(coder: NSCoder) { nil }
+
+        func setController(_ controller: ConversationAnnotationController?) {
+            guard self.controller !== controller else { return }
+            self.controller?.attach(to: nil)
+            self.controller = controller
+            scheduleAttachment()
+        }
+
+        override func viewWillMove(toWindow newWindow: NSWindow?) {
+            attachmentGeneration += 1
+            controller?.attach(to: nil)
+            super.viewWillMove(toWindow: newWindow)
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            scheduleAttachment()
+        }
+
+        private func scheduleAttachment() {
+            attachmentGeneration += 1
+            let generation = attachmentGeneration
+            // AppKit can ask SwiftUI to update during NSWindow.dealloc, before
+            // view.window is cleared. Never weak-register that window from an
+            // update callback; resolve it after the mount has settled instead.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.attachmentGeneration == generation else { return }
+                self.controller?.attach(to: self.window)
+            }
+        }
+
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 }

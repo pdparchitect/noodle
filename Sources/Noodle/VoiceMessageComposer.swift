@@ -4,7 +4,8 @@ import NoodleCore
 
 @available(macOS 26.0, *)
 struct VoiceMessageComposer<Content: View>: View {
-    @State private var recorder: VoiceRecorder
+    let recorder: VoiceRecorder
+    @State private var mountedRecorder: VoiceRecorder?
     @State private var sendError: String?
     @State private var composerID = UUID()
     private var sending: Bool { recorder.isSending }
@@ -14,7 +15,7 @@ struct VoiceMessageComposer<Content: View>: View {
 
     init(recorder: VoiceRecorder, send: @escaping (URL, VoiceMessage) throws -> Void,
          @ViewBuilder content: @escaping (@escaping () -> Void) -> Content) {
-        _recorder = State(initialValue: recorder)
+        self.recorder = recorder
         self.send = send
         self.content = content
     }
@@ -86,12 +87,25 @@ struct VoiceMessageComposer<Content: View>: View {
                 .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .focusable().focusEffectDisabled().focused($focused)
                 .onAppear { focused = true }
+                .id(ObjectIdentifier(recorder))
             }
         }
         .focusedSceneValue(\.voiceRecordingCommand,
             VoiceRecordingCommand(phase: { recorder.phase }, isSending: { sending }, toggle: toggleRecording))
-        .onAppear { recorder.attachComposer(composerID) }
-        .onDisappear { recorder.detachComposer(composerID) }
+        .onAppear { mountRecorder() }
+        .onChange(of: ObjectIdentifier(recorder)) { _, _ in mountRecorder() }
+        .onDisappear {
+            mountedRecorder?.detachComposer(composerID)
+            mountedRecorder = nil
+        }
+    }
+
+    private func mountRecorder() {
+        guard mountedRecorder !== recorder else { return }
+        mountedRecorder?.detachComposer(composerID)
+        mountedRecorder = recorder
+        recorder.attachComposer(composerID)
+        sendError = nil
     }
 
     private func toggleRecording() {
@@ -113,6 +127,10 @@ struct VoiceMessageComposer<Content: View>: View {
         do {
             try send(recorder.audioURL, recorder.metadata)
             await recorder.discard()
-        } catch { sendError = error.localizedDescription }
+        } catch {
+            // A send can finish after navigation. Its error belongs to the
+            // recorder that started it, not the newly selected conversation.
+            if mountedRecorder === recorder { sendError = error.localizedDescription }
+        }
     }
 }

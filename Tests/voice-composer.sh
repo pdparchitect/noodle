@@ -20,7 +20,7 @@ swiftc -parse-as-library -I "$bin_path/Modules" \
     "$project_root/Tests/NativeFixtureChecks.swift" \
     "$project_root/Tests/voice-composer.swift" \
     "$bin_path"/NoodleCore.build/*.swift.o "$bin_path"/NoodleWallpaperCore.build/*.swift.o \
-    "$bin_path"/ComputerBridge.build/*.swift.o \
+    "$bin_path"/ComputerBridge.build/*.swift.o "$bin_path"/AppletBridge.build/*.swift.o \
     "$bin_path"/NoodleAudioCapture.build/*.o \
     -o "$project_root/.build/voice-composer-tests"
 "$project_root/.build/voice-composer-tests"

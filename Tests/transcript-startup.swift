@@ -3,6 +3,7 @@ import SwiftUI
 import NoodleCore
 
 @MainActor final class StartupModel: ObservableObject {
+    let conversationID = UUID()
     @Published var ids: [UUID] = []
     @Published var overlay: CGFloat = 0
     var visible: Set<UUID> = []
@@ -19,6 +20,15 @@ import NoodleCore
 struct StartupFixture: View {
     @ObservedObject var model: StartupModel
     var body: some View {
+        ConversationTransition(conversationID: model.conversationID) {
+            transcript
+                .id(model.conversationID)
+                .transaction { $0.animation = nil }
+        }
+        .overlay(alignment: .bottom) { Text("Composer").frame(height: 60) }
+    }
+
+    private var transcript: some View {
         TranscriptScrollView(initialViewport: model.initialViewport, lastMessageID: model.ids.last,
             lastMessageIsFromUser: model.lastMessageIsFromUser, bottomOverlayHeight: model.overlay,
             saveViewport: { model.saved = $0; model.persist?($0) }) {
@@ -57,8 +67,6 @@ struct StartupFixture: View {
                 Color.white
             }.ignoresSafeArea(edges: .top)
         }
-        .overlay(alignment: .bottom) { Text("Composer").frame(height: 60) }
-        .transaction { $0.animation = nil }
     }
 }
 
@@ -144,7 +152,25 @@ struct StartupFixture: View {
             try? await Task.sleep(for: .milliseconds(800))
             precondition(fallback.visible.contains(remaining.last!), "A removed reading message must fall back to visible latest content")
             fallbackWindow.close()
-            print("Transcript startup checks passed: attachment-heavy initial rendering, delayed loading, persisted reading position, changed-width relaunch and deleted-message fallback")
+
+            let switchingWindow = makeWindow(original, width: 820)
+            let switchingHost = switchingWindow.contentView as! NSHostingView<StartupFixture>
+            try? await Task.sleep(for: .milliseconds(300))
+            for _ in 0..<5 {
+                for model in [relaunched, original] {
+                    model.visible.removeAll()
+                    switchingHost.rootView = StartupFixture(model: model)
+                    try? await Task.sleep(for: .milliseconds(40))
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(250))
+            precondition(original.visible.contains(original.ids.last!), "Rapid navigation must settle on the latest selected transcript")
+            relaunched.visible.removeAll()
+            switchingHost.rootView = StartupFixture(model: relaunched)
+            try? await Task.sleep(for: .milliseconds(300))
+            precondition(relaunched.visible.contains(restored.messageID!), "A dissolve must preserve the returning conversation's reading position")
+            switchingWindow.close()
+            print("Transcript startup checks passed: attachment-heavy initial rendering, delayed loading, persisted reading position, changed-width relaunch, deleted-message fallback and rapid conversation switching")
             exit(0)
         }
         app.run()
