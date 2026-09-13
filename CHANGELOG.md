@@ -14,6 +14,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Bind stop confirmations to the exact restart or access-change operation so a late confirmation cannot grant access or launch an outdated configuration during a newer transition.
+
 - Ignore status, approval, and heartbeat callbacks from retired runtimes, keeping restarted and removed bots isolated from late process events.
 
 - Cancel pending runtime recovery when a bot leaves the roster so delayed restarts cannot bring it back. Cover crash backoff, stable-runtime reset, wake recovery, and shutdown with controlled timers.

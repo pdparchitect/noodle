@@ -87,6 +87,7 @@ final class AgentRuntimeCoordinator {
     private(set) var changingAccess: Set<UUID> = []
     @ObservationIgnored private let sleepController = AgentActivitySleepController()
     private var lifecycleID = UUID()
+    private var transitionIDs: [UUID: UUID] = [:]
     private var blockedRestarts: Set<UUID> = []
     private var restartAttempts: [UUID: Int] = [:]
     @ObservationIgnored private var restartTasks: [UUID: Task<Void, Never>] = [:]
@@ -219,7 +220,10 @@ final class AgentRuntimeCoordinator {
         let required = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsRestrictedAccess == false
         guard (!required || enabled), !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id),
               accessConfiguration.isExtended(for: agent) != enabled else { return }
+        cancelSupervision(for: agent.id)
         changingAccess.insert(agent.id)
+        let transitionID = UUID()
+        transitionIDs[agent.id] = transitionID
         let lifecycle = lifecycleID
         // Persist revocation before stopping so relaunch cannot restore access.
         // Grants are saved only after the previous process has stopped.
@@ -233,8 +237,9 @@ final class AgentRuntimeCoordinator {
         snapshots[agent.id] = .init(agentID: agent.id, phase: .starting, detail: "Changing agent access…")
         let finish: (Bool) -> Void = { [weak self] stopped in
             guard let self else { return }
-            guard self.lifecycleID == lifecycle, self.changingAccess.contains(agent.id) else { return }
+            guard self.lifecycleID == lifecycle, self.transitionIDs[agent.id] == transitionID else { return }
             self.changingAccess.remove(agent.id)
+            self.transitionIDs[agent.id] = nil
             guard stopped else {
                 self.blockedRestarts.insert(agent.id)
                 self.snapshots[agent.id] = .init(agentID: agent.id, phase: .failed, detail: "Could not confirm that the old runtime stopped. Quit Noodle before restarting this bot.")
@@ -400,6 +405,7 @@ final class AgentRuntimeCoordinator {
             processes.removeValue(forKey: id)?.stop { _ in }
             cancelSupervision(for: id)
             changingAccess.remove(id)
+            transitionIDs[id] = nil
             recoveryPending.remove(id)
             approvals.removeAll { $0.agentID == id }
             heartbeatScheduler.remove(id)
@@ -567,6 +573,8 @@ final class AgentRuntimeCoordinator {
         guard !changingAccess.contains(agent.id) else { return }
         cancelSupervision(for: agent.id)
         changingAccess.insert(agent.id)
+        let transitionID = UUID()
+        transitionIDs[agent.id] = transitionID
         let lifecycle = lifecycleID
         runtimeIDs[agent.id] = nil
         let old = processes.removeValue(forKey: agent.id)
@@ -580,8 +588,9 @@ final class AgentRuntimeCoordinator {
         }
         let finish: (Bool) -> Void = { [weak self] stopped in
             guard let self else { return }
-            guard self.lifecycleID == lifecycle, self.changingAccess.contains(agent.id) else { return }
+            guard self.lifecycleID == lifecycle, self.transitionIDs[agent.id] == transitionID else { return }
             self.changingAccess.remove(agent.id)
+            self.transitionIDs[agent.id] = nil
             if stopped { self.start(agent: agent, repository: repository) }
             else {
                 self.blockedRestarts.insert(agent.id)
@@ -606,6 +615,7 @@ final class AgentRuntimeCoordinator {
         cancelSupervision(for: agentID)
         recoveryPending.remove(agentID)
         changingAccess.remove(agentID)
+        transitionIDs[agentID] = nil
         approvals.removeAll { $0.agentID == agentID }
         accessConfiguration.remove(agentID)
         accessConfiguration.save(to: defaults)
@@ -625,6 +635,7 @@ final class AgentRuntimeCoordinator {
         lifecycleID = UUID()
         runtimeIDs.removeAll()
         changingAccess = []
+        transitionIDs.removeAll()
         approvals = []
         capabilityProbe?.stop()
         capabilityProbe = nil
