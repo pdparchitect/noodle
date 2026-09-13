@@ -20,6 +20,16 @@ swift test --disable-sandbox --package-path Computer --scratch-path .build/compu
 swift test --disable-sandbox --package-path Computer/Bridge
 ```
 
+To check shell selection, history, editing, completion, and interrupt keys in
+real Linux PTYs, pass locally available image names to the shell test:
+
+```sh
+python3 Computer/Tests/GuestShellTests.py noodle-computer-shell-image:local noodle-computer-desktop-image:local
+```
+
+This check uses Apple's `container` CLI and disposable containers with networking
+disabled and no host mounts. See [image builds](Images/README.md#build-and-test).
+
 For signed integration fixtures, build a separate test app:
 
 ```sh

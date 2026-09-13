@@ -245,11 +245,8 @@ actor ContainerComputer {
         let id = UUID()
         terminalID = id
         let process = try await pod.execInContainer("workspace", processID: "interactive-shell-\(id.uuidString.lowercased())") { config in
-            config.arguments = ["/bin/sh", "-c", "cd /workspace && exec /bin/sh -i"]
-            config.environmentVariables = ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                // Expand PWD at each prompt; /bin/sh need not support Bash's \w escape.
-                "HOME=/root", "TERM=xterm-256color", "PS1=${PWD} # ",
-                "ENV=/etc/noodle/interactive-shell.sh"]
+            config.arguments = ["/bin/sh", "-c", GuestShell.command]
+            config.environmentVariables = GuestShell.environment
             config.terminal = true
             config.stdin = io
             config.stdout = io
@@ -287,10 +284,8 @@ actor ContainerComputer {
     func makeProviderTerminal(io: GuestTerminalIO, id: UUID) async throws -> LinuxProcess {
         guard let pod else { throw ComputerError("Start the computer first.") }
         let process = try await pod.execInContainer("workspace", processID: "noodle-\(id.uuidString.lowercased())") { config in
-            config.arguments = ["/bin/sh", "-c", "cd /workspace && exec /bin/sh -i"]
-            config.environmentVariables = ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                "HOME=/root", "TERM=xterm-256color", "PS1=$ ",
-                "ENV=/etc/noodle/interactive-shell.sh"]
+            config.arguments = ["/bin/sh", "-c", GuestShell.command]
+            config.environmentVariables = GuestShell.environment
             config.terminal = true; config.stdin = io; config.stdout = io
         }
         do {

@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Support Command-K to clear terminal output while preserving current input, and start the guest’s configured interactive shell so history and line editing work on images that provide Bash or Zsh.
 - Explain invalid container image names with copyable corrections before downloading, and give recovery steps for missing images, denied access, download limits, and registry failures.
 - Publish `Noodle-Computer-arm64.zip` and its checksum under stable filenames so download links follow the current release.
 

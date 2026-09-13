@@ -33,6 +33,19 @@ and services. Each gets its own terminal sessions. An agent can present a termin
 or desktop in the conversation for you to review work or take over a step.
 Closing a preview leaves the terminal running.
 
+## Use the terminal
+
+The terminal uses the guest root account’s configured shell, with a fallback for
+minimal images. Commands come from the image and the packages you install in it.
+
+**Command-K** clears earlier output while preserving the current input. You can
+also right-click and choose **Clear Terminal**. In full-screen applications, this
+clears scrollback while preserving the application’s screen.
+
+**Control-C** interrupts a command. Shells with line editing support also provide
+**Control-L** to redraw, **Up/Down** for history, **Control-A/E** for the start/end
+of the line, **Option-Left/Right** for word movement, and **Tab** for completion.
+
 ## Work with files
 
 **Files** opens at `/workspace`. Browse in icons, list, or gallery view. Press

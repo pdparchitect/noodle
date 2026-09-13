@@ -69,6 +69,56 @@ final class GuestTerminalIO: ReaderStream, Writer, @unchecked Sendable {
 }
 
 final class ComputerNativeTerminalView: TerminalView {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        if window?.firstResponder === self, modifiers == .command,
+           event.charactersIgnoringModifiers?.lowercased() == "k" {
+            clearTerminal(nil)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    @objc func clearTerminal(_ sender: Any?) {
+        let terminal = getTerminal()
+        selectNone()
+        clearScrollback()
+        // Full-screen applications own their screen layout; clearing history
+        // must not change their cursor, modes, or send an input command.
+        guard !terminal.isCurrentBufferAlternate else { return }
+        var firstLine = terminal.buffer.y
+        while firstLine > 0, terminal.getLine(row: firstLine)?.isWrapped == true { firstLine -= 1 }
+        if firstLine > 0 {
+            let blank = BufferLine(cols: terminal.cols)
+            for row in 0..<terminal.rows {
+                let source = terminal.getLine(row: row + firstLine) ?? blank
+                terminal.getLine(row: row)?.copyFrom(line: source)
+            }
+            terminal.buffer.y -= firstLine
+            terminal.buffer.savedY = max(0, terminal.buffer.savedY - firstLine)
+        }
+        // Mutate the local display directly, rather than injecting escape
+        // sequences into a guest stream that may be between partial writes.
+        scroll(toPosition: 1)
+        terminal.refresh(startRow: 0, endRow: terminal.rows - 1)
+        needsDisplay = true
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        if !menu.items.isEmpty { menu.addItem(.separator()) }
+        let clear = NSMenuItem(title: "Clear Terminal", action: #selector(clearTerminal(_:)), keyEquivalent: "k")
+        clear.keyEquivalentModifierMask = .command
+        clear.target = self
+        menu.addItem(clear)
+        return menu
+    }
+
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(clearTerminal(_:)) { return true }
+        return super.validateUserInterfaceItem(item)
+    }
+
     override func viewWillDraw() {
         super.viewWillDraw()
         // SwiftTerm's standalone NSScroller otherwise paints a full-height
