@@ -99,6 +99,11 @@ run in the default Swift suite; native presentation fixtures remain separate.
 
 Storage migration tests interrupt each move and verify resumption, user-folder
 collisions, hard-link separation, copied packages, and invalid layouts.
+`AgentBackstoryMigrationTests` covers legacy Backstory formats, empty completion
+flags, atomic commit failures and retries, damaged or redirected source files,
+and regeneration after a committed migration. Repository and store tests verify
+that public records omit Backstory and settings saves or rollbacks preserve its
+private configuration independently of generated workspace instructions.
 `RestrictedAgentSandboxTests` runs real sandboxed processes against disposable
 data: workspace writes and Messenger replies must succeed while configuration
 and runtime writes, replacements, and links are denied. Other bots’ contents and

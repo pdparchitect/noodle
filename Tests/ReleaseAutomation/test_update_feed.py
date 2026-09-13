@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import unittest
 import xml.etree.ElementTree as ET
@@ -22,6 +23,16 @@ def appcast(version, minimum=None, legacy=False):
 
 
 class UpdateFeedTests(unittest.TestCase):
+    def test_registered_backstory_milestone_remains_in_the_upgrade_chain(self):
+        milestones = json.loads((ROOT / "Support/update-milestones.json").read_text())["milestones"]
+        self.assertEqual(milestones, ["0.13.0", "0.14.0"])
+        def previous(version):
+            return appcast(version, "0.13.0" if version == "0.14.0" else None, legacy=version == "0.13.0")
+        for version, expected in [("0.14.0", ["0.13.0", None]), ("0.15.0", ["0.14.0", "0.13.0", None])]:
+            result = feed.prepare(appcast(version), version, milestones, previous)
+            items = ET.fromstring(result).findall("channel/item")
+            self.assertEqual([i.findtext(S + "minimumUpdateVersion") for i in items], expected)
+
     def test_migration_release_is_reachable_from_older_versions(self):
         result = feed.prepare(appcast("0.13.0"), "0.13.0", ["0.13.0"], lambda _: self.fail("No old release needed"))
         self.assertIsNone(ET.fromstring(result).find("channel/item/" + S + "minimumUpdateVersion"))

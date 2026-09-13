@@ -50,9 +50,26 @@ wake path for authorized follow-ups during idle time.
 ## Workspaces and access
 
 Each bot has a UUID-named package containing `agent.json`, Noodle-owned `runtime`
-state, and a writable `workspace` subdirectory. `AGENTS.md` holds its backstory and managed
-runtime guidance; `CLAUDE.md` points to the same file. Noodle refreshes managed
-skills while preserving custom skills and user-written backstories.
+state, and a writable `workspace` subdirectory. The private `backstory` field in
+`agent.json` is the source of truth; it is omitted from the public `AgentRecord`
+used by profiles and participant lists. Edit Backstory through Noodle. `AGENTS.md`
+renders that backstory and runtime guidance; `CLAUDE.md` points to the same file.
+The whole file is generated, without managed-section markers. Noodle can replace
+edited, missing, or corrupted output without parsing it or changing Backstory.
+Custom skills are preserved. Keep standing preferences in `preferences.md` and durable facts,
+decisions, and ongoing context in `memory.md`. Noodle creates `preferences.md` when
+missing, including in existing workspaces, and never overwrites its contents.
+Agents are instructed to read it at session start and after changes; newer explicit
+user requests take precedence. Apple loads a bounded preference excerpt alongside
+the backstory for every wake, including chat turns without workspace tools.
+
+At app startup, the one-time `AgentBackstoryMigration` runs after the directory
+migration and before bots load. It imports legacy marked Backstory, custom
+`AGENTS.md`, or older `instructions.md` into `agent.json` atomically before any
+regeneration. A present string, including an empty one, marks completion. Missing
+or damaged legacy sources stop migration with their files intact. The parser is
+isolated for retirement after the 0.14.0 update milestone; the configuration check
+must remain. Backstory migration does not grant legacy autonomous access.
 
 The signed Agent Host applies a dedicated filesystem sandbox before starting
 restricted Codex, FX, Grok Build, Muse Code, or Apple. Each can read only its own

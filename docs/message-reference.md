@@ -9,13 +9,15 @@ Runtime wake notifications tell a bot to check for work. Messenger deliveries ca
 
 ## Agent instruction loading
 
-The bot's `AGENTS.md` (also exposed as `CLAUDE.md`) holds its backstory, workspace rules, and a short pointer to `.agents/skills/messenger/SKILL.md`. Codex runtime instructions use the same pointer. The Messenger skill holds the complete generated guidance below; startup instructions do not repeat it.
+The bot's `AGENTS.md` (also exposed as `CLAUDE.md`) is entirely generated from its private configuration and Noodle's runtime guidance. Backstory is stored in `agent.json` one level above the workspace and edited through Noodle. The generated file warns that all edits will be overwritten during synchronization; no managed-section markers are needed. Agents read `preferences.md` for standing user preferences and use `memory.md` for durable facts and context; Noodle preserves these files. `AGENTS.md` and Codex runtime instructions point to `.agents/skills/messenger/SKILL.md`. The Messenger skill holds the complete generated guidance below; startup instructions do not repeat it.
 
 When missing or incompatible private model context must be replaced, the runtime appends this recovery guidance to its wake:
 
 Noodle replaced unavailable private model context. Your workspace and Noodle conversation history are intact. Read the Messenger skill, check unread messages once, and use Messenger --list-conversations and --list-messages --conversation <uuid> to recover recent unanswered requests even if the inbox was consumed before the interruption. Check your own prior replies, workspace files, and completed actions before repeating work. Do not assume an interrupted action failed; if its outcome cannot be verified, ask a specific question before repeating a consequential action. Reply through Messenger to the original conversation; do not merely acknowledge this recovery notice.
 
 ### Apple native transport
+
+Apple includes up to 1,600 characters each from the backstory and `preferences.md` on every wake, including chat turns without workspace tools. Newer explicit user requests take precedence over standing preferences.
 
 The bundled Apple harness loads compact catalogue guidance and the bot backstory, and automatically delivers answers to the originating conversation through Messenger. Chat turns start fresh and retrieve original messages through conversation_history rather than replaying prior model mistakes or refusals. Use scope userMessages for user-provided facts and allMessages for questions about assistant replies. Workspace turns resume actual native transcripts, retaining up to eight complete turns within a 6,000-byte budget shared with the new prompt and preserving tool exchanges together. The harness never fabricates model response entries from visible chat. Workspace tools require a file, path, attachment, or command reference in recent user requests, followed by local category classification. Assistant claims alone cannot enable filesystem tools. Pending message IDs and completed native model results are saved per conversation and survive interruption, so a delivery retry reuses the completed result. Large results are saved in the bot workspace and returned in pages. The CLI and full skill remain available through the command tool for additional operations.
 

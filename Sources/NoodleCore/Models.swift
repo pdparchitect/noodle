@@ -402,7 +402,7 @@ public struct WorkspaceRepository: Sendable {
     public let launcherExecutableURL: URL?
     private let discoverAppletApplication: @Sendable () -> URL?
 
-    public static let managedSkillVersion = 24
+    public static let managedSkillVersion = 25
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil,
                 discoverAppletApplication: @escaping @Sendable () -> URL? = { AppletAgentSkill.installedApplicationURL() }) {
@@ -483,13 +483,12 @@ public struct WorkspaceRepository: Sendable {
         var createdConversationID: UUID?
         do {
             let agentDirectory = layout.workspace
-            try write(agent, to: layout.configuration)
+            try AgentConfiguration(agent: agent, backstory: backstory.trimmingCharacters(in: .whitespacesAndNewlines)).save(to: layout)
             try "# Memory\n\n".write(
                 to: agentDirectory.appendingPathComponent("memory.md"),
                 atomically: true,
                 encoding: .utf8
             )
-            try updateAgentBackstory(agent, backstory: backstory)
             try synchronizeAgentWorkspace(agent)
 
             let conversation = BotConversation(
@@ -552,7 +551,7 @@ public struct WorkspaceRepository: Sendable {
         renamed.avatarSymbolName = avatarSymbolName
         renamed.avatarColorIndex = avatarColorIndex
         renamed.avatarImageData = avatarImageData
-        try write(renamed, to: storage(for: agent.id).configuration)
+        try saveAgentRecord(renamed)
         return renamed
     }
 
@@ -580,7 +579,7 @@ public struct WorkspaceRepository: Sendable {
         // Appearance only: preserve runtime configuration and do not restart the bot.
         agent.avatarImageData = data as Data
         agent.updatedAt = Date()
-        try write(agent, to: storage(for: agent.id).configuration)
+        try saveAgentRecord(agent)
         return agent
     }
 
@@ -729,17 +728,20 @@ public struct WorkspaceRepository: Sendable {
             throw WorkspaceError.missingAgent(agent.id)
         }
 
+        let backstory = try loadAgentBackstory(agent)
         let workspaceFiles = try WorkspaceMailbox(workspace: directory, path: "")
         let agentsFiles = try WorkspaceMailbox(workspace: directory, path: ".agents", create: true)
         let messengerFiles = try WorkspaceMailbox(workspace: directory, path: ".agents/skills/messenger", create: true)
 
-        let backstory = try loadAgentBackstory(agent)
+        if !workspaceFiles.contains("preferences.md") {
+            try workspaceFiles.writeData(Data(Self.initialAgentPreferences.utf8), named: "preferences.md", replaceExisting: false)
+        }
         let mcpRegistry = try MCPRegistry.load(root: rootURL)
         let computerAssigned = !(try ComputerAssignments.load(root: rootURL)).assigned(to: agent.id).isEmpty
         let appletExecutable = appletExecutableURL
         let appletEnabled = appletExecutable != nil
-        let appletInstructions = appletEnabled ? "\n## Creative applets\nRead `.agents/skills/applet/SKILL.md` to build and run HTML and native Swift noodlets in Noodle Applet.\n" : ""
-        let computerInstructions = computerAssigned ? "\n## Assigned computers\nRead `.agents/skills/computer/SKILL.md` to access your assigned computers through Noodle.\n" : ""
+        let appletInstructions = appletEnabled ? "\n## Creative applets\n\nRead `.agents/skills/applet/SKILL.md` to build and run HTML and native Swift noodlets in Noodle Applet.\n" : ""
+        let computerInstructions = computerAssigned ? "\n## Assigned computers\n\nRead `.agents/skills/computer/SKILL.md` to access your assigned computers through Noodle.\n" : ""
         try workspaceFiles.writeData(Data((Self.renderedAgentInstructions(backstory: backstory,
             mcpConnections: mcpRegistry.assigned(to: agent.id)) + computerInstructions + appletInstructions).utf8), named: "AGENTS.md")
         workspaceFiles.remove("instructions.md")
@@ -771,27 +773,21 @@ public struct WorkspaceRepository: Sendable {
     }
 
     public func loadAgentBackstory(_ agent: AgentRecord) throws -> String {
-        let directory = directory(for: agent)
-        guard FileManager.default.fileExists(atPath: directory.path) else {
-            throw WorkspaceError.missingAgent(agent.id)
-        }
+        try AgentConfiguration.load(from: storage(for: agent.id)).requireBackstory()
+    }
 
-        let files = try WorkspaceMailbox(workspace: directory, path: "")
-        if files.contains("AGENTS.md") {
-            let contents = String(decoding: try files.read("AGENTS.md", limit: 4 * 1_048_576), as: UTF8.self)
-            if let backstory = Self.backstory(fromManagedInstructions: contents) { return backstory }
-            if !Self.looksLikeLegacyManagedInstructions(contents) { return Self.normalizedLegacyBackstory(contents) }
-        }
-        guard files.contains("instructions.md") else { return "" }
-        let legacy = String(decoding: try files.read("instructions.md", limit: 4 * 1_048_576), as: UTF8.self)
-        return Self.normalizedLegacyBackstory(legacy)
+    public func loadAgentPreferences(_ agent: AgentRecord) throws -> String {
+        let files = try WorkspaceMailbox(workspace: directory(for: agent), path: "")
+        guard files.contains("preferences.md") else { return "" }
+        return String(decoding: try files.read("preferences.md", limit: 4 * 1_048_576), as: UTF8.self)
     }
 
     public func updateAgentBackstory(_ agent: AgentRecord, backstory: String) throws {
-        let files = try WorkspaceMailbox(workspace: directory(for: agent), path: "")
-        try files.writeData(Data(Self.renderedAgentInstructions(backstory: backstory,
-            mcpConnections: MCPRegistry.load(root: rootURL).assigned(to: agent.id)).utf8), named: "AGENTS.md")
-        files.remove("instructions.md")
+        let layout = storage(for: agent.id)
+        var configuration = try AgentConfiguration.load(from: layout)
+        _ = try configuration.requireBackstory()
+        configuration.backstory = backstory.trimmingCharacters(in: .whitespacesAndNewlines)
+        try configuration.save(to: layout)
     }
 
     public func importAttachment(
@@ -1438,7 +1434,9 @@ public struct WorkspaceRepository: Sendable {
         try prepare()
         return try agentPackages().map { layout in
             try layout.validate()
-            return try agentRecord(in: layout)
+            let configuration = try AgentConfiguration.load(from: layout)
+            _ = try configuration.requireBackstory()
+            return configuration.agent
         }.sorted { $0.createdAt < $1.createdAt }
     }
 
@@ -1448,7 +1446,11 @@ public struct WorkspaceRepository: Sendable {
         try prepare()
         return try agentPackages().compactMap { layout in
             let agent = try agentRecord(in: layout)
-            return try AgentStorageMigration.migrate(layout) ? agent.id : nil
+            let movedWorkspace = try AgentStorageMigration.migrate(layout)
+            try AgentBackstoryMigration.migrate(layout)
+            // Only the old directory migration establishes legacy access grants.
+            // Moving Backstory must never broaden a bot's permissions.
+            return movedWorkspace ? agent.id : nil
         }
     }
 
@@ -1469,6 +1471,13 @@ public struct WorkspaceRepository: Sendable {
             throw AgentStorageError("The bot identifier does not match its storage folder. Restore the original UUID folder name.")
         }
         return agent
+    }
+
+    private func saveAgentRecord(_ agent: AgentRecord) throws {
+        let layout = storage(for: agent.id)
+        var configuration = try AgentConfiguration.load(from: layout)
+        configuration.agent = agent
+        try configuration.save(to: layout)
     }
 
     public func loadConversations() throws -> [BotConversation] {
@@ -1600,51 +1609,22 @@ public struct WorkspaceRepository: Sendable {
         return try operation()
     }
 
-    private static let managedInstructionsStart = "<!-- noodle:managed:start -->"
-    private static let managedInstructionsEnd = "<!-- noodle:managed:end -->"
+    private static let initialAgentPreferences = "# Preferences\n\n"
 
     private static func renderedAgentInstructions(backstory: String, mcpConnections: [MCPConnectionRecord] = []) -> String {
         let normalizedBackstory = backstory.trimmingCharacters(in: .whitespacesAndNewlines)
         return """
         # Noodle Agent
 
+        > Generated by Noodle. Do not edit: changes will be overwritten during workspace synchronization. Backstory is stored in Noodle's private configuration and edited through Noodle. Save standing preferences in `preferences.md`. `CLAUDE.md` points to this same generated file.
+
         ## Backstory
 
         \(normalizedBackstory)
 
-        \(managedInstructionsStart)
         \(managedAgentInstructions)
         \(MCPSkillWriter.index(mcpConnections))
-        \(managedInstructionsEnd)
         """
-    }
-
-    private static func backstory(fromManagedInstructions contents: String) -> String? {
-        guard let heading = contents.range(of: "## Backstory"),
-              let managedStart = contents.range(
-                of: managedInstructionsStart,
-                range: heading.upperBound..<contents.endIndex
-              ) else { return nil }
-        return String(contents[heading.upperBound..<managedStart.lowerBound])
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func normalizedLegacyBackstory(_ contents: String) -> String {
-        var lines = contents.components(separatedBy: .newlines)
-        if let firstContentIndex = lines.firstIndex(where: {
-            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }), lines[firstContentIndex].trimmingCharacters(in: .whitespacesAndNewlines)
-            .caseInsensitiveCompare("# Instructions") == .orderedSame {
-            lines.remove(at: firstContentIndex)
-        }
-        return lines.joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func looksLikeLegacyManagedInstructions(_ contents: String) -> Bool {
-        contents.contains("# Noodle Agent") &&
-            contents.contains("## Messages") &&
-            contents.contains("--get-latest")
     }
 
     private static var managedAgentInstructions: String {
@@ -1652,6 +1632,10 @@ public struct WorkspaceRepository: Sendable {
         ## Noodle Runtime
 
         This directory is the bot's persistent workspace. The Backstory section above is this bot's user-authored instructions. Noodle manages the runtime section, Messenger core skill, and assigned MCP connection skills; unrelated skills under `.agents/skills` belong to this bot and are left untouched.
+
+        ## Preferences and memory
+
+        Read `preferences.md` at the start of each session and reread it after changes. Apply it as this bot's standing user preferences, such as tone, formatting, and working style; newer explicit user requests take precedence. When the user asks you to remember a preference, update `preferences.md`. Use `memory.md` for durable facts, decisions, and ongoing context. Noodle creates `preferences.md` with only a heading if missing and preserves both files during workspace synchronization; keep persistent notes there, not in generated instructions.
 
         ## Messages
 

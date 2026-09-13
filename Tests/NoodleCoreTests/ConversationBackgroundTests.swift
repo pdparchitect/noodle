@@ -119,7 +119,7 @@ final class ConversationBackgroundTests: XCTestCase {
     }
 
     func testDirectChatAttachmentSetsOnlyBotIconAndPreservesOriginal() throws {
-        let bot = try repository.createAgent(named: "Bot")
+        let bot = try repository.createAgent(named: "Bot", backstory: "Private role")
         let before = try XCTUnwrap(repository.loadAgents().first)
         let original = try fixtureImage()
         let attachment = try repository.importAttachment(data: original, originalFilename: "icon.png",
@@ -127,6 +127,7 @@ final class ConversationBackgroundTests: XCTestCase {
         let conversationBefore = try Data(contentsOf: repository.conversationDirectory(id: bot.conversation.id)
             .appendingPathComponent("conversation.json"))
         let updated = try repository.setAgentIcon(from: attachment)
+        XCTAssertEqual(try repository.loadAgentBackstory(updated), "Private role")
         let icon = try XCTUnwrap(updated.avatarImageData)
         let source = try XCTUnwrap(CGImageSourceCreateWithData(icon as CFData, nil))
         let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
