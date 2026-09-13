@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Cover draft-safe message failures, attachment-only sends, independent voice and command sends, reaction edits, and unread persistence through the app store.
+
 - Cover group creation, edits, deletion, participant wakeups, and conversation search through the app store with isolated workspaces.
 
 - Cover heartbeat deadlines, busy-bot deferral, activity resets, settings changes, and relaunch persistence with an injected clock.
@@ -17,6 +19,8 @@ All notable changes to Noodle are documented here, following
 - Add MCP controller regression tests for saved-account failures, bot assignment isolation, forged and replayed bridge requests, and browser sign-in validation, cancellation, and timeout recovery, without provider accounts or Keychain access.
 
 ### Fixed
+
+- Preserve unreadable conversation history instead of replacing it during a send. Report the failure and retain the unsent text and attachments for retry.
 
 - Bind stop confirmations to the exact restart or access-change operation so a late confirmation cannot grant access or launch an outdated configuration during a newer transition.
 

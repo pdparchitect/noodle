@@ -696,7 +696,7 @@ public struct WorkspaceRepository: Sendable {
     public func append(_ message: ChatMessage) throws {
         let file = conversationDirectory(id: message.conversationID).appendingPathComponent("messages.json")
         try withConversationLock(message.conversationID) {
-            var messages = (try? read([ChatMessage].self, from: file)) ?? []
+            var messages = try loadMessages(conversationID: message.conversationID)
             messages.append(message)
             try write(messages, to: file)
         }
