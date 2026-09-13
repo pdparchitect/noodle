@@ -35,9 +35,10 @@ FX, Grok Build, or Muse Code using your existing account.
 
 - **[Noodle](https://github.com/pdparchitect/noodle/releases/latest)**: work with agents individually or as a team. Requires macOS 15 or later.
 - **[Noodle Computer](https://github.com/pdparchitect/noodle/releases/tag/computer-latest)**: Linux computers for you and your agents. Requires Apple silicon and macOS 26 or later.
+- **[Noodle Applet](https://github.com/pdparchitect/noodle/releases/tag/applet-latest)**: run little tools, websites, experiments, and games created by you and your agents. Requires macOS 15 or later.
 
 Download the app ZIP, unzip it, and move the app to **Applications**.
-Noodle Computer is optional and also works on its own.
+Noodle Computer and Noodle Applet are optional and also work on their own.
 
 ## Get started
 
@@ -57,6 +58,7 @@ in the bot's **Computers** tab. Several bots can share the same computer.
 - [Working with agents](docs/usage.md)
 - [Harness setup](docs/harness-setup.md)
 - [Noodle Computer](Computer/README.md)
+- [Noodle Applet](Applet/README.md)
 - [Architecture](docs/architecture.md)
 - [Security and privacy](docs/security.md)
 - [Development and testing](docs/development.md)

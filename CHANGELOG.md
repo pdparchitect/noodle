@@ -61,6 +61,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Link Noodle Applet's download and documentation from the main README.
 - Move Tools immediately after Security in Settings.
 - Shorten the generated bot name options in General settings to “Real” and “Playful”.
 - Display harness installation and update commands in a distinct inset box with larger monospaced text and an inline copy button.
