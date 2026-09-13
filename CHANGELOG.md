@@ -32,6 +32,8 @@ All notable changes to Noodle are documented here, following
 
 - Keep retired Computer preview callbacks from closing a replacement window or replacing a current error, discard queued terminal input after shell exit, and clear unavailable web displays. Restrict web navigation and authentication callbacks to the current authorized preview.
 
+- Keep runtime errors and recovery actions in Harness settings, removing duplicate warnings and Retry Startup buttons from Security settings.
+
 - Add a blank line between companion headings and their paragraphs in generated `AGENTS.md` instructions.
 
 - Reject uploads and downloads when Computer access is revoked during the final provider handshake, and withhold catalogue and transfer results from retired bot sessions after removal or restart.

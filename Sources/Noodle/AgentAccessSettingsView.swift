@@ -3,7 +3,6 @@ import NoodleCore
 
 struct AgentAccessSettingsView: View {
     @Environment(NoodleStore.self) private var store
-    @State private var kickRequest: AgentKickRequest?
 
     var body: some View {
         Form {
@@ -15,43 +14,29 @@ struct AgentAccessSettingsView: View {
                     SettingsBotList(agents: store.agents) { agent in
                         let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")
                         let requiresAutonomousAccess = provider?.supportsRestrictedAccess == false
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(alignment: .top) {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(agent.displayName).font(.body)
-                                    AgentAccessStatusLabel(
-                                        isExtended: store.runtime.accessConfiguration.isExtended(for: agent),
-                                        isChanging: store.runtime.changingAccess.contains(agent.id),
-                                        requiredProvider: requiresAutonomousAccess ? provider : nil
-                                    )
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(agent.displayName).font(.body)
+                                AgentAccessStatusLabel(
+                                    isExtended: store.runtime.accessConfiguration.isExtended(for: agent),
+                                    isChanging: store.runtime.changingAccess.contains(agent.id),
+                                    requiredProvider: requiresAutonomousAccess ? provider : nil
+                                )
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                                Toggle(isOn: Binding(
-                                    get: { store.runtime.accessConfiguration.isExtended(for: agent) },
-                                    set: { enabled in
-                                        store.runtime.setExtendedAccess(enabled, agent: agent, repository: store.repository)
-                                    }
-                                )) {
-                                    Text(agent.displayName)
+                            Toggle(isOn: Binding(
+                                get: { store.runtime.accessConfiguration.isExtended(for: agent) },
+                                set: { enabled in
+                                    store.runtime.setExtendedAccess(enabled, agent: agent, repository: store.repository)
                                 }
-                                .labelsHidden()
-                                .controlSize(.mini)
-                                .accessibilityLabel("\(agent.displayName), autonomous access")
-                                .disabled((requiresAutonomousAccess && store.runtime.accessConfiguration.isExtended(for: agent)) || store.runtime.changingAccess.contains(agent.id))
+                            )) {
+                                Text(agent.displayName)
                             }
-                            if store.runtime.snapshot(for: agent.id).phase == .failed {
-                                Text(store.runtime.snapshot(for: agent.id).detail)
-                                    .font(.caption).foregroundStyle(.red)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .textSelection(.enabled)
-                                Button("Retry Startup") {
-                                    kickRequest = store.runtime.kick(agent: agent, repository: store.repository)
-                                }
-                                .controlSize(.small)
-                                .accessibilityLabel("Retry startup for \(agent.displayName)")
-                                .disabled(store.runtime.changingAccess.contains(agent.id))
-                            }
+                            .labelsHidden()
+                            .controlSize(.mini)
+                            .accessibilityLabel("\(agent.displayName), autonomous access")
+                            .disabled((requiresAutonomousAccess && store.runtime.accessConfiguration.isExtended(for: agent)) || store.runtime.changingAccess.contains(agent.id))
                         }
                     }
                 }
@@ -60,7 +45,6 @@ struct AgentAccessSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .modifier(AgentKickConfirmation(request: $kickRequest))
     }
 }
 
