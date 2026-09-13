@@ -159,16 +159,7 @@ struct ChatView: View {
                 // Fade the transcript pixels themselves as they pass beneath
                 // the toolbar. The separate window-wide shade remains behind
                 // the sidebar and transcript for wallpaper contrast.
-                VStack(spacing: 0) {
-                    LinearGradient(stops: [
-                        .init(color: .clear, location: 0),
-                        .init(color: .white.opacity(0.12), location: 0.45),
-                        .init(color: .white, location: 1)
-                    ], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 88)
-                    Color.white
-                }
-                .ignoresSafeArea(edges: .top)
+                ConversationContentTopFade()
             }
     }
 

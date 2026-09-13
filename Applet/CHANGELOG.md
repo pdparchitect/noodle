@@ -23,6 +23,9 @@
 
 ### Added
 
+- Customize the library’s single background from Settings → General, with the same presets, images, Photos, generated images, and animated wallpapers as Noodle and Noodle Computer.
+- Fade library cards beneath the toolbar over the same softly shaded wallpaper used in Noodle conversations, leaving sidebar content untouched.
+
 - Register persistent noodlet IDs, handle `noodlet://UUID` links, and expose `info` for resolving a creation without running it. Keep IDs across source updates and tracked moves; give independent copies their own IDs.
 - Add Open Library to the File menu.
 

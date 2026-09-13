@@ -11,6 +11,7 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "Protocol"),
+        .package(path: "../Shared/Wallpaper"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
     ],
     targets: [
@@ -20,6 +21,7 @@ let package = Package(
             name: "NoodleApplet",
             dependencies: [
                 "AppletCore", .product(name: "AppletBridge", package: "Protocol"),
+                .product(name: "NoodleWallpaper", package: "Wallpaper"),
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             resources: [.copy("Resources")]),

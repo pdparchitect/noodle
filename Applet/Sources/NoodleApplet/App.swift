@@ -1,6 +1,7 @@
 import AppKit
 import AppletBridge
 import AppletCore
+import NoodleWallpaper
 import SwiftUI
 
 @main struct NoodleAppletApp: App {
@@ -9,7 +10,7 @@ import SwiftUI
 
   var body: some Scene {
     Window("Noodle Applet", id: "library") {
-      LibraryView(library: delegate.library, runtime: delegate.runtime)
+      LibraryView(library: delegate.library, runtime: delegate.runtime, background: delegate.background)
         .handlesExternalEvents(preferring: [], allowing: [])
         .frame(minWidth: 850, minHeight: 580)
         .preferredColorScheme(.dark)
@@ -44,7 +45,7 @@ import SwiftUI
       AppletFileCommands(delegate: delegate)
     }
     Settings {
-      AppletSettingsView().preferredColorScheme(.dark)
+      AppletSettingsView(background: delegate.background).preferredColorScheme(.dark)
     }
     .windowResizability(.contentSize)
     .handlesExternalEvents(matching: [])
@@ -94,6 +95,7 @@ private struct AppletMenu: View {
 @MainActor final class AppletDelegate: NSObject, NSApplicationDelegate {
   var openLibrary: (() -> Void)?
   let library = AppletLibrary()
+  lazy var background = AppletBackgroundStore(root: library.root)
   lazy var runtime = AppletRuntime(library: library)
   private var openedExternalItem = false
 
@@ -178,6 +180,7 @@ private enum LibrarySection: String, CaseIterable, Identifiable {
 private struct LibraryView: View {
   @ObservedObject var library: AppletLibrary
   @ObservedObject var runtime: AppletRuntime
+  @ObservedObject var background: AppletBackgroundStore
   @State private var search = ""
   @State private var searching = false
   @State private var searchFocused = false
@@ -236,10 +239,18 @@ private struct LibraryView: View {
           }
         }
       }
+      .mask { ConversationContentTopFade() }
       .navigationTitle(selection?.rawValue ?? "All")
       .toolbar { libraryToolbar }
     }
     .navigationSplitViewStyle(.balanced)
+    .background {
+      ConversationWallpaper(background: background.background, imageURL: background.imageURL)
+        .overlay(alignment: .top) {
+          ConversationWindowHeaderShade()
+        }
+        .ignoresSafeArea()
+    }
     .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
     .onChange(of: searching) { _, active in if !active { searchFocused = false } }
     .onAppear { columnVisibility = sidebarVisible ? .all : .detailOnly }
