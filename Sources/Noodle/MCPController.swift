@@ -22,14 +22,19 @@ final class MCPController {
     @ObservationIgnored private var claimed: [UUID: Date] = [:]
     @ObservationIgnored private var registryReadable = true
 
-    init(repository: WorkspaceRepository) {
+    init(repository: WorkspaceRepository, service: MCPService? = nil) {
         self.repository = repository
-        service = MCPService(namespace: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle.local")
+        self.service = service ?? MCPService(namespace: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle.local")
         do { registry = try MCPRegistry.load(root: repository.rootURL) }
         catch {
             registryReadable = false
             errorMessage = "Could not read saved tool connections. They have not been replaced."
         }
+    }
+    deinit {
+        bridgeTask?.cancel()
+        loginTask?.cancel()
+        calls.values.forEach { $0.cancel() }
     }
     func start(agents: [AgentRecord]) {
         self.agents = agents

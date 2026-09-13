@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Add MCP controller regression tests for saved-account failures, bot assignment isolation, forged and replayed bridge requests, and browser sign-in validation, cancellation, and timeout recovery, without provider accounts or Keychain access.
+
 ### Fixed
 
 - Pause Grok bots when their saved session cannot be found, show the storage problem and recovery action, and preserve the session reference and unfinished work instead of repeatedly restarting with a sign-in warning.

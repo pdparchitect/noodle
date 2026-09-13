@@ -65,7 +65,7 @@ let package = Package(
         ),
         .testTarget(
             name: "NoodleAppTests",
-            dependencies: ["Noodle", "NoodleCore", "NoodleAudioCapture"]
+            dependencies: ["Noodle", "NoodleCore", "NoodleMCP", "NoodleAudioCapture"]
         ),
         .testTarget(
             name: "NoodleComputerIntegrationTests",
