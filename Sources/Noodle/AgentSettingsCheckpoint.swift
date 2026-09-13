@@ -18,7 +18,6 @@ import NoodleCore
         if let agent {
             let layout = repository.storage(for: agent.id)
             try capture(WorkspaceMailbox(workspace: layout.package, path: ""), names: ["agent.json"])
-            try capture(WorkspaceMailbox(workspace: layout.workspace, path: ""), names: ["AGENTS.md", "instructions.md"])
             for conversation in conversations where conversation.kind == .direct && conversation.participantIDs == [agent.id] {
                 try capture(WorkspaceMailbox(workspace: repository.conversationDirectory(id: conversation.id), path: ""), names: ["conversation.json"])
             }

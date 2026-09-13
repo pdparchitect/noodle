@@ -35,6 +35,7 @@ final class RepositoryTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("agent.json").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("instructions.md").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("memory.md").path))
+        XCTAssertEqual(try repository.loadAgentPreferences(created.agent), "# Preferences\n\n")
         XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("AGENTS.md").path))
         XCTAssertEqual(
             try FileManager.default.destinationOfSymbolicLink(
@@ -58,7 +59,9 @@ final class RepositoryTests: XCTestCase {
         )
         XCTAssertTrue(agentsGuide.contains(MessengerDocumentation.bootstrapInstructions))
         XCTAssertTrue(agentsGuide.contains("## Backstory"))
-        XCTAssertTrue(agentsGuide.contains("<!-- noodle:managed:start -->"))
+        XCTAssertTrue(agentsGuide.contains("Do not edit: changes will be overwritten"))
+        XCTAssertTrue(agentsGuide.contains("Read `preferences.md` at the start of each session"))
+        XCTAssertFalse(agentsGuide.contains("<!-- noodle:managed:"))
         XCTAssertFalse(agentsGuide.contains(MessengerDocumentation.transportInstructions))
         XCTAssertFalse(agentsGuide.contains("TextEncoder"))
         XCTAssertFalse(agentsGuide.contains("noodle_get_latest"))
@@ -141,7 +144,7 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: skills.path), external.path)
     }
 
-    func testBackstoryIsStoredInAgentsFileAndSurvivesSynchronization() throws {
+    func testBackstoryIsStoredPrivatelyAndRenderedInGeneratedInstructions() throws {
         let created = try repository.createAgent(named: "Story Bot")
         let directory = repository.directory(for: created.agent)
         let agentsFile = directory.appendingPathComponent("AGENTS.md")
@@ -160,18 +163,58 @@ final class RepositoryTests: XCTestCase {
         XCTAssertTrue(contents.contains("You are a pragmatic release engineer"))
         XCTAssertTrue(contents.contains("## Noodle Runtime"))
         XCTAssertTrue(contents.contains(MessengerDocumentation.bootstrapInstructions))
+        let config = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: repository.storage(for: created.agent.id).configuration)) as? [String: Any])
+        XCTAssertEqual(config["backstory"] as? String, try repository.loadAgentBackstory(created.agent))
+        let publicRecord = try XCTUnwrap(repository.loadAgents().first)
+        XCTAssertFalse(String(decoding: try JSONEncoder().encode(publicRecord), as: UTF8.self).contains("backstory"))
         XCTAssertFalse(FileManager.default.fileExists(
             atPath: directory.appendingPathComponent("instructions.md").path
         ))
     }
 
-    func testLegacyInstructionsMigrateIntoAgentsFile() throws {
-        let created = try repository.createAgent(named: "Legacy Bot")
+    func testWorkspaceRefreshSeedsMissingPreferencesAndPreservesUserContent() throws {
+        let created = try repository.createAgent(named: "Preferences Bot", backstory: "Original backstory")
+        let directory = repository.directory(for: created.agent)
+        let preferencesFile = directory.appendingPathComponent("preferences.md")
+        let memoryFile = directory.appendingPathComponent("memory.md")
+        let initialPreferences = try Data(contentsOf: preferencesFile)
+
+        // Simulate an existing workspace created before preferences were introduced.
+        try FileManager.default.removeItem(at: preferencesFile)
+        XCTAssertEqual(try repository.loadAgentPreferences(created.agent), "")
+        try repository.synchronizeAgentWorkspaces([created.agent])
+        XCTAssertEqual(try Data(contentsOf: preferencesFile), initialPreferences)
+        XCTAssertEqual(try repository.loadAgentBackstory(created.agent), "Original backstory")
+
+        let preferences = "# Preferences\n\nUse British spelling.\nKeep replies short.\n"
+        let memory = "# Memory\n\nThe current project is Noodle.\n"
+        try preferences.write(to: preferencesFile, atomically: true, encoding: .utf8)
+        try memory.write(to: memoryFile, atomically: true, encoding: .utf8)
+        try repository.updateAgentBackstory(created.agent, backstory: "Updated backstory")
+        try repository.synchronizeAgentWorkspaces([created.agent])
+        try repository.synchronizeAgentWorkspaces([created.agent])
+
+        XCTAssertEqual(try repository.loadAgentPreferences(created.agent), preferences)
+        XCTAssertEqual(try Data(contentsOf: preferencesFile), Data(preferences.utf8))
+        XCTAssertEqual(try Data(contentsOf: memoryFile), Data(memory.utf8))
+        XCTAssertEqual(try repository.loadAgentBackstory(created.agent), "Updated backstory")
+        let manifest = try String(contentsOf: directory.appendingPathComponent(".agents/managed-skills.json"), encoding: .utf8)
+        XCTAssertFalse(manifest.contains("preferences.md"))
+        XCTAssertFalse(manifest.contains("memory.md"))
+
+        // An intentionally empty file is still user content.
+        try Data().write(to: preferencesFile)
+        try repository.synchronizeAgentWorkspace(created.agent)
+        XCTAssertEqual(try Data(contentsOf: preferencesFile), Data())
+    }
+
+    func testMissingGeneratedInstructionsAreRebuiltFromConfiguration() throws {
+        let created = try repository.createAgent(named: "Story Bot", backstory: "Original backstory")
         let directory = repository.directory(for: created.agent)
         let agentsFile = directory.appendingPathComponent("AGENTS.md")
         let legacyFile = directory.appendingPathComponent("instructions.md")
         try FileManager.default.removeItem(at: agentsFile)
-        try "# Instructions\n\nYou are a careful research librarian.\n".write(
+        try "Stale legacy backstory".write(
             to: legacyFile,
             atomically: true,
             encoding: .utf8
@@ -181,34 +224,32 @@ final class RepositoryTests: XCTestCase {
 
         XCTAssertEqual(
             try repository.loadAgentBackstory(created.agent),
-            "You are a careful research librarian."
+            "Original backstory"
         )
         XCTAssertFalse(FileManager.default.fileExists(atPath: legacyFile.path))
         XCTAssertTrue(
             try String(contentsOf: agentsFile, encoding: .utf8)
-                .contains("You are a careful research librarian.")
+                .contains("Original backstory")
         )
     }
 
-    func testExistingCustomAgentsFileMigratesAsBackstory() throws {
-        let created = try repository.createAgent(named: "Custom Bot")
+    func testEditedOrCorruptedGeneratedInstructionsCannotChangeBackstory() throws {
+        let created = try repository.createAgent(named: "Story Bot", backstory: "Original backstory")
         let directory = repository.directory(for: created.agent)
         let agentsFile = directory.appendingPathComponent("AGENTS.md")
-        try "You are an experienced product designer.\nPrefer direct, visual explanations.\n".write(
-            to: agentsFile,
-            atomically: true,
-            encoding: .utf8
-        )
-
-        try repository.synchronizeAgentWorkspace(created.agent)
-
-        XCTAssertEqual(
-            try repository.loadAgentBackstory(created.agent),
-            "You are an experienced product designer.\nPrefer direct, visual explanations."
-        )
-        let contents = try String(contentsOf: agentsFile, encoding: .utf8)
-        XCTAssertTrue(contents.contains("## Backstory"))
-        XCTAssertTrue(contents.contains("## Noodle Runtime"))
+        for contents in [Data("Unrequested new role".utf8), Data(), Data([0xFF, 0xFE])] {
+            try contents.write(to: agentsFile)
+            XCTAssertEqual(try repository.loadAgentBackstory(created.agent), "Original backstory")
+            XCTAssertTrue(try repository.migrateAgentStorage().isEmpty)
+            try repository.synchronizeAgentWorkspace(created.agent)
+            let regenerated = try String(contentsOf: agentsFile, encoding: .utf8)
+            XCTAssertTrue(regenerated.contains("Original backstory"))
+            XCTAssertFalse(regenerated.contains("noodle:managed:"))
+        }
+        // Saving a stale public record cannot erase a newer private backstory.
+        try repository.updateAgentBackstory(created.agent, backstory: "Changed in Noodle")
+        let renamed = try repository.renameAgent(created.agent, to: "Renamed")
+        XCTAssertEqual(try repository.loadAgentBackstory(renamed), "Changed in Noodle")
     }
 
     func testRenameDoesNotMoveWorkspace() throws {

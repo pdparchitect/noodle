@@ -72,7 +72,9 @@ public final class WorkspaceMailbox: @unchecked Sendable {
         try writeData(JSONEncoder().encode(value), named: name)
     }
 
-    public func writeData(_ data: Data, named name: String) throws {
+    /// With replacement disabled, preserve any existing entry, including links.
+    /// Publish exclusively so a file created concurrently is also left untouched.
+    public func writeData(_ data: Data, named name: String, replaceExisting: Bool = true) throws {
         guard Self.validName(name) else { throw Self.invalid() }
         let temporary = "." + UUID().uuidString.lowercased()
         let file = openat(descriptor, temporary, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
@@ -80,7 +82,11 @@ public final class WorkspaceMailbox: @unchecked Sendable {
         let handle = FileHandle(fileDescriptor: file, closeOnDealloc: true)
         defer { try? handle.close(); unlinkat(descriptor, temporary, 0) }
         try handle.write(contentsOf: data)
-        guard renameat(descriptor, temporary, descriptor, name) == 0 else { throw Self.invalid() }
+        if replaceExisting {
+            guard renameat(descriptor, temporary, descriptor, name) == 0 else { throw Self.invalid() }
+        } else if renameatx_np(descriptor, temporary, descriptor, name, UInt32(RENAME_EXCL)) != 0 {
+            guard errno == EEXIST else { throw Self.invalid() }
+        }
     }
 
     public func claim(_ name: String, as claimed: String) throws {

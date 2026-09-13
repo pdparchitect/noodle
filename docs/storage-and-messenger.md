@@ -7,13 +7,14 @@ workspace, right-click it in the sidebar and choose **Show Workspace in Finder**
 ```text
 Noodle/
 ├── Agents/<bot-uuid>/
-│   ├── agent.json
+│   ├── agent.json             # Bot settings and private Backstory
 │   ├── .noodle-storage.json   # Storage layout version
 │   ├── runtime/              # Session pointers and unfinished-turn markers
 │   └── workspace/            # Harness working directory
-│       ├── AGENTS.md          # Backstory and managed instructions
+│       ├── AGENTS.md          # Fully generated Backstory and runtime guidance
 │       ├── CLAUDE.md → AGENTS.md
 │       ├── memory.md
+│       ├── preferences.md
 │       ├── .noodle/           # Inbox positions, diagnostics, tool bridges
 │       └── .agents/skills/    # Messenger, assigned tools, custom skills
 └── Conversations/<chat-uuid>/
@@ -22,8 +23,10 @@ Noodle/
     └── Attachments/
 ```
 
-Names can change without moving files. Noodle preserves backstories and custom
-skills when refreshing managed instructions. Messenger stores read positions in
+Names can change without moving files. Backstory is stored in `agent.json` and
+edited through Noodle. Changes to generated `AGENTS.md` or `CLAUDE.md` are overwritten
+on refresh. Keep standing preferences in `preferences.md` and durable context in
+`memory.md`; Noodle preserves those files and custom skills. Messenger stores read positions in
 `.noodle/inbox.json`; older `.agents/inbox.json` files are read for migration.
 
 On first launch after upgrading, Noodle moves flat agent workspaces into this
@@ -33,10 +36,16 @@ positions, and all harness session pointers. Existing user folders named
 resumes on the next launch; conflicts stop migration without overwriting files.
 Absolute paths in custom scripts or external links may need updating.
 
+Noodle 0.14.0 also imports Backstory from older workspace Markdown into `agent.json`
+before regenerating instructions. A saved `backstory` string marks this migration
+complete, even when empty. If the old source is missing or its markers are damaged,
+startup reports the problem and leaves the source intact for recovery. Once migrated,
+generated Markdown can be rebuilt without recovering Backstory from it.
+
 To carry an agent's core to another installation, quit Noodle and copy the entire
 `Agents/<bot-uuid>` package, including hidden files and symlinks, into the other
-installation's `Agents` directory. Use Noodle 0.13.0 or later at the destination;
-older releases do not understand this layout. Keep the UUID folder name. Noodle refreshes its
+installation's `Agents` directory. Use Noodle 0.14.0 or later for packages with
+Backstory in `agent.json`; earlier releases do not preserve that field. Keep the UUID folder name. Noodle refreshes its
 managed tool links on launch. Install and sign in to the selected harness and
 authorize autonomous access if needed. Chats and attachments remain in
 `Conversations`; tool/computer assignments and credentials are separate.

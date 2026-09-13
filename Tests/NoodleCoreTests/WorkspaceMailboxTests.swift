@@ -3,6 +3,59 @@ import Darwin
 @testable import NoodleCore
 
 final class WorkspaceMailboxTests: XCTestCase {
+    func testExclusiveWritesPreserveExistingContentAndLinks() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let folder = try WorkspaceMailbox(workspace: root, path: "own", create: true)
+        try folder.writeData(Data(), named: "empty", replaceExisting: false)
+        try folder.writeData(Data("replacement".utf8), named: "empty", replaceExisting: false)
+        XCTAssertEqual(try folder.read("empty", limit: 100), Data())
+
+        let target = root.appendingPathComponent("private")
+        try Data("private".utf8).write(to: target)
+        try folder.symlink("link", destination: target.path)
+        try folder.symlink("dangling", destination: "missing")
+        for name in ["link", "dangling"] {
+            try folder.writeData(Data("replacement".utf8), named: name, replaceExisting: false)
+        }
+        XCTAssertEqual(folder.linkDestination("link"), target.path)
+        XCTAssertEqual(folder.linkDestination("dangling"), "missing")
+        XCTAssertEqual(try Data(contentsOf: target), Data("private".utf8))
+        XCTAssertEqual(Set(try folder.names()), ["empty", "link", "dangling"])
+    }
+
+    func testConcurrentExclusiveWritesPublishOneCompleteFile() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let folder = try WorkspaceMailbox(workspace: root, path: "")
+        let candidates = (0..<16).map { Data(repeating: UInt8($0), count: 65_536) }
+        DispatchQueue.concurrentPerform(iterations: candidates.count) { index in
+            do { try folder.writeData(candidates[index], named: "preferences.md", replaceExisting: false) }
+            catch { XCTFail("Exclusive publication failed: \(error)") }
+        }
+        XCTAssertTrue(candidates.contains(try folder.read("preferences.md", limit: 65_536)))
+        XCTAssertEqual(try folder.names(), ["preferences.md"])
+    }
+
+    func testPreferencesRefreshPreservesLinksAndLoadingRejectsRedirection() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = WorkspaceRepository(rootURL: root)
+        let first = try repository.createAgent(named: "First").agent
+        let second = try repository.createAgent(named: "Second").agent
+        let preferences = repository.directory(for: first).appendingPathComponent("preferences.md")
+        let target = repository.directory(for: second).appendingPathComponent("preferences.md")
+        let original = try Data(contentsOf: target)
+        try FileManager.default.removeItem(at: preferences)
+        try FileManager.default.createSymbolicLink(at: preferences, withDestinationURL: target)
+        try repository.synchronizeAgentWorkspace(first)
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: preferences.path), target.path)
+        XCTAssertEqual(try Data(contentsOf: target), original)
+        XCTAssertThrowsError(try repository.loadAgentPreferences(first))
+    }
+
     func testTraversalAndInvalidNamesCannotReachOutsideMailbox() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -62,9 +115,12 @@ final class WorkspaceMailboxTests: XCTestCase {
         let original = try Data(contentsOf: outside.appendingPathComponent("AGENTS.md"))
         try FileManager.default.removeItem(at: workspace.appendingPathComponent("AGENTS.md"))
         try FileManager.default.createSymbolicLink(at: workspace.appendingPathComponent("AGENTS.md"), withDestinationURL: outside.appendingPathComponent("AGENTS.md"))
-        XCTAssertThrowsError(try repository.loadAgentBackstory(first))
-        XCTAssertThrowsError(try repository.synchronizeAgentWorkspace(first))
+        XCTAssertEqual(try repository.loadAgentBackstory(first), "")
+        try repository.synchronizeAgentWorkspace(first)
+        XCTAssertNil(try WorkspaceMailbox(workspace: workspace, path: "").linkDestination("AGENTS.md"))
         try repository.updateAgentBackstory(first, backstory: "own replacement")
+        try repository.synchronizeAgentWorkspace(first)
+        XCTAssertEqual(try repository.loadAgentBackstory(first), "own replacement")
         XCTAssertEqual(try Data(contentsOf: outside.appendingPathComponent("AGENTS.md")), original)
         try FileManager.default.removeItem(at: workspace.appendingPathComponent(".agents"))
         try FileManager.default.createSymbolicLink(at: workspace.appendingPathComponent(".agents"), withDestinationURL: outside.appendingPathComponent(".agents"))

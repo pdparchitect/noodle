@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Add persistent `preferences.md` to new and existing bot workspaces, initially containing only a `# Preferences` heading. Keep usage guidance in generated `AGENTS.md`, preserve existing contents across refreshes, and load preferences alongside backstory in Apple.
+
 - Teach assigned agents to automate the Computer desktop's visible, signed-in browser using bundled Puppeteer, hand sign-in to the user, and disconnect without closing shared tabs.
 
 - Cover draft-safe message failures, attachment-only sends, independent voice and command sends, reaction edits, and unread persistence through the app store.
@@ -27,6 +29,8 @@ All notable changes to Noodle are documented here, following
 - Cancel an unfinished capture-region drag when the image or selection mode changes, so mouse-up cannot annotate a replacement capture. Cover native capture-window close/reopen, keyboard save retries, permission recovery, and original-conversation routing.
 
 - Keep retired Computer preview callbacks from closing a replacement window or replacing a current error, discard queued terminal input after shell exit, and clear unavailable web displays. Restrict web navigation and authentication callbacks to the current authorized preview.
+
+- Add a blank line between companion headings and their paragraphs in generated `AGENTS.md` instructions.
 
 - Reject uploads and downloads when Computer access is revoked during the final provider handshake, and withhold catalogue and transfer results from retired bot sessions after removal or restart.
 
@@ -63,6 +67,8 @@ All notable changes to Noodle are documented here, following
 - Let conversation participants target the exact Applet session returned by shared opens using the shared link, conversation, and session ID together. Document hidden rendering limits, session diagnostics, and explicit headless animation stepping in generated CLI help and agent guidance.
 
 ### Changed
+
+- Store Backstory privately in `agent.json` and generate all of `AGENTS.md` without section markers, warning that edits are overwritten. Migrate existing backstories once before regeneration, preserve damaged sources for recovery, and register 0.14.0 as the migration milestone with conditional cleanup after it.
 
 - Publish Noodle as `Noodle-arm64.zip` with a matching checksum so the website can link directly to the latest download. Preserve existing migration-release downloads and defer website deployment until its download is available.
 

@@ -70,7 +70,7 @@ import XCTest
         XCTAssertEqual(try f.repository.loadAgents().count, before.count + 1)
     }
 
-    func testFailedBackstoryWriteRollsBackConfigurationConversationAndAccess() throws {
+    func testFailedWorkspaceRefreshRollsBackConfigurationBackstoryConversationAndAccess() throws {
         let f = try fixture(), before = try Data(contentsOf: f.repository.storage(for: f.a.id).configuration)
         let previousBackstory = try f.repository.loadAgentBackstory(f.a)
         f.store.agentBeingEdited = f.a
@@ -84,6 +84,19 @@ import XCTest
         XCTAssertFalse(AgentAccessConfiguration.load(from: f.runtime.defaults).requiredHarnessGrants[f.a.id.uuidString]?.contains(HarnessProvider.claudeCode.rawValue) == true)
         XCTAssertEqual(f.store.agentBeingEdited?.id, f.a.id)
         XCTAssertTrue(f.runtime.factory.processes.isEmpty)
+    }
+
+    func testSettingsSaveRepairsRedirectedGeneratedGuideWithoutReadingIt() throws {
+        let f = try fixture()
+        let target = f.repository.directory(for: f.b).appendingPathComponent("AGENTS.md")
+        let original = try Data(contentsOf: target)
+        let guide = f.repository.directory(for: f.a).appendingPathComponent("AGENTS.md")
+        try FileManager.default.removeItem(at: guide)
+        try FileManager.default.createSymbolicLink(at: guide, withDestinationURL: target)
+        XCTAssertTrue(update(f, backstory: "Saved privately"), f.store.errorMessage ?? "")
+        XCTAssertEqual(try f.repository.loadAgentBackstory(f.a), "Saved privately")
+        XCTAssertEqual(try Data(contentsOf: target), original)
+        XCTAssertTrue(try String(contentsOf: guide, encoding: .utf8).contains("Saved privately"))
     }
 
     func testFailedDirectConversationWriteRestoresAgentAndLeavesDrafts() throws {

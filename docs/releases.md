@@ -103,11 +103,15 @@ Noodle releases as the repository's latest release.
 
 ## Storage migration milestones
 
-Treat the agent-package storage change as the next minor release, **0.13.0**.
-Keep published 0.12.x versions intact even if they have not been announced.
+The **0.13.0** release introduced the agent-package storage layout.
+The Backstory move into `agent.json` is planned for **0.14.0**, the next migration
+milestone. Keep published versions intact.
 `Support/update-milestones.json` declares releases that users must run before
 installing their successors. The first milestone contains the flat-workspace
-migration in `AgentStorageMigration.swift`.
+migration in `AgentStorageMigration.swift`; 0.14.0 contains the one-time Markdown
+import in `AgentBackstoryMigration.swift`. Startup runs these in order before
+loading bots or regenerating their instructions. A present `backstory` string in
+`agent.json`, including an empty string, is the Backstory migration completion flag.
 
 Release packaging verifies the signed feeds of earlier milestones, preserves
 their signed archive entries and immutable URLs, adds Sparkle's
@@ -117,9 +121,12 @@ releases can still be skipped. Noodle enables update checks only after storage
 loads successfully, so the migration release runs its migration before offering
 the next update. Keep milestone assets publicly available.
 
-The migration can be retired in a later release after verifying this upgrade
-chain. Retain the layout-version check and a clear error directing old-layout
-users to the migration release: manual app downloads and clients predating
+The migrations can be retired in later releases after verifying this upgrade
+chain: the directory migration has a `TODO(0.14.0)` removal note, and Backstory
+import has `TODO(0.15.0)`. Those notes are conditional on the corresponding
+milestone being published and the enforced update chain being verified.
+Retain the layout-version check, the required Backstory field check, and clear
+errors directing older packages to the appropriate migration release. Manual app downloads and clients predating
 Sparkle 2.9 can bypass feed prerequisites. Add future milestones in ascending
 order rather than requiring every minor release. Changing the milestone version
 before its first publication must update the policy file and these instructions.

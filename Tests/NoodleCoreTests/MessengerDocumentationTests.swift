@@ -106,7 +106,7 @@ final class MessengerDocumentationTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let repository = WorkspaceRepository(rootURL: root)
         try repository.prepare()
-        let bot = try repository.createAgent(named: "Writer")
+        let bot = try repository.createAgent(named: "Writer", backstory: "PRIVATE-BACKSTORY-TO-PRESERVE")
         let workspace = repository.directory(for: bot.agent)
         let guide = workspace.appendingPathComponent("AGENTS.md")
         try """
@@ -114,7 +114,7 @@ final class MessengerDocumentationTests: XCTestCase {
 
         ## Backstory
 
-        PRIVATE-BACKSTORY-TO-PRESERVE
+        This workspace edit must not replace the configured backstory.
 
         <!-- noodle:managed:start -->
         Obsolete runtime guidance.
@@ -128,6 +128,8 @@ final class MessengerDocumentationTests: XCTestCase {
         let refreshed = try String(contentsOf: guide, encoding: .utf8)
         let skill = try String(contentsOf: workspace.appendingPathComponent(".agents/skills/messenger/SKILL.md"), encoding: .utf8)
         XCTAssertTrue(refreshed.contains("PRIVATE-BACKSTORY-TO-PRESERVE"))
+        XCTAssertFalse(refreshed.contains("This workspace edit"))
+        XCTAssertFalse(refreshed.contains("noodle:managed:"))
         XCTAssertFalse(refreshed.contains("Obsolete runtime guidance"))
         XCTAssertTrue(refreshed.contains(MessengerDocumentation.bootstrapInstructions))
         XCTAssertFalse(refreshed.contains(MessengerDocumentation.skillInstructions))
