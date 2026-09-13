@@ -117,6 +117,9 @@ final class AppleLiveTests: XCTestCase {
         }
         _ = try repository.latestMessages(for: bot.agent.id, consuming: true)
         let existingMessageIDs = Set(try repository.loadMessages(conversationID: bot.conversation.id).map(\.id))
+        let broker = MessengerBroker(repository: repository)
+        try broker.start(agents: [bot.agent])
+        defer { broker.stop() }
         let workspace = repository.directory(for: bot.agent)
         try FileManager.default.createDirectory(at: workspace.appendingPathComponent(".noodle/tmp"), withIntermediateDirectories: true)
         try Data("a crisp pear".utf8).write(to: workspace.appendingPathComponent("seed.txt"))

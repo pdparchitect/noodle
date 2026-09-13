@@ -100,40 +100,10 @@ public enum ComputerAgentSkill {
     """
 
     public static func synchronize(workspace: URL, enabled: Bool, executable: URL?) throws {
-        let directory = workspace.appendingPathComponent(".agents/skills/computer")
-        let marker = directory.appendingPathComponent(".noodle-managed")
-        let manager = FileManager.default
-        if manager.fileExists(atPath: directory.path), !manager.fileExists(atPath: marker.path) {
-            // Never overwrite a user-authored skill with the same name.
-            if enabled { throw ComputerBridgeError("The computer skill name is occupied by a user skill.") }
-            return
-        }
-        guard enabled else {
-            if manager.fileExists(atPath: marker.path) { try manager.removeItem(at: directory) }
-            return
-        }
-        if (try? manager.attributesOfItem(atPath: directory.path)[.type] as? FileAttributeType) == .typeSymbolicLink {
-            throw ComputerBridgeError("The managed Computer skill must not be a symbolic link.")
-        }
-        try manager.createDirectory(at: directory, withIntermediateDirectories: true)
-        try Data().write(to: marker, options: .atomic)
-        try instructions.write(to: directory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
-        if let executable {
-            let link = directory.appendingPathComponent("computer")
-            if (try? manager.attributesOfItem(atPath: link.path)) != nil { try manager.removeItem(at: link) }
-            try manager.createSymbolicLink(at: link, withDestinationURL: executable)
-        }
+        try WorkspaceMailbox.synchronizeSkill(workspace: workspace, name: "computer", enabled: enabled,
+            instructions: instructions, command: "computer", executable: executable)
     }
     public static func bridge(workspace: URL) throws -> URL {
-        // Reuse the existing safe-directory and bounded-file primitives, but
-        // keep Computer requests and per-agent credentials separate from MCP.
-        _ = try MCPBridgeFiles.prepare(workspace: workspace)
-        let directory = workspace.appendingPathComponent(".noodle/computer-bridge")
-        if (try? FileManager.default.attributesOfItem(atPath: directory.path)[.type] as? FileAttributeType) == .typeSymbolicLink {
-            throw ComputerBridgeError("Unsafe Computer bridge directory.")
-        }
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
-                                                attributes: [.posixPermissions: 0o700])
-        return directory
+        try WorkspaceMailbox(workspace: workspace, path: ".noodle/computer-bridge", create: true).url
     }
 }

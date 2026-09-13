@@ -223,14 +223,14 @@ import Foundation
         let session = try JSONDecoder().decode(
             AppletAgentSession.self,
             from: Data(contentsOf: directory.appendingPathComponent("session.json")))
-        guard kill(session.processID, 0) == 0 else { throw AppletError("Open Noodle first.") }
+        guard kill(session.processID, 0) == 0 || errno == EPERM else { throw AppletError("Open Noodle first.") }
         let envelope = AppletAgentEnvelope(
             token: session.token, request: request, conversationID: conversation)
         let input = directory.appendingPathComponent(
             envelope.id.uuidString.lowercased() + ".request")
         let output = directory.appendingPathComponent(
             envelope.id.uuidString.lowercased() + ".response")
-        try JSONEncoder().encode(envelope).write(to: input, options: .atomic)
+        try writeRequest(JSONEncoder().encode(envelope), directory: directory, name: input.lastPathComponent)
         defer {
             try? FileManager.default.removeItem(at: input)
             try? FileManager.default.removeItem(at: output)
@@ -240,11 +240,26 @@ import Foundation
             if let data = try? Data(contentsOf: output) {
                 return try JSONDecoder().decode(AppletResponse.self, from: data)
             }
-            guard kill(session.processID, 0) == 0 else {
+            guard kill(session.processID, 0) == 0 || errno == EPERM else {
                 throw AppletError("Noodle stopped. Check the noodlet before retrying.")
             }
             try await Task.sleep(for: .milliseconds(100))
         }
         throw AppletError("Request timed out. Inspect status before repeating a mutation.")
+    }
+
+    /// Publish in the mailbox itself. Foundation's atomic write may require
+    /// filesystem access outside a restricted bot's allowed workspace.
+    static func writeRequest(_ data: Data, directory: URL, name: String) throws {
+        let folder = open(directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard folder >= 0 else { throw AppletError("The Applet mailbox is unavailable.") }
+        defer { close(folder) }
+        let temporary = ".request-" + UUID().uuidString.lowercased()
+        let descriptor = openat(folder, temporary, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
+        guard descriptor >= 0 else { throw AppletError("Cannot write to the Applet mailbox.") }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        defer { try? handle.close(); unlinkat(folder, temporary, 0) }
+        try handle.write(contentsOf: data)
+        guard renameat(folder, temporary, folder, name) == 0 else { throw AppletError("Cannot publish the Applet request.") }
     }
 }

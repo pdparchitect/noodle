@@ -60,7 +60,7 @@ import NoodleCore
                 currentDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
             let directory = try ComputerAgentSkill.bridge(workspace: context.workspace)
             let session = try JSONDecoder().decode(MCPBridgeSession.self, from: MCPBridgeFiles.read(directory.appendingPathComponent("session.json"), limit: 4096))
-            guard kill(session.processID, 0) == 0 else { throw ComputerBridgeError("Open Noodle first.") }
+            guard kill(session.processID, 0) == 0 || errno == EPERM else { throw ComputerBridgeError("Open Noodle first.") }
             var envelope = ComputerAgentRequest(token: session.token, request: request, conversationID: conversation, message: flags["--message"], view: flags["--view"])
             if operation.isFileTransfer {
                 envelope.localPath = try ComputerWorkspaceFiles.relativePath(flags[operation == .fileUpload ? "--source" : "--destination"]!,
@@ -68,7 +68,7 @@ import NoodleCore
             }
             let stem = envelope.id.uuidString.lowercased()
             let inputURL = directory.appendingPathComponent(stem + ".request"), outputURL = directory.appendingPathComponent(stem + ".response")
-            try ComputerAgentFiles.write(envelope, to: inputURL)
+            try MCPBridgeFiles.write(envelope, to: inputURL, workspace: context.workspace)
             defer { try? FileManager.default.removeItem(at: inputURL); try? FileManager.default.removeItem(at: outputURL) }
             let deadline = ProcessInfo.processInfo.systemUptime + Double(operation.timeout + 5)
             while ProcessInfo.processInfo.systemUptime < deadline {
@@ -82,7 +82,7 @@ import NoodleCore
                     try FileHandle.standardOutput.write(contentsOf: JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
                     print(""); return
                 }
-                guard kill(session.processID, 0) == 0 else { throw ComputerBridgeError("Noodle stopped. Check the computer before retrying.") }
+                guard kill(session.processID, 0) == 0 || errno == EPERM else { throw ComputerBridgeError("Noodle stopped. Check the computer before retrying.") }
                 Thread.sleep(forTimeInterval: 0.1)
             }
             throw ComputerBridgeError("Computer request timed out. Check its state before retrying.")

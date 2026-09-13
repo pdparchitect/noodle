@@ -39,7 +39,7 @@ final class MCPController {
                 if sessions[agent.id] == nil {
                     sessions[agent.id] = UUID().uuidString + UUID().uuidString
                     try MCPBridgeFiles.write(MCPBridgeSession(token: sessions[agent.id]!, processID: getpid()),
-                                             to: folder.appendingPathComponent("session.json"))
+                                             to: folder.appendingPathComponent("session.json"), workspace: repository.directory(for: agent))
                 }
             }
             sessions = sessions.filter { id, _ in agents.contains { $0.id == id } }
@@ -165,14 +165,16 @@ final class MCPController {
         claimed = claimed.filter { $0.value > Date() }
         let manager = FileManager.default
         for agent in agents {
-            let folder = MCPBridgeFiles.directory(workspace: repository.directory(for: agent))
+            let workspace = repository.directory(for: agent)
+            let folder = MCPBridgeFiles.directory(workspace: workspace)
+            guard let mailbox = try? WorkspaceMailbox(workspace: workspace, path: ".noodle/mcp-bridge") else { continue }
             guard folder.resolvingSymlinksInPath() == folder.standardizedFileURL,
                   let files = try? manager.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey]) else { continue }
             for file in files.prefix(256) {
                 if file.pathExtension == "response" || file.pathExtension == "running" {
                     if let date = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
                        date < Date().addingTimeInterval(-300), UUID(uuidString: file.deletingPathExtension().lastPathComponent) != nil {
-                        try? manager.removeItem(at: file)
+                        mailbox.remove(file.lastPathComponent)
                     }
                     continue
                 }
@@ -180,7 +182,7 @@ final class MCPController {
                       let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent) else { continue }
                 let responseURL = folder.appendingPathComponent(id.uuidString.lowercased() + ".response")
                 let runningURL = folder.appendingPathComponent(id.uuidString.lowercased() + ".running")
-                guard let data = try? MCPBridgeFiles.read(file, limit: MCPBridgeFiles.maxRequestEnvelopeBytes),
+                guard let data = try? mailbox.read(file.lastPathComponent, limit: MCPBridgeFiles.maxRequestEnvelopeBytes),
                       let request = try? JSONDecoder().decode(MCPBridgeRequest.self, from: data),
                       request.id == id, request.session == sessions[agent.id],
                       (request.arguments?.count ?? 0) <= MCPBridgeFiles.maxRequestBytes,
@@ -188,21 +190,21 @@ final class MCPController {
                       (request.skillName?.utf8.count ?? 0) <= 64,
                       request.expiresAt > Date(), request.expiresAt < Date().addingTimeInterval(130),
                       claimed[id] == nil else {
-                    try? manager.removeItem(at: file)
-                    try? MCPBridgeFiles.write(MCPBridgeResponse(error: "Expired or invalid MCP request."), to: responseURL)
+                    mailbox.remove(file.lastPathComponent)
+                    try? mailbox.write(MCPBridgeResponse(error: "Expired or invalid MCP request."), named: responseURL.lastPathComponent)
                     continue
                 }
                 // Consume before dispatch: a crash never silently replays an uncertain write.
-                do { try manager.moveItem(at: file, to: runningURL) } catch { continue }
+                do { try mailbox.claim(file.lastPathComponent, as: runningURL.lastPathComponent) } catch { continue }
                 claimed[id] = request.expiresAt
                 guard let connection = request.assignedConnection(in: registry.assigned(to: agent.id)) else {
-                    try? MCPBridgeFiles.write(MCPBridgeResponse(error: "This MCP connection is not assigned to this bot."), to: responseURL)
-                    try? manager.removeItem(at: runningURL)
+                    try? mailbox.write(MCPBridgeResponse(error: "This MCP connection is not assigned to this bot."), named: responseURL.lastPathComponent)
+                    mailbox.remove(runningURL.lastPathComponent)
                     continue
                 }
                 calls[id] = Task { [weak self] in
                     guard let self else { return }
-                    defer { calls[id] = nil; try? manager.removeItem(at: runningURL) }
+                    defer { calls[id] = nil; mailbox.remove(runningURL.lastPathComponent) }
                     let response: MCPBridgeResponse
                     do {
                         let result = try await service.perform(request, connection: connection) { [weak self] in
@@ -218,7 +220,7 @@ final class MCPController {
                     }
                     // The caller may have gone away. Never retain an expired result.
                     if request.expiresAt > Date(), folder.resolvingSymlinksInPath() == folder.standardizedFileURL {
-                        try? MCPBridgeFiles.write(response, to: responseURL)
+                        try? mailbox.write(response, named: responseURL.lastPathComponent)
                     }
                 }
             }

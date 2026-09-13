@@ -14,7 +14,7 @@ final class RestrictedMuseSandboxTests: XCTestCase {
         let bot = try repository.createAgent(named: "Muse sandbox fixture", harnessIdentifier: "muse")
         let workspace = repository.directory(for: bot.agent)
         let temporary = workspace.appendingPathComponent(".noodle/tmp")
-        let account = try RestrictedAgentSandbox.accountDirectory(provider: .muse, home: home)
+        let account = try RestrictedAgentSandbox.accountDirectory(provider: .muse, home: RestrictedHarnessStorage.home(workspace: workspace))
         for directory in [account, temporary] { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
         // Existing foreign personal context must not turn restricted startup
         // into a permission error or become part of this bot's instructions.
@@ -58,8 +58,9 @@ final class RestrictedMuseSandboxTests: XCTestCase {
         let home = URL(fileURLWithPath: "/fixture/home"), workspace = URL(fileURLWithPath: "/fixture/bot/workspace")
         XCTAssertThrowsError(try RestrictedAgentSandbox.environment(provider: .muse, home: home))
         let environment = try RestrictedAgentSandbox.environment(provider: .muse, home: home, workspace: workspace)
-        XCTAssertEqual(environment["HOME"], home.path)
-        XCTAssertEqual(environment["XDG_CONFIG_HOME"], "/fixture/home/.config")
+        XCTAssertEqual(environment["HOME"], workspace.path + "/.noodle/home")
+        XCTAssertEqual(environment["XDG_CONFIG_HOME"], workspace.path + "/.noodle/home/.config")
+        XCTAssertEqual(environment["TBH_CREDENTIAL_BACKEND"], "file")
         for key in ["XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR"] {
             XCTAssertTrue(try XCTUnwrap(environment[key]).hasPrefix(workspace.path + "/"))
         }

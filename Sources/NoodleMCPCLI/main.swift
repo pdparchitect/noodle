@@ -44,7 +44,7 @@ import NoodleCore
                 session = try JSONDecoder().decode(MCPBridgeSession.self,
                     from: MCPBridgeFiles.read(folder.appendingPathComponent("session.json"), limit: 4096))
             } catch { throw MCPConnectionError.message("Noodle's MCP bridge is not available. Open Noodle first.") }
-            guard kill(session.processID, 0) == 0 else { throw MCPConnectionError.message("Noodle is not running. Open Noodle first.") }
+            guard kill(session.processID, 0) == 0 || errno == EPERM else { throw MCPConnectionError.message("Noodle is not running. Open Noodle first.") }
             var arguments: Data?
             if action == .call {
                 if let json = flags["--input"] { arguments = Data(json.utf8) }
@@ -68,7 +68,7 @@ import NoodleCore
             let stem = request.id.uuidString.lowercased()
             let requestFile = folder.appendingPathComponent(stem + ".request")
             let responseFile = folder.appendingPathComponent(stem + ".response")
-            try MCPBridgeFiles.write(request, to: requestFile)
+            try MCPBridgeFiles.write(request, to: requestFile, workspace: context.workspace)
             defer {
                 // These are this invocation's unique disposable IPC files only.
                 try? FileManager.default.removeItem(at: requestFile)
@@ -86,7 +86,7 @@ import NoodleCore
                        object["isError"] as? Bool == true { exit(1) }
                     return
                 }
-                guard kill(session.processID, 0) == 0 else {
+                guard kill(session.processID, 0) == 0 || errno == EPERM else {
                     throw MCPConnectionError.message("Noodle stopped during the request. Verify any remote action before retrying.")
                 }
                 Thread.sleep(forTimeInterval: 0.1)

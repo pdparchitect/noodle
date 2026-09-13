@@ -26,6 +26,7 @@ final class MCPInvocationTests: XCTestCase {
         let legacyRegistry = ["connections": [object], "assignments": [agent.uuidString.lowercased(): [first.id.uuidString]] ] as [String: Any]
         try JSONSerialization.data(withJSONObject: legacyRegistry).write(to: root.appendingPathComponent("MCP/connections.json"))
         let workspace = root.appendingPathComponent("workspace")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         try MCPSkillWriter.synchronize(workspace: workspace, connections: [legacy], executable: URL(fileURLWithPath: "/bin/echo"))
         let oldFolder = workspace.appendingPathComponent(".agents/skills/" + oldName)
         let notes = oldFolder.appendingPathComponent("notes.txt")

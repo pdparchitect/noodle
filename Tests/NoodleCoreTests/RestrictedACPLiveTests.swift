@@ -23,11 +23,15 @@ final class RestrictedACPLiveTests: XCTestCase {
         let repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: messenger)
         let bot = try repository.createAgent(named: "Restricted ACP fixture", harnessIdentifier: provider.rawValue)
         let workspace = repository.directory(for: bot.agent)
+        let broker = MessengerBroker(repository: repository)
+        try broker.start(agents: [bot.agent])
+        defer { broker.stop() }
+        try RestrictedHarnessStorage.prepare(provider: provider, workspace: workspace, loginHome: home)
         let temporary = workspace.appendingPathComponent(".noodle/tmp")
         try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
         let profile = try RestrictedAgentSandbox.profile(provider: provider, workspace: workspace, repository: root,
             home: home, executable: executable, application: project, temporary: temporary)
-        var environment = try RestrictedAgentSandbox.environment(provider: provider, home: home)
+        var environment = try RestrictedAgentSandbox.environment(provider: provider, home: home, workspace: workspace)
         environment["USER"] = NSUserName()
         environment["LOGNAME"] = NSUserName()
         environment["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"

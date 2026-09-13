@@ -49,7 +49,7 @@ import SwiftUI
                 let directory = try ComputerAgentSkill.bridge(workspace: repository.directory(for: agent))
                 let token = UUID().uuidString + UUID().uuidString
                 tokens[agent.id] = token
-                try MCPBridgeFiles.write(MCPBridgeSession(token: token, processID: getpid()), to: directory.appendingPathComponent("session.json"))
+                try MCPBridgeFiles.write(MCPBridgeSession(token: token, processID: getpid()), to: directory.appendingPathComponent("session.json"), workspace: repository.directory(for: agent))
             }
         } catch { failure = error.localizedDescription }
         if monitor == nil {
@@ -193,7 +193,7 @@ import SwiftUI
                 claimed[id] = Date()
                 let resultURL = directory.appendingPathComponent(id.uuidString.lowercased() + ".response")
                 do {
-                    let envelope = try JSONDecoder().decode(ComputerAgentRequest.self, from: MCPBridgeFiles.read(file, limit: 150_000))
+                    let envelope = try JSONDecoder().decode(ComputerAgentRequest.self, from: MCPBridgeFiles.read(file, limit: 150_000, workspace: repository.directory(for: agent)))
                     guard envelope.id == id, envelope.token == token, envelope.expiresAt > Date(),
                           envelope.expiresAt.timeIntervalSinceNow <= Double(envelope.request.operation.timeout + 5) else { throw ComputerBridgeError("Invalid or expired Computer session.") }
                     pending.insert(agent.id)
@@ -203,10 +203,10 @@ import SwiftUI
                         let response: ComputerResponse
                         do { response = try await self.perform(envelope, agent: agent) }
                         catch { response = .init(error: error.localizedDescription) }
-                        try? ComputerAgentFiles.write(response, to: resultURL)
+                        try? MCPBridgeFiles.write(response, to: resultURL, workspace: self.repository.directory(for: agent))
                     }
                     break
-                } catch { try? ComputerAgentFiles.write(ComputerResponse(error: error.localizedDescription), to: resultURL) }
+                } catch { try? MCPBridgeFiles.write(ComputerResponse(error: error.localizedDescription), to: resultURL, workspace: repository.directory(for: agent)) }
             }
         }
     }

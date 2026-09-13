@@ -6,6 +6,7 @@ import XCTest
 final class AppletAccessTests: XCTestCase {
     func testSkillRequiresInstalledCompanionAndBundledCLI() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let application = root.appendingPathComponent("Noodle Applet.app")
         let helper = root.appendingPathComponent("noodlet")
@@ -62,6 +63,7 @@ final class AppletAccessTests: XCTestCase {
     }
     func testManagedSkillPreservesCustomSkillAndExposesCorrectHelper() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let skill = root.appendingPathComponent(".agents/skills/applet")
         try AppletAgentSkill.synchronize(

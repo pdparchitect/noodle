@@ -33,6 +33,7 @@ import NoodleCore
                 "TMPDIR": NSTemporaryDirectory(), "XDG_DATA_HOME": Self.storage.path]
             if restricted {
                 let workspace = Self.workspace!
+                try RestrictedHarnessStorage.prepare(provider: .muse, workspace: workspace, loginHome: HarnessStorage.userHome)
                 let temporary = workspace.appendingPathComponent(".noodle/tmp")
                 try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
                 let project = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
@@ -93,6 +94,9 @@ import NoodleCore
         let bot = try repository.createAgent(named: "Muse reply fixture", harnessIdentifier: "muse",
             modelIdentifier: environment["NOODLE_TEST_MUSE_MODEL"], reasoningEffort: "low",
             backstory: "This is an isolated integration test. Respond to the user's greeting through Messenger. Do not access other files, contact other services, or do unrelated work.")
+        let broker = MessengerBroker(repository: repository)
+        try broker.start(agents: [bot.agent])
+        defer { broker.stop() }
         ExtendedAgentConnection.workspace = repository.directory(for: bot.agent)
         ExtendedAgentConnection.storage = root.appendingPathComponent("MuseData")
         for marker in ["Hello from Muse.", "Muse resumed."] {

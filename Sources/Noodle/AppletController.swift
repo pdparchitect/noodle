@@ -38,7 +38,7 @@ import Observation
                 let token = UUID().uuidString + UUID().uuidString
                 try MCPBridgeFiles.write(
                     AppletAgentSession(token: token, processID: getpid()),
-                    to: directory.appendingPathComponent("session.json"))
+                    to: directory.appendingPathComponent("session.json"), workspace: repository.directory(for: agent))
                 tokens[agent.id] = token
             }
         } catch { failure = error.localizedDescription }
@@ -157,7 +157,7 @@ import Observation
                 do {
                     let envelope = try JSONDecoder().decode(
                         AppletAgentEnvelope.self,
-                        from: MCPBridgeFiles.read(file, limit: AppletConnection.maxFrame))
+                        from: MCPBridgeFiles.read(file, limit: AppletConnection.maxFrame, workspace: repository.directory(for: agent)))
                     guard envelope.id == id, envelope.request.id == id, envelope.token == token,
                         envelope.expiresAt > Date(),
                         envelope.expiresAt.timeIntervalSinceNow
@@ -172,12 +172,12 @@ import Observation
                         do { response = try await self.perform(envelope, agent: agent) } catch {
                             response = AppletResponse(error: error.localizedDescription)
                         }
-                        try? MCPBridgeFiles.write(response, to: output)
+                        try? MCPBridgeFiles.write(response, to: output, workspace: self.repository.directory(for: agent))
                     }
                     break
                 } catch {
                     try? MCPBridgeFiles.write(
-                        AppletResponse(error: error.localizedDescription), to: output)
+                        AppletResponse(error: error.localizedDescription), to: output, workspace: repository.directory(for: agent))
                 }
             }
         }

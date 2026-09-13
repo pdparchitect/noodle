@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Keep noodlet CLI request publication inside its workspace mailbox, and permit broker calls when the bot sandbox denies process signaling; a denied liveness probe does not mean Noodle has stopped.
+
 - Handle background preview and CLI launches through a dedicated URL, including sandboxed launches that discard command-line arguments. Keep the catalogue closed and existing creation windows visible; opening Applet directly still shows the library.
 
 - Show the library when opening Noodle Applet directly; file and noodlet-link launches open only the requested creation without restoring the catalogue.

@@ -48,17 +48,10 @@ public enum MCPBridgeFiles {
         workspace.appendingPathComponent(".noodle/mcp-bridge", isDirectory: true)
     }
     public static func prepare(workspace: URL) throws -> URL {
-        let directory = directory(workspace: workspace)
-        for parent in [workspace.appendingPathComponent(".noodle"), directory] {
-            if (try? FileManager.default.attributesOfItem(atPath: parent.path)[.type] as? FileAttributeType) == .typeSymbolicLink {
-                throw MCPConnectionError.message("The MCP bridge directory must not be a symbolic link.")
-            }
-        }
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
-                                                attributes: [.posixPermissions: 0o700])
-        return directory
+        try WorkspaceMailbox(workspace: workspace, path: ".noodle/mcp-bridge", create: true).url
     }
-    public static func read(_ file: URL, limit: Int) throws -> Data {
+    public static func read(_ file: URL, limit: Int, workspace: URL? = nil) throws -> Data {
+        if let workspace { return try mailbox(for: file, workspace: workspace).read(file.lastPathComponent, limit: limit) }
         let descriptor = Darwin.open(file.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
         guard descriptor >= 0 else { throw POSIXError(.ENOENT) }
         defer { Darwin.close(descriptor) }
@@ -70,10 +63,27 @@ public enum MCPBridgeFiles {
         guard data.count <= limit else { throw MCPConnectionError.message("MCP request or response is too large.") }
         return data
     }
-    public static func write<T: Encodable>(_ value: T, to file: URL) throws {
+    public static func write<T: Encodable>(_ value: T, to file: URL, workspace: URL? = nil) throws {
+        if let workspace { try mailbox(for: file, workspace: workspace).write(value, named: file.lastPathComponent); return }
         let data = try JSONEncoder().encode(value)
         // Atomic replacement replaces a link itself, never follows its target.
         try data.write(to: file, options: [.atomic, .completeFileProtectionUnlessOpen])
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+    }
+
+    public static func mailbox(for file: URL, workspace: URL) throws -> WorkspaceMailbox {
+        // Foundation directory listings can switch /var to /private/var. Normalize
+        // only these system aliases; never resolve bot-controlled parent links.
+        func path(_ url: URL) -> String {
+            let value = url.standardizedFileURL.path
+            for alias in ["/var", "/tmp", "/etc"] where value == alias || value.hasPrefix(alias + "/") {
+                return "/private" + value
+            }
+            return value
+        }
+        let prefix = path(workspace) + "/"
+        let parent = path(file.deletingLastPathComponent())
+        guard parent.hasPrefix(prefix) else { throw MCPConnectionError.message("Bridge files must stay inside the bot workspace.") }
+        return try WorkspaceMailbox(workspace: workspace, path: String(parent.dropFirst(prefix.count)))
     }
 }

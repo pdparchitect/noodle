@@ -133,13 +133,10 @@ if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-chi
         if restricted {
             let layout = AgentStorageLayout(workspace: workspace)
             let repository = layout.package.deletingLastPathComponent().deletingLastPathComponent()
-            let codexHome = HostPaths.home.appendingPathComponent(".codex", isDirectory: true)
-            guard provider != .codex || codexHome.resolvingSymlinksInPath().path == codexHome.path else {
-                throw HostError("Restricted Codex requires an unredirected account directory.")
-            }
+            try RestrictedHarnessStorage.prepare(provider: provider, workspace: workspace, loginHome: HostPaths.home)
+            let privateHome = RestrictedHarnessStorage.home(workspace: workspace)
+            let codexHome = privateHome.appendingPathComponent(".codex", isDirectory: true)
             let temporary = workspace.appendingPathComponent(".noodle/tmp", isDirectory: true)
-            try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
-            guard temporary.resolvingSymlinksInPath().path == temporary.path else { throw HostError("The bot temporary directory is redirected.") }
             // Only fixed paths derived by this host enter the profile. The XPC
             // caller cannot supply policy text, writable roots, or a command.
             let profile: String
@@ -156,11 +153,13 @@ if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-chi
             default: throw HostError("Unsupported restricted harness.")
             }
             setenv("TMPDIR", temporary.path, 1)
+            setenv("TMPPREFIX", temporary.appendingPathComponent("zsh").path, 1)
+            setenv("CODEX_HOME", codexHome.path, 1)
             if provider == .fx || provider == .grokBuild || provider == .muse {
                 for (key, value) in try RestrictedAgentSandbox.environment(provider: provider, home: HostPaths.home, workspace: workspace) {
                     setenv(key, value, 1)
                 }
-            } else { setenv("HOME", workspace.path, 1) }
+            } else { setenv("HOME", privateHome.path, 1) }
             strings = ["/usr/bin/sandbox-exec", "-p", profile] + strings
         }
         var arguments: [UnsafeMutablePointer<CChar>?] = strings.map { value in value.withCString { strdup($0) } }

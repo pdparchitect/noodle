@@ -18,6 +18,9 @@ final class FxLiveTests: XCTestCase {
         let repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: URL(fileURLWithPath: messenger))
         try repository.prepare()
         let bot = try repository.createAgent(named: "FX Integration Fixture", harnessIdentifier: HarnessProvider.fx.rawValue)
+        let broker = MessengerBroker(repository: repository)
+        try broker.start(agents: [bot.agent])
+        defer { broker.stop() }
         let workspace = repository.directory(for: bot.agent)
         func enqueue(_ body: String) throws {
             try repository.append(ChatMessage(conversationID: bot.conversation.id, author: .user, body: body, delivery: .queued))

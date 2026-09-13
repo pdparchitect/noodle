@@ -6,14 +6,17 @@ final class AppleToolsTests: XCTestCase {
     private var root: URL!
     private var repository: WorkspaceRepository!
     private var workspace: URL!
+    private var broker: MessengerBroker!
     override func setUpWithError() throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent("apple-tools-\(UUID())").resolvingSymlinksInPath()
         repository = WorkspaceRepository(rootURL: root)
         let bot = try repository.createAgent(named: "Apple test")
         workspace = repository.directory(for: bot.agent)
+        broker = MessengerBroker(repository: repository)
+        try broker.start(agents: [bot.agent])
         try FileManager.default.createDirectory(at: workspace.appendingPathComponent(".noodle/tmp"), withIntermediateDirectories: true)
     }
-    override func tearDownWithError() throws { try FileManager.default.removeItem(at: root) }
+    override func tearDownWithError() throws { broker.stop(); try FileManager.default.removeItem(at: root) }
 
     func testChatMemoryDoesNotEnableFilesFromAssistantClaims() {
         let history: [AppleConversationTurn.Message] = [

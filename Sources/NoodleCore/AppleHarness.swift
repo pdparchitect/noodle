@@ -41,10 +41,9 @@ public enum AppleAgentSandbox {
     public static func profile(application: URL, workspace: URL? = nil, repository: URL? = nil) -> String {
         var reads = ["/System", "/usr", "/bin", "/sbin", "/dev", "/Library/Apple",
                      "/Library/Preferences", "/private/etc", "/private/var/db/timezone", application.path]
-        if let repository { reads.append(repository.path) }
+        if let workspace { reads.append(AgentStorageLayout(workspace: workspace).package.path) }
         var writes: [String] = []
         if let workspace { reads.append(workspace.path); writes.append(workspace.path) }
-        if let repository { writes.append(repository.appendingPathComponent("Conversations").path) }
         return """
         (version 1)
         (deny default)

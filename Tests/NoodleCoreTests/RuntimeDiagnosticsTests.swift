@@ -12,6 +12,9 @@ final class RuntimeDiagnosticsTests: XCTestCase {
         let repository = WorkspaceRepository(rootURL: root)
         try repository.prepare()
         let bot = try repository.createAgent(named: "Logging fixture")
+        let broker = MessengerBroker(repository: repository)
+        try broker.start(agents: [bot.agent])
+        defer { broker.stop() }
         let workspace = repository.directory(for: bot.agent)
         var trace = RuntimeTrace(agentID: bot.agent.id, provider: .codex, workspace: workspace)
         trace.begin(reason: .heartbeat)
@@ -39,6 +42,7 @@ final class RuntimeDiagnosticsTests: XCTestCase {
 
     func testReceiptAggregatesOnlyConsumingReadsAndClearsAfterFailure() throws {
         let workspace = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workspace) }
         let bot = UUID()
         var trace = RuntimeTrace(agentID: bot, provider: .claudeCode, workspace: workspace)
@@ -66,6 +70,9 @@ final class RuntimeDiagnosticsTests: XCTestCase {
         let repository = WorkspaceRepository(rootURL: root)
         try repository.prepare()
         let bot = try repository.createAgent(named: "Private Bot")
+        let broker = MessengerBroker(repository: repository)
+        try broker.start(agents: [bot.agent])
+        defer { broker.stop() }
         let workspace = repository.directory(for: bot.agent)
         try repository.append(ChatMessage(conversationID: bot.conversation.id, author: .user,
             body: "Private message", delivery: .delivered))
@@ -73,8 +80,8 @@ final class RuntimeDiagnosticsTests: XCTestCase {
         trace.begin(reason: .inboxChanged)
         let context = RuntimeDiagnostics.readContext(in: workspace, agentID: bot.agent.id)
         let args = ["messenger", "--agent-directory", workspace.path, "--get-latest"]
-        let peek = MessengerCLI.run(arguments: args + ["--peek"], environment: [:])
-        let read = MessengerCLI.run(arguments: args, environment: [:])
+        let peek = MessengerCLI.runDirect(arguments: args + ["--peek"], environment: [:])
+        let read = MessengerCLI.runDirect(arguments: args, environment: [:])
         XCTAssertEqual(peek.exitCode, 0)
         XCTAssertEqual(read.exitCode, 0)
         XCTAssertEqual(peek.standardOutput, read.standardOutput)
@@ -82,7 +89,7 @@ final class RuntimeDiagnosticsTests: XCTestCase {
         let deliveries = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(read.standardOutput.utf8)) as? [[String: Any]])
         XCTAssertEqual(deliveries.count, 1)
         XCTAssertEqual((deliveries.first?["message"] as? [String: Any])?["body"] as? String, "Private message")
-        let second = MessengerCLI.run(arguments: args, environment: [:])
+        let second = MessengerCLI.runDirect(arguments: args, environment: [:])
         let empty = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(second.standardOutput.utf8)) as? [Any])
         XCTAssertTrue(empty.isEmpty)
         XCTAssertEqual(context, RuntimeDiagnostics.readContext(in: workspace, agentID: bot.agent.id))
@@ -91,6 +98,7 @@ final class RuntimeDiagnosticsTests: XCTestCase {
 
     func testWakeCorrelationLifecycleAndPrivacy() throws {
         let workspace = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workspace) }
         let bot = UUID()
         var trace = RuntimeTrace(agentID: bot, provider: .codex, workspace: workspace)
@@ -114,6 +122,7 @@ final class RuntimeDiagnosticsTests: XCTestCase {
 
     func testOldRuntimeCannotClearNewWakeAndStartupClearsStaleMarker() throws {
         let workspace = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workspace) }
         let bot = UUID()
         var old = RuntimeTrace(agentID: bot, provider: .claudeCode, workspace: workspace)

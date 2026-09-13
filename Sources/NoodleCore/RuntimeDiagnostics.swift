@@ -50,12 +50,8 @@ public enum RuntimeDiagnostics {
     }
 
     static func readReceipt(in workspace: URL, context: Context) -> InboxReceipt? {
-        let url = receiptURL(in: workspace)
-        guard hasSafeContextDirectory(in: workspace),
-              let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey]),
-              values.isRegularFile == true, values.isSymbolicLink != true,
-              let size = values.fileSize, size < 4_096,
-              let data = try? Data(contentsOf: url),
+        guard let mailbox = try? WorkspaceMailbox(workspace: workspace, path: ".noodle"),
+              let data = try? mailbox.read("runtime-log-inbox.json", limit: 4096),
               let receipt = try? JSONDecoder().decode(InboxReceipt.self, from: data),
               receipt.context == context,
               (0...1_000_000).contains(receipt.reads),
@@ -65,24 +61,19 @@ public enum RuntimeDiagnostics {
     }
 
     private static func saveInboxReceipt(in workspace: URL, context: Context, count: Int?) {
-        guard hasSafeContextDirectory(in: workspace) else { return }
-        let lockURL = workspace.appendingPathComponent(".noodle/runtime-log-inbox.lock")
-        let descriptor = open(lockURL.path, O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC, S_IRUSR | S_IWUSR)
-        guard descriptor >= 0 else { return }
-        defer { close(descriptor) }
-        // Never wait for diagnostics. Concurrent or unavailable logging cannot delay work.
-        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else { return }
-        defer { flock(descriptor, LOCK_UN) }
-        guard readContext(in: workspace, agentID: context.agentID) == context else { return }
-        var receipt = readReceipt(in: workspace, context: context) ?? InboxReceipt(context: context)
-        if let count {
-            receipt.reads = min(receipt.reads + 1, 1_000_000)
-            receipt.deliveries = min(receipt.deliveries + min(max(0, count), 1_000_000_000), 1_000_000_000)
-        } else {
-            receipt.failures = min(receipt.failures + 1, 1_000_000)
-        }
-        if let data = try? JSONEncoder().encode(receipt) {
-            try? data.write(to: receiptURL(in: workspace), options: .atomic)
+        guard let mailbox = try? WorkspaceMailbox(workspace: workspace, path: ".noodle") else { return }
+        mailbox.withLock("runtime-log-inbox.lock") {
+            guard readContext(in: workspace, agentID: context.agentID) == context else { return }
+            var receipt = readReceipt(in: workspace, context: context) ?? InboxReceipt(context: context)
+            if let count {
+                receipt.reads = min(receipt.reads + 1, 1_000_000)
+                receipt.deliveries = min(receipt.deliveries + min(max(0, count), 1_000_000_000), 1_000_000_000)
+            } else {
+                receipt.failures = min(receipt.failures + 1, 1_000_000)
+            }
+            if let data = try? JSONEncoder().encode(receipt) {
+                try? mailbox.writeData(data, named: "runtime-log-inbox.json")
+            }
         }
     }
 
@@ -96,7 +87,7 @@ public enum RuntimeDiagnostics {
             record(.inboxReadFailed, agentID: context.agentID, provider: context.provider,
                    context: context, reads: receipt.failures)
         }
-        try? FileManager.default.removeItem(at: receiptURL(in: workspace))
+        (try? WorkspaceMailbox(workspace: workspace, path: ".noodle"))?.remove("runtime-log-inbox.json")
     }
 
     static func contextURL(in workspace: URL) -> URL {
@@ -104,8 +95,8 @@ public enum RuntimeDiagnostics {
     }
 
     static func readContext(in workspace: URL, agentID: UUID) -> Context? {
-        guard hasSafeContextDirectory(in: workspace),
-              let data = try? Data(contentsOf: contextURL(in: workspace)),
+        guard let mailbox = try? WorkspaceMailbox(workspace: workspace, path: ".noodle"),
+              let data = try? mailbox.read("runtime-log-context.json", limit: 4096),
               let context = try? JSONDecoder().decode(Context.self, from: data),
               context.agentID == agentID,
               AgentWakeReason(rawValue: context.reason) != nil else { return nil }
@@ -171,14 +162,9 @@ public struct RuntimeTrace {
     public mutating func begin(reason: AgentWakeReason) {
         context = .init(agentID: agentID, wakeID: UUID(), provider: provider, reason: reason.rawValue)
         observedOutput = false
-        let url = RuntimeDiagnostics.contextURL(in: workspace)
         do {
-            guard RuntimeDiagnostics.hasSafeContextDirectory(in: workspace) else {
-                record(.wakePrepared)
-                return
-            }
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try JSONEncoder().encode(context).write(to: url, options: .atomic)
+            let mailbox = try WorkspaceMailbox(workspace: workspace, path: ".noodle", create: true)
+            try mailbox.write(context, named: "runtime-log-context.json")
         } catch {
             // Best effort only. Lifecycle records still carry the in-memory wake ID.
         }
@@ -194,7 +180,7 @@ public struct RuntimeTrace {
         // about a newly started runtime's subsequent CLI calls.
         if let previous = RuntimeDiagnostics.readContext(in: workspace, agentID: agentID) {
             RuntimeDiagnostics.relayInboxReceipt(in: workspace, context: previous)
-            try? FileManager.default.removeItem(at: RuntimeDiagnostics.contextURL(in: workspace))
+            (try? WorkspaceMailbox(workspace: workspace, path: ".noodle"))?.remove("runtime-log-context.json")
         }
         context = nil
         record(.runtimeStarting)
@@ -211,7 +197,7 @@ public struct RuntimeTrace {
         record(event)
         // An older runtime must not clear a newer runtime's correlation marker.
         if let context, RuntimeDiagnostics.readContext(in: workspace, agentID: agentID) == context {
-            try? FileManager.default.removeItem(at: RuntimeDiagnostics.contextURL(in: workspace))
+            (try? WorkspaceMailbox(workspace: workspace, path: ".noodle"))?.remove("runtime-log-context.json")
         }
         context = nil
     }

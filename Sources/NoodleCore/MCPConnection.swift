@@ -170,67 +170,36 @@ public enum MCPSkillWriter {
     }
 
     public static func synchronize(workspace: URL, connections: [MCPConnectionRecord], executable: URL?) throws {
-        let manager = FileManager.default
-        let manifestURL = workspace.appendingPathComponent(".agents/mcp-skills.json")
-        if connections.isEmpty && !manager.fileExists(atPath: manifestURL.path) { return }
-        let skills = workspace.appendingPathComponent(".agents/skills", isDirectory: true)
-        guard !isSymlink(workspace.appendingPathComponent(".agents")), !isSymlink(skills) else {
-            throw MCPConnectionError.message("Cannot write MCP skills into a redirected skill directory.")
-        }
-        let previous = (try? JSONDecoder().decode([String].self, from: Data(contentsOf: manifestURL))) ?? []
+        let root = try WorkspaceMailbox(workspace: workspace, path: "")
+        if connections.isEmpty && !root.contains(".agents") { return }
+        let agents = try WorkspaceMailbox(workspace: workspace, path: ".agents", create: true)
+        let skills = try WorkspaceMailbox(workspace: workspace, path: ".agents/skills", create: true)
+        let previous = (try? JSONDecoder().decode([String].self,
+            from: agents.read("mcp-skills.json", limit: 1_048_576))) ?? []
         let names = connections.map(\.skillName)
-        // Check destinations before removing old generated files during migration.
         for name in names {
             guard isManagedName(name) else { throw MCPConnectionError.message("Invalid managed MCP skill name.") }
-            let folder = skills.appendingPathComponent(name, isDirectory: true)
-            guard !isSymlink(folder) else {
-                throw MCPConnectionError.message("Cannot write MCP skills into a redirected skill directory.")
-            }
-            if manager.fileExists(atPath: folder.path), !previous.contains(name) {
+            if skills.contains(name), !previous.contains(name) {
                 throw MCPConnectionError.message("A skill named \(name) already exists and is not managed by this connection. Rename that skill before trying again.")
             }
+            if skills.contains(name) { _ = try WorkspaceMailbox(workspace: workspace, path: ".agents/skills/" + name) }
         }
-        // Only remove files owned by this generator; never remove arbitrary skill directories.
         for name in previous where !names.contains(name) && isManagedName(name) {
-            let directory = skills.appendingPathComponent(name)
-            guard !isSymlink(directory) else { continue }
-            for file in ["SKILL.md", "mcpshim"] {
-                let url = directory.appendingPathComponent(file)
-                if (try? manager.attributesOfItem(atPath: url.path)) != nil { try manager.removeItem(at: url) }
+            if let folder = try? WorkspaceMailbox(workspace: workspace, path: ".agents/skills/" + name) {
+                folder.remove("SKILL.md"); folder.remove("mcpshim")
+                skills.removeEmptyDirectory(name)
             }
-            if (try? manager.contentsOfDirectory(atPath: directory.path).isEmpty) == true {
-                try manager.removeItem(at: directory)
-            }
-            let claudeLink = workspace.appendingPathComponent(".claude/skills/\(name)")
-            if !isSymlink(workspace.appendingPathComponent(".claude")),
-               !isSymlink(workspace.appendingPathComponent(".claude/skills")),
-               (try? manager.destinationOfSymbolicLink(atPath: claudeLink.path)) == "../../.agents/skills/\(name)" {
-                try manager.removeItem(at: claudeLink)
-            }
+            if let native = try? WorkspaceMailbox(workspace: workspace, path: ".claude/skills"),
+               native.linkDestination(name) == "../../.agents/skills/" + name { native.remove(name) }
         }
         for connection in connections {
-            guard isManagedName(connection.skillName) else { throw MCPConnectionError.message("Invalid managed MCP skill name.") }
-            let folder = skills.appendingPathComponent(connection.skillName, isDirectory: true)
-            guard !isSymlink(skills), !isSymlink(folder) else {
-                throw MCPConnectionError.message("Cannot write MCP skills into a redirected skill directory.")
-            }
-            try manager.createDirectory(at: folder, withIntermediateDirectories: true)
-            try contents(connection).write(to: folder.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
-            if let executable {
-                let link = folder.appendingPathComponent("mcpshim")
-                if (try? manager.destinationOfSymbolicLink(atPath: link.path)) != executable.path {
-                    if (try? manager.attributesOfItem(atPath: link.path)) != nil { try manager.removeItem(at: link) }
-                    try manager.createSymbolicLink(at: link, withDestinationURL: executable)
-                }
-            }
+            let folder = try WorkspaceMailbox(workspace: workspace, path: ".agents/skills/" + connection.skillName, create: true)
+            try folder.writeData(Data(contents(connection).utf8), named: "SKILL.md")
+            if let executable { try folder.symlink("mcpshim", destination: executable.path) }
         }
-        try manager.createDirectory(at: manifestURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try JSONEncoder().encode(names).write(to: manifestURL, options: .atomic)
+        try agents.write(names, named: "mcp-skills.json")
     }
     private static func isManagedName(_ value: String) -> Bool {
         value.hasPrefix("mcp-") && value.count <= 64 && value.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
-    }
-    private static func isSymlink(_ url: URL) -> Bool {
-        (try? FileManager.default.attributesOfItem(atPath: url.path)[.type] as? FileAttributeType) == .typeSymbolicLink
     }
 }

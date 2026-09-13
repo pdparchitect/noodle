@@ -13,7 +13,7 @@ final class URLAttachmentTests: XCTestCase {
         let args = ["messenger", "--agent-directory", repository.directory(for: bot.agent).path,
                     "--send", "--conversation", bot.conversation.id.uuidString, "--attach", url.absoluteString]
         for _ in 0..<2 {
-            let result = MessengerCLI.run(arguments: args, environment: [:])
+            let result = MessengerCLI.runDirect(arguments: args, environment: [:])
             XCTAssertEqual(result.exitCode, 0, result.standardError)
         }
         let attachments = try repository.loadAttachments(conversationID: bot.conversation.id)
@@ -102,7 +102,7 @@ final class URLAttachmentTests: XCTestCase {
         try Data("local file contents".utf8).write(to: file)
         let prefix = ["messenger", "--agent-directory", repository.directory(for: bot.agent).path,
                       "--send", "--conversation", bot.conversation.id.uuidString]
-        let result = MessengerCLI.run(arguments: prefix + ["--attach", file.path, "--attach", file.absoluteString,
+        let result = MessengerCLI.runDirect(arguments: prefix + ["--attach", file.path, "--attach", file.absoluteString,
             "--attach", "http://example.com/a", "--attach", "https://example.com/b#anchor"], environment: [:])
         XCTAssertEqual(result.exitCode, 0, result.standardError)
         let attachments = try repository.loadAttachments(conversationID: bot.conversation.id)
@@ -111,14 +111,14 @@ final class URLAttachmentTests: XCTestCase {
         for local in attachments.filter({ $0.url == nil }) {
             XCTAssertEqual(try String(contentsOf: repository.attachmentFileURL(local), encoding: .utf8), "local file contents")
         }
-        let onlyLink = MessengerCLI.run(arguments: prefix + ["--attach", "https://example.com/only"], environment: [:])
+        let onlyLink = MessengerCLI.runDirect(arguments: prefix + ["--attach", "https://example.com/only"], environment: [:])
         XCTAssertEqual(onlyLink.exitCode, 0, onlyLink.standardError)
         let beforeFailure = try repository.loadAttachments(conversationID: bot.conversation.id)
-        let failed = MessengerCLI.run(arguments: prefix + ["--attach", "https://example.com/rollback",
+        let failed = MessengerCLI.runDirect(arguments: prefix + ["--attach", "https://example.com/rollback",
             "--attach", root.appendingPathComponent("missing.txt").path], environment: [:])
         XCTAssertNotEqual(failed.exitCode, 0)
         XCTAssertEqual(try repository.loadAttachments(conversationID: bot.conversation.id), beforeFailure)
-        let invalid = MessengerCLI.run(arguments: prefix + ["--attach", "ftp://example.com/a"], environment: [:])
+        let invalid = MessengerCLI.runDirect(arguments: prefix + ["--attach", "ftp://example.com/a"], environment: [:])
         XCTAssertNotEqual(invalid.exitCode, 0)
         XCTAssertEqual(try repository.loadAttachments(conversationID: bot.conversation.id), beforeFailure)
     }

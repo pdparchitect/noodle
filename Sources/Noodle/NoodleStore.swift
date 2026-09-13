@@ -103,6 +103,7 @@ final class NoodleStore {
 
     let repository: WorkspaceRepository
     @ObservationIgnored private let transcriptPositions: TranscriptPositionStore
+    let messenger: MessengerBroker
     let mcp: MCPController
     let computers: ComputerController
     let applets: AppletController
@@ -136,6 +137,7 @@ final class NoodleStore {
         }
 
         transcriptPositions = TranscriptPositionStore(fileURL: self.repository.rootURL.appendingPathComponent("scroll-positions.json"))
+        messenger = MessengerBroker(repository: self.repository)
         mcp = MCPController(repository: self.repository)
         computers = ComputerController(repository: self.repository)
         applets = AppletController(repository: self.repository)
@@ -187,6 +189,7 @@ final class NoodleStore {
             runtime.prepareAccessForExistingAgents(agents, migratedIDs: migratedIDs)
             try repository.synchronizeAgentWorkspaces(agents)
             if connectsServices {
+                try messenger.start(agents: agents)
                 mcp.start(agents: agents)
                 computers.start(agents: agents)
                 applets.start(agents: agents)
@@ -275,6 +278,7 @@ final class NoodleStore {
             try computers.assign(computerIDs, to: created.agent)
             computers.start(agents: agents)
             applets.start(agents: agents)
+            try messenger.start(agents: agents)
             mcp.start(agents: agents)
             runtime.refresh(agents: agents)
             runtime.start(agent: created.agent, repository: repository)
@@ -336,6 +340,7 @@ final class NoodleStore {
             computers.start(agents: agents)
             applets.start(agents: agents)
             try repository.synchronizeAgentWorkspace(updated)
+            try messenger.start(agents: agents)
             mcp.start(agents: agents)
             runtime.restart(
                 agent: updated,

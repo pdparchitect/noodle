@@ -1,7 +1,7 @@
 import Foundation
 import UniformTypeIdentifiers
 
-public struct MessengerCommandResult: Sendable {
+public struct MessengerCommandResult: Codable, Sendable {
     public let exitCode: Int32
     public let standardOutput: String
     public let standardError: String
@@ -26,85 +26,116 @@ public enum MessengerCLI {
     ) -> MessengerCommandResult {
         do {
             let invocation = try Invocation(arguments: arguments, environment: environment)
-            let repository = WorkspaceRepository(rootURL: invocation.repositoryRoot)
-
             switch invocation.action {
+            case .help: return MessengerCommandResult(exitCode: 0, standardOutput: help + "\n")
+            case .listEffects: return .json(ConversationEffectKind.allCases.map(\.rawValue))
+            default: return try MessengerBridgeClient.request(invocation.action, workspace: invocation.workspace)
+            }
+        } catch {
+            return MessengerCommandResult(
+                exitCode: 2,
+                standardError: "messenger: \(error.localizedDescription)\n\n\(help)\n"
+            )
+        }
+    }
+
+    /// Trusted in-process entry point for app operations and repository tests.
+    /// The shipped CLI always uses the bot-bound bridge, without a disk fallback.
+    public static func runDirect(arguments: [String], environment: [String: String] = [:]) -> MessengerCommandResult {
+        do {
+            let invocation = try Invocation(arguments: arguments, environment: environment)
+            return perform(invocation.action, repository: WorkspaceRepository(rootURL: invocation.repositoryRoot),
+                           agentID: invocation.agentID)
+        } catch { return .init(exitCode: 2, standardError: "messenger: \(error.localizedDescription)\n") }
+    }
+
+    public static func perform(_ action: MessengerAction, repository: WorkspaceRepository, agentID: UUID,
+                               brokered: Bool = false) -> MessengerCommandResult {
+        do {
+            switch action {
             case .listEffects:
                 return .json(ConversationEffectKind.allCases.map(\.rawValue))
 
             case .effect(let conversationID, let kind, let requestID):
-                let event = try repository.sendEffect(agentID: invocation.agentID,
+                let event = try repository.sendEffect(agentID: agentID,
                     conversationID: conversationID, kind: kind, requestID: requestID)
                 return .json(MessengerEffectReceipt(effect: event))
 
             case .getLatest(let consumes, let includesInlineImages):
-                let deliveries: [MessengerDelivery]
+                var response = MessengerCommandResult.json([MessengerDelivery]())
                 do {
-                    deliveries = try repository.latestMessages(for: invocation.agentID, consuming: consumes)
-                    RuntimeDiagnostics.inboxRead(agentID: invocation.agentID,
-                        workspace: repository.directory(forAgentID: invocation.agentID),
-                        count: deliveries.count, consuming: consumes)
+                    let deliveries = try repository.latestMessages(for: agentID, consuming: consumes, preparing: { original in
+                        let visible = try brokered ? project(original, repository: repository, agentID: agentID) : original
+                        if includesInlineImages {
+                            var includedIDs = Set<UUID>()
+                            let images = original.flatMap(\.attachments).compactMap { attachment -> MessengerInlineImage? in
+                                guard includedIDs.insert(attachment.id).inserted,
+                                      let dataURL = try? repository.inlineImageDataURL(for: attachment) else { return nil }
+                                return MessengerInlineImage(attachmentID: attachment.id,
+                                    originalFilename: attachment.originalFilename, mediaType: attachment.mediaType, dataURL: dataURL)
+                            }
+                            response = .json(MessengerInboxPayload(deliveries: visible, images: images))
+                        } else { response = .json(visible) }
+                        if brokered, try JSONEncoder().encode(response).count > MessengerBridgeClient.maxResponseBytes {
+                            throw HarnessSetupError("The inbox is too large. Read individual conversations with --list-messages; no inbox offsets were advanced.")
+                        }
+                    })
+                    RuntimeDiagnostics.inboxRead(agentID: agentID, workspace: repository.directory(forAgentID: agentID),
+                                                 count: deliveries.count, consuming: consumes)
+                    return response
                 } catch {
-                    RuntimeDiagnostics.inboxRead(agentID: invocation.agentID,
-                        workspace: repository.directory(forAgentID: invocation.agentID),
-                        count: nil, consuming: consumes)
+                    RuntimeDiagnostics.inboxRead(agentID: agentID, workspace: repository.directory(forAgentID: agentID),
+                                                 count: nil, consuming: consumes)
                     throw error
                 }
-                if includesInlineImages {
-                    var includedIDs = Set<UUID>()
-                    let images = deliveries
-                        .flatMap(\.attachments)
-                        .compactMap { attachment -> MessengerInlineImage? in
-                            guard includedIDs.insert(attachment.id).inserted,
-                                  let dataURL = try? repository.inlineImageDataURL(for: attachment)
-                            else { return nil }
-                            return MessengerInlineImage(
-                                attachmentID: attachment.id,
-                                originalFilename: attachment.originalFilename,
-                                mediaType: attachment.mediaType,
-                                dataURL: dataURL
-                            )
-                        }
-                    return .json(MessengerInboxPayload(deliveries: deliveries, images: images))
-                }
-                return .json(deliveries)
 
             case .listConversations:
                 let conversations = try repository.loadConversations()
-                    .filter { $0.participantIDs.contains(invocation.agentID) }
+                    .filter { $0.participantIDs.contains(agentID) }
                 return .json(conversations)
 
             case .listParticipants(let conversationID):
                 return .json(try repository.participantRoster(
-                    for: invocation.agentID,
+                    for: agentID,
                     conversationID: conversationID
                 ))
 
             case .listMessages(let conversationID):
-                return .json(try repository.latestMessages(
-                    for: invocation.agentID, consuming: false, in: conversationID, includingRead: true
-                ))
+                let deliveries = try repository.latestMessages(
+                    for: agentID, consuming: false, in: conversationID, includingRead: true
+                )
+                return .json(try brokered ? project(deliveries, repository: repository, agentID: agentID) : deliveries)
 
             case .react(let conversationID, let messageID, let emoji, let present):
                 return .json(try repository.setReaction(
                     conversationID: conversationID, messageID: messageID,
-                    author: .agent(invocation.agentID), emoji: emoji, present: present
+                    author: .agent(agentID), emoji: emoji, present: present
                 ))
 
             case .send(let conversationID, let body, let attachmentURLs):
+                // Check membership before importing anything, including URLs.
+                _ = try repository.participantRoster(for: agentID, conversationID: conversationID)
                 var importedAttachments: [ConversationAttachment] = []
                 do {
                     for sourceURL in attachmentURLs {
                         let mediaType = UTType(filenameExtension: sourceURL.pathExtension)?.preferredMIMEType
                             ?? "application/octet-stream"
-                        importedAttachments.append(try repository.importAttachment(
-                            from: sourceURL,
-                            into: conversationID,
-                            mediaType: mediaType
-                        ))
+                        if brokered, sourceURL.isFileURL {
+                            let workspace = repository.directory(forAgentID: agentID)
+                            let relative = try ComputerWorkspaceFiles.relativePath(sourceURL.path, currentDirectory: workspace, workspace: workspace)
+                            let staging = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-messenger-" + UUID().uuidString)
+                            try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false,
+                                                                   attributes: [.posixPermissions: 0o700])
+                            defer { try? FileManager.default.removeItem(at: staging) }
+                            let file = staging.appendingPathComponent(sourceURL.lastPathComponent)
+                            _ = try ComputerWorkspaceFiles.upload(workspace: workspace, path: relative, to: file)
+                            importedAttachments.append(try repository.importAttachment(from: file, into: conversationID, mediaType: mediaType))
+                        } else {
+                            importedAttachments.append(try repository.importAttachment(from: sourceURL, into: conversationID, mediaType: mediaType))
+                        }
                     }
                     let message = try repository.sendAgentMessage(
-                        agentID: invocation.agentID,
+                        agentID: agentID,
                         conversationID: conversationID,
                         body: body,
                         attachmentIDs: importedAttachments.map(\.id)
@@ -120,30 +151,37 @@ public enum MessengerCLI {
             case .help:
                 return MessengerCommandResult(exitCode: 0, standardOutput: help + "\n")
             }
-        } catch {
-            return MessengerCommandResult(
-                exitCode: 2,
-                standardError: "messenger: \(error.localizedDescription)\n\n\(help)\n"
-            )
-        }
+        } catch { return .init(exitCode: 2, standardError: "messenger: \(error.localizedDescription)\n") }
     }
 
-    private enum Action {
-        case listEffects
-        case effect(conversationID: UUID, kind: String, requestID: UUID)
-        case getLatest(consumes: Bool, includesInlineImages: Bool)
-        case listConversations
-        case listParticipants(conversationID: UUID)
-        case listMessages(conversationID: UUID)
-        case react(conversationID: UUID, messageID: UUID, emoji: String, present: Bool)
-        case send(conversationID: UUID, body: String, attachmentURLs: [URL])
-        case help
+    private static func project(_ deliveries: [MessengerDelivery], repository: WorkspaceRepository,
+                                agentID: UUID) throws -> [MessengerDelivery] {
+        let workspace = repository.directory(forAgentID: agentID)
+        var copies: [UUID: String] = [:]
+        return try deliveries.map { original in
+            var delivery = original
+            delivery.attachments = try original.attachments.map { attachment in
+                var item = attachment
+                if let path = copies[item.id] { item.absolutePath = path; return item }
+                let folder = try WorkspaceMailbox(workspace: workspace,
+                    path: ".noodle/messenger-attachments/" + item.conversationID.uuidString.lowercased(), create: true)
+                let source = repository.attachmentsDirectory(conversationID: item.conversationID).appendingPathComponent(item.storedFilename)
+                guard source.standardizedFileURL.deletingLastPathComponent() == repository.attachmentsDirectory(conversationID: item.conversationID).standardizedFileURL,
+                      source.resolvingSymlinksInPath() == source.standardizedFileURL else { throw WorkspaceError.invalidAttachment }
+                try folder.copy(from: source, named: item.storedFilename)
+                item.absolutePath = folder.url.appendingPathComponent(item.storedFilename).path
+                copies[item.id] = item.absolutePath
+                return item
+            }
+            return delivery
+        }
     }
 
     private struct Invocation {
         let repositoryRoot: URL
         let agentID: UUID
-        let action: Action
+        let workspace: URL
+        let action: MessengerAction
 
         init(arguments: [String], environment: [String: String]) throws {
             guard let executable = arguments.first else { throw WorkspaceError.invalidAgentDirectory }
@@ -156,8 +194,9 @@ public enum MessengerCLI {
             let environmentDirectory = environment["NOODLE_WORKSPACE"].map {
                 URL(fileURLWithPath: $0, isDirectory: true)
             }
-            let workspace = try explicitDirectory ?? environmentDirectory ?? Self.agentDirectory(from: executable)
-            let layout = try AgentStorageLayout.containing(workspace)
+            let resolvedWorkspace = try explicitDirectory ?? environmentDirectory ?? Self.agentDirectory(from: executable)
+            let layout = try AgentStorageLayout.containing(resolvedWorkspace)
+            workspace = layout.workspace
             guard let id = UUID(uuidString: layout.package.lastPathComponent) else {
                 throw WorkspaceError.invalidAgentDirectory
             }
@@ -356,3 +395,15 @@ private extension MessengerCommandResult {
         }
     }
 }
+
+public enum MessengerAction: Codable, Sendable {
+        case listEffects
+        case effect(conversationID: UUID, kind: String, requestID: UUID)
+        case getLatest(consumes: Bool, includesInlineImages: Bool)
+        case listConversations
+        case listParticipants(conversationID: UUID)
+        case listMessages(conversationID: UUID)
+        case react(conversationID: UUID, messageID: UUID, emoji: String, present: Bool)
+        case send(conversationID: UUID, body: String, attachmentURLs: [URL])
+        case help
+    }

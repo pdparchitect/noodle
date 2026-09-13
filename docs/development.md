@@ -92,7 +92,10 @@ Storage migration tests interrupt each move and verify resumption, user-folder
 collisions, hard-link separation, copied packages, and invalid layouts.
 `RestrictedAgentSandboxTests` runs real sandboxed processes against disposable
 data: workspace writes and Messenger replies must succeed while configuration
-and runtime writes, replacements, and links are denied. FX/Grok/Muse checks also deny
+and runtime writes, replacements, and links are denied. Other bots’ contents and
+raw conversation files must be unreadable, and the broker must reject nonmember
+conversation requests. Private provider stores cannot expose the shared login
+Keychain or standalone account history. FX/Grok/Muse checks also deny
 personal-file access, other account access, and installation replacement. When
 Codex, FX, or Grok Build is installed, initialization-only checks use empty account
 directories; they make no model requests and read no real account credentials.
@@ -109,6 +112,15 @@ and session resume using the real accounts, inside disposable repositories.
 real Muse adapter and production sandbox profile. `NOODLE_TEST_MUSE_MODEL` can
 select a model; otherwise Muse uses its default. The autonomous comparison is
 available with `NOODLE_TEST_MUSE_LIVE=1`.
+`MessengerBridgeTests`, `WorkspaceMailboxTests`, and `RestrictedHarnessStorageTests`
+exercise forged/expired/replayed tokens, membership checks, attachment copies,
+credential seeding and refresh preservation, and symlink/hardlink redirection.
+Computer broker tests exercise concurrent requests and revocation during transfers.
+`BridgeCLISandboxTests` runs the signed development bundle's MCP, Computer, and
+Applet helpers through real workspace mailboxes under the Apple profile, with
+networking and cross-sandbox signaling denied. Build the development app first;
+without its bundled helpers these three tests skip. The deterministic message
+fixture also checks recovery of an old Codex thread missing from private storage.
 Release automation tests verify
 that signed update-feed entries retain the required migration chain.
 

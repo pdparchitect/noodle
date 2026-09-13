@@ -771,6 +771,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private struct PersistedState: Codable {
         let version: Int
         let threadID: String
+        var needsHistoryRecovery: Bool? = nil
     }
 
     let configuration: AgentRecord
@@ -795,6 +796,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private var nextRequestID = 1
     private var purposes: [Int: RequestPurpose] = [:]
     private var threadID: String?
+    private var needsHistoryRecovery = false
     private var turnIsActive = false
     private var activeTurnID: String?
     private var earlyTurnCompletion: [String: Any]?
@@ -835,6 +837,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
         let state = Self.loadState(from: stateURL)
         threadID = state?.version == Self.runtimeVersion ? state?.threadID : nil
+        needsHistoryRecovery = state?.needsHistoryRecovery ?? false
     }
 
     func start() {
@@ -998,7 +1001,9 @@ final class CodexAgentProcess: AgentRuntimeProcess {
                 }
                 if case .resumeThread = purpose {
                     threadID = nil
-                    try? FileManager.default.removeItem(at: stateURL)
+                    needsHistoryRecovery = true
+                    recoveryPending = true
+                    // Keep the old pointer until a new private thread is saved.
                     openThread()
                     return
                 }
@@ -1032,6 +1037,8 @@ final class CodexAgentProcess: AgentRuntimeProcess {
                     fail("Codex did not return a turn identifier")
                     return
                 }
+                needsHistoryRecovery = false
+                if let threadID { saveState(threadID: threadID) }
                 activeTurnID = id
                 trace.record(.turnAccepted)
                 turnIsActive = true
@@ -1202,7 +1209,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             "threadId": threadID,
             "input": [[
                 "type": "text",
-                "text": reason.eventText
+                "text": reason.eventText + (needsHistoryRecovery ? "\n\n" + MessengerDocumentation.recoveredModelContext : "")
             ]],
             "cwd": workspaceURL.path,
             "approvalPolicy": extendedAccess ? "on-request" : "never",
@@ -1250,7 +1257,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             let directory = stateURL.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try JSONEncoder().encode(
-                PersistedState(version: Self.runtimeVersion, threadID: threadID)
+                PersistedState(version: Self.runtimeVersion, threadID: threadID, needsHistoryRecovery: needsHistoryRecovery)
             ).write(to: stateURL, options: .atomic)
         } catch {
             fail("Could not save Codex thread: \(error.localizedDescription)")

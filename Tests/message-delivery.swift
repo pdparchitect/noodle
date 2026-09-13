@@ -6,6 +6,8 @@ import NoodleCore
 @MainActor final class ExtendedAgentConnection {
     static var current: ExtendedAgentConnection!
     static var workspace = ""
+    static var rejectCodexResume = false
+    var lastPromptText = ""
     var onData: ((Data, Bool) -> Void)?
     var onExit: ((Int32) -> Void)?
     var onFailure: ((String) -> Void)?
@@ -74,7 +76,12 @@ import NoodleCore
             result = provider == .muse
                 ? ["schema": ["version": 1], "serverInfo": ["name": "muse"], "sessionDurability": "durable"]
                 : ["protocolVersion": 1]
-        case "thread/start", "thread/resume": result = ["thread": ["id": session]]
+        case "thread/start": result = ["thread": ["id": session]]
+        case "thread/resume":
+            if Self.rejectCodexResume {
+                emit(["id": id, "error": ["code": -32000, "message": "Thread absent from private account"]]); return
+            }
+            result = ["thread": ["id": session]]
         case "thread/name/set", "authenticate": break
         case "session/new": result = ["sessionId": session]
         case "session/load":
@@ -84,6 +91,7 @@ import NoodleCore
             result = ["session": ["sessionId": session, "workspaceRoot": Self.workspace], "pendingRequests": []]
         case "session/prompt": prompts += 1; promptID = id; return
         case "turn/start":
+            lastPromptText = (params["input"] as? [[String: String]])?.first?["text"] ?? ""
             prompts += 1
             turn = UUID().uuidString
             result = provider == .codex ? ["turn": ["id": turn]]
@@ -212,6 +220,35 @@ import NoodleCore
         }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("delivery-fixture-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }
+
+        // A legacy thread in shared CODEX_HOME must recover through Messenger
+        // after switching to private storage, even without a new inbox event.
+        do {
+            let workspace = root.appendingPathComponent("legacy-codex/workspace")
+            let layout = AgentStorageLayout(workspace: workspace)
+            try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: layout.runtime, withIntermediateDirectories: true)
+            let oldThread = UUID().uuidString
+            try JSONSerialization.data(withJSONObject: ["version": 9, "threadID": oldThread])
+                .write(to: layout.sessionState(provider: .codex, extendedAccess: false))
+            ExtendedAgentConnection.rejectCodexResume = true
+            defer { ExtendedAgentConnection.rejectCodexResume = false }
+            let agent = AgentRecord(displayName: "Private Codex", harnessIdentifier: "codex")
+            let process = CodexAgentProcess(agent: agent, executableURL: URL(fileURLWithPath: "/fixture/codex"),
+                workspaceURL: workspace, extendedAccess: false, recoverInterruptedWork: false,
+                onSnapshot: { _ in }, onHeartbeat: {}, onApprovals: { _ in }, onUnexpectedTermination: { _, _, _ in })
+            process.start()
+            await eventually { ExtendedAgentConnection.current.prompts == 1 && process.snapshot.phase == .working }
+            let wire = ExtendedAgentConnection.current!
+            precondition(wire.lastPromptText.contains(MessengerDocumentation.recoveredModelContext))
+            let saved = try JSONSerialization.jsonObject(with: Data(contentsOf: layout.sessionState(provider: .codex, extendedAccess: false))) as! [String: Any]
+            precondition(saved["threadID"] as? String != oldThread)
+            precondition(saved["needsHistoryRecovery"] as? Bool == false)
+            wire.complete()
+            await eventually { process.snapshot.phase == .ready }
+            process.stop { _ in }
+            print("PASS: Codex shared-session migration recovers context through Messenger")
+        }
 
         for provider in HarnessProvider.allCases {
             let process = try await make(provider, root: root)

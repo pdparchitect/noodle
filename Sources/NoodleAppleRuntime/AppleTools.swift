@@ -43,7 +43,7 @@ struct AppleConversationTurn: Sendable {
 /// and real filesystem behavior can be tested without making an inference request.
 public actor AppleToolContext {
     public let workspace: URL
-    private let repository: WorkspaceRepository
+    private let messenger: MessengerClient
     private let agentID: UUID
     private var remainingCalls = 32
     private var inboxResult: String?
@@ -58,12 +58,12 @@ public actor AppleToolContext {
     private let replyReceiptsFile: URL
     private var replyReceipts: [String: ReplyReceipt]
 
-    public init(workspace: URL) throws {
+    public init(workspace: URL, messenger: MessengerClient? = nil) throws {
         let layout = try AgentStorageLayout.containing(workspace)
         self.workspace = layout.workspace
         guard let id = UUID(uuidString: layout.package.lastPathComponent) else { throw WorkspaceError.invalidAgentDirectory }
         agentID = id
-        repository = WorkspaceRepository(rootURL: layout.package.deletingLastPathComponent().deletingLastPathComponent())
+        self.messenger = messenger ?? MessengerClient(workspace: layout.workspace)
         outputDirectory = layout.workspace.appendingPathComponent(".noodle/apple/outputs")
         pendingRepliesFile = layout.workspace.appendingPathComponent(".noodle/apple/pending-replies.json")
         if FileManager.default.fileExists(atPath: pendingRepliesFile.path) {
@@ -135,7 +135,7 @@ public actor AppleToolContext {
         try beginCall()
         // A repeated tool call in one turn never consumes a second inbox batch.
         if let inboxResult { return inboxResult }
-        let deliveries = try repository.latestMessages(for: agentID, consuming: true)
+        let deliveries: [MessengerDelivery] = try messenger.call(.getLatest(consumes: true, includesInlineImages: false))
         inboxDeliveries = deliveries
         for delivery in deliveries where delivery.message.author == .user && delivery.reactionChange == nil {
             pendingReplies[delivery.conversation.id.uuidString.lowercased(), default: []].insert(delivery.message.id)
@@ -170,7 +170,7 @@ public actor AppleToolContext {
     public func history(conversation: String) throws -> String {
         try beginCall()
         let id = try conversationID(conversation)
-        let messages = try repository.latestMessages(for: agentID, consuming: false, in: id, includingRead: true)
+        let messages: [MessengerDelivery] = try messenger.call(.listMessages(conversationID: id))
         return try present(json(messages))
     }
 
@@ -183,7 +183,7 @@ public actor AppleToolContext {
     func conversationHistoryPage(conversation: String, offset: Int, includeAssistantReplies: Bool) throws -> AppleHistoryPage {
         try beginCall()
         let id = try conversationID(conversation)
-        let messages = try repository.latestMessages(for: agentID, consuming: false, in: id, includingRead: true)
+        let messages: [MessengerDelivery] = try messenger.call(.listMessages(conversationID: id))
         let text = try messages.filter { includeAssistantReplies || $0.message.author == .user }.map { delivery in
             let role = delivery.message.author == .agent(agentID) ? "Assistant" : delivery.sender.displayName
             return "\(role): \(try conversationText(delivery))"
@@ -203,7 +203,7 @@ public actor AppleToolContext {
         var turns: [AppleConversationTurn] = []
         for key in pendingReplies.keys.sorted() {
             let conversation = try conversationID(key)
-            let deliveries = try repository.latestMessages(for: agentID, consuming: false, in: conversation, includingRead: true)
+            let deliveries: [MessengerDelivery] = try messenger.call(.listMessages(conversationID: conversation))
             // Reconcile only the exact reply prepared for these messages. An
             // unrelated reply may follow a new arrival while another turn runs.
             if let receipt = replyReceipts[key],
@@ -275,13 +275,14 @@ public actor AppleToolContext {
 
     public func conversations() throws -> String {
         try beginCall()
-        return try present(json(repository.loadConversations().filter { $0.participantIDs.contains(agentID) }))
+        let conversations: [BotConversation] = try messenger.call(.listConversations)
+        return try present(json(conversations))
     }
 
     public func send(conversation: String, body: String) throws -> String {
         try beginCall()
         guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw HarnessSetupError("A reply cannot be empty.") }
-        let message = try repository.sendAgentMessage(agentID: agentID, conversationID: conversationID(conversation), body: body)
+        let message: ChatMessage = try messenger.call(.send(conversationID: conversationID(conversation), body: body, attachmentURLs: []))
         return "Sent message \(message.id.uuidString.lowercased())."
     }
 

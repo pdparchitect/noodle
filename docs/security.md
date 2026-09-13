@@ -30,37 +30,49 @@ An automatically accepted tool approval cannot add filesystem permissions to
 that policy. The restrictions therefore apply even when a model issues an
 unexpected command or follows misleading instructions.
 
-For restricted Codex, FX, Grok Build, and Muse Code, the policy permits writes to
-the bot's `workspace`, shared conversations,
-the selected harness's account directory (`~/.codex`, `~/.fx`, `~/.grok`, or `~/.config/muse`),
-and its workspace temporary files. Grok's `bin`, `downloads`, `bundled`, and
-`vendor` installation directories remain read-only.
-Restricted Muse keeps its session data, state, and runtime files under
-`workspace/.noodle/muse` using fixed XDG paths. Its standalone session store and
-native installation remain outside the writable boundary.
-Its parent `agent.json`, layout metadata, Noodle-owned `runtime`, and Noodle
-preferences are outside the writable boundary. System files, the app and harness
-installation, and Noodle repository data are readable where needed; arbitrary
-personal file contents are not granted. Outbound networking supports the model
-connection and connected tools. This is not isolation between conversation
-participants or between sessions using the same harness account.
+Each restricted bot can read its own `Agents/<uuid>` package and write only
+inside that package's `workspace`. Its `agent.json`, layout metadata, and
+Noodle-owned `runtime` remain read-only. Other bots' packages, the shared
+conversation store, Noodle preferences, and unrelated personal files are outside
+the content-read and write boundary. System libraries, the signed app/harness
+installation, and required system services remain available.
 
-Restricted FX and Grok retain their existing account discovery without gaining
-general home-folder access. They can list the home directory's entries, but this
-does not grant access to its child files. FX also opens each ancestor directory
-of its workspace and account when discovering skills; exact directory-entry
-reads support that traversal without granting reads of sibling file contents.
-Muse discovers its existing account through a fixed `XDG_CONFIG_HOME`, without
-access to other configuration folders. Its real `HOME` preserves native Keychain
-lookup, while the sandbox reports personal `.agents`, `.codex`, and `.claude`
-directories as absent during discovery. Workspace skills and Muse's own
-account configuration remain available. FX and Muse additionally need read-only access
-to the standard `~/Library/Keychains/login.keychain` and `login.keychain-db` files
-and the local securityd service for their existing OAuth sign-ins. FX's
-[Zig TLS certificate scanner](https://github.com/ziglang/zig/blob/master/lib/std/crypto/Certificate/Bundle/macos.zig)
-also reads `/Library/Keychains/System.keychain` in addition to the system root
-certificates already under `/System`. Other personal Keychain files and direct
-Keychain writes remain denied; macOS Keychain access controls still apply.
+Conversation access goes through the Messenger CLI and an app-side broker.
+Noodle must be running. The broker derives bot identity from the registered
+workspace and a per-bot session token, then checks conversation membership. A CLI
+flag, forged bot ID, or edited skill cannot grant another bot's access. The CLI
+has no direct conversation-file fallback. Attachment reads return copies under
+`workspace/.noodle/messenger-attachments`; local attachment sends can import only
+regular files from the caller's workspace, without following symlinks.
+
+Cloud harnesses have a private home at `workspace/.noodle/home`. Codex, FX, Grok,
+and Muse store their own configuration, sessions, and caches there; Muse's data,
+state, and runtime directories remain under `workspace/.noodle/muse`. The trusted
+Agent Host seeds only login material from the existing provider sign-in. It does
+not copy standalone conversations, global skills, hooks, or MCP configuration.
+FX also receives its selected provider/model settings. Native installations stay
+read-only.
+
+For FX and Muse Keychain-backed sign-ins, the host requests only the exact
+provider credential item, without prompting. The harness receives a private file
+credential store and has no access to the login Keychain or shared account
+folder. If macOS denies that item, startup fails with a Keychain-access error;
+it does not widen the sandbox. FX's TLS implementation still reads the system
+certificate store at `/Library/Keychains/System.keychain`.
+
+Each bot keeps credentials it refreshes. The host replaces them when the source
+login changes, and never writes the bot's credentials back to the shared login.
+Bot-package backups and copies now include these private login files and should
+be treated as credentials. These are copies of the same provider login, so provider-side identity, quotas,
+and revocation remain shared; they are not separate provider accounts. Provider
+refresh-token rotation can require signing in again. Existing native Codex
+sessions stored in the former shared account may need a fresh model context;
+Noodle's conversation history remains available through Messenger.
+
+Workspace mailboxes, attachment copies, and managed instructions/skills use
+anchored directory handles. Replacing a writable parent directory with a symlink
+cannot redirect a privileged app operation into another bot's files.
+
 FX uses ACP ask mode and Noodle grants only the
 offered allow-once action for the current session. Grok uses a dedicated
 `--no-leader` process with its inner sandbox disabled because Agent Host has
@@ -91,6 +103,9 @@ Revoke those separately in System Settings.
   configuration, Noodle runtime state, and unrelated personal files are denied.
   Ordinary link, rename, and replacement attempts do not grant access outside
   the policy. Unrelated personal file contents are also denied.
+- **Per-bot storage and authorized conversations:** other bots’ files and raw
+  conversation JSON are denied. The app checks membership and tool assignments
+  before releasing data or performing a request.
 - **A controlled launch boundary:** the host verifies executable identity and
   accepts only supported launch options. Restricted runs cannot request a wider
   policy, and enabling another restricted harness does not require broader app
@@ -99,12 +114,12 @@ Revoke those separately in System Settings.
 ## Limitations
 
 - **Allowed files remain writable.** A bot can damage or delete data inside its
-  writable workspace, conversation store, and permitted account directory. The
+  writable workspace, including its private harness storage. The
   sandbox does not validate the meaning of edits or provide rollback.
-- **Bots do not have private repositories or accounts.** The Noodle repository
-  is readable, including other bots' stored data, and conversations are shared.
-  Sessions using the same harness account also share its permitted account
-  storage. This is not a boundary for running mutually untrusted tenants.
+- **Authorized data is still shared.** Members of a conversation can retrieve
+  its messages and attachments through Messenger. Copies already delivered to
+  a workspace are not erased when membership is removed. Bots using the same
+  provider login share that provider account's permissions and billing.
 - **Cloud harness networking is open outbound.** Codex, FX, Grok Build, and Muse
   Code are not limited to a list of model-provider domains. Readable data can be
   sent to remote services, and the policy does not block outbound LAN access.
@@ -114,8 +129,9 @@ Revoke those separately in System Settings.
   perform on a bot's behalf.
 - **File metadata is less restricted than contents.** The profiles generally
   allow metadata queries, so file existence and attributes can be visible even
-  when contents cannot be read. Muse's hidden personal-context directories are
-  an explicit exception. FX and Grok can also list home-directory entries.
+  when contents cannot be read. FX also needs exact directory-entry reads along
+  its workspace ancestors for native skill discovery; these can expose sibling
+  names, but do not grant sibling file contents.
 - **Some tools will fail inside the boundary.** Dependencies, caches, global
   skills, services, or files outside the allowed paths may be unavailable.
   Harness updates can introduce new requirements. A tool approval does not fix
@@ -159,12 +175,12 @@ policy before the harness executable starts; failure to apply it prevents
 startup. The host accepts no caller-supplied sandbox profile, arbitrary command,
 or writable roots. Autonomous harnesses use the separate authorized launch path.
 The host runs as the current user, never root. App and helper entitlements are
-unchanged by the workspace migration.
+unchanged by bot isolation.
 
 The built-in `NoodleAppleAgent` is verified against this app's exact helper path,
 signing team, and helper identifier. It has no extra entitlements and does not
 inherit the app sandbox. Agent Host applies its own deny-by-default policy before
-execution: system and Noodle repository reads, workspace and conversation writes,
+execution: system and own-bot package reads, workspace writes,
 read-only model-availability and global preferences, and the Apple model-manager
 service. Outbound network and unrelated user files are denied. Its initial
 Default model runs on device through Foundation Models. The existing per-bot
@@ -174,7 +190,10 @@ Sparkle's signed installer runs outside the sandbox to replace the app during up
 
 The policies are implemented in
 [`RestrictedAgentSandbox.swift`](../Sources/NoodleCore/RestrictedAgentSandbox.swift)
-and [`AppleHarness.swift`](../Sources/NoodleCore/AppleHarness.swift), with launch
+and [`AppleHarness.swift`](../Sources/NoodleCore/AppleHarness.swift). Login seeding is
+in [`RestrictedHarnessStorage.swift`](../Sources/NoodleCore/RestrictedHarnessStorage.swift),
+conversation authorization is in [`MessengerBridge.swift`](../Sources/NoodleCore/MessengerBridge.swift),
+and workspace I/O is anchored by [`WorkspaceMailbox.swift`](../Sources/NoodleCore/WorkspaceMailbox.swift), with launch
 enforcement in [`NoodleAgentHost`](../Sources/NoodleAgentHost/main.swift).
 [Development](development.md) describes the real-process filesystem boundary
 tests, offline initialization checks, opt-in live Messenger/resume checks, and

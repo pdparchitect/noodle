@@ -116,7 +116,7 @@ final class AttachmentAnnotationTests: XCTestCase {
                 .first(where: { $0.message.id == message.id }))
             XCTAssertEqual(delivery.attachments.first?.annotation, note)
             XCTAssertEqual(delivery.attachments.first?.mediaType, "text/plain")
-            let cli = MessengerCLI.run(arguments: ["messenger", "--list-messages", "--conversation", group.id.uuidString],
+            let cli = MessengerCLI.runDirect(arguments: ["messenger", "--list-messages", "--conversation", group.id.uuidString],
                 environment: ["NOODLE_WORKSPACE": repository.directory(for: agent).path])
             XCTAssertEqual(cli.exitCode, 0, cli.standardError)
             let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(cli.standardOutput.utf8)) as? [[String: Any]])
@@ -202,7 +202,7 @@ final class AttachmentAnnotationTests: XCTestCase {
         XCTAssertEqual(repaired.mediaType, "image/png")
         XCTAssertEqual(repaired.annotation, note, "Image type repair must preserve annotation metadata")
         _ = try repository.sendUserMessage(conversationID: bot.conversation.id, body: "Review", attachmentIDs: [file.id])
-        let cli = MessengerCLI.run(arguments: ["messenger", "--get-latest", "--peek", "--inline-images"],
+        let cli = MessengerCLI.runDirect(arguments: ["messenger", "--get-latest", "--peek", "--inline-images"],
             environment: ["NOODLE_WORKSPACE": repository.directory(for: bot.agent).path])
         XCTAssertEqual(cli.exitCode, 0, cli.standardError)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(cli.standardOutput.utf8)) as? [String: Any])

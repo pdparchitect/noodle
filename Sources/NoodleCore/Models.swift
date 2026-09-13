@@ -242,7 +242,7 @@ public struct MessengerAttachment: Codable, Hashable, Sendable {
     public let mediaType: String
     public let byteCount: Int64
     public let createdAt: Date
-    public let absolutePath: String
+    public var absolutePath: String
     public let url: URL?
     public let voice: VoiceMessage?
 
@@ -268,7 +268,7 @@ public struct MessengerDelivery: Codable, Hashable, Sendable {
     public let participants: [MessengerIdentity]
     public let sender: MessengerIdentity
     public let message: ChatMessage
-    public let attachments: [MessengerAttachment]
+    public var attachments: [MessengerAttachment]
     public var reactions: [MessengerReaction]?
     public var reactionChange: MessengerReactionChange?
 
@@ -715,11 +715,9 @@ public struct WorkspaceRepository: Sendable {
             throw WorkspaceError.missingAgent(agent.id)
         }
 
-        let agentsDirectory = directory.appendingPathComponent(".agents", isDirectory: true)
-        let messengerDirectory = agentsDirectory
-            .appendingPathComponent("skills", isDirectory: true)
-            .appendingPathComponent("messenger", isDirectory: true)
-        try FileManager.default.createDirectory(at: messengerDirectory, withIntermediateDirectories: true)
+        let workspaceFiles = try WorkspaceMailbox(workspace: directory, path: "")
+        let agentsFiles = try WorkspaceMailbox(workspace: directory, path: ".agents", create: true)
+        let messengerFiles = try WorkspaceMailbox(workspace: directory, path: ".agents/skills/messenger", create: true)
 
         let backstory = try loadAgentBackstory(agent)
         let mcpRegistry = try MCPRegistry.load(root: rootURL)
@@ -727,21 +725,11 @@ public struct WorkspaceRepository: Sendable {
         let appletExecutable = appletExecutableURL
         let appletEnabled = appletExecutable != nil
         let appletInstructions = appletEnabled ? "\n## Creative applets\nRead `.agents/skills/applet/SKILL.md` to build and run HTML and native Swift noodlets in Noodle Applet.\n" : ""
-        let agentsFile = directory.appendingPathComponent("AGENTS.md")
         let computerInstructions = computerAssigned ? "\n## Assigned computers\nRead `.agents/skills/computer/SKILL.md` to access your assigned computers through Noodle.\n" : ""
-        try (Self.renderedAgentInstructions(backstory: backstory, mcpConnections: mcpRegistry.assigned(to: agent.id)) + computerInstructions + appletInstructions).write(
-            to: agentsFile,
-            atomically: true,
-            encoding: .utf8
-        )
-
-        let legacyInstructionsFile = directory.appendingPathComponent("instructions.md")
-        if FileManager.default.fileExists(atPath: legacyInstructionsFile.path) {
-            try FileManager.default.removeItem(at: legacyInstructionsFile)
-        }
-
-        let claudeFile = directory.appendingPathComponent("CLAUDE.md")
-        try replaceSymlink(at: claudeFile, destinationPath: "AGENTS.md")
+        try workspaceFiles.writeData(Data((Self.renderedAgentInstructions(backstory: backstory,
+            mcpConnections: mcpRegistry.assigned(to: agent.id)) + computerInstructions + appletInstructions).utf8), named: "AGENTS.md")
+        workspaceFiles.remove("instructions.md")
+        try workspaceFiles.symlink("CLAUDE.md", destination: "AGENTS.md")
         let mcpExecutable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("mcpshim")
         try MCPSkillWriter.synchronize(workspace: directory, connections: mcpRegistry.assigned(to: agent.id),
             executable: mcpExecutable.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil })
@@ -751,12 +739,9 @@ public struct WorkspaceRepository: Sendable {
         try AppletAgentSkill.synchronize(workspace: directory, enabled: appletEnabled, executable: appletEnabled ? appletExecutable : nil)
         let claudeSkillPaths = try synchronizeClaudeSkillLinks(in: directory)
 
-        let skillFile = messengerDirectory.appendingPathComponent("SKILL.md")
-        try Self.messengerSkill.write(to: skillFile, atomically: true, encoding: .utf8)
-
+        try messengerFiles.writeData(Data(Self.messengerSkill.utf8), named: "SKILL.md")
         if let launcherExecutableURL {
-            let command = messengerDirectory.appendingPathComponent("messenger")
-            try replaceSymlink(at: command, destinationPath: launcherExecutableURL.path)
+            try messengerFiles.symlink("messenger", destination: launcherExecutableURL.path)
         }
 
         let manifest = ManagedSkillManifest(
@@ -768,7 +753,7 @@ public struct WorkspaceRepository: Sendable {
                 ".agents/skills/messenger/messenger"
             ] + (computerAssigned ? [".agents/skills/computer/SKILL.md", ".agents/skills/computer/computer", ".agents/skills/computer/.noodle-managed"] : []) + (appletEnabled ? [".agents/skills/applet/SKILL.md", ".agents/skills/applet/noodlet", ".agents/skills/applet/.noodle-managed"] : []) + claudeSkillPaths
         )
-        try write(manifest, to: agentsDirectory.appendingPathComponent("managed-skills.json"))
+        try agentsFiles.write(manifest, named: "managed-skills.json")
     }
 
     public func loadAgentBackstory(_ agent: AgentRecord) throws -> String {
@@ -777,42 +762,22 @@ public struct WorkspaceRepository: Sendable {
             throw WorkspaceError.missingAgent(agent.id)
         }
 
-        let agentsFile = directory.appendingPathComponent("AGENTS.md")
-        if let contents = try? String(contentsOf: agentsFile, encoding: .utf8) {
-            if let backstory = Self.backstory(fromManagedInstructions: contents) {
-                return backstory
-            }
-            if !Self.looksLikeLegacyManagedInstructions(contents) {
-                return Self.normalizedLegacyBackstory(contents)
-            }
+        let files = try WorkspaceMailbox(workspace: directory, path: "")
+        if files.contains("AGENTS.md") {
+            let contents = String(decoding: try files.read("AGENTS.md", limit: 4 * 1_048_576), as: UTF8.self)
+            if let backstory = Self.backstory(fromManagedInstructions: contents) { return backstory }
+            if !Self.looksLikeLegacyManagedInstructions(contents) { return Self.normalizedLegacyBackstory(contents) }
         }
-
-        let legacyInstructionsFile = directory.appendingPathComponent("instructions.md")
-        guard FileManager.default.fileExists(atPath: legacyInstructionsFile.path) else {
-            return ""
-        }
-        let legacy = try String(contentsOf: legacyInstructionsFile, encoding: .utf8)
+        guard files.contains("instructions.md") else { return "" }
+        let legacy = String(decoding: try files.read("instructions.md", limit: 4 * 1_048_576), as: UTF8.self)
         return Self.normalizedLegacyBackstory(legacy)
     }
 
     public func updateAgentBackstory(_ agent: AgentRecord, backstory: String) throws {
-        let directory = directory(for: agent)
-        guard FileManager.default.fileExists(atPath: directory.path) else {
-            throw WorkspaceError.missingAgent(agent.id)
-        }
-
-        let agentsFile = directory.appendingPathComponent("AGENTS.md")
-        try Self.renderedAgentInstructions(backstory: backstory,
-            mcpConnections: MCPRegistry.load(root: rootURL).assigned(to: agent.id)).write(
-            to: agentsFile,
-            atomically: true,
-            encoding: .utf8
-        )
-
-        let legacyInstructionsFile = directory.appendingPathComponent("instructions.md")
-        if FileManager.default.fileExists(atPath: legacyInstructionsFile.path) {
-            try FileManager.default.removeItem(at: legacyInstructionsFile)
-        }
+        let files = try WorkspaceMailbox(workspace: directory(for: agent), path: "")
+        try files.writeData(Data(Self.renderedAgentInstructions(backstory: backstory,
+            mcpConnections: MCPRegistry.load(root: rootURL).assigned(to: agent.id)).utf8), named: "AGENTS.md")
+        files.remove("instructions.md")
     }
 
     public func importAttachment(
@@ -1104,7 +1069,8 @@ public struct WorkspaceRepository: Sendable {
         for agentID: UUID,
         consuming: Bool = true,
         in conversationID: UUID? = nil,
-        includingRead: Bool = false
+        includingRead: Bool = false,
+        preparing: (([MessengerDelivery]) throws -> Void)? = nil
     ) throws -> [MessengerDelivery] {
         let agents = try loadAgents()
         guard let readingAgent = agents.first(where: { $0.id == agentID }) else {
@@ -1194,10 +1160,13 @@ public struct WorkspaceRepository: Sendable {
             }
         }
 
-        if consuming && !includingRead { try saveInbox(inbox, for: agentID) }
-        return deliveries.sorted {
+        deliveries.sort {
             ($0.reactionChange?.createdAt ?? $0.message.createdAt) < ($1.reactionChange?.createdAt ?? $1.message.createdAt)
         }
+        // Broker attachment delivery must succeed before advancing the inbox.
+        try preparing?(deliveries)
+        if consuming && !includingRead { try saveInbox(inbox, for: agentID) }
+        return deliveries
     }
 
     public func participantRoster(for agentID: UUID, conversationID: UUID) throws -> MessengerRoster {
@@ -1549,47 +1518,27 @@ public struct WorkspaceRepository: Sendable {
         return try decoder.decode(type, from: Data(contentsOf: url))
     }
 
-    private func replaceSymlink(at url: URL, destinationPath: String) throws {
-        if FileManager.default.fileExists(atPath: url.path) ||
-            (try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)) != nil {
-            try FileManager.default.removeItem(at: url)
-        }
-        try FileManager.default.createSymbolicLink(atPath: url.path, withDestinationPath: destinationPath)
-    }
-
     private func synchronizeClaudeSkillLinks(in directory: URL) throws -> [String] {
-        let manager = FileManager.default
-        let claude = directory.appendingPathComponent(".claude", isDirectory: true)
-        // Never follow an existing redirected configuration folder or replace
-        // user-authored Claude settings, skills or symlinks.
-        if let type = try? manager.attributesOfItem(atPath: claude.path)[.type] as? FileAttributeType {
-            guard type == .typeDirectory else { return [] }
-        } else {
-            try manager.createDirectory(at: claude, withIntermediateDirectories: false)
-        }
-        let skills = claude.appendingPathComponent("skills", isDirectory: true)
+        let root = try WorkspaceMailbox(workspace: directory, path: "")
+        // Preserve user redirects, without following them for privileged I/O.
+        if root.contains(".claude"), root.linkDestination(".claude") != nil { return [] }
+        guard let claude = try? WorkspaceMailbox(workspace: directory, path: ".claude", create: true) else { return [] }
         let destination = "../.agents/skills"
-        if (try? manager.destinationOfSymbolicLink(atPath: skills.path)) == destination {
+        if claude.linkDestination("skills") == destination { return [".claude/skills"] }
+        if !claude.contains("skills") {
+            try claude.symlink("skills", destination: destination)
             return [".claude/skills"]
         }
-        guard let type = try? manager.attributesOfItem(atPath: skills.path)[.type] as? FileAttributeType else {
-            try manager.createSymbolicLink(atPath: skills.path, withDestinationPath: destination)
-            return [".claude/skills"]
-        }
-        guard type == .typeDirectory else { return [] }
-
-        // An existing native skills directory belongs to the bot. Add missing
-        // skill links inside it, leaving native skills and name conflicts alone.
-        let shared = directory.appendingPathComponent(".agents/skills", isDirectory: true)
+        guard let native = try? WorkspaceMailbox(workspace: directory, path: ".claude/skills") else { return [] }
+        let shared = try WorkspaceMailbox(workspace: directory, path: ".agents/skills")
         var managedPaths: [String] = []
-        for name in try manager.contentsOfDirectory(atPath: shared.path).sorted() {
-            let link = skills.appendingPathComponent(name)
-            let target = "../../.agents/skills/\(name)"
-            if (try? manager.destinationOfSymbolicLink(atPath: link.path)) == target {
-                managedPaths.append(".claude/skills/\(name)")
-            } else if (try? manager.attributesOfItem(atPath: link.path)) == nil {
-                try manager.createSymbolicLink(atPath: link.path, withDestinationPath: target)
-                managedPaths.append(".claude/skills/\(name)")
+        for name in try shared.names().sorted() {
+            let target = "../../.agents/skills/" + name
+            if native.linkDestination(name) == target {
+                managedPaths.append(".claude/skills/" + name)
+            } else if !native.contains(name) {
+                try native.symlink(name, destination: target)
+                managedPaths.append(".claude/skills/" + name)
             }
         }
         return managedPaths

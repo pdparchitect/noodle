@@ -32,10 +32,11 @@ public enum AppleModel {
         let recovering = FileManager.default.fileExists(atPath: unfinished.path)
         try AtomicFile.write(Data("unfinished".utf8), to: unfinished)
         let repository = WorkspaceRepository(rootURL: layout.package.deletingLastPathComponent().deletingLastPathComponent())
-        let agent = try repository.loadAgents().first { $0.id.uuidString.lowercased() == layout.package.lastPathComponent }
-        let backstory = try agent.map { try repository.loadAgentBackstory($0) } ?? ""
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let agent = try decoder.decode(AgentRecord.self, from: Data(contentsOf: layout.configuration))
+        let backstory = try repository.loadAgentBackstory(agent)
         let identityInstructions = """
-        You are \(agent?.displayName ?? "a Noodle bot").
+        You are \(agent.displayName).
         \(String(backstory.prefix(1_600)))
         """
         let workspaceInstructions = """

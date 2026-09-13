@@ -19,19 +19,19 @@ final class ConversationEffectTests: XCTestCase {
     func testCLIListsEffectsAndReturnsAnEncodedReceipt() throws {
         let bot = try repository.createAgent(named: "Builder")
         let command = repository.directory(for: bot.agent).appendingPathComponent(".agents/skills/messenger/messenger").path
-        let list = MessengerCLI.run(arguments: [command, "--list-effects"], environment: [:])
+        let list = MessengerCLI.runDirect(arguments: [command, "--list-effects"], environment: [:])
         XCTAssertEqual(list.exitCode, 0, list.standardError)
         XCTAssertEqual(try JSONDecoder().decode([String].self, from: Data(list.standardOutput.utf8)), ["confetti"])
         let id = UUID()
         let arguments = [command, "--effect", "confetti", "--conversation", bot.conversation.id.uuidString,
                          "--request-id", id.uuidString]
-        let result = MessengerCLI.run(arguments: arguments, environment: [:])
+        let result = MessengerCLI.runDirect(arguments: arguments, environment: [:])
         XCTAssertEqual(result.exitCode, 0, result.standardError)
         let receipt = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.standardOutput.utf8)) as? [String: Any])
         XCTAssertEqual(receipt["status"] as? String, "queued")
         XCTAssertEqual((receipt["effect"] as? [String: Any])?["id"] as? String, id.uuidString)
         XCTAssertEqual(try repository.takePendingEffect(conversationID: bot.conversation.id)?.id, id)
-        let retry = MessengerCLI.run(arguments: arguments, environment: [:])
+        let retry = MessengerCLI.runDirect(arguments: arguments, environment: [:])
         XCTAssertEqual(retry.exitCode, 0, retry.standardError)
         XCTAssertTrue(retry.standardOutput.contains("consumed"))
         XCTAssertNil(try repository.takePendingEffect(conversationID: bot.conversation.id))
@@ -48,7 +48,7 @@ final class ConversationEffectTests: XCTestCase {
             base + ["--react"], ["--list-effects", "--send"],
             ["--effect", "unknown", "--conversation", bot.conversation.id.uuidString]
         ] {
-            XCTAssertNotEqual(MessengerCLI.run(arguments: prefix + options, environment: [:]).exitCode, 0, options.joined(separator: " "))
+            XCTAssertNotEqual(MessengerCLI.runDirect(arguments: prefix + options, environment: [:]).exitCode, 0, options.joined(separator: " "))
         }
         XCTAssertTrue(try repository.loadMessages(conversationID: bot.conversation.id).isEmpty)
         XCTAssertNil(try repository.takePendingEffect(conversationID: bot.conversation.id))

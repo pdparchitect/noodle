@@ -46,6 +46,7 @@ final class MCPConnectionTests: XCTestCase {
     }
     func testRegistryAndSkillLifecyclePreservesUserFiles() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let record = try MCPConnectionRecord(name: "Work: \"Notion\"", endpoint: endpoint,
                                             description: "Read projects\nand notes", instructions: "Only use the work account.")
@@ -55,6 +56,7 @@ final class MCPConnectionTests: XCTestCase {
         try registry.save(root: root)
         XCTAssertEqual(try MCPRegistry.load(root: root), registry)
         let workspace = root.appendingPathComponent("agent")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         try MCPSkillWriter.synchronize(workspace: workspace, connections: [record], executable: URL(fileURLWithPath: "/bin/echo"))
         let directory = workspace.appendingPathComponent(".agents/skills/\(record.skillName)")
         let skill = try String(contentsOf: directory.appendingPathComponent("SKILL.md"), encoding: .utf8)
@@ -71,6 +73,7 @@ final class MCPConnectionTests: XCTestCase {
     }
     func testRedirectedSkillDirectoryIsNotWritten() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let workspace = root.appendingPathComponent("workspace")
         let outside = root.appendingPathComponent("outside")
@@ -83,6 +86,7 @@ final class MCPConnectionTests: XCTestCase {
     }
     func testBridgeRefusesSymlinksAndOversizedFiles() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let directory = try MCPBridgeFiles.prepare(workspace: root)
         let file = directory.appendingPathComponent("test")
@@ -102,6 +106,7 @@ final class MCPConnectionTests: XCTestCase {
     }
     func testBootstrapIndexesOnlyAssignedAccountsAndPreservesBackstory() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let repository = WorkspaceRepository(rootURL: root)
         let agent = try repository.createAgent(named: "Test", backstory: "Private instructions").agent
@@ -124,6 +129,7 @@ final class MCPConnectionTests: XCTestCase {
     }
     func testCorruptRegistryFailsWithoutReplacement() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         var registry = MCPRegistry()
         let connection = try MCPConnectionRecord(name: "Notion", endpoint: endpoint)

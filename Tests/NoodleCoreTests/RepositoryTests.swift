@@ -704,7 +704,7 @@ final class RepositoryTests: XCTestCase {
 
         let command = repository.directory(for: created.agent)
             .appendingPathComponent(".agents/skills/messenger/messenger")
-        let result = MessengerCLI.run(arguments: [command.path, "--get-latest", "--peek"])
+        let result = MessengerCLI.runDirect(arguments: [command.path, "--get-latest", "--peek"])
         XCTAssertEqual(result.exitCode, 0)
         let delivery = try XCTUnwrap(
             decode([MessengerDelivery].self, from: result.standardOutput).first
@@ -721,7 +721,7 @@ final class RepositoryTests: XCTestCase {
             "data:image/png;base64,aW1hZ2UgYnl0ZXM="
         )
 
-        let inlineResult = MessengerCLI.run(arguments: [
+        let inlineResult = MessengerCLI.runDirect(arguments: [
             command.path, "--get-latest", "--peek", "--inline-images"
         ])
         XCTAssertEqual(inlineResult.exitCode, 0)
@@ -747,19 +747,19 @@ final class RepositoryTests: XCTestCase {
         )
         try repository.append(incoming)
 
-        let first = MessengerCLI.run(arguments: [command.path, "--get-latest"])
+        let first = MessengerCLI.runDirect(arguments: [command.path, "--get-latest"])
         XCTAssertEqual(first.exitCode, 0)
         let deliveries = try decode([MessengerDelivery].self, from: first.standardOutput)
         XCTAssertEqual(deliveries.map(\.message.body), ["What changed?"])
 
-        let second = MessengerCLI.run(arguments: [command.path, "--get-latest"])
+        let second = MessengerCLI.runDirect(arguments: [command.path, "--get-latest"])
         XCTAssertEqual(try decode([MessengerDelivery].self, from: second.standardOutput).count, 0)
 
         let replyBody = "The workspace bridge is ready — it's Unicode-safe. ✓"
         let encodedReplyBody = replyBody.addingPercentEncoding(
             withAllowedCharacters: .alphanumerics
         )!
-        let reply = MessengerCLI.run(arguments: [
+        let reply = MessengerCLI.runDirect(arguments: [
             command.path,
             "--send",
             "--conversation", created.conversation.id.uuidString,
@@ -808,7 +808,7 @@ final class RepositoryTests: XCTestCase {
 
         let command = repository.directory(for: first.agent)
             .appendingPathComponent(".agents/skills/messenger/messenger")
-        let result = MessengerCLI.run(arguments: [
+        let result = MessengerCLI.runDirect(arguments: [
             command.path,
             "--list-participants",
             "--conversation", group.id.uuidString
@@ -881,7 +881,7 @@ final class RepositoryTests: XCTestCase {
         try Data("%PDF-1.7 test document".utf8).write(to: brief)
         let command = workspace.appendingPathComponent(".agents/skills/messenger/messenger")
 
-        let result = MessengerCLI.run(arguments: [
+        let result = MessengerCLI.runDirect(arguments: [
             command.path,
             "--send",
             "--conversation", group.id.uuidString,
@@ -927,7 +927,7 @@ final class RepositoryTests: XCTestCase {
         try Data("result".utf8).write(to: validFile)
         let command = workspace.appendingPathComponent(".agents/skills/messenger/messenger")
 
-        let result = MessengerCLI.run(arguments: [
+        let result = MessengerCLI.runDirect(arguments: [
             command.path,
             "--send",
             "--conversation", created.conversation.id.uuidString,
@@ -1036,7 +1036,7 @@ final class RepositoryTests: XCTestCase {
         )
         try repository.append(incoming)
 
-        let result = MessengerCLI.run(
+        let result = MessengerCLI.runDirect(
             arguments: ["messenger", "--get-latest"],
             environment: ["NOODLE_WORKSPACE": repository.directory(for: created.agent).path]
         )
@@ -1098,10 +1098,10 @@ final class RepositoryTests: XCTestCase {
         _ = try repository.latestMessages(for: second.agent.id)
         let command = repository.directory(for: first.agent).appendingPathComponent(".agents/skills/messenger/messenger").path
         let args = ["--conversation", group.id.uuidString, "--message", message.id.uuidString, "--emoji", "👀"]
-        XCTAssertEqual(MessengerCLI.run(arguments: [command, "--react"] + args).exitCode, 0)
+        XCTAssertEqual(MessengerCLI.runDirect(arguments: [command, "--react"] + args).exitCode, 0)
         let receivingCommand = repository.directory(for: second.agent)
             .appendingPathComponent(".agents/skills/messenger/messenger").path
-        let inbox = MessengerCLI.run(arguments: [receivingCommand, "--get-latest"])
+        let inbox = MessengerCLI.runDirect(arguments: [receivingCommand, "--get-latest"])
         XCTAssertEqual(inbox.exitCode, 0)
         let feedback = try decode([MessengerDelivery].self, from: inbox.standardOutput)
         XCTAssertEqual(feedback.count, 1)
@@ -1110,23 +1110,23 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(feedback.first?.reactionChange?.removed, false)
         XCTAssertEqual(feedback.first?.reactionChange?.sender.displayName, "First")
         XCTAssertEqual(feedback.first?.reactionChange?.sender.handle, .bot)
-        let history = MessengerCLI.run(arguments: [command, "--list-messages", "--conversation", group.id.uuidString])
+        let history = MessengerCLI.runDirect(arguments: [command, "--list-messages", "--conversation", group.id.uuidString])
         XCTAssertEqual(history.exitCode, 0)
         let deliveries = try decode([MessengerDelivery].self, from: history.standardOutput)
         XCTAssertEqual(deliveries.count, 1)
         XCTAssertEqual(deliveries.first?.reactions?.first?.sender.handle, .me)
         XCTAssertEqual(try repository.latestMessages(for: first.agent.id).count, 1, "History must not consume unread messages")
-        XCTAssertEqual(MessengerCLI.run(arguments: [command, "--unreact"] + args).exitCode, 0)
-        let removal = MessengerCLI.run(arguments: [receivingCommand, "--get-latest"])
+        XCTAssertEqual(MessengerCLI.runDirect(arguments: [command, "--unreact"] + args).exitCode, 0)
+        let removal = MessengerCLI.runDirect(arguments: [receivingCommand, "--get-latest"])
         XCTAssertEqual(removal.exitCode, 0)
         let removed = try decode([MessengerDelivery].self, from: removal.standardOutput)
         XCTAssertEqual(removed.first?.reactionChange?.removed, true)
         XCTAssertEqual(removed.first?.reactionChange?.emoji, "👀")
-        let consumed = MessengerCLI.run(arguments: [receivingCommand, "--get-latest"])
+        let consumed = MessengerCLI.runDirect(arguments: [receivingCommand, "--get-latest"])
         XCTAssertEqual(consumed.exitCode, 0)
         XCTAssertTrue(try decode([MessengerDelivery].self, from: consumed.standardOutput).isEmpty)
-        XCTAssertNotEqual(MessengerCLI.run(arguments: [command, "--react", "--unreact"] + args).exitCode, 0)
-        XCTAssertNotEqual(MessengerCLI.run(arguments: [command, "--react", "--emoji", "👍"]).exitCode, 0)
+        XCTAssertNotEqual(MessengerCLI.runDirect(arguments: [command, "--react", "--unreact"] + args).exitCode, 0)
+        XCTAssertNotEqual(MessengerCLI.runDirect(arguments: [command, "--react", "--emoji", "👍"]).exitCode, 0)
     }
 
     func testReactionsRejectInvalidEmojiAndNonparticipants() throws {

@@ -65,6 +65,12 @@ final class AppleSandboxTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let repository = WorkspaceRepository(rootURL: root.appendingPathComponent("Noodle"))
         let bot = try repository.createAgent(named: "Boundary")
+        let other = try repository.createAgent(named: "Other")
+        let privateFile = repository.directory(for: other.agent).appendingPathComponent("private.txt")
+        try Data("other bot".utf8).write(to: privateFile)
+        let broker = MessengerBroker(repository: repository)
+        try broker.start(agents: [bot.agent, other.agent])
+        defer { broker.stop() }
         let layout = repository.storage(for: bot.agent.id)
         let protected = root.appendingPathComponent("outside.txt")
         try Data("secret".utf8).write(to: protected)
@@ -81,7 +87,12 @@ final class AppleSandboxTests: XCTestCase {
         ln -s "$2" "$1/link"
         if cat "$1/link"; then exit 15; fi
         if /bin/sh -c 'cat "$1"' nested "$2"; then exit 16; fi
-        """, "probe", layout.workspace.path, protected.path, layout.configuration.path, layout.runtime.path]
+        if cat "$5"; then exit 17; fi
+        if cat "$6/conversation.json"; then exit 18; fi
+        if printf changed > "$6/messages.json"; then exit 19; fi
+        "$7" --agent-directory "$1" --list-conversations > "$1/conversations.json"
+        """, "probe", layout.workspace.path, protected.path, layout.configuration.path, layout.runtime.path, privateFile.path,
+            repository.conversationDirectory(id: bot.conversation.id).path, project.appendingPathComponent(".build/debug/NoodleMessenger").path]
         child.standardError = errors
         try child.run(); child.waitUntilExit()
         XCTAssertEqual(child.terminationStatus, 0, String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))

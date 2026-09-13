@@ -106,6 +106,9 @@ final class GrokLiveTests: XCTestCase {
         let repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: URL(fileURLWithPath: messenger))
         try repository.prepare()
         let bot = try repository.createAgent(named: "Grok Integration Fixture", harnessIdentifier: HarnessProvider.grokBuild.rawValue)
+        let broker = MessengerBroker(repository: repository)
+        try broker.start(agents: [bot.agent])
+        defer { broker.stop() }
         let workspace = repository.directory(for: bot.agent)
         let args = ["agent", "--no-leader", "stdio"]
         func enqueue(_ body: String) throws {

@@ -55,7 +55,13 @@ runtime guidance; `CLAUDE.md` points to the same file. Noodle refreshes managed
 skills while preserving custom skills and user-written backstories.
 
 The signed Agent Host applies a dedicated filesystem sandbox before starting
-restricted Codex, FX, Grok Build, Muse Code, or Apple, protecting its parent configuration and runtime state.
+restricted Codex, FX, Grok Build, Muse Code, or Apple. Each can read only its own
+bot package alongside required system/application files, and write its workspace;
+parent configuration and runtime state stay read-only. Cloud harness homes and
+session stores are private to the bot, seeded only with provider login material.
+Messenger uses an app-side broker bound to the registered bot workspace and token.
+The broker checks conversation membership and copies attachments into the caller's
+workspace, keeping raw conversation files and other bots' packages inaccessible.
 Autonomous harnesses use a separate authorized launch path. The app remains in
 App Sandbox and brokers remote tools and Computer
 requests after checking assignments. See [agent access](security.md),
@@ -123,7 +129,7 @@ the prompt. Keep those live assertions: context containment does not make this
 model a reliable default agent.
 
 Restricted Apple runs under its own deny-by-default Seatbelt policy: system and
-Noodle repository reads, workspace and conversation writes, and the required
+own-bot package reads, workspace writes, and the required
 Apple model services. It does not receive Codex credentials or outbound network
 access. Autonomous mode uses the existing explicit per-bot authorization.
 Additional models and tools can be added behind the helper protocol without

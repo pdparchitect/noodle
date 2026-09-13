@@ -16,7 +16,7 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         let repository = WorkspaceRepository(rootURL: root.appendingPathComponent("Noodle"))
         let bot = try repository.createAgent(named: "Startup probe")
         let workspace = repository.directory(for: bot.agent)
-        let account = root.appendingPathComponent("EmptyAccount"), temp = workspace.appendingPathComponent(".noodle/tmp")
+        let account = RestrictedHarnessStorage.home(workspace: workspace).appendingPathComponent(".codex"), temp = workspace.appendingPathComponent(".noodle/tmp")
         for directory in [account, temp] { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
         let policy = RestrictedAgentSandbox.profile(workspace: workspace, repository: repository.rootURL,
             codexHome: account, executableDirectory: installation,
@@ -72,15 +72,23 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let repository = WorkspaceRepository(rootURL: root.appendingPathComponent("Noodle"))
         let created = try repository.createAgent(named: "Boundary")
+        let other = try repository.createAgent(named: "Private bot")
+        let otherSecret = repository.directory(for: other.agent).appendingPathComponent("private.txt")
+        try Data("other bot private data".utf8).write(to: otherSecret)
+        let broker = MessengerBroker(repository: repository)
+        try broker.start(agents: [created.agent, other.agent])
+        defer { broker.stop() }
         let layout = repository.storage(for: created.agent.id)
         let state = layout.sessionState(provider: provider, extendedAccess: false)
         let original = try Data(contentsOf: layout.configuration)
         try Data("state".utf8).write(to: state)
         let home = root.appendingPathComponent("Home")
-        let account = provider == .codex ? home.appendingPathComponent(".codex")
-            : try RestrictedAgentSandbox.accountDirectory(provider: provider, home: home)
+        let privateHome = RestrictedHarnessStorage.home(workspace: layout.workspace)
+        let account = provider == .codex ? privateHome.appendingPathComponent(".codex")
+            : try RestrictedAgentSandbox.accountDirectory(provider: provider, home: privateHome)
         let temp = layout.workspace.appendingPathComponent(".noodle/tmp")
         for directory in [account, temp] { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         let personal = home.appendingPathComponent("personal.txt")
         try Data("private".utf8).write(to: personal)
         let siblingAccount = home.appendingPathComponent(provider == .muse ? ".config/other" : ".other")
@@ -99,7 +107,7 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         let loginKeychain = keychains.appendingPathComponent("login.keychain-db")
         let otherKeychain = keychains.appendingPathComponent("other.keychain-db")
         for file in [loginKeychain, otherKeychain] { try Data("keychain fixture".utf8).write(to: file) }
-        let installation = provider == .grokBuild ? account.appendingPathComponent("downloads") : home.appendingPathComponent("bin")
+        let installation = home.appendingPathComponent("bin")
         try FileManager.default.createDirectory(at: installation, withIntermediateDirectories: true)
         let binary = installation.appendingPathComponent("harness")
         try Data("signed binary fixture".utf8).write(to: binary)
@@ -115,6 +123,9 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         printf memory > "$1/allowed.txt"
         printf session > "$5/session.txt"
         printf temporary > "$TMPDIR/allowed.txt"
+        /bin/zsh -fc 'cat <<EOF > "$1/heredoc.txt"
+        private temporary file
+        EOF' probe "$1"
         if printf changed > "$2"; then exit 11; fi
         if printf changed > "$3"; then exit 12; fi
         if rm "$2"; then exit 13; fi
@@ -151,6 +162,11 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         if printf changed > "${12}"; then exit 28; fi
         if rm "${12}"; then exit 29; fi
         if cat "${13}"; then exit 30; fi
+        if cat "${17}"; then exit 35; fi
+        if cat "${18}/conversation.json"; then exit 36; fi
+        if printf forged > "${18}/messages.json"; then exit 37; fi
+        if "$6" --agent-directory "${17%/*}" --list-conversations; then exit 38; fi
+        if "$6" --agent-directory "$1" --list-messages --conversation "${19}"; then exit 39; fi
         if [ "${16}" = 1 ]; then
           for path in "${11}/.agents" "${11}/.codex" "${11}/.claude"; do
             if [ -e "$path" ]; then exit 31; fi
@@ -167,9 +183,10 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         process.arguments = ["-p", policy, "/bin/sh", "-c", script, "probe", layout.workspace.path,
                              layout.configuration.path, state.path, layout.package.path, account.path, helper.path,
                              created.conversation.id.uuidString, personal.path, binary.path, siblingSecret.path, home.path,
-                             loginKeychain.path, otherKeychain.path, provider == .fx || provider == .muse ? "1" : "0",
-                             provider == .fx ? "1" : "0", provider == .muse ? "1" : "0"]
-        process.environment = ["PATH": "/usr/bin:/bin", "HOME": layout.workspace.path, "TMPDIR": temp.path]
+                             loginKeychain.path, otherKeychain.path, "0",
+                             provider == .fx ? "1" : "0", "0", otherSecret.path,
+                             repository.conversationDirectory(id: created.conversation.id).path, other.conversation.id.uuidString]
+        process.environment = ["PATH": "/usr/bin:/bin", "HOME": layout.workspace.path, "TMPDIR": temp.path, "TMPPREFIX": temp.appendingPathComponent("zsh").path]
         process.standardOutput = output; process.standardError = errors
         try process.run(); process.waitUntilExit()
         let details = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
@@ -205,18 +222,15 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         try checkInstalledACP(provider: .fx)
     }
 
-    func testRedirectedKeychainDoesNotGrantReadAccessElsewhere() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let home = root.appendingPathComponent("Home")
-        let keychains = home.appendingPathComponent("Library/Keychains")
-        try FileManager.default.createDirectory(at: keychains, withIntermediateDirectories: true)
-        let outside = root.appendingPathComponent("private")
-        try Data("private".utf8).write(to: outside)
-        try FileManager.default.createSymbolicLink(at: keychains.appendingPathComponent("login.keychain-db"), withDestinationURL: outside)
-        for provider in [HarnessProvider.fx, .muse] {
-            XCTAssertThrowsError(try RestrictedAgentSandbox.profile(provider: provider, workspace: root, repository: root,
-                home: home, executable: root.appendingPathComponent("harness"), application: root, temporary: root))
+    func testProfilesNeverGrantSharedAccountOrKeychainContent() throws {
+        for provider in [HarnessProvider.fx, .grokBuild, .muse] {
+            let profile = try RestrictedAgentSandbox.profile(provider: provider,
+                workspace: URL(fileURLWithPath: "/fixture/bot/workspace"), repository: URL(fileURLWithPath: "/fixture"),
+                home: URL(fileURLWithPath: "/private-login"), executable: URL(fileURLWithPath: "/native/harness"),
+                application: URL(fileURLWithPath: "/app"), temporary: URL(fileURLWithPath: "/fixture/bot/workspace/tmp"))
+            XCTAssertFalse(profile.contains("/private-login"))
+            XCTAssertFalse(profile.contains("securityd.xpc"))
+            XCTAssertFalse(profile.contains("login.keychain"))
         }
     }
 
@@ -237,11 +251,11 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         let bot = try repository.createAgent(named: "ACP sandbox startup")
         let workspace = repository.directory(for: bot.agent), home = root.appendingPathComponent("Home")
         let temporary = workspace.appendingPathComponent("tmp")
-        let account = try RestrictedAgentSandbox.accountDirectory(provider: provider, home: home)
+        let account = try RestrictedAgentSandbox.accountDirectory(provider: provider, home: RestrictedHarnessStorage.home(workspace: workspace))
         for directory in [account, temporary] { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
         let policy = try RestrictedAgentSandbox.profile(provider: provider, workspace: workspace, repository: repository.rootURL,
             home: home, executable: executable, application: workspace, temporary: temporary) + "\n(deny network*)"
-        var environment = try RestrictedAgentSandbox.environment(provider: provider, home: home)
+        var environment = try RestrictedAgentSandbox.environment(provider: provider, home: home, workspace: workspace)
         environment["TMPDIR"] = temporary.path
         environment["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
         let skillProbe = workspace.appendingPathComponent(".agents/skills/noodle-discovery-probe/SKILL.md")
