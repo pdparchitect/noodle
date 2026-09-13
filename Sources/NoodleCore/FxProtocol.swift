@@ -53,8 +53,11 @@ public enum FxProtocol {
         }
     }
 
-    public static func permissionResponse(params: [String: Any], sessionID: String?, extendedAccess: Bool) -> [String: Any] {
-        guard extendedAccess, let sessionID, params["sessionId"] as? String == sessionID,
+    /// Restricted FX/Grok actions execute inside Agent Host's immutable OS
+    /// sandbox. An ACP allow-once response cannot broaden that boundary.
+    public static func permissionResponse(params: [String: Any], sessionID: String?, extendedAccess: Bool,
+                                          restrictedAccess: Bool = false) -> [String: Any] {
+        guard extendedAccess || restrictedAccess, let sessionID, params["sessionId"] as? String == sessionID,
               let options = params["options"] as? [[String: Any]],
               let option = options.first(where: { $0["kind"] as? String == "allow_once" }),
               let id = option["optionId"] as? String, !id.isEmpty else {

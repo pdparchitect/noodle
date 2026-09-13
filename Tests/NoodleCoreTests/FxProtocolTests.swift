@@ -33,6 +33,19 @@ final class FxProtocolTests: XCTestCase {
         }
         XCTAssertEqual((FxProtocol.permissionResponse(params: ["sessionId": "one"], sessionID: "one", extendedAccess: true)["outcome"] as? [String: String])?["outcome"], "cancelled")
     }
+    func testRestrictedACPApprovalsRemainSessionScopedAndNeverPersistent() {
+        let options = [["optionId": "always", "kind": "allow_always"], ["optionId": "once", "kind": "allow_once"]]
+        let params: [String: Any] = ["sessionId": "active", "options": options]
+        let result = FxProtocol.permissionResponse(params: params, sessionID: "active", extendedAccess: false, restrictedAccess: true)
+        XCTAssertEqual(result["outcome"] as? [String: String], ["outcome": "selected", "optionId": "once"])
+        for session in [nil, "stale"] as [String?] {
+            let denied = FxProtocol.permissionResponse(params: params, sessionID: session, extendedAccess: false, restrictedAccess: true)
+            XCTAssertEqual(denied["outcome"] as? [String: String], ["outcome": "cancelled"])
+        }
+        let persistentOnly: [String: Any] = ["sessionId": "active", "options": [options[0]]]
+        let denied = FxProtocol.permissionResponse(params: persistentOnly, sessionID: "active", extendedAccess: false, restrictedAccess: true)
+        XCTAssertEqual(denied["outcome"] as? [String: String], ["outcome": "cancelled"])
+    }
     func testLoginChallengeAllowsOnlyVercelHTTPS() {
         XCTAssertNil(FxProtocol.loginChallenge("Open https://vercel.com/verify\nCode: PARTIAL"))
         XCTAssertNotNil(FxProtocol.loginChallenge("Open https://vercel.com/verify?code=one\nCode: ABC-123\n"))

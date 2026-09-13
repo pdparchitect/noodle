@@ -50,15 +50,19 @@ final class ACPWireFixture {
     private var messages: [Int: [String: Any]] = [:]
     private var sequence = 0
     private var diagnosticText = ""
+    private let requestTimeout: TimeInterval
     var diagnostics: String {
         condition.lock(); defer { condition.unlock() }
         return diagnosticText
     }
     private lazy var reader = JSONLineReader { [weak self] object in self?.receive(object) }
-    init(executable: URL, workspace: URL, arguments: [String] = ["acp"]) throws {
+    init(executable: URL, workspace: URL, arguments: [String] = ["acp"],
+         environment: [String: String]? = nil, requestTimeout: TimeInterval = 120) throws {
+        self.requestTimeout = requestTimeout
         process.executableURL = executable
         process.arguments = arguments
         process.currentDirectoryURL = workspace
+        process.environment = environment
         process.standardInput = stdin
         process.standardOutput = stdout
         process.standardError = FileHandle.nullDevice
@@ -107,9 +111,11 @@ final class ACPWireFixture {
         let id = sequence
         try send(["jsonrpc": "2.0", "id": id, "method": method, "params": params])
         condition.lock(); defer { condition.unlock() }
-        let deadline = Date().addingTimeInterval(120)
+        let deadline = Date().addingTimeInterval(requestTimeout)
         while messages[id] == nil {
-            guard condition.wait(until: deadline) else { throw HarnessSetupError("ACP live test timed out during \(method)") }
+            guard condition.wait(until: deadline) else {
+                throw HarnessSetupError("ACP live test timed out during \(method). Fixture output: \(diagnosticText)")
+            }
         }
         let object = messages.removeValue(forKey: id)!
         if let error = object["error"] as? [String: Any] { throw HarnessSetupError("ACP \(method): \(error["message"] ?? "failed")") }

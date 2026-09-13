@@ -15,8 +15,8 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
     /// Whether the Agent Host can apply a separate restricted runtime policy.
     public var supportsRestrictedAccess: Bool {
         switch self {
-        case .apple, .codex: return true
-        case .claudeCode, .fx, .grokBuild, .muse: return false
+        case .apple, .codex, .fx, .grokBuild: return true
+        case .claudeCode, .muse: return false
         }
     }
 

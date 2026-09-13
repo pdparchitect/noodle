@@ -65,6 +65,13 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
     func startRestrictedApple(agentID: UUID, reply: @escaping (Int32, String?) -> Void) {
         proxy()?.startRestrictedApple(agentID: agentID.uuidString, withReply: reply)
     }
+    func startRestrictedACP(provider: HarnessProvider, agentID: UUID, executablePath: String,
+                            modelIdentifier: String?, effortIdentifier: String?,
+                            reply: @escaping (Int32, String?) -> Void) {
+        proxy()?.startRestrictedACP(harnessIdentifier: provider.rawValue, agentID: agentID.uuidString,
+                                    executablePath: executablePath, modelIdentifier: modelIdentifier,
+                                    effortIdentifier: effortIdentifier, withReply: reply)
+    }
     func inspectApple(reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.inspectApple(withReply: reply)
     }

@@ -92,9 +92,16 @@ Storage migration tests interrupt each move and verify resumption, user-folder
 collisions, hard-link separation, copied packages, and invalid layouts.
 `RestrictedAgentSandboxTests` runs real sandboxed processes against disposable
 data: workspace writes and Messenger replies must succeed while configuration
-and runtime writes, replacements, and links are denied. When Codex is installed,
-an initialization-only check uses an empty account directory; it makes no model
-request and reads no real account credentials. Release automation tests verify
+and runtime writes, replacements, and links are denied. FX/Grok checks also deny
+personal-file access, other account access, and installation replacement. When
+Codex, FX, or Grok Build is installed, initialization-only checks use empty account
+directories; they make no model requests and read no real account credentials.
+FX/Grok initialization fixtures additionally deny all network access. The FX
+fixture verifies workspace skill discovery through its native directory walk.
+`NOODLE_TEST_RESTRICTED_ACP=1 swift test --disable-sandbox --filter RestrictedACPLiveTests`
+opts into two small model turns per installed harness to check Messenger replies
+and session resume using the real accounts, inside disposable repositories.
+Release automation tests verify
 that signed update-feed entries retain the required migration chain.
 
 Voice capture regressions also run in `NoodleAppTests`. Offline audio engines

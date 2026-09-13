@@ -141,14 +141,25 @@ if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-chi
             guard temporary.resolvingSymlinksInPath().path == temporary.path else { throw HostError("The bot temporary directory is redirected.") }
             // Only fixed paths derived by this host enter the profile. The XPC
             // caller cannot supply policy text, writable roots, or a command.
-            let profile = provider == .apple
-                ? AppleAgentSandbox.profile(application: HostPaths.application, workspace: workspace, repository: repository)
-                : RestrictedAgentSandbox.profile(workspace: workspace, repository: repository,
-                codexHome: codexHome, executableDirectory: executable.deletingLastPathComponent().deletingLastPathComponent(),
-                application: Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent(),
-                temporary: temporary)
+            let profile: String
+            switch provider {
+            case .apple:
+                profile = AppleAgentSandbox.profile(application: HostPaths.application, workspace: workspace, repository: repository)
+            case .codex:
+                profile = RestrictedAgentSandbox.profile(workspace: workspace, repository: repository,
+                    codexHome: codexHome, executableDirectory: executable.deletingLastPathComponent().deletingLastPathComponent(),
+                    application: HostPaths.application, temporary: temporary)
+            case .fx, .grokBuild:
+                profile = try RestrictedAgentSandbox.profile(provider: provider, workspace: workspace, repository: repository,
+                    home: HostPaths.home, executable: executable, application: HostPaths.application, temporary: temporary)
+            default: throw HostError("Unsupported restricted harness.")
+            }
             setenv("TMPDIR", temporary.path, 1)
-            setenv("HOME", workspace.path, 1)
+            if provider == .fx || provider == .grokBuild {
+                for (key, value) in try RestrictedAgentSandbox.environment(provider: provider, home: HostPaths.home) {
+                    setenv(key, value, 1)
+                }
+            } else { setenv("HOME", workspace.path, 1) }
             strings = ["/usr/bin/sandbox-exec", "-p", profile] + strings
         }
         var arguments: [UnsafeMutablePointer<CChar>?] = strings.map { value in value.withCString { strdup($0) } }
@@ -204,6 +215,18 @@ private final class HostSession: NSObject, AgentHostService {
     func startRestrictedApple(agentID: String, withReply reply: @escaping (Int32, String?) -> Void) {
         startRuntime(harnessIdentifier: HarnessProvider.apple.rawValue, agentID: agentID, executablePath: HostPaths.apple.path,
                      sessionID: nil, resumeSession: false, modelIdentifier: nil, effortIdentifier: nil,
+                     restricted: true, reply: reply)
+    }
+
+    func startRestrictedACP(harnessIdentifier: String, agentID: String, executablePath: String,
+                            modelIdentifier: String?, effortIdentifier: String?,
+                            withReply reply: @escaping (Int32, String?) -> Void) {
+        guard let provider = HarnessProvider(rawValue: harnessIdentifier), provider == .fx || provider == .grokBuild else {
+            reply(0, "Unsupported restricted ACP harness.")
+            return
+        }
+        startRuntime(harnessIdentifier: provider.rawValue, agentID: agentID, executablePath: executablePath,
+                     sessionID: nil, resumeSession: false, modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier,
                      restricted: true, reply: reply)
     }
 

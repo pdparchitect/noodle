@@ -29,9 +29,28 @@ final class AgentAccessTests: XCTestCase {
         XCTAssertFalse(configuration.isExtended(for: imported))
     }
     func testHarnessAccessCapabilities() {
-        XCTAssertTrue(HarnessProvider.codex.supportsRestrictedAccess)
-        for provider in [HarnessProvider.claudeCode, .fx, .grokBuild, .muse] {
+        for provider in [HarnessProvider.codex, .apple, .fx, .grokBuild] {
+            XCTAssertTrue(provider.supportsRestrictedAccess)
+        }
+        for provider in [HarnessProvider.claudeCode, .muse] {
             XCTAssertFalse(provider.supportsRestrictedAccess)
+        }
+    }
+
+    func testFormerlyRequiredACPGrantsDoNotOverrideTheSavedRestrictedPreference() {
+        let suite = "Noodle.AccessTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        for provider in [HarnessProvider.fx, .grokBuild] {
+            let bot = AgentRecord(displayName: "Existing", harnessIdentifier: provider.rawValue)
+            defaults.set([bot.id.uuidString: [provider.rawValue]], forKey: "Noodle.access.requiredHarnessGrants")
+            var access = AgentAccessConfiguration.load(from: defaults)
+            XCTAssertFalse(access.isExtended(for: bot))
+            access.setExtended(true, for: bot.id)
+            XCTAssertTrue(access.isExtended(for: bot))
+            access.setExtended(false, for: bot.id)
+            access.save(to: defaults)
+            XCTAssertFalse(AgentAccessConfiguration.load(from: defaults).isExtended(for: bot))
         }
     }
 

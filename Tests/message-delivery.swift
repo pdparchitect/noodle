@@ -22,6 +22,7 @@ import NoodleCore
     var promptID: Int?
     var permissionReply: [String: Any]?
     var invalidated = false
+    var restrictedACP = false
     init() throws { Self.current = self }
     func start(provider: HarnessProvider, agentID: UUID, executablePath: String,
                sessionID: UUID? = nil, resumeSession: Bool = false,
@@ -36,6 +37,12 @@ import NoodleCore
     }
     func startRestrictedApple(agentID: UUID, reply: @escaping (Int32, String?) -> Void) {
         start(provider: .apple, agentID: agentID, executablePath: "/fixture/apple", reply: reply)
+    }
+    func startRestrictedACP(provider: HarnessProvider, agentID: UUID, executablePath: String,
+                            modelIdentifier: String?, effortIdentifier: String?, reply: @escaping (Int32, String?) -> Void) {
+        restrictedACP = true
+        start(provider: provider, agentID: agentID, executablePath: executablePath,
+              modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier, reply: reply)
     }
     func write(_ data: Data) {
         let object = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
@@ -138,7 +145,7 @@ import NoodleCore
     }
     static func settle() async { try? await Task.sleep(for: .milliseconds(30)) }
 
-    @MainActor static func make(_ provider: HarnessProvider, root: URL) async throws -> any AgentRuntimeProcess {
+    @MainActor static func make(_ provider: HarnessProvider, root: URL, restrictedACP: Bool = false) async throws -> any AgentRuntimeProcess {
         let workspace = root.appendingPathComponent(UUID().uuidString).appendingPathComponent("workspace")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         ExtendedAgentConnection.workspace = workspace.path
@@ -160,7 +167,7 @@ import NoodleCore
                 onUnexpectedTermination: { _, _, _ in })
         case .apple, .fx, .grokBuild:
             process = ACPAgentProcess(provider: provider, agent: agent, executableURL: executable, workspaceURL: workspace,
-                extendedAccess: provider != .apple, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
+                extendedAccess: provider != .apple && !restrictedACP, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
                 onUnexpectedTermination: { _, _, _ in })
         }
         process.start()
@@ -303,6 +310,34 @@ import NoodleCore
             process.stop { _ in }
         }
         print("PASS: ACP permissions are cancelled while interruption drains")
+
+        for provider in [HarnessProvider.fx, .grokBuild] {
+            let process = try await make(provider, root: root, restrictedACP: true)
+            let wire = ExtendedAgentConnection.current!
+            precondition(wire.restrictedACP, "Restricted FX/Grok must use the restricted host endpoint")
+            process.notify()
+            await eventually { wire.prompts == 1 }
+            wire.emit(["id": "restricted-permission", "method": "session/request_permission", "params": [
+                "sessionId": wire.session, "options": [["kind": "allow_always", "optionId": "always"],
+                                                      ["kind": "allow_once", "optionId": "once"]]]])
+            await eventually { wire.permissionReply != nil }
+            let result = wire.permissionReply?["result"] as? [String: Any]
+            precondition((result?["outcome"] as? [String: String])?["optionId"] == "once")
+            wire.permissionReply = nil
+            process.notify(immediately: true)
+            await eventually { wire.cancels == 1 }
+            wire.emit(["id": "restricted-cancel", "method": "session/request_permission", "params": [
+                "sessionId": wire.session, "options": [["kind": "allow_once", "optionId": "once"]]]])
+            await eventually { wire.permissionReply != nil }
+            let cancelled = wire.permissionReply?["result"] as? [String: Any]
+            precondition((cancelled?["outcome"] as? [String: String])?["outcome"] == "cancelled")
+            wire.complete(cancelled: true)
+            await eventually { wire.prompts == 2 }
+            wire.complete()
+            await eventually { process.canReceiveHeartbeat }
+            process.stop { _ in }
+        }
+        print("PASS: Restricted FX/Grok startup, allow-once approvals, and cancellation")
 
         // Replay Grok's actual billing-failure shapes without contacting an
         // account. A disconnected, exhausted bot must wait for a manual kick.

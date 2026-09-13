@@ -106,6 +106,10 @@ final class ACPAgentProcess: AgentRuntimeProcess {
             }
             if provider == .apple, !extendedAccess {
                 connection.startRestrictedApple(agentID: configuration.id, reply: started)
+            } else if !extendedAccess {
+                connection.startRestrictedACP(provider: provider, agentID: configuration.id, executablePath: executableURL.path,
+                                              modelIdentifier: configuration.modelIdentifier,
+                                              effortIdentifier: provider == .grokBuild ? configuration.reasoningEffort : nil, reply: started)
             } else {
                 connection.start(provider: provider, agentID: configuration.id, executablePath: executableURL.path,
                                  modelIdentifier: configuration.modelIdentifier,
@@ -205,7 +209,8 @@ final class ACPAgentProcess: AgentRuntimeProcess {
                 if method == "session/request_permission" {
                     let response: [String: Any] = interruptRequested
                         ? ["outcome": ["outcome": "cancelled"]]
-                        : FxProtocol.permissionResponse(params: params, sessionID: sessionID, extendedAccess: extendedAccess)
+                        : FxProtocol.permissionResponse(params: params, sessionID: sessionID,
+                                                        extendedAccess: extendedAccess, restrictedAccess: provider == .fx || provider == .grokBuild)
                     send(["jsonrpc": "2.0", "id": id.json, "result": response])
                 } else {
                     send(["jsonrpc": "2.0", "id": id.json, "error": ["code": -32601, "message": "Unsupported client request"]])
