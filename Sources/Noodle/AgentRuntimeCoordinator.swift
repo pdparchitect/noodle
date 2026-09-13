@@ -100,6 +100,7 @@ final class AgentRuntimeCoordinator {
     @ObservationIgnored private lazy var messageDelivery = MessageDeliveryRouter(defaults: defaults)
 
     private var discovery: HarnessDiscovery
+    @ObservationIgnored private let now: @MainActor () -> Date
     @ObservationIgnored private let sleep: @MainActor (Duration) async throws -> Void
     @ObservationIgnored private let makeProcess: @MainActor (AgentRuntimeLaunch) -> any AgentRuntimeProcess
     private var processes: [UUID: any AgentRuntimeProcess] = [:]
@@ -174,7 +175,9 @@ final class AgentRuntimeCoordinator {
 
     init(discovery: HarnessDiscovery = HarnessDiscovery(), defaults: UserDefaults = .standard,
          makeProcess: @escaping @MainActor (AgentRuntimeLaunch) -> any AgentRuntimeProcess = { $0.makeProcess() },
-         sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
+         sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+         now: @escaping @MainActor () -> Date = Date.init) {
+        self.now = now
         self.sleep = sleep
         self.makeProcess = makeProcess
         self.discovery = discovery
@@ -277,7 +280,7 @@ final class AgentRuntimeCoordinator {
     }
 
     private func applyHeartbeatConfiguration(_ configuration: AgentHeartbeatConfiguration) {
-        heartbeatScheduler.configure(configuration, at: Date())
+        heartbeatScheduler.configure(configuration, at: now())
         heartbeatConfiguration = configuration
         configuration.save(to: defaults)
         saveHeartbeatActivityDates()
@@ -290,12 +293,12 @@ final class AgentRuntimeCoordinator {
     }
 
     func recordActivity(for agentID: UUID) {
-        heartbeatScheduler.recordActivity(for: agentID, at: Date())
+        heartbeatScheduler.recordActivity(for: agentID, at: now())
         saveHeartbeatActivityDates()
     }
 
     private func recordHeartbeat(for agentID: UUID) {
-        lastHeartbeatDates[agentID] = Date()
+        lastHeartbeatDates[agentID] = now()
         saveLastHeartbeatDates()
     }
 
@@ -334,7 +337,7 @@ final class AgentRuntimeCoordinator {
 
     func checkHeartbeats() {
         let readyIDs = Set(processes.filter { $0.value.canReceiveHeartbeat }.map(\.key))
-        let dueIDs = heartbeatScheduler.takeDueHeartbeats(readyAgentIDs: readyIDs, at: Date())
+        let dueIDs = heartbeatScheduler.takeDueHeartbeats(readyAgentIDs: readyIDs, at: now())
         if !dueIDs.isEmpty { saveHeartbeatActivityDates() }
         for id in dueIDs {
             // Do not start offline/failed bots or enqueue a heartbeat behind real work.

@@ -89,7 +89,7 @@ import XCTest
             executableSearchDirectories: [bin], applicationBundleURL: root, environment: [:])
         let factory = factory, clock = clock
         runtime = AgentRuntimeCoordinator(discovery: discovery, defaults: defaults,
-            makeProcess: { factory.make($0) }, sleep: { try await clock.sleep($0) })
+            makeProcess: { factory.make($0) }, sleep: { try await clock.sleep($0) }, now: { clock.date })
     }
     func agent(_ name: String = "Fixture bot", harness: HarnessProvider? = .codex) throws -> AgentRecord {
         try repository.createAgent(named: name, harnessIdentifier: harness?.rawValue).agent
@@ -109,6 +109,7 @@ import XCTest
 
 /// Suspensions finish only when released, even if cancelled, to model late callbacks.
 @MainActor final class RuntimeClockFixture {
+    var date = Date(timeIntervalSince1970: 1_800_000_000)
     var waits: [(Duration, RoutingGate<Void>)] = []
     func sleep(_ duration: Duration) async throws {
         let gate = RoutingGate<Void>()
