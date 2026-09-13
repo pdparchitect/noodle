@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Simplify the stopped-computer message in Noodle's live display, removing the CLI command and computer ID.
+
 ### Added
 
 - Import folders from Finder or the file picker, preserving nested and empty folders, with byte/item progress and cancellation. Completed items are kept when cancelled; existing items are never overwritten.

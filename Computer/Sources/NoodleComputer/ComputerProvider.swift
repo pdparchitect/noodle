@@ -68,6 +68,9 @@ import WebKit
             return .init()
         }
         guard session.phase == .running, let runtime = session.container else {
+            if request.operation == .display {
+                throw ComputerBridgeError("Computer is stopped. Start it in Noodle Computer.")
+            }
             throw ComputerBridgeError("Computer is stopped. Start it in Noodle Computer or with computer start --computer \(session.id.uuidString).")
         }
         if request.operation.isFileTransfer {
