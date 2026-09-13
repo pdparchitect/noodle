@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Display the bot or group name as plain title text in separate chat windows, removing the small glass capsule on macOS 26.
+
 - Place the Heartbeat and Security bot-list scrollbars beside the rows so they no longer overlap the toggles.
 
 - Give draft annotation and attachment chips a frosted glass background so conversation text scrolling behind them stays blurred and their labels remain readable.

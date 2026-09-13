@@ -55,10 +55,11 @@ struct ConversationWindowView: View {
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                if let conversation {
-                    Text(store.title(for: conversation)).font(.headline).lineLimit(1)
-                }
+            if #available(macOS 26.0, *) {
+                ToolbarItem(placement: .principal) { windowTitle }
+                    .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .principal) { windowTitle }
             }
             ToolbarItem(placement: .primaryAction) {
                 if let conversation {
@@ -88,6 +89,15 @@ struct ConversationWindowView: View {
         .modifier(ConversationErrorAlert())
         .onChange(of: conversation == nil) { _, missing in
             if missing { dismiss() }
+        }
+    }
+
+    @ViewBuilder private var windowTitle: some View {
+        if let conversation {
+            Text(store.title(for: conversation))
+                .font(.headline)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
     }
 }
