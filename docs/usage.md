@@ -20,6 +20,17 @@ Type `@` to insert an agent's name. Click its avatar to see its profile or open 
 direct conversation. Right-click a group in the sidebar to change its members or
 description. Removing a member keeps the group's history.
 
+## Keep conversations in separate windows
+
+Right-click a bot or group in the sidebar and choose **Open in New Window**, or
+use the same button in the current chat's toolbar. Opening it again brings its
+existing window forward. Each separate window stays on its conversation while
+you browse other chats in the main window.
+
+Messages, unsent text, attachments, and conversation details update in both
+places. Each window scrolls independently. Closing a window keeps the conversation
+and its draft available in Noodle.
+
 ## Messages and files
 
 - **Return** sends; **Shift+Return** adds a line.

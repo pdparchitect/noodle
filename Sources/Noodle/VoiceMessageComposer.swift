@@ -6,7 +6,8 @@ import NoodleCore
 struct VoiceMessageComposer<Content: View>: View {
     @State private var recorder: VoiceRecorder
     @State private var sendError: String?
-    @State private var sending = false
+    @State private var composerID = UUID()
+    private var sending: Bool { recorder.isSending }
     @FocusState private var focused: Bool
     let send: (URL, VoiceMessage) throws -> Void
     let content: (@escaping () -> Void) -> Content
@@ -89,7 +90,8 @@ struct VoiceMessageComposer<Content: View>: View {
         }
         .focusedSceneValue(\.voiceRecordingCommand,
             VoiceRecordingCommand(phase: { recorder.phase }, isSending: { sending }, toggle: toggleRecording))
-        .onDisappear { Task { await recorder.leaveConversation() } }
+        .onAppear { recorder.attachComposer(composerID) }
+        .onDisappear { recorder.detachComposer(composerID) }
     }
 
     private func toggleRecording() {
@@ -103,8 +105,8 @@ struct VoiceMessageComposer<Content: View>: View {
 
     private func sendRecording(audioOnly: Bool = false) async {
         guard !sending else { return }
-        sending = true
-        defer { sending = false }
+        recorder.isSending = true
+        defer { recorder.isSending = false }
         sendError = nil
         if recorder.phase == .recording { await recorder.finish() }
         guard recorder.phase == .ready || (audioOnly && recorder.phase == .failed && recorder.hasAudio) else { return }

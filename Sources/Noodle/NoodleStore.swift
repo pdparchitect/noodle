@@ -86,7 +86,10 @@ final class NoodleStore {
             drafts[selectedConversationID].attachments = newValue
         }
     }
-    var composerIsFocused = false
+    func pendingAttachments(for conversationID: UUID) -> [ConversationAttachment] {
+        drafts[conversationID].attachments
+    }
+    let conversationWindows = ConversationWindowRegistry()
     @ObservationIgnored private var voiceRecorders: [UUID: AnyObject] = [:]
 
     @available(macOS 26.0, *)
@@ -103,7 +106,8 @@ final class NoodleStore {
     let mcp: MCPController
     let computers: ComputerController
     let applets: AppletController
-    let runtime = AgentRuntimeCoordinator()
+    let runtime: AgentRuntimeCoordinator
+    private let connectsServices: Bool
     private var transcriptRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptGeneration: UInt = 0
     private var attachmentLookupByConversation: [UUID: [UUID: ConversationAttachment]] = [:]
@@ -111,7 +115,9 @@ final class NoodleStore {
     private var isProcessingShares = false
     private var failedShareIDs: Set<UUID> = []
 
-    init(repository: WorkspaceRepository? = nil) {
+    init(repository: WorkspaceRepository? = nil, runtime: AgentRuntimeCoordinator? = nil, connectsServices: Bool = true) {
+        self.runtime = runtime ?? AgentRuntimeCoordinator()
+        self.connectsServices = connectsServices
         if let repository {
             self.repository = repository
         } else {
@@ -180,9 +186,11 @@ final class NoodleStore {
             agents = try repository.loadAgents()
             runtime.prepareAccessForExistingAgents(agents, migratedIDs: migratedIDs)
             try repository.synchronizeAgentWorkspaces(agents)
-            mcp.start(agents: agents)
-            computers.start(agents: agents)
-            applets.start(agents: agents)
+            if connectsServices {
+                mcp.start(agents: agents)
+                computers.start(agents: agents)
+                applets.start(agents: agents)
+            }
             conversations = try repository.loadConversations()
             backgrounds = Dictionary(uniqueKeysWithValues: conversations.map {
                 ($0.id, (try? repository.loadBackground(conversationID: $0.id)) ?? ConversationBackground())
@@ -469,8 +477,14 @@ final class NoodleStore {
     }
 
     func sendDraft() {
-        guard let conversation = selectedConversation else { return }
-        let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let selectedConversationID else { return }
+        sendDraft(to: selectedConversationID)
+    }
+
+    func sendDraft(to conversationID: UUID) {
+        guard let conversation = conversations.first(where: { $0.id == conversationID }) else { return }
+        let body = draft(for: conversationID).trimmingCharacters(in: .whitespacesAndNewlines)
+        let pendingAttachments = pendingAttachments(for: conversationID)
         guard !body.isEmpty || !pendingAttachments.isEmpty else { return }
         let messageBody = body.isEmpty ? "Sent \(pendingAttachments.count) attachment\(pendingAttachments.count == 1 ? "" : "s")" : body
 
@@ -544,7 +558,7 @@ final class NoodleStore {
     }
 
     func markSelectedConversationReadIfVisible() {
-        guard !NoodleNotifications.shouldPresentActivity else { return }
+        guard let selectedConversationID, conversationWindows.isViewing(selectedConversationID) else { return }
         markConversationRead(selectedConversationID)
     }
 
@@ -568,7 +582,10 @@ final class NoodleStore {
 
     func importAttachments(from providers: [NSItemProvider]) {
         guard let conversationID = selectedConversation?.id else { return }
+        importAttachments(from: providers, into: conversationID)
+    }
 
+    func importAttachments(from providers: [NSItemProvider], into conversationID: UUID) {
         Task {
             var firstError: Error?
             for provider in providers {
@@ -596,9 +613,8 @@ final class NoodleStore {
         }
     }
 
-    func importAttachmentsFromPasteboard() -> Bool {
-        guard let conversationID = selectedConversation?.id else { return false }
-        let pasteboard = NSPasteboard.general
+    func importAttachmentsFromPasteboard(into conversationID: UUID, pasteboard: NSPasteboard = .general) -> Bool {
+        guard conversations.contains(where: { $0.id == conversationID }) else { return false }
 
         let values = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
         if !values.isEmpty {
@@ -1001,6 +1017,7 @@ final class NoodleStore {
     }
 
     private func refreshAppShortcuts() {
+        guard connectsServices else { return }
         NoodleShortcuts.updateAppShortcutParameters()
         publishShareDestinations()
     }
@@ -1055,9 +1072,8 @@ final class NoodleStore {
         guard !messages.isEmpty else { return }
 
         var updated = unreadConversationIDs
-        let isViewingSelectedConversation = !NoodleNotifications.shouldPresentActivity
         for message in messages {
-            if isViewingSelectedConversation && message.conversationID == selectedConversationID {
+            if conversationWindows.isViewing(message.conversationID) {
                 updated.remove(message.conversationID)
             } else {
                 updated.insert(message.conversationID)
@@ -1078,7 +1094,7 @@ final class NoodleStore {
     }
 
     private func postNotifications(for messages: [ChatMessage]) {
-        guard NoodleNotifications.shouldPresentActivity else { return }
+        guard connectsServices, NoodleNotifications.shouldPresentActivity else { return }
 
         for message in messages {
             guard case .agent(let agentID) = message.author,

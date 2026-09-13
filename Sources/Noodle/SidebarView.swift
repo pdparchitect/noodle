@@ -6,6 +6,7 @@ struct SidebarView: View {
     var focusComposer: () -> Void = {}
     var focusRequest: UUID? = nil
     @Environment(NoodleStore.self) private var store
+    @Environment(\.openWindow) private var openWindow
     @FocusState private var searchIsFocused: Bool
 
     var body: some View {
@@ -18,6 +19,8 @@ struct SidebarView: View {
                         ConversationRow(conversation: conversation)
                             .tag(conversation.id)
                             .contextMenu {
+                                Button("Open in New Window") { openWindow(id: "conversation", value: conversation.id) }
+                                Divider()
                                 if let agent = store.participants(for: conversation).first {
                                     Button("Edit Bot") {
                                         store.agentBeingEdited = agent
@@ -48,6 +51,8 @@ struct SidebarView: View {
                         ConversationRow(conversation: conversation)
                             .tag(conversation.id)
                             .contextMenu {
+                                Button("Open in New Window") { openWindow(id: "conversation", value: conversation.id) }
+                                Divider()
                                 Button("Edit Group…") { store.groupBeingEdited = conversation }
                                 Button("Change Background…") { store.backgroundBeingEdited = conversation }
                             }

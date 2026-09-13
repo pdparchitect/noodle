@@ -45,7 +45,7 @@ struct NoodleApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("Noodle") {
+        WindowGroup("Noodle", id: "main") {
             RootView()
                 .environment(store)
                 .frame(minWidth: 980, minHeight: 670)
@@ -86,6 +86,18 @@ struct NoodleApp: App {
             }
         }
 
+        WindowGroup("Conversation", id: "conversation", for: UUID.self) { $conversationID in
+            if let conversationID {
+                ConversationWindowView(conversationID: conversationID)
+                    .environment(store)
+                    .frame(minWidth: 560, minHeight: 500)
+                    .preferredColorScheme(.dark)
+            }
+        }
+        .defaultSize(width: 760, height: 810)
+        .windowResizability(.contentMinSize)
+        .windowToolbarStyle(.unified(showsTitle: false))
+
         Settings {
             NoodleSettingsView()
                 .environment(store)
@@ -102,7 +114,6 @@ struct NoodleApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var attachmentPasteMonitor: Any?
     private let services = NoodleServices()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -119,26 +130,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSWorkspace.didWakeNotification,
             object: nil
         )
-        attachmentPasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            guard event.window?.identifier?.rawValue != "NoodleComputerPreview",
-                  !AttachmentPreviewController.containsPreviewWindow(event.window) else { return event }
-            let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
-            guard event.charactersIgnoringModifiers?.lowercased() == "v",
-                  modifiers == .command || modifiers == .control,
-                  let store = NoodleStore.active,
-                  store.composerIsFocused,
-                  store.importAttachmentsFromPasteboard() else {
-                return event
-            }
-            return nil
-        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         NSWorkspace.shared.notificationCenter.removeObserver(self)
-        if let attachmentPasteMonitor {
-            NSEvent.removeMonitor(attachmentPasteMonitor)
-        }
         NoodleStore.active?.stopMonitoring()
     }
 
@@ -187,14 +182,14 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         ] as? String
 
         Task { @MainActor in
-            if let rawID, let conversationID = UUID(uuidString: rawID) {
+            if let rawID, let conversationID = UUID(uuidString: rawID),
+               NoodleStore.active?.conversationWindows.focus(conversationID) != true {
                 NotificationCenter.default.post(
                     name: .openConversation,
                     object: conversationID
                 )
             }
             NSApp.activate(ignoringOtherApps: true)
-            NSApp.windows.first?.makeKeyAndOrderFront(nil)
             completionHandler()
         }
     }
@@ -232,6 +227,7 @@ private struct WindowConfiguration: NSViewRepresentable {
 struct RootView: View {
     @Environment(NoodleStore.self) private var store
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var isFileDropTargeted = false
     @State private var composerFocusRequest = UUID()
@@ -269,6 +265,13 @@ struct RootView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        .background(ConversationWindowHost(registry: store.conversationWindows,
+            conversationID: store.selectedConversationID, isMainWindow: true,
+            markRead: store.markConversationRead, openConversation: { id in
+                guard store.conversations.contains(where: { $0.id == id }) else { return }
+                store.selectedConversationID = id
+                store.conversationWindows.focusMainWindow()
+            }))
         .background {
             let conversation = store.selectedConversation
             let background = store.background(for: conversation)
@@ -320,6 +323,15 @@ struct RootView: View {
 
             ToolbarItem(placement: .primaryAction) {
                 if let conversation = store.selectedConversation {
+                    Button("Open in New Window", systemImage: "macwindow.badge.plus") {
+                        openWindow(id: "conversation", value: conversation.id)
+                    }
+                    .help("Open in New Window")
+                }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                if let conversation = store.selectedConversation {
                     if conversation.kind == .direct,
                        let agent = store.participants(for: conversation).first {
                         Button {
@@ -367,17 +379,7 @@ struct RootView: View {
                 .environment(store)
                 .noodleSheetSizing()
         }
-        .alert(
-            "Noodle",
-            isPresented: Binding(
-                get: { store.errorMessage != nil },
-                set: { if !$0 { store.errorMessage = nil } }
-            )
-        ) {
-            Button("OK") { store.errorMessage = nil }
-        } message: {
-            Text(store.errorMessage ?? "An unexpected error occurred.")
-        }
+        .modifier(ConversationErrorAlert())
         .onReceive(NotificationCenter.default.publisher(for: .newBot)) { _ in
             store.showNewBot()
         }
@@ -385,13 +387,6 @@ struct RootView: View {
             if !store.agents.isEmpty {
                 store.creationSheet = .group
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openConversation)) { notification in
-            guard let conversationID = notification.object as? UUID,
-                  store.conversations.contains(where: { $0.id == conversationID }) else {
-                return
-            }
-            store.selectedConversationID = conversationID
         }
     }
 }

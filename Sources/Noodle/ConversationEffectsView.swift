@@ -13,7 +13,7 @@ struct ConversationEffectsView: View {
 
     private var isVisibleChat: Bool {
         guard let window = windowReference.window else { return false }
-        return NSApp.isActive && store.selectedConversationID == conversationID &&
+        return NSApp.isActive &&
             window.isVisible && !window.isMiniaturized && window.isKeyWindow && window.attachedSheet == nil
     }
 

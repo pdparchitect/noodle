@@ -38,6 +38,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Open any bot chat or group in a separate window from the sidebar or chat toolbar. Keep messages, drafts, attachments, and conversation details synchronized while browsing and scrolling independently.
+
 - Add bug report and feature request forms, and require before and after screenshots when reviewing visual pull requests.
 
 - Press Backspace (⌫) in a live or loading capture preview to return to the window or screen picker. Keep Backspace available for editing annotation comments.

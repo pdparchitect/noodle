@@ -11,6 +11,7 @@ struct ChatView: View {
     let attachmentPreview: AttachmentPreviewController
     var composerFocusRequest: UUID? = nil
     var focusSidebar: (() -> Void)? = nil
+    var openDirectMessage: ((UUID) -> Void)? = nil
     @State private var composerFocused = false
     @State private var choosingAttachments = false
     @State private var showingAttachmentMenu = false
@@ -103,7 +104,7 @@ struct ChatView: View {
                 }
             }
             .onPasteCommand(of: AttachmentTransfer.pasteContentTypes) { providers in
-                store.importAttachments(from: providers)
+                store.importAttachments(from: providers, into: conversation.id)
             }
             .onChange(of: conversation.id) { _, _ in
                 noodletOpenTask?.cancel()
@@ -189,10 +190,10 @@ struct ChatView: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 7) {
-            if !store.pendingAttachments.isEmpty {
+            if !store.pendingAttachments(for: conversation.id).isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 7) {
-                        ForEach(store.pendingAttachments) { attachment in
+                        ForEach(store.pendingAttachments(for: conversation.id)) { attachment in
                             PendingAttachmentChip(
                                 attachment: attachment,
                                 preview: { showPreview(attachment) },
@@ -206,18 +207,14 @@ struct ChatView: View {
 
             composerControls
         }
-        .onChange(of: composerFocused) { _, isFocused in
-            store.composerIsFocused = isFocused
-        }
         .onDisappear {
-            store.composerIsFocused = false
             nameCompletion.detach()
         }
     }
 
     private var cannotSend: Bool {
-        store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            store.pendingAttachments.isEmpty
+        store.draft(for: conversation.id).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            store.pendingAttachments(for: conversation.id).isEmpty
     }
 
     @ViewBuilder private var composerControls: some View {
@@ -339,8 +336,9 @@ struct ChatView: View {
                 preferredIDs: Set(conversation.participantIDs),
                 separatesPreferredAgents: conversation.kind == .group,
                 completion: nameCompletion,
-                submit: store.sendDraft,
-                focusSidebar: focusSidebar
+                submit: { store.sendDraft(to: conversation.id) },
+                focusSidebar: focusSidebar,
+                pasteAttachments: { store.importAttachmentsFromPasteboard(into: conversation.id) }
             )
             .padding(.leading, 12)
             .padding(.trailing, composerSendControlWidth + 14 + (microphoneAction == nil ? 0 : 31))
@@ -366,7 +364,7 @@ struct ChatView: View {
                     .frame(width: composerSendControlWidth, height: composerControlHeight)
                     .padding(.trailing, 7)
             } else {
-                Button(action: store.sendDraft) {
+                Button(action: { store.sendDraft(to: conversation.id) }) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 23))
                         .foregroundStyle(Color.accentColor)
@@ -420,9 +418,10 @@ struct ChatView: View {
         switch action {
         case .reply(let name, let conversationID):
             guard conversation.id == conversationID else { return }
-            store.draft = "\(name), " + store.draft
+            store.setDraft("\(name), " + store.draft(for: conversationID), for: conversationID)
         case .directMessage(let id):
-            store.selectedConversationID = id
+            if let openDirectMessage { openDirectMessage(id) }
+            else { store.selectedConversationID = id }
         }
         // Restore keyboard focus after AppKit finishes dismissing the sheet.
         DispatchQueue.main.async { composerFocused = true }

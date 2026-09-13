@@ -23,6 +23,8 @@ struct VoiceRecordingDraft: Codable {
     private(set) var inputName = "Microphone"
     private(set) var noInputSignal = false
     private(set) var recoveringInput = false
+    var isSending = false
+    @ObservationIgnored private var composerIDs: Set<UUID> = []
     let directory: URL
     var audioURL: URL { directory.appendingPathComponent("recording.caf") }
     var hasAudio: Bool { duration > 0 && FileManager.default.fileExists(atPath: audioURL.path) }
@@ -266,6 +268,16 @@ struct VoiceRecordingDraft: Codable {
     func leaveConversation() async {
         if phase == .recording { await finish() }
         if phase == .preparing { await discard() }
+    }
+
+    func attachComposer(_ id: UUID) { composerIDs.insert(id) }
+
+    func detachComposer(_ id: UUID) {
+        composerIDs.remove(id)
+        Task {
+            guard composerIDs.isEmpty, !isSending else { return }
+            await leaveConversation()
+        }
     }
 
     func discard() async {

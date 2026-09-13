@@ -15,6 +15,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
     let completion: ComposerNameCompletion
     let submit: () -> Void
     var focusSidebar: (() -> Void)? = nil
+    var pasteAttachments: (() -> Bool)? = nil
     @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showDescriptions = true
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -30,6 +31,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
 
     func updateNSView(_ view: ComposerScrollView, context: Context) {
         context.coordinator.parent = self
+        view.editor.pasteAttachments = pasteAttachments
         let requestFocus = isFocused && !context.coordinator.lastRequestedFocus
         context.coordinator.lastRequestedFocus = isFocused
         let focusRevision = context.coordinator.focusRevision
@@ -47,6 +49,8 @@ struct ScrollableChatComposer: NSViewRepresentable {
             view.editor.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
             view.editor.scrollRangeToVisible(view.editor.selectedRange())
         } else if view.editor.string != text, !view.editor.hasMarkedText() {
+            // A send or an edit in another window replaces this editor's history.
+            view.editor.undoManager?.removeAllActions()
             view.editor.string = text
             replacedText = true
             view.editor.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
@@ -72,6 +76,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
         coordinator.parent.completion.detach()
         view.focusChanged = nil
         view.editor.delegate = nil
+        view.editor.pasteAttachments = nil
     }
 
     @MainActor final class Coordinator: NSObject, NSTextViewDelegate {
@@ -192,8 +197,18 @@ struct ScrollableChatComposer: NSViewRepresentable {
 
 @MainActor final class ComposerTextView: NSTextView {
     var focusChanged: ((Bool) -> Void)?
+    var pasteAttachments: (() -> Bool)?
     var placeholder = "" { didSet { needsDisplay = true } }
-    override func paste(_ sender: Any?) { pasteAsPlainText(sender) }
+    override func paste(_ sender: Any?) {
+        if pasteAttachments?() == true { return }
+        pasteAsPlainText(sender)
+    }
+    override func keyDown(with event: NSEvent) {
+        let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        if event.charactersIgnoringModifiers?.lowercased() == "v", modifiers == .control,
+           pasteAttachments?() == true { return }
+        super.keyDown(with: event)
+    }
     override func becomeFirstResponder() -> Bool {
         let accepted = super.becomeFirstResponder()
         if accepted { focusChanged?(true) }
