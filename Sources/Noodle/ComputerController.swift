@@ -19,6 +19,7 @@ import SwiftUI
     @ObservationIgnored private var tokens: [UUID: String] = [:]
     @ObservationIgnored private var pending: Set<UUID> = []
     @ObservationIgnored private var claimed: [UUID: Date] = [:]
+    @ObservationIgnored private var refreshID = UUID()
     @ObservationIgnored private var launch: Task<Void, Error>?
     @ObservationIgnored private let applicationLookup: () -> URL?
     /// Injectable connection boundary for deterministic broker failure tests.
@@ -36,7 +37,7 @@ import SwiftUI
         do { registry = try ComputerAssignments.load(root: repository.rootURL) }
         catch { readable = false; failure = "Could not read Computer assignments; they were not changed." }
     }
-    func start(agents: [AgentRecord]) {
+    func start(agents: [AgentRecord], monitoring: Bool = true) {
         for removed in self.agents where !agents.contains(where: { $0.id == removed.id }) {
             for id in registry.assigned(to: removed.id) {
                 Task { [weak self] in _ = try? await self?.call(.init(.revoke, computerID: id, agentID: removed.id), launchIfNeeded: false) }
@@ -48,10 +49,15 @@ import SwiftUI
             for agent in agents where tokens[agent.id] == nil {
                 let directory = try ComputerAgentSkill.bridge(workspace: repository.directory(for: agent))
                 let token = UUID().uuidString + UUID().uuidString
-                tokens[agent.id] = token
                 try MCPBridgeFiles.write(MCPBridgeSession(token: token, processID: getpid()), to: directory.appendingPathComponent("session.json"), workspace: repository.directory(for: agent))
+                tokens[agent.id] = token
             }
         } catch { failure = error.localizedDescription }
+        guard monitoring else {
+            monitor?.cancel(); monitor = nil
+            bridge?.cancel(); bridge = nil
+            return
+        }
         if monitor == nil {
             monitor = Task { [weak self] in
                 await self?.refresh(launchIfNeeded: true)
@@ -70,7 +76,8 @@ import SwiftUI
             }
         }
     }
-    func call(_ request: ComputerRequest, launchIfNeeded: Bool = true) async throws -> ComputerResponse {
+    func call(_ request: ComputerRequest, launchIfNeeded: Bool = true,
+              authorize: () throws -> Void = {}) async throws -> ComputerResponse {
         // Check before each action, including after a provider relaunch/update.
         // This inexpensive local handshake never replays the requested mutation.
         var handshake = ComputerRequest(.list)
@@ -78,6 +85,8 @@ import SwiftUI
         let discovery = try await connect(handshake, launchIfNeeded: launchIfNeeded)
         try ComputerCapabilities.requireCompatible(discovery.capabilities)
         if request.operation.isFileTransfer { try ComputerCapabilities.requireFileTransfer(discovery.capabilities) }
+        try Task.checkCancellation()
+        try authorize()
         if request.operation == .list { return discovery }
         return try await connect(request, launchIfNeeded: false)
     }
@@ -136,8 +145,10 @@ import SwiftUI
         guard NSWorkspace.shared.open(ComputerDistribution.downloadPage) else { throw ComputerBridgeError("Could not open the Computer download page.") }
     }
     func refresh(launchIfNeeded: Bool = false) async {
+        let id = UUID(); refreshID = id
         do {
             let response = try await call(.init(.list), launchIfNeeded: launchIfNeeded)
+            guard refreshID == id, !Task.isCancelled else { return }
             guard let computers = response.computers, computers.count <= 1000,
                   Set(computers.map(\.id)).count == computers.count else { throw ComputerBridgeError("Invalid provider catalogue.") }
             available = true
@@ -148,6 +159,7 @@ import SwiftUI
             needsFileTransferUpdate = response.capabilities?.features.contains("file-transfer-v1") == false
             if readable { failure = nil }
         } catch {
+            guard refreshID == id, !Task.isCancelled else { return }
             available = false; failure = error.localizedDescription
             needsFileTransferUpdate = false
         }
@@ -163,10 +175,10 @@ import SwiftUI
         var next = registry; next.agents[agent.id.uuidString] = ids
         try next.save(root: repository.rootURL)
         registry = next // Access is revoked before asynchronous terminal cleanup.
-        try repository.synchronizeAgentWorkspace(agent)
         for id in removed {
             Task { [weak self] in _ = try? await self?.call(.init(.revoke, computerID: id, agentID: agent.id)) }
         }
+        try repository.synchronizeAgentWorkspace(agent)
     }
     func permits(_ card: ComputerCard) -> Bool {
         readable && registry.permits(card.computer.id, agent: card.agentID) && agents.contains { $0.id == card.agentID }
@@ -178,11 +190,13 @@ import SwiftUI
               request.agentID == card.agentID, request.terminalID == card.terminalID else {
             throw ComputerBridgeError("This computer assignment or terminal reference has been revoked.")
         }
-        let response = try await call(request)
+        let response = try await call(request) {
+            guard self.permits(card) else { throw ComputerBridgeError("This computer assignment was revoked.") }
+        }
         guard permits(card) else { throw ComputerBridgeError("This computer assignment was revoked.") }
         return response
     }
-    private func scan() {
+    func scan() {
         claimed = claimed.filter { Date().timeIntervalSince($0.value) < 700 }
         for agent in agents {
             guard !pending.contains(agent.id), let token = tokens[agent.id],
@@ -245,9 +259,14 @@ import SwiftUI
             response = try await transfer(request, localPath: localPath, agent: agent)
         } else {
             guard envelope.localPath == nil else { throw ComputerBridgeError("Local paths require upload or download.") }
-            response = try await call(request)
+            response = try await call(request) {
+                guard self.registry.permits(request.computerID, agent: agent.id),
+                      self.tokens[agent.id] == envelope.token, self.agents.contains(where: { $0.id == agent.id }) else {
+                    throw ComputerBridgeError("Computer access was revoked during the request.")
+                }
+            }
         }
-        guard registry.permits(request.computerID, agent: agent.id), agents.contains(where: { $0.id == agent.id }) else {
+        guard registry.permits(request.computerID, agent: agent.id), tokens[agent.id] == envelope.token, agents.contains(where: { $0.id == agent.id }) else {
             _ = try? await call(.init(.revoke, computerID: request.computerID, agentID: agent.id))
             throw ComputerBridgeError("Computer access was revoked during the request.")
         }
