@@ -10,6 +10,8 @@ All notable changes to Noodle are documented here, following
 
 - Run sandbox and broker regressions on ordinary CI pushes as well as pull requests and releases. Require freshly built, ad-hoc signed CLI fixtures without developer credentials, include adapter session recovery checks, and cover membership revocation, cross-bot tokens, and invalid mailbox inputs.
 
+- Highlight autonomous access in orange in Security using the same regular caption weight as other settings labels, keep restricted access neutral, and move the Claude Code access requirement into a popover opened from its label.
+
 - Isolate restricted bots from other bots’ files, raw conversation storage, and shared harness histories. Broker Messenger access by bot identity and conversation membership, copy attachments into each workspace, give cloud harnesses private credential/session stores, and prevent workspace symlinks from redirecting app-side bridge or skill writes.
 
 - Correct the README's restricted-harness list and document how the sandbox is enforced, what it protects, and its limits around shared data, networking, tool access, and resource use.
