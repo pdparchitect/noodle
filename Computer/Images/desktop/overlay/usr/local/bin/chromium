@@ -1,0 +1,69 @@
+#!/bin/bash
+# Every desktop/menu/terminal launch shares the visible browser and its profile.
+set -euo pipefail
+
+# Guest terminal commands run as root; the visible desktop belongs to agent.
+if [ "$(id -u)" = 0 ]; then
+    exec runuser -u agent -- env -u XDG_CONFIG_HOME -u XDG_CACHE_HOME -u XDG_DATA_HOME \
+        HOME=/home/agent XDG_RUNTIME_DIR=/run/user/1000 "$0" "$@"
+fi
+if [ "$(id -un)" != agent ]; then
+    echo 'Open the Noodle browser as the desktop account (agent) or from the guest root terminal.' >&2
+    exit 1
+fi
+
+export HOME=/home/agent
+export DISPLAY="${DISPLAY:-:1}"
+export XAUTHORITY="${XAUTHORITY:-/run/launcher-desktop/Xauthority}"
+if [ -s /run/launcher-desktop/dbus-session-address ]; then
+    export DBUS_SESSION_BUS_ADDRESS="$(head -n 1 /run/launcher-desktop/dbus-session-address)"
+fi
+if ! xdpyinfo >/dev/null 2>&1; then
+    echo 'The Noodle desktop display is unavailable. Start the Desktop computer before opening Browser.' >&2
+    exit 1
+fi
+
+# Do not let a caller silently switch away from the visible, attachable session.
+for argument in "$@"; do
+    case "$argument" in
+        --headless*|--user-data-dir*|--remote-debugging*|--remote-allow-origins*)
+            echo 'Noodle Browser owns its visible profile and local debugging connection; omit headless, profile and debugging switches.' >&2
+            exit 2 ;;
+    esac
+done
+
+# Chrome requires a non-default data directory for remote debugging. Copy the
+# old desktop profile once, without altering it, to retain website sign-ins.
+profile=/home/agent/.config/noodle-browser
+legacy=/home/agent/.config/chromium
+mkdir -p /home/agent/.config
+exec 9>/home/agent/.config/noodle-browser.lock
+flock -x 9
+if [ ! -e "$profile" ]; then
+    if [ -L "$legacy/SingletonLock" ]; then
+        owner="$(readlink "$legacy/SingletonLock")"
+        pid="${owner##*-}"
+        if [[ "$pid" =~ ^[0-9]+$ ]] && [ -r "/proc/$pid/cmdline" ] &&
+            grep -aq chromium "/proc/$pid/cmdline"; then
+            echo 'Close existing Chromium windows once before Noodle copies the desktop profile.' >&2
+            exit 1
+        fi
+    fi
+    staging="$(mktemp -d /home/agent/.config/.noodle-browser.XXXXXX)"
+    trap 'rm -rf -- "$staging"' EXIT
+    if [ -d "$legacy" ]; then
+        cp -a -- "$legacy/." "$staging/"
+    fi
+    rm -f -- "$staging/SingletonLock" "$staging/SingletonCookie" "$staging/SingletonSocket"
+    chmod 700 "$staging"
+    mv -T -- "$staging" "$profile"
+    trap - EXIT
+fi
+flock -u 9
+exec 9>&-
+
+exec /usr/local/lib/noodle-chromium-base \
+    --user-data-dir="$profile" \
+    --remote-debugging-address=127.0.0.1 \
+    --remote-debugging-port=9222 \
+    "$@"

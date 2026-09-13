@@ -11,9 +11,16 @@ LABEL org.opencontainers.image.title="Noodle Computer Desktop" \
       org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}"
 
+# Keep the base's rendering and desktop integration behind our shared-profile launcher.
+RUN mv /usr/local/bin/chromium /usr/local/lib/noodle-chromium-base
+COPY desktop/browser/package.json desktop/browser/package-lock.json /opt/noodle-browser/
+RUN cd /opt/noodle-browser && npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
+    && npm cache clean --force
+COPY desktop/browser/index.cjs /opt/noodle-browser/index.cjs
 COPY desktop/overlay/ /
 # The session hook owns Picom; disable its generic XDG autostart duplicate.
 RUN chmod 0755 /etc/desktop/session.d/noodle-compositor \
+    /etc/desktop/session.d/noodle-browser /usr/local/bin/chromium \
     && printf '\nHidden=true\n' >> /etc/xdg/autostart/picom.desktop
 COPY shared/noodle-welcome /usr/local/bin/noodle-welcome
 COPY shared/interactive-shell.sh /etc/noodle/interactive-shell.sh
@@ -35,5 +42,6 @@ ENV DESKTOP_TITLE="Noodle Computer" \
     DESKTOP_WALLPAPER=/usr/share/backgrounds/desktop-wallpaper.png
 WORKDIR /workspace
 HEALTHCHECK NONE
+USER agent
 ENTRYPOINT ["/bin/sh"]
 CMD ["-i"]

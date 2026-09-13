@@ -74,7 +74,7 @@ def check(label, output, count=1, bold=None):
 
 for image in (shell_image, desktop_image):
     check(image + ': default shell mode', run(image, entrypoint=None, environment=['TERM=xterm-256color'], startup='exit\n'), bold=True)
-    check(image + ': native/provider environment', run(image, ['-i', 'PATH=/usr/local/bin:/usr/bin:/bin', 'HOME=/root', 'TERM=xterm-256color', 'ENV=/etc/noodle/interactive-shell.sh', '/bin/sh', '-ic', 'exit']), bold=True)
+    check(image + ': native/provider environment', run(image, ['-i', 'PATH=/usr/local/bin:/usr/bin:/bin', 'HOME=/home/agent', 'TERM=xterm-256color', 'ENV=/etc/noodle/interactive-shell.sh', '/bin/sh', '-ic', 'exit']), bold=True)
     check(image + ': login shell prints once', run(image, ['/bin/sh', '-lic', 'exit']))
     check(image + ': repeated hook prints once', run(image, ['/bin/sh', '-ic', '. /etc/noodle/interactive-shell.sh; . /etc/noodle/interactive-shell.sh']))
     check(image + ': nested shell gets its own logo', run(image, ['/bin/sh', '-ic', '/bin/sh -ic exit']), count=2)
@@ -83,5 +83,5 @@ for image in (shell_image, desktop_image):
     check(image + ': NO_COLOR', run(image, ['/bin/sh', '-ic', 'exit'], environment=['TERM=xterm-256color', 'NO_COLOR=1']), bold=True)
     check(image + ': dumb terminal', run(image, ['/bin/sh', '-ic', 'exit'], environment=['TERM=dumb']), bold=False)
     check(image + ': opt out', run(image, ['/bin/sh', '-ic', 'exit'], environment=['NOODLE_BANNER=0']), count=0)
-for args in (['/bin/bash', '-ic', 'exit'], ['/bin/bash', '-lic', 'exit'], ['su', '-', 'agent', '-c', '/bin/bash -ic exit']):
+for args in (['/bin/bash', '-ic', 'exit'], ['/bin/bash', '-lic', 'exit'], ['sudo', '-n', '-u', 'agent', '/bin/bash', '-lic', 'exit']):
     check('Desktop Bash: ' + ' '.join(args), run(desktop_image, args))

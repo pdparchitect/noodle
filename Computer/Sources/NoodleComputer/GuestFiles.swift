@@ -135,10 +135,25 @@ actor GuestFiles: FileImportDestination, FileExportSource {
                   let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize else {
                 throw ComputerError("The file helper is missing. Rebuild Noodle Computer.")
             }
-            let path = "/tmp/.noodle-files-runtime"
-            let staging = path + "." + UUID().uuidString.lowercased()
             let input = try FileInput(url: url, limit: Int64(size))
-            _ = try await run(arguments: ["/bin/sh", "-c", "umask 077; set -C; trap 'rm -f -- \"$2\"' EXIT; cat > \"$2\" && chmod 700 \"$2\" && mv -f -- \"$2\" \"$1\"", "noodle-files", path, staging], input: input, limit: 4096, timeout: 15)
+            // A prior root-owned helper survives image updates in the writable
+            // layer. Separate accounts must not replace each other's /tmp files.
+            let output = try await run(arguments: ["/bin/sh", "-c", #"""
+                set -eu
+                umask 077
+                set -C
+                path="/tmp/.noodle-files-runtime-$(id -u)"
+                staging="$path.$1"
+                trap 'rm -f -- "$staging"' EXIT
+                cat > "$staging"
+                chmod 700 "$staging"
+                mv -f -- "$staging" "$path"
+                printf '%s\n' "$path"
+                """#, "noodle-files", UUID().uuidString.lowercased()], input: input, limit: 4096, timeout: 15)
+            let path = String(decoding: output, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard path.range(of: #"^/tmp/\.noodle-files-runtime-[0-9]+$"#, options: .regularExpression) != nil else {
+                throw ComputerError("The guest did not return a valid file helper path.")
+            }
             return path
         }
         installation = task

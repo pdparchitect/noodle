@@ -9,8 +9,16 @@ LABEL org.opencontainers.image.title="Noodle Computer Shell" \
       org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}"
 
+RUN apk add --no-cache sudo \
+    && addgroup -g 1000 agent \
+    && adduser -D -u 1000 -G agent -h /home/agent -s /bin/ash agent \
+    && mkdir -p /workspace /etc/sudoers.d \
+    && chown agent:agent /workspace \
+    && printf 'agent ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/agent \
+    && chmod 0440 /etc/sudoers.d/agent \
+    && visudo -cf /etc/sudoers
 WORKDIR /workspace
-ENV HOME=/root TERM=xterm-256color
+ENV HOME=/home/agent TERM=xterm-256color
 ENV ENV=/etc/noodle/interactive-shell.sh
 COPY shared/noodle-welcome /usr/local/bin/noodle-welcome
 COPY shared/interactive-shell.sh /etc/noodle/interactive-shell.sh
@@ -18,4 +26,5 @@ RUN chmod 0755 /usr/local/bin/noodle-welcome \
     && ln -s /etc/noodle/interactive-shell.sh /etc/profile.d/noodle-welcome.sh
 COPY shared/verify.sh /usr/local/lib/noodle-image-check
 RUN sh /usr/local/lib/noodle-image-check shell
+USER agent
 CMD ["/bin/sh", "-i"]

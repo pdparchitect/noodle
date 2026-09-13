@@ -33,6 +33,7 @@ actor ContainerComputer {
     private var terminalIO: GuestTerminalIO?
     private var terminalID: UUID?
     private var terminalMonitor: Task<Void, Never>?
+    private var guestConfiguration = LinuxProcessConfiguration()
     private(set) var desktop: DesktopConnection?
 
     static func prepare(computer: Computer, directory: URL, cache: URL,
@@ -49,6 +50,9 @@ actor ContainerComputer {
         guard pod == nil else { throw ComputerError("This computer is already running.") }
         let state = try preparedState ?? ContainerDiskState.load(in: directory)
         let layers = state.directory(in: directory)
+        let savedImage = try JSONDecoder().decode(ContainerizationOCI.Image.self,
+            from: Data(contentsOf: layers.appendingPathComponent("ImageConfig.json")))
+        guestConfiguration = savedImage.config.map { LinuxProcessConfiguration(from: $0) } ?? LinuxProcessConfiguration()
         let vmm = VZVirtualMachineManager(kernel: Kernel(path: kernel, platform: .linuxArm),
             initialFilesystem: .block(format: "ext4", source: cache.appendingPathComponent("initfs-0.43.0.ext4").path,
                                       destination: "/", options: ["ro"]))
@@ -146,12 +150,10 @@ actor ContainerComputer {
                 return "Linux desktop is ready."
             }
             if computer.isCustomContainer, let port = computer.webPort {
-                let saved = try JSONDecoder().decode(ContainerizationOCI.Image.self,
-                    from: Data(contentsOf: layers.appendingPathComponent("ImageConfig.json")))
-                guard let imageConfig = saved.config else {
+                guard savedImage.config != nil else {
                     throw ComputerError("The image has no startup configuration.")
                 }
-                let configured = LinuxProcessConfiguration(from: imageConfig)
+                let configured = guestConfiguration
                 guard !configured.arguments.isEmpty else {
                     throw ComputerError("The image has no startup command for its web interface.")
                 }
@@ -244,9 +246,11 @@ actor ContainerComputer {
         guard let pod, terminalProcess == nil else { throw ComputerError("The terminal is not available.") }
         let id = UUID()
         terminalID = id
+        let guest = guestConfiguration
         let process = try await pod.execInContainer("workspace", processID: "interactive-shell-\(id.uuidString.lowercased())") { config in
             config.arguments = ["/bin/sh", "-c", GuestShell.command]
-            config.environmentVariables = GuestShell.environment
+            config.user = guest.user
+            config.environmentVariables = GuestShell.environment(inheriting: guest.environmentVariables)
             config.terminal = true
             config.stdin = io
             config.stdout = io
@@ -283,9 +287,11 @@ actor ContainerComputer {
     // owns a distinct PTY, while all sessions share this computer's filesystem.
     func makeProviderTerminal(io: GuestTerminalIO, id: UUID) async throws -> LinuxProcess {
         guard let pod else { throw ComputerError("Start the computer first.") }
+        let guest = guestConfiguration
         let process = try await pod.execInContainer("workspace", processID: "noodle-\(id.uuidString.lowercased())") { config in
             config.arguments = ["/bin/sh", "-c", GuestShell.command]
-            config.environmentVariables = GuestShell.environment
+            config.user = guest.user
+            config.environmentVariables = GuestShell.environment(inheriting: guest.environmentVariables)
             config.terminal = true; config.stdin = io; config.stdout = io
         }
         do {
@@ -320,9 +326,11 @@ actor ContainerComputer {
         guard let pod else { throw ComputerError("Start the computer first.") }
         guard commandProcess == nil else { throw ComputerError("A command is already running.") }
         let output = ComputerOutput()
+        let guest = guestConfiguration
         let process = try await pod.execInContainer("workspace", processID: UUID().uuidString.lowercased()) { config in
             config.arguments = ["/bin/sh", "-c", "cd /workspace && " + command]
-            config.environmentVariables = ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/root", "TERM=dumb"]
+            config.user = guest.user
+            config.environmentVariables = GuestShell.environment(inheriting: guest.environmentVariables, terminal: false)
             config.stdout = output
             config.stderr = output
         }
@@ -346,9 +354,11 @@ actor ContainerComputer {
     func makeFileProcess(arguments: [String], input: (any ReaderStream)? = nil,
                          output: any Writer, errors: any Writer) async throws -> LinuxProcess {
         guard let pod else { throw ComputerError("Start the computer to browse its files.") }
+        let guest = guestConfiguration
         return try await pod.execInContainer("workspace", processID: "files-\(UUID().uuidString)") { config in
             config.arguments = arguments
-            config.environmentVariables = ["PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/root"]
+            config.user = guest.user
+            config.environmentVariables = GuestShell.environment(inheriting: guest.environmentVariables, terminal: false)
             config.stdin = input
             config.stdout = output
             config.stderr = errors

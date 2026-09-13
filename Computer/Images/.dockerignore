@@ -5,3 +5,5 @@
 !desktop/**
 !shared/
 !shared/**
+**/node_modules
+**/.codex

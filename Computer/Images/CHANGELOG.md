@@ -2,7 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- Bundle Puppeteer for scripts that attach to the visible desktop Chromium session, with a persistent shared profile, preserved existing desktop logins, and a guest-loopback debugging port. Open Browser with the desktop and reuse its account/profile from root terminals.
+
 ### Changed
+
+- Default both images to the non-root `agent` account with passwordless sudo and writable home/workspace directories.
 
 - Shorten the image build, customization, and publishing guide.
 

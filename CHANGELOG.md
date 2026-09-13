@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Teach assigned agents to automate the Computer desktop's visible, signed-in browser using bundled Puppeteer, hand sign-in to the user, and disconnect without closing shared tabs.
+
 - Cover draft-safe message failures, attachment-only sends, independent voice and command sends, reaction edits, and unread persistence through the app store.
 
 - Cover group creation, edits, deletion, participant wakeups, and conversation search through the app store with isolated workspaces.

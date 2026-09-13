@@ -959,7 +959,7 @@ import WebKit
         print("TERMINAL TEST PASSED: guest PTY input/output, window resize, Control-C and native terminal rendering")
         do { try await checkTerminalReconnection(store: store, session: session) }
         catch { await store.stop(session, force: true); throw error }
-        let packageCheck = networkEnabled ? " && apk add --no-cache jq && jq --version" : ""
+        let packageCheck = networkEnabled ? " && if command -v sudo >/dev/null; then sudo apk add --no-cache jq; else apk add --no-cache jq; fi && jq --version" : ""
         await store.execute("uname -m && printf noodle-persistence > /workspace/sentinel" + packageCheck, in: session)
         guard session.console.contains("aarch64"), session.console.contains("[Exit 0]"),
             !networkEnabled || session.console.contains("jq-")
