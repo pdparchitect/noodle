@@ -171,6 +171,9 @@ Run native UI fixtures from a logged-in Mac. They use isolated test data.
 | --- | --- | --- |
 | Chat | `zsh Tests/chat-features.sh` | Name menu, profiles, Markdown, draft and keyboard behavior |
 | Chat input | `zsh Tests/scrollable-composer.sh` | Cursor visibility beyond six lines, scrolling, wrapping, resize, IME, undo and paste |
+| Transcript layout | `swift test --disable-sandbox --filter TranscriptLayoutTests` | Real thumbnail loading, annotation height stability, cached previews, legacy notes, scrolling during incoming replies, composer growth, resizing and full-chat navigation |
+| Transcript restoration | `zsh Tests/transcript-startup.sh` | Delayed loading, persisted reading position, changed-width relaunch and rapid chat switching |
+| Transcript resize | `zsh Tests/transcript-resize.sh` | Reading-message anchoring, width/height reflow, incoming messages and follow-latest |
 | Sheets | `zsh Tests/sheet-sizing.sh` | Growing/shrinking content and group member selection |
 | Backgrounds | `zsh Tests/animated-backgrounds.sh` | Import, playback, and Reduce Motion |
 | Voice | `zsh Tests/voice-recording.sh` | Audio conversion, waveform, and restored drafts |

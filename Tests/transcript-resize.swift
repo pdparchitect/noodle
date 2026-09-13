@@ -40,13 +40,17 @@ struct TranscriptResizeFixture: View {
         setbuf(stdout, nil)
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
+        // A main-queue timeout cannot fire while SwiftUI is stuck in layout.
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 40) {
+            FileHandle.standardError.write(Data("FAIL: Transcript resize checks timed out\n".utf8))
+            _exit(1)
+        }
         let model = TranscriptFixtureModel()
         let window = NSWindow(contentRect: NSRect(x: 60, y: 80, width: 760, height: 620),
             styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         window.title = "Transcript Resize Tests"
         window.contentView = NSHostingView(rootView: TranscriptResizeFixture(model: model))
         window.makeKeyAndOrderFront(nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 40) { fatalError("Transcript resize checks timed out") }
         Task { @MainActor in
             func settle() async { try? await Task.sleep(for: .milliseconds(300)) }
             @MainActor func find(_ view: NSView) -> NSScrollView? {

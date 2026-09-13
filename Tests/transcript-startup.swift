@@ -75,7 +75,11 @@ struct StartupFixture: View {
         setbuf(stdout, nil)
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 45) { fatalError("Startup checks timed out") }
+        // A main-queue timeout cannot fire while SwiftUI is stuck in layout.
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 45) {
+            FileHandle.standardError.write(Data("FAIL: Transcript startup checks timed out\n".utf8))
+            _exit(1)
+        }
         Task { @MainActor in
             @MainActor func makeWindow(_ model: StartupModel, width: CGFloat) -> NSWindow {
                 let window = NSWindow(contentRect: NSRect(x: 80, y: 80, width: width, height: 780),

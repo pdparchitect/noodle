@@ -124,13 +124,20 @@ struct AttachmentInlinePreview: View {
                     .padding(.leading, 9)
                     .overlay(alignment: .leading) { Rectangle().fill(.orange.opacity(0.6)).frame(width: 2) }
             } else if note.region != nil {
-                if let thumbnail {
-                    Image(nsImage: thumbnail).resizable().scaledToFit().frame(maxHeight: 190)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .accessibilityLabel("Marked preview region")
-                } else {
-                    Label("Marked preview region", systemImage: "viewfinder").font(.caption).foregroundStyle(.secondary)
+                // Loading is driven by scroll visibility. Reserve the preview's
+                // height before loading so it cannot move neighboring rows and
+                // invalidate the lazy stack's placement as they become visible.
+                ZStack {
+                    if let thumbnail {
+                        Image(nsImage: thumbnail).resizable().scaledToFit()
+                            .accessibilityLabel("Marked preview region")
+                    } else {
+                        Label("Marked preview region", systemImage: "viewfinder").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
+                .frame(maxWidth: .infinity)
+                .frame(height: attachment.mediaType.hasPrefix("image/") ? 190 : nil)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             }
             Text(note.comment).font(.callout).lineLimit(4)
         }
@@ -248,7 +255,7 @@ struct AttachmentInlinePreview: View {
 }
 
 @MainActor
-private enum AttachmentThumbnailCache {
+enum AttachmentThumbnailCache {
     static let shared = NSCache<NSURL, NSImage>()
     private static var previewSizes: [URL: CGSize] = [:]
 
