@@ -20,8 +20,8 @@ public final class ShareComposerModel: ObservableObject {
     @Published public var isLoading = true
     @Published public var isSending = false
     public let inbox: SharedInbox
-    private let requestID = UUID()
-    private var loadTask: Task<Void, Never>?
+    private var requestID = UUID()
+    private(set) var loadTask: Task<Void, Never>?
     private var published = false
     private var isCancelled = false
 
@@ -29,8 +29,18 @@ public final class ShareComposerModel: ObservableObject {
 
     public func load(_ inputs: [ShareInput]) {
         guard !isCancelled, !published else { return }
+        loadTask?.cancel()
+        inbox.cancelDraft(requestID)
+        let requestID = UUID()
+        self.requestID = requestID
+        text = ""
+        filenames = []
+        error = nil
+        destinationID = nil
+        isLoading = true
         loadTask = Task {
             do {
+                try Task.checkCancellation()
                 destinations = try inbox.loadDestinations()
                 destinationID = destinations.first?.id
                 let draft = try inbox.draftDirectory(requestID)
@@ -45,17 +55,20 @@ public final class ShareComposerModel: ObservableObject {
                             defer { if access { url.stopAccessingSecurityScopedResource() } }
                             try FileManager.default.copyItem(at: url, to: target)
                         }.value
+                        try Task.checkCancellation()
                         filenames.append(target.lastPathComponent)
                     case .provider(let provider):
                         try await importProvider(provider, into: draft)
                     }
                 }
+                try Task.checkCancellation()
             } catch is CancellationError {
                 inbox.cancelDraft(requestID)
             } catch {
-                self.error = error.localizedDescription
+                if Task.isCancelled { inbox.cancelDraft(requestID) }
+                else if self.requestID == requestID { self.error = error.localizedDescription }
             }
-            isLoading = false
+            if self.requestID == requestID { isLoading = false }
         }
     }
 
@@ -108,6 +121,7 @@ public final class ShareComposerModel: ObservableObject {
     private func importProvider(_ provider: NSItemProvider, into draft: URL) async throws {
         if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
             let url = try await loadURL(provider)
+            try Task.checkCancellation()
             guard url.isFileURL else { throw SharedInboxError.invalidRequest }
             let target = uniqueFile(in: draft, name: provider.suggestedName ?? url.lastPathComponent)
             try await Task.detached {
@@ -115,10 +129,12 @@ public final class ShareComposerModel: ObservableObject {
                 defer { if access { url.stopAccessingSecurityScopedResource() } }
                 try FileManager.default.copyItem(at: url, to: target)
             }.value
+            try Task.checkCancellation()
             filenames.append(target.lastPathComponent)
         } else if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
             // A shared web page stays a URL. Do not silently download it as an attachment.
             let url = try await loadURL(provider)
+            try Task.checkCancellation()
             guard ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { throw SharedInboxError.invalidRequest }
             appendText(url.absoluteString)
         } else if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
@@ -129,6 +145,7 @@ public final class ShareComposerModel: ObservableObject {
                     else { continuation.resume(throwing: SharedInboxError.invalidRequest) }
                 }
             }
+            try Task.checkCancellation()
             appendText(value)
         } else {
             guard let type = provider.registeredTypeIdentifiers.compactMap(UTType.init).first(where: { $0.conforms(to: .data) })
@@ -147,6 +164,7 @@ public final class ShareComposerModel: ObservableObject {
                     } catch { continuation.resume(throwing: error) }
                 }
             }
+            try Task.checkCancellation()
             filenames.append(target.lastPathComponent)
         }
     }

@@ -20,6 +20,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Discard late share-provider results after cancellation or replacement, and give each load its own draft so older callbacks cannot append to or remove the current share.
+
 - Prevent cancelled share composers from publishing content or recreating their drafts. Cover text/file sharing, duplicate filenames, and publication retry without opening the extension UI.
 
 - Preserve unreadable conversation history instead of replacing it during a send. Report the failure and retain the unsent text and attachments for retry.
