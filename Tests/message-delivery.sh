@@ -19,6 +19,7 @@ PY
 
 swiftc -parse-as-library -I "$bin_path/Modules" \
     "$project_root/.build/DeliveryCodexAdapter.swift" \
+    "$project_root/Sources/Noodle/HarnessRuntimeConnection.swift" \
     "$project_root/Sources/Noodle/ClaudeAgentProcess.swift" \
     "$project_root/Sources/Noodle/ACPAgentProcess.swift" \
     "$project_root/Sources/Noodle/MuseAgentProcess.swift" \

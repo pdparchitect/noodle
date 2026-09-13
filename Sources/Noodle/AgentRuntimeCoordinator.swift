@@ -792,7 +792,10 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private let onApprovals: @MainActor ([AgentApprovalRequest]) -> Void
     private var pendingApprovals: [AgentApprovalRequest] = []
     private var approvalItemDetails: [String: [String: Any]] = [:]
-    private var hostConnection: ExtendedAgentConnection?
+    private var connectionID: UUID?
+    private let sleep: @MainActor (Duration) async throws -> Void
+    private let makeConnection: @MainActor () throws -> any HarnessRuntimeConnection
+    private var hostConnection: (any HarnessRuntimeConnection)?
     private var hostRunning = false
     private var hostPID: Int32?
     private let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
@@ -801,9 +804,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private let stateURL: URL
     private var turnRecovery: AgentTurnRecovery
 
-    private lazy var outputReader = JSONLineReader { [weak self] message in
-        Task { @MainActor in self?.handle(message) }
-    }
+
     private var nextRequestID = 1
     private var purposes: [Int: RequestPurpose] = [:]
     private var threadID: String?
@@ -814,6 +815,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private var earlyTurnError: [String: Any]?
     private var turnErrorDetail: String?
     private var steeringNotificationID: UUID?
+    private var startupTimeout: Task<Void, Never>?
     private var steeringTimeout: Task<Void, Never>?
     private var notifications = PendingAgentNotification()
     private var notificationPending: Bool { notifications.isPending }
@@ -834,8 +836,12 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void,
         onHeartbeat: @escaping @MainActor () -> Void,
         onApprovals: @escaping @MainActor ([AgentApprovalRequest]) -> Void,
-        onUnexpectedTermination: @escaping @MainActor (CodexAgentProcess, String, Bool) -> Void
+        onUnexpectedTermination: @escaping @MainActor (CodexAgentProcess, String, Bool) -> Void,
+        makeConnection: @escaping @MainActor () throws -> any HarnessRuntimeConnection = { try ExtendedAgentConnection() },
+        sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
+        self.makeConnection = makeConnection
+        self.sleep = sleep
         configuration = agent
         self.executableURL = executableURL
         self.workspaceURL = workspaceURL
@@ -857,38 +863,50 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         guard hostConnection == nil else { return }
         intentionallyStopped = false
         terminationReported = false
+        lastErrorText = nil
         update(.starting, "Starting Codex")
         trace.runtimeStarting()
 
         do {
-            let connection = try ExtendedAgentConnection()
+            let connectionID = UUID()
+            self.connectionID = connectionID
+            let outputReader = JSONLineReader { [weak self] message in
+                Task { @MainActor in
+                    guard let self, self.connectionID == connectionID else { return }
+                    self.handle(message)
+                }
+            }
+            let connection = try makeConnection()
             hostConnection = connection
             connection.onData = { [weak self] data, isError in
                 Task { @MainActor in
-                    guard let self, !self.intentionallyStopped else { return }
+                    guard let self, self.connectionID == connectionID, !self.intentionallyStopped else { return }
                     if isError { self.lastErrorText = String(decoding: data, as: UTF8.self) }
-                    else { self.outputReader.receive(data) }
+                    else { outputReader.receive(data) }
                 }
             }
-            connection.onExit = { [weak self] status in Task { @MainActor in self?.didTerminate(status: status) } }
+            connection.onExit = { [weak self] status in Task { @MainActor in guard let self, self.connectionID == connectionID else { return }; self.didTerminate(status: status) } }
             connection.onFailure = { [weak self] detail in
-                Task { @MainActor in self?.reportUnexpectedTermination(detail) }
+                Task { @MainActor in guard let self, self.connectionID == connectionID else { return }; self.reportUnexpectedTermination(detail) }
             }
             hostRunning = true
+            startupTimeout = Task { [weak self] in
+                try? await self?.sleep(.seconds(60))
+                guard let self, !Task.isCancelled, self.connectionID == connectionID else { return }
+                self.reportUnexpectedTermination("Codex session startup timed out")
+            }
             let started: (Int32, String?) -> Void = { [weak self] pid, error in
                 Task { @MainActor in
-                    guard let self, !self.intentionallyStopped else { return }
+                    guard let self, self.connectionID == connectionID, !self.intentionallyStopped else { return }
                     if let error { self.reportUnexpectedTermination(error); return }
                     self.hostPID = pid
                     do { try self.initialize() }
                     catch { self.reportUnexpectedTermination(error.localizedDescription) }
                 }
             }
-            if extendedAccess {
-                connection.start(provider: .codex, agentID: configuration.id, executablePath: executableURL.path, reply: started)
-            } else {
-                connection.startRestrictedCodex(agentID: configuration.id, executablePath: executableURL.path, reply: started)
-            }
+            connection.startHarness(provider: .codex, agentID: configuration.id, executablePath: executableURL.path,
+                                    extendedAccess: extendedAccess, sessionID: nil, resumeSession: false,
+                                    modelIdentifier: nil, effortIdentifier: nil, reply: started)
         } catch { reportUnexpectedTermination(error.localizedDescription) }
     }
 
@@ -901,6 +919,8 @@ final class CodexAgentProcess: AgentRuntimeProcess {
 
     func stop(completion: @escaping (Bool) -> Void = { _ in }) {
         trace.finish(.runtimeStopped)
+        connectionID = nil
+        startupTimeout?.cancel()
         intentionallyStopped = true
         terminationReported = true
         pendingApprovals = []
@@ -962,6 +982,8 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         let detail = HarnessVersionPolicy.startupIssue(provider: .codex, text: detail) ?? detail
         guard !intentionallyStopped, !terminationReported else { return }
         trace.finish(.runtimeDisconnected)
+        connectionID = nil
+        startupTimeout?.cancel()
         terminationReported = true
         steeringTimeout?.cancel()
         let needsRecovery = hasInterruptedWork
@@ -987,7 +1009,8 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             approvalMessage["params"] = params
         }
         if message["method"] != nil, let approval = AgentApprovalRequest(agentID: configuration.id, message: approvalMessage) {
-            guard approval.params["threadId"] as? String == threadID else {
+            guard approval.params["threadId"] as? String == threadID,
+                  approval.turnID == nil || (turnIsActive && (activeTurnID == nil || approval.turnID == activeTurnID)) else {
                 try? send(approval.response(allow: false))
                 return
             }
@@ -1043,7 +1066,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
                     return
                 }
                 threadID = id
-                saveState(threadID: id)
+                guard saveState(threadID: id) else { startupTimeout?.cancel(); return }
                 setThreadName(id)
             case .setThreadName:
                 finishOpeningThread()
@@ -1053,7 +1076,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
                     return
                 }
                 needsHistoryRecovery = false
-                if let threadID { saveState(threadID: threadID) }
+                if let threadID, !saveState(threadID: threadID) { return }
                 activeTurnID = id
                 trace.record(.turnAccepted)
                 turnIsActive = true
@@ -1111,12 +1134,14 @@ final class CodexAgentProcess: AgentRuntimeProcess {
                 sendPendingNotificationIfPossible()
             }
         }
-        if method == "item/started", let params = message["params"] as? [String: Any],
+        if method == "item/started", turnIsActive, let params = message["params"] as? [String: Any],
+           params["threadId"] as? String == threadID, params["turnId"] as? String == activeTurnID,
            let item = params["item"] as? [String: Any], let id = item["id"] as? String,
            ["commandExecution", "fileChange"].contains(item["type"] as? String ?? "") {
             approvalItemDetails[id] = item
         }
-        if method == "item/completed", let params = message["params"] as? [String: Any],
+        if method == "item/completed", turnIsActive, let params = message["params"] as? [String: Any],
+           params["threadId"] as? String == threadID, params["turnId"] as? String == activeTurnID,
            let item = params["item"] as? [String: Any], let id = item["id"] as? String {
             approvalItemDetails.removeValue(forKey: id)
             pendingApprovals.removeAll { $0.params["itemId"] as? String == id }
@@ -1205,6 +1230,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     }
 
     private func finishOpeningThread() {
+        startupTimeout?.cancel()
         update(.ready, "Codex ready")
         if recoveryPending {
             recoveryPending = false
@@ -1249,7 +1275,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
                 ])
                 trace.record(.inboxSteerSubmitted)
                 steeringTimeout = Task { [weak self] in
-                    do { try await Task.sleep(for: .seconds(10)) } catch { return }
+                    do { try await self?.sleep(.seconds(10)) } catch { return }
                     guard let self, self.steeringNotificationID == notificationID else { return }
                     self.reportUnexpectedTermination("Codex did not acknowledge message steering.")
                 }
@@ -1324,15 +1350,17 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         hostConnection.write(data + Data([0x0A]))
     }
 
-    private func saveState(threadID: String) {
+    private func saveState(threadID: String) -> Bool {
         do {
             let directory = stateURL.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try JSONEncoder().encode(
                 PersistedState(version: Self.runtimeVersion, threadID: threadID, needsHistoryRecovery: needsHistoryRecovery)
             ).write(to: stateURL, options: .atomic)
+            return true
         } catch {
             fail("Could not save Codex thread: \(error.localizedDescription)")
+            return false
         }
     }
 
@@ -1342,6 +1370,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     }
 
     private func fail(_ detail: String) {
+        startupTimeout?.cancel()
         trace.finish(.runtimeFailed)
         pendingApprovals = []
         onApprovals([])

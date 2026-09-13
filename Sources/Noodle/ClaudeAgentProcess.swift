@@ -16,7 +16,10 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     private var turnRecovery: AgentTurnRecovery
     private var sessionID: UUID { sessionState.sessionID }
 
-    private var connection: ExtendedAgentConnection?
+    private var connectionID: UUID?
+    private let sleep: @MainActor (Duration) async throws -> Void
+    private let makeConnection: @MainActor () throws -> any HarnessRuntimeConnection
+    private var connection: (any HarnessRuntimeConnection)?
     private var running = false
     private var processIdentifier: Int32?
     private var notifications = PendingAgentNotification()
@@ -25,14 +28,13 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     private var turnIsActive = false
     private var interruptRequested = false
     private var interruptRequestID: String?
+    private var startupTimeout: Task<Void, Never>?
     private var interruptTimeout: Task<Void, Never>?
     private var intentionallyStopped = false
     private var terminationReported = false
     private var lastErrorText: String?
     private lazy var trace = RuntimeTrace(agentID: configuration.id, provider: .claudeCode, workspace: workspaceURL)
-    private lazy var outputReader = JSONLineReader { [weak self] message in
-        Task { @MainActor in self?.handle(message) }
-    }
+
 
     private(set) var snapshot: AgentRuntimeSnapshot
 
@@ -44,8 +46,12 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         recoverInterruptedWork: Bool,
         onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void,
         onHeartbeat: @escaping @MainActor () -> Void,
-        onUnexpectedTermination: @escaping @MainActor (ClaudeAgentProcess, String, Bool) -> Void
+        onUnexpectedTermination: @escaping @MainActor (ClaudeAgentProcess, String, Bool) -> Void,
+        makeConnection: @escaping @MainActor () throws -> any HarnessRuntimeConnection = { try ExtendedAgentConnection() },
+        sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
+        self.makeConnection = makeConnection
+        self.sleep = sleep
         configuration = agent
         self.executableURL = executableURL
         self.workspaceURL = workspaceURL
@@ -72,39 +78,54 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         update(.starting, "Starting Claude Code")
         trace.runtimeStarting()
         do {
-            let connection = try ExtendedAgentConnection()
+            let connectionID = UUID()
+            self.connectionID = connectionID
+            let outputReader = JSONLineReader { [weak self] message in
+                Task { @MainActor in
+                    guard let self, self.connectionID == connectionID else { return }
+                    self.handle(message)
+                }
+            }
+            let connection = try makeConnection()
             self.connection = connection
             connection.onData = { [weak self] data, isError in
                 Task { @MainActor in
-                    guard let self, !self.intentionallyStopped else { return }
+                    guard let self, self.connectionID == connectionID, !self.intentionallyStopped else { return }
                     if isError {
                         let detail = String(decoding: data, as: UTF8.self)
                             .trimmingCharacters(in: .whitespacesAndNewlines)
                         if !detail.isEmpty { self.lastErrorText = String(detail.suffix(2_000)) }
                     } else {
-                        self.outputReader.receive(data)
+                        outputReader.receive(data)
                     }
                 }
             }
             connection.onExit = { [weak self] status in
-                Task { @MainActor in self?.didTerminate(status: status) }
+                Task { @MainActor in guard let self, self.connectionID == connectionID else { return }; self.didTerminate(status: status) }
             }
             connection.onFailure = { [weak self] detail in
-                Task { @MainActor in self?.reportUnexpectedTermination(detail) }
+                Task { @MainActor in guard let self, self.connectionID == connectionID else { return }; self.reportUnexpectedTermination(detail) }
             }
             running = true
-            connection.start(
+            startupTimeout = Task { [weak self] in
+                try? await self?.sleep(.seconds(60))
+                guard let self, !Task.isCancelled, self.connectionID == connectionID else { return }
+                self.reportUnexpectedTermination("Claude Code session startup timed out")
+            }
+            connection.startHarness(
                 provider: .claudeCode,
                 agentID: configuration.id,
                 executablePath: executableURL.path,
+                extendedAccess: extendedAccess,
                 sessionID: sessionID,
                 resumeSession: sessionState.shouldResume,
                 modelIdentifier: configuration.modelIdentifier,
                 effortIdentifier: configuration.reasoningEffort
             ) { [weak self] pid, error in
                 Task { @MainActor in
-                    guard let self, !self.intentionallyStopped, !self.terminationReported else { return }
+                    guard let self, self.connectionID == connectionID, !self.intentionallyStopped, !self.terminationReported else { return }
                     if let error { self.reportUnexpectedTermination(error); return }
+                    self.startupTimeout?.cancel()
                     self.processIdentifier = pid
                     self.update(.ready, "Claude Code ready")
                     if self.recoveryPending {
@@ -122,6 +143,8 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
 
     func stop(completion: @escaping (Bool) -> Void = { _ in }) {
         trace.finish(.runtimeStopped)
+        connectionID = nil
+        startupTimeout?.cancel()
         intentionallyStopped = true
         interruptTimeout?.cancel()
         interruptRequestID = nil
@@ -137,12 +160,8 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
             return
         }
         self.connection = nil
-        connection.stop { [weak self] stopped in
-            Task { @MainActor in
-                self?.update(.offline, "Stopped")
-                completion(stopped)
-            }
-        }
+        update(.offline, "Stopped")
+        connection.stop { stopped in Task { @MainActor in completion(stopped) } }
     }
 
     @discardableResult
@@ -198,7 +217,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
                 connection.write(try JSONSerialization.data(withJSONObject: request) + Data([10]))
                 trace.record(.turnInterruptRequested)
                 interruptTimeout = Task { [weak self] in
-                    do { try await Task.sleep(for: .seconds(10)) } catch { return }
+                    do { try await self?.sleep(.seconds(10)) } catch { return }
                     guard let self, self.interruptRequested || self.interruptRequestID != nil else { return }
                     self.reportUnexpectedTermination("Claude Code did not finish interrupting its turn.")
                 }
@@ -311,6 +330,8 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         let detail = HarnessVersionPolicy.startupIssue(provider: .claudeCode, text: detail) ?? detail
         guard !intentionallyStopped, !terminationReported else { return }
         trace.finish(.runtimeDisconnected)
+        connectionID = nil
+        startupTimeout?.cancel()
         terminationReported = true
         interruptTimeout?.cancel()
         let needsRecovery = hasInterruptedWork

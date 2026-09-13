@@ -17,7 +17,10 @@ final class ACPAgentProcess: AgentRuntimeProcess {
     private let stateURL: URL
     private var turnRecovery: AgentTurnRecovery
     private var sessionID: String?
-    private var connection: ExtendedAgentConnection?
+    private var connectionID: UUID?
+    private let sleep: @MainActor (Duration) async throws -> Void
+    private let makeConnection: @MainActor () throws -> any HarnessRuntimeConnection
+    private var connection: (any HarnessRuntimeConnection)?
     private var running = false
     private var stopped = false
     private var paused = false
@@ -36,18 +39,20 @@ final class ACPAgentProcess: AgentRuntimeProcess {
     private var startupTimeout: Task<Void, Never>?
     private struct State: Codable { let sessionID: String }
     private lazy var trace = RuntimeTrace(agentID: configuration.id, provider: provider, workspace: workspaceURL)
-    private lazy var reader = JSONLineReader { [weak self] object in
-        Task { @MainActor in self?.receive(object) }
-    }
+
     private(set) var snapshot: AgentRuntimeSnapshot
 
     init(provider: HarnessProvider, agent: AgentRecord, executableURL: URL, workspaceURL: URL, extendedAccess: Bool,
          recoverInterruptedWork: Bool,
          onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void,
          onHeartbeat: @escaping @MainActor () -> Void,
-         onUnexpectedTermination: @escaping @MainActor (ACPAgentProcess, String, Bool) -> Void) {
+         onUnexpectedTermination: @escaping @MainActor (ACPAgentProcess, String, Bool) -> Void,
+        makeConnection: @escaping @MainActor () throws -> any HarnessRuntimeConnection = { try ExtendedAgentConnection() },
+        sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         precondition(provider == .apple || provider == .fx || provider == .grokBuild)
         self.provider = provider
+        self.makeConnection = makeConnection
+        self.sleep = sleep
         configuration = agent
         self.executableURL = executableURL
         self.workspaceURL = workspaceURL
@@ -75,50 +80,52 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         update(.starting, "Starting \(name)")
         trace.runtimeStarting()
         do {
-            let connection = try ExtendedAgentConnection()
+            let connectionID = UUID()
+            self.connectionID = connectionID
+            let reader = JSONLineReader { [weak self] message in
+                Task { @MainActor in
+                    guard let self, self.connectionID == connectionID else { return }
+                    self.receive(message)
+                }
+            }
+            let connection = try makeConnection()
             self.connection = connection
             connection.onData = { [weak self] data, isError in
                 Task { @MainActor in
-                    guard let self else { return }
+                    guard let self, self.connectionID == connectionID else { return }
                     if isError {
                         // Classify known CLI rejections without exposing private stderr.
                         if let issue = HarnessVersionPolicy.startupIssue(provider: self.provider, text: String(decoding: data.prefix(4096), as: UTF8.self)) {
                             self.compatibilityIssue = issue
                         }
-                    } else { self.reader.receive(data) }
+                    } else { reader.receive(data) }
                 }
             }
-            connection.onExit = { [weak self] code in Task { @MainActor in self?.terminated("Harness exited with status \(code)") } }
-            connection.onFailure = { [weak self] error in Task { @MainActor in self?.terminated(error) } }
+            connection.onExit = { [weak self] code in Task { @MainActor in guard let self, self.connectionID == connectionID else { return }; self.terminated("Harness exited with status \(code)") } }
+            connection.onFailure = { [weak self] error in Task { @MainActor in guard let self, self.connectionID == connectionID else { return }; self.terminated(error) } }
             running = true
             startupTimeout = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(60))
+                try? await self?.sleep(.seconds(60))
                 guard !Task.isCancelled else { return }
                 self?.terminated("Harness session startup timed out")
             }
             let started: (Int32, String?) -> Void = { [weak self] pid, error in
                 Task { @MainActor in
-                    guard let self, !self.stopped, self.running else { return }
+                    guard let self, self.connectionID == connectionID, !self.stopped, self.running else { return }
                     if let error { self.terminated(error); return }
                     self.pid = pid
                     self.request(.initialize, method: "initialize", params: FxProtocol.initializeParameters)
                 }
             }
-            if provider == .apple, !extendedAccess {
-                connection.startRestrictedApple(agentID: configuration.id, reply: started)
-            } else if !extendedAccess {
-                connection.startRestrictedACP(provider: provider, agentID: configuration.id, executablePath: executableURL.path,
-                                              modelIdentifier: configuration.modelIdentifier,
-                                              effortIdentifier: provider == .grokBuild ? configuration.reasoningEffort : nil, reply: started)
-            } else {
-                connection.start(provider: provider, agentID: configuration.id, executablePath: executableURL.path,
-                                 modelIdentifier: configuration.modelIdentifier,
-                                 effortIdentifier: provider == .grokBuild ? configuration.reasoningEffort : nil, reply: started)
-            }
+            connection.startHarness(provider: provider, agentID: configuration.id, executablePath: executableURL.path,
+                                    extendedAccess: extendedAccess, sessionID: nil, resumeSession: false,
+                                    modelIdentifier: configuration.modelIdentifier,
+                                    effortIdentifier: provider == .grokBuild ? configuration.reasoningEffort : nil, reply: started)
         } catch { terminated(error.localizedDescription) }
     }
 
     func stop(completion: @escaping (Bool) -> Void) {
+        connectionID = nil
         stopped = true
         running = false
         paused = false
@@ -166,7 +173,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
             send(["jsonrpc": "2.0", "method": "session/cancel", "params": ["sessionId": sessionID]])
             trace.record(.turnInterruptRequested)
             interruptTimeout = Task { [weak self] in
-                do { try await Task.sleep(for: .seconds(10)) } catch { return }
+                do { try await self?.sleep(.seconds(10)) } catch { return }
                 guard let self, self.interruptRequested else { return }
                 self.terminated("\(self.name) did not finish cancelling its turn.")
             }
@@ -323,6 +330,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         // A missing session or exhausted balance cannot be repaired by reconnecting.
         // Keep the bot paused for an explicit retry, including if the old transport exits.
         paused = true
+        connectionID = nil
         stopped = true
         running = false
         turnIsActive = false
@@ -345,6 +353,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         let detail = compatibilityIssue ?? HarnessVersionPolicy.startupIssue(provider: provider, text: detail) ?? detail
         guard !stopped else { return }
         let needsRecovery = hasInterruptedWork
+        connectionID = nil
         stopped = true
         running = false
         turnIsActive = false
