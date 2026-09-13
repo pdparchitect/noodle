@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Cover bot startup, workspace validation, restart stop-confirmation, shutdown, configuration changes, and session reset with isolated runtime fixtures.
+
 - Add MCP controller regression tests for saved-account failures, bot assignment isolation, forged and replayed bridge requests, and browser sign-in validation, cancellation, and timeout recovery, without provider accounts or Keychain access.
 
 ### Fixed

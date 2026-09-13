@@ -26,6 +26,47 @@ extension AgentRuntimeProcess {
     func notify() { _ = notify(immediately: false) }
 }
 
+/// Construction is injected after workspace and access checks, so tests exercise
+/// the same coordinator policy without launching a harness or an XPC helper.
+@MainActor
+struct AgentRuntimeLaunch {
+    let agent: AgentRecord
+    let provider: HarnessProvider
+    let executableURL: URL
+    let workspaceURL: URL
+    let extendedAccess: Bool
+    let recoverInterruptedWork: Bool
+    let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
+    let onHeartbeat: @MainActor () -> Void
+    let onApprovals: @MainActor ([AgentApprovalRequest]) -> Void
+    let onUnexpectedTermination: @MainActor (any AgentRuntimeProcess, String, Bool) -> Void
+
+    func makeProcess() -> any AgentRuntimeProcess {
+        switch provider {
+        case .muse:
+            return MuseAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
+                extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
+                onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
+                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) })
+        case .apple, .fx, .grokBuild:
+            return ACPAgentProcess(provider: provider, agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
+                extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
+                onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
+                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) })
+        case .codex:
+            return CodexAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
+                extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
+                onSnapshot: onSnapshot, onHeartbeat: onHeartbeat, onApprovals: onApprovals,
+                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) })
+        case .claudeCode:
+            return ClaudeAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
+                extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
+                onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
+                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) })
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class AgentRuntimeCoordinator {
@@ -58,6 +99,7 @@ final class AgentRuntimeCoordinator {
     @ObservationIgnored private lazy var messageDelivery = MessageDeliveryRouter(defaults: defaults)
 
     private var discovery: HarnessDiscovery
+    @ObservationIgnored private let makeProcess: @MainActor (AgentRuntimeLaunch) -> any AgentRuntimeProcess
     private var processes: [UUID: any AgentRuntimeProcess] = [:]
     private var capabilityProbe: CodexCapabilityProbe?
     private var fxCapabilityTask: Task<Void, Never>?
@@ -127,7 +169,9 @@ final class AgentRuntimeCoordinator {
         }
     }
 
-    init(discovery: HarnessDiscovery = HarnessDiscovery(), defaults: UserDefaults = .standard) {
+    init(discovery: HarnessDiscovery = HarnessDiscovery(), defaults: UserDefaults = .standard,
+         makeProcess: @escaping @MainActor (AgentRuntimeLaunch) -> any AgentRuntimeProcess = { $0.makeProcess() }) {
+        self.makeProcess = makeProcess
         self.discovery = discovery
         self.defaults = defaults
         preventIdleSleepWhileWorking = defaults.bool(forKey: Self.preventIdleSleepDefaultsKey)
@@ -477,96 +521,24 @@ final class AgentRuntimeCoordinator {
             return
         }
 
-        switch installation.provider {
-        case .muse:
-            restartTasks.removeValue(forKey: agent.id)?.cancel()
-            let process = MuseAgentProcess(
-                agent: agent, executableURL: URL(fileURLWithPath: executablePath),
-                workspaceURL: repository.directory(for: agent),
-                extendedAccess: accessConfiguration.isExtended(for: agent),
-                recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
-                onSnapshot: runtimeSnapshotHandler(for: agent.id),
-                onHeartbeat: { [weak self] in self?.recordHeartbeat(for: agent.id) },
-                onUnexpectedTermination: { [weak self] terminated, detail, needsRecovery in
-                    self?.runtimeTerminated(terminated, agent: agent, repository: repository, detail: detail, needsRecovery: needsRecovery)
-                })
-            processes[agent.id] = process
-            process.start()
-        case .apple, .fx, .grokBuild:
-            restartTasks.removeValue(forKey: agent.id)?.cancel()
-            let process = ACPAgentProcess(
-                provider: installation.provider, agent: agent, executableURL: URL(fileURLWithPath: executablePath),
-                workspaceURL: repository.directory(for: agent),
-                extendedAccess: accessConfiguration.isExtended(for: agent),
-                recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
-                onSnapshot: runtimeSnapshotHandler(for: agent.id),
-                onHeartbeat: { [weak self] in self?.recordHeartbeat(for: agent.id) },
-                onUnexpectedTermination: { [weak self] terminated, detail, needsRecovery in
-                    self?.runtimeTerminated(terminated, agent: agent, repository: repository, detail: detail, needsRecovery: needsRecovery)
-                }
-            )
-            processes[agent.id] = process
-            process.start()
-        case .codex:
-            restartTasks.removeValue(forKey: agent.id)?.cancel()
-            let process = CodexAgentProcess(
-                agent: agent,
-                executableURL: URL(fileURLWithPath: executablePath),
-                workspaceURL: repository.directory(for: agent),
-                extendedAccess: accessConfiguration.isExtended(for: agent),
-                recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
-                onSnapshot: { [weak self] snapshot in
-                    if self?.snapshots[snapshot.agentID]?.phase == .working,
-                       snapshot.phase == .ready {
-                        self?.recordActivity(for: snapshot.agentID)
-                    }
-                    self?.snapshots[snapshot.agentID] = snapshot
-                    if snapshot.phase == .ready {
-                        self?.markStable(agentID: snapshot.agentID)
-                    }
-                },
-                onHeartbeat: { [weak self] in
-                    self?.recordHeartbeat(for: agent.id)
-                },
-                onApprovals: { [weak self] pending in
-                    self?.approvals.removeAll { $0.agentID == agent.id }
-                    self?.approvals.append(contentsOf: pending)
-                },
-                onUnexpectedTermination: { [weak self] terminated, detail, needsRecovery in
-                    self?.runtimeTerminated(
-                        terminated,
-                        agent: agent,
-                        repository: repository,
-                        detail: detail,
-                        needsRecovery: needsRecovery
-                    )
-                }
-            )
-            processes[agent.id] = process
-            process.start()
-        case .claudeCode:
-            restartTasks.removeValue(forKey: agent.id)?.cancel()
-            let process = ClaudeAgentProcess(
-                agent: agent,
-                executableURL: URL(fileURLWithPath: executablePath),
-                workspaceURL: repository.directory(for: agent),
-                extendedAccess: accessConfiguration.isExtended(for: agent),
-                recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
-                onSnapshot: runtimeSnapshotHandler(for: agent.id),
-                onHeartbeat: { [weak self] in self?.recordHeartbeat(for: agent.id) },
-                onUnexpectedTermination: { [weak self] terminated, detail, needsRecovery in
-                    self?.runtimeTerminated(
-                        terminated,
-                        agent: agent,
-                        repository: repository,
-                        detail: detail,
-                        needsRecovery: needsRecovery
-                    )
-                }
-            )
-            processes[agent.id] = process
-            process.start()
-        }
+        restartTasks.removeValue(forKey: agent.id)?.cancel()
+        let process = makeProcess(AgentRuntimeLaunch(
+            agent: agent, provider: installation.provider,
+            executableURL: URL(fileURLWithPath: executablePath), workspaceURL: repository.directory(for: agent),
+            extendedAccess: accessConfiguration.isExtended(for: agent),
+            recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
+            onSnapshot: runtimeSnapshotHandler(for: agent.id),
+            onHeartbeat: { [weak self] in self?.recordHeartbeat(for: agent.id) },
+            onApprovals: { [weak self] pending in
+                self?.approvals.removeAll { $0.agentID == agent.id }
+                self?.approvals.append(contentsOf: pending)
+            },
+            onUnexpectedTermination: { [weak self] terminated, detail, needsRecovery in
+                self?.runtimeTerminated(terminated, agent: agent, repository: repository,
+                    detail: detail, needsRecovery: needsRecovery)
+            }))
+        processes[agent.id] = process
+        process.start()
         recoverUnreadMessages(for: agent, process: processes[agent.id], repository: repository)
     }
 
