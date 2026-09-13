@@ -227,7 +227,6 @@ private struct WindowConfiguration: NSViewRepresentable {
 struct RootView: View {
     @Environment(NoodleStore.self) private var store
     @Environment(\.openSettings) private var openSettings
-    @Environment(\.openWindow) private var openWindow
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var isFileDropTargeted = false
     @State private var composerFocusRequest = UUID()
@@ -319,15 +318,6 @@ struct RootView: View {
                     Label("Create", systemImage: "square.and.pencil")
                 }
                 .help("Create Bot or Group")
-            }
-
-            ToolbarItem(placement: .primaryAction) {
-                if let conversation = store.selectedConversation {
-                    Button("Open in New Window", systemImage: "macwindow.badge.plus") {
-                        openWindow(id: "conversation", value: conversation.id)
-                    }
-                    .help("Open in New Window")
-                }
             }
 
             ToolbarItem(placement: .primaryAction) {

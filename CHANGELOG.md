@@ -40,7 +40,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
-- Open any bot chat or group in a separate window from the sidebar or chat toolbar. Keep messages, drafts, attachments, and conversation details synchronized while browsing and scrolling independently.
+- Open any bot chat or group in a separate window from the sidebar. Keep messages, drafts, attachments, and conversation details synchronized while browsing and scrolling independently.
 
 - Add bug report and feature request forms, and require before and after screenshots when reviewing visual pull requests.
 
@@ -67,6 +67,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Remove the Open in New Window button from the chat toolbar; the action remains available in the sidebar context menu.
 - Link Noodle Applet's download and documentation from the main README.
 - Move Tools immediately after Security in Settings.
 - Shorten the generated bot name options in General settings to “Real” and “Playful”.

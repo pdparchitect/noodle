@@ -22,10 +22,9 @@ description. Removing a member keeps the group's history.
 
 ## Keep conversations in separate windows
 
-Right-click a bot or group in the sidebar and choose **Open in New Window**, or
-use the same button in the current chat's toolbar. Opening it again brings its
-existing window forward. Each separate window stays on its conversation while
-you browse other chats in the main window.
+Right-click a bot or group in the sidebar and choose **Open in New Window**.
+Opening it again brings its existing window forward. Each separate window stays
+on its conversation while you browse other chats in the main window.
 
 Messages, unsent text, attachments, and conversation details update in both
 places. Each window scrolls independently. Closing a window keeps the conversation
