@@ -34,6 +34,8 @@ All notable changes to Noodle are documented here, following
 
 - Cancel pending runtime recovery when a bot leaves the roster so delayed restarts cannot bring it back. Cover crash backoff, stable-runtime reset, wake recovery, and shutdown with controlled timers.
 
+- Restore restricted Codex HTTPS connections with a host-prepared public certificate bundle, preserving the sandbox and Keychain restrictions. Show active Codex connection failures and retries in bot status and lifecycle logs instead of leaving the bot silently busy.
+
 - Pause Grok bots when their saved session cannot be found, show the storage problem and recovery action, and preserve the session reference and unfinished work instead of repeatedly restarting with a sign-in warning.
 
 - Let conversation participants target the exact Applet session returned by shared opens using the shared link, conversation, and session ID together. Document hidden rendering limits, session diagnostics, and explicit headless animation stepping in generated CLI help and agent guidance.

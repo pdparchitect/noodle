@@ -325,6 +325,75 @@ import NoodleCore
             print("PASS: \(provider.rawValue) start/steer/completion races")
         }
 
+        // Connection errors are scoped to the current turn and remain visible
+        // while Codex retries. They must not acknowledge unfinished work.
+        do {
+            let process = try await make(.codex, root: root)
+            let wire = ExtendedAgentConnection.current!
+            let state = AgentStorageLayout(workspace: URL(fileURLWithPath: ExtendedAgentConnection.workspace))
+                .sessionState(provider: .codex, extendedAccess: true)
+            let recovery = AgentTurnRecovery(sessionStateURL: state)
+            func reportError(thread: String? = nil, turn: String? = nil, retry: Bool = true) {
+                wire.emit(["method": "error", "params": ["threadId": thread ?? wire.session,
+                    "turnId": turn ?? wire.turn, "willRetry": retry, "error": [
+                        "message": "private raw transport detail",
+                        "codexErrorInfo": ["responseStreamConnectionFailed": ["httpStatusCode": NSNull()]]]]])
+            }
+            func reportOutput(turn: String? = nil) {
+                wire.emit(["method": "item/agentMessage/delta", "params": ["threadId": wire.session,
+                    "turnId": turn ?? wire.turn, "itemId": "reply", "delta": "Hello"]])
+            }
+            process.notify()
+            await eventually { wire.prompts == 1 && process.snapshot.phase == .working }
+            await settle()
+            let savedState = try Data(contentsOf: state)
+            reportError(thread: "another-thread")
+            reportError(turn: "another-turn")
+            await settle()
+            precondition(process.snapshot.phase == .working, "Ignore errors for other work")
+            reportError()
+            await eventually { process.snapshot.phase == .failed }
+            precondition(process.snapshot.detail.contains("Retrying automatically"))
+            precondition(!process.snapshot.detail.contains("private raw"))
+            precondition(process.isAlive && recovery.hasUnfinishedTurn && !process.canReceiveHeartbeat)
+            let stateAfterError = try Data(contentsOf: state)
+            precondition(stateAfterError == savedState)
+            process.notify(immediately: true)
+            await settle()
+            precondition(wire.prompts == 1 && wire.steers == 0)
+            reportOutput(turn: "another-turn")
+            await settle()
+            precondition(process.snapshot.phase == .failed, "Stale output must not clear the error")
+            reportOutput()
+            await eventually { process.snapshot.phase == .working && wire.steers == 1 }
+            wire.acknowledgeSteer()
+            await settle()
+            precondition(recovery.hasUnfinishedTurn)
+            wire.complete()
+            await eventually { process.canReceiveHeartbeat }
+            precondition(!recovery.hasUnfinishedTurn && wire.prompts == 1)
+            reportError()
+            await settle()
+            precondition(process.snapshot.phase == .ready, "Ignore errors after completion")
+
+            wire.holdStartAck = true
+            process.notify()
+            reportError()
+            await settle()
+            wire.acknowledgeStart()
+            await eventually { process.snapshot.phase == .failed }
+            precondition(recovery.hasUnfinishedTurn, "An early retry error must preserve recovery")
+            reportError(retry: false)
+            await eventually { !process.snapshot.detail.contains("Retrying automatically") }
+            precondition(process.snapshot.detail.contains("Kick") && recovery.hasUnfinishedTurn)
+            wire.emit(["method": "turn/completed", "params": ["threadId": wire.session,
+                "turn": ["id": wire.turn, "status": "failed", "error": ["message": "Connection failed"]]]])
+            await eventually { !recovery.hasUnfinishedTurn }
+            precondition(process.snapshot.phase == .failed)
+            process.stop { _ in }
+            print("PASS: Codex retry errors are visible, scoped, recoverable, and preserve unfinished work")
+        }
+
         // Claude can acknowledge interruption before or after the old result.
         // A rejected control request must leave the wake queued for that result.
         for reject in [false, true] {

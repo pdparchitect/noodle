@@ -18,6 +18,8 @@ public enum RuntimeDiagnostics {
         case inboxSteerRejected = "inbox-steer-rejected"
         case turnInterruptRequested = "turn-interrupt-requested"
         case turnAccepted = "turn-accepted"
+        case turnRetrying = "turn-retrying"
+        case turnError = "turn-error"
         case turnOutputObserved = "turn-output-observed"
         case turnCompleted = "turn-completed"
         case turnEndedUnknown = "turn-ended-unknown"
@@ -114,7 +116,7 @@ public enum RuntimeDiagnostics {
         let wake = context?.wakeID.uuidString ?? "uncorrelated"
         let reason = context?.reason ?? "none"
         switch event {
-        case .runtimeDisconnected, .runtimeFailed, .turnFailed, .inboxReadFailed:
+        case .runtimeDisconnected, .runtimeFailed, .turnFailed, .turnRetrying, .turnError, .inboxReadFailed:
             logger.error("event=\(event.rawValue, privacy: .public) bot=\(agentID.uuidString, privacy: .public) harness=\(providerName, privacy: .public) wake=\(wake, privacy: .public) reason=\(reason, privacy: .public) count=\(count) reads=\(reads)")
         default:
             logger.notice("event=\(event.rawValue, privacy: .public) bot=\(agentID.uuidString, privacy: .public) harness=\(providerName, privacy: .public) wake=\(wake, privacy: .public) reason=\(reason, privacy: .public) count=\(count) reads=\(reads)")

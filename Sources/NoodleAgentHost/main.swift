@@ -144,6 +144,8 @@ if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-chi
             case .apple:
                 profile = AppleAgentSandbox.profile(application: HostPaths.application, workspace: workspace, repository: repository)
             case .codex:
+                let certificates = try RestrictedCodexCertificates.prepare(workspace: workspace)
+                setenv("CODEX_CA_CERTIFICATE", certificates.path, 1)
                 profile = RestrictedAgentSandbox.profile(workspace: workspace, repository: repository,
                     codexHome: codexHome, executableDirectory: executable.deletingLastPathComponent().deletingLastPathComponent(),
                     application: HostPaths.application, temporary: temporary)
