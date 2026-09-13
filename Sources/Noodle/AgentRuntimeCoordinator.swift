@@ -613,15 +613,17 @@ final class AgentRuntimeCoordinator {
         }
     }
 
-    func stop(agentID: UUID) {
+    func stop(agentID: UUID, revokeAccess: Bool = true) {
         runtimeIDs[agentID] = nil
         cancelSupervision(for: agentID)
         recoveryPending.remove(agentID)
         changingAccess.remove(agentID)
         transitionIDs[agentID] = nil
         approvals.removeAll { $0.agentID == agentID }
-        accessConfiguration.remove(agentID)
-        accessConfiguration.save(to: defaults)
+        if revokeAccess {
+            accessConfiguration.remove(agentID)
+            accessConfiguration.save(to: defaults)
+        }
         processes.removeValue(forKey: agentID)?.stop { _ in }
         snapshots.removeValue(forKey: agentID)
         heartbeatScheduler.remove(agentID)

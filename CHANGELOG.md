@@ -20,6 +20,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Restore prior bot settings and assignments when an edit fails, and grant a newly selected harness only after saving succeeds. Remove incomplete bot creations, preserve bot access on failed deletion, and restore staged workspaces and conversations if deletion cannot update every group. Keep successful saves distinct from Messenger startup failures.
+
 - Recheck Computer access after provider discovery and before terminal actions, retain newer discovery results over late responses, retry failed bridge-session writes, and always schedule terminal revocation after assignments are saved. Cover these races and uncertain-command delivery with controlled broker tests.
 
 - Keep runtime startup failed when a Codex session cannot be saved, scope approvals and callbacks to their active turn and connection, and prevent late Claude stop confirmations from overwriting restarted status. Bound Codex and Claude helper startup waits; cover Codex, Claude, and ACP recovery, cancellation, permissions, and transport failures in SwiftPM.

@@ -86,13 +86,17 @@ final class MCPController {
         try save(record)
         return registry.connections.first { $0.id == record.id }!
     }
-    func assign(_ ids: Set<UUID>, to agent: AgentRecord) throws {
+    func assign(_ ids: Set<UUID>, to agent: AgentRecord, synchronizeWorkspace: Bool = true) throws {
         try validateAssignment(ids)
         var next = registry
         try next.assign(ids, to: agent.id)
         try next.save(root: repository.rootURL)
         registry = next
-        try repository.synchronizeAgentWorkspace(agent)
+        if synchronizeWorkspace { try repository.synchronizeAgentWorkspace(agent) }
+    }
+    func reloadAssignments() throws {
+        do { registry = try MCPRegistry.load(root: repository.rootURL); registryReadable = true }
+        catch { registryReadable = false; throw error }
     }
     func validateAssignment(_ ids: Set<UUID>) throws {
         try requireReadableRegistry()

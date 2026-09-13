@@ -480,25 +480,39 @@ public struct WorkspaceRepository: Sendable {
         )
         let layout = storage(for: agent.id)
         try layout.create()
-        let agentDirectory = layout.workspace
-        try write(agent, to: layout.configuration)
-        try "# Memory\n\n".write(
-            to: agentDirectory.appendingPathComponent("memory.md"),
-            atomically: true,
-            encoding: .utf8
-        )
-        try updateAgentBackstory(agent, backstory: backstory)
-        try synchronizeAgentWorkspace(agent)
+        var createdConversationID: UUID?
+        do {
+            let agentDirectory = layout.workspace
+            try write(agent, to: layout.configuration)
+            try "# Memory\n\n".write(
+                to: agentDirectory.appendingPathComponent("memory.md"),
+                atomically: true,
+                encoding: .utf8
+            )
+            try updateAgentBackstory(agent, backstory: backstory)
+            try synchronizeAgentWorkspace(agent)
 
-        let conversation = BotConversation(
-            displayName: name,
-            kind: .direct,
-            participantIDs: [agent.id],
-            createdAt: now,
-            updatedAt: now
-        )
-        try createConversationFiles(conversation)
-        return CreatedAgentWorkspace(agent: agent, conversation: conversation)
+            let conversation = BotConversation(
+                displayName: name,
+                kind: .direct,
+                participantIDs: [agent.id],
+                createdAt: now,
+                updatedAt: now
+            )
+            createdConversationID = conversation.id
+            try createConversationFiles(conversation)
+            return CreatedAgentWorkspace(agent: agent, conversation: conversation)
+        } catch {
+            let original = error
+            do {
+                if let createdConversationID {
+                    let directory = conversationDirectory(id: createdConversationID)
+                    if FileManager.default.fileExists(atPath: directory.path) { try FileManager.default.removeItem(at: directory) }
+                }
+                try FileManager.default.removeItem(at: layout.package)
+            } catch { throw AgentStorageError("Bot creation failed and its incomplete workspace could not be removed: \(error.localizedDescription)") }
+            throw original
+        }
     }
 
     public func renameAgent(_ agent: AgentRecord, to rawName: String, now: Date = Date()) throws -> AgentRecord {
@@ -1375,22 +1389,49 @@ public struct WorkspaceRepository: Sendable {
     }
 
     public func deleteAgent(_ agent: AgentRecord) throws {
-        let directory = storage(for: agent.id).package
-        guard FileManager.default.fileExists(atPath: directory.path) else {
-            throw WorkspaceError.missingAgent(agent.id)
+        let package = storage(for: agent.id).package
+        guard FileManager.default.fileExists(atPath: package.path) else { throw WorkspaceError.missingAgent(agent.id) }
+        let affected = try loadConversations().filter { $0.participantIDs.contains(agent.id) }
+        let groups = try affected.filter { $0.kind != .direct }.map { conversation in
+            let directory = try WorkspaceMailbox(workspace: conversationDirectory(id: conversation.id), path: "")
+            return (conversation, directory, try directory.read("conversation.json", limit: 4 * 1_048_576))
         }
-
-        for conversation in try loadConversations() where conversation.participantIDs.contains(agent.id) {
-            if conversation.kind == .direct {
-                try deleteConversation(id: conversation.id)
-            } else {
+        var moved: [(URL, URL)] = []
+        do {
+            // Rename first: an unwritable agent parent must fail before touching
+            // conversations, and every moved directory remains intact for rollback.
+            for original in [package] + affected.filter({ $0.kind == .direct }).map({ conversationDirectory(id: $0.id) }) {
+                let staged = original.deletingLastPathComponent().appendingPathComponent(".deleting-" + UUID().uuidString.lowercased())
+                try FileManager.default.moveItem(at: original, to: staged)
+                moved.append((original, staged))
+            }
+            for (conversation, directory, _) in groups {
                 var updated = conversation
                 updated.participantIDs.removeAll { $0 == agent.id }
-                try updateConversation(updated)
+                let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                try directory.writeData(encoder.encode(updated), named: "conversation.json")
             }
+        } catch {
+            let original = error
+            var rollbackError: Error?
+            for (_, directory, data) in groups {
+                do {
+                    if (try? directory.read("conversation.json", limit: 4 * 1_048_576)) != data {
+                        try directory.writeData(data, named: "conversation.json")
+                    }
+                } catch { rollbackError = error }
+            }
+            for (destination, staged) in moved.reversed() {
+                do { try FileManager.default.moveItem(at: staged, to: destination) }
+                catch { rollbackError = error }
+            }
+            if let rollbackError { throw AgentStorageError("Bot deletion failed and could not be fully restored: \(rollbackError.localizedDescription)") }
+            throw original
         }
-
-        try FileManager.default.removeItem(at: directory)
+        // Logical deletion is complete. A cleanup failure leaves a hidden intact
+        // staging directory; it must not report failure and invite another delete.
+        for (_, staged) in moved { try? FileManager.default.removeItem(at: staged) }
     }
 
     public func loadAgents() throws -> [AgentRecord] {

@@ -31,9 +31,15 @@ public struct AgentStorageLayout: Sendable {
 
     public func create() throws {
         try FileManager.default.createDirectory(at: package, withIntermediateDirectories: false)
-        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: false)
-        try FileManager.default.createDirectory(at: runtime, withIntermediateDirectories: false)
-        try markCurrent()
+        do {
+            try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: false)
+            try FileManager.default.createDirectory(at: runtime, withIntermediateDirectories: false)
+            try markCurrent()
+        } catch {
+            let original = error
+            try FileManager.default.removeItem(at: package)
+            throw original
+        }
     }
 
     public func validate() throws {

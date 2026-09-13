@@ -169,16 +169,23 @@ import SwiftUI
         guard readable else { throw ComputerBridgeError("Computer assignments could not be read.") }
         guard ids.isSubset(of: Set(registry.computers.map(\.id))) else { throw ComputerBridgeError("One of the selected computers is no longer registered.") }
     }
-    func assign(_ ids: Set<UUID>, to agent: AgentRecord) throws {
+    func assign(_ ids: Set<UUID>, to agent: AgentRecord, synchronizeWorkspace: Bool = true) throws {
         try validate(ids)
         let removed = registry.assigned(to: agent.id).subtracting(ids)
         var next = registry; next.agents[agent.id.uuidString] = ids
         try next.save(root: repository.rootURL)
         registry = next // Access is revoked before asynchronous terminal cleanup.
         for id in removed {
-            Task { [weak self] in _ = try? await self?.call(.init(.revoke, computerID: id, agentID: agent.id)) }
+            Task { [weak self] in
+                guard let self, !self.registry.permits(id, agent: agent.id) else { return }
+                _ = try? await self.call(.init(.revoke, computerID: id, agentID: agent.id))
+            }
         }
-        try repository.synchronizeAgentWorkspace(agent)
+        if synchronizeWorkspace { try repository.synchronizeAgentWorkspace(agent) }
+    }
+    func reloadAssignments() throws {
+        do { registry = try ComputerAssignments.load(root: repository.rootURL); readable = true }
+        catch { readable = false; throw error }
     }
     func permits(_ card: ComputerCard) -> Bool {
         readable && registry.permits(card.computer.id, agent: card.agentID) && agents.contains { $0.id == card.agentID }

@@ -254,42 +254,49 @@ final class NoodleStore {
             errorMessage = "Set up a supported harness in Settings before creating a bot."
             return false
         }
+        var created: CreatedAgentWorkspace?
+        var checkpoint: AgentSettingsCheckpoint?
         do {
             try mcp.validateAssignment(mcpConnectionIDs)
             try computers.validate(computerIDs)
-            runtime.prepareAccessForExistingAgents(agents)
-            let created = try repository.createAgent(
-                named: name,
-                harnessIdentifier: harnessIdentifier,
-                modelIdentifier: modelIdentifier,
-                reasoningEffort: reasoningEffort,
-                publicDescription: publicDescription,
-                avatarSymbolName: avatarSymbolName,
-                avatarColorIndex: avatarColorIndex,
-                avatarImageData: avatarImageData,
-                backstory: backstory
+            checkpoint = try AgentSettingsCheckpoint(repository: repository)
+            let result = try repository.createAgent(
+                named: name, harnessIdentifier: harnessIdentifier,
+                modelIdentifier: modelIdentifier, reasoningEffort: reasoningEffort,
+                publicDescription: publicDescription, avatarSymbolName: avatarSymbolName,
+                avatarColorIndex: avatarColorIndex, avatarImageData: avatarImageData, backstory: backstory
             )
-            agents.append(created.agent)
-            runtime.authorizeSelectedHarness(created.agent)
-            conversations.insert(created.conversation, at: 0)
-            messagesByConversation[created.conversation.id] = []
-            attachmentsByConversation[created.conversation.id] = []
-            try mcp.assign(mcpConnectionIDs, to: created.agent)
-            try computers.assign(computerIDs, to: created.agent)
-            computers.start(agents: agents)
-            applets.start(agents: agents)
-            try messenger.start(agents: agents)
-            mcp.start(agents: agents)
-            runtime.refresh(agents: agents)
-            runtime.start(agent: created.agent, repository: repository)
-            selectedConversationID = created.conversation.id
-            creationSheet = nil
-            refreshAppShortcuts()
-            return true
+            created = result
+            try mcp.assign(mcpConnectionIDs, to: result.agent, synchronizeWorkspace: false)
+            try computers.assign(computerIDs, to: result.agent, synchronizeWorkspace: false)
+            try repository.synchronizeAgentWorkspace(result.agent)
         } catch {
-            errorMessage = error.localizedDescription
+            var detail = error.localizedDescription
+            do {
+                try checkpoint?.restore()
+                try mcp.reloadAssignments(); try computers.reloadAssignments()
+                if let created {
+                    try repository.deleteConversation(id: created.conversation.id)
+                    try FileManager.default.removeItem(at: repository.storage(for: created.agent.id).package)
+                }
+            } catch { detail += " Previous settings could not be fully restored: \(error.localizedDescription)" }
+            errorMessage = detail
             return false
         }
+        guard let created else { return false }
+        // Publish app state and access only after all settings have been saved.
+        agents.append(created.agent)
+        runtime.authorizeSelectedHarness(created.agent)
+        conversations.insert(created.conversation, at: 0)
+        messagesByConversation[created.conversation.id] = []
+        attachmentsByConversation[created.conversation.id] = []
+        startAgentServicesAfterSave()
+        runtime.refresh(agents: agents)
+        runtime.start(agent: created.agent, repository: repository)
+        selectedConversationID = created.conversation.id
+        creationSheet = nil
+        refreshAppShortcuts()
+        return true
     }
 
     func updateAgent(
@@ -306,54 +313,64 @@ final class NoodleStore {
         mcpConnectionIDs: Set<UUID>? = nil,
         computerIDs: Set<UUID>? = nil
     ) -> Bool {
+        var checkpoint: AgentSettingsCheckpoint?
+        let updated: AgentRecord
+        let previousBackstory: String
+        var updatedConversations = conversations
         do {
             if let mcpConnectionIDs { try mcp.validateAssignment(mcpConnectionIDs) }
             if let computerIDs { try computers.validate(computerIDs) }
-            let previousBackstory = try repository.loadAgentBackstory(agent)
-            let updated = try repository.updateAgent(
-                agent,
-                displayName: name,
-                harnessIdentifier: harnessIdentifier,
-                modelIdentifier: modelIdentifier,
-                reasoningEffort: reasoningEffort,
-                publicDescription: publicDescription,
-                avatarSymbolName: avatarSymbolName,
-                avatarColorIndex: avatarColorIndex,
-                avatarImageData: avatarImageData
+            previousBackstory = try repository.loadAgentBackstory(agent)
+            checkpoint = try AgentSettingsCheckpoint(repository: repository, agent: agent, conversations: conversations)
+            updated = try repository.updateAgent(
+                agent, displayName: name, harnessIdentifier: harnessIdentifier,
+                modelIdentifier: modelIdentifier, reasoningEffort: reasoningEffort,
+                publicDescription: publicDescription, avatarSymbolName: avatarSymbolName,
+                avatarColorIndex: avatarColorIndex, avatarImageData: avatarImageData
             )
-            if let index = agents.firstIndex(where: { $0.id == agent.id }) {
-                agents[index] = updated
+            for index in updatedConversations.indices where updatedConversations[index].kind == .direct &&
+                updatedConversations[index].participantIDs == [agent.id] {
+                updatedConversations[index].displayName = updated.displayName
+                updatedConversations[index].updatedAt = updated.updatedAt
+                try repository.updateConversation(updatedConversations[index])
             }
-            runtime.authorizeSelectedHarness(updated)
-
-            for index in conversations.indices where
-                conversations[index].kind == .direct &&
-                conversations[index].participantIDs == [agent.id] {
-                conversations[index].displayName = updated.displayName
-                conversations[index].updatedAt = updated.updatedAt
-                try repository.updateConversation(conversations[index])
-            }
-
             try repository.updateAgentBackstory(updated, backstory: backstory)
-            if let mcpConnectionIDs { try mcp.assign(mcpConnectionIDs, to: updated) }
-            if let computerIDs { try computers.assign(computerIDs, to: updated) }
-            computers.start(agents: agents)
-            applets.start(agents: agents)
+            if let mcpConnectionIDs { try mcp.assign(mcpConnectionIDs, to: updated, synchronizeWorkspace: false) }
+            if let computerIDs { try computers.assign(computerIDs, to: updated, synchronizeWorkspace: false) }
             try repository.synchronizeAgentWorkspace(updated)
-            try messenger.start(agents: agents)
-            mcp.start(agents: agents)
-            runtime.restart(
-                agent: updated,
-                repository: repository,
-                resetThread: previousBackstory != backstory.trimmingCharacters(in: .whitespacesAndNewlines)
-            )
-            agentBeingEdited = nil
-            refreshAppShortcuts()
-            return true
         } catch {
-            errorMessage = error.localizedDescription
+            var detail = error.localizedDescription
+            if let checkpoint {
+                do {
+                    try checkpoint.restore()
+                    try mcp.reloadAssignments(); try computers.reloadAssignments()
+                    // Generated skills derive from the restored settings. A damaged
+                    // workspace may still need repair before it can be synchronized.
+                    try repository.synchronizeAgentWorkspace(agent)
+                } catch { detail += " Previous settings were restored where possible; workspace repair is still needed: \(error.localizedDescription)" }
+            }
+            errorMessage = detail
             return false
         }
+        if let index = agents.firstIndex(where: { $0.id == agent.id }) { agents[index] = updated }
+        conversations = updatedConversations
+        runtime.authorizeSelectedHarness(updated)
+        startAgentServicesAfterSave()
+        runtime.restart(agent: updated, repository: repository,
+            resetThread: previousBackstory != backstory.trimmingCharacters(in: .whitespacesAndNewlines))
+        agentBeingEdited = nil
+        refreshAppShortcuts()
+        return true
+    }
+
+    private func startAgentServicesAfterSave() {
+        errorMessage = nil
+        guard connectsServices else { return }
+        computers.start(agents: agents)
+        applets.start(agents: agents)
+        mcp.start(agents: agents)
+        do { try messenger.start(agents: agents) }
+        catch { errorMessage = "Bot settings were saved, but Messenger could not start: \(error.localizedDescription)" }
     }
 
     func backstory(for agent: AgentRecord) -> String {
@@ -429,12 +446,13 @@ final class NoodleStore {
             : nil
 
         if let agent {
-            runtime.stop(agentID: agent.id)
+            runtime.stop(agentID: agent.id, revokeAccess: false)
         }
 
         do {
             if let agent {
                 try repository.deleteAgent(agent)
+                runtime.stop(agentID: agent.id)
             } else {
                 try repository.deleteConversation(id: conversation.id)
             }
