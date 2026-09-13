@@ -132,6 +132,15 @@ struct CaptureShortcut: NSViewRepresentable {
     override func cancelOperation(_ sender: Any?) {
         if model?.phase == .annotating { model?.retake() } else { close() }
     }
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, event.keyCode == 51,
+           event.modifierFlags.intersection([.command, .option, .control, .shift, .function]).isEmpty,
+           let model, model.phase == .loading || model.phase == .live {
+            if !event.isARepeat { model.chooseSources() }
+            return
+        }
+        super.sendEvent(event)
+    }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let bindings = KeyboardBindings.shared
         if bindings.matches(.capture, event: event) {
@@ -292,6 +301,7 @@ struct ScreenCapturePreview: View {
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 Button("Choose Another…") { model.chooseSources() }
+                    .help(model.phase == .annotating ? "Choose another window or screen" : "Choose Another (⌫)")
                 if model.phase == .annotating || model.error != nil { Button("Retake") { model.retake() } }
                 Spacer()
                 if model.phase == .annotating {
