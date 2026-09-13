@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Cover group creation, edits, deletion, participant wakeups, and conversation search through the app store with isolated workspaces.
+
 - Cover heartbeat deadlines, busy-bot deferral, activity resets, settings changes, and relaunch persistence with an injected clock.
 
 - Cover bot startup, workspace validation, restart stop-confirmation, shutdown, configuration changes, and session reset with isolated runtime fixtures.
