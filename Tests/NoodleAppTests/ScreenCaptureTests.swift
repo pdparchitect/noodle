@@ -440,7 +440,7 @@ import NoodleCore
     }
 }
 
-@MainActor private final class CaptureTestService: ScreenCaptureProviding {
+@MainActor final class CaptureTestService: ScreenCaptureProviding {
     var hasPermission = true
     var permissionRequests = 0
     var sourceRequests = 0
@@ -473,7 +473,7 @@ import NoodleCore
     }
 }
 
-@MainActor private final class CaptureTestFeed: ScreenCaptureFeed {
+@MainActor final class CaptureTestFeed: ScreenCaptureFeed {
     let frames: AsyncThrowingStream<ScreenCaptureFrame, Error>
     let continuation: AsyncThrowingStream<ScreenCaptureFrame, Error>.Continuation
     var delayStart = false

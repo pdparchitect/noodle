@@ -22,6 +22,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Cancel an unfinished capture-region drag when the image or selection mode changes, so mouse-up cannot annotate a replacement capture. Cover native capture-window close/reopen, keyboard save retries, permission recovery, and original-conversation routing.
+
 - Keep retired Computer preview callbacks from closing a replacement window or replacing a current error, discard queued terminal input after shell exit, and clear unavailable web displays. Restrict web navigation and authentication callbacks to the current authorized preview.
 
 - Reject uploads and downloads when Computer access is revoked during the final provider handshake, and withhold catalogue and transfer results from retired bot sessions after removal or restart.

@@ -43,8 +43,9 @@ struct CaptureShortcut: NSViewRepresentable {
     private weak var responder: NSResponder?
 
     func show(kind: ScreenCaptureKind, relativeTo host: NSWindow, service: (any ScreenCaptureProviding)? = nil,
+              present: Bool = true,
               save: @escaping (CGImage, String, AttachmentAnnotation.Region?, String) throws -> Void) {
-        if focusIfOpen() { return }
+        if focusIfOpen(present: present) { return }
         self.host = host; responder = host.firstResponder
         let panel = ScreenCapturePanel(contentRect: NSRect(x: 0, y: 0, width: 880, height: 660),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
@@ -85,12 +86,12 @@ struct CaptureShortcut: NSViewRepresentable {
         frame.origin = NSPoint(x: screen.midX - frame.width / 2, y: screen.midY - frame.height / 2)
         panel.setFrame(frame, display: false)
         self.panel = panel; self.model = model
-        panel.makeKeyAndOrderFront(nil)
+        if present { panel.makeKeyAndOrderFront(nil) }
         model.chooseSources()
     }
-    @discardableResult func focusIfOpen() -> Bool {
+    @discardableResult func focusIfOpen(present: Bool = true) -> Bool {
         guard let panel else { return false }
-        panel.makeKeyAndOrderFront(nil)
+        if present { panel.makeKeyAndOrderFront(nil) }
         return true
     }
     func close() { panel?.close() }
@@ -123,6 +124,7 @@ struct CaptureShortcut: NSViewRepresentable {
 
 @MainActor final class ScreenCapturePanel: NSPanel {
     var model: ScreenCaptureModel?
+    var bindings = KeyboardBindings.shared
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     // Keep edge resizing while disabling document-window sizing actions.
@@ -142,7 +144,6 @@ struct CaptureShortcut: NSViewRepresentable {
         super.sendEvent(event)
     }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        let bindings = KeyboardBindings.shared
         if bindings.matches(.capture, event: event) {
             // The picker is already open; preserve its source and annotations.
             return true
@@ -333,12 +334,13 @@ private struct CaptureCanvas: NSViewRepresentable {
 /// Selection is expressed in image coordinates, independent of letterboxing,
 /// window resizing, or a display's backing scale.
 @MainActor final class ScreenCaptureCanvas: NSView {
-    var image: CGImage?
-    var selecting = false
+    var image: CGImage? { didSet { if image !== oldValue { cancelDrag() } } }
+    var selecting = false { didSet { if selecting != oldValue { cancelDrag() } } }
     var region: AttachmentAnnotation.Region?
     var onRegion: ((AttachmentAnnotation.Region) -> Void)?
     private var start: NSPoint?
     private var drag: CGRect?
+    private func cancelDrag() { start = nil; drag = nil; needsDisplay = true }
     var imageRect: CGRect { Self.imageRect(imageSize: image.map { CGSize(width: $0.width, height: $0.height) } ?? .zero, bounds: bounds) }
     override var acceptsFirstResponder: Bool { true }
     override func resetCursorRects() { if selecting { addCursorRect(imageRect, cursor: .crosshair) } }
