@@ -22,6 +22,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Make Kick explain account failures and ask before recovering a missing Grok session from conversation history. Preserve previous session references, files, settings, and unfinished work, and pause interrupted recovery until an explicit retry.
+
 - Keep region-annotation previews the same height before and after thumbnails load, preventing transcript rows from jumping during scrolling. Add real-thumbnail and full-chat layout regressions, and make transcript fixture timeouts detect a blocked main thread.
 
 - Clear Muse’s paused-runtime liveness after an explicit stop. Cover session resume, early turn completions, steering, staged approvals, and bounded history recovery in the default Swift test suite without a Muse account.

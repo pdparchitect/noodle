@@ -339,6 +339,7 @@ private struct HarnessInstallationRow: View {
     @State private var terminalError: String?
     @State private var showsUpdateGuide = false
     @State private var showsExperimentalInfo = false
+    @State private var kickRequest: AgentKickRequest?
     @Environment(\.openURL) private var openURL
 
     private var id: HarnessProvider { installation.provider }
@@ -405,6 +406,11 @@ private struct HarnessInstallationRow: View {
                             .font(.caption).foregroundStyle(.red)
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
+                        Button("Kick") {
+                            kickRequest = store.runtime.kick(agent: agent, repository: store.repository)
+                        }
+                        .controlSize(.small)
+                        .disabled(store.runtime.changingAccess.contains(agent.id))
                     }
                 }
                 if installation.isAvailable {
@@ -471,6 +477,7 @@ private struct HarnessInstallationRow: View {
             }
         }
         .padding(.vertical, 6)
+        .modifier(AgentKickConfirmation(request: $kickRequest))
     }
 
     private func openTerminal() {

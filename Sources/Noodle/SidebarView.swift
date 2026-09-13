@@ -8,6 +8,7 @@ struct SidebarView: View {
     @Environment(NoodleStore.self) private var store
     @Environment(\.openWindow) private var openWindow
     @FocusState private var searchIsFocused: Bool
+    @State private var kickRequest: AgentKickRequest?
 
     var body: some View {
         @Bindable var store = store
@@ -35,7 +36,7 @@ struct SidebarView: View {
                                     if store.runtime.snapshot(for: agent.id).phase == .failed {
                                         Divider()
                                         Button("Kick") {
-                                            store.runtime.restart(agent: agent, repository: store.repository)
+                                            kickRequest = store.runtime.kick(agent: agent, repository: store.repository)
                                         }
                                         .disabled(store.runtime.changingAccess.contains(agent.id))
                                     }
@@ -61,6 +62,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .modifier(AgentKickConfirmation(request: $kickRequest))
         .scrollContentBackground(.hidden)
         .modifier(ConversationListKeyboardNavigation(
             hasSelection: store.selectedConversationID != nil,

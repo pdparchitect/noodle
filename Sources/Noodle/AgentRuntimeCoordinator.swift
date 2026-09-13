@@ -67,6 +67,38 @@ struct AgentRuntimeLaunch {
     }
 }
 
+/// A confirmation is valid only for this bot configuration, runtime, and failure.
+struct AgentKickRequest: Identifiable {
+    let id = UUID()
+    let agent: AgentRecord
+    let failure: AgentRuntimeFailure
+    fileprivate let runtimeID: UUID?
+    fileprivate let lifecycleID: UUID
+    fileprivate let extendedAccess: Bool
+
+    var title: String {
+        switch failure {
+        case .missingSession: return "Recover \(agent.displayName)?"
+        case .usageLimit: return "Usage limit reached"
+        case .authenticationRequired: return "Sign in to reconnect \(agent.displayName)"
+        case .recoveryFailed: return "Retry recovery?"
+        }
+    }
+
+    var message: String {
+        switch failure {
+        case .missingSession:
+            return "The previous session is unavailable. Noodle can start a replacement and help \(agent.displayName) continue using your conversation history.\n\nYour messages, files, and bot settings will be kept. Details remembered only within the previous session may be lost."
+        case .usageLimit:
+            return "The harness's usage limit has been reached. Once usage is available again, retry to continue. Restarting cannot restore usage. Your session and unfinished work will be kept."
+        case .authenticationRequired:
+            return "The harness needs you to sign in again. Open Harness settings for sign-in options, then retry. Your session and unfinished work will be kept."
+        case .recoveryFailed:
+            return "Noodle will retry recovery using your conversation history. Your messages and files will be kept."
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class AgentRuntimeCoordinator {
@@ -93,6 +125,7 @@ final class AgentRuntimeCoordinator {
     @ObservationIgnored private var restartTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var stabilityTasks: [UUID: Task<Void, Never>] = [:]
     private var recoveryPending: Set<UUID> = []
+    private var blockedRecoveries: Set<UUID> = []
     private var isStoppingAll = false
 
     @ObservationIgnored private var heartbeatScheduler: AgentHeartbeatScheduler
@@ -402,7 +435,7 @@ final class AgentRuntimeCoordinator {
         installations = discoveredInstallations()
         let liveIDs = Set(agents.map(\.id))
         let trackedIDs = Set(processes.keys).union(restartTasks.keys).union(stabilityTasks.keys)
-            .union(changingAccess).union(recoveryPending)
+            .union(changingAccess).union(recoveryPending).union(blockedRecoveries)
         for id in trackedIDs where !liveIDs.contains(id) {
             runtimeIDs[id] = nil
             processes.removeValue(forKey: id)?.stop { _ in }
@@ -410,6 +443,7 @@ final class AgentRuntimeCoordinator {
             changingAccess.remove(id)
             transitionIDs[id] = nil
             recoveryPending.remove(id)
+            blockedRecoveries.remove(id)
             approvals.removeAll { $0.agentID == id }
             heartbeatScheduler.remove(id)
             saveHeartbeatActivityDates()
@@ -516,7 +550,8 @@ final class AgentRuntimeCoordinator {
     }
 
     func start(agent: AgentRecord, repository: WorkspaceRepository) {
-        guard processes[agent.id] == nil, !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id) else { return }
+        guard processes[agent.id] == nil, !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id),
+              !blockedRecoveries.contains(agent.id) else { return }
         if HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsRestrictedAccess == false,
            !accessConfiguration.isExtended(for: agent) {
             snapshots[agent.id] = .init(agentID: agent.id, phase: .failed,
@@ -568,12 +603,52 @@ final class AgentRuntimeCoordinator {
         recoverUnreadMessages(for: agent, process: processes[agent.id], repository: repository)
     }
 
+    /// Ordinary Kick remains immediate; replacing a missing session requires a
+    /// concrete confirmation. Account failures explain the prerequisite first.
+    func kick(agent: AgentRecord, repository: WorkspaceRepository) -> AgentKickRequest? {
+        guard !isStoppingAll, !changingAccess.contains(agent.id), snapshot(for: agent.id).phase == .failed else { return nil }
+        if let failure = snapshot(for: agent.id).failure, failure != .recoveryFailed {
+            return AgentKickRequest(agent: agent, failure: failure, runtimeID: runtimeIDs[agent.id],
+                lifecycleID: lifecycleID, extendedAccess: accessConfiguration.isExtended(for: agent))
+        }
+        restart(agent: agent, repository: repository,
+            sessionRecovery: snapshot(for: agent.id).failure == .recoveryFailed ? .retry : nil)
+        return nil
+    }
+
+    func confirmKick(_ request: AgentKickRequest, repository: WorkspaceRepository) {
+        let agent = request.agent
+        guard !isStoppingAll, !changingAccess.contains(agent.id),
+              lifecycleID == request.lifecycleID, runtimeIDs[agent.id] == request.runtimeID,
+              snapshot(for: agent.id).phase == .failed, snapshot(for: agent.id).failure == request.failure,
+              processes[agent.id].map({ $0.configuration == agent }) ?? true,
+              accessConfiguration.isExtended(for: agent) == request.extendedAccess else { return }
+        let recovery: SessionRecovery
+        switch request.failure {
+        case .missingSession(let sessionID): recovery = .replace(sessionID)
+        case .usageLimit, .authenticationRequired, .recoveryFailed: recovery = .retry
+        }
+        restart(agent: agent, repository: repository, sessionRecovery: recovery)
+    }
+
     func restart(
         agent: AgentRecord,
         repository: WorkspaceRepository,
         resetThread: Bool = false
     ) {
+        restart(agent: agent, repository: repository, resetThread: resetThread, sessionRecovery: nil)
+    }
+
+    private enum SessionRecovery { case replace(String), retry }
+
+    private func restart(
+        agent: AgentRecord,
+        repository: WorkspaceRepository,
+        resetThread: Bool = false,
+        sessionRecovery: SessionRecovery?
+    ) {
         guard !changingAccess.contains(agent.id) else { return }
+        blockedRecoveries.remove(agent.id)
         cancelSupervision(for: agent.id)
         changingAccess.insert(agent.id)
         let transitionID = UUID()
@@ -594,7 +669,30 @@ final class AgentRuntimeCoordinator {
             guard self.lifecycleID == lifecycle, self.transitionIDs[agent.id] == transitionID else { return }
             self.changingAccess.remove(agent.id)
             self.transitionIDs[agent.id] = nil
-            if stopped { self.start(agent: agent, repository: repository) }
+            if stopped {
+                if let sessionRecovery {
+                    do {
+                        let storage = repository.storage(for: agent.id)
+                        try storage.validate()
+                        let state = storage.sessionState(provider: .grokBuild,
+                            extendedAccess: self.accessConfiguration.isExtended(for: agent))
+                        guard agent.harnessIdentifier == HarnessProvider.grokBuild.rawValue else {
+                            throw HarnessSetupError("This harness does not support session recovery through Kick.")
+                        }
+                        switch sessionRecovery {
+                        case .replace(let sessionID): try ACPSessionState.prepareRecovery(at: state, replacing: sessionID)
+                        case .retry: try ACPSessionState.allowRecoveryRetry(at: state)
+                        }
+                    } catch {
+                        self.blockedRecoveries.insert(agent.id)
+                        self.snapshots[agent.id] = .init(agentID: agent.id, phase: .failed,
+                            detail: "Could not prepare recovery. Your messages and files are preserved. Choose Kick to check again.",
+                            failure: .recoveryFailed)
+                        return
+                    }
+                }
+                self.start(agent: agent, repository: repository)
+            }
             else {
                 self.blockedRestarts.insert(agent.id)
                 self.snapshots[agent.id] = .init(agentID: agent.id, phase: .failed, detail: "The previous runtime could not be stopped.")
@@ -614,6 +712,7 @@ final class AgentRuntimeCoordinator {
     }
 
     func stop(agentID: UUID) {
+        blockedRecoveries.remove(agentID)
         runtimeIDs[agentID] = nil
         cancelSupervision(for: agentID)
         recoveryPending.remove(agentID)
@@ -648,6 +747,7 @@ final class AgentRuntimeCoordinator {
         stabilityTasks.removeAll()
         restartAttempts.removeAll()
         recoveryPending.removeAll()
+        blockedRecoveries.removeAll()
         processes.values.forEach { $0.stop { _ in } }
         processes.removeAll()
         snapshots = snapshots.mapValues {
@@ -672,7 +772,7 @@ final class AgentRuntimeCoordinator {
             }
             guard restartTasks[agent.id] == nil,
                   !changingAccess.contains(agent.id),
-                  !blockedRestarts.contains(agent.id) else { continue }
+                  !blockedRestarts.contains(agent.id), !blockedRecoveries.contains(agent.id) else { continue }
             scheduleRestart(agent: agent, repository: repository, detail: "Runtime connection was lost", immediately: immediately)
         }
     }

@@ -22,9 +22,10 @@ import XCTest
         self.launch = launch
         snapshot = .init(agentID: launch.agent.id, phase: .offline, detail: "Fixture")
     }
-    func transition(_ phase: AgentRuntimePhase, detail: String = "Fixture") {
+    func transition(_ phase: AgentRuntimePhase, detail: String = "Fixture", failure: AgentRuntimeFailure? = nil) {
         snapshot.phase = phase
         snapshot.detail = detail
+        snapshot.failure = failure
         launch.onSnapshot(snapshot)
     }
     func start() { starts += 1; isAlive = true; transition(.ready) }
@@ -80,8 +81,9 @@ import XCTest
         try repository.prepare()
         let bin = root.appendingPathComponent("bin")
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-        for name in ["codex", "claude"] {
-            let url = bin.appendingPathComponent(name)
+        for path in ["bin/codex", "bin/claude", ".grok/bin/grok"] {
+            let url = root.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Data("#!/bin/sh\nexit 99\n".utf8).write(to: url)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
         }
