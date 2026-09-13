@@ -2,12 +2,26 @@ import Foundation
 import NoodleCore
 
 @MainActor final class HarnessVersionChecker: HarnessVersionChecking {
-    func check(_ installation: HarnessInstallation, previous: HarnessVersionReport?, forceLatest: Bool) async throws -> HarnessVersionReport {
-        if installation.provider == .apple {
-            let result = try await AppleHostProbe().load()
-            return HarnessVersionReport(installedVersion: result.version)
+    private let inspect: @MainActor (HarnessInstallation) async throws -> HarnessVersionReport
+    private let fetch: @MainActor (URL) async throws -> Data
+    private let now: @MainActor () -> Date
+    init(inspect: (@MainActor (HarnessInstallation) async throws -> HarnessVersionReport)? = nil,
+         fetch: (@MainActor (URL) async throws -> Data)? = nil,
+         now: @escaping @MainActor () -> Date = { Date() }) {
+        self.inspect = inspect ?? { installation in
+            if installation.provider == .apple {
+                let result = try await AppleHostProbe().load()
+                return HarnessVersionReport(installedVersion: result.version)
+            }
+            return try await HarnessVersionHostProbe().load(installation)
         }
-        var report = try await HarnessVersionHostProbe().load(installation)
+        self.fetch = fetch ?? { try await Self.fetchRelease($0) }
+        self.now = now
+    }
+    func check(_ installation: HarnessInstallation, previous: HarnessVersionReport?, forceLatest: Bool) async throws -> HarnessVersionReport {
+        var report = try await inspect(installation)
+        try Task.checkCancellation()
+        if installation.provider == .apple { return report }
         report.latestVersion = previous?.latestVersion
         report.latestCheckedAt = previous?.latestCheckedAt
         guard let url = HarnessVersionPolicy.latestURL(for: installation) else {
@@ -16,14 +30,15 @@ import NoodleCore
             return report
         }
         if !forceLatest, let date = previous?.latestCheckedAt,
-           (0..<6 * 60 * 60).contains(Date().timeIntervalSince(date)) { return report }
+           (0..<6 * 60 * 60).contains(now().timeIntervalSince(date)) { return report }
         do {
-            let data = try await Self.fetchRelease(url)
+            let data = try await fetch(url)
+            try Task.checkCancellation()
             guard let version = HarnessVersionPolicy.latestVersion(provider: installation.provider, data: data) else {
                 throw HarnessSetupError("The provider returned an unrecognized release version.")
             }
             report.latestVersion = version
-            report.latestCheckedAt = Date()
+            report.latestCheckedAt = now()
         } catch is CancellationError { throw CancellationError() }
         catch { report.checkError = "Could not check the latest release. Your installation and sign-in are unchanged; try Check Again." }
         return report

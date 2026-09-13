@@ -22,6 +22,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Clear cancelled harness sign-ins immediately so users can retry, and ignore retired challenges and account checks. Bind setup results to the current installation so removed or replaced harnesses cannot be restored by a late callback. Discard version results returned after cancellation.
+
 - Cancel an unfinished capture-region drag when the image or selection mode changes, so mouse-up cannot annotate a replacement capture. Cover native capture-window close/reopen, keyboard save retries, permission recovery, and original-conversation routing.
 
 - Keep retired Computer preview callbacks from closing a replacement window or replacing a current error, discard queued terminal input after shell exit, and clear unavailable web displays. Restrict web navigation and authentication callbacks to the current authorized preview.
