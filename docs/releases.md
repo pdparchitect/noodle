@@ -40,6 +40,15 @@ remain drafts until their ZIP, checksum, signed feed, and notes are uploaded.
 A successful run requires every selected product to finish publishing.
 Computer and Applet releases never replace Noodle's repository-wide latest release.
 
+Automatic app CI skips changes limited to ordinary Markdown, `docs/` assets,
+or `website/`. Changelogs remain release inputs, and direct edits to
+`docs/message-reference.md` still run its generated-documentation check. Source,
+test, build, workflow, and version changes continue to run CI, including commits
+that also edit documentation. Manual runs remain available. Website content uses
+its separate deployment workflow; README-only edits also skip that workflow and
+the image build workflow. These are native
+[GitHub path filters](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore).
+
 ## Recover a failed release
 
 - **Checks or preparation failed:** fix the cause and rerun the original workflow's failed jobs. No selected tags are created before all preparation passes.

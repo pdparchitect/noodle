@@ -3,7 +3,29 @@ name: Validate and release versions
 on:
   push:
     branches: [main]
+    paths:
+      - '**'
+      - '!**.md'
+      - '!docs/**'
+      - '!website/**'
+      # Dated notes can opt a product into its first release.
+      - 'CHANGELOG.md'
+      - 'Computer/CHANGELOG.md'
+      - 'Applet/CHANGELOG.md'
+      - 'Computer/Images/CHANGELOG.md'
+      # Keep the generated catalogue's drift check on direct reference edits.
+      - 'docs/message-reference.md'
   pull_request:
+    paths:
+      - '**'
+      - '!**.md'
+      - '!docs/**'
+      - '!website/**'
+      - 'CHANGELOG.md'
+      - 'Computer/CHANGELOG.md'
+      - 'Applet/CHANGELOG.md'
+      - 'Computer/Images/CHANGELOG.md'
+      - 'docs/message-reference.md'
   workflow_dispatch:
 
 permissions:

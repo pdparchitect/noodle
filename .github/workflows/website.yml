@@ -6,6 +6,7 @@ on:
     paths:
       - 'website/**'
       - '.github/workflows/website.yml'
+      - '!**.md'
   workflow_dispatch:
 
 permissions:

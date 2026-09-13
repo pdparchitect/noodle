@@ -1,5 +1,6 @@
 """Exercise the real workflow dependency conditions, without GitHub or secrets."""
 import itertools
+import fnmatch
 import json
 import os
 from pathlib import Path
@@ -26,6 +27,19 @@ def condition(text, values):
     if re.search(r'\b(needs|github)\.', text):
         raise AssertionError('Unbound workflow context: ' + text)
     return eval('(' + text + ')', {'__builtins__': {}}, {})
+
+
+def matches_paths(paths, patterns):
+    # These workflow filters use only ** globs (which match across directories).
+    # Evaluate ordered exclusions/re-inclusions, then GitHub's any-file rule.
+    for path in paths:
+        included = False
+        for pattern in patterns:
+            if fnmatch.fnmatchcase(path, pattern.removeprefix('!')):
+                included = not pattern.startswith('!')
+        if included:
+            return True
+    return False
 
 
 class WorkflowTests(unittest.TestCase):
@@ -193,13 +207,66 @@ class WorkflowTests(unittest.TestCase):
     def test_file_versions_drive_main_push_without_tag_event_recursion(self):
         # YAML 1.1 interprets the key "on" as true.
         triggers = self.flow.get('on', self.flow.get('true'))
-        self.assertEqual(triggers['push'], {'branches': ['main']})
+        self.assertEqual(triggers['push']['branches'], ['main'])
+        self.assertNotIn('tags', triggers['push'])
+        self.assertIn('workflow_dispatch', triggers)
         for name in ['prepare-noodle-release.yml', 'computer-release.yml', 'applet-release.yml', 'computer-images.yml']:
             child = workflow(name)
             self.assertNotIn('push', child.get('on', child.get('true')))
         self.assertEqual(self.jobs['tag']['needs'], [
             'versions', 'workflow-lint', 'checks', 'test-noodle', 'test-computer', 'test-applet', 'test-bridge',
             'prepare-noodle', 'prepare-computer', 'prepare-applet', 'prepare-images'])
+
+    def test_documentation_only_changes_skip_app_ci_but_release_inputs_do_not(self):
+        triggers = self.flow.get('on', self.flow.get('true'))
+        docs = ['README.md', 'AGENTS.md', '.github/pull_request_template.md',
+                'Computer/README.md', 'Computer/Bridge/README.md',
+                'Computer/Images/README.md', 'Applet/RELEASING.md',
+                'docs/releases.md', 'docs/noodle-architecture.svg',
+                'docs/noodle-architecture.excalidraw.json', 'website/index.html',
+                'website/assets/noodle.png']
+        required = ['VERSION', 'Computer/VERSION', 'Applet/VERSION', 'Computer/Images/VERSION',
+                    'CHANGELOG.md', 'Computer/CHANGELOG.md', 'Applet/CHANGELOG.md',
+                    'Computer/Images/CHANGELOG.md', 'docs/message-reference.md',
+                    'Sources/NoodleCore/MessengerDocumentation.swift', 'Package.swift',
+                    'Tests/NoodleAppTests/ScreenCaptureTests.swift', 'scripts/build-app.sh',
+                    'Support/AppIcon.png', 'Support/update-milestones.json',
+                    'Computer/Images/desktop/Dockerfile', 'Applet/Support/Info.plist',
+                    '.github/workflows/release.yml']
+        for event in ['push', 'pull_request']:
+            patterns = triggers[event]['paths']
+            self.assertFalse(matches_paths(docs, patterns), event)
+            for path in required:
+                with self.subTest(event=event, path=path):
+                    self.assertTrue(matches_paths([path], patterns))
+                    self.assertTrue(matches_paths(docs + [path], patterns))
+
+    def test_image_docs_skip_builds_but_image_changes_and_releases_still_run(self):
+        flow = workflow('computer-images.yml')
+        triggers = flow.get('on', flow.get('true'))
+        patterns = triggers['pull_request']['paths']
+        docs = ['README.md', 'Computer/Images/README.md']
+        self.assertFalse(matches_paths(docs, patterns))
+        self.assertIn('workflow_call', triggers)
+        for path in ['Computer/Images/VERSION', 'Computer/Images/CHANGELOG.md',
+                     'Computer/Images/desktop/Dockerfile', 'Computer/Images/shared/verify.sh',
+                     'Computer/Images/tests/desktop.sh',
+                     'Computer/Images/desktop/overlay/usr/share/backgrounds/desktop-wallpaper.png',
+                     '.github/workflows/computer-images.yml']:
+            with self.subTest(path=path):
+                self.assertTrue(matches_paths(docs + [path], patterns))
+
+    def test_website_content_still_deploys_without_readme_only_runs(self):
+        flow = workflow('website.yml')
+        triggers = flow.get('on', flow.get('true'))
+        patterns = triggers['push']['paths']
+        self.assertEqual(triggers['push']['branches'], ['main'])
+        self.assertIn('workflow_dispatch', triggers)
+        self.assertFalse(matches_paths(['README.md', 'website/README.md', 'docs/website.md'], patterns))
+        for path in ['website/index.html', 'website/assets/noodle.png',
+                     'website/CNAME', '.github/workflows/website.yml']:
+            with self.subTest(path=path):
+                self.assertTrue(matches_paths(['website/README.md', path], patterns))
 
 
 if __name__ == '__main__':

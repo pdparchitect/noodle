@@ -2,7 +2,11 @@ name: Prepare Noodle Computer images
 
 on:
   pull_request:
-    paths: ['Computer/Images/**', '.github/workflows/computer-images.yml']
+    paths:
+      - 'Computer/Images/**'
+      - '.github/workflows/computer-images.yml'
+      - '!**.md'
+      - 'Computer/Images/CHANGELOG.md'
   workflow_call:
 
 permissions:
