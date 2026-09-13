@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Make the website's Download for Mac button download the Noodle ZIP directly.
+
 - Skip app CI for ordinary Markdown, documentation assets, and website-only changes. Skip image builds and website deployment for README-only edits, while retaining checks for release metadata and the generated message reference.
 
 ## [0.13.0] - 2026-09-13

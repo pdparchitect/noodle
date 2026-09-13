@@ -18,6 +18,7 @@ Each product has its own version and changelog:
 3. Run the affected tests and review the changes.
 4. Commit and push to `main`. **Pushing a new version requests publication.**
 5. Watch **Validate and release versions** through completion and verify the public download and update channel.
+6. After publishing Noodle, update the Download for Mac link in `website/index.html` to the published `Noodle-X.Y.Z-macOS.zip` asset URL, verify it downloads, then commit and push the website change. Keep the previous download link until the new release is available.
 
 Do not create tags manually or reuse published versions. Unchanged versions skip
 publication. A new product with no release history and only Unreleased notes
