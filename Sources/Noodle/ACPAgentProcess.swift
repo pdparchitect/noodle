@@ -228,6 +228,11 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         }
         guard let id = object["id"] as? Int, let purpose = requests.removeValue(forKey: id) else { return }
         if let error = object["error"] as? [String: Any] {
+            if provider == .grokBuild, case .load = purpose,
+               let detail = GrokProtocol.sessionLoadFailureDescription(error) {
+                pause(detail, event: .runtimeFailed)
+                return
+            }
             // Only an explicit missing session permits discarding its pointer.
             if case .load = purpose, error["message"] as? String == "Session not found" {
                 do { try FileManager.default.removeItem(at: stateURL) }
@@ -237,7 +242,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
             } else if case .prompt = purpose {
                 if provider == .grokBuild,
                    let detail = GrokProtocol.usageLimitDescription(error) ?? usageLimitDetail {
-                    pauseForUsageLimit(detail)
+                    pause(detail)
                     return
                 }
                 interruptTimeout?.cancel()
@@ -277,7 +282,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
             sessionReady()
         case .prompt:
             if let usageLimitDetail {
-                pauseForUsageLimit(usageLimitDetail)
+                pause(usageLimitDetail)
                 return
             }
             guard let stopReason = result["stopReason"] as? String else { terminated("\(name) returned no turn completion reason"); return }
@@ -314,9 +319,9 @@ final class ACPAgentProcess: AgentRuntimeProcess {
     }
     private var compatibilityIssue: String?
 
-    private func pauseForUsageLimit(_ detail: String) {
-        // A billing failure cannot be repaired by reconnecting. Keep the bot
-        // paused for an explicit retry, including if the old transport exits.
+    private func pause(_ detail: String, event: RuntimeDiagnostics.Event = .turnFailed) {
+        // A missing session or exhausted balance cannot be repaired by reconnecting.
+        // Keep the bot paused for an explicit retry, including if the old transport exits.
         paused = true
         stopped = true
         running = false
@@ -327,13 +332,13 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         requests.removeAll()
         connection?.invalidate()
         connection = nil
-        trace.finish(.turnFailed)
+        trace.finish(event)
         update(.failed, detail)
     }
 
     private func terminated(_ detail: String) {
         if let usageLimitDetail, !stopped {
-            pauseForUsageLimit(usageLimitDetail)
+            pause(usageLimitDetail)
             return
         }
         interruptTimeout?.cancel()

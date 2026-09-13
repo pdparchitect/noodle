@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Pause Grok bots when their saved session cannot be found, show the storage problem and recovery action, and preserve the session reference and unfinished work instead of repeatedly restarting with a sign-in warning.
+
 - Let conversation participants target the exact Applet session returned by shared opens using the shared link, conversation, and session ID together. Document hidden rendering limits, session diagnostics, and explicit headless animation stepping in generated CLI help and agent guidance.
 
 ### Changed

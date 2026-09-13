@@ -3,6 +3,16 @@ import Foundation
 public enum GrokProtocol {
     public static let efforts: Set<String> = ["low", "medium", "high", "xhigh"]
 
+    /// A missing saved session needs a storage repair, not another reconnect.
+    /// Scope this to session/load; FS_NOT_FOUND elsewhere can describe a tool's input.
+    /// Never include the provider's detail, which may contain private paths.
+    public static func sessionLoadFailureDescription(_ error: [String: Any]) -> String? {
+        let data = error["data"] as? [String: Any]
+        guard data?["code"] as? String == "FS_NOT_FOUND" ||
+                error["message"] as? String == "Session not found" else { return nil }
+        return "Grok Build could not find this bot's saved session. Restore the session files for this workspace, then right-click the bot and choose Kick. Automatic retries are paused; unfinished work is preserved."
+    }
+
     /// Classify the provider's billing failure without displaying its raw payload,
     /// which can include private account or request data. ACP uses an internal
     /// JSON-RPC error with the HTTP status in `data`, not in the RPC error code.

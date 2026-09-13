@@ -2,6 +2,28 @@ import XCTest
 @testable import NoodleCore
 
 final class GrokTests: XCTestCase {
+    func testMissingSessionClassifiesStorageCodeWithoutExposingProviderDetail() throws {
+        let detail = try XCTUnwrap(GrokProtocol.sessionLoadFailureDescription([
+            "code": -32603, "message": "Path not found.",
+            "data": ["code": "FS_NOT_FOUND", "detail": "/private/account/session.json"]
+        ]))
+        XCTAssertTrue(detail.contains("saved session"))
+        XCTAssertTrue(detail.contains("Kick"))
+        XCTAssertTrue(detail.contains("retries are paused"))
+        XCTAssertFalse(detail.contains("/private"))
+        XCTAssertEqual(GrokProtocol.sessionLoadFailureDescription(["message": "Session not found"]), detail)
+        for error: [String: Any] in [
+            ["code": -32603, "message": "Path not found."],
+            ["message": "FS_NOT_FOUND"],
+            ["data": ["code": "CONNECTION_TIMEOUT"]],
+            ["data": ["code": "FS_PERMISSION_DENIED"]],
+            ["data": ["detail": "Session not found"]],
+            ["data": "FS_NOT_FOUND"], [:]
+        ] {
+            XCTAssertNil(GrokProtocol.sessionLoadFailureDescription(error))
+        }
+    }
+
     func testUsageLimitClassifiesHTTPDataWithoutExposingRawErrors() throws {
         let detail = try XCTUnwrap(GrokProtocol.usageLimitDescription([
             "code": -32603, "message": "Internal error",

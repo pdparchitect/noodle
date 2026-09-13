@@ -7,6 +7,7 @@ import NoodleCore
     static var current: ExtendedAgentConnection!
     static var workspace = ""
     static var rejectCodexResume = false
+    static var acpLoadError: [String: Any]?
     var lastPromptText = ""
     var onData: ((Data, Bool) -> Void)?
     var onExit: ((Int32) -> Void)?
@@ -15,6 +16,7 @@ import NoodleCore
     var session = UUID().uuidString
     var turn = UUID().uuidString
     var prompts = 0
+    var createdSessions = 0
     var steers = 0
     var cancels = 0
     var holdStartAck = false
@@ -83,8 +85,11 @@ import NoodleCore
             }
             result = ["thread": ["id": session]]
         case "thread/name/set", "authenticate": break
-        case "session/new": result = ["sessionId": session]
+        case "session/new": createdSessions += 1; result = ["sessionId": session]
         case "session/load":
+            if let error = Self.acpLoadError {
+                emit(["id": id, "error": error]); return
+            }
             session = params["sessionId"] as! String
             result = ["sessionId": session]
         case "session/start", "session/resume":
@@ -382,6 +387,106 @@ import NoodleCore
             process.stop { _ in }
         }
         print("PASS: Restricted FX/Grok startup, allow-once approvals, and cancellation")
+
+        // Missing session files must not turn into a reconnect loop or an
+        // automatic history reset. Resume the same session after a manual kick.
+        for error: [String: Any] in [
+            ["code": -32603, "message": "Path not found.",
+             "data": ["code": "FS_NOT_FOUND", "detail": "/private/account/session.json"]],
+            ["code": -32603, "message": "Session not found"]
+        ] {
+            let workspace = root.appendingPathComponent(UUID().uuidString).appendingPathComponent("workspace")
+            let layout = AgentStorageLayout(workspace: workspace)
+            try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: layout.runtime, withIntermediateDirectories: true)
+            let stateURL = layout.sessionState(provider: .grokBuild, extendedAccess: true)
+            let savedSession = UUID().uuidString
+            let savedState = try JSONSerialization.data(withJSONObject: ["sessionID": savedSession])
+            try savedState.write(to: stateURL)
+            var recovery = AgentTurnRecovery(sessionStateURL: stateURL)
+            try recovery.begin()
+            let unfinishedURL = stateURL.appendingPathExtension("unfinished")
+            let unfinished = try Data(contentsOf: unfinishedURL)
+            let agent = AgentRecord(displayName: "Missing session fixture", harnessIdentifier: HarnessProvider.grokBuild.rawValue)
+            var terminations = 0
+            let process = ACPAgentProcess(provider: .grokBuild, agent: agent,
+                executableURL: URL(fileURLWithPath: "/fixture/harness"), workspaceURL: workspace,
+                extendedAccess: true, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
+                onUnexpectedTermination: { _, _, _ in terminations += 1 })
+            ExtendedAgentConnection.acpLoadError = error
+            process.start()
+            await eventually { process.snapshot.phase == .failed }
+            let wire = ExtendedAgentConnection.current!
+            precondition(process.snapshot.detail.contains("saved session") && process.snapshot.detail.contains("Kick"))
+            precondition(!process.snapshot.detail.contains("/private") && !process.snapshot.detail.contains("sign-in"))
+            precondition(process.isAlive && process.hasInterruptedWork && !process.canReceiveHeartbeat)
+            precondition(wire.invalidated && wire.createdSessions == 0 && wire.prompts == 0 && terminations == 0)
+            let failure = process.snapshot
+            process.notify(immediately: true)
+            process.heartbeat()
+            process.start()
+            wire.onExit?(1)
+            wire.onFailure?("Late disconnect")
+            wire.emit(["id": 3, "result": ["sessionId": "stale-session"]])
+            await settle()
+            precondition(process.snapshot == failure && terminations == 0 && wire.prompts == 0)
+            let stateAfterFailure = try Data(contentsOf: stateURL)
+            let unfinishedAfterFailure = try Data(contentsOf: unfinishedURL)
+            precondition(stateAfterFailure == savedState && unfinishedAfterFailure == unfinished)
+            process.stop { _ in }
+            ExtendedAgentConnection.acpLoadError = nil
+
+            let restarted = ACPAgentProcess(provider: .grokBuild, agent: agent,
+                executableURL: URL(fileURLWithPath: "/fixture/harness"), workspaceURL: workspace,
+                extendedAccess: true, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
+                onUnexpectedTermination: { _, _, _ in preconditionFailure("Unexpected recovery termination") })
+            restarted.start()
+            await eventually { restarted.snapshot.phase == .working }
+            let resumed = ExtendedAgentConnection.current!
+            precondition(resumed.session == savedSession && resumed.createdSessions == 0 && resumed.prompts == 1)
+            resumed.complete()
+            await eventually { restarted.canReceiveHeartbeat }
+            precondition(!restarted.hasInterruptedWork)
+            restarted.stop { _ in }
+        }
+        print("PASS: Missing Grok sessions pause retries, preserve history/work, and resume after repair and Kick")
+
+        // Unknown load failures still reach supervision, and the Grok storage
+        // classification must not change another provider's error handling.
+        for provider in [HarnessProvider.grokBuild, .fx] {
+            let ready = try await make(provider, root: root)
+            let workspace = URL(fileURLWithPath: ExtendedAgentConnection.workspace)
+            let stateURL = AgentStorageLayout(workspace: workspace).sessionState(provider: provider, extendedAccess: true)
+            let state = try Data(contentsOf: stateURL)
+            ready.stop { _ in }
+            ExtendedAgentConnection.acpLoadError = ["code": -32603, "message": "Internal error",
+                "data": ["code": provider == .grokBuild ? "CONNECTION_TIMEOUT" : "FS_NOT_FOUND"]]
+            var terminations = 0
+            let process = ACPAgentProcess(provider: provider, agent: ready.configuration,
+                executableURL: URL(fileURLWithPath: "/fixture/harness"), workspaceURL: workspace,
+                extendedAccess: true, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
+                onUnexpectedTermination: { _, _, _ in terminations += 1 })
+            process.start()
+            await eventually { terminations == 1 }
+            precondition(!process.isAlive && !process.snapshot.detail.contains("retries are paused"))
+            let stateAfterFailure = try Data(contentsOf: stateURL)
+            precondition(stateAfterFailure == state)
+            process.stop { _ in }
+            ExtendedAgentConnection.acpLoadError = nil
+        }
+        // A tool/turn path error is not proof that the saved session is missing.
+        do {
+            let process = try await make(.grokBuild, root: root)
+            let wire = ExtendedAgentConnection.current!
+            process.notify()
+            await eventually { wire.prompts == 1 }
+            wire.emit(["id": wire.promptID!, "error": ["code": -32603, "message": "Path not found.",
+                "data": ["code": "FS_NOT_FOUND"]]])
+            await eventually { process.snapshot.phase == .failed }
+            precondition(!wire.invalidated && !process.snapshot.detail.contains("saved session"))
+            process.stop { _ in }
+        }
+        print("PASS: Grok missing-session handling is limited to session/load; other failures retain their recovery path")
 
         // Replay Grok's actual billing-failure shapes without contacting an
         // account. A disconnected, exhausted bot must wait for a manual kick.
