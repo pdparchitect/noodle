@@ -8,6 +8,7 @@ import NoodleCore
     static var workspace = ""
     static var rejectCodexResume = false
     static var acpLoadError: [String: Any]?
+    static var acpCreateError: [String: Any]?
     var lastPromptText = ""
     var onData: ((Data, Bool) -> Void)?
     var onExit: ((Int32) -> Void)?
@@ -85,7 +86,10 @@ import NoodleCore
             }
             result = ["thread": ["id": session]]
         case "thread/name/set", "authenticate": break
-        case "session/new": createdSessions += 1; result = ["sessionId": session]
+        case "session/new":
+            createdSessions += 1
+            if let error = Self.acpCreateError { emit(["id": id, "error": error]); return }
+            result = ["sessionId": session]
         case "session/load":
             if let error = Self.acpLoadError {
                 emit(["id": id, "error": error]); return
@@ -94,7 +98,9 @@ import NoodleCore
             result = ["sessionId": session]
         case "session/start", "session/resume":
             result = ["session": ["sessionId": session, "workspaceRoot": Self.workspace], "pendingRequests": []]
-        case "session/prompt": prompts += 1; promptID = id; return
+        case "session/prompt":
+            lastPromptText = (params["prompt"] as? [[String: String]])?.first?["text"] ?? ""
+            prompts += 1; promptID = id; return
         case "turn/start":
             lastPromptText = (params["input"] as? [[String: String]])?.first?["text"] ?? ""
             prompts += 1
@@ -487,6 +493,7 @@ import NoodleCore
             await eventually { process.snapshot.phase == .failed }
             let wire = ExtendedAgentConnection.current!
             precondition(process.snapshot.detail.contains("saved session") && process.snapshot.detail.contains("Kick"))
+            precondition(process.snapshot.failure == .missingSession(savedSession))
             precondition(!process.snapshot.detail.contains("/private") && !process.snapshot.detail.contains("sign-in"))
             precondition(process.isAlive && process.hasInterruptedWork && !process.canReceiveHeartbeat)
             precondition(wire.invalidated && wire.createdSessions == 0 && wire.prompts == 0 && terminations == 0)
@@ -519,6 +526,112 @@ import NoodleCore
             restarted.stop { _ in }
         }
         print("PASS: Missing Grok sessions pause retries, preserve history/work, and resume after repair and Kick")
+
+        // The coordinator separately tests confirmation and stop ordering. Here
+        // exercise the actual adapter after an authorized replacement, including
+        // no unread messages and no unfinished marker (the inbox was consumed).
+        for extended in [false, true] {
+            let workspace = root.appendingPathComponent(UUID().uuidString).appendingPathComponent("workspace")
+            let layout = AgentStorageLayout(workspace: workspace)
+            try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: layout.runtime, withIntermediateDirectories: true)
+            let stateURL = layout.sessionState(provider: .grokBuild, extendedAccess: extended)
+            let oldSession = UUID().uuidString
+            try ACPSessionState(sessionID: oldSession).save(to: stateURL)
+            try ACPSessionState.prepareRecovery(at: stateURL, replacing: oldSession)
+            let agent = AgentRecord(displayName: "Confirmed recovery", harnessIdentifier: HarnessProvider.grokBuild.rawValue)
+            func replacement() -> ACPAgentProcess {
+                ACPAgentProcess(provider: .grokBuild, agent: agent, executableURL: URL(fileURLWithPath: "/fixture/harness"),
+                    workspaceURL: workspace, extendedAccess: extended, recoverInterruptedWork: false,
+                    onSnapshot: { _ in }, onHeartbeat: {},
+                    onUnexpectedTermination: { _, _, _ in preconditionFailure("Recovery must not enter supervision") })
+            }
+            let process = replacement()
+            process.start()
+            await eventually { process.snapshot.phase == .working }
+            let wire = ExtendedAgentConnection.current!
+            let replacementID = wire.session
+            precondition(wire.createdSessions == 1 && replacementID != oldSession)
+            precondition(wire.lastPromptText.contains(AgentWakeReason.runtimeRecovered.eventText))
+            precondition(wire.lastPromptText.contains(MessengerDocumentation.recoveredModelContext))
+            precondition(wire.lastPromptText.contains("--list-messages"))
+            precondition(process.hasInterruptedWork)
+            process.notify(immediately: true)
+            await eventually { wire.cancels == 1 }
+            wire.complete(cancelled: true)
+            await eventually { wire.prompts == 2 }
+            precondition(wire.lastPromptText.contains(MessengerDocumentation.recoveredModelContext), "A cancelled recovery must still reconstruct history")
+            wire.onExit?(1)
+            await eventually { process.snapshot.failure == .recoveryFailed }
+            let unfinished = try Data(contentsOf: stateURL.appendingPathExtension("unfinished"))
+            process.stop { _ in }
+
+            let relaunched = replacement()
+            relaunched.start()
+            precondition(relaunched.snapshot.failure == .recoveryFailed && relaunched.isAlive)
+            precondition(ExtendedAgentConnection.current === wire, "App relaunch must not retry blocked recovery")
+            relaunched.notify(immediately: true)
+            relaunched.heartbeat()
+            relaunched.start()
+            precondition(ExtendedAgentConnection.current === wire)
+            let unfinishedAfterRelaunch = try Data(contentsOf: stateURL.appendingPathExtension("unfinished"))
+            precondition(unfinishedAfterRelaunch == unfinished)
+            relaunched.stop { _ in }
+
+            try ACPSessionState.allowRecoveryRetry(at: stateURL)
+            let retry = replacement()
+            retry.start()
+            await eventually { retry.snapshot.phase == .working }
+            let resumed = ExtendedAgentConnection.current!
+            precondition(resumed.createdSessions == 0 && resumed.session == replacementID)
+            precondition(resumed.lastPromptText.contains(MessengerDocumentation.recoveredModelContext))
+            resumed.complete()
+            await eventually { retry.canReceiveHeartbeat }
+            precondition(!retry.hasInterruptedWork)
+            let saved = try JSONDecoder().decode(ACPSessionState.self, from: Data(contentsOf: stateURL))
+            precondition(saved.sessionID == replacementID && saved.previousSessionIDs == [oldSession])
+            precondition(!saved.needsHistoryRecovery && !saved.recoveryBlocked)
+            retry.notify()
+            await eventually { resumed.prompts == 2 }
+            precondition(!resumed.lastPromptText.contains(MessengerDocumentation.recoveredModelContext))
+            resumed.complete()
+            await eventually { retry.canReceiveHeartbeat }
+            retry.stop { _ in }
+        }
+        print("PASS: Confirmed Grok recovery reconstructs consumed inbox context, survives cancellation, and resumes once after explicit retry")
+
+        do {
+            let workspace = root.appendingPathComponent(UUID().uuidString).appendingPathComponent("workspace")
+            let layout = AgentStorageLayout(workspace: workspace)
+            try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: layout.runtime, withIntermediateDirectories: true)
+            let stateURL = layout.sessionState(provider: .grokBuild, extendedAccess: true)
+            let oldSession = UUID().uuidString
+            try ACPSessionState(sessionID: oldSession).save(to: stateURL)
+            try ACPSessionState.prepareRecovery(at: stateURL, replacing: oldSession)
+            let agent = AgentRecord(displayName: "Failed replacement", harnessIdentifier: HarnessProvider.grokBuild.rawValue)
+            func replacement() -> ACPAgentProcess {
+                ACPAgentProcess(provider: .grokBuild, agent: agent, executableURL: URL(fileURLWithPath: "/fixture/harness"),
+                    workspaceURL: workspace, extendedAccess: true, recoverInterruptedWork: false,
+                    onSnapshot: { _ in }, onHeartbeat: {},
+                    onUnexpectedTermination: { _, _, _ in preconditionFailure("Failed creation must pause") })
+            }
+            ExtendedAgentConnection.acpCreateError = ["code": -32603, "message": "Storage unavailable"]
+            let process = replacement()
+            process.start()
+            await eventually { process.snapshot.failure == .recoveryFailed }
+            let wire = ExtendedAgentConnection.current!
+            precondition(wire.createdSessions == 1 && wire.prompts == 0)
+            process.stop { _ in }
+            let relaunched = replacement()
+            relaunched.start()
+            precondition(relaunched.snapshot.failure == .recoveryFailed && ExtendedAgentConnection.current === wire)
+            let state = try JSONDecoder().decode(ACPSessionState.self, from: Data(contentsOf: stateURL))
+            precondition(state.sessionID == nil && state.previousSessionIDs == [oldSession] && state.recoveryBlocked)
+            relaunched.stop { _ in }
+            ExtendedAgentConnection.acpCreateError = nil
+        }
+        print("PASS: Failed Grok replacement creation is bounded across app relaunch")
 
         // Unknown load failures still reach supervision, and the Grok storage
         // classification must not change another provider's error handling.

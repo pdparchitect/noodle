@@ -32,6 +32,8 @@ All notable changes to Noodle are documented here, following
 
 - Keep runtime startup failed when a Codex session cannot be saved, scope approvals and callbacks to their active turn and connection, and prevent late Claude stop confirmations from overwriting restarted status. Bound Codex and Claude helper startup waits; cover Codex, Claude, and ACP recovery, cancellation, permissions, and transport failures in SwiftPM.
 
+- Make Kick explain account failures and ask before recovering a missing Grok session from conversation history. Preserve previous session references, files, settings, and unfinished work, and pause interrupted recovery until an explicit retry.
+
 - Keep region-annotation previews the same height before and after thumbnails load, preventing transcript rows from jumping during scrolling. Add real-thumbnail and full-chat layout regressions, and make transcript fixture timeouts detect a blocked main thread.
 
 - Clear Muse’s paused-runtime liveness after an explicit stop. Cover session resume, early turn completions, steering, staged approvals, and bounded history recovery in the default Swift test suite without a Muse account.

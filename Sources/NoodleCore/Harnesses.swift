@@ -244,22 +244,33 @@ public enum AgentRuntimePhase: String, Codable, Hashable, Sendable {
     case failed
 }
 
+/// Actionable failures supplied by the adapter, never inferred from display text.
+public enum AgentRuntimeFailure: Codable, Hashable, Sendable {
+    case missingSession(String)
+    case usageLimit
+    case authenticationRequired
+    case recoveryFailed
+}
+
 public struct AgentRuntimeSnapshot: Codable, Hashable, Sendable {
     public let agentID: UUID
     public var phase: AgentRuntimePhase
     public var detail: String
     public var processIdentifier: Int32?
+    public var failure: AgentRuntimeFailure?
 
     public init(
         agentID: UUID,
         phase: AgentRuntimePhase,
         detail: String,
-        processIdentifier: Int32? = nil
+        processIdentifier: Int32? = nil,
+        failure: AgentRuntimeFailure? = nil
     ) {
         self.agentID = agentID
         self.phase = phase
         self.detail = detail
         self.processIdentifier = processIdentifier
+        self.failure = failure
     }
 }
 

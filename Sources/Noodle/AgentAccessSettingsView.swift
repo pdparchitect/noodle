@@ -3,6 +3,7 @@ import NoodleCore
 
 struct AgentAccessSettingsView: View {
     @Environment(NoodleStore.self) private var store
+    @State private var kickRequest: AgentKickRequest?
 
     var body: some View {
         Form {
@@ -45,7 +46,7 @@ struct AgentAccessSettingsView: View {
                                     .fixedSize(horizontal: false, vertical: true)
                                     .textSelection(.enabled)
                                 Button("Retry Startup") {
-                                    store.runtime.restart(agent: agent, repository: store.repository)
+                                    kickRequest = store.runtime.kick(agent: agent, repository: store.repository)
                                 }
                                 .controlSize(.small)
                                 .accessibilityLabel("Retry startup for \(agent.displayName)")
@@ -59,6 +60,7 @@ struct AgentAccessSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .modifier(AgentKickConfirmation(request: $kickRequest))
     }
 }
 

@@ -16,7 +16,11 @@ final class ACPAgentProcess: AgentRuntimeProcess {
     private let onUnexpectedTermination: @MainActor (ACPAgentProcess, String, Bool) -> Void
     private let stateURL: URL
     private var turnRecovery: AgentTurnRecovery
-    private var sessionID: String?
+    private var state = ACPSessionState()
+    private var sessionID: String? {
+        get { state.sessionID }
+        set { state.sessionID = newValue }
+    }
     private var connectionID: UUID?
     private let sleep: @MainActor (Duration) async throws -> Void
     private let makeConnection: @MainActor () throws -> any HarnessRuntimeConnection
@@ -37,7 +41,6 @@ final class ACPAgentProcess: AgentRuntimeProcess {
     private enum Purpose { case initialize, authenticate, create, load, model, effort, prompt(AgentWakeReason) }
     private var requests: [Int: Purpose] = [:]
     private var startupTimeout: Task<Void, Never>?
-    private struct State: Codable { let sessionID: String }
     private lazy var trace = RuntimeTrace(agentID: configuration.id, provider: provider, workspace: workspaceURL)
 
     private(set) var snapshot: AgentRuntimeSnapshot
@@ -63,8 +66,10 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: provider, extendedAccess: extendedAccess)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
         recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
-        if let data = try? Data(contentsOf: stateURL), let state = try? JSONDecoder().decode(State.self, from: data),
-           FxProtocol.validIdentifier(state.sessionID) { sessionID = state.sessionID }
+        if let data = try? Data(contentsOf: stateURL), let saved = try? JSONDecoder().decode(ACPSessionState.self, from: data) {
+            state = saved
+            recoveryPending = recoveryPending || state.needsHistoryRecovery
+        }
         snapshot = .init(agentID: agent.id, phase: .offline, detail: "Not started")
     }
 
@@ -76,6 +81,20 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         guard connection == nil, !paused else { return }
         guard extendedAccess || provider.supportsRestrictedAccess else { update(.failed, "\(name) requires autonomous access in Settings → Security"); return }
         stopped = false
+        if state.needsHistoryRecovery {
+            guard !state.recoveryBlocked else {
+                pause("Recovery was interrupted or could not finish. Choose Kick to try again. Your messages, files, and unfinished work are preserved.", failure: .recoveryFailed)
+                return
+            }
+            // Persist before starting: neither supervision nor app relaunch can
+            // repeatedly create replacements after a failed recovery attempt.
+            state.recoveryBlocked = true
+            do { try state.save(to: stateURL) }
+            catch {
+                pause("Could not save recovery progress. Choose Kick to try again. Your messages and files are preserved.", failure: .recoveryFailed)
+                return
+            }
+        }
         compatibilityIssue = nil
         update(.starting, "Starting \(name)")
         trace.runtimeStarting()
@@ -191,7 +210,8 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         reviewHeld = false
         usageLimitDetail = nil
         trace.begin(reason: reason)
-        request(.prompt(reason), method: "session/prompt", params: ["sessionId": sessionID, "prompt": [["type": "text", "text": reason.eventText]]])
+        let prompt = reason.eventText + (state.needsHistoryRecovery ? "\n\n" + MessengerDocumentation.recoveredModelContext : "")
+        request(.prompt(reason), method: "session/prompt", params: ["sessionId": sessionID, "prompt": [["type": "text", "text": prompt]]])
         guard running else { return }
         trace.record(.wakeSubmitted)
         if reason == .heartbeat { onHeartbeat() }
@@ -235,9 +255,17 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         }
         guard let id = object["id"] as? Int, let purpose = requests.removeValue(forKey: id) else { return }
         if let error = object["error"] as? [String: Any] {
+            if provider == .grokBuild, let detail = GrokProtocol.authenticationFailureDescription(error) {
+                pause(detail, failure: .authenticationRequired)
+                return
+            }
+            if provider == .grokBuild, let detail = GrokProtocol.usageLimitDescription(error) {
+                pause(detail, failure: .usageLimit)
+                return
+            }
             if provider == .grokBuild, case .load = purpose,
-               let detail = GrokProtocol.sessionLoadFailureDescription(error) {
-                pause(detail, event: .runtimeFailed)
+               let detail = GrokProtocol.sessionLoadFailureDescription(error), let sessionID {
+                pause(detail, event: .runtimeFailed, failure: .missingSession(sessionID))
                 return
             }
             // Only an explicit missing session permits discarding its pointer.
@@ -249,7 +277,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
             } else if case .prompt = purpose {
                 if provider == .grokBuild,
                    let detail = GrokProtocol.usageLimitDescription(error) ?? usageLimitDetail {
-                    pause(detail)
+                    pause(detail, failure: .usageLimit)
                     return
                 }
                 interruptTimeout?.cancel()
@@ -274,7 +302,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
             guard let sessionID, FxProtocol.validIdentifier(sessionID) else { terminated("\(name) did not identify its session"); return }
             do {
                 try FileManager.default.createDirectory(at: stateURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try JSONEncoder().encode(State(sessionID: sessionID)).write(to: stateURL, options: .atomic)
+                try state.save(to: stateURL)
             } catch { terminated("Could not save the \(name) session"); return }
             if provider == .grokBuild || provider == .apple, let model = configuration.modelIdentifier {
                 request(.model, method: "session/set_model", params: ["sessionId": sessionID, "modelId": model])
@@ -289,7 +317,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
             sessionReady()
         case .prompt:
             if let usageLimitDetail {
-                pause(usageLimitDetail)
+                pause(usageLimitDetail, failure: .usageLimit)
                 return
             }
             guard let stopReason = result["stopReason"] as? String else { terminated("\(name) returned no turn completion reason"); return }
@@ -302,7 +330,18 @@ final class ACPAgentProcess: AgentRuntimeProcess {
                 update(.failed, reviewHeld ? "\(name) held tool execution: its safety reviewer is unavailable. Retry when the review service recovers." : "\(name) stopped before completing the turn. Retry Startup to resume.")
                 return
             }
-            do { try turnRecovery.finish() }
+            do {
+                // Cancellation is a handoff to the queued message, not proof
+                // that the new session has reconstructed its context.
+                if state.needsHistoryRecovery, !wasInterrupted {
+                    var completed = state
+                    completed.needsHistoryRecovery = false
+                    completed.recoveryBlocked = false
+                    try completed.save(to: stateURL)
+                    state = completed
+                }
+                try turnRecovery.finish()
+            }
             catch { update(.failed, "Could not record finished \(name) work"); return }
             turnIsActive = false
             trace.finish(wasInterrupted ? .turnInterrupted : .turnCompleted)
@@ -326,7 +365,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
     }
     private var compatibilityIssue: String?
 
-    private func pause(_ detail: String, event: RuntimeDiagnostics.Event = .turnFailed) {
+    private func pause(_ detail: String, event: RuntimeDiagnostics.Event = .turnFailed, failure: AgentRuntimeFailure? = nil) {
         // A missing session or exhausted balance cannot be repaired by reconnecting.
         // Keep the bot paused for an explicit retry, including if the old transport exits.
         paused = true
@@ -341,17 +380,21 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         connection?.invalidate()
         connection = nil
         trace.finish(event)
-        update(.failed, detail)
+        update(.failed, detail, failure: failure ?? (state.needsHistoryRecovery ? .recoveryFailed : nil))
     }
 
     private func terminated(_ detail: String) {
         if let usageLimitDetail, !stopped {
-            pause(usageLimitDetail)
+            pause(usageLimitDetail, failure: .usageLimit)
             return
         }
         interruptTimeout?.cancel()
         let detail = compatibilityIssue ?? HarnessVersionPolicy.startupIssue(provider: provider, text: detail) ?? detail
         guard !stopped else { return }
+        if state.needsHistoryRecovery {
+            pause("\(detail) Choose Kick to retry recovery. Your messages, files, and unfinished work are preserved.", event: .runtimeDisconnected, failure: .recoveryFailed)
+            return
+        }
         let needsRecovery = hasInterruptedWork
         connectionID = nil
         stopped = true
@@ -364,8 +407,9 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         update(.failed, detail)
         onUnexpectedTermination(self, detail, needsRecovery)
     }
-    private func update(_ phase: AgentRuntimePhase, _ detail: String) {
-        snapshot = .init(agentID: configuration.id, phase: phase, detail: detail, processIdentifier: pid)
+    private func update(_ phase: AgentRuntimePhase, _ detail: String, failure: AgentRuntimeFailure? = nil) {
+        snapshot = .init(agentID: configuration.id, phase: phase, detail: detail, processIdentifier: pid,
+                         failure: failure ?? (phase == .failed && state.needsHistoryRecovery ? .recoveryFailed : nil))
         onSnapshot(snapshot)
     }
 }

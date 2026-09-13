@@ -10,6 +10,8 @@ final class GrokTests: XCTestCase {
         XCTAssertTrue(detail.contains("saved session"))
         XCTAssertTrue(detail.contains("Kick"))
         XCTAssertTrue(detail.contains("retries are paused"))
+        XCTAssertTrue(detail.contains("ask before replacing"))
+        XCTAssertFalse(detail.contains("Restore the session files"))
         XCTAssertFalse(detail.contains("/private"))
         XCTAssertEqual(GrokProtocol.sessionLoadFailureDescription(["message": "Session not found"]), detail)
         for error: [String: Any] in [
@@ -22,6 +24,16 @@ final class GrokTests: XCTestCase {
         ] {
             XCTAssertNil(GrokProtocol.sessionLoadFailureDescription(error))
         }
+    }
+
+    func testAuthenticationFailureRequiresExplicitHTTPStatus() throws {
+        let detail = try XCTUnwrap(GrokProtocol.authenticationFailureDescription([
+            "data": ["http_status": 401, "message": "private account information"]
+        ]))
+        XCTAssertTrue(detail.contains("sign in"))
+        XCTAssertFalse(detail.contains("private"))
+        XCTAssertNil(GrokProtocol.authenticationFailureDescription(["code": 401]))
+        XCTAssertNil(GrokProtocol.authenticationFailureDescription(["data": ["http_status": 500]]))
     }
 
     func testUsageLimitClassifiesHTTPDataWithoutExposingRawErrors() throws {

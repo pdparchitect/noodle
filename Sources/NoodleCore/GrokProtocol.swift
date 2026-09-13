@@ -3,14 +3,19 @@ import Foundation
 public enum GrokProtocol {
     public static let efforts: Set<String> = ["low", "medium", "high", "xhigh"]
 
-    /// A missing saved session needs a storage repair, not another reconnect.
+    /// A missing saved session needs confirmed context recovery, not a reconnect.
     /// Scope this to session/load; FS_NOT_FOUND elsewhere can describe a tool's input.
     /// Never include the provider's detail, which may contain private paths.
     public static func sessionLoadFailureDescription(_ error: [String: Any]) -> String? {
         let data = error["data"] as? [String: Any]
         guard data?["code"] as? String == "FS_NOT_FOUND" ||
                 error["message"] as? String == "Session not found" else { return nil }
-        return "Grok Build could not find this bot's saved session. Restore the session files for this workspace, then right-click the bot and choose Kick. Automatic retries are paused; unfinished work is preserved."
+        return "Grok Build could not find this bot's saved session. Choose Kick to recover using conversation history. Noodle will ask before replacing the session. Automatic retries are paused; unfinished work is preserved."
+    }
+
+    public static func authenticationFailureDescription(_ error: [String: Any]) -> String? {
+        guard (error["data"] as? [String: Any])?["http_status"] as? Int == 401 else { return nil }
+        return "Grok Build needs you to sign in again. Choose Kick for sign-in options. Your session and unfinished work are preserved."
     }
 
     /// Classify the provider's billing failure without displaying its raw payload,
