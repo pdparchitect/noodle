@@ -159,13 +159,15 @@ import NoodleCore
     }
 
     func testProbeRejectsThumbnailThatCannotStayLive() async {
-        let feed = CaptureTestFeed()
-        let task = Task { try await ScreenCaptureProbe.capture(feed, timeout: .milliseconds(100), settling: .milliseconds(60)) }
-        await until { feed.started }
+        // Preserve both events and queue the pause before the probe starts its
+        // timers. A sleeping producer can resume after settling on a busy runner.
+        let feed = CaptureTestFeed(bufferingPolicy: .unbounded)
         feed.send(image())
-        try? await Task.sleep(for: .milliseconds(20))
         feed.continuation.yield(.paused)
-        do { _ = try await task.value; XCTFail("A suspended source must not produce a picker tile") } catch {}
+        do {
+            _ = try await ScreenCaptureProbe.capture(feed, timeout: .milliseconds(100), settling: .milliseconds(60))
+            XCTFail("A suspended source must not produce a picker tile")
+        } catch {}
         XCTAssertGreaterThanOrEqual(feed.stops, 1)
     }
 
@@ -478,8 +480,8 @@ import NoodleCore
     var started = false
     var stops = 0
     var startWaiter: CheckedContinuation<Void, Never>?
-    init() {
-        let pair = AsyncThrowingStream<ScreenCaptureFrame, Error>.makeStream(bufferingPolicy: .bufferingNewest(1))
+    init(bufferingPolicy: AsyncThrowingStream<ScreenCaptureFrame, Error>.Continuation.BufferingPolicy = .bufferingNewest(1)) {
+        let pair = AsyncThrowingStream<ScreenCaptureFrame, Error>.makeStream(bufferingPolicy: bufferingPolicy)
         frames = pair.stream; continuation = pair.continuation
     }
     func send(_ image: CGImage) { continuation.yield(.image(image)) }
