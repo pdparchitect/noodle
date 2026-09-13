@@ -70,6 +70,7 @@ import XCTest
     let repository: WorkspaceRepository
     let discovery: HarnessDiscovery
     let factory = RuntimeFactoryFixture()
+    let clock = RuntimeClockFixture()
     let runtime: AgentRuntimeCoordinator
 
     init() throws {
@@ -86,8 +87,9 @@ import XCTest
         }
         discovery = HarnessDiscovery(homeDirectory: root, applicationsDirectory: root,
             executableSearchDirectories: [bin], applicationBundleURL: root, environment: [:])
-        let factory = factory
-        runtime = AgentRuntimeCoordinator(discovery: discovery, defaults: defaults, makeProcess: { factory.make($0) })
+        let factory = factory, clock = clock
+        runtime = AgentRuntimeCoordinator(discovery: discovery, defaults: defaults,
+            makeProcess: { factory.make($0) }, sleep: { try await clock.sleep($0) })
     }
     func agent(_ name: String = "Fixture bot", harness: HarnessProvider? = .codex) throws -> AgentRecord {
         try repository.createAgent(named: name, harnessIdentifier: harness?.rawValue).agent
@@ -98,8 +100,34 @@ import XCTest
     }
     func cleanUp() {
         runtime.stopAll()
+        clock.releaseAll()
         for process in factory.processes { process.finishStop(true) }
         defaults.removePersistentDomain(forName: suite)
         try? FileManager.default.removeItem(at: root)
+    }
+}
+
+/// Suspensions finish only when released, even if cancelled, to model late callbacks.
+@MainActor final class RuntimeClockFixture {
+    var waits: [(Duration, RoutingGate<Void>)] = []
+    func sleep(_ duration: Duration) async throws {
+        let gate = RoutingGate<Void>()
+        waits.append((duration, gate))
+        try await gate.value()
+    }
+    func next(_ duration: Duration, after index: Int = 0) async throws -> RoutingGate<Void> {
+        try await waitUntil { self.waits.dropFirst(index).contains { $0.0 == duration } }
+        return waits.dropFirst(index).first { $0.0 == duration }!.1
+    }
+    func releaseAll() { waits.forEach { $0.1.resolve(.failure(CancellationError())) } }
+    func waitUntil(_ predicate: () -> Bool) async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while !predicate() {
+            guard ContinuousClock.now < deadline else {
+                XCTFail("Runtime transition did not complete")
+                throw CancellationError()
+            }
+            await Task.yield()
+        }
     }
 }

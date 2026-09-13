@@ -99,6 +99,7 @@ final class AgentRuntimeCoordinator {
     @ObservationIgnored private lazy var messageDelivery = MessageDeliveryRouter(defaults: defaults)
 
     private var discovery: HarnessDiscovery
+    @ObservationIgnored private let sleep: @MainActor (Duration) async throws -> Void
     @ObservationIgnored private let makeProcess: @MainActor (AgentRuntimeLaunch) -> any AgentRuntimeProcess
     private var processes: [UUID: any AgentRuntimeProcess] = [:]
     private var capabilityProbe: CodexCapabilityProbe?
@@ -170,7 +171,9 @@ final class AgentRuntimeCoordinator {
     }
 
     init(discovery: HarnessDiscovery = HarnessDiscovery(), defaults: UserDefaults = .standard,
-         makeProcess: @escaping @MainActor (AgentRuntimeLaunch) -> any AgentRuntimeProcess = { $0.makeProcess() }) {
+         makeProcess: @escaping @MainActor (AgentRuntimeLaunch) -> any AgentRuntimeProcess = { $0.makeProcess() },
+         sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
+        self.sleep = sleep
         self.makeProcess = makeProcess
         self.discovery = discovery
         self.defaults = defaults
@@ -388,9 +391,14 @@ final class AgentRuntimeCoordinator {
     func refresh(agents: [AgentRecord], repository: WorkspaceRepository? = nil) {
         installations = discoveredInstallations()
         let liveIDs = Set(agents.map(\.id))
-        for id in processes.keys where !liveIDs.contains(id) {
+        let trackedIDs = Set(processes.keys).union(restartTasks.keys).union(stabilityTasks.keys)
+            .union(changingAccess).union(recoveryPending)
+        for id in trackedIDs where !liveIDs.contains(id) {
             processes.removeValue(forKey: id)?.stop { _ in }
             cancelSupervision(for: id)
+            changingAccess.remove(id)
+            recoveryPending.remove(id)
+            approvals.removeAll { $0.agentID == id }
             heartbeatScheduler.remove(id)
             saveHeartbeatActivityDates()
         }
@@ -673,8 +681,8 @@ final class AgentRuntimeCoordinator {
             phase: .starting,
             detail: "\(detail). Restarting \(delayText)…"
         )
-        restartTasks[agent.id] = Task { [weak self] in
-            if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+        restartTasks[agent.id] = Task { [weak self, sleep] in
+            if delay > 0 { try? await sleep(.seconds(delay)) }
             guard let self, !Task.isCancelled, !self.isStoppingAll else { return }
             self.restartTasks[agent.id] = nil
             self.start(agent: agent, repository: repository)
@@ -684,8 +692,8 @@ final class AgentRuntimeCoordinator {
     private func markStable(agentID: UUID) {
         guard stabilityTasks[agentID] == nil,
               let process = processes[agentID] else { return }
-        stabilityTasks[agentID] = Task { [weak self, weak process] in
-            try? await Task.sleep(for: .seconds(60))
+        stabilityTasks[agentID] = Task { [weak self, weak process, sleep] in
+            try? await sleep(.seconds(60))
             guard let self, let process, !Task.isCancelled,
                   self.processes[agentID].map(ObjectIdentifier.init) == ObjectIdentifier(process),
                   process.isAlive else { return }
