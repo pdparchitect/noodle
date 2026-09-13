@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Preserve saved session identity, state and available mode metadata when inspection or other live operations target an archived session. Return `session-not-running` and keep status/log access available after Applet restarts.
+
 - Resolve package links to active sessions before historical sessions, choose the newest stopped session consistently, and preserve session identity and mode in failed-operation responses. Allow explicit session targeting constrained to the authorized package.
 
 ### Added

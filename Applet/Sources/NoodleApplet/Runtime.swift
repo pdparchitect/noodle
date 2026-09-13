@@ -82,6 +82,7 @@ import AppletCore
   }
   func handle(_ input: AppletRequest, identity: String) async -> AppletResponse {
     var resolvedSession: AppletSession?
+    var archivedResponse: AppletResponse?
     do {
       var request = input
       try request.validate()
@@ -246,16 +247,18 @@ import AppletCore
           owner: owner == "local" ? (owners[package.key] ?? owner) : owner)
       }
       guard let session = find(request, owner: owner) else {
-        if [.status, .logs].contains(request.operation), let id = request.sessionID,
+        if let id = request.sessionID,
           let record = savedRecord(id),
           owner == "local" || record.owner == owner
         {
           var response = record.response
+          response.sessionID = id
           if ["running", "building", "starting"].contains(response.state ?? "") {
             response.state = "interrupted"
           }
           response.viewAvailable = false
           response.rendering = nil
+          archivedResponse = response
           if request.operation == .logs {
             let (bytes, next) = try AppletLog(
               url: library.root.appendingPathComponent("Logs/\(id.uuidString).jsonl")
@@ -263,6 +266,10 @@ import AppletCore
             response.text = String(decoding: bytes, as: UTF8.self)
             response.offset = next
             response.done = true
+          } else if request.operation != .status {
+            let mode = response.mode.map { " (\($0))" } ?? ""
+            response.error = "Session \(id)\(mode) is \(response.state ?? "archived") and has no live runtime. Open the noodlet to start a new session."
+            response.errorCode = "session-not-running"
           }
           return response
         }
@@ -365,7 +372,7 @@ import AppletCore
       default: throw AppletError("Operation is not valid for this session.")
       }
     } catch {
-      var response = resolvedSession.map(status) ?? AppletResponse()
+      var response = resolvedSession.map(status) ?? archivedResponse ?? AppletResponse()
       response.error = error.localizedDescription
       response.errorCode = (error as? AppletError)?.code
       return response

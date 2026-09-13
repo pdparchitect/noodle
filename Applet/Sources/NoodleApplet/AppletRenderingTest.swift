@@ -136,6 +136,16 @@ import WebKit
     let clean = try await value(["eval", "--text", "return {marker:await noodle.storage.get('clock-marker')};"] + target)
     try require(clean["marker"] is NSNull && normal.dataScope == "user", "Test data escaped into normal storage")
     _ = try await call(["close"] + target)
+    // Model a provider restart: only durable records remain in this isolated runtime.
+    runtime.sessions.removeAll()
+    let archived = try await call(["inspect"] + exact, succeeds: false)
+    try require(archived.errorCode == "session-not-running" && archived.sessionID == open.sessionID
+      && archived.noodletID == open.noodletID && archived.state == "stopped"
+      && archived.mode == "headless" && archived.dataScope == "test" && archived.testClock == true
+      && archived.viewAvailable == false && archived.rendering == nil, "Archived inspection lost saved session metadata")
+    let archivedStatus = try await call(["status"] + exact)
+    try require(archivedStatus.sessionID == open.sessionID && archivedStatus.state == "stopped", "Archived status stopped working")
+    print("PASS signed CLI: archived inspection error retains identity/state/mode without claiming a live view")
     print("PASS signed CLI: historical/headless targeting, native visibility, synthetic RAF/clock, cancellation/errors, Canvas/WebGL pixels, restart, exact close and test-data isolation")
     print("APPLET RENDERING TEST PASSED")
     } catch {

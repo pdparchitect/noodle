@@ -21,6 +21,10 @@ extension MessengerDocumentation {
         and HTML rendering diagnostics when available. Errors retain resolved session
         metadata; errorCode distinguishes session-not-found, session-unavailable,
         session-not-running, session-mode-conflict and unsupported-operation when applicable.
+        After Applet restarts, --session UUID can still read saved status/logs. Live
+        operations on that archived session return session-not-running with its saved
+        identity, state and available mode/data metadata; viewAvailable is false.
+        Formerly active sessions report interrupted. Older records may omit newer fields.
         JavaScript input is an async function body: use `return` for a result.
         --output refuses to replace an existing file. Recordings are silent MP4.
         Headless runs offscreen in a logged-in macOS desktop session and uses test data.
