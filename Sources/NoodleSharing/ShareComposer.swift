@@ -23,10 +23,12 @@ public final class ShareComposerModel: ObservableObject {
     private let requestID = UUID()
     private var loadTask: Task<Void, Never>?
     private var published = false
+    private var isCancelled = false
 
     public init(inbox: SharedInbox) { self.inbox = inbox }
 
     public func load(_ inputs: [ShareInput]) {
+        guard !isCancelled, !published else { return }
         loadTask = Task {
             do {
                 destinations = try inbox.loadDestinations()
@@ -58,7 +60,7 @@ public final class ShareComposerModel: ObservableObject {
     }
 
     public var canSend: Bool {
-        !isLoading && !isSending && error == nil && destinationID != nil &&
+        !isCancelled && !isLoading && !isSending && error == nil && destinationID != nil &&
             (!text.isEmpty || !filenames.isEmpty || !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
@@ -77,6 +79,8 @@ public final class ShareComposerModel: ObservableObject {
     }
 
     public func cancel() {
+        isCancelled = true
+        isLoading = false
         loadTask?.cancel()
         if !published { inbox.cancelDraft(requestID) }
     }

@@ -72,6 +72,10 @@ let package = Package(
             dependencies: ["Noodle", "NoodleCore", .product(name: "ComputerBridge", package: "Bridge")]
         ),
         .testTarget(
+            name: "NoodleSharingTests",
+            dependencies: ["NoodleSharing", "NoodleCore"]
+        ),
+        .testTarget(
             name: "NoodleMCPTests",
             dependencies: ["NoodleMCP", "NoodleCore", .product(name: "MCP", package: "swift-sdk")]
         )

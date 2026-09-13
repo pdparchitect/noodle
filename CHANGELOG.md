@@ -20,6 +20,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Prevent cancelled share composers from publishing content or recreating their drafts. Cover text/file sharing, duplicate filenames, and publication retry without opening the extension UI.
+
 - Preserve unreadable conversation history instead of replacing it during a send. Report the failure and retain the unsent text and attachments for retry.
 
 - Bind stop confirmations to the exact restart or access-change operation so a late confirmation cannot grant access or launch an outdated configuration during a newer transition.
