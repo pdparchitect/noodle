@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Let conversation participants target the exact Applet session returned by shared opens using the shared link, conversation, and session ID together. Document hidden rendering limits, session diagnostics, and explicit headless animation stepping in generated CLI help and agent guidance.
+
 ### Changed
 
 - Publish Noodle as `Noodle-arm64.zip` with a matching checksum so the website can link directly to the latest download. Preserve existing migration-release downloads and defer website deployment until its download is available.

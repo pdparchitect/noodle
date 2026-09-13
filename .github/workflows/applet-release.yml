@@ -79,6 +79,10 @@ jobs:
         timeout-minutes: 8
         run: python3 Applet/scripts/smoke.py
 
+      - name: Verify isolated session selection and offscreen animation
+        timeout-minutes: 3
+        run: '".build/Noodle Applet.app/Contents/MacOS/NoodleApplet" --noodle-background --rendering-test'
+
       - name: Save verified release assets
         run: cp "$RUNNER_TEMP/applet-notes.md" "dist/applet-$APPLET_VERSION/release-notes.md"
 

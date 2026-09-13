@@ -6,12 +6,17 @@ import AppletCore
   let id = UUID(), package: NoodletPackage, owner: String, log: AppletLog, dataRoot: URL
   var lock: InstanceLock?
   var state = "starting", mode: String, revision: String
+  let createdAt = Date()
+  let testClock: Bool
+  var isActive: Bool { ["starting", "building", "running"].contains(state) }
   let size: CGSize
   var web: WebRunner?, native: NativeRunner?, recording: AppletRecording?
-  init(package: NoodletPackage, owner: String, mode: String, size: CGSize, root: URL) throws {
+  init(package: NoodletPackage, owner: String, mode: String, size: CGSize, root: URL,
+       testClock: Bool = false) throws {
     self.package = package
     self.owner = owner
     self.mode = mode
+    self.testClock = testClock
     self.size = size
     revision = package.revision
     dataRoot = root.appendingPathComponent(
@@ -22,6 +27,9 @@ import AppletCore
       location: package.url, directory: root.appendingPathComponent("Locks"))
   }
   func snapshot() async throws -> NSImage {
+    guard state == "running" else {
+      throw AppletError("Session \(id) (\(mode)) is \(state).", code: "session-not-running")
+    }
     if let web { return try await web.snapshot() }
     if let native { return try await native.snapshot() }
     throw AppletError("The noodlet has no running view.")
@@ -73,6 +81,7 @@ import AppletCore
     } catch { self.error = error.localizedDescription }
   }
   func handle(_ input: AppletRequest, identity: String) async -> AppletResponse {
+    var resolvedSession: AppletSession?
     do {
       var request = input
       try request.validate()
@@ -83,7 +92,15 @@ import AppletCore
       if let id = request.noodletID {
         let package = try library.package(for: id)
         guard owner == "local" || belongs(package, owner: owner) else {
-          throw AppletError("This noodlet is unavailable to this caller.")
+          throw AppletError("This noodlet is unavailable to this caller.", code: "session-unavailable")
+        }
+        if let sessionID = request.sessionID {
+          // A shared package grant must never become unrestricted local session access.
+          let live = sessions[sessionID].map { $0.package.key == package.key }
+          let saved = savedRecord(sessionID)
+          guard live ?? (saved?.response.noodletID == id) else {
+            throw AppletError("Session is unavailable for this noodlet.", code: "session-unavailable")
+          }
         }
         request.path = package.url.path
         request.noodletID = nil
@@ -103,8 +120,7 @@ import AppletCore
         } else { throw AppletError("Provide --id, --path, or --session for info.") }
         var response = try packageInfo(package)
         if let session = find(request, owner: owner) {
-          response.sessionID = session.id
-          response.state = session.state
+          response = status(session)
         }
         if request.includePreview == true {
           guard owner == "local", identity == "com.pdparchitect.noodle" || identity == "com.pdparchitect.noodle.local" else {
@@ -145,10 +161,9 @@ import AppletCore
         response.items = try library.entries.filter {
           owner == "local" || belongs($0.package, owner: owner)
         }.map { entry in
-          let session = sessions.values.first {
-            $0.package.key == entry.id
-              && ["starting", "building", "running"].contains($0.state)
-          }
+          let session = preferredSession(sessions.values.filter {
+            $0.package.key == entry.id && (owner == "local" || $0.owner == owner)
+          })
           var item = AppletItem(
             path: entry.package.url.path, title: entry.title,
             runtime: entry.package.manifest.runtime, sessionID: session?.id,
@@ -212,6 +227,12 @@ import AppletCore
           guard owner == "local" || existing.owner == owner else {
             throw AppletError("This package is already running for another caller.")
           }
+          resolvedSession = existing
+          if request.operation == .open,
+             (request.testClock ?? false) != existing.testClock
+              || (request.mode == "headless") != (existing.dataRoot.lastPathComponent == "Testing") {
+            throw AppletError("The live session uses different test data or clock settings. Close it before opening another mode.", code: "session-mode-conflict")
+          }
           if request.mode == "foreground" { try await show(existing) }
           var response = status(existing)
           if existing.revision != package.revision {
@@ -226,16 +247,15 @@ import AppletCore
       }
       guard let session = find(request, owner: owner) else {
         if [.status, .logs].contains(request.operation), let id = request.sessionID,
-          let saved = try? Data(
-            contentsOf: library.root.appendingPathComponent(
-              "Sessions/\(id.uuidString).json")),
-          let record = try? JSONDecoder().decode(SessionRecord.self, from: saved),
+          let record = savedRecord(id),
           owner == "local" || record.owner == owner
         {
           var response = record.response
           if ["running", "building", "starting"].contains(response.state ?? "") {
             response.state = "interrupted"
           }
+          response.viewAvailable = false
+          response.rendering = nil
           if request.operation == .logs {
             let (bytes, next) = try AppletLog(
               url: library.root.appendingPathComponent("Logs/\(id.uuidString).jsonl")
@@ -246,8 +266,9 @@ import AppletCore
           }
           return response
         }
-        throw AppletError("Session not found. Use list, then --session UUID or --path.")
+        throw AppletError("Session not found. Use list, then --session UUID or --id.", code: "session-not-found")
       }
+      resolvedSession = session
       switch request.operation {
       case .status: return status(session)
       case .logs:
@@ -262,9 +283,12 @@ import AppletCore
         objectWillChange.send()
         return status(session)
       case .restart:
-        session.stop()
         var start = request
-        start.mode = request.mode ?? session.mode
+        start.mode = request.mode ?? (session.dataRoot.lastPathComponent == "Testing" ? "headless" : session.mode)
+        start.testClock = request.testClock ?? (start.mode == "headless" && session.testClock)
+        try validateClock(start, package: session.package)
+        session.stop()
+        _ = status(session)
         start.width = request.width ?? Int(session.size.width)
         start.height = request.height ?? Int(session.size.height)
         return try await launch(
@@ -277,7 +301,7 @@ import AppletCore
         if let native = session.native {
           _ = try await native.perform(AppletRequest(.hide))
         }
-        session.mode = "background"
+        session.mode = session.dataRoot.lastPathComponent == "Testing" ? "headless" : "background"
         return status(session)
       case .screenshot, .present:
         let image = try await session.snapshot()
@@ -320,9 +344,12 @@ import AppletCore
         response.artifactID = register(recording.url, owner: owner)
         response.mediaType = "video/mp4"
         return response
-      case .inspect, .eval, .click, .type, .key, .scroll, .drag:
+      case .inspect, .eval, .click, .type, .key, .scroll, .drag, .step:
         guard session.state == "running" else {
-          throw AppletError("Session is \(session.state). Restart it first.")
+          throw AppletError("Session \(session.id) (\(session.mode)) is \(session.state).", code: "session-not-running")
+        }
+        if request.operation == .step, !session.testClock {
+          throw AppletError("step requires an HTML session opened with --mode headless --test-clock.", code: "unsupported-operation")
         }
         let result: String
         if let web = session.web {
@@ -337,7 +364,16 @@ import AppletCore
         return response
       default: throw AppletError("Operation is not valid for this session.")
       }
-    } catch { return AppletResponse(error: error.localizedDescription) }
+    } catch {
+      var response = resolvedSession.map(status) ?? AppletResponse()
+      response.error = error.localizedDescription
+      response.errorCode = (error as? AppletError)?.code
+      return response
+    }
+  }
+  private func savedRecord(_ id: UUID) -> SessionRecord? {
+    guard let data = try? Data(contentsOf: library.root.appendingPathComponent("Sessions/\(id.uuidString).json")) else { return nil }
+    return try? JSONDecoder().decode(SessionRecord.self, from: data)
   }
   private func ownerKey(_ owner: String) -> String { NoodletPackage.digest(Data(owner.utf8)) }
   private func packageInfo(_ package: NoodletPackage) throws -> AppletResponse {
@@ -361,20 +397,33 @@ import AppletCore
     if let path = request.path {
       let url = URL(fileURLWithPath: origins[owner + "\0" + path] ?? path)
         .resolvingSymlinksInPath().standardizedFileURL
-      return sessions.values.filter {
+      return preferredSession(sessions.values.filter {
         (owner == "local" || $0.owner == owner) && $0.package.url == url
-      }.sorted { $0.state == "running" && $1.state != "running" }.first
+      })
     }
     return nil
+  }
+  private func preferredSession(_ candidates: [AppletSession]) -> AppletSession? {
+    candidates.sorted {
+      if $0.isActive != $1.isActive { return $0.isActive }
+      if $0.createdAt != $1.createdAt { return $0.createdAt > $1.createdAt }
+      return $0.id.uuidString > $1.id.uuidString
+    }.first
+  }
+  private func validateClock(_ request: AppletRequest, package: NoodletPackage) throws {
+    if request.testClock == true, request.mode != "headless" || package.manifest.runtime != "html" {
+      throw AppletError("--test-clock requires HTML and --mode headless.", code: "unsupported-operation")
+    }
   }
   private func launch(_ package: NoodletPackage, request: AppletRequest, owner: String)
     async throws -> AppletResponse
   {
+    try validateClock(request, package: package)
     let session = try AppletSession(
       package: package, owner: owner, mode: request.mode ?? "background",
       size: (package.manifest.window ?? NoodletWindowOptions()).size(
         width: request.width, height: request.height),
-      root: library.root)
+      root: library.root, testClock: request.testClock ?? false)
     sessions[session.id] = session
     session.log.append(
       "lifecycle",
@@ -396,7 +445,8 @@ import AppletCore
         let runner = WebRunner(
           package: package, dataRoot: session.dataRoot, log: session.log,
           size: session.size, storeID: storeID,
-          rememberFrame: session.mode != "headless" && request.width == nil && request.height == nil
+          rememberFrame: session.mode != "headless" && request.width == nil && request.height == nil,
+          testClock: session.testClock
         )
         runner.failed = { [weak self, weak session] message in
           guard let session else { return }
@@ -481,6 +531,9 @@ import AppletCore
     }
   }
   private func show(_ session: AppletSession) async throws {
+    guard session.state == "running" else {
+      throw AppletError("Session \(session.id) (\(session.mode)) is \(session.state).", code: "session-not-running")
+    }
     if let web = session.web { web.show() }
     if let native = session.native { _ = try await native.perform(AppletRequest(.show)) }
     session.mode = "foreground"
@@ -489,6 +542,11 @@ import AppletCore
     var response = (try? packageInfo(session.package)) ?? AppletResponse()
     response.sessionID = session.id
     response.state = session.state
+    response.mode = session.mode
+    response.dataScope = session.dataRoot.lastPathComponent == "Testing" ? "test" : "user"
+    response.testClock = session.testClock
+    response.viewAvailable = session.state == "running" && (session.web != nil || session.native != nil)
+    response.rendering = session.web?.rendering
     response.path = session.package.url.path
     response.capabilities =
       session.package.manifest.runtime == "html"
@@ -496,6 +554,7 @@ import AppletCore
         "inspect", "eval", "synthetic-input", "screenshot", "silent-video", "storage",
         "foreground-file-dialogs",
       ] : ["inspect", "native-input", "view-screenshot", "silent-video", "data-directory"]
+    if session.testClock { response.capabilities?.append("step") }
     let directory = library.root.appendingPathComponent("Sessions")
     try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     if let data = try? JSONEncoder().encode(

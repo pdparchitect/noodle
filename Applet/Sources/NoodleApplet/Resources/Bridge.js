@@ -71,8 +71,9 @@
     files:Object.freeze({openText:()=>send({operation:'openFile'}),saveText:(name,text)=>send({operation:'saveFile',name,text})})
   }), writable:false});
   window.__noodletControl = async r => {
+    if(r.operation==='step') return await window.__noodletAnimation.step(r.frames ?? 1);
     const rect = e => {const b=e.getBoundingClientRect();return {x:b.x,y:b.y,width:b.width,height:b.height};};
-    if(r.operation==='inspect') return {title:document.title,url:location.href,viewport:{width:innerWidth,height:innerHeight},text:document.body?.innerText.slice(0,20000),elements:[...document.querySelectorAll('button,input,textarea,select,a,[role],[contenteditable],canvas')].slice(0,500).map((e,i)=>{e.dataset.noodletId=String(i);return {target:`[data-noodlet-id="${i}"]`,tag:e.tagName,role:e.getAttribute('role'),name:e.getAttribute('aria-label')||e.getAttribute('placeholder')||e.innerText?.slice(0,160),value:e.value,disabled:!!e.disabled,rect:rect(e)};})};
+    if(r.operation==='inspect') return {title:document.title,url:location.href,rendering:window.__noodletAnimation.state(),viewport:{width:innerWidth,height:innerHeight},text:document.body?.innerText.slice(0,20000),elements:[...document.querySelectorAll('button,input,textarea,select,a,[role],[contenteditable],canvas')].slice(0,500).map((e,i)=>{e.dataset.noodletId=String(i);return {target:`[data-noodlet-id="${i}"]`,tag:e.tagName,role:e.getAttribute('role'),name:e.getAttribute('aria-label')||e.getAttribute('placeholder')||e.innerText?.slice(0,160),value:e.value,disabled:!!e.disabled,rect:rect(e)};})};
     const e = r.target ? document.querySelector(r.target) : (r.x!==undefined && r.y!==undefined ? document.elementFromPoint(r.x,r.y) : document.activeElement);
     if(!e) throw Error('No element matches the target. Inspect the current page first.');
     const b=e.getBoundingClientRect(), x=r.x??b.x+b.width/2,y=r.y??b.y+b.height/2;

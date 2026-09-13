@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Resolve package links to active sessions before historical sessions, choose the newest stopped session consistently, and preserve session identity and mode in failed-operation responses. Allow explicit session targeting constrained to the authorized package.
+
+### Added
+
+- Report session mode, data scope, view availability, and HTML visibility/animation observations. Add opt-in headless HTML test clocks and bounded `step --frames` for synthetic offscreen RAF rendering without changing normal game visibility or user data.
+
 ### Changed
 
 - Publish `Noodle-Applet-arm64.zip` and its checksum under stable filenames so download links follow the current release.

@@ -108,7 +108,17 @@ private struct AppletMenu: View {
   func applicationDidFinishLaunching(_ notification: Notification) {
     let defaultLaunch = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true
     launchLog.notice("Provider launched; default app launch: \(defaultLaunch)")
-    if CommandLine.arguments.contains("--background-launch-ui-test") {
+    if CommandLine.arguments.contains("--rendering-test") {
+      Task { @MainActor in
+        do {
+          try await AppletRenderingTest.run()
+          NSApp.terminate(nil)
+        } catch {
+          fputs("APPLET RENDERING TEST FAILED: \(error.localizedDescription)\n", stderr)
+          exit(1)
+        }
+      }
+    } else if CommandLine.arguments.contains("--background-launch-ui-test") {
       Task { @MainActor in
         do {
           try await AppletUITest.runBackgroundLaunch()

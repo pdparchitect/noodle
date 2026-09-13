@@ -170,7 +170,8 @@ import Observation
                         defer { self.inFlight[agent.id, default: 1] -= 1 }
                         let response: AppletResponse
                         do { response = try await self.perform(envelope, agent: agent) } catch {
-                            response = AppletResponse(error: error.localizedDescription)
+                            response = AppletResponse(error: error.localizedDescription,
+                                errorCode: (error as? AppletError)?.code)
                         }
                         try? MCPBridgeFiles.write(response, to: output, workspace: self.repository.directory(for: agent))
                     }
@@ -192,7 +193,8 @@ import Observation
         request.owner = agent.id.uuidString.lowercased()
         try request.validate()
         if let conversation = envelope.conversationID {
-            _ = try repository.participantRoster(for: agent.id, conversationID: conversation)
+            do { _ = try repository.participantRoster(for: agent.id, conversationID: conversation) }
+            catch { throw AppletError(error.localizedDescription, code: "session-unavailable") }
             if request.operation == .artifact {
                 guard let id = request.artifactID, let grant = sharedArtifacts[id],
                       grant.agent == agent.id, grant.conversation == conversation,
@@ -203,14 +205,14 @@ import Observation
             } else if request.operation != .present {
                 guard let id = request.noodletID, request.files == nil,
                       ![.build, .validate, .list, .artifact].contains(request.operation) else {
-                    throw AppletError("Use --id with a shared noodlet link and --conversation.")
+                    throw AppletError("Use --id with a shared noodlet link and --conversation; add --session to target its exact session.", code: "session-unavailable")
                 }
                 let messages = try repository.loadMessages(conversationID: conversation)
                 let sent = Set(messages.flatMap(\.attachments))
                 guard try repository.loadAttachments(conversationID: conversation).contains(where: {
                     sent.contains($0.id) && $0.url.flatMap(NoodletLink.id) == id
-                }) else { throw AppletError("This noodlet has not been shared with the conversation.") }
-                // The signed broker authorizes the specific shared package, never a caller-supplied path/session.
+                }) else { throw AppletError("This noodlet has not been shared with the conversation.", code: "session-unavailable") }
+                // The signed broker authorizes the specific shared package, with any explicit session constrained to that package by Applet.
                 request.owner = "local"
             }
         }

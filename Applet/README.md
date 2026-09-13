@@ -26,6 +26,11 @@ through its shipped CLI. It checks interaction, persistence, captures, compiler
 diagnostics, native sandbox containment, and termination of blocked JavaScript.
 Temporary creations are removed; captures are saved under `.build/applet/smoke`.
 
+Run `'.build/Noodle Applet.app/Contents/MacOS/NoodleApplet' --rendering-test` for
+an isolated signed CLI fixture covering historical session selection, hidden
+visibility, synthetic frame stepping, Canvas/WebGL capture pixels, and test-data
+isolation. It uses its own runtime and socket without touching existing sessions.
+
 Building Noodle through `scripts/build-app.sh` also bundles the CLI and exposes the
 companion in Settings. Noodle installs the managed Applet skill for every bot only
 while the companion is installed. Startup, activation, and a five-second background
@@ -220,6 +225,11 @@ of the `.webloc` itself does not resolve the custom URL.
 Conversation participants use `--id URL --conversation CONVERSATION_UUID` with
 `info`, `open`, inspection, input, captures, or closing. The broker checks that
 the link was sent in that conversation and that the caller is a participant.
+Add `--session RETURNED_UUID` alongside the shared ID and conversation to target
+the exact session from `open`, including headless sessions. The session must belong
+to that package. A session UUID alone does not grant shared access. Without it,
+package lookup selects an active session first, otherwise the newest historical
+session. `list` shows only the caller’s own packages.
 It grants access to that specific creation, not another bot's workspace or source
 replacement. Links refer to this Mac's registry and are not portable copies.
 
@@ -306,3 +316,32 @@ arbitrary Metal, video, and embedded web surfaces can need a specific renderer.
 Recordings are silent H.264 MP4 at up to 12 fps, bounded to 60 seconds. They capture
 only noodlet content and do not request Screen Recording or Accessibility access.
 For hidden SpriteKit scenes, capture advances the scene's `update` callback.
+
+### Hidden HTML animation checks
+
+Background and headless pages may remain hidden and WebKit may suspend
+`requestAnimationFrame`; games can also intentionally pause on visibility loss.
+A running session or successful PNG does not prove that a Canvas/WebGL scene has
+rendered. Responses report `mode`, `dataScope`, `testClock`, `viewAvailable`, and
+page-reported `rendering` observations: document readiness, effective/native
+visibility, synthetic timing, observed RAF frame count and its last timestamp.
+Compare counts across commands and inspect captured pixels. Status uses the latest
+reported observations so blocked page JavaScript does not block status itself.
+
+For synthetic main-page animation tests, opt in explicitly:
+
+```sh
+noodlet open --path Game.noodlet --mode headless --test-clock
+noodlet step --session RETURNED_UUID --frames 60
+noodlet screenshot --session RETURNED_UUID --output frame.png
+noodlet close --session RETURNED_UUID
+```
+
+`step` advances RAF and `performance.now()` at 60 Hz, accepts 1–600 frames, and
+defaults to one frame. The page sees visible document state; diagnostics preserve
+the native visibility too. Each capture records the current frame without stepping.
+Date, timers, CSS animations, workers and media retain native timing, so this is
+not a full virtual browser clock or real-time gameplay/performance evidence.
+The clock is limited to HTML with headless test storage. Close the existing session
+before switching between normal/test storage or clocks. A headless restart retains
+the clock. Keep normal hidden-window pause behavior in shipping games.

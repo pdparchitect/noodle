@@ -73,4 +73,35 @@ final class PackageTests: XCTestCase {
         r.width = 8192
         XCTAssertThrowsError(try r.validate())
     }
+    func testSharedSessionAndTestClockProtocol() throws {
+        var request = AppletRequest(.status, sessionID: UUID())
+        request.noodletID = UUID()
+        XCTAssertNoThrow(try request.validate())
+        request.path = "/other.noodlet"
+        XCTAssertThrowsError(try request.validate())
+        request.path = nil; request.operation = .open
+        XCTAssertThrowsError(try request.validate())
+        request.sessionID = nil; request.testClock = true; request.mode = "background"
+        XCTAssertThrowsError(try request.validate())
+        request.mode = "headless"
+        XCTAssertNoThrow(try request.validate())
+        let decoded = try JSONDecoder().decode(AppletRequest.self, from: JSONEncoder().encode(request))
+        XCTAssertEqual(decoded.testClock, true)
+        request = AppletRequest(.step, sessionID: UUID())
+        for count in [0, 601, Int.max] { request.frames = count; XCTAssertThrowsError(try request.validate()) }
+        request.frames = 60
+        XCTAssertNoThrow(try request.validate())
+        XCTAssertEqual(try JSONDecoder().decode(AppletRequest.self, from: JSONEncoder().encode(request)).frames, 60)
+        let legacy = try JSONDecoder().decode(AppletResponse.self, from: Data("{\"version\":1,\"state\":\"running\"}".utf8))
+        XCTAssertNil(legacy.rendering)
+        XCTAssertNil(legacy.testClock)
+        let diagnostics = Data("""
+            {"version":1,"mode":"headless","dataScope":"test","testClock":true,"viewAvailable":true,
+             "errorCode":"session-not-running","rendering":{"readyState":"complete","visibilityState":"visible",
+             "nativeVisibilityState":"hidden","synthetic":true,"animationFrameCount":60,"lastAnimationFrameTimestamp":1000}}
+            """.utf8)
+        let response = try JSONDecoder().decode(AppletResponse.self, from: diagnostics)
+        let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(response)) as! NSDictionary
+        XCTAssertEqual(encoded, try JSONSerialization.jsonObject(with: diagnostics) as! NSDictionary)
+    }
 }

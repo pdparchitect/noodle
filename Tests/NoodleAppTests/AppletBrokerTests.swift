@@ -92,6 +92,23 @@ import XCTest
         var download = AppletRequest(.artifact); download.artifactID = artifact
         _ = try await invoke(download)
         do { _ = try await invoke(download, a); XCTFail("Another participant read an ungranted capture") } catch {}
+        var exact = AppletRequest(.status, sessionID: UUID()); exact.noodletID = id
+        _ = try await invoke(exact)
+        let targeted = await recorder.requests.last
+        XCTAssertEqual(targeted?.sessionID, exact.sessionID)
+        XCTAssertEqual(targeted?.noodletID, id)
+        XCTAssertEqual(targeted?.owner, "local")
+        exact.noodletID = nil
+        do { _ = try await invoke(exact); XCTFail("A session UUID alone granted shared access") } catch {}
+        exact.noodletID = id
+        do { _ = try await invoke(exact, outsider); XCTFail("Outsider targeted shared session") } catch {}
+        let wrongGroup = try repository.createGroup(named: "Unshared", participantIDs: [a.id, b.id], existingAgents: [a, b])
+        do {
+            _ = try await controller.perform(AppletAgentEnvelope(token: "test", request: exact, conversationID: wrongGroup.id), agent: b)
+            XCTFail("Wrong conversation granted session access")
+        } catch {}
+        _ = try repository.updateGroupParticipants(conversationID: group.id, participantIDs: [a.id], existingAgents: [a, b])
+        do { _ = try await invoke(exact); XCTFail("Removed participant retained session access") } catch {}
     }
 
     func testPresentAttachesLiveWeblocInsteadOfPackageOrScreenshot() async throws {

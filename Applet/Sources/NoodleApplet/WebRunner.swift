@@ -21,9 +21,10 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKScriptMessageHandlerWit
   private var dragMonitor: Any?
   private var dragEvent: NSEvent?
   private var cancellations: [UUID: () -> Void] = [:]
+  private(set) var rendering: AppletRenderingState?
   init(
     package: NoodletPackage, dataRoot: URL, log: AppletLog, size: CGSize, storeID: UUID,
-    rememberFrame: Bool = true
+    rememberFrame: Bool = true, testClock: Bool = false
   ) {
     self.package = package
     self.dataRoot = dataRoot
@@ -59,6 +60,16 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKScriptMessageHandlerWit
       self, contentWorld: .page, name: "noodle")
     let scriptURL = AppletResources.bundle.url(forResource: "Resources", withExtension: nil)!
       .appendingPathComponent("Bridge.js")
+    let animationURL = scriptURL.deletingLastPathComponent().appendingPathComponent("Animation.js")
+    let animation = (try? String(contentsOf: animationURL, encoding: .utf8)) ?? ""
+    config.userContentController.addUserScript(WKUserScript(
+      source: "(() => { const synthetic = \(testClock);\n\(animation)\n})();",
+      injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    if testClock {
+      log.append("rendering", "Synthetic test clock: step advances main-page RAF and performance.now at 60 Hz; visibility is overridden. Timers, Date, media, workers and CSS animations retain native timing.")
+    } else {
+      log.append("rendering", "Native WebKit timing. Hidden pages may suspend animation frames or pause their own simulation; a capture does not establish visual readiness.")
+    }
     let script = (try? String(contentsOf: scriptURL, encoding: .utf8)) ?? ""
     config.userContentController.addUserScript(
       WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: true))
@@ -162,6 +173,10 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKScriptMessageHandlerWit
     Task { @MainActor in
       do {
         switch operation {
+        case "rendering":
+          let data = try JSONSerialization.data(withJSONObject: body["state"] ?? [:])
+          rendering = try JSONDecoder().decode(AppletRenderingState.self, from: data)
+          replyHandler(true, nil)
         case "dragWindow":
           guard window.isVisible, let event = dragEvent, event.window === window,
             ProcessInfo.processInfo.systemUptime - event.timestamp < 1 else {

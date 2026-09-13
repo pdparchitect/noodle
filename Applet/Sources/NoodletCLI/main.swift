@@ -7,7 +7,8 @@ import Foundation
     static func main() async {
         do { try await run() } catch {
             let data =
-                (try? JSONEncoder().encode(AppletResponse(error: error.localizedDescription)))
+                (try? JSONEncoder().encode(AppletResponse(error: error.localizedDescription,
+                    errorCode: (error as? AppletError)?.code)))
                 ?? Data()
             try? FileHandle.standardOutput.write(contentsOf: data + Data([10]))
             exit(1)
@@ -33,11 +34,11 @@ import Foundation
         guard let operation = AppletOperation(rawValue: name) else {
             throw AppletError("Unknown command. Use --help.")
         }
-        let booleans: Set<String> = ["--follow", "--text-output"]
+        let booleans: Set<String> = ["--follow", "--text-output", "--test-clock"]
         let allowed: Set<String> = Set([
             "--path", "--session", "--output", "--file", "--text", "--target", "--mode", "--x",
             "--y", "--to-x", "--to-y", "--width", "--height", "--duration", "--offset",
-            "--artifact", "--conversation", "--socket", "--team", "--id",
+            "--artifact", "--conversation", "--socket", "--team", "--id", "--frames",
         ]).union(booleans)
         var flags: [String: String] = [:]
         while !args.isEmpty {
@@ -82,6 +83,8 @@ import Foundation
             URL(fileURLWithPath: $0).resolvingSymlinksInPath().standardizedFileURL.path
         }
         request.mode = flags["--mode"]
+        request.testClock = flags["--test-clock"].map { $0 == "true" }
+        request.frames = try integer("--frames")
         request.text = flags["--text"]
         request.target = flags["--target"]
         request.x = try number("--x")

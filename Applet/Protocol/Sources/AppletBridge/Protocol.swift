@@ -3,16 +3,18 @@ import Foundation
 public struct AppletError: Error, LocalizedError, Sendable {
     public let message: String
     public let unavailable: Bool
-    public init(_ message: String, unavailable: Bool = false) {
+    public let code: String?
+    public init(_ message: String, unavailable: Bool = false, code: String? = nil) {
         self.message = message
         self.unavailable = unavailable
+        self.code = code
     }
     public var errorDescription: String? { message }
 }
 
 public enum AppletOperation: String, Codable, CaseIterable, Sendable {
     case list, info, validate, build, open, status, logs, inspect, eval, click, type, key, scroll, drag
-    case screenshot
+    case screenshot, step
     case recordStart = "record-start"
     case recordStop = "record-stop"
     case show, hide, close, terminate, restart, artifact, present
@@ -40,6 +42,8 @@ public struct AppletRequest: Codable, Sendable {
     public var text: String?
     public var target: String?
     public var mode: String?
+    public var testClock: Bool?
+    public var frames: Int?
     public var x: Double?
     public var y: Double?
     public var toX: Double?
@@ -55,8 +59,20 @@ public struct AppletRequest: Codable, Sendable {
     }
     public func validate() throws {
         guard version == 1 else { throw AppletError("Unsupported Applet protocol version.") }
-        if noodletID != nil, path != nil || sessionID != nil || files != nil {
-            throw AppletError("Use --id alone, without --path, --session, or package files.")
+        if noodletID != nil, path != nil || files != nil {
+            throw AppletError("Use --id without --path or package files.")
+        }
+        if sessionID != nil, [.open, .build, .validate, .list].contains(operation) {
+            throw AppletError("This command does not accept --session.")
+        }
+        if testClock != nil, ![.open, .restart].contains(operation) {
+            throw AppletError("--test-clock is only valid with open or restart.")
+        }
+        if testClock == true, let mode, mode != "headless" {
+            throw AppletError("--test-clock requires --mode headless.")
+        }
+        if let frames, operation != .step || !(1...600).contains(frames) {
+            throw AppletError("--frames is only valid with step, from 1 to 600.")
         }
         if includePreview == true, operation != .info {
             throw AppletError("Preview access is only valid with info.")
@@ -99,6 +115,7 @@ public struct AppletRequest: Codable, Sendable {
 public struct AppletResponse: Codable, Sendable {
     public var version = 1
     public var error: String?
+    public var errorCode: String?
     public var sessionID: UUID?
     public var noodletID: UUID?
     public var url: URL?
@@ -106,6 +123,11 @@ public struct AppletResponse: Codable, Sendable {
     public var runtime: String?
     public var previewBookmark: Data?
     public var state: String?
+    public var mode: String?
+    public var dataScope: String?
+    public var testClock: Bool?
+    public var viewAvailable: Bool?
+    public var rendering: AppletRenderingState?
     public var path: String?
     public var text: String?
     public var value: String?
@@ -118,11 +140,24 @@ public struct AppletResponse: Codable, Sendable {
     public var height: Int?
     public var items: [AppletItem]?
     public var capabilities: [String]?
-    public init(error: String? = nil) { self.error = error }
+    public init(error: String? = nil, errorCode: String? = nil) {
+        self.error = error
+        self.errorCode = errorCode
+    }
     public func checked() throws -> Self {
-        if let error { throw AppletError(error) }
+        if let error { throw AppletError(error, code: errorCode) }
         return self
     }
+}
+
+/// Page-reported diagnostics, not proof of a painted Canvas/WebGL frame.
+public struct AppletRenderingState: Codable, Sendable {
+    public var readyState: String
+    public var visibilityState: String
+    public var nativeVisibilityState: String
+    public var synthetic: Bool
+    public var animationFrameCount: Int
+    public var lastAnimationFrameTimestamp: Double?
 }
 
 public struct AppletItem: Codable, Sendable, Identifiable {
