@@ -1,6 +1,32 @@
 import Foundation
 import NoodleCore
 
+/// A narrow transport boundary; the default implementation retains the signed
+/// helper and its distinct restricted/autonomous launch entrypoints.
+@MainActor protocol MuseRuntimeConnection: AnyObject {
+    var onData: ((Data, Bool) -> Void)? { get set }
+    var onExit: ((Int32) -> Void)? { get set }
+    var onFailure: ((String) -> Void)? { get set }
+    func startMuse(agentID: UUID, executablePath: String, modelIdentifier: String?, effortIdentifier: String?,
+                   extendedAccess: Bool, reply: @escaping (Int32, String?) -> Void)
+    func write(_ data: Data)
+    func invalidate()
+    func stop(reply: @escaping (Bool) -> Void)
+}
+
+extension ExtendedAgentConnection: MuseRuntimeConnection {
+    @MainActor func startMuse(agentID: UUID, executablePath: String, modelIdentifier: String?, effortIdentifier: String?,
+                             extendedAccess: Bool, reply: @escaping (Int32, String?) -> Void) {
+        if extendedAccess {
+            start(provider: .muse, agentID: agentID, executablePath: executablePath,
+                  modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier, reply: reply)
+        } else {
+            startRestrictedMuse(agentID: agentID, executablePath: executablePath,
+                                modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier, reply: reply)
+        }
+    }
+}
+
 /// Persistent MSP transport. Only Messenger creates chat messages; MSP events
 /// drive lifecycle and recovery, never a second copy of the assistant's output.
 @MainActor
@@ -20,7 +46,8 @@ final class MuseAgentProcess: AgentRuntimeProcess {
     private var steeringTimeout: Task<Void, Never>?
     private var earlyCompletions: [String: [String: Any]] = [:]
     private var approvalStages = Set<String>()
-    private var connection: ExtendedAgentConnection?
+    private let makeConnection: @MainActor () throws -> any MuseRuntimeConnection
+    private var connection: (any MuseRuntimeConnection)?
     private var running = false
     private var stopped = false
     private var paused = false
@@ -56,7 +83,9 @@ final class MuseAgentProcess: AgentRuntimeProcess {
          recoverInterruptedWork: Bool,
          onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void,
          onHeartbeat: @escaping @MainActor () -> Void,
-         onUnexpectedTermination: @escaping @MainActor (MuseAgentProcess, String, Bool) -> Void) {
+         onUnexpectedTermination: @escaping @MainActor (MuseAgentProcess, String, Bool) -> Void,
+         makeConnection: @escaping @MainActor () throws -> any MuseRuntimeConnection = { try ExtendedAgentConnection() }) {
+        self.makeConnection = makeConnection
         configuration = agent
         self.executableURL = executableURL
         self.workspaceURL = workspaceURL
@@ -96,7 +125,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
         update(.starting, "Starting Muse Code")
         trace.runtimeStarting()
         do {
-            let connection = try ExtendedAgentConnection()
+            let connection = try makeConnection()
             self.connection = connection
             connection.onData = { [weak self] data, isError in
                 Task { @MainActor in
@@ -123,18 +152,14 @@ final class MuseAgentProcess: AgentRuntimeProcess {
                     self.request(.initialize, method: "initialize", params: MuseProtocol.initialize)
                 }
             }
-            if extendedAccess {
-                connection.start(provider: .muse, agentID: configuration.id, executablePath: executableURL.path,
-                                 modelIdentifier: configuration.modelIdentifier, effortIdentifier: configuration.reasoningEffort, reply: started)
-            } else {
-                connection.startRestrictedMuse(agentID: configuration.id, executablePath: executableURL.path,
-                                               modelIdentifier: configuration.modelIdentifier, effortIdentifier: configuration.reasoningEffort, reply: started)
-            }
+            connection.startMuse(agentID: configuration.id, executablePath: executableURL.path,
+                                 modelIdentifier: configuration.modelIdentifier, effortIdentifier: configuration.reasoningEffort,
+                                 extendedAccess: extendedAccess, reply: started)
         } catch { terminated(error.localizedDescription) }
     }
 
     func stop(completion: @escaping (Bool) -> Void) {
-        stopped = true; running = false
+        stopped = true; running = false; paused = false
         startupTimeout?.cancel()
         trace.finish(.runtimeStopped)
         requests.removeAll(); earlyCompletions.removeAll()
