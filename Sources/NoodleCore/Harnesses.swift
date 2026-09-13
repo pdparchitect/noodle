@@ -22,7 +22,7 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
 
     public var displayName: String {
         switch self {
-        case .apple: return "Apple"
+        case .apple: return "Apple Intelligence"
         case .codex: return "Codex"
         case .claudeCode: return "Claude Code"
         case .fx: return "FX"

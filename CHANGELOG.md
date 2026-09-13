@@ -72,6 +72,8 @@ All notable changes to Noodle are documented here, following
 
 - Remove unused in-chat action approval and question forms, their pending-request queue, and sidebar indicators. Keep runtime permission replies tied to saved bot access, skip structured questions immediately without adding a replacement prompt.
 
+- Display the Apple harness as “Apple Intelligence” in settings and harness selections.
+
 - Store Backstory privately in `agent.json` and generate all of `AGENTS.md` without section markers, warning that edits are overwritten. Migrate existing backstories once before regeneration, preserve damaged sources for recovery, and register 0.14.0 as the migration milestone with conditional cleanup after it.
 
 - Publish Noodle as `Noodle-arm64.zip` with a matching checksum so the website can link directly to the latest download. Preserve existing migration-release downloads and defer website deployment until its download is available.
