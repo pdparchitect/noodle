@@ -1,7 +1,42 @@
 import XCTest
+import Darwin
 @testable import NoodleCore
 
 final class WorkspaceMailboxTests: XCTestCase {
+    func testTraversalAndInvalidNamesCannotReachOutsideMailbox() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let folder = try WorkspaceMailbox(workspace: root, path: "own", create: true)
+        try Data("private".utf8).write(to: root.appendingPathComponent("private"))
+        for path in ["../outside", "/outside", "own/../outside", "own/./outside", "own/\0outside"] {
+            XCTAssertThrowsError(try WorkspaceMailbox(workspace: root, path: path, create: true), path)
+        }
+        for name in ["", ".", "..", "../private", "/private", "nested/private", "private\0ignored", String(repeating: "x", count: 256)] {
+            XCTAssertThrowsError(try folder.read(name, limit: 100), name)
+            XCTAssertThrowsError(try folder.writeData(Data("overwrite".utf8), named: name), name)
+            folder.remove(name)
+        }
+        XCTAssertEqual(try String(contentsOf: root.appendingPathComponent("private"), encoding: .utf8), "private")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("outside").path))
+    }
+
+    func testReadsRejectOversizedFilesDirectoriesAndNonblockingFIFOs() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let folder = try WorkspaceMailbox(workspace: root, path: "")
+        try folder.writeData(Data(repeating: 1, count: 8), named: "bounded")
+        XCTAssertEqual(try folder.read("bounded", limit: 8).count, 8)
+        XCTAssertThrowsError(try folder.read("bounded", limit: 7))
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("directory"), withIntermediateDirectories: false)
+        XCTAssertThrowsError(try folder.read("directory", limit: 100))
+        XCTAssertEqual(mkfifo(root.appendingPathComponent("pipe").path, 0o600), 0)
+        // No writer: a blocking open would hang the suite instead of rejecting
+        // the special file. O_NONBLOCK and the regular-file check are required.
+        XCTAssertThrowsError(try folder.read("pipe", limit: 100))
+    }
+
     func testRetainedDirectoryCannotBeRedirectedAfterOpen() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

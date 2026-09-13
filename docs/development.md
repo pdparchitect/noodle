@@ -51,10 +51,13 @@ test reports. Add user-visible changes to the appropriate Unreleased changelog.
 
 ## Coverage
 
-Run the Swift suite with coverage and generate a source-only report:
+Run the same Noodle checks as CI, with no harness accounts or signing certificate:
 
 ```sh
-swift test --disable-sandbox --enable-code-coverage
+zsh Tests/build-sandbox-cli-fixture.sh
+zsh Tests/message-delivery.sh
+NOODLE_TEST_CLI_APPLICATION="$PWD/.build/Sandbox CLI Tests.app" \
+  swift test --disable-sandbox --enable-code-coverage
 python3 scripts/coverage-report.py \
   --input "$(swift test --disable-sandbox --show-codecov-path)" \
   --output .build/coverage/noodle
@@ -65,7 +68,13 @@ The directory also contains a complete file summary and the original SwiftPM
 JSON export. To compare against a saved report, pass
 `--baseline /path/to/previous/summary.json`; changes are percentage points.
 
-Each Noodle CI test job, including pull requests, publishes the summary and a
+The `Validate and release versions` workflow runs the Noodle, Computer, Applet,
+and shared bridge suites on every pull request, push to `main`, and manual run,
+even when no version changes. Its macOS 26 runners execute real Seatbelt sandbox
+processes; `--disable-sandbox` disables SwiftPM's build sandbox, not the sandbox
+profiles exercised by the tests. Version selection still controls release jobs.
+
+Each Noodle CI test job publishes the summary and a
 `noodle-coverage` artifact retained for 30 days. Coverage counts root source
 modules linked into the test bundle, including app code pulled in by integration
 tests, and excludes test code and dependencies. Separate native fixtures do not
@@ -113,14 +122,27 @@ real Muse adapter and production sandbox profile. `NOODLE_TEST_MUSE_MODEL` can
 select a model; otherwise Muse uses its default. The autonomous comparison is
 available with `NOODLE_TEST_MUSE_LIVE=1`.
 `MessengerBridgeTests`, `WorkspaceMailboxTests`, and `RestrictedHarnessStorageTests`
-exercise forged/expired/replayed tokens, membership checks, attachment copies,
-credential seeding and refresh preservation, and symlink/hardlink redirection.
+exercise forged/expired/replayed tokens, cross-bot token substitution, membership
+revocation, attachment copies, credential seeding and refresh preservation,
+symlink/hardlink redirection, path traversal, size limits, and special-file rejection.
 Computer broker tests exercise concurrent requests and revocation during transfers.
-`BridgeCLISandboxTests` runs the signed development bundle's MCP, Computer, and
-Applet helpers through real workspace mailboxes under the Apple profile, with
-networking and cross-sandbox signaling denied. Build the development app first;
-without its bundled helpers these three tests skip. The deterministic message
-fixture also checks recovery of an old Codex thread missing from private storage.
+`BridgeCLISandboxTests` runs the production Messenger, MCP, Computer, and Applet
+CLIs through real workspace mailboxes under the Apple profile, with networking
+and cross-sandbox signaling denied. CI builds and ad-hoc signs these four helpers
+first, then checks their signatures and exact JSON responses. A missing helper
+fails the suite when `CI=true` or `NOODLE_TEST_CLI_APPLICATION` is set. A plain local
+`swift test` uses the signed development app if present and otherwise skips these
+four tests; use the commands above for required coverage without a certificate.
+CI also runs the deterministic message-delivery fixture, including recovery of an
+old Codex thread missing from private storage.
+
+The account-free CI suite verifies containment and broker behavior. Installed
+native harness initialization tests skip when the relevant harness is absent;
+live provider requests and Apple Intelligence generation require the opt-ins
+above and are not CI guarantees. The CLI fixture does not launch the GUI, test
+Team ID authenticated XPC, or contact real MCP/Computer/Applet services. Release
+packaging separately verifies the signed app and helper identities. Passing these
+regressions is not an exhaustive security audit or proof against every escape.
 Release automation tests verify
 that signed update-feed entries retain the required migration chain.
 

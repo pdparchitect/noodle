@@ -97,23 +97,33 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(condition(applet['if'], values))
         self.assertFalse(condition(applet['if'], {**values, 'needs.tag.result': 'failure'}))
 
-    def test_product_selection_and_parallel_tests(self):
-        for selected, expected in [
-            (['noodle'], ['noodle', 'bridge']),
-            (['computer'], ['noodle', 'computer', 'bridge']),
-            (['applet'], ['noodle', 'applet', 'bridge']),
-            (['images'], []),
-            ([], []),
-        ]:
-            values = {**self.base(), **{f'needs.versions.outputs.{p}': str(p in selected).lower()
-                                      for p in ['noodle', 'computer', 'applet', 'images']}}
-            for product in ['noodle', 'computer', 'applet', 'bridge']:
-                job = self.jobs['test-' + product]
-                self.assertEqual(condition(job['if'], values), product in expected)
-                self.assertEqual(job['needs'], ['versions', 'checks'])
+    def test_all_suites_run_independently_of_version_changes(self):
+        # Every workflow trigger runs the tests. Release selection still gates
+        # preparation/publication, but must never suppress ordinary main CI.
+        for product in ['noodle', 'computer', 'applet', 'bridge']:
+            job = self.jobs['test-' + product]
+            self.assertNotIn('if', job)
+            self.assertEqual(job['needs'], ['versions', 'checks'])
+            self.assertEqual(job['runs-on'], 'macos-26')
         self.assertNotIn('test-computer', self.jobs['prepare-noodle']['needs'])
         self.assertEqual(self.jobs['prepare-images']['needs'], ['versions', 'checks'])
         self.assertNotIn('swift test', json.dumps(self.jobs['checks']))
+
+    def test_sandbox_helpers_and_adapter_recovery_are_required_before_coverage(self):
+        steps = self.jobs['test-noodle']['steps']
+        fixture = next(i for i, step in enumerate(steps)
+                       if 'Tests/build-sandbox-cli-fixture.sh' in step.get('run', ''))
+        delivery = next(i for i, step in enumerate(steps)
+                        if 'Tests/message-delivery.sh' in step.get('run', ''))
+        suite = next(i for i, step in enumerate(steps) if step.get('id') == 'tests')
+        self.assertLess(fixture, suite)
+        # The standalone swiftc fixture links uninstrumented SwiftPM objects.
+        self.assertLess(delivery, suite)
+        for index in [fixture, delivery, suite]:
+            self.assertFalse(steps[index].get('continue-on-error', False))
+            self.assertNotIn('if', steps[index])
+        self.assertEqual(steps[suite]['env']['NOODLE_TEST_CLI_APPLICATION'],
+                         '${{ github.workspace }}/.build/Sandbox CLI Tests.app')
 
     def test_selected_test_failures_block_tagging(self):
         for product in ['noodle', 'computer', 'applet', 'bridge']:

@@ -60,15 +60,20 @@ jobs:
 
   test-noodle:
     needs: [versions, checks]
-    if: github.event_name == 'pull_request' || needs.versions.outputs.noodle == 'true' || needs.versions.outputs.computer == 'true' || needs.versions.outputs.applet == 'true'
     runs-on: macos-26
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
         with:
           lfs: true
+      - name: Build sandbox CLI fixtures without signing credentials
+        run: zsh Tests/build-sandbox-cli-fixture.sh
+      - name: Test adapter delivery and private-session recovery
+        run: zsh Tests/message-delivery.sh
       - name: Test Noodle and Computer integration
         id: tests
+        env:
+          NOODLE_TEST_CLI_APPLICATION: ${{ github.workspace }}/.build/Sandbox CLI Tests.app
         run: swift test --disable-sandbox --enable-code-coverage
       - name: Summarize Noodle coverage
         if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
@@ -88,7 +93,6 @@ jobs:
 
   test-computer:
     needs: [versions, checks]
-    if: github.event_name == 'pull_request' || needs.versions.outputs.computer == 'true'
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -100,7 +104,6 @@ jobs:
 
   test-applet:
     needs: [versions, checks]
-    if: github.event_name == 'pull_request' || needs.versions.outputs.applet == 'true'
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -112,7 +115,6 @@ jobs:
 
   test-bridge:
     needs: [versions, checks]
-    if: github.event_name == 'pull_request' || needs.versions.outputs.noodle == 'true' || needs.versions.outputs.computer == 'true' || needs.versions.outputs.applet == 'true'
     runs-on: macos-26
     timeout-minutes: 10
     steps:

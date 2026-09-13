@@ -48,6 +48,37 @@ final class MessengerBridgeTests: XCTestCase {
         XCTAssertTrue(result.standardError.contains("bridge is unavailable"))
     }
 
+    func testMembershipRevocationTakesEffectWithoutRestartingBroker() throws {
+        let group = try repository.createGroup(named: "Shared", participantIDs: [agent.id, other.id], existingAgents: [agent, other])
+        XCTAssertEqual(try call(.send(conversationID: group.id, body: "before removal", attachmentURLs: [])).exitCode, 0)
+        _ = try repository.updateGroupParticipants(conversationID: group.id, participantIDs: [other.id], existingAgents: [agent, other])
+        XCTAssertNotEqual(try call(.listMessages(conversationID: group.id)).exitCode, 0)
+        XCTAssertNotEqual(try call(.listParticipants(conversationID: group.id)).exitCode, 0)
+        XCTAssertNotEqual(try call(.send(conversationID: group.id, body: "after removal", attachmentURLs: [])).exitCode, 0)
+        let deliveries = try decode(call(.getLatest(consumes: false, includesInlineImages: false)), as: [MessengerDelivery].self)
+        XCTAssertFalse(deliveries.contains { $0.message.conversationID == group.id })
+        XCTAssertFalse(try repository.loadMessages(conversationID: group.id).contains { $0.body == "after removal" })
+    }
+
+    func testAnotherBotsTokenCannotAuthorizeRequestsFromCallerWorkspace() throws {
+        let otherMailbox = try WorkspaceMailbox(workspace: repository.directory(for: other), path: MessengerBridgeClient.path)
+        let otherSession = try JSONDecoder().decode(MCPBridgeSession.self, from: otherMailbox.read("session.json", limit: 4096))
+        let ownMailbox = try WorkspaceMailbox(workspace: workspace, path: MessengerBridgeClient.path)
+        // Even if a foreign token were known, the broker binds it to its own
+        // workspace. Replacing the client session file cannot change identity.
+        try ownMailbox.write(otherSession, named: "session.json")
+        XCTAssertNotEqual(try call(.listMessages(conversationID: privateConversation.id)).exitCode, 0)
+        XCTAssertNotEqual(try call(.send(conversationID: privateConversation.id, body: "impersonated", attachmentURLs: [])).exitCode, 0)
+        XCTAssertFalse(try repository.loadMessages(conversationID: privateConversation.id).contains { $0.body == "impersonated" })
+    }
+
+    func testOversizedRequestIsRejectedBeforeCreatingMailboxRequest() throws {
+        XCTAssertThrowsError(try call(.send(conversationID: conversation.id,
+            body: String(repeating: "x", count: MessengerBridgeClient.maxRequestBytes), attachmentURLs: [])))
+        let mailbox = try WorkspaceMailbox(workspace: workspace, path: MessengerBridgeClient.path)
+        XCTAssertFalse(try mailbox.names().contains { $0.hasSuffix(".request") })
+    }
+
     func testAttachmentUploadAndInboxCopyStayInsideCallerWorkspace() throws {
         let source = workspace.appendingPathComponent("picture.txt")
         try Data("own attachment".utf8).write(to: source)
