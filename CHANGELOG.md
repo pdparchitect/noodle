@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-13
+
 ### Fixed
 
 - Run sandbox and broker regressions on ordinary CI pushes as well as pull requests and releases. Require freshly built, ad-hoc signed CLI fixtures without developer credentials, include adapter session recovery checks, and cover membership revocation, cross-bot tokens, and invalid mailbox inputs.
@@ -439,7 +441,8 @@ All notable changes to Noodle are documented here, following
 - Signed and notarized macOS packaging with a dedicated Developer ID identity.
 - Sandboxed messaging and explicit attachment paths for agent file access.
 
-[Unreleased]: https://github.com/pdparchitect/noodle/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/pdparchitect/noodle/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/pdparchitect/noodle/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/pdparchitect/noodle/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/pdparchitect/noodle/compare/v0.11.2...v0.12.0
 [0.9.0]: https://github.com/pdparchitect/noodle/compare/v0.8.0...v0.9.0

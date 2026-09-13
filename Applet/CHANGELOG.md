@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-13
+
 ### Fixed
 
 - Keep noodlet CLI request publication inside its workspace mailbox, and permit broker calls when the bot sandbox denies process signaling; a denied liveness probe does not mean Noodle has stopped.

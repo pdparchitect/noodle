@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.5.0] - 2026-09-13
+
 ### Changed
 
 - Simplify the stopped-computer message in Noodle's live display, removing the CLI command and computer ID.
