@@ -69,11 +69,22 @@ def check(image):
         send("unset PROMPT_COMMAND; PS1=$(printf '__PROMPT_%s__ ' READY)\r")
         expect(rb"__PROMPT_READY__")
         # Verify the passwd shell is selected when it is executable.
-        send("while IFS=: read -r n p u g c h s; do [ \"$u\" = 0 ] || continue; "
+        send("while IFS=: read -r n p u g c h s; do [ \"$u\" = \"$(id -u)\" ] || continue; "
              "printf '\\n__ACCOUNT_%s__\\n' \"$s\"; break; done < /etc/passwd\r")
         account = expect(rb"__ACCOUNT_/[^\r\n]*__")
         assert selected.removeprefix("__SHELL_") == account.removeprefix("__ACCOUNT_"), (selected, account)
         expect(rb"__PROMPT_READY__")
+
+        # The launcher must replace a stale HOME=/root with the selected account's
+        # home, while the image user can explicitly elevate when needed.
+        send("printf '\\n__IDENTITY_%s_%s__\\n' \"$(id -u)\" \"$HOME\"\r")
+        identity = expect(rb"__IDENTITY_[0-9]+_/[^\r\n]*__")
+        expect(rb"__PROMPT_READY__")
+        if "__IDENTITY_1000_" in identity:
+            assert identity == "__IDENTITY_1000_/home/agent__", identity
+            send("printf '\\n__SUDO_%s__\\n' \"$(sudo -n id -u)\"\r")
+            expect(rb"__SUDO_0__")
+            expect(rb"__PROMPT_READY__")
 
         send("printf '\\n__HISTORY_%s__\\n' OK\r")
         expect(rb"__HISTORY_OK__")

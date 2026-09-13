@@ -47,8 +47,18 @@ jobs:
           done
       - name: Verify interactive welcome in both images
         run: python3 Computer/Images/tests/welcome.py docker noodle-computer-shell-image:check noodle-computer-desktop-image:check
+      - name: Verify non-root defaults and explicit sudo in both images
+        run: |
+          set -eu
+          for kind in shell desktop; do
+            docker run --rm -i --network none --entrypoint /bin/sh "noodle-computer-$kind-image:check" < Computer/Images/tests/user.sh
+          done
       - name: Verify desktop wallpaper rendering
         run: docker run --rm -i --network none --entrypoint /bin/sh noodle-computer-desktop-image:check < Computer/Images/tests/desktop.sh
+      - name: Verify file helper account transition
+        run: python3 Computer/Images/tests/file-user.py docker noodle-computer-shell-image:check noodle-computer-desktop-image:check
+      - name: Verify visible browser automation and persistent sign-in
+        run: docker run --rm -i --user root --network none --entrypoint /bin/bash noodle-computer-desktop-image:check < Computer/Images/tests/browser.sh
       # Export the exact tested builds. Publication loads these; it never rebuilds.
       - name: Save tested images
         if: github.event_name != 'pull_request'

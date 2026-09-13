@@ -2,6 +2,12 @@
 set -eu
 test -x /bin/sh
 test -d /workspace
+id agent >/dev/null
+command -v sudo >/dev/null
+test "$(sudo -n -u agent id -u)" = 1000
+test "$(sudo -n -u agent sudo -n id -u)" = 0
+sudo -n -u agent test -w /workspace
+sudo -n -u agent test -w /home/agent
 case "${1:-}" in
   shell)
     test -f /etc/alpine-release
@@ -11,7 +17,10 @@ case "${1:-}" in
     ;;
   desktop)
     test -x /init
-    for program in Xvnc openbox picom feh kitty xterm openssl kasmvncpasswd; do command -v "$program" >/dev/null; done
+    for program in Xvnc openbox picom feh kitty xterm openssl kasmvncpasswd node chromium runuser flock; do command -v "$program" >/dev/null; done
+    test -x /usr/local/lib/noodle-chromium-base
+    test -x /etc/desktop/session.d/noodle-browser
+    node -e 'if (typeof require("/opt/noodle-browser").connect !== "function") process.exit(1)'
     test -x /etc/desktop/session.d/noodle-compositor
     grep -q '^Hidden=true$' /etc/xdg/autostart/picom.desktop
     grep -q '^corner-radius = 12;$' /etc/xdg/picom.conf

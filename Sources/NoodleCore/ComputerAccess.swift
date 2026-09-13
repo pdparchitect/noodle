@@ -74,6 +74,43 @@ public enum ComputerAgentSkill {
     For web apps, discover the computer's current IP using the guest's available
     tools and share a local URL with the server's port.
 
+    Current Shell and Desktop images run commands as the non-root `agent` account
+    with HOME=/home/agent. Use `sudo` for package installation and other
+    administrative work. Older/custom images use their configured account; check
+    `id` instead of assuming root. Files uploaded through Computer use that same
+    account. Existing root-owned files may need sudo to manage.
+
+    For website automation in a Desktop computer, use its visible Chromium
+    session. In the guest, check for `/opt/noodle-browser/index.cjs`; older images
+    need the user to choose Update in Computer, and Shell/custom images may not
+    provide this feature. The desktop opens Browser automatically. If the user
+    closed it, run `chromium` in a guest terminal to reopen the same profile.
+    Upload a .cjs script to /workspace and run it with the guest's `node`:
+    ```js
+    const { connect } = require('/opt/noodle-browser');
+    (async () => {
+      const browser = await connect();
+      try {
+        const pages = await browser.pages();
+        console.log(pages.map(page => page.url()));
+        // Select the intended tab by URL; use its existing signed-in context.
+      } finally {
+        await browser.disconnect();
+      }
+    })().catch(error => { console.error(error); process.exitCode = 1; });
+    ```
+    The bundled puppeteer-core connects to guest loopback port 9222, preserving
+    the visible viewport. Run scripts inside this computer, never against the
+    Mac's browser. Do not launch a headless browser, create an incognito context,
+    or call browser.close() for this workflow. The shared profile persists across
+    restarts; website sessions can still expire. All assigned agents share browser
+    tabs and logins, so coordinate their use and select tabs deliberately.
+    For sign-in, present the desktop using the command below and let the user
+    interact. Resume after the expected authenticated page appears or the user
+    replies; do not type while the user is signing in. Do not print cookies or
+    credentials into logs or conversation cards. If connect() fails, check that
+    Browser is open and report the error; do not silently start another browser.
+
     For terminal interaction run `present --terminal SESSION_ID
     --conversation UUID --message 'Please complete the sign-in in this terminal.'`.
     It sends a visual Computer card in that conversation. The user opens a live

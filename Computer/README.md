@@ -35,8 +35,15 @@ Closing a preview leaves the terminal running.
 
 ## Use the terminal
 
-The terminal uses the guest root account’s configured shell, with a fallback for
-minimal images. Commands come from the image and the packages you install in it.
+Shell and Desktop images use the non-root `agent` account, with passwordless
+`sudo` for administrative work (for example, `sudo apk add jq` in Shell).
+Terminals, agent commands, and file transfers follow the image's configured user;
+custom and older images may still select root. Choose an image Update to receive
+new image defaults after publication. Files previously created by root retain
+their ownership; use `sudo` when you need to manage them.
+
+The terminal uses that account’s configured shell, with a fallback for minimal
+images. Commands come from the image and the packages you install in it.
 
 **Command-K** clears earlier output while preserving the current input. You can
 also right-click and choose **Clear Terminal**. In full-screen applications, this

@@ -1,0 +1,10 @@
+{
+  "name": "noodle-desktop-browser",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Attach scripts to Noodle Computer's visible desktop browser",
+  "main": "index.cjs",
+  "dependencies": {
+    "puppeteer-core": "25.10.0"
+  }
+}

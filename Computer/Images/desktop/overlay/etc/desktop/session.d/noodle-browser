@@ -1,0 +1,3 @@
+#!/bin/sh
+# Runs inside the authenticated X11/D-Bus session, after the keyring is ready.
+exec chromium >>/var/log/launcher-desktop/browser.log 2>&1
