@@ -102,6 +102,7 @@ final class AgentRuntimeCoordinator {
     @ObservationIgnored private let sleep: @MainActor (Duration) async throws -> Void
     @ObservationIgnored private let makeProcess: @MainActor (AgentRuntimeLaunch) -> any AgentRuntimeProcess
     private var processes: [UUID: any AgentRuntimeProcess] = [:]
+    private var runtimeIDs: [UUID: UUID] = [:]
     private var capabilityProbe: CodexCapabilityProbe?
     private var fxCapabilityTask: Task<Void, Never>?
     private var grokCapabilityTask: Task<Void, Never>?
@@ -226,6 +227,7 @@ final class AgentRuntimeCoordinator {
             accessConfiguration.setExtended(false, for: agent.id)
             accessConfiguration.save(to: defaults)
         }
+        runtimeIDs[agent.id] = nil
         let old = processes.removeValue(forKey: agent.id)
         approvals.removeAll { $0.agentID == agent.id }
         snapshots[agent.id] = .init(agentID: agent.id, phase: .starting, detail: "Changing agent access…")
@@ -394,6 +396,7 @@ final class AgentRuntimeCoordinator {
         let trackedIDs = Set(processes.keys).union(restartTasks.keys).union(stabilityTasks.keys)
             .union(changingAccess).union(recoveryPending)
         for id in trackedIDs where !liveIDs.contains(id) {
+            runtimeIDs[id] = nil
             processes.removeValue(forKey: id)?.stop { _ in }
             cancelSupervision(for: id)
             changingAccess.remove(id)
@@ -530,16 +533,22 @@ final class AgentRuntimeCoordinator {
         }
 
         restartTasks.removeValue(forKey: agent.id)?.cancel()
+        let runtimeID = UUID()
+        runtimeIDs[agent.id] = runtimeID
         let process = makeProcess(AgentRuntimeLaunch(
             agent: agent, provider: installation.provider,
             executableURL: URL(fileURLWithPath: executablePath), workspaceURL: repository.directory(for: agent),
             extendedAccess: accessConfiguration.isExtended(for: agent),
             recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
-            onSnapshot: runtimeSnapshotHandler(for: agent.id),
-            onHeartbeat: { [weak self] in self?.recordHeartbeat(for: agent.id) },
+            onSnapshot: runtimeSnapshotHandler(for: agent.id, runtimeID: runtimeID),
+            onHeartbeat: { [weak self] in
+                guard let self, self.runtimeIDs[agent.id] == runtimeID else { return }
+                self.recordHeartbeat(for: agent.id)
+            },
             onApprovals: { [weak self] pending in
-                self?.approvals.removeAll { $0.agentID == agent.id }
-                self?.approvals.append(contentsOf: pending)
+                guard let self, self.runtimeIDs[agent.id] == runtimeID else { return }
+                self.approvals.removeAll { $0.agentID == agent.id }
+                self.approvals.append(contentsOf: pending.filter { $0.agentID == agent.id })
             },
             onUnexpectedTermination: { [weak self] terminated, detail, needsRecovery in
                 self?.runtimeTerminated(terminated, agent: agent, repository: repository,
@@ -559,7 +568,9 @@ final class AgentRuntimeCoordinator {
         cancelSupervision(for: agent.id)
         changingAccess.insert(agent.id)
         let lifecycle = lifecycleID
+        runtimeIDs[agent.id] = nil
         let old = processes.removeValue(forKey: agent.id)
+        approvals.removeAll { $0.agentID == agent.id }
         if resetThread {
             let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "") ?? .codex
             let state = repository.storage(for: agent.id).sessionState(provider: provider,
@@ -591,6 +602,7 @@ final class AgentRuntimeCoordinator {
     }
 
     func stop(agentID: UUID) {
+        runtimeIDs[agentID] = nil
         cancelSupervision(for: agentID)
         recoveryPending.remove(agentID)
         changingAccess.remove(agentID)
@@ -611,6 +623,7 @@ final class AgentRuntimeCoordinator {
         grokCapabilityTask?.cancel()
         isStoppingAll = true
         lifecycleID = UUID()
+        runtimeIDs.removeAll()
         changingAccess = []
         approvals = []
         capabilityProbe?.stop()
@@ -633,6 +646,8 @@ final class AgentRuntimeCoordinator {
         for agent in agents where installation(for: agent) != nil {
             if let process = processes[agent.id], process.isAlive { continue }
             if let process = processes.removeValue(forKey: agent.id) {
+                runtimeIDs[agent.id] = nil
+                approvals.removeAll { $0.agentID == agent.id }
                 if process.hasInterruptedWork {
                     recoveryPending.insert(agent.id)
                 }
@@ -659,6 +674,7 @@ final class AgentRuntimeCoordinator {
               let current = processes[agent.id],
               ObjectIdentifier(current) == ObjectIdentifier(terminated) else { return }
         processes.removeValue(forKey: agent.id)
+        runtimeIDs[agent.id] = nil
         approvals.removeAll { $0.agentID == agent.id }
         stabilityTasks.removeValue(forKey: agent.id)?.cancel()
         if needsRecovery { recoveryPending.insert(agent.id) }
@@ -709,13 +725,14 @@ final class AgentRuntimeCoordinator {
         restartAttempts.removeValue(forKey: agentID)
     }
 
-    private func runtimeSnapshotHandler(for agentID: UUID) -> @MainActor (AgentRuntimeSnapshot) -> Void {
+    private func runtimeSnapshotHandler(for agentID: UUID, runtimeID: UUID) -> @MainActor (AgentRuntimeSnapshot) -> Void {
         { [weak self] snapshot in
-            if self?.snapshots[snapshot.agentID]?.phase == .working, snapshot.phase == .ready {
-                self?.recordActivity(for: snapshot.agentID)
+            guard let self, self.runtimeIDs[agentID] == runtimeID, snapshot.agentID == agentID else { return }
+            if self.snapshots[agentID]?.phase == .working, snapshot.phase == .ready {
+                self.recordActivity(for: agentID)
             }
-            self?.snapshots[snapshot.agentID] = snapshot
-            if snapshot.phase == .ready { self?.markStable(agentID: agentID) }
+            self.snapshots[agentID] = snapshot
+            if snapshot.phase == .ready { self.markStable(agentID: agentID) }
         }
     }
 

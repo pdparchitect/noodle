@@ -14,6 +14,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Ignore status, approval, and heartbeat callbacks from retired runtimes, keeping restarted and removed bots isolated from late process events.
+
 - Cancel pending runtime recovery when a bot leaves the roster so delayed restarts cannot bring it back. Cover crash backoff, stable-runtime reset, wake recovery, and shutdown with controlled timers.
 
 - Pause Grok bots when their saved session cannot be found, show the storage problem and recovery action, and preserve the session reference and unfinished work instead of repeatedly restarting with a sign-in warning.
