@@ -800,6 +800,8 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private var turnIsActive = false
     private var activeTurnID: String?
     private var earlyTurnCompletion: [String: Any]?
+    private var earlyTurnError: [String: Any]?
+    private var turnErrorDetail: String?
     private var steeringNotificationID: UUID?
     private var steeringTimeout: Task<Void, Never>?
     private var notifications = PendingAgentNotification()
@@ -902,6 +904,8 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         turnIsActive = false
         activeTurnID = nil
         earlyTurnCompletion = nil
+        earlyTurnError = nil
+        turnErrorDetail = nil
         steeringNotificationID = nil
         steeringTimeout?.cancel()
         notifications.take()
@@ -1044,6 +1048,10 @@ final class CodexAgentProcess: AgentRuntimeProcess {
                 turnIsActive = true
                 update(.working, snapshot.detail)
                 if reason == .heartbeat { onHeartbeat() }
+                if let error = earlyTurnError {
+                    earlyTurnError = nil
+                    handle(error)
+                }
                 if let completion = earlyTurnCompletion {
                     earlyTurnCompletion = nil
                     handle(completion)
@@ -1062,6 +1070,36 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         }
 
         guard let method = message["method"] as? String else { return }
+        if method == "error" {
+            guard turnIsActive, let params = message["params"] as? [String: Any],
+                  params["threadId"] as? String == threadID,
+                  params["turnId"] is String,
+                  let error = params["error"] as? [String: Any],
+                  let willRetry = params["willRetry"] as? Bool else { return }
+            guard let activeTurnID else {
+                earlyTurnError = message
+                return
+            }
+            guard params["turnId"] as? String == activeTurnID else { return }
+            let detail = Self.turnErrorDescription(error, willRetry: willRetry)
+            if turnErrorDetail != detail { trace.record(willRetry ? .turnRetrying : .turnError) }
+            turnErrorDetail = detail
+            // A retry notification does not finish the turn. Keep its recovery
+            // marker and queued messages until Codex reports actual completion.
+            update(.failed, detail)
+            return
+        }
+        if ["item/started", "item/completed", "item/agentMessage/delta",
+            "item/reasoning/textDelta", "item/reasoning/summaryTextDelta"].contains(method),
+           turnIsActive, let activeTurnID, let params = message["params"] as? [String: Any],
+           params["threadId"] as? String == threadID, params["turnId"] as? String == activeTurnID {
+            trace.outputObserved()
+            if turnErrorDetail != nil {
+                turnErrorDetail = nil
+                update(.working, "Codex is responding again")
+                sendPendingNotificationIfPossible()
+            }
+        }
         if method == "item/started", let params = message["params"] as? [String: Any],
            let item = params["item"] as? [String: Any], let id = item["id"] as? String,
            ["commandExecution", "fileChange"].contains(item["type"] as? String ?? "") {
@@ -1098,6 +1136,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             onApprovals([])
             turnIsActive = false
             self.activeTurnID = nil
+            turnErrorDetail = nil
             let params = message["params"] as? [String: Any]
             let turn = params?["turn"] as? [String: Any]
             let status = turn?["status"] as? String
@@ -1132,6 +1171,26 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         } catch {
             finishOpeningThread()
         }
+    }
+
+    private static func turnErrorDescription(_ error: [String: Any], willRetry: Bool) -> String {
+        let info = error["codexErrorInfo"]
+        let variants = info as? [String: Any] ?? [:]
+        let summary: String
+        if ["httpConnectionFailed", "responseStreamConnectionFailed", "responseStreamDisconnected",
+            "responseTooManyFailedAttempts"].contains(where: { variants[$0] != nil }) {
+            summary = "Codex could not maintain its connection to the model service."
+        } else {
+            summary = switch info as? String {
+            case "unauthorized": "Codex sign-in was rejected."
+            case "usageLimitExceeded", "sessionBudgetExceeded": "Codex reached its usage limit."
+            case "rateLimitExceeded", "serverOverloaded": "The Codex model service is busy."
+            case "contextWindowExceeded": "The Codex conversation exceeded its context limit."
+            case "sandboxError": "Codex reported a sandbox error."
+            default: "Codex reported a turn error."
+            }
+        }
+        return summary + (willRetry ? " Retrying automatically; use Kick to restart if it persists." : " Use Kick to retry.")
     }
 
     private func finishOpeningThread() {
@@ -1199,6 +1258,8 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         guard let threadID else { return }
         activeTurnID = nil
         earlyTurnCompletion = nil
+        earlyTurnError = nil
+        turnErrorDetail = nil
         trace.begin(reason: reason)
         let policy: [String: Any] = extendedAccess ? [
             "type": "workspaceWrite",
