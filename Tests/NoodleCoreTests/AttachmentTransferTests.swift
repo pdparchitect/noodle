@@ -53,6 +53,69 @@ final class AttachmentTransferTests: XCTestCase {
         await assertUnsupported(NSItemProvider())
     }
 
+    func testDroppedDocumentsLoadFromDataAndFileRepresentations() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("AttachmentTransferTests-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cases: [(String, UTType)] = [
+            ("README.md", UTType(filenameExtension: "md")!),
+            ("Notes.txt", .plainText), ("Page.html", .html),
+            ("Script.swift", .swiftSource), ("Settings.json", .json),
+            ("Unknown.custom-extension", .data), ("LICENSE", .data)
+        ]
+        for (filename, type) in cases {
+            let bytes = Data("Original bytes for \(filename)\n".utf8)
+            let url = root.appendingPathComponent(filename)
+            try bytes.write(to: url)
+            for fileRepresentation in [false, true] {
+                let provider = NSItemProvider()
+                provider.suggestedName = filename
+                if fileRepresentation {
+                    provider.registerFileRepresentation(forTypeIdentifier: type.identifier,
+                        fileOptions: [], visibility: .all) { completion in
+                        completion(url, false, nil)
+                        return nil
+                    }
+                } else {
+                    register(type, data: bytes, on: provider)
+                }
+                guard case .data(let received, let name, let mediaType) = try await AttachmentTransfer.load(provider, context: .drop) else {
+                    return XCTFail("Expected document bytes for \(filename)")
+                }
+                XCTAssertEqual(received, bytes)
+                XCTAssertEqual(name, filename)
+                XCTAssertEqual(mediaType, type.preferredMIMEType ?? "application/octet-stream")
+            }
+        }
+    }
+
+    func testDroppedFileURLWinsOverTextRepresentationForEveryFileExtension() async throws {
+        for filename in ["README.md", "Notes.txt", "data.unknown", "LICENSE"] {
+            let url = URL(fileURLWithPath: "/tmp/\(filename)")
+            let provider = NSItemProvider(object: url as NSURL)
+            register(.plainText, data: Data("alternative text".utf8), on: provider)
+            for context in [AttachmentTransfer.Context.drop, .paste] {
+                guard case .file(let received) = try await AttachmentTransfer.load(provider, context: context) else {
+                    return XCTFail("Expected the original file URL")
+                }
+                XCTAssertEqual(received, url.standardizedFileURL)
+            }
+        }
+    }
+
+    func testDroppedFileURLsLoadFromPasteboardRepresentations() async throws {
+        let url = URL(fileURLWithPath: "/tmp/Notes with spaces.txt")
+        let dataProvider = NSItemProvider()
+        register(.fileURL, data: Data(url.absoluteString.utf8), on: dataProvider)
+        let itemProvider = NSItemProvider(item: url as NSURL, typeIdentifier: UTType.fileURL.identifier)
+        for provider in [dataProvider, itemProvider] {
+            guard case .file(let received) = try await AttachmentTransfer.load(provider, context: .drop) else {
+                return XCTFail("Expected a local file URL")
+            }
+            XCTAssertEqual(received, url.standardizedFileURL)
+        }
+    }
+
     func testImageIsSelectedWhenClipboardAlsoOffersTextAndHTML() async throws {
         let provider = NSItemProvider()
         for type in [UTType.html, .plainText, .png] {
@@ -63,6 +126,16 @@ final class AttachmentTransferTests: XCTestCase {
         }
         XCTAssertEqual(bytes, Data(UTType.png.identifier.utf8))
         XCTAssertEqual(mediaType, "image/png")
+    }
+
+    func testDroppedBinaryDataWinsOverAlternativeText() async throws {
+        let provider = NSItemProvider()
+        register(.plainText, data: Data("description".utf8), on: provider)
+        register(.data, data: Data([0, 255, 17]), on: provider)
+        guard case .data(let bytes, _, _) = try await AttachmentTransfer.load(provider, context: .drop) else {
+            return XCTFail("Expected the file bytes")
+        }
+        XCTAssertEqual(bytes, Data([0, 255, 17]))
     }
 
     func testProviderFailuresAreReportedInsteadOfCreatingEmptyAttachments() async {

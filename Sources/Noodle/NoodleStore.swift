@@ -608,12 +608,13 @@ final class NoodleStore {
         importAttachments(from: providers, into: conversationID)
     }
 
-    func importAttachments(from providers: [NSItemProvider], into conversationID: UUID) {
+    func importAttachments(from providers: [NSItemProvider], into conversationID: UUID,
+                           context: AttachmentTransfer.Context = .drop) {
         Task {
             var firstError: Error?
             for provider in providers {
                 do {
-                    let payload = try await AttachmentTransfer.load(provider)
+                    let payload = try await AttachmentTransfer.load(provider, context: context)
                     guard conversations.contains(where: { $0.id == conversationID }) else { return }
                     switch payload {
                     case .file(let url):

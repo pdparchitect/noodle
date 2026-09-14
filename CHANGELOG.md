@@ -16,6 +16,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Accept Markdown, text, source code, and other file types dropped into conversations, including directly onto the message input.
 - Refocus the chat input after saving a text or region annotation in the conversation window, ready to submit the draft.
 
 ## [0.15.0] - 2026-09-14

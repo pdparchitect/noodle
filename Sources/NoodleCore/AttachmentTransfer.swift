@@ -22,6 +22,11 @@ public enum AttachmentTransferError: LocalizedError {
 }
 
 public enum AttachmentTransfer {
+    public enum Context: Sendable {
+        case paste
+        case drop
+    }
+
     public static func photoPayload(_ data: Data) throws -> AttachmentTransferPayload {
         guard data.count <= 50 * 1024 * 1024,
               let source = CGImageSourceCreateWithData(data as CFData, nil),
@@ -54,14 +59,14 @@ public enum AttachmentTransfer {
         .archive
     ]
 
-    public static func load(_ provider: NSItemProvider) async throws -> AttachmentTransferPayload {
+    public static func load(_ provider: NSItemProvider, context: Context = .paste) async throws -> AttachmentTransferPayload {
         if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier),
            let url = try? await loadURL(from: provider),
            url.isFileURL {
             return .file(url.standardizedFileURL)
         }
 
-        if let contentType = preferredDataType(from: provider) {
+        if let contentType = preferredDataType(from: provider, context: context) {
             let data = try await loadData(from: provider, contentType: contentType)
             return .data(
                 data,
@@ -81,14 +86,17 @@ public enum AttachmentTransfer {
         throw AttachmentTransferError.unsupportedItem
     }
 
-    private static func preferredDataType(from provider: NSItemProvider) -> UTType? {
-        provider.registeredTypeIdentifiers
+    private static func preferredDataType(from provider: NSItemProvider, context: Context) -> UTType? {
+        // Drops may provide document bytes without a file URL, including text,
+        // Markdown, source code, and HTML. Clipboard text still belongs in the
+        // composer; a browser URL should still win over its text/HTML fallback.
+        let includesText = context == .drop && !provider.hasItemConformingToTypeIdentifier(UTType.url.identifier)
+        return provider.registeredTypeIdentifiers
             .compactMap(UTType.init)
             .filter { contentType in
                 !contentType.conforms(to: .fileURL) &&
                     !contentType.conforms(to: .url) &&
-                    !contentType.conforms(to: .text) &&
-                    !contentType.conforms(to: .html) &&
+                    (includesText || !contentType.conforms(to: .text)) &&
                     !contentType.conforms(to: .directory) &&
                     contentType.conforms(to: .data)
             }
@@ -103,6 +111,7 @@ public enum AttachmentTransfer {
         if contentType.conforms(to: .movie) { return 4 }
         if contentType.conforms(to: .audio) { return 5 }
         if contentType.conforms(to: .archive) { return 6 }
+        if contentType.conforms(to: .text) { return 8 }
         return 7
     }
 

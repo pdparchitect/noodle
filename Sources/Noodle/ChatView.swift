@@ -114,7 +114,7 @@ struct ChatView: View {
                 }
             }
             .onPasteCommand(of: AttachmentTransfer.pasteContentTypes) { providers in
-                store.importAttachments(from: providers, into: conversation.id)
+                store.importAttachments(from: providers, into: conversation.id, context: .paste)
             }
             .onChange(of: conversation.id) { _, _ in
                 attachmentOpenTask?.cancel()
@@ -339,7 +339,10 @@ struct ChatView: View {
                 completion: nameCompletion,
                 submit: { store.sendDraft(to: conversation.id) },
                 focusSidebar: focusSidebar,
-                pasteAttachments: { store.importAttachmentsFromPasteboard(into: conversation.id) }
+                pasteAttachments: { store.importAttachmentsFromPasteboard(into: conversation.id) },
+                dropFiles: { urls in
+                    urls.forEach { store.importAttachment(from: $0, into: conversation.id) }
+                }
             )
             .padding(.leading, 12)
             .padding(.trailing, composerSendControlWidth + 14 + (microphoneAction == nil ? 0 : 31))

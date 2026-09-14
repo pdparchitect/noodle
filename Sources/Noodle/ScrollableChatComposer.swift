@@ -16,6 +16,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
     let submit: () -> Void
     var focusSidebar: (() -> Void)? = nil
     var pasteAttachments: (() -> Bool)? = nil
+    var dropFiles: (([URL]) -> Void)? = nil
     @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showDescriptions = true
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -32,6 +33,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
     func updateNSView(_ view: ComposerScrollView, context: Context) {
         context.coordinator.parent = self
         view.editor.pasteAttachments = pasteAttachments
+        view.editor.dropFiles = dropFiles
         let requestFocus = isFocused && !context.coordinator.lastRequestedFocus
         context.coordinator.lastRequestedFocus = isFocused
         let focusRevision = context.coordinator.focusRevision
@@ -77,6 +79,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
         view.focusChanged = nil
         view.editor.delegate = nil
         view.editor.pasteAttachments = nil
+        view.editor.dropFiles = nil
     }
 
     @MainActor final class Coordinator: NSObject, NSTextViewDelegate {
@@ -169,6 +172,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
         editor.isGrammarCheckingEnabled = true
         editor.isAutomaticSpellingCorrectionEnabled = true
         documentView = editor
+        editor.registerForDraggedTypes([.fileURL])
         editor.focusChanged = { [weak self] in self?.focusChanged?($0) }
 
         // SwiftUI probes several widths while sizing nested stacks. Measuring
@@ -198,7 +202,32 @@ struct ScrollableChatComposer: NSViewRepresentable {
 @MainActor final class ComposerTextView: NSTextView {
     var focusChanged: ((Bool) -> Void)?
     var pasteAttachments: (() -> Bool)?
+    var dropFiles: (([URL]) -> Void)?
     var placeholder = "" { didSet { needsDisplay = true } }
+    override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
+        [.fileURL] + super.acceptableDragTypes.filter { $0 != .fileURL }
+    }
+    override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        [.fileURL] + super.readablePasteboardTypes.filter { $0 != .fileURL }
+    }
+    override func dragOperation(for draggingInfo: NSDraggingInfo, type: NSPasteboard.PasteboardType) -> NSDragOperation {
+        if dropFiles != nil, draggingInfo.draggingPasteboard.canReadObject(forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]) {
+            return draggingInfo.draggingSourceOperationMask.intersection(.copy)
+        }
+        return super.dragOperation(for: draggingInfo, type: type)
+    }
+    override func readSelection(from pasteboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+        // NSTextView otherwise consumes text documents itself, inserting their
+        // contents or path instead of letting the conversation attach the file.
+        if let dropFiles,
+           let urls = pasteboard.readObjects(forClasses: [NSURL.self],
+               options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty {
+            dropFiles(urls)
+            return true
+        }
+        return super.readSelection(from: pasteboard, type: type)
+    }
     override func paste(_ sender: Any?) {
         if pasteAttachments?() == true { return }
         pasteAsPlainText(sender)
