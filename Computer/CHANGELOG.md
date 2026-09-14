@@ -6,6 +6,8 @@
 
 ### Fixed
 
+- Repair terminal prompt release checks after moving shell configuration, covering both root and non-root prompts.
+
 - Explain blocked Local Network access with Open Settings and Try Again actions, include a reason in macOS's permission prompt, and return the actual startup failure to the CLI. Failed computers can be started again after recovery.
 
 - Preserve the Quick Look extension's root view while loading saved computer previews and redraw after native resizing, keeping its view connection and displayed content intact.
