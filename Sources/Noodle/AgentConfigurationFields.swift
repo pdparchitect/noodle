@@ -165,7 +165,7 @@ private struct RuntimeSelectionRow: View {
     }
 }
 
-private struct HarnessChooser: View {
+struct HarnessChooser: View {
     let installations: [HarnessInstallation]
     @Binding var selection: String
     @Environment(\.dismiss) private var dismiss
@@ -223,7 +223,7 @@ struct HarnessExperimentalWarning: View {
     }
 }
 
-private struct ModelChooser: View {
+struct ModelChooser: View {
     let providerName: String
     var usesCatalogueDefault = false
     let models: [HarnessModel]
@@ -324,7 +324,7 @@ private struct ModelChooser: View {
     }
 }
 
-private struct EffortControl: View {
+struct EffortControl: View {
     let model: HarnessModel?
     @Binding var selection: String
 
