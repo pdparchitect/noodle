@@ -1,11 +1,15 @@
 import Foundation
 
 /// Filesystem calls can wait for macOS folder consent. Keep them off the capture
-/// and input queue, while serializing transfers and rechecking the account session.
+/// and input queue. Independent reads must also keep working while another
+/// folder waits for consent; only transfer/mutation state needs serialization.
 public final class LocalMacFileWorker: @unchecked Sendable {
     private let queue = DispatchQueue(label: "LocalMac.account.files")
+    private let reads = DispatchQueue(label: "LocalMac.account.fileReads", attributes: .concurrent)
+    private let work = DispatchGroup()
     private let lock = NSLock()
     private var pending = 0
+    private var listings: Set<String> = []
     private var closed = false
     private let home: String
     private let verify: () throws -> Void
@@ -14,28 +18,56 @@ public final class LocalMacFileWorker: @unchecked Sendable {
 
     public func handle(_ request: LocalMacRequest) async throws -> LocalMacReply {
         try await withCheckedThrowingContinuation { continuation in
+            let readOnly: Bool
+            switch request.operation {
+            case .fileHome, .fileList, .fileStat, .fileRead: readOnly = true
+            default: readOnly = false
+            }
+            let listing = request.operation == .fileList ? listingKey(request.path ?? "/") : nil
             lock.lock()
             guard !closed, pending < 16 else {
                 lock.unlock()
                 continuation.resume(throwing: LocalMacError("Account file access is unavailable or busy. Retry after the current operation finishes."))
                 return
             }
-            pending += 1; lock.unlock()
-            queue.async {
-                defer { self.lock.lock(); self.pending -= 1; self.lock.unlock() }
+            if let listing, listings.contains(listing) {
+                lock.unlock()
+                continuation.resume(throwing: LocalMacError("This folder is still being read. Finish any folder-permission prompt in the account’s desktop, then retry."))
+                return
+            }
+            if let listing { listings.insert(listing) }
+            pending += 1; work.enter(); lock.unlock()
+            (readOnly ? reads : queue).async {
+                let result: Result<LocalMacReply, Error>
                 do {
                     self.lock.lock(); let closed = self.closed; self.lock.unlock()
                     guard !closed else { throw LocalMacError("Account file access has closed.") }
                     try self.verify(); try request.validate()
-                    if self.store == nil { self.store = try LocalMacFileStore(home: self.home) }
-                    continuation.resume(returning: try self.perform(request, files: self.store!))
-                } catch { continuation.resume(throwing: error) }
+                    let files: LocalMacFileStore
+                    if readOnly {
+                        // Each read owns its descriptors; upload dictionaries
+                        // remain confined to the original serial queue.
+                        files = try LocalMacFileStore(home: self.home)
+                    } else {
+                        if self.store == nil { self.store = try LocalMacFileStore(home: self.home) }
+                        files = self.store!
+                    }
+                    result = .success(try self.perform(request, files: files))
+                } catch { result = .failure(error) }
+                self.lock.lock(); self.pending -= 1
+                if let listing { self.listings.remove(listing) }
+                self.lock.unlock(); self.work.leave()
+                continuation.resume(with: result)
             }
         }
     }
     public func close(completion: @escaping () -> Void = {}) {
         lock.lock(); closed = true; lock.unlock()
-        queue.async { self.store?.close(); self.store = nil; completion() }
+        work.notify(queue: queue) { self.store?.close(); self.store = nil; completion() }
+    }
+    private func listingKey(_ path: String) -> String {
+        let relative = path == home ? "/" : path.hasPrefix(home + "/") ? String(path.dropFirst(home.count)) : path
+        return relative.split(separator: "/").filter { $0 != "." }.joined(separator: "/")
     }
     private func perform(_ request: LocalMacRequest, files: LocalMacFileStore) throws -> LocalMacReply {
         var response = LocalMacReply(id: request.id)

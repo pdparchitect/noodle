@@ -95,11 +95,14 @@ parents, use version checks and publish uploads atomically without replacement.
 Cancellation removes unpublished upload data; deletion accepts files or empty
 folders. Home resolves through the backend instead of assuming `/root`.
 
-File operations run on a bounded serial worker, separate from desktop capture and
-input. A macOS permission prompt or slow copy must not block the preview. Each
-operation rechecks the account session on that worker. Permission, missing-item
-and symbolic-link failures have distinct errors; directory enumeration errors
-are not treated as an empty folder.
+File operations run on a bounded worker, separate from desktop capture and input.
+Reads use independent descriptors and run concurrently so one folder's consent
+wait does not hold up every other folder. Duplicate listings of the same folder
+are refused while its first read is outstanding. Mutations and transfer state
+remain serialized; closing rejects new work and drains accepted operations before
+cleaning up transfers. Every operation rechecks the account session. Permission,
+missing-item and symbolic-link failures have distinct errors; directory
+enumeration errors are not treated as an empty folder.
 
 Desktop, Documents and Downloads remain subject to macOS Files & Folders privacy
 permissions, even for the account that owns them. The standalone helper includes
@@ -256,3 +259,12 @@ for the standalone helper in managed account UID 502 (`authValue=0`,
 `authReason=13`). The old generic symbolic-link error hid that cause. This is
 evidence of a privacy denial, not evidence that the new usage descriptions have
 resolved it; permission granting in the retained account remains a live check.
+
+On 2026-09-15, the installed 0.7.0 release's account TCC logs showed the old
+development requirements rejected for Desktop, Documents and Downloads. Folder
+requests then waited on consent and ended with `Denied (Prompt Cancel)`, including
+the account terminal's `ls`. The serial file queue filled during those waits;
+the workspace became readable again after they ended. The concurrent-read fix
+passes 29 helper tests, including a blocked-folder/available-workspace regression,
+but has not replaced the installed release. Restoring the managed account's
+Files & Folders approvals remains a separate live recovery step.

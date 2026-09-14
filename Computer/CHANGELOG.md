@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Keep other Local Mac folders readable while one folder waits for macOS consent, and prevent repeated folder reads from filling the file-operation queue.
 - Detect an unlaunchable Local Mac account helper promptly and offer registration repair after app signing changes, preserving accounts and files.
 - Explain how to restore the existing Local Mac credential's Keychain access when a signing change prevents background login.
 - Keep Local Mac permission recovery in computer settings, show only the current desktop issue, and clear stale input errors when control is restored.
