@@ -1,5 +1,6 @@
 import AppKit
 import SwiftTerm
+import SwiftUI
 import XCTest
 @testable import NoodleComputer
 
@@ -28,11 +29,11 @@ import XCTest
         return (view, capture, window)
     }
 
-    private func key(_ characters: String, code: UInt16, modifiers: NSEvent.ModifierFlags = [],
+    private func key(_ characters: String, ignoringModifiers: String? = nil, code: UInt16, modifiers: NSEvent.ModifierFlags = [],
                      in window: NSWindow) -> NSEvent {
         NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers,
                         timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-                        context: nil, characters: characters, charactersIgnoringModifiers: characters,
+                        context: nil, characters: characters, charactersIgnoringModifiers: ignoringModifiers ?? characters,
                         isARepeat: false, keyCode: code)!
     }
 
@@ -72,6 +73,44 @@ import XCTest
             view.keyDown(with: key(characters, code: code, modifiers: modifiers, in: window))
             XCTAssertEqual(capture.bytes, Array(expected.utf8), "Key code \(code), modifiers \(modifiers.rawValue)")
         }
+    }
+
+    func testControlCReachesTerminalThroughHostedWindow() {
+        let terminal = GuestTerminal()
+        let capture = Capture()
+        terminal.view.terminalDelegate = capture
+        let host = NSHostingView(rootView: ComputerTerminalView(terminal: terminal))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 320),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        defer { window.orderOut(nil) }
+        XCTAssertTrue(window.makeFirstResponder(terminal.view))
+        window.sendEvent(key("\u{03}", ignoringModifiers: "c", code: 8, modifiers: .control, in: window))
+        XCTAssertEqual(capture.bytes, [3])
+    }
+
+    func testControlCShortcutSendsOneInterrupt() {
+        let (view, capture, window) = fixture()
+        defer { window.orderOut(nil) }
+        for modifiers: NSEvent.ModifierFlags in [.control, [.control, .capsLock]] {
+            capture.bytes = []
+            XCTAssertTrue(view.performKeyEquivalent(with: key("\u{03}", ignoringModifiers: "c", code: 8,
+                                                             modifiers: modifiers, in: window)))
+            XCTAssertEqual(capture.bytes, [3])
+        }
+    }
+
+    func testInterruptShortcutRequiresControlAndTerminalFocus() {
+        let (view, capture, window) = fixture()
+        defer { window.orderOut(nil) }
+        for modifiers: NSEvent.ModifierFlags in [[], .command, [.command, .control], [.control, .option]] {
+            XCTAssertFalse(view.performKeyEquivalent(with: key("c", code: 8, modifiers: modifiers, in: window)))
+        }
+        window.makeFirstResponder(nil)
+        XCTAssertFalse(view.performKeyEquivalent(with: key("\u{03}", ignoringModifiers: "c", code: 8,
+                                                          modifiers: .control, in: window)))
+        XCTAssertTrue(capture.bytes.isEmpty)
     }
 
     func testClearPreservesWrappedInputAndTerminalModes() {
@@ -152,5 +191,23 @@ import XCTest
         XCTAssertEqual(item.keyEquivalentModifierMask, .command)
         XCTAssertTrue(item.target === view)
         XCTAssertTrue(view.validateUserInterfaceItem(item))
+    }
+
+    func testContextMenuInterruptSendsControlCWithoutChangingScreen() throws {
+        let (view, capture, window) = fixture()
+        defer { window.orderOut(nil) }
+        view.feed(text: "prompt> running command")
+        let before = view.getTerminal().getBufferAsData()
+        let event = NSEvent.mouseEvent(with: .rightMouseDown, location: .zero, modifierFlags: [],
+                                      timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                                      eventNumber: 1, clickCount: 1, pressure: 1)!
+        let item = try XCTUnwrap(view.menu(for: event)?.items.first { $0.title == "Interrupt Command" })
+        XCTAssertEqual(item.keyEquivalent, "c")
+        XCTAssertEqual(item.keyEquivalentModifierMask, .control)
+        XCTAssertTrue(item.target === view)
+        XCTAssertTrue(view.validateUserInterfaceItem(item))
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(item.action), to: item.target, from: item))
+        XCTAssertEqual(capture.bytes, [3])
+        XCTAssertEqual(view.getTerminal().getBufferAsData(), before)
     }
 }

@@ -76,7 +76,20 @@ final class ComputerNativeTerminalView: TerminalView {
             clearTerminal(nil)
             return true
         }
+        if window?.firstResponder === self, modifiers == .control,
+           event.charactersIgnoringModifiers?.lowercased() == "c" {
+            // Claim the shortcut before the hosting view/responder chain can
+            // interpret it. SwiftTerm still owns the terminal's key encoding.
+            keyDown(with: event)
+            return true
+        }
         return super.performKeyEquivalent(with: event)
+    }
+
+    @objc func interruptCommand(_ sender: Any?) {
+        // Send Ctrl-C through the PTY so its foreground job can handle it.
+        // Never kill the shell or signal a host process from the terminal UI.
+        send(data: [0x03][...])
     }
 
     @objc func clearTerminal(_ sender: Any?) {
@@ -107,6 +120,10 @@ final class ComputerNativeTerminalView: TerminalView {
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
         if !menu.items.isEmpty { menu.addItem(.separator()) }
+        let interrupt = NSMenuItem(title: "Interrupt Command", action: #selector(interruptCommand(_:)), keyEquivalent: "c")
+        interrupt.keyEquivalentModifierMask = .control
+        interrupt.target = self
+        menu.addItem(interrupt)
         let clear = NSMenuItem(title: "Clear Terminal", action: #selector(clearTerminal(_:)), keyEquivalent: "k")
         clear.keyEquivalentModifierMask = .command
         clear.target = self
@@ -115,7 +132,7 @@ final class ComputerNativeTerminalView: TerminalView {
     }
 
     override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
-        if item.action == #selector(clearTerminal(_:)) { return true }
+        if item.action == #selector(clearTerminal(_:)) || item.action == #selector(interruptCommand(_:)) { return true }
         return super.validateUserInterfaceItem(item)
     }
 

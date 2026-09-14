@@ -52,7 +52,9 @@ images. Commands come from the image and the packages you install in it.
 also right-click and choose **Clear Terminal**. In full-screen applications, this
 clears scrollback while preserving the application’s screen.
 
-**Control-C** interrupts a command. Shells with line editing support also provide
+**Control-C** interrupts a command while the terminal has focus. You can also
+right-click in the terminal and choose **Interrupt Command**. **Command-C** remains
+Copy. Shells with line editing support also provide
 **Control-L** to redraw, **Up/Down** for history, **Control-A/E** for the start/end
 of the line, **Option-Left/Right** for word movement, and **Tab** for completion.
 
