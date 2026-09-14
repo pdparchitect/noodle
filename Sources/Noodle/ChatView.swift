@@ -551,6 +551,7 @@ private struct PendingAttachmentChip: View {
             .buttonStyle(.plain)
             .help(previewDescription)
             .accessibilityLabel("Preview \(previewDescription)")
+            .onDrag { store.attachmentDragProvider(attachment) }
 
             Button(action: remove) {
                 Image(systemName: "xmark.circle.fill")

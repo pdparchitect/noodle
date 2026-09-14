@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Drag conversation attachments and draft attachment chips into Finder, other apps, or another conversation, preserving their filenames and keeping the originals in Noodle.
+
 ## [0.14.0] - 2026-09-14
 
 ### Added

@@ -198,6 +198,7 @@ struct MessageBubble: View {
             select: { selectedAttachmentID = attachment.id },
             preview: { previewAttachment(attachment) }
         )
+        .onDrag { store.attachmentDragProvider(attachment) }
         .overlay { reactionContextMenu(attachment: attachment) }
     }
 
