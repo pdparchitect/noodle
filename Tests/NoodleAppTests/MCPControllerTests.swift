@@ -66,6 +66,24 @@ import XCTest
         XCTAssertTrue(f.controller.selectedIDs(for: f.b).isEmpty)
     }
 
+    func testPresetRetryPreservesEditedAccountAndCannotOverwriteAnotherServer() throws {
+        let f = try fixture()
+        let configuration = MCPToolConfiguration(endpoint: URL(string: "https://example.com/mcp")!)
+        let tool = ToolDefinition(id: "fixture", name: "Fixture", summary: "Fixture account", defaultInstructions: "",
+            iconName: "tools", configuration: .mcp(configuration))
+        var account = try f.controller.addPreset(tool, configuration: configuration)
+        account.name = "Edited account"
+        try f.controller.save(account)
+        XCTAssertEqual(try f.controller.addPreset(tool, configuration: configuration, connectionID: account.id), account)
+        let before = try Data(contentsOf: f.registryURL)
+        let other = MCPToolConfiguration(endpoint: URL(string: "https://other.example.com/mcp")!)
+        let different = ToolDefinition(id: "different", name: "Different", summary: "", defaultInstructions: "",
+            iconName: "tools", configuration: .mcp(other))
+        XCTAssertThrowsError(try f.controller.addPreset(different, configuration: other, connectionID: account.id))
+        XCTAssertEqual(try Data(contentsOf: f.registryURL), before)
+        XCTAssertEqual(f.controller.registry.connections, [account])
+    }
+
     func testAssignmentAndRenameUpdateOnlyTheAssignedBotsInstructions() throws {
         let f = try fixture(), account = try f.account()
         f.controller.start(agents: [f.a, f.b])

@@ -65,15 +65,23 @@ struct ToolCatalogView: View {
 struct ToolCreationSheet: View {
     let controller: MCPController
     var onAdded: (UUID) -> Void = { _ in }
+    private let onConnect: (MCPConnectionRecord) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var customMCP = false
     @State private var error: String?
     @State private var adding = false
+    @State private var presetAttempts: [String: UUID] = [:]
+
+    init(controller: MCPController, onAdded: @escaping (UUID) -> Void = { _ in },
+         onConnect: ((MCPConnectionRecord) -> Void)? = nil) {
+        self.controller = controller; self.onAdded = onAdded
+        self.onConnect = onConnect ?? controller.connect
+    }
 
     var body: some View {
         Group {
             if customMCP {
-                MCPEditor(controller: controller, onBack: { customMCP = false }, onSaved: { onAdded($0.id) })
+                MCPEditor(controller: controller, onBack: { customMCP = false }, onSaved: { onAdded($0.id) }, onConnect: onConnect)
             } else {
                 ToolCatalogView(onSelect: add, onCustomMCP: { customMCP = true },
                                 onCancel: { dismiss() }, error: error).disabled(adding)
@@ -87,12 +95,17 @@ struct ToolCreationSheet: View {
         do {
             switch tool.configuration {
             case .mcp(let configuration):
-                let connection = try controller.addPreset(tool, configuration: configuration)
+                // Saving the account can precede a failed workspace refresh.
+                // Retrying this preset must resume that account, even after
+                // the user has tried another preset in the same sheet.
+                let id = presetAttempts[tool.id] ?? UUID()
+                presetAttempts[tool.id] = id
+                let connection = try controller.addPreset(tool, configuration: configuration, connectionID: id)
                 onAdded(connection.id)
                 dismiss()
                 Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(250))
-                    controller.connect(connection)
+                    onConnect(connection)
                 }
             }
         } catch {

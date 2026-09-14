@@ -76,13 +76,21 @@ final class MCPController {
 
     /// Creates a separate saved MCP account without signing in or assigning it.
     /// Other tool types use their own storage/setup handler, not this registry.
-    func addPreset(_ tool: ToolDefinition, configuration: MCPToolConfiguration) throws -> MCPConnectionRecord {
+    func addPreset(_ tool: ToolDefinition, configuration: MCPToolConfiguration, connectionID: UUID = UUID()) throws -> MCPConnectionRecord {
         guard tool.configuration == .mcp(configuration) else {
             throw MCPConnectionError.message("This tool requires a different setup method.")
         }
-        let record = try configuration.makeConnection(
-            name: ToolCatalog.availableName(for: tool, existingNames: registry.connections.map(\.name)),
-            description: tool.summary, instructions: tool.defaultInstructions)
+        let record: MCPConnectionRecord
+        if let saved = registry.connections.first(where: { $0.id == connectionID }) {
+            guard saved.endpoint == configuration.endpoint else {
+                throw MCPConnectionError.message("The saved account does not match this tool.")
+            }
+            record = saved
+        } else {
+            record = try MCPConnectionRecord(id: connectionID,
+                name: ToolCatalog.availableName(for: tool, existingNames: registry.connections.map(\.name)),
+                endpoint: configuration.endpoint, description: tool.summary, instructions: tool.defaultInstructions)
+        }
         try save(record)
         return registry.connections.first { $0.id == record.id }!
     }
