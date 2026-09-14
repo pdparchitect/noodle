@@ -28,6 +28,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Keep a new MCP connection's identity across failed workspace-refresh retries and pass the saved account, including its allocated skill name, to completion and sign-in callbacks. Cover connection validation, editing, assignments, cancellation, and retry with hidden-window tests.
+
 - Preserve group metadata and member inbox positions when an edit cannot save every file, and retain the membership notice for a successful retry. Cover group search, membership controls, creation, validation, cancel, and failed-save retries with hidden-window tests.
 
 - Clear cancelled harness sign-ins immediately so users can retry, and ignore retired challenges and account checks. Bind setup results to the current installation so removed or replaced harnesses cannot be restored by a late callback. Discard version results returned after cancellation.

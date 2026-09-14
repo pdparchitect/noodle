@@ -280,7 +280,7 @@ import XCTest
     }
 }
 
-@MainActor private final class MCPControllerFixture {
+@MainActor final class MCPControllerFixture {
     let root: URL
     let repository: WorkspaceRepository
     let a: AgentRecord

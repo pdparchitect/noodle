@@ -32,7 +32,7 @@ import NoodleCore
     func attribute(_ node: NSObject, _ key: NSAccessibility.Attribute) -> Any? {
         if let value = node.accessibilityAttributeValue(key) { return value }
         let names: [NSAccessibility.Attribute: String] = [.children: "accessibilityChildren", .title: "accessibilityTitle",
-            .description: "accessibilityLabel", .value: "accessibilityValue", .enabled: "isAccessibilityEnabled", .role: "accessibilityRole"]
+            .description: "accessibilityLabel", .help: "accessibilityHelp", .value: "accessibilityValue", .enabled: "isAccessibilityEnabled", .role: "accessibilityRole"]
         let name = names[key] ?? (key.rawValue == "AXChildrenInNavigationOrder" ? "accessibilityChildrenInNavigationOrder" : "")
         guard !name.isEmpty, node.responds(to: NSSelectorFromString(name)) else { return nil }
         return node.value(forKey: name == "isAccessibilityEnabled" ? "accessibilityEnabled" : name)
@@ -52,7 +52,7 @@ import NoodleCore
         return result
     }
     func labels(_ node: NSObject) -> [String] {
-        [attribute(node, .title), attribute(node, .description), attribute(node, .value)].compactMap { $0 as? String }
+        [attribute(node, .title), attribute(node, .description), attribute(node, .value), attribute(node, .help)].compactMap { $0 as? String }
     }
     final func wait(_ predicate: @escaping () -> Bool) async throws {
         let end = ContinuousClock.now.advanced(by: .seconds(3))

@@ -95,16 +95,20 @@ struct MCPEditor: View {
     let existing: MCPConnectionRecord?
     let onBack: (() -> Void)?
     let onSaved: (MCPConnectionRecord) -> Void
+    private let onConnect: (MCPConnectionRecord) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
     @State private var endpoint: String
     @State private var description: String
     @State private var instructions: String
     @State private var error: String?
+    @State private var newConnectionID = UUID()
     init(controller: MCPController, existing: MCPConnectionRecord? = nil,
-         onBack: (() -> Void)? = nil, onSaved: @escaping (MCPConnectionRecord) -> Void = { _ in }) {
+         onBack: (() -> Void)? = nil, onSaved: @escaping (MCPConnectionRecord) -> Void = { _ in },
+         onConnect: ((MCPConnectionRecord) -> Void)? = nil) {
         self.controller = controller; self.existing = existing
         self.onBack = onBack; self.onSaved = onSaved
+        self.onConnect = onConnect ?? controller.connect
         _name = State(initialValue: existing?.name ?? "")
         _endpoint = State(initialValue: existing?.endpoint.absoluteString ?? "")
         _description = State(initialValue: existing?.description ?? "")
@@ -167,11 +171,14 @@ struct MCPEditor: View {
             guard let url = URL(string: endpoint.trimmingCharacters(in: .whitespacesAndNewlines)) else {
                 throw MCPConnectionError.message("Enter a valid HTTPS server URL.")
             }
-            var record = try existing ?? MCPConnectionRecord(name: name, endpoint: url)
+            // A registry save can succeed before workspace refresh fails. Keep
+            // the draft's identity so retry updates that account in place.
+            var record = try existing ?? MCPConnectionRecord(id: newConnectionID, name: name, endpoint: url)
             record.name = try ConversationName.validated(name)
             record.description = String(description.prefix(1_000))
             record.instructions = String(instructions.prefix(20_000))
             try controller.save(record)
+            record = controller.registry.connections.first { $0.id == record.id } ?? record
             onSaved(record)
             let shouldConnect = existing == nil
             dismiss()
@@ -179,7 +186,7 @@ struct MCPEditor: View {
                 Task { @MainActor in
                     // Present authorization after the editor sheet has dismissed.
                     try? await Task.sleep(for: .milliseconds(250))
-                    controller.connect(record)
+                    onConnect(record)
                 }
             }
         } catch { self.error = error.localizedDescription }
@@ -218,36 +225,8 @@ struct MCPAssignmentPicker: View {
                 Spacer()
                 Button { search = ""; showingAdd = true } label: { Label("Add Tools…", systemImage: "plus") }
                     .popover(isPresented: $showingAdd, arrowEdge: .bottom) {
-                        VStack(spacing: 10) {
-                            TextField("Search connections", text: $search).textFieldStyle(.roundedBorder).autocorrectionDisabled()
-                            ScrollView {
-                                LazyVStack(spacing: 4) {
-                                    ForEach(controller.registry.connections.filter {
-                                        !selectedIDs.contains($0.id) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search))
-                                    }) { connection in
-                                        Button { selectedIDs.insert(connection.id) } label: {
-                                            HStack(spacing: 10) {
-                                                MCPConnectionIcon(connection: connection, size: 28)
-                                                VStack(alignment: .leading) {
-                                                    Text(connection.name).foregroundStyle(.primary)
-                                                    Text(connection.description).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                                                }
-                                                Spacer()
-                                                Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
-                                            }.padding(8).contentShape(Rectangle())
-                                        }.buttonStyle(.plain)
-                                    }
-                                    if controller.registry.connections.isEmpty {
-                                        Text("No saved connections. Choose New Tool to add one.").foregroundStyle(.secondary).padding()
-                                    }
-                                }
-                            }
-                            HStack {
-                                Button("New Tool…") { wantsNewTool = true; showingAdd = false }
-                                Spacer()
-                                Button("Done") { showingAdd = false }
-                            }
-                        }.padding(16).frame(width: 330, height: 260)
+                        MCPConnectionChooser(controller: controller, selectedIDs: $selectedIDs, search: $search,
+                            onNewTool: { wantsNewTool = true; showingAdd = false }, onDone: { showingAdd = false })
                             .onDisappear {
                                 // Wait for the popover to close before presenting a sheet
                                 // on the bot editor. No nested popover or global window.
@@ -286,5 +265,45 @@ struct MCPAssignmentPicker: View {
         .sheet(item: $editing) { connection in
             MCPEditor(controller: controller, existing: connection).noodleSheetSizing()
         }
+    }
+}
+
+struct MCPConnectionChooser: View {
+    let controller: MCPController
+    @Binding var selectedIDs: Set<UUID>
+    @Binding var search: String
+    let onNewTool: () -> Void
+    let onDone: () -> Void
+    var body: some View {
+        VStack(spacing: 10) {
+            TextField("Search connections", text: $search).textFieldStyle(.roundedBorder).autocorrectionDisabled()
+            ScrollView {
+                LazyVStack(spacing: 4) {
+                    ForEach(controller.registry.connections.filter {
+                        !selectedIDs.contains($0.id) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search))
+                    }) { connection in
+                        Button { selectedIDs.insert(connection.id) } label: {
+                            HStack(spacing: 10) {
+                                MCPConnectionIcon(connection: connection, size: 28)
+                                VStack(alignment: .leading) {
+                                    Text(connection.name).foregroundStyle(.primary)
+                                    Text(connection.description).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                                Spacer()
+                                Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
+                            }.padding(8).contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                    }
+                    if controller.registry.connections.isEmpty {
+                        Text("No saved connections. Choose New Tool to add one.").foregroundStyle(.secondary).padding()
+                    }
+                }
+            }
+            HStack {
+                Button("New Tool…", action: onNewTool)
+                Spacer()
+                Button("Done", action: onDone)
+            }
+        }.padding(16).frame(width: 330, height: 260)
     }
 }
