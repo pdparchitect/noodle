@@ -123,4 +123,34 @@ import XCTest
         XCTAssertEqual(f.store.preview(for: f.directA), "No messages yet")
         XCTAssertEqual(f.store.preview(for: f.directB), "A violet notebook")
     }
+    func testFailedAddedMemberInboxWriteRollsBackEarlierWritesAndRetryPreservesHistoryBoundary() throws {
+        let f = try fixture(), third = try f.runtime.agent("Linus")
+        f.store.reload()
+        let group = try f.group([f.a.id])
+        let history = try f.repository.sendUserMessage(conversationID: group.id, body: "Existing group history")
+        let added = [f.b, third].sorted { $0.id.uuidString < $1.id.uuidString }
+        for agent in added { _ = try f.repository.latestMessages(for: agent.id) }
+        let inboxes = added.map { f.repository.directory(for: $0).appendingPathComponent(".noodle/inbox.json") }
+        let originals = try inboxes.map { try Data(contentsOf: $0) }
+        let file = f.repository.conversationDirectory(id: group.id).appendingPathComponent("conversation.json")
+        let metadata = try Data(contentsOf: file)
+        let blocked = inboxes[1].deletingLastPathComponent()
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: blocked.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: blocked.path) }
+        let members = Set([f.a.id, f.b.id, third.id])
+        XCTAssertFalse(f.store.updateGroup(group, named: "New name", publicDescription: "New context", participantIDs: members))
+        XCTAssertEqual(try Data(contentsOf: file), metadata)
+        XCTAssertEqual(try inboxes.map { try Data(contentsOf: $0) }, originals)
+        XCTAssertEqual(try f.repository.loadMessages(conversationID: group.id).map(\.id), [history.id])
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: blocked.path)
+        XCTAssertTrue(f.store.updateGroup(group, named: "New name", publicDescription: "New context", participantIDs: members))
+        let messages = try f.repository.loadMessages(conversationID: group.id)
+        XCTAssertEqual(messages.count, 2)
+        XCTAssertEqual(messages.last?.author, .system)
+        for agent in added {
+            let inbox = try JSONDecoder().decode(AgentInbox.self, from: Data(contentsOf: f.repository.directory(for: agent).appendingPathComponent(".noodle/inbox.json")))
+            XCTAssertEqual(inbox.conversationOffsets[group.id.uuidString.lowercased()], 1)
+        }
+    }
+
 }

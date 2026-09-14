@@ -9,12 +9,6 @@ struct GroupMemberPicker: View {
     @State private var search = ""
 
     private var selected: [AgentRecord] { agents.filter { selectedIDs.contains($0.id) } }
-    private var available: [AgentRecord] {
-        agents.filter {
-            !selectedIDs.contains($0.id) &&
-                (search.isEmpty || $0.displayName.localizedCaseInsensitiveContains(search))
-        }
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -26,37 +20,9 @@ struct GroupMemberPicker: View {
                 }
                 .disabled(selected.count == agents.count)
                 .popover(isPresented: $showingAdd, arrowEdge: .bottom) {
-                    VStack(spacing: 12) {
-                        TextField("Search bots", text: $search)
-                            .textFieldStyle(.roundedBorder)
-                        ScrollView {
-                            LazyVStack(spacing: 4) {
-                                ForEach(available) { agent in
-                                    Button {
-                                        selectedIDs.insert(agent.id)
-                                    } label: {
-                                        HStack(spacing: 12) {
-                                            BotAvatar(agent: agent, size: 32)
-                                            Text(agent.displayName).foregroundStyle(.primary)
-                                            Spacer()
-                                            Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
-                                        }
-                                        .padding(8)
-                                        .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel("Add \(agent.displayName) to group")
-                                }
-                                if available.isEmpty {
-                                    Text(selected.count == agents.count ? "All bots added" : "No matching bots")
-                                        .foregroundStyle(.secondary).padding()
-                                }
-                            }
-                        }
-                        HStack { Spacer(); Button("Done") { showingAdd = false } }
+                    GroupMemberChooser(agents: agents, selectedIDs: $selectedIDs, search: $search) {
+                        showingAdd = false
                     }
-                    .padding(16)
-                    .frame(width: 300, height: 280)
                 }
             }
             ScrollView {
@@ -110,5 +76,54 @@ struct GroupMemberPicker: View {
             .frame(minHeight: 140, maxHeight: 280)
             .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
         }
+    }
+}
+
+struct GroupMemberChooser: View {
+    let agents: [AgentRecord]
+    @Binding var selectedIDs: Set<UUID>
+    @Binding var search: String
+    let onDone: () -> Void
+
+    private var selected: [AgentRecord] { agents.filter { selectedIDs.contains($0.id) } }
+    private var available: [AgentRecord] {
+        agents.filter {
+            !selectedIDs.contains($0.id) &&
+                (search.isEmpty || $0.displayName.localizedCaseInsensitiveContains(search))
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            TextField("Search bots", text: $search)
+                .textFieldStyle(.roundedBorder)
+            ScrollView {
+                LazyVStack(spacing: 4) {
+                    ForEach(available) { agent in
+                        Button {
+                            selectedIDs.insert(agent.id)
+                        } label: {
+                            HStack(spacing: 12) {
+                                BotAvatar(agent: agent, size: 32)
+                                Text(agent.displayName).foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
+                            }
+                            .padding(8)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Add \(agent.displayName) to group")
+                    }
+                    if available.isEmpty {
+                        Text(selected.count == agents.count ? "All bots added" : "No matching bots")
+                            .foregroundStyle(.secondary).padding()
+                    }
+                }
+            }
+            HStack { Spacer(); Button("Done", action: onDone) }
+        }
+        .padding(16)
+        .frame(width: 300, height: 280)
     }
 }

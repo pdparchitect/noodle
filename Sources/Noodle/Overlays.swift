@@ -935,6 +935,10 @@ struct NewGroupSheet: View {
     @State private var selectedIDs = Set<UUID>()
     @FocusState private var nameFocused: Bool
 
+    init(participantIDs: Set<UUID> = []) {
+        _selectedIDs = State(initialValue: participantIDs)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
