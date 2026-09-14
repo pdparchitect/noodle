@@ -84,28 +84,52 @@ struct VoiceWaveform: View {
     }
 }
 
+@MainActor protocol VoicePlaybackPlayer: AnyObject {
+    var currentTime: TimeInterval { get set }
+    var duration: TimeInterval { get }
+    var isPlaying: Bool { get }
+    func play() -> Bool
+    func pause()
+}
+
+extension AVAudioPlayer: VoicePlaybackPlayer {}
+
 @MainActor @Observable final class VoicePlayback {
     private static weak var active: VoicePlayback?
-    private var player: AVAudioPlayer?
+    private var player: (any VoicePlaybackPlayer)?
+    private var loadedURL: URL?
     private var timer: Task<Void, Never>?
+    private let makePlayer: (URL) throws -> any VoicePlaybackPlayer
+    private let sleep: (Duration) async throws -> Void
     private(set) var playing = false
     private(set) var position: Double = 0
     private(set) var error: String?
 
+    init(makePlayer: @escaping (URL) throws -> any VoicePlaybackPlayer = { try AVAudioPlayer(contentsOf: $0) },
+         sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
+        self.makePlayer = makePlayer; self.sleep = sleep
+    }
+
     func toggle(url: URL) {
+        if loadedURL != url {
+            stop(reset: true)
+            player = nil; loadedURL = nil
+        }
         if playing { stop(reset: false); return }
         do {
-            if player == nil { player = try AVAudioPlayer(contentsOf: url) }
+            if player == nil { player = try makePlayer(url); loadedURL = url }
             Self.active?.stop(reset: false)
             Self.active = self
             guard let player else { return }
             if player.currentTime >= player.duration { player.currentTime = 0 }
             guard player.play() else { throw VoiceFailure("The recording couldn’t be played.") }
+            position = player.currentTime
             playing = true
             error = nil
+            let sleep = sleep
             timer = Task { [weak self] in
                 while !Task.isCancelled {
-                    try? await Task.sleep(for: .milliseconds(100))
+                    try? await sleep(.milliseconds(100))
                     guard !Task.isCancelled, let self else { return }
                     position = player.currentTime
                     if !player.isPlaying { stop(reset: true); break }
@@ -133,7 +157,12 @@ struct VoiceMessagePlayer: View {
     let url: URL
     let voice: VoiceMessage
     var shouldPlay = true
-    @State private var playback = VoicePlayback()
+    @State private var playback: VoicePlayback
+
+    @MainActor init(url: URL, voice: VoiceMessage, shouldPlay: Bool = true, playback: VoicePlayback? = nil) {
+        self.url = url; self.voice = voice; self.shouldPlay = shouldPlay
+        _playback = State(initialValue: playback ?? VoicePlayback())
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -167,6 +196,7 @@ struct VoiceMessagePlayer: View {
         .frame(width: 270)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
         .onDisappear { playback.stop() }
+        .onChange(of: url) { _, _ in playback.stop(reset: true) }
         .onChange(of: shouldPlay) { _, visible in if !visible { playback.stop() } }
     }
 }

@@ -30,6 +30,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Stop old voice playback when a message's recording changes, load the replacement recording, and reset the displayed playhead immediately on replay. Cover pause/resume, seeking, completion, failures, active-message handoff, and view removal with silent playback fixtures.
+
 - Reset reused link-preview cards when their URL changes and ignore results from the previous request. Cover shared requests, cached failures, metadata/image deadlines, cancellation, and visibility with controlled loaders and hidden views.
 
 - Keep a new MCP connection's identity across failed workspace-refresh retries and pass the saved account, including its allocated skill name, to completion and sign-in callbacks. Cover connection validation, editing, assignments, cancellation, and retry with hidden-window tests.
