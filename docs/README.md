@@ -10,6 +10,7 @@
 - [Keyboard shortcuts](keyboard-shortcuts.md)
 - [Attachment annotations](attachment-annotations.md)
 - [Agent access and privacy](security.md)
+- [Noodle in the enterprise](enterprise.md)
 - [Noodle Computer](../Computer/README.md)
 
 ## Develop Noodle

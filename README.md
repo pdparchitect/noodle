@@ -13,7 +13,7 @@
   <img alt="Individual and team work" src="https://img.shields.io/badge/work-individual%20%2B%20teams-0a0a0a?style=flat-square">
 </p>
 
-[Website](https://pdparchitect.github.io/noodle/) · [Download](#download) · [Documentation](docs/README.md) · [Security](docs/security.md)
+[Website](https://pdparchitect.github.io/noodle/) · [Download](#download) · [Documentation](docs/README.md) · [Enterprise](docs/enterprise.md) · [Security](docs/security.md)
 
 </div>
 
@@ -58,6 +58,7 @@ in the bot's **Computers** tab. Several bots can share the same computer.
 
 - [Working with agents](docs/usage.md)
 - [Harness setup](docs/harness-setup.md)
+- [Noodle in the enterprise](docs/enterprise.md)
 - [Noodle Computer](Computer/README.md)
 - [Noodle Applet](Applet/README.md)
 - [Architecture](docs/architecture.md)

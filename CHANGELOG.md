@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Add a concise enterprise introduction for prospective customers highlighting the benefits of native macOS integration, managed deployment, on-device AI, and connected business tools, linked from the README and documentation index.
+
 - Cover saved annotation preview editing, repeated saves, cancellation, blank comments, failed-save retry, read-only sent notes, original-conversation routing, missing images, and current/legacy image rendering with hidden native panels.
 
 - Cover saved general, chat, microphone, and heartbeat preferences with hidden-window tests, including native toggle and segmented-control changes, settings reopening, runtime recreation, and disconnected microphone recovery.
