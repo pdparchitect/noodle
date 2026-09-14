@@ -5,10 +5,6 @@ Applet releases independently from Noodle. Use `Applet/VERSION` and
 
 ## Publish
 
-Applet has not had its first public release. While its changelog contains only
-Unreleased notes, the version planner leaves publication unselected. Preparing
-the first dated version section opts into the same release flow as Computer.
-
 1. Set a higher, unused `X.Y.Z` in `Applet/VERSION`.
 2. Move the relevant Unreleased notes into `## [X.Y.Z] - YYYY-MM-DD` in `Applet/CHANGELOG.md`.
 3. Run the local checks below, commit, and push to `main`. The version change requests publication.

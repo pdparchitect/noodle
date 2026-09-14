@@ -1,6 +1,8 @@
 # Noodle Computer changelog
 
-## Unreleased
+## [Unreleased]
+
+## [0.6.0] - 2026-09-14
 
 ### Fixed
 

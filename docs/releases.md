@@ -104,7 +104,7 @@ Noodle releases as the repository's latest release.
 ## Storage migration milestones
 
 The **0.13.0** release introduced the agent-package storage layout.
-The Backstory move into `agent.json` is planned for **0.14.0**, the next migration
+The **0.14.0** release moves Backstory into `agent.json` and is the next migration
 milestone. Keep published versions intact.
 `Support/update-milestones.json` declares releases that users must run before
 installing their successors. The first milestone contains the flat-workspace

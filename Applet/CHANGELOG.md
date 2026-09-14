@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-14
+
 ### Fixed
 
 - Correct the update documentation to use the existing Applet download channel.
