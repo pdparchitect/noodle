@@ -905,7 +905,7 @@ public struct WorkspaceRepository: Sendable {
         }
         if let computer {
             guard computer.version == 1, mediaType == ComputerCard.mediaType, linkURL == nil,
-                  data.count <= 900_000, (try? JSONDecoder().decode(ComputerCard.self, from: data)) == computer else {
+                  data.count <= 900_000, (try? JSONDecoder().decode(ComputerReference.self, from: data)) == computer.reference else {
                 throw WorkspaceError.invalidAttachment
             }
         }

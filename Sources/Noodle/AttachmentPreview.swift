@@ -1,11 +1,17 @@
 import QuickLookThumbnailing
 import AppletBridge
+import ComputerBridge
 import ImageIO
 import SwiftUI
 import NoodleCore
 import UniformTypeIdentifiers
 
 extension ConversationAttachment {
+    var isComputerDocument: Bool {
+        annotation == nil && (computer != nil || mediaType == ComputerCard.mediaType
+            || (originalFilename as NSString).pathExtension.lowercased() == "noodlecomputer")
+    }
+
     @MainActor func isInlineImage(at url: URL) -> Bool {
         annotation == nil && computer == nil && voice == nil &&
             (mediaType.hasPrefix("image/") || AttachmentThumbnailCache.isImage(url))
@@ -68,8 +74,7 @@ struct AttachmentInlinePreview: View {
         Group {
             if let note = attachment.annotation {
                 annotationPreview(note)
-            } else if let card = attachment.computer {
-                ComputerAttachmentCard(card: card)
+
             } else if let url = attachment.url, NoodletLink.id(in: url) != nil {
                 NoodletAttachmentCard(url: url, shouldLoad: shouldLoad)
             } else if displaysAsImage {
@@ -102,16 +107,22 @@ struct AttachmentInlinePreview: View {
             preview()
             return .handled
         }
-        .help(attachment.url.flatMap(NoodletLink.id) != nil ? "Click or press Space to open in Noodle Applet" : "Click or press Space to preview")
+        .help(openHint)
         .accessibilityLabel("Attachment \(attachment.originalFilename)")
-        .accessibilityHint(attachment.url.flatMap(NoodletLink.id) != nil ? "Click or press Space to open in Noodle Applet" : "Click or press Space to preview")
+        .accessibilityHint(openHint)
         .accessibilityAddTraits(.isButton)
         .task(id: shouldLoad) {
-            guard shouldLoad, attachment.computer == nil,
+            guard shouldLoad,
                   attachment.url.flatMap(NoodletLink.id) == nil,
                   attachment.annotation == nil || attachment.mediaType.hasPrefix("image/") else { return }
             await loadThumbnail()
         }
+    }
+
+    private var openHint: String {
+        if attachment.isComputerDocument { return "Click or press Space to open in Noodle Computer" }
+        if attachment.url.flatMap(NoodletLink.id) != nil { return "Click or press Space to open in Noodle Applet" }
+        return "Click or press Space to preview"
     }
 
     private func annotationPreview(_ note: AttachmentAnnotation) -> some View {
@@ -236,7 +247,9 @@ struct AttachmentInlinePreview: View {
             fileAt: fileURL,
             size: CGSize(width: 520, height: 300),
             scale: NSScreen.main?.backingScaleFactor ?? 2,
-            representationTypes: .all
+            // An icon returned before a provider is available is not a preview.
+            // Keep the placeholder retryable instead of caching that icon.
+            representationTypes: .thumbnail
         )
 
         do {

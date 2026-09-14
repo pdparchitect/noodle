@@ -19,11 +19,12 @@ struct NoodleApp: App {
             NSApplication.shared.run()
             Darwin.exit(1)
         }
-        if CommandLine.arguments.contains("--computer-integration-test") || CommandLine.arguments.contains("--computer-discovery-test") || CommandLine.arguments.contains("--computer-picker-test") {
+        if CommandLine.arguments.contains("--computer-integration-test") || CommandLine.arguments.contains("--computer-discovery-test") || CommandLine.arguments.contains("--computer-picker-test") || CommandLine.arguments.contains("--computer-document-preview-test") {
             NSApplication.shared.setActivationPolicy(.regular)
             Task { @MainActor in
                 do {
-                    if CommandLine.arguments.contains("--computer-picker-test") { try await ComputerIntegrationTest.checkPicker() }
+                    if CommandLine.arguments.contains("--computer-document-preview-test") { try await ComputerIntegrationTest.checkDocumentPreview() }
+                    else if CommandLine.arguments.contains("--computer-picker-test") { try await ComputerIntegrationTest.checkPicker() }
                     else if CommandLine.arguments.contains("--computer-discovery-test") { try await ComputerIntegrationTest.checkDiscovery() }
                     else { try await ComputerIntegrationTest.run() }
                     Darwin.exit(0)

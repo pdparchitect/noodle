@@ -19,8 +19,7 @@ struct ChatView: View {
     @State private var photoSelection: [PhotosPickerItem] = []
     @State private var attachmentDestinationID: UUID?
     @State private var selectedAttachmentID: UUID?
-    @State private var computerPreview = ComputerPreviewController()
-    @State private var noodletOpenTask: Task<Void, Never>?
+    @State private var attachmentOpenTask: Task<Void, Never>?
     @State private var screenCapturePreview = ScreenCapturePreviewController()
     @State private var conversationAnnotations = ConversationAnnotationController()
     @State private var bottomOverlayHeight: CGFloat = 0
@@ -107,14 +106,13 @@ struct ChatView: View {
                 store.importAttachments(from: providers, into: conversation.id)
             }
             .onChange(of: conversation.id) { _, _ in
-                noodletOpenTask?.cancel()
+                attachmentOpenTask?.cancel()
                 conversationAnnotations.cancel()
                 selectedAttachmentID = nil
-                computerPreview.close()
                 screenCapturePreview.close()
                 nameCompletion.detach()
             }
-            .onDisappear { noodletOpenTask?.cancel(); computerPreview.close(); screenCapturePreview.close(); conversationAnnotations.cancel() }
+            .onDisappear { attachmentOpenTask?.cancel(); screenCapturePreview.close(); conversationAnnotations.cancel() }
             .onChange(of: composerFocusRequest) { _, request in
                 if request != nil { composerFocused = true }
             }
@@ -221,11 +219,11 @@ struct ChatView: View {
     }
 
     private func showCapture(_ kind: ScreenCaptureKind) {
-        noodletOpenTask?.cancel()
+        attachmentOpenTask?.cancel()
         if screenCapturePreview.focusIfOpen() { return }
         guard let host = attachmentPreview.resolveHostWindow() else { return }
         let destination = conversation.id
-        attachmentPreview.close(); computerPreview.close()
+        attachmentPreview.close()
         screenCapturePreview.show(kind: kind, relativeTo: host) { image, title, region, comment in
             try store.importCapture(image: image, title: title, region: region, comment: comment, into: destination)
         }
@@ -372,13 +370,22 @@ struct ChatView: View {
     }
 
     private func showPreview(_ attachment: ConversationAttachment) {
-        noodletOpenTask?.cancel()
+        attachmentOpenTask?.cancel()
         selectedAttachmentID = attachment.id
+        if attachment.isComputerDocument {
+            attachmentPreview.close()
+            screenCapturePreview.close()
+            let fileURL = store.attachmentFileURL(attachment)
+            attachmentOpenTask = Task { @MainActor in
+                do { try await store.computers.openDocument(at: fileURL) }
+                catch { if !Task.isCancelled { store.errorMessage = error.localizedDescription } }
+            }
+            return
+        }
         if let url = attachment.url, NoodletLink.id(in: url) != nil {
             attachmentPreview.close()
-            computerPreview.close()
             screenCapturePreview.close()
-            noodletOpenTask = Task { @MainActor in
+            attachmentOpenTask = Task { @MainActor in
                 do {
                     try await store.applets.openNoodlet(url)
                 } catch {
@@ -387,20 +394,14 @@ struct ChatView: View {
             }
             return
         }
-        if let card = attachment.computer {
-            attachmentPreview.close()
-            computerPreview.show(card, controller: store.computers)
-        } else {
-            computerPreview.close()
-            let edit: ((ConversationAttachment, String) throws -> ConversationAttachment)? = store.canEditAnnotation(attachment) ? { [weak store] attachment, comment in
-                guard let store else { throw WorkspaceError.missingConversation(attachment.conversationID) }
-                return try store.reviseAnnotationComment(attachment, comment: comment)
-            } : nil
-            attachmentPreview.show(attachment, url: store.attachmentFileURL(attachment), edit: edit,
-                canEdit: { [weak store] in store?.canEditAnnotation($0) == true }) { [weak store] note, content, source in
-                guard let store else { throw WorkspaceError.missingConversation(source.conversationID) }
-                try store.saveAnnotation(note, content: content, source: source)
-            }
+        let edit: ((ConversationAttachment, String) throws -> ConversationAttachment)? = store.canEditAnnotation(attachment) ? { [weak store] attachment, comment in
+            guard let store else { throw WorkspaceError.missingConversation(attachment.conversationID) }
+            return try store.reviseAnnotationComment(attachment, comment: comment)
+        } : nil
+        attachmentPreview.show(attachment, url: store.attachmentFileURL(attachment), edit: edit,
+            canEdit: { [weak store] in store?.canEditAnnotation($0) == true }) { [weak store] note, content, source in
+            guard let store else { throw WorkspaceError.missingConversation(source.conversationID) }
+            try store.saveAnnotation(note, content: content, source: source)
         }
     }
 

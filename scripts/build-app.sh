@@ -104,7 +104,6 @@ otool -l "$contents/Helpers/NoodleAppleAgent" \
             install_name_tool -delete_rpath "$rpath" "$contents/Helpers/NoodleAppleAgent"
         fi
     done
-cp -R "$bin_path/SwiftTerm_SwiftTerm.bundle" "$contents/Resources/"
 cp "$project_root/Support/Info.plist" "$contents/Info.plist"
 ditto "$project_root/Support/ToolIcons" "$contents/Resources/ToolIcons"
 agent_host="$contents/XPCServices/NoodleAgentHost.xpc"

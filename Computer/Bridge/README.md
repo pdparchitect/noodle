@@ -54,7 +54,7 @@ atomically only after a complete copy and a fresh assignment check. Transfers
 time out after ten minutes; an upload with an uncertain result is never retried
 automatically. Check the guest destination before retrying.
 
-Removing an assignment closes that bot's terminals and live previews. Already
+Removing an assignment closes that bot's terminals. Already
 sent input cannot be undone and is never automatically retried. Assignment checks
 are not hard isolation against a bot with autonomous host access.
 
@@ -67,19 +67,39 @@ Run the assigned Computer CLI from the bot's workspace:
 ./.agents/skills/computer/computer present --computer COMPUTER_ID --conversation CHAT_ID
 ```
 
-The first selects an exact terminal. The second selects a web display; for a
-shell-only computer it requires a single active terminal, otherwise specify one.
-The broker also checks conversation membership.
+The first captures a saved preview of the specified terminal. The second captures
+the web display; for a shell-only computer it requires a single active terminal,
+otherwise specify one.
+The broker also checks conversation membership. New presentations require the
+`document-preview-v1` capability; Noodle asks users to update an older Computer
+app while keeping its terminal and file commands available.
 
 Cards store a historical preview and a computer reference, without display
-credentials. Opening fetches live access after checking assignment and compatibility.
-Saved cards remain readable if Computer is unavailable, but cannot restore deleted
-computers or expired sessions.
+credentials. Opening in Computer selects the current computer in its main window
+and starts it if stopped. The window uses the computer's normal desktop or human
+terminal; the captured terminal ID is historical metadata, not a separate viewer.
+Saved previews require the installed Computer preview extension, but work while
+Computer is closed. References cannot restore deleted computers.
 
-Computer cards use a Noodle-owned interactive panel because Quick Look cannot
-accept terminal keyboard input. Closing the panel leaves the shell running and
+Computer owns the registered `.noodlecomputer` document type, Quick Look preview
+and thumbnail extensions. Noodle shows a saved thumbnail and opens the file in
+Noodle Computer when clicked. Finder double-clicks use the same document handler.
+Quick Look shows only the saved desktop or terminal content, without titles,
+footers, or a runtime connection. Live Quick Look work is paused.
+
+The sandboxed extensions have no optional entitlements: they only read the file
+provided by macOS. The Computer app uses its main library window and existing
+terminal and web display implementations. Closing it leaves the computer running and
 does not tell the bot that a task is complete. The web view stays on the guest
 origin, with host clipboard, file panels, and media capture disabled.
+
+Computer resolves opened references directly against its local library.
+Opening a reference requires neither a running Noodle app nor an agent assignment. General-purpose
+reference files contain no agent ID; the agent that presented a file remains in
+Noodle's conversation metadata. Legacy files that contain agentID are accepted,
+but that field is ignored when opening a computer. Existing agent CLI permissions
+and terminal ownership checks are unchanged. Opening a reference does not attach
+the user to an agent's terminal session.
 
 ## Tests
 
@@ -114,7 +134,8 @@ Noodle's `--computer-picker-test` opens an isolated assignment UI fixture. Add
 `--computer-update-notice-test` to save a before/after update notice snapshot using
 synthetic providers, without opening real computers or bot workspaces.
 Computer's `--provider-snapshot-test`, alongside its provider integration flags,
-checks native desktop capture. Snapshot and preview geometry checks are in
-`Computer/Tests/PreviewSnapshotTests.swift` and `PreviewGeometryTests.swift`.
+checks native desktop capture. Snapshot checks are in
+`Computer/Tests/PreviewSnapshotTests.swift`; saved document tests are in
+`Computer/Presentation/Tests/ComputerDocumentTests`.
 
 [Computer](../README.md) · [Architecture](../../docs/architecture.md)

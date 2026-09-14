@@ -36,6 +36,9 @@ if [[ "$actual_kernel" != "$expected_kernel" ]]; then
     exit 1
 fi
 swift build --disable-sandbox --package-path "$package" --scratch-path "$build_root" -c "$configuration" --product NoodleComputer >&2
+for product in ComputerPreviewExtension ComputerThumbnailExtension; do
+    swift build --disable-sandbox --package-path "$package" --scratch-path "$build_root" -c "$configuration" --product "$product" >&2
+done
 bin_path="$(swift build --disable-sandbox --package-path "$package" --scratch-path "$build_root" -c "$configuration" --show-bin-path)"
 staging_root="$(mktemp -d "$build_root/App.XXXXXX")"
 trap 'rm -rf "$staging_root"' EXIT
@@ -57,6 +60,15 @@ cp "$package/Support/Info.plist" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $app_name" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$app/Contents/Info.plist"
+for kind in Preview Thumbnail; do
+    extension="$app/Contents/PlugIns/Computer$kind.appex"
+    mkdir -p "$extension/Contents/MacOS"
+    cp "$bin_path/Computer${kind}Extension" "$extension/Contents/MacOS/Computer${kind}Extension"
+    cp "$package/Support/$kind-Info.plist" "$extension/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.${kind:l}" "$extension/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$extension/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$extension/Contents/Info.plist"
+done
 updates_enabled=false
 if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == 1 ]]; then updates_enabled=true; fi
 if [[ "${NOODLE_COMPUTER_TEST_UPDATES:-0}" == 1 ]]; then
@@ -121,6 +133,9 @@ cp "$package/Support/Computer.entitlements" "$resolved_entitlements"
 /usr/libexec/PlistBuddy -c "Add :com.apple.security.temporary-exception.mach-lookup.global-name:1 string $bundle_identifier-spki" "$resolved_entitlements"
 for component in "$sparkle/Versions/B/XPCServices/Installer.xpc" "$sparkle/Versions/B/Autoupdate" "$sparkle/Versions/B/Updater.app" "$sparkle"; do
     codesign --force --options runtime "$timestamp_option" --sign "$signing_identity" "$component"
+done
+for extension in "$app/Contents/PlugIns/"*.appex; do
+    codesign --force --options runtime "$timestamp_option" --entitlements "$package/Support/Preview.entitlements" --sign "$signing_identity" "$extension"
 done
 codesign --force --options runtime "$timestamp_option" --entitlements "$resolved_entitlements" --sign "$signing_identity" "$app"
 codesign --verify --deep --strict --verbose=2 "$app"

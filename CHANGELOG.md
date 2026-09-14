@@ -32,6 +32,12 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Open Computer attachments with the running provider, or the neighbouring local Computer build during development, instead of an older installed copy that cannot handle reference files.
+
+- Correct Computer skill and CLI guidance: attachments show saved previews and open the computer's normal desktop or human terminal, rather than resuming an agent's terminal session.
+
+- Avoid overlapping Quick Look loads when opening or repeatedly clicking attachments, and keep unavailable thumbnails retryable instead of caching a generic file icon.
+
 - Reuse the saved preset account when tool creation retries a failed workspace refresh, including after switching presets. Preserve independent accounts for separate creations and cover catalogue search, custom setup navigation, repeated clicks, cancellation, and save failures with hidden-window tests.
 
 - Stop old voice playback and clear its error when a message's recording changes, load the replacement recording, and reset the displayed playhead immediately on replay. Cover pause/resume, seeking, completion, failures, active-message handoff, and view removal with silent playback fixtures.
@@ -45,8 +51,6 @@ All notable changes to Noodle are documented here, following
 - Clear cancelled harness sign-ins immediately so users can retry, and ignore retired challenges and account checks. Bind setup results to the current installation so removed or replaced harnesses cannot be restored by a late callback. Discard version results returned after cancellation.
 
 - Cancel an unfinished capture-region drag when the image or selection mode changes, so mouse-up cannot annotate a replacement capture. Cover native capture-window close/reopen, keyboard save retries, permission recovery, and original-conversation routing.
-
-- Keep retired Computer preview callbacks from closing a replacement window or replacing a current error, discard queued terminal input after shell exit, and clear unavailable web displays. Restrict web navigation and authentication callbacks to the current authorized preview.
 
 - Keep runtime errors and recovery actions in Harness settings, removing duplicate warnings and Retry Startup buttons from Security settings.
 
@@ -87,6 +91,8 @@ All notable changes to Noodle are documented here, following
 - Let conversation participants target the exact Applet session returned by shared opens using the shared link, conversation, and session ID together. Document hidden rendering limits, session diagnostics, and explicit headless animation stepping in generated CLI help and agent guidance.
 
 ### Changed
+
+- Show saved images for Computer attachments and open the referenced computer in Noodle Computer when clicked, keeping agent assignment checks on the CLI path.
 
 - Remove unused in-chat action approval and question forms, their pending-request queue, and sidebar indicators. Keep runtime permission replies tied to saved bot access, skip structured questions immediately without adding a replacement prompt.
 

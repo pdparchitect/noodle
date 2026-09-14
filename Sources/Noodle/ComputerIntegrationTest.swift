@@ -97,7 +97,6 @@ import SwiftUI
     }
     static func run() async throws {
         setbuf(stdout, nil)
-        let headless = CommandLine.arguments.contains("--computer-headless-test")
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("NoodleBridge-Test-\(UUID().uuidString)")
         let helpers = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers")
         let repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: helpers.appendingPathComponent("messenger"))
@@ -184,7 +183,7 @@ import SwiftUI
         try await expectDenied(["read"] + terminalA, b.agent)
         try await expectDenied(["present", "--terminal", idA, "--conversation", b.conversation.id.uuidString], b.agent)
         try await expectDenied(["present", "--computer", UUID().uuidString, "--terminal", idA, "--conversation", a.conversation.id.uuidString], a.agent)
-        _ = try await cli(["present", "--terminal", idA, "--conversation", a.conversation.id.uuidString, "--message", "Use this live terminal."])
+        _ = try await cli(["present", "--terminal", idA, "--conversation", a.conversation.id.uuidString, "--message", "Here is the saved terminal preview."])
         let attachment = try repository.loadAttachments(conversationID: a.conversation.id).first!
         guard let card = attachment.computer, card.terminalID?.uuidString == idA, card.view == "terminal" else { throw ComputerBridgeError("No typed computer attachment.") }
         if controller.registry.computers.first(where: { $0.id == computer.id })?.hasWebDisplay != true {
@@ -201,23 +200,6 @@ import SwiftUI
         _ = try await cli(["read"] + terminalA)
         print("PASS: discovery, two assignments, separate PTYs, shared guest files, CLI input/read/resize, typed card, membership checks and revocation")
 
-        let preview = ComputerPreviewController()
-        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 380, height: 290),
-            styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.title = "Isolated Computer Attachment Test"
-        window.contentView = NSHostingView(rootView: AttachmentInlinePreview(attachment: attachment,
-            fileURL: root.appendingPathComponent("fixture.noodlecomputer"), shouldLoad: true, isSelected: false,
-            select: {}, preview: { preview.show(card, controller: controller) }).padding(24))
-        if !headless { window.makeKeyAndOrderFront(nil) }
-        print("PREVIEW TEST READY: click the card, type printf 'USER_%s\\n' INPUT, then close with Command-W")
-        for _ in 0..<((CommandLine.arguments.contains("--computer-web-test-only") || CommandLine.arguments.contains("--computer-headless-test")) ? 0 : 300) {
-            try await Task.sleep(for: .seconds(1))
-            let text = try await cli(["read"] + terminalA)["text"] as? String ?? ""
-            if text.contains("USER_INPUT") { break }
-        }
-        let text = try await cli(["read"] + terminalA)["text"] as? String ?? ""
-        print(text.contains("USER_INPUT") ? "PASS: interactive preview keyboard input reached guest" : "NOTE: interactive keyboard check not completed")
-        preview.close(); window.orderOut(nil)
         if CommandLine.arguments.contains("--computer-web-test") {
             _ = try await cli(["write"] + terminalA + ["--text", "apk add --no-cache busybox-extras && printf '__HTTP_%s__\\n' READY"])
             var httpReady = false
@@ -233,16 +215,8 @@ import SwiftUI
             _ = try await cli(["present"] + base + ["--conversation", a.conversation.id.uuidString])
             let webCard = try repository.loadAttachments(conversationID: a.conversation.id).last!.computer!
             guard webCard.view == "web", webCard.terminalID == nil else { throw ComputerBridgeError("Web card unexpectedly requires a terminal.") }
-            _ = try await controller.previewCall(.init(.display, computerID: computer.id, agentID: a.agent.id), card: webCard)
-            if !headless { preview.show(webCard, controller: controller) }
-            print("WEB PREVIEW TEST READY")
-            var webVerified = false
-            for _ in 0..<(CommandLine.arguments.contains("--computer-headless-test") ? 0 : 180) {
-                if await preview.integrationTestWebState() == "WEB_INPUT" { webVerified = true; break }
-                try await Task.sleep(for: .seconds(1))
-            }
-            print(webVerified ? "PASS: live web keyboard and pointer input" : "NOTE: live web interaction not completed")
-            preview.close()
+            _ = try await controller.call(.init(.display, computerID: computer.id, agentID: a.agent.id))
+            print("PASS: web presentation reference resolves through the authorized broker")
         }
         _ = try await cli(["write"] + terminalA + ["--text", "exit"])
         try await Task.sleep(for: .milliseconds(300))

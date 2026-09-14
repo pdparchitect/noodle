@@ -11,6 +11,8 @@
     <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>26.0</string>
     <key>NSHighResolutionCapable</key><true/>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Noodle Computer connects to the virtual desktops running on this Mac to display their screens.</string>
     <key>NSAppTransportSecurity</key><dict>
         <key>NSAllowsLocalNetworking</key><true/>
     </dict>
@@ -26,4 +28,43 @@
     <key>SUAllowsAutomaticUpdates</key><true/>
     <key>SUSendProfileInfo</key><false/>
     <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.pdparchitect.noodle.computer-reference</string>
+			<key>UTTypeDescription</key>
+			<string>Noodle Computer Reference</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>noodlecomputer</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/vnd.noodle.computer+json</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Noodle Computer Reference</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.pdparchitect.noodle.computer-reference</string>
+			</array>
+		</dict>
+	</array>
 </dict></plist>

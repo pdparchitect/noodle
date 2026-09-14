@@ -17,7 +17,6 @@ let package = Package(
         .package(path: "Shared/Wallpaper"),
         .package(path: "Computer/Bridge"),
         .package(path: "Applet/Protocol"),
-        .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", exact: "1.20.0"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk", exact: "0.12.1")
     ],
@@ -41,7 +40,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: ["NoodleCore", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", "NoodleAudioCapture", .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "SwiftTerm", package: "SwiftTerm")],
+            dependencies: ["NoodleCore", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", "NoodleAudioCapture", .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",

@@ -11,3 +11,9 @@ entitlements="$(mktemp /tmp/computer-entitlements.XXXXXX)"
 trap 'rm -f "$entitlements"' EXIT
 codesign -d --entitlements :- "$app" > "$entitlements" 2>/dev/null
 swift "$project_root/Computer/Tests/VerifyRelease.swift" "$info" "$entitlements" "$project_root/Computer/VERSION"
+for kind in Preview Thumbnail; do
+    extension="$app/Contents/PlugIns/Computer$kind.appex"
+    codesign --verify --strict "$extension"
+    codesign -d --entitlements :- "$extension" > "$entitlements" 2>/dev/null
+    swift "$project_root/Computer/Tests/VerifyPreviewExtension.swift" "$extension/Contents/Info.plist" "$entitlements" "$info" "$kind"
+done

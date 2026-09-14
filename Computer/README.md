@@ -30,8 +30,11 @@ Noodle starts the Computer app when needed; its window can stay closed.
 
 Assign the same computer to several agents when they need to work on shared files
 and services. Each gets its own terminal sessions. An agent can present a terminal
-or desktop in the conversation for you to review work or take over a step.
-Closing a preview leaves the terminal running.
+or desktop in the conversation as a `.noodlecomputer` file. Quick Look shows its
+saved preview. Click the attachment or double-click the file to select and start
+that computer in Noodle Computer's main window. This uses the normal desktop or
+human terminal, independently of Noodle and agent assignments. Closing the window
+leaves the computer running.
 
 ## Use the terminal
 

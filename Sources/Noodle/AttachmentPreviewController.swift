@@ -170,7 +170,12 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
         // QL searches the responder chain during key/main-window changes. Its
         // requested item must already exist before that search starts.
         Self.active = self
-        source = attachment; item = Item(url: url, title: attachment.originalFilename); self.save = save
+        source = attachment; self.save = save
+        // Attachment files are immutable. Keep the same item on repeated clicks
+        // so an in-flight extension preview is not discarded and loaded again.
+        if item?.previewItemURL != url || item?.previewItemTitle != attachment.originalFilename {
+            item = Item(url: url, title: attachment.originalFilename)
+        }
         panel = preview
         if !reusingPreview {
             if hostWindow.firstResponder !== view { hostResponder = hostWindow.firstResponder }
@@ -198,7 +203,10 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
         // A closed shared panel can retain its controller while its data source
         // was cleared by the close/handoff. Rebind on every successful open.
         configurePreviewPanel(preview)
-        preview.reloadData(); preview.currentPreviewItemIndex = 0; preview.refreshCurrentPreviewItem()
+        // reloadData already loads a changed item. Refreshing it immediately
+        // starts another extension request while Quick Look is still activating
+        // the first display bundle, which can abort during its teardown.
+        preview.reloadData()
         preview.title = attachment.originalFilename
         openedAt = Date()
         preview.makeKeyAndOrderFront(nil)

@@ -10,14 +10,15 @@ import XCTest
         try await f.prepare(); return f
     }
 
-    func testPreviewRevokedDuringHandshakeNeverDispatchesTerminalWrite() async throws {
+    func testAssignmentRevokedDuringHandshakeNeverDispatchesTerminalWrite() async throws {
         let f = try await fixture()
         f.provider.blockedOperation = .list
-        let task = Task { try await f.controller.previewCall(f.request(.terminalWrite), card: f.card) }
+        let sent = try f.send(f.request(.terminalWrite))
         try await f.wait { f.provider.blocked != nil }
         try f.controller.assign([], to: f.a)
         f.provider.blocked?.finish(.success(f.provider.response(.list)))
-        do { _ = try await task.value; XCTFail("Revoked preview succeeded") } catch {}
+        let response = try await f.response(sent)
+        XCTAssertNotNil(response.error)
         XCTAssertEqual(f.provider.count(.terminalWrite), 0)
     }
 
@@ -43,7 +44,7 @@ import XCTest
         f.provider.blocked?.finish(.success(f.provider.response(.terminalRead)))
         let response = try await f.response(sent)
         XCTAssertNotNil(response.error); XCTAssertNil(response.data)
-        XCTAssertFalse(f.controller.permits(f.card))
+        XCTAssertFalse(f.controller.registry.permits(f.card.computer.id, agent: f.card.agentID))
     }
 
     func testTransfersRevokedDuringDispatchHandshakeNeverReachProvider() async throws {
@@ -115,7 +116,7 @@ import XCTest
         try FileManager.default.createDirectory(at: path, withIntermediateDirectories: false)
         XCTAssertThrowsError(try f.controller.assign([], to: f.a))
         XCTAssertEqual(f.controller.selectedIDs(for: f.a), [f.provider.computer.id])
-        XCTAssertTrue(f.controller.permits(f.card))
+        XCTAssertTrue(f.controller.registry.permits(f.card.computer.id, agent: f.card.agentID))
         XCTAssertEqual(f.provider.count(.revoke), 0)
         try FileManager.default.removeItem(at: path); try before.write(to: path)
     }
@@ -126,7 +127,7 @@ import XCTest
         try FileManager.default.removeItem(at: instructions)
         try FileManager.default.createDirectory(at: instructions, withIntermediateDirectories: false)
         XCTAssertThrowsError(try f.controller.assign([], to: f.a))
-        XCTAssertFalse(f.controller.permits(f.card))
+        XCTAssertFalse(f.controller.registry.permits(f.card.computer.id, agent: f.card.agentID))
         try await f.wait { f.provider.count(.revoke) == 1 }
         XCTAssertEqual(try ComputerAssignments.load(root: f.root).assigned(to: f.a.id), [])
     }
@@ -155,17 +156,6 @@ import XCTest
         XCTAssertFalse(f.controller.available)
         XCTAssertEqual(f.controller.failure, "Invalid provider catalogue.")
         XCTAssertEqual(try Data(contentsOf: f.root.appendingPathComponent("computers.json")), before)
-    }
-
-    func testStaleOrForgedPreviewCardCannotReachProvider() async throws {
-        let f = try await fixture(), before = f.provider.requests.count
-        for operation in [ComputerOperation.terminalRead, .terminalWrite, .display, .revoke] {
-            var request = f.request(operation); request.agentID = f.b.id
-            do { _ = try await f.controller.previewCall(request, card: f.card); XCTFail("Forged preview accepted") } catch {}
-        }
-        XCTAssertEqual(f.provider.requests.count, before)
-        f.controller.start(agents: [f.b], monitoring: false)
-        XCTAssertFalse(f.controller.permits(f.card))
     }
 
     func testAgentIdentityAndCatalogueFilteringAreBrokerOwned() async throws {

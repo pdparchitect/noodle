@@ -2,6 +2,24 @@ import XCTest
 @testable import ComputerBridge
 
 final class ProtocolTests: XCTestCase {
+    func testDocumentPreviewCapabilityDoesNotBlockExistingCLICommands() throws {
+        var old = ComputerCapabilities()
+        old.features.remove("document-preview-v1")
+        XCTAssertNoThrow(try ComputerCapabilities.requireCompatible(old))
+        XCTAssertNoThrow(try ComputerCapabilities.requireFileTransfer(old))
+        XCTAssertThrowsError(try ComputerCapabilities.requireDocumentPreview(old))
+        XCTAssertNoThrow(try ComputerCapabilities.requireDocumentPreview(ComputerCapabilities()))
+    }
+    func testHumanReferenceOmitsAgentIdentityAndAcceptsLegacyCards() throws {
+        let card = ComputerCard(computer: .init(id: UUID(), name: "Desktop", kind: "Desktop", state: "Running", symbol: "desktopcomputer"),
+            agentID: UUID(), terminalPreview: "", view: "web", previewImage: Data([1, 2]))
+        let data = try JSONEncoder().encode(card.reference)
+        let fields = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(Set(fields.keys), ["version", "computer", "capturedAt", "terminalPreview", "view", "previewImage"])
+        XCTAssertNil(fields["agentID"])
+        XCTAssertEqual(try JSONDecoder().decode(ComputerReference.self, from: data), card.reference)
+        XCTAssertEqual(try JSONDecoder().decode(ComputerReference.self, from: JSONEncoder().encode(card)), card.reference)
+    }
     func testTransferCapabilityIsOptionalForExistingOperations() throws {
         var legacy = ComputerCapabilities()
         legacy.features.remove("file-transfer-v1")

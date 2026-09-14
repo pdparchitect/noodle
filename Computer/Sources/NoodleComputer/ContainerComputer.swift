@@ -239,6 +239,12 @@ actor ContainerComputer {
             } catch { lastFailure = error.localizedDescription }
             try await Task.sleep(for: .milliseconds(500))
         }
+        // Preserve the readiness retries while macOS's initial permission prompt
+        // is open. Only diagnose a block after that grace period, and never infer
+        // denial from URLSession's generic "Internet offline" error alone.
+        let denied = await LocalNetworkAccessProbe.isDenied(for: connection.url)
+        try Task.checkCancellation()
+        if denied { throw ComputerStartupRecovery.localNetwork }
         throw ComputerError("The Linux desktop did not become ready: \(lastFailure)\n" + output.text())
     }
 

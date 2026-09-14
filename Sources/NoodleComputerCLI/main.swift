@@ -12,8 +12,9 @@ import NoodleCore
                 print("upload --computer UUID --source LOCAL_FILE --destination /guest/file")
                 print("download --computer UUID --source /guest/file --destination LOCAL_FILE")
                 print("Transfers: regular files up to 8 GiB; local files must be in this bot's workspace. Parent folders must exist; symlinks and overwrites are refused.")
-                print("present --terminal SESSION_ID --conversation CHAT_ID: share this exact terminal (computer inferred).")
-                print("present --computer COMPUTER_ID --conversation CHAT_ID: share its web display, or its only active terminal for a shell-only computer.")
+                print("present --terminal SESSION_ID --conversation CHAT_ID: share a saved preview of this terminal (computer inferred).")
+                print("present --computer COMPUTER_ID --conversation CHAT_ID: share a saved preview of its web display, or its only active terminal for a shell-only computer.")
+                print("Opening the attachment selects and starts the computer in Noodle Computer's main window, using its normal desktop or human terminal.")
                 print("--view is a compatibility override; normally omit it. Multiple shell sessions require --terminal.")
                 return
             }

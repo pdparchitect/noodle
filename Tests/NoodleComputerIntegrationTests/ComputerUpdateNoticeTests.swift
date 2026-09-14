@@ -5,6 +5,24 @@ import XCTest
 @testable import Noodle
 
 @MainActor final class ComputerUpdateNoticeTests: XCTestCase {
+    func testOlderProviderExplainsDocumentPreviewUpgradeWithoutBlockingTerminals() async throws {
+        let provider = UpdateNoticeProvider()
+        var old = ComputerCapabilities(); old.features.remove("document-preview-v1")
+        await provider.set(capabilities: old)
+        let controller = try controller(provider: provider)
+        await controller.refresh()
+        XCTAssertTrue(controller.needsDocumentPreviewUpdate)
+        XCTAssertTrue(controller.available)
+        do {
+            _ = try await controller.call(.init(.preview, computerID: UUID()))
+            XCTFail("Old provider should request an update")
+        } catch { XCTAssertTrue(error.localizedDescription.contains("Update Noodle Computer")) }
+        let operations = await provider.operations
+        XCTAssertFalse(operations.contains(.preview))
+        await provider.set(capabilities: ComputerCapabilities())
+        await controller.refresh()
+        XCTAssertFalse(controller.needsDocumentPreviewUpdate)
+    }
     private func controller(provider: UpdateNoticeProvider) throws -> ComputerController {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let repository = WorkspaceRepository(rootURL: root)

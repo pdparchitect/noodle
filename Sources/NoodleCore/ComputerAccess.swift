@@ -42,7 +42,7 @@ public enum ComputerAgentSkill {
     public static let instructions = """
     ---
     name: computer
-    description: Use computers explicitly assigned to this bot through Noodle. Run commands in guest terminals and show the user an interactive computer card.
+    description: Use computers explicitly assigned to this bot through Noodle. Run commands in guest terminals and share saved previews that open in Noodle Computer.
     ---
     # Computer
 
@@ -111,18 +111,25 @@ public enum ComputerAgentSkill {
     credentials into logs or conversation cards. If connect() fails, check that
     Browser is open and report the error; do not silently start another browser.
 
-    For terminal interaction run `present --terminal SESSION_ID
-    --conversation UUID --message 'Please complete the sign-in in this terminal.'`.
-    It sends a visual Computer card in that conversation. The user opens a live
-    preview of the SAME terminal; do not keep typing while they interact. There
-    is no Done action. Detect the needed state change or wait for a chat reply;
-    closing the preview does not mean success. The computer is inferred from your
-    terminal ID. For a web/desktop display, use `present --computer COMPUTER_ID
+    To share a saved terminal preview, run `present --terminal SESSION_ID
+    --conversation UUID --message 'Here is the computer and its saved terminal output.'`.
+    It sends a .noodlecomputer attachment in that conversation. Quick Look shows
+    the saved preview. Clicking the attachment or opening the file selects and
+    starts the computer in Noodle Computer's main window. Terminal references
+    open the computer's normal human terminal; they do not attach the user to your
+    terminal session. A command awaiting input in your terminal must be completed
+    there, so do not ask the user to answer that prompt through the attachment.
+    For user interaction, give any steps they need to run in their own terminal.
+    There is no Done action. Detect the needed state change or wait for a chat
+    reply; closing the window does not mean success. The computer is inferred
+    from your terminal ID. For a web/desktop display, use `present --computer COMPUTER_ID
     --conversation UUID`; no terminal needs to be opened. On a shell-only computer,
     this selects your sole active terminal. If none exists, open one first; if more
     than one exists, choose explicitly with --terminal. Normally omit --view (a
-    compatibility override). It captures a bounded visual snapshot or recent terminal text. It
-    does not grant access to recipients' agents. Start a stopped computer first.
+    compatibility override). It captures a bounded visual snapshot or recent
+    terminal text. Opening the attachment is a user action and needs no agent
+    assignment; it does not grant access to recipients' agents. Start a stopped
+    computer before capturing a preview.
 
     Only assigned computers appear in list. You may start an assigned computer
     when needed for the user's task. No desktop app window needs to be open.

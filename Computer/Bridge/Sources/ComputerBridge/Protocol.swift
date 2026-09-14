@@ -113,7 +113,7 @@ public struct ComputerCapabilities: Codable, Equatable, Sendable {
     public var minimumProtocol = 1
     public var maximumProtocol = 1
     private static let requiredFeatures: Set<String> = ["agent-terminals-v1", "presentation-v2", "guest-display-v1"]
-    public var features: Set<String> = requiredFeatures.union(["file-transfer-v1"])
+    public var features: Set<String> = requiredFeatures.union(["file-transfer-v1", "document-preview-v1"])
     public init() {}
     public static func requireCompatible(_ capabilities: Self?) throws {
         guard let capabilities else {
@@ -135,6 +135,12 @@ public struct ComputerCapabilities: Codable, Equatable, Sendable {
             throw ComputerBridgeError("Update Noodle Computer to upload and download files.")
         }
     }
+    public static func requireDocumentPreview(_ capabilities: Self?) throws {
+        try requireCompatible(capabilities)
+        guard capabilities?.features.contains("document-preview-v1") == true else {
+            throw ComputerBridgeError("Update Noodle Computer to preview and open computer reference files.")
+        }
+    }
 }
 
 public enum ComputerPresentation {
@@ -147,7 +153,24 @@ public enum ComputerPresentation {
     }
 }
 
-/// Conversation-owned reference, never a network address or bearer credential.
+/// General-purpose human document. No agent identity, connection credentials or
+/// authority is stored here. Legacy ComputerCard JSON decodes by ignoring agentID.
+public struct ComputerReference: Codable, Hashable, Sendable {
+    public var version = 1
+    public var computer: RemoteComputer
+    public var terminalID: UUID?
+    public var capturedAt: Date
+    public var terminalPreview: String
+    public var view: String?
+    public var previewImage: Data?
+    public init(computer: RemoteComputer, terminalID: UUID? = nil, capturedAt: Date = Date(),
+                terminalPreview: String, view: String? = nil, previewImage: Data? = nil) {
+        self.computer = computer; self.terminalID = terminalID; self.capturedAt = capturedAt
+        self.terminalPreview = String(terminalPreview.suffix(2000)); self.view = view; self.previewImage = previewImage
+    }
+}
+
+/// Conversation metadata tracks the presenting agent separately from the file.
 public struct ComputerCard: Codable, Hashable, Sendable {
     public static let mediaType = "application/vnd.noodle.computer+json"
     public var version = 1
@@ -158,6 +181,12 @@ public struct ComputerCard: Codable, Hashable, Sendable {
     public var terminalPreview: String
     public var view: String?
     public var previewImage: Data?
+    public var reference: ComputerReference {
+        var reference = ComputerReference(computer: computer, terminalID: terminalID, capturedAt: capturedAt,
+            terminalPreview: terminalPreview, view: view, previewImage: previewImage)
+        reference.version = version
+        return reference
+    }
     public init(computer: RemoteComputer, agentID: UUID, terminalID: UUID? = nil, terminalPreview: String, view: String? = nil, previewImage: Data? = nil) {
         self.computer = computer; self.agentID = agentID; self.terminalID = terminalID
         self.capturedAt = Date(); self.terminalPreview = String(terminalPreview.suffix(2000))

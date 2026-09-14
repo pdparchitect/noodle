@@ -13,12 +13,62 @@ The kernel is tracked with Git LFS; its provenance is in
 [the kernel notice](Support/KERNEL-NOTICE.txt). Builds use release optimization.
 Set `NOODLE_COMPUTER_CONFIGURATION=debug` for debugging.
 
+Noodle Local opens attachments with the running Computer app. When Computer is
+closed, it prefers `Noodle Computer.app` beside its own bundle, before the release
+registered with macOS. Launch the intended Computer build before testing if both
+development and release copies are installed; only one process can own a library.
+
 ## Tests
 
 ```sh
 swift test --disable-sandbox --package-path Computer --scratch-path .build/computer
 swift test --disable-sandbox --package-path Computer/Bridge
+swift test --disable-sandbox --package-path Computer/Presentation
 ```
+
+Computer's preview and thumbnail extensions are bundled and signed by the same
+build script. Each has only App Sandbox, without network, App Group or optional
+file access entitlements. `verify-computer-release.sh` checks both installed
+extension signatures, document-type declarations and their exact entitlement set.
+Quick Look renders the saved content; opening a document selects and starts its
+computer in the main library window. Document tests cover saved content and
+reference compatibility; Computer storage tests cover reference selection without
+launching guests or accessing real libraries. The separate live viewer has been
+removed. Only [notes from the Quick Look investigation](Prototypes/QuickLook/README.md)
+are retained from the temporary prototype.
+
+To verify a registered extension through the modern macOS thumbnail API:
+
+```sh
+swiftc -parse-as-library Computer/Tests/NativeThumbnailProbe.swift -o /tmp/computer-thumbnail-probe
+/tmp/computer-thumbnail-probe /path/to/reference.noodlecomputer /tmp/computer-thumbnail.png
+```
+
+This bounded check reads only the supplied reference and writes the requested
+image. It does not start a computer. The Computer app must already be registered
+with Launch Services and its thumbnail extension enabled. `qlmanage -t` timed out
+on the development machine while the modern API rendered the extension correctly.
+
+To exercise Noodle's real Quick Look panel after building both apps:
+
+```sh
+'.build/Noodle Local.app/Contents/MacOS/Noodle' --computer-document-preview-test
+```
+
+This opt-in fixture runs before Noodle opens its workspace. It generates temporary
+computer, text and unknown-type files, repeats preview selection and closing,
+and prints a screenshot path for visual verification. It does not load agents or
+start guests. Document tests also verify that preparing a preview preserves the
+root view exported through macOS ViewBridge.
+
+Desktop startup preserves its readiness retries while macOS's first Local Network
+permission prompt is open. If startup still fails, a bounded Network.framework
+connection to the same guest endpoint checks specifically for `localNetworkDenied`.
+That failure shows Open Settings and Try Again; an ordinary offline or unreachable
+endpoint keeps its original error. `LocalNetworkAccessTests` cover denial, timeout,
+cancellation, and recovery state with an injected connection, without changing
+privacy settings. Terminal-launched tests cannot validate the app's Local Network
+grant; check that manually with the signed app when permission changes are allowed.
 
 To check shell selection, history, editing, completion, and interrupt keys in
 real Linux PTYs, pass locally available image names to the shell test:

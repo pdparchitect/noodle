@@ -1,5 +1,6 @@
 import AppKit
 import ComputerCore
+import ComputerDocument
 import SwiftUI
 import UniformTypeIdentifiers
 import Virtualization
@@ -28,17 +29,27 @@ struct NoodleComputerApp: App {
           NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle")!)
         }
       }
-      CommandGroup(replacing: .newItem) {
-        Button("New Computer…") { NotificationCenter.default.post(name: .newComputer, object: nil) }
-          .keyboardShortcut("n")
-        Button("New from Container Image…") { NotificationCenter.default.post(name: .newCustomComputer, object: nil) }
-      }
+      ComputerFileCommands(delegate: delegate)
     }
     Settings {
       ComputerSettingsView()
         .preferredColorScheme(.dark)
     }
     .windowResizability(.contentSize)
+  }
+}
+
+@MainActor private struct ComputerFileCommands: Commands {
+  let delegate: ComputerAppDelegate
+  @Environment(\.openWindow) private var openWindow
+  var body: some Commands {
+    let action = openWindow
+    let _ = delegate.openLibrary = { action(id: "library") }
+    CommandGroup(replacing: .newItem) {
+      Button("New Computer…") { NotificationCenter.default.post(name: .newComputer, object: nil) }
+        .keyboardShortcut("n")
+      Button("New from Container Image…") { NotificationCenter.default.post(name: .newCustomComputer, object: nil) }
+    }
   }
 }
 
@@ -49,6 +60,46 @@ extension Notification.Name {
 
 @MainActor final class ComputerAppDelegate: NSObject, NSApplicationDelegate {
   static var store: ComputerStore?
+  var openLibrary: (() -> Void)? {
+    didSet {
+      if needsLibrary, let openLibrary {
+        needsLibrary = false
+        DispatchQueue.main.async { openLibrary() }
+      }
+    }
+  }
+  private var needsLibrary = false
+  private var openedDocument = false
+  private var documentRequest = UUID()
+  private var documentStarts: [UUID: Task<Void, Never>] = [:]
+  func application(_ application: NSApplication, open urls: [URL]) {
+    for url in urls {
+      do {
+        let card = try ComputerReferenceDocument.read(url)
+        let store = try Self.loadLibrary()
+        let session = try store.selectComputer(card)
+        openedDocument = true
+        if let openLibrary { openLibrary() } else { needsLibrary = true }
+        application.unhide(nil)
+        application.activate(ignoringOtherApps: true)
+        let request = UUID()
+        documentRequest = request
+        let start = documentStarts[session.id] ?? Task { [weak self] in
+          if session.phase.canStart { await store.start(session) }
+          self?.documentStarts.removeValue(forKey: session.id)
+        }
+        documentStarts[session.id] = start
+        Task {
+          await start.value
+          guard documentRequest == request, store.selection == session.id else { return }
+          await store.selectDisplay(card.view == "web" ? .desktop : .terminal, in: session)
+        }
+      } catch {
+        let alert = NSAlert(error: error)
+        alert.runModal()
+      }
+    }
+  }
   func applicationDidBecomeActive(_ notification: Notification) {
     // Quiet agent-driven provider launches must not show update prompts.
     ComputerUpdater.shared.start()
@@ -57,7 +108,7 @@ extension Notification.Name {
     guard CommandLine.arguments.contains("--noodle-background") else { return }
     // Also cover Launch Services reopening a previously registered single-window
     // app. This affects only this process; an explicit later open unhides it.
-    NSApp.hide(nil)
+    if !openedDocument { NSApp.hide(nil) }
     if CommandLine.arguments.contains("--provider-integration-test") {
       Task {
         do { try await ComputerSmokeTest.checkProvider(); NSApp.terminate(nil) }
@@ -434,6 +485,19 @@ struct ComputerDetailView: View {
         ComputerFilesView(model: session.filesModel(for: runtime), appearance: session.computer.appearance ?? .init()).id(session.id)
       } else if let terminal = session.terminal {
         ComputerTerminalView(terminal: terminal, appearance: session.computer.appearance ?? .init())
+      } else if let recovery = session.startupRecovery {
+        ContentUnavailableView {
+          Label(recovery.title, systemImage: "network")
+        } description: {
+          Text(recovery.explanation)
+        } actions: {
+          Button("Open Settings") {
+            if !recovery.openSettings() {
+              store.error = "Open System Settings → Privacy & Security → Local Network and enable Noodle Computer."
+            }
+          }.buttonStyle(.borderedProminent)
+          Button("Try Again") { Task { await store.start(session) } }
+        }
       } else {
         ContentUnavailableView {
           Label(

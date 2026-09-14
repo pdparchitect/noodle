@@ -1,4 +1,5 @@
 import AppKit
+import ComputerBridge
 import ComputerCore
 import Darwin
 import Virtualization
@@ -17,6 +18,13 @@ enum ComputerPhase: Equatable {
         }
     }
     var busy: Bool { self == .starting || self == .stopping || self == .updating }
+    var canStart: Bool {
+        switch self { case .stopped, .failed: true; default: false }
+    }
+    var startFailureDescription: String {
+        if case .failed(let reason) = self { return "Computer did not start: \(reason)" }
+        return "Computer did not start: \(label)"
+    }
 }
 
 enum ComputerDisplayMode: String {
@@ -29,7 +37,10 @@ enum ComputerDisplayMode: String {
 @MainActor final class ComputerSession: ObservableObject, Identifiable {
     nonisolated let id: UUID
     @Published var computer: Computer
-    @Published var phase = ComputerPhase.stopped
+    @Published var phase = ComputerPhase.stopped {
+        didSet { if case .failed = phase {} else { startupRecovery = nil } }
+    }
+    @Published var startupRecovery: ComputerStartupRecovery?
     @Published var console = ""
     @Published var commandRunning = false
     @Published var updateResult: String?
@@ -66,6 +77,11 @@ enum ComputerDisplayMode: String {
         self.computer = computer
     }
     func append(_ text: String) { console = String((console + text).suffix(262_144)) }
+    func recordStartupFailure(_ error: Error) {
+        phase = .failed(error.localizedDescription)
+        startupRecovery = error as? ComputerStartupRecovery
+        append("\n\(error.localizedDescription)\n")
+    }
 }
 
 /// One owner for the library and all live machines. No provider discovery,
@@ -130,6 +146,17 @@ enum ComputerDisplayMode: String {
     deinit { if lease >= 0 { close(lease) } }
 
     var selected: ComputerSession? { sessions.first { $0.id == selection } }
+    /// Reference files identify a computer; the normal library owns its UI and
+    /// current terminal. Historical terminal IDs do not create another viewer.
+    func selectComputer(_ reference: ComputerReference) throws -> ComputerSession {
+        guard let session = sessions.first(where: { $0.id == reference.computer.id }) else {
+            throw ComputerError("This computer is no longer in your library.")
+        }
+        selection = session.id
+        session.showingFiles = false
+        if reference.view == "web" { session.showingTerminal = false }
+        return session
+    }
     var kernel: URL { Bundle.main.resourceURL!.appendingPathComponent("Runtime/vmlinux-arm64") }
 
     func create(_ requested: Computer, source: URL?) async -> Bool {
@@ -423,8 +450,7 @@ enum ComputerDisplayMode: String {
                 session.desktop = nil
             }
             if session.virtual?.machine.state == .stopped { session.virtual = nil }
-            session.phase = .failed(error.localizedDescription)
-            session.append("\n\(error.localizedDescription)\n")
+            session.recordStartupFailure(error)
         }
     }
 

@@ -63,8 +63,8 @@ import WebKit
             return .init()
         }
         if request.operation == .start {
-            if session.phase == .stopped { await store.start(session) }
-            guard session.phase == .running else { throw ComputerBridgeError("Computer did not start: \(session.phase.label)") }
+            if session.phase.canStart { await store.start(session) }
+            guard session.phase == .running else { throw ComputerBridgeError(session.phase.startFailureDescription) }
             return .init()
         }
         guard session.phase == .running, let runtime = session.container else {

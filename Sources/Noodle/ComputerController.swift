@@ -10,6 +10,7 @@ import SwiftUI
     private(set) var available = false
     private(set) var failure: String?
     private(set) var needsFileTransferUpdate = false
+    private(set) var needsDocumentPreviewUpdate = false
     @ObservationIgnored private let repository: WorkspaceRepository
     @ObservationIgnored private let socket: URL?
     @ObservationIgnored private var readable = true
@@ -21,18 +22,28 @@ import SwiftUI
     @ObservationIgnored private var claimed: [UUID: Date] = [:]
     @ObservationIgnored private var refreshID = UUID()
     @ObservationIgnored private var launch: Task<Void, Error>?
-    @ObservationIgnored private let applicationLookup: () -> URL?
+    @ObservationIgnored private let applicationLookup: @MainActor () -> URL?
+    @ObservationIgnored private let documentOpener: (URL, URL) async throws -> Void
     /// Injectable connection boundary for deterministic broker failure tests.
     /// Normal app construction always uses the authenticated signed-app socket.
     @ObservationIgnored private let connection: (@Sendable (ComputerRequest) async throws -> ComputerResponse)?
     var installed: Bool { applicationLookup() != nil }
 
     init(repository: WorkspaceRepository, socket: URL? = nil,
-         applicationLookup: @escaping () -> URL? = { NSWorkspace.shared.urlForApplication(withBundleIdentifier: ComputerConnection.providerID) },
+         applicationLookup: @escaping @MainActor () -> URL? = { ComputerApplication.locate() },
+         documentOpener: @escaping (URL, URL) async throws -> Void = { document, application in
+             let configuration = NSWorkspace.OpenConfiguration()
+             configuration.activates = true
+             configuration.hides = false
+             configuration.allowsRunningApplicationSubstitution = false
+             configuration.promptsUserIfNeeded = false
+             _ = try await NSWorkspace.shared.open([document], withApplicationAt: application, configuration: configuration)
+         },
          connection: (@Sendable (ComputerRequest) async throws -> ComputerResponse)? = nil) {
         self.repository = repository
         self.socket = socket
         self.applicationLookup = applicationLookup
+        self.documentOpener = documentOpener
         self.connection = connection
         do { registry = try ComputerAssignments.load(root: repository.rootURL) }
         catch { readable = false; failure = "Could not read Computer assignments; they were not changed." }
@@ -85,6 +96,7 @@ import SwiftUI
         let discovery = try await connect(handshake, launchIfNeeded: launchIfNeeded)
         try ComputerCapabilities.requireCompatible(discovery.capabilities)
         if request.operation.isFileTransfer { try ComputerCapabilities.requireFileTransfer(discovery.capabilities) }
+        if request.operation == .preview { try ComputerCapabilities.requireDocumentPreview(discovery.capabilities) }
         try Task.checkCancellation()
         try authorize()
         if request.operation == .list { return discovery }
@@ -115,6 +127,7 @@ import SwiftUI
             }
             let configuration = NSWorkspace.OpenConfiguration()
             configuration.activates = false; configuration.hides = true
+            configuration.allowsRunningApplicationSubstitution = false
             configuration.arguments = ["--noodle-background"]
             _ = try await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
         }
@@ -131,7 +144,21 @@ import SwiftUI
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         configuration.hides = false
+        configuration.allowsRunningApplicationSubstitution = false
         _ = try await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+    }
+    /// A human opens the owned attachment through Computer's document handler.
+    /// This does not use the agent broker or depend on any bot assignment.
+    func openDocument(at fileURL: URL) async throws {
+        guard fileURL.isFileURL, FileManager.default.isReadableFile(atPath: fileURL.path) else {
+            throw ComputerBridgeError("This computer attachment is no longer available.")
+        }
+        if let launch { try await launch.value }
+        try Task.checkCancellation()
+        guard let application = applicationLookup() else {
+            throw ComputerBridgeError("Install Noodle Computer to open this computer attachment.")
+        }
+        try await documentOpener(fileURL, application)
     }
     func openDownload() async throws {
         // Do not send users to a broken download before the first public release.
@@ -157,11 +184,13 @@ import SwiftUI
                 try next.save(root: repository.rootURL); registry = next
             }
             needsFileTransferUpdate = response.capabilities?.features.contains("file-transfer-v1") == false
+            needsDocumentPreviewUpdate = response.capabilities?.features.contains("document-preview-v1") == false
             if readable { failure = nil }
         } catch {
             guard refreshID == id, !Task.isCancelled else { return }
             available = false; failure = error.localizedDescription
             needsFileTransferUpdate = false
+            needsDocumentPreviewUpdate = false
         }
     }
     func selectedIDs(for agent: AgentRecord) -> Set<UUID> { registry.assigned(to: agent.id) }
@@ -186,22 +215,6 @@ import SwiftUI
     func reloadAssignments() throws {
         do { registry = try ComputerAssignments.load(root: repository.rootURL); readable = true }
         catch { readable = false; throw error }
-    }
-    func permits(_ card: ComputerCard) -> Bool {
-        readable && registry.permits(card.computer.id, agent: card.agentID) && agents.contains { $0.id == card.agentID }
-    }
-    func previewCall(_ request: ComputerRequest, card: ComputerCard) async throws -> ComputerResponse {
-        try request.validate()
-        guard [.terminalRead, .terminalWrite, .terminalResize, .display].contains(request.operation),
-              permits(card), request.computerID == card.computer.id,
-              request.agentID == card.agentID, request.terminalID == card.terminalID else {
-            throw ComputerBridgeError("This computer assignment or terminal reference has been revoked.")
-        }
-        let response = try await call(request) {
-            guard self.permits(card) else { throw ComputerBridgeError("This computer assignment was revoked.") }
-        }
-        guard permits(card) else { throw ComputerBridgeError("This computer assignment was revoked.") }
-        return response
     }
     func scan() {
         claimed = claimed.filter { Date().timeIntervalSince($0.value) < 700 }
@@ -292,7 +305,7 @@ import SwiftUI
             guard view == "web" || terminal != nil else { throw ComputerBridgeError("The provider did not return a terminal session. Update Noodle Computer.") }
             let card = ComputerCard(computer: computer, agentID: agent.id, terminalID: terminal, terminalPreview: text,
                 view: view, previewImage: view == "web" ? response.previewImage : nil)
-            let attachment = try repository.importAttachment(data: JSONEncoder().encode(card), originalFilename: computer.name + ".noodlecomputer",
+            let attachment = try repository.importAttachment(data: JSONEncoder().encode(card.reference), originalFilename: computer.name + ".noodlecomputer",
                 into: conversation, mediaType: ComputerCard.mediaType, computer: card)
             do {
                 _ = try repository.sendAgentMessage(agentID: agent.id, conversationID: conversation,
@@ -411,9 +424,9 @@ struct ComputerAssignmentPicker: View {
                     .padding(16).frame(width: 300, height: 280)
                 }
             }
-            if controller.needsFileTransferUpdate {
+            if controller.needsFileTransferUpdate || controller.needsDocumentPreviewUpdate {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("Update Noodle Computer to enable file transfers.", systemImage: "arrow.down.circle")
+                    Label(controller.needsDocumentPreviewUpdate ? "Update Noodle Computer to enable native attachment previews." : "Update Noodle Computer to enable file transfers.", systemImage: "arrow.down.circle")
                         .font(.callout.weight(.medium))
                         .fixedSize(horizontal: false, vertical: true)
                     Text("In Noodle Computer, choose Check for Updates… from the app menu.")
