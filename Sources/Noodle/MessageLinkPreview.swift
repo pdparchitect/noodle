@@ -18,10 +18,10 @@ struct MessageLinkPreview: View {
     @State private var loading = false
     @State private var requestID = UUID()
 
-    init(url: URL, shouldLoad: Bool, cache: LinkPreviewMetadataCache = .shared,
+    @MainActor init(url: URL, shouldLoad: Bool, cache: LinkPreviewMetadataCache? = nil,
          openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }) {
         self.url = url; self.shouldLoad = shouldLoad
-        self.cache = cache; self.openURL = openURL
+        self.cache = cache ?? .shared; self.openURL = openURL
     }
 
     var body: some View {

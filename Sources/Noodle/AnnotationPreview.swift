@@ -8,6 +8,12 @@ import NoodleCore
     private(set) var window: NSPanel?
     private weak var sourceWindow: NSWindow?
     private weak var sourceResponder: NSResponder?
+    private let present: @MainActor (NSPanel) -> Void
+
+    init(present: @escaping @MainActor (NSPanel) -> Void = { $0.makeKeyAndOrderFront(nil) }) {
+        self.present = present
+        super.init()
+    }
 
     func show(_ attachment: ConversationAttachment, url: URL, relativeTo host: NSWindow,
               edit: ((ConversationAttachment, String) throws -> ConversationAttachment)? = nil,
@@ -41,7 +47,7 @@ import NoodleCore
         }
         Self.setContent(note: note, image: AnnotationPreviewContent.image(for: attachment, url: url), in: panel,
             edit: saveEdit, canEdit: { canEdit(current) })
-        panel.makeKeyAndOrderFront(nil)
+        present(panel)
     }
 
     /// Construction is separate from presentation so the real frame can also be
