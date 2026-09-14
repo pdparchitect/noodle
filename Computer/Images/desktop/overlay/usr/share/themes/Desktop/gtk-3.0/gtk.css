@@ -24,19 +24,18 @@ toolbar {
 }
 
 /*
- * Chrome uses GTK's client-side decoration node for its focused window edge,
- * even though it draws the tab strip and caption buttons itself.
+ * Chromium paints its own frame from these GTK nodes. Keep it solid and dark:
+ * a white focus stroke gets cut at the compositor's rounded corners, and a
+ * transparent decoration leaves a seam beside the inset tab strip.
+ * Picom owns the outer shape for every window, including Openbox fullscreen;
+ * native GTK rounding would leave cutouts when only the WM fullscreen hint is set.
  */
 window.background.csd decoration,
 window.background.solid-csd decoration {
-  border: 1px solid #172020;
+  background-color: #000000;
+  border: 1px solid #000000;
   border-radius: 0;
   box-shadow: none;
-}
-
-window.background.csd decoration:not(:backdrop),
-window.background.solid-csd decoration:not(:backdrop) {
-  border-color: #ffffff;
 }
 
 /*

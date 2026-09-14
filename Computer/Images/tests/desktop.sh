@@ -155,6 +155,111 @@ try:
         sp.run(['wmctrl', '-ir', str(terminal['WINDOW']), '-b', 'remove,' + state], check=True)
         time.sleep(0.5)
     print('PASS: maximized and fullscreen windows keep square corners')
+
+    # Chromium owns its frame: Openbox's terminal checks cannot detect a GTK
+    # focus border or seams at rounded corners.
+    sp.run(['xdotool', 'windowminimize', str(terminal['WINDOW'])], check=True)
+    from pathlib import Path
+    fixture = Path('/tmp/noodle-browser-frame.html')
+    fixture.write_text('<!doctype html><title>Noodle Browser Frame Verification</title>'
+                       '<style>html,body{margin:0;height:100%;background:#182623;color:#edf2f2;'
+                       'font:20px sans-serif}main{padding:36px}h1{font-size:32px}</style>'
+                       '<main><h1>Browser frame</h1><p>Dark edges. Consistent corners.</p></main>')
+    browser = sp.Popen(['chromium', '--window-size=800,600', '--window-position=100,80',
+                        fixture.as_uri()], stdout=log, stderr=log)
+    processes.append(browser)
+    for _ in range(80):
+        try:
+            chrome = geometry('Noodle Browser Frame Verification')
+            break
+        except sp.CalledProcessError:
+            if browser.poll() is not None:
+                raise AssertionError('Browser exited: ' + open(log.name).read())
+            time.sleep(0.25)
+    else:
+        raise AssertionError('Browser did not appear: ' + open(log.name).read())
+
+    def browser_frame(label, rounded=True, save=False):
+        global display, snapshot
+        time.sleep(1)
+        current = geometry('Noodle Browser Frame Verification')
+        bx, by, bw, bh = (current[key] for key in ('X', 'Y', 'WIDTH', 'HEIGHT'))
+        display = x.XOpenDisplay(None)
+        overlay = composite.XCompositeGetOverlayWindow(display, x.XDefaultRootWindow(display))
+        snapshot = x.XGetImage(display, overlay, 0, 0, 1024, 768, c.c_ulong(-1), 2)
+        try:
+            # Inspect every straight edge, not just the middle of the window.
+            edges = [(px, py) for px in range(bx + 16, bx + bw - 16) for py in (by, by + bh - 1)]
+            edges += [(px, py) for py in range(by + 16, by + bh - 16) for px in (bx, bx + bw - 1)]
+            assert all(max(pixel(px, py)) < 50 for px, py in edges), label + ': bright browser frame edge'
+            for cx, cy, dx, dy in ((bx, by, 1, 1), (bx + bw - 1, by, -1, 1),
+                                   (bx, by + bh - 1, 1, -1), (bx + bw - 1, by + bh - 1, -1, -1)):
+                if rounded:
+                    for offset_x, offset_y in ((0, 0), (1, 1)):
+                        px, py = cx + dx * offset_x, cy + dy * offset_y
+                        expected = tuple((wallpaper[py][px] >> shift) & 255 for shift in (16, 8, 0))
+                        assert pixel(px, py) == expected, label + ': corner must reveal the wallpaper'
+                    # The inside of the arc must be filled, without a transparent
+                    # seam between GTK's decoration and its inset headerbar.
+                    for offset_x, offset_y in ((4, 5), (5, 4), (8, 8)):
+                        assert max(pixel(cx + dx * offset_x, cy + dy * offset_y)) < 60, label + ': gap inside browser corner'
+                else:
+                    assert max(pixel(cx, cy)) < 50, label + ': edge-to-edge corner must remain square: ' + str((cx, cy, pixel(cx, cy)))
+            if save:
+                rows = b''.join(b'\x00' + bytes(channel for px in range(1024) for channel in pixel(px, py)) for py in range(768))
+                png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', 1024, 768, 8, 2, 0, 0, 0))
+                png += chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b'')
+                Path('/tmp/noodle-chromium-theme.png').write_bytes(png)
+        except AssertionError:
+            print(label, current, sp.check_output(['xprop', '-id', str(current['WINDOW']), '_NET_WM_STATE', '_GTK_FRAME_EXTENTS', '_NET_WM_OPAQUE_REGION'], text=True), flush=True)
+            rows = b''.join(b'\x00' + bytes(channel for px in range(1024) for channel in pixel(px, py)) for py in range(768))
+            png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', 1024, 768, 8, 2, 0, 0, 0))
+            png += chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b'')
+            Path('/tmp/noodle-chromium-theme-failure.png').write_bytes(png)
+            raise
+        finally:
+            x.XDestroyImage(snapshot)
+            x.XCloseDisplay(display)
+        print('PASS: Chromium ' + label + ' frame and corners')
+
+    sp.run(['xdotool', 'windowactivate', '--sync', str(chrome['WINDOW'])], check=True)
+    browser_frame('focused', save=True)
+    # This small focus target stays outside the browser's bounds.
+    focus_target = sp.Popen(['xterm', '-geometry', '1x1+980+740', '-title', 'Frame Focus Fixture',
+                             '-e', 'sleep', '60'], stdout=log, stderr=log)
+    processes.append(focus_target)
+    for _ in range(40):
+        try:
+            focus_window = geometry('^Frame Focus Fixture$')['WINDOW']
+            break
+        except sp.CalledProcessError:
+            time.sleep(0.1)
+    else:
+        raise AssertionError('Focus fixture did not appear')
+    sp.run(['xdotool', 'windowactivate', '--sync', str(focus_window)], check=True)
+    browser_frame('unfocused')
+    sp.run(['xdotool', 'windowactivate', '--sync', str(chrome['WINDOW'])], check=True)
+    sp.run(['xdotool', 'windowsize', str(chrome['WINDOW']), '720', '560'], check=True)
+    sp.run(['xdotool', 'windowmove', str(chrome['WINDOW']), '140', '100'], check=True)
+    browser_frame('moved and resized')
+    sp.run(['wmctrl', '-ir', str(chrome['WINDOW']), '-b', 'add,maximized_vert,maximized_horz'], check=True)
+    browser_frame('maximized', rounded=False)
+    sp.run(['wmctrl', '-ir', str(chrome['WINDOW']), '-b', 'remove,maximized_vert,maximized_horz'], check=True)
+    time.sleep(0.5)
+    # Openbox's Alt-F11 action only changes the WM state. Chromium must keep a
+    # square frame there too, even while its own toolbar remains visible.
+    sp.run(['wmctrl', '-ir', str(chrome['WINDOW']), '-b', 'add,fullscreen'], check=True)
+    browser_frame('window manager fullscreen', rounded=False)
+    sp.run(['wmctrl', '-ir', str(chrome['WINDOW']), '-b', 'remove,fullscreen'], check=True)
+    time.sleep(0.5)
+    # Chromium's fullscreen controller owns its frame visibility. F11 exercises
+    # the real browser action; changing only the WM hint leaves the toolbar up.
+    sp.run(['xdotool', 'key', '--clearmodifiers', 'F11'], check=True)
+    time.sleep(1)
+    state = sp.check_output(['xprop', '-id', str(chrome['WINDOW']), '_NET_WM_STATE'], text=True)
+    assert '_NET_WM_STATE_FULLSCREEN' in state, 'Chromium did not enter fullscreen'
+    browser_frame('fullscreen', rounded=False)
+    sp.run(['xdotool', 'key', '--clearmodifiers', 'F11'], check=True)
 finally:
     for process in reversed(processes):
         process.terminate()

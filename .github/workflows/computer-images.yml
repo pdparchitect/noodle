@@ -63,7 +63,7 @@ jobs:
           for kind in shell desktop; do
             docker run --rm -i --network none --entrypoint /bin/sh "noodle-computer-$kind-image:check" < Computer/Images/tests/user.sh
           done
-      - name: Verify desktop wallpaper rendering
+      - name: Verify desktop and Chromium frame rendering
         run: docker run --rm -i --network none --entrypoint /bin/sh noodle-computer-desktop-image:check < Computer/Images/tests/desktop.sh
       - name: Verify file helper account transition
         run: python3 Computer/Images/tests/file-user.py docker noodle-computer-shell-image:check noodle-computer-desktop-image:check

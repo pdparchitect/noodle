@@ -141,6 +141,7 @@ Replace these paths through an overlay to customize the desktop:
 | `/etc/xdg/tint2/tint2rc` | Panel layout |
 | `/etc/xdg/kitty/{kitty.conf,theme.conf}` | Terminal defaults and palette; existing user config is preserved |
 | `/etc/xdg/picom.conf` | Window corners/compositing |
+| `/usr/share/themes/Desktop/gtk-3.0/gtk.css` | Chromium frame, menus, and GTK widgets; keep its frame solid and let Picom own outer rounding |
 | `/etc/xdg/cortile/config.toml` | Initial tiling config; existing user config is preserved |
 | `/usr/local/bin/desktop-welcome` | Initial terminal and Welcome menu action |
 | `/usr/local/bin/desktop-harness` | Control-Shift-G action |

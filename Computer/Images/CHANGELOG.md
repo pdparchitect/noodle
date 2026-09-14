@@ -7,6 +7,10 @@
 - Build Desktop directly from pinned Ubuntu and Node images, with repository-owned desktop configuration and verified KasmVNC/Cortile downloads. Remove the Launcher base image and control bridge dependency.
 - Provide authenticated startup, configurable session defaults, overlay hooks, workspace seeds, and a working derivative example for downstream images.
 
+### Fixed
+
+- Match Chromium’s frame to the dark desktop theme, align its rounded corners with the compositor, and keep maximized/fullscreen corners square. Cover the browser frame in rendered-pixel checks for focus changes and resizing.
+
 ## [0.2.0] - 2026-09-14
 
 ### Added
