@@ -172,6 +172,9 @@ public struct LocalMacReply: Codable, Sendable {
     public init(id: UUID? = nil, error: String? = nil) { self.id = id; self.error = error }
 }
 public struct LocalMacStatus: Codable, Sendable {
+    // Keep the existing wire error recognizable by clients talking to a retained
+    // 0.7.0 helper; no new reply fields or protocol version are required.
+    public static let inputPermissionError = "Allow Accessibility for the desktop helper to control this account."
     public var screenCapture: Bool
     public var accessibility: Bool
     public var postEvents: Bool
@@ -179,6 +182,7 @@ public struct LocalMacStatus: Codable, Sendable {
     public var displayID: UInt32?
     public var setupRunning: Bool
     public var detail: String?
+    public var canControl: Bool { accessibility && postEvents }
     public init(screenCapture: Bool, accessibility: Bool, postEvents: Bool, display: LocalMacDisplay,
                 setupRunning: Bool = false, detail: String? = nil) {
         self.screenCapture = screenCapture; self.accessibility = accessibility; self.postEvents = postEvents

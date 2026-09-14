@@ -95,7 +95,15 @@ desktop/terminal/files, assigned-agent terminal and transfers, native preview
 opening, quit/reconnect, helper failure, sleep/wake, reboot, and a real signed
 old-to-new app update. Check that account identity, files and grants survive and
 the main desktop remains unaffected. A prototype service lacking the update
-handshake needs one normal Mac restart on its first upgrade.
+handshake may need a normal Mac restart. A development-to-Developer-ID upgrade
+also needs the native Login Items toggle to refresh the saved launch constraint,
+and may need that account credential's trusted application updated in Keychain
+Access. Keep the password hidden and unchanged; never grant all applications
+access. Desktop privacy approvals can also retain the development certificate
+even when System Settings reports a new grant. Verify accepted capture and input
+in the running helper; the narrowly scoped recovery is documented in
+`LocalMac/README.md`. Verify this migration separately from release-to-release
+updates.
 
 Keep one account for development and upgrades. Use a separate test machine for
 fresh-account setup, deletion and alternate display arrangements when available.

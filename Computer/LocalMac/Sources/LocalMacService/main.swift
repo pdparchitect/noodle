@@ -49,6 +49,9 @@ private enum Passwords {
         var query = try query(id); query[kSecReturnData as String] = true
         var value: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &value)
+        if status == errSecInteractionNotAllowed {
+            throw LocalMacError("macOS blocked access to the saved account password. In Keychain Access → System, allow the installed LocalMacService to access com.pdparchitect.noodle.computer.localmac, then retry Start. Keep the existing password and account.")
+        }
         guard status == errSecSuccess, let data = value as? Data, let password = String(data: data, encoding: .utf8) else {
             throw LocalMacError("The Local Mac credential is unavailable (\(status)). Its account has been retained.")
         }

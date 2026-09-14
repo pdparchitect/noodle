@@ -4,7 +4,7 @@ import Foundation
 import LocalMacCore
 
 struct LocalMacSetupRequired: LocalizedError {
-    var errorDescription: String? { "Enable Local Mac and approve it in System Settings, then use Start again." }
+    var errorDescription: String? { "The Local Mac account helper could not start. Open Local Mac Setup to enable or repair it, then try Start again. Your account and files are retained." }
 }
 
 @MainActor enum LocalMacSetup {
@@ -27,13 +27,7 @@ struct LocalMacSetupRequired: LocalizedError {
     }
     static func check() async throws {
         let connection = try connection(); defer { connection.invalidate() }
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            let reply = Once(continuation)
-            let service = connection.remoteObjectProxyWithErrorHandler { _ in
-                reply.finish(.failure(LocalMacSetupRequired()))
-            } as! LocalMacLifecycle
-            service.check { reply.finish(.success(())) }
-        }
+        guard await LocalMacServiceProbe.responds(connection) else { throw LocalMacSetupRequired() }
         guard let team = Bundle.main.object(forInfoDictionaryKey: "NoodleSigningTeam") as? String else { throw ComputerError("Cannot identify the Local Mac service.") }
         let executable = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/LocalMacSetup.app/Contents/Library/LaunchServices/LocalMacService")
         let requirement = "anchor apple generic and identifier \"com.pdparchitect.noodle.computer.localmac\" and certificate leaf[subject.OU] = \"\(team)\""
@@ -114,6 +108,7 @@ private final class Once<T>: @unchecked Sendable {
     private var timeouts: [UUID: Task<Void, Never>] = [:]
     private var inputQueue = LocalMacInputQueue()
     private var inputPump: Task<Void, Never>?
+    private var inputFailure: String?
     private var closed = true
     private var connectedOnce = false
     private var disconnectExpected = false
@@ -178,6 +173,7 @@ private final class Once<T>: @unchecked Sendable {
         if let status = reply.status {
             self.status = status
             if !verifyCaptureDisplay() { return }
+            if status.canControl, inputFailure == LocalMacStatus.inputPermissionError { clearInputFailure() }
         }
         if reply.frame, let data = reply.data, status?.displayID != nil {
             guard verifyCaptureDisplay() else { return }
@@ -219,16 +215,23 @@ private final class Once<T>: @unchecked Sendable {
     }
     func send(_ event: LocalMacInput) {
         guard !closed else { return }
-        if !inputQueue.append(event) { error = "Desktop input fell behind and was released. Try again." }
+        if !inputQueue.append(event) { recordInputFailure("Desktop input fell behind and was released. Try again.") }
         guard inputPump == nil else { return }
         inputPump = Task {
             defer { inputPump = nil }
             while !Task.isCancelled, let event = inputQueue.next() {
                 var request = LocalMacRequest(.input); request.input = event
-                do { _ = try await call(request) }
-                catch { if !closed { self.error = error.localizedDescription }; inputQueue.removeAll(); break }
+                do { _ = try await call(request); clearInputFailure() }
+                catch { if !closed { recordInputFailure(error.localizedDescription) }; inputQueue.removeAll(); break }
             }
         }
+    }
+    private func recordInputFailure(_ message: String) { inputFailure = message; error = message }
+    private func clearInputFailure() {
+        // A successful input or restored grant must not dismiss an unrelated
+        // transport/capture failure that arrived in the meantime.
+        if let inputFailure, error == inputFailure { error = nil }
+        inputFailure = nil
     }
     func refreshStatus() async {
         guard isConnected else { return }

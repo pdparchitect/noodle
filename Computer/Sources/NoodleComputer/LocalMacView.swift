@@ -64,37 +64,64 @@ struct NewLocalMacView: View {
 struct LocalMacDesktopView: View {
     @ObservedObject var runtime: LocalMacComputer
     var active = true
+    var openSettings: () -> Void
+    private var issue: (message: String, settings: Bool, dismissible: Bool)? {
+        if let status = runtime.status {
+            if !status.screenCapture { return ("Screen Recording access is required to show this desktop.", true, false) }
+            if !status.accessibility { return ("Accessibility access is required for mouse and keyboard control.", true, false) }
+            if !status.postEvents { return ("Restart this computer to enable mouse and keyboard control.", false, false) }
+            if status.setupRunning { return ("Restart this computer to finish account setup.", false, false) }
+            if let detail = status.detail { return (detail, false, false) }
+        }
+        return runtime.error.map { ($0, false, true) }
+    }
     var body: some View {
         VStack(spacing: 0) {
-            if let status = runtime.status,
-               !status.screenCapture || !status.accessibility || status.setupRunning || status.detail != nil {
-                VStack(alignment: .leading, spacing: 8) {
-                    if !status.screenCapture || !status.accessibility {
-                        Text("Allow Screen Recording and Accessibility for Noodle Local Mac Desktop.")
-                        HStack {
-                            Button("Screen Recording…") { openPrivacy("Privacy_ScreenCapture") }
-                            Button("Accessibility…") { openPrivacy("Privacy_Accessibility") }
-                            Button("Show Desktop Helper") { NSWorkspace.shared.activateFileViewerSelecting([LocalMacSetup.desktopApp]) }
-                        }
-                        Text("Add this helper using the + button in System Settings. Stop and start the computer after granting access.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    if status.setupRunning {
-                        Text("Account setup has been prepared. Stop and start this computer to open its desktop.")
-                    }
-                    if let detail = status.detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
-                }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(.regularMaterial)
-            }
             LocalMacSurface(runtime: runtime, active: active).background(.black)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .overlay { if runtime.image == nil { ProgressView("Waiting for desktop…").allowsHitTesting(false) } }
-            if let error = runtime.error {
-                HStack { Text(error).font(.caption).textSelection(.enabled); Spacer(); Button("Dismiss") { runtime.error = nil } }.padding(8)
+                .overlay {
+                    if runtime.image == nil {
+                        if let issue {
+                            VStack(spacing: 12) {
+                                Text(issue.message).multilineTextAlignment(.center)
+                                if issue.settings { Button("Settings…", action: openSettings) }
+                            }.padding(24)
+                        } else { ProgressView("Waiting for desktop…").allowsHitTesting(false) }
+                    }
+                }
+            if runtime.image != nil, let issue {
+                HStack {
+                    Text(issue.message).font(.caption).textSelection(.enabled)
+                    Spacer()
+                    if issue.settings { Button("Settings…", action: openSettings) }
+                    else if issue.dismissible { Button("Dismiss") { runtime.error = nil } }
+                }.padding(8)
             }
         }.task {
             while !Task.isCancelled {
                 await runtime.refreshStatus()
                 try? await Task.sleep(for: .seconds(3))
+            }
+        }
+    }
+}
+
+/// Recovery instructions live in the existing computer settings, not above and
+/// below the desktop at the same time. Only offer the permission still missing.
+struct LocalMacPermissionsSettings: View {
+    @ObservedObject var runtime: LocalMacComputer
+    var body: some View {
+        if let status = runtime.status, !status.screenCapture || !status.accessibility {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Allow \(!status.screenCapture ? "Screen Recording" : "Accessibility") for Noodle Local Mac Desktop.")
+                Text("In System Settings, use + to add the desktop helper. Restart this computer after granting access.")
+                    .font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    Button("Open System Settings…") {
+                        openPrivacy(!status.screenCapture ? "Privacy_ScreenCapture" : "Privacy_Accessibility")
+                    }
+                    Button("Show Desktop Helper") { NSWorkspace.shared.activateFileViewerSelecting([LocalMacSetup.desktopApp]) }
+                }
             }
         }
     }

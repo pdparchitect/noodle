@@ -478,7 +478,7 @@ struct ComputerDetailView: View {
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if let local = session.localMac {
         ZStack {
-          LocalMacDesktopView(runtime: local, active: session.displayMode == .desktop)
+          LocalMacDesktopView(runtime: local, active: session.displayMode == .desktop, openSettings: { editing = true })
             .opacity(session.displayMode == .desktop ? 1 : 0)
             .allowsHitTesting(session.displayMode == .desktop)
             .accessibilityHidden(session.displayMode != .desktop)
@@ -541,7 +541,7 @@ struct ComputerDetailView: View {
           }
         } actions: {
           if session.localMacSetupRequired {
-            Button("Enable Local Mac…") {
+            Button("Open Local Mac Setup…") {
               do { try LocalMacSetup.enable() } catch { store.error = error.localizedDescription }
             }
           }
@@ -677,6 +677,7 @@ struct EditComputerView: View {
           }
         }.padding(12).background(
           Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 12))
+        if let local = session.localMac { LocalMacPermissionsSettings(runtime: local) }
         if let result = session.updateResult {
           Text(result).font(.caption).foregroundStyle(.secondary)
         }

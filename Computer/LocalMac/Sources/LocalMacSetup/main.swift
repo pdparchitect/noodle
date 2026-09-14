@@ -7,6 +7,7 @@ import ServiceManagement
 final class Setup: NSObject, NSApplicationDelegate {
     let service = SMAppService.daemon(plistName: "com.pdparchitect.noodle.computer.localmac.plist")
     var window: NSWindow!
+    var enable: NSButton!
     let status = NSTextField(wrappingLabelWithString: "Enable the account helper once. macOS will ask you to approve it for this Mac.")
     func applicationDidFinishLaunching(_ notification: Notification) {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 510, height: 240),
@@ -15,7 +16,7 @@ final class Setup: NSObject, NSApplicationDelegate {
         let title = NSTextField(labelWithString: "Enable Local Mac")
         title.font = .boldSystemFont(ofSize: 22)
         let detail = NSTextField(wrappingLabelWithString: "The helper creates and starts Noodle’s separate accounts. Stopping a computer retains its account, files and permissions.")
-        let enable = NSButton(title: "Enable Account Helper…", target: self, action: #selector(register))
+        enable = NSButton(title: "Enable Account Helper…", target: self, action: #selector(register))
         let done = NSButton(title: "Done", target: self, action: #selector(finish))
         let buttons = NSStackView(views: [enable, done]); buttons.orientation = .horizontal
         let stack = NSStackView(views: [title, detail, status, buttons])
@@ -29,8 +30,13 @@ final class Setup: NSObject, NSApplicationDelegate {
     }
     func applicationDidBecomeActive(_ notification: Notification) { refresh() }
     func refresh() {
-        if service.status == .enabled { status.stringValue = "Account helper enabled. Return to Noodle Computer and choose Start." }
-        else if service.status == .requiresApproval { status.stringValue = "Approve Local Mac Setup in System Settings → General → Login Items & Extensions." }
+        guard enable != nil else { return }
+        enable.title = service.status == .enabled ? "Open Login Items…" : "Enable Account Helper…"
+        if service.status == .enabled {
+            status.stringValue = "The helper is approved. If Start cannot connect after an update, turn LocalMacSetup off and back on in Login Items, then retry Start. Accounts and files are retained."
+        } else if service.status == .requiresApproval {
+            status.stringValue = "Approve Local Mac Setup in System Settings → General → Login Items & Extensions."
+        } else { status.stringValue = "Enable the account helper. Existing accounts and files are retained." }
     }
     @objc func register() {
         guard Bundle.main.bundleIdentifier == "com.pdparchitect.noodle.computer.localmacsetup" else {
@@ -38,7 +44,9 @@ final class Setup: NSObject, NSApplicationDelegate {
         }
         do {
             if service.status != .enabled && service.status != .requiresApproval { try service.register() }
-            if service.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
+            // The native toggle refreshes stale launch constraints using the
+            // installed signed helper. Do not discard the registration here.
+            SMAppService.openSystemSettingsLoginItems()
             refresh()
         } catch {
             if service.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems(); refresh() }
@@ -48,8 +56,8 @@ final class Setup: NSObject, NSApplicationDelegate {
     @objc func finish() { NSApp.terminate(nil) }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 }
-// Service registration is retained across updates. Never unregister an enabled
-// job as an update mechanism: re-registration can require fresh user approval.
+// Registration repair uses the native Login Items approval flow. Never
+// unregister the service automatically during startup or an app update.
 guard CommandLine.arguments.count == 1 else {
     fputs("Local Mac Setup does not accept maintenance commands.\n", stderr); exit(1)
 }

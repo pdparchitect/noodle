@@ -19,7 +19,7 @@ final class AccountInput {
     func post(_ input: LocalMacInput, bounds: CGRect) throws {
         try session.verifyCurrent()
         guard AXIsProcessTrusted(), CGPreflightPostEventAccess() else {
-            throw LocalMacError("Allow Accessibility for the desktop helper to control this account.")
+            throw LocalMacError(LocalMacStatus.inputPermissionError)
         }
         if input.kind == .reset {
             for key in keys.sorted() { try send(CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false)) }

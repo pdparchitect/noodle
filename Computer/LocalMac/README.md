@@ -129,9 +129,11 @@ service inside its installed app, not just a marketing version number.
 Keep the installed app path, signing identity, account and permission identity
 stable. Build and verify before replacing the app. Close the app's active
 connections before updating and start them again afterward so the client and
-signed desktop copy use the same protocol. Do not unregister/re-register the
-lifecycle service as an update mechanism: that can discard its approval. The
-service checks its fixed installed executable against its exact signing identity.
+signed desktop copy use the same protocol. Do not automatically unregister the
+lifecycle service during ordinary startup: that can discard its approval and
+interrupt desktops. Explicit registration repair is available in Local Mac Setup
+when an update leaves the service unable to launch. The service checks its fixed
+installed executable against its exact signing identity.
 When it finds a replacement and has no active desktop children, it drains the XPC
 reply and exits; launchd loads the replacement through the same approved job.
 Lifecycle operations are refused once that restart begins. The client retries
@@ -139,10 +141,63 @@ only this read-only handshake, with a bounded wait. Active desktops defer servic
 replacement until they close; account operations are never blindly replayed.
 
 **First upgrade from the prototype:** a daemon without `serviceInfo` cannot be
-taught to restart by an updated app. It requires a normal Mac restart once. The
-client reports that explicitly instead of offering service re-registration.
+taught to restart by an updated app. A normal Mac restart can replace that process,
+but it cannot repair launch constraints saved for a different signing category.
+The client probes service availability for five seconds before account operations
+and offers Local Mac Setup when the helper does not respond. Setup opens Login
+Items and explains how to turn LocalMacSetup off and back on, refreshing the
+installed helper's launch constraints without deleting its registration. macOS
+may require authentication; account records,
+credentials, homes and desktop privacy grants are not removed by this operation.
 Restart/reconnect after an actual signed app replacement still requires live
 validation; the account-free tests do not prove launchd's update behavior.
+
+**Development-to-release transition observed on macOS 27.0 (26A428):** the retained
+0.6.0 launchd job required validation category 3 (development), while the installed
+0.7.0 service had category 6 (Developer ID). launchd rejected it with a Launch
+Constraint Violation before account login. Strict installed signature and bundle
+layout checks passed. This is a stale-registration failure, not evidence about
+whether the background-login API works on that OS. The ServiceManagement SDK
+requires re-registration after changing a daemon executable; its launch metadata
+must be validated as well as the service's own fingerprint handshake. The native
+Login Items toggle was verified to refresh the job to 0.7.0/category 6 and allow
+the released service to launch.
+
+The same transition exposed a separate credential ACL issue: the password item's
+trusted application requirement named the original Apple Development certificate.
+securityd rejected the Developer ID service with `errSecInteractionNotAllowed`
+before background login. Repair that item's Access Control for the installed
+service in Keychain Access; do not reveal/reset the password, recreate the account,
+or allow all applications. A stable release-to-release signing identity must be
+tested separately; development-to-release migration cannot assume those grants
+carry over.
+
+Desktop privacy grants also retained the development certificate in this
+transition. System Settings reported successful Screen Recording and
+Accessibility grants for the release, but a read-only inspection of the system
+TCC records showed the old code requirement was still stored. The runtime copy
+had the release identity; TCC rejected it with a code-requirement mismatch.
+Adding the same bundle again and restarting the account did not repair this.
+For this specific migration, clear only the helper's two stale approvals with
+Apple's `tccutil`, then grant the installed desktop helper through System Settings:
+
+```sh
+tccutil reset ScreenCapture com.pdparchitect.noodle.computer.desktop
+tccutil reset Accessibility com.pdparchitect.noodle.computer.desktop
+```
+
+Do not run a service-wide or `All` reset, edit TCC databases, or reset other apps'
+permissions. These commands remove approvals; they do not grant access. Confirm
+the helper actually reports capture and input access after reapproval and restart
+before treating the migration as repaired. See Apple's
+[protected-resource reset documentation](https://developer.apple.com/documentation/xcode/resetting-access-to-protected-resources-in-macos).
+
+This scoped reset and reapproval was verified on 2026-09-15: both stored grants
+then referenced the Developer ID requirement, the retained desktop returned, and
+a reconnect restored input. Clicking into the native preview and sending
+Command-L focused Safari's address field inside the account. The account, home,
+credential and installed 0.7.0 release were retained. This verifies that tested
+recovery on macOS 27.0; it does not establish release-to-release upgrade coverage.
 
 The account's standalone desktop copy is installed under a per-account lock.
 The source and staged bundle must pass signing identity and content validation.

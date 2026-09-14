@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import LocalMacCore
 import ComputerCore
 import XCTest
@@ -88,6 +89,56 @@ import XCTest
         do { _ = try await runtime.call(read); XCTFail("Disconnected request must fail.") } catch {}
         XCTAssertFalse(unexpected); XCTAssertNil(runtime.error); XCTAssertFalse(runtime.isConnected)
         _ = try await helper.value
+    }
+    func testPermissionErrorClearsOnlyWhenAccessibilityAndEventPostingRecover() async throws {
+        let input = Pipe(), output = Pipe()
+        var replyNumber = 0
+        let helper = peer(input, output, count: 5) { request in
+            replyNumber += 1
+            var reply = Self.reply(request, displayID: 99)
+            reply.status?.accessibility = replyNumber >= 4
+            reply.status?.postEvents = replyNumber >= 5
+            if request.operation == .input { reply.status = nil; reply.error = LocalMacStatus.inputPermissionError }
+            return reply
+        }
+        let runtime = LocalMacComputer(displayIDs: { [2] })
+        runtime.expectDisconnect(true)
+        try await runtime.connect(input: output.fileHandleForReading, output: input.fileHandleForWriting, protectedDisplays: [2])
+        let failed = expectation(description: "Input denial received")
+        let observer = runtime.$error.sink { if $0 == LocalMacStatus.inputPermissionError { failed.fulfill() } }
+        runtime.send(LocalMacInput(.move))
+        await fulfillment(of: [failed], timeout: 2)
+        observer.cancel()
+        await runtime.refreshStatus()
+        XCTAssertTrue(runtime.status?.accessibility == true)
+        XCTAssertFalse(runtime.status?.canControl == true)
+        XCTAssertEqual(runtime.error, LocalMacStatus.inputPermissionError)
+        await runtime.refreshStatus()
+        XCTAssertTrue(runtime.status?.canControl == true)
+        XCTAssertNil(runtime.error)
+        _ = try await helper.value
+        runtime.close()
+    }
+    func testPermissionRecoveryPreservesAnUnrelatedFailure() async throws {
+        let input = Pipe(), output = Pipe()
+        let helper = peer(input, output, count: 4) { request in
+            var reply = Self.reply(request, displayID: 99)
+            if request.operation == .input { reply.status = nil; reply.error = LocalMacStatus.inputPermissionError }
+            return reply
+        }
+        let runtime = LocalMacComputer(displayIDs: { [2] })
+        runtime.expectDisconnect(true)
+        try await runtime.connect(input: output.fileHandleForReading, output: input.fileHandleForWriting, protectedDisplays: [2])
+        let failed = expectation(description: "Input denial received")
+        let observer = runtime.$error.sink { if $0 == LocalMacStatus.inputPermissionError { failed.fulfill() } }
+        runtime.send(LocalMacInput(.move))
+        await fulfillment(of: [failed], timeout: 2)
+        observer.cancel()
+        runtime.error = "A separate capture failure"
+        await runtime.refreshStatus()
+        XCTAssertEqual(runtime.error, "A separate capture failure")
+        _ = try await helper.value
+        runtime.close()
     }
     func testSessionIgnoresOldConnectionsAndExpectedStops() {
         let session = ComputerSession(Computer(name: "Retained", kind: .localMac))

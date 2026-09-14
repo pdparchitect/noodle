@@ -18,7 +18,9 @@ display interfaces is recorded in [DISPLAY-RESEARCH.md](DISPLAY-RESEARCH.md).
 - The retained **Local Mac Development** library entry was created through the UI.
 - Direct registration from the sandboxed app was rejected by macOS. The separate
   setup app registered the fixed job and the user approved it through Login Items.
-  Registration stays approved across signed updates. A command-line reload
+  Registration stayed approved across the development-signed updates tested here.
+  The later Developer ID transition required refreshing the launch constraint in
+  Login Items; see README.md. A command-line reload
   unregistered successfully but macOS refused command-line re-registration;
   **Enable Account Helper** in the native setup app completed it without another
   password prompt. Do not use command-line reload during a running account session.

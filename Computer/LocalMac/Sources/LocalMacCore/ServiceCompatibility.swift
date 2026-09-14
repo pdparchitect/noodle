@@ -51,7 +51,7 @@ public struct LocalMacServiceInfo: Codable, Sendable {
         }
         return true
     }
-    public static let restartMessage = "The running Local Mac service predates automatic update recovery or is incompatible. Restart your Mac to finish updating Noodle Computer; accounts, files and approvals are retained. Do not disable and re-enable the service."
+    public static let restartMessage = "The running Local Mac service predates automatic update recovery or is incompatible. Restart your Mac to load the installed helper. If it still cannot start, repair its registration in Local Mac Setup; accounts and files are retained."
 }
 
 public enum LocalMacServiceUpdate {
