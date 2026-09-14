@@ -92,6 +92,11 @@ extension MessengerDocumentation {
         path to update its copy; a different location creates a separate noodlet.
         Source updates preserve data. Only one instance of a library package may run.
 
+        Git is supported and encouraged for applet development. Track source changes
+        and commit useful checkpoints. Keep the repository root above the `.noodlet`
+        folder (for example, `MyProject/.git` and `MyProject/MyApp.noodlet`) so Git
+        metadata stays out of the imported package and its 512-file / 20 MiB limits.
+
         For delivery, prefer validating the source and attaching the returned url using
         Messenger --attach "noodlet://UUID". HTML needs no build step. Validation returns
         the persistent noodletID and url without running the creation. Never invent IDs
