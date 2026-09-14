@@ -62,7 +62,7 @@ struct NoodleSettingsView: View {
     }
 }
 
-private struct GeneralSettingsView: View {
+struct GeneralSettingsView: View {
     @Environment(NoodleStore.self) private var store
     @AppStorage(BotNameStyle.defaultsKey) private var botNameStyle = BotNameStyle.real.rawValue
 
@@ -89,7 +89,7 @@ private struct GeneralSettingsView: View {
     }
 }
 
-private struct ChatSettingsView: View {
+struct ChatSettingsView: View {
     @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showBotDescriptions = true
     @AppStorage(LinkPreviewSettings.timeoutKey) private var linkPreviewTimeout = LinkPreviewSettings.defaultTimeout
     @AppStorage(VoiceInputDevice.defaultsKey) private var microphoneUID = ""
@@ -97,6 +97,14 @@ private struct ChatSettingsView: View {
     @AppStorage(ChatImageLayout.defaultsKey) private var imageLayout = ChatImageLayout.defaultValue.rawValue
     @State private var microphones: [VoiceInputDevice] = []
     @State private var defaultMicrophoneID: UInt32 = 0
+    private let microphoneDevices: () -> [VoiceInputDevice]
+    private let systemMicrophoneID: () -> UInt32
+
+    init(microphoneDevices: @escaping () -> [VoiceInputDevice] = VoiceInputDevice.available,
+         systemMicrophoneID: @escaping () -> UInt32 = { VoiceInputDevice.defaultDeviceID }) {
+        self.microphoneDevices = microphoneDevices
+        self.systemMicrophoneID = systemMicrophoneID
+    }
 
     var body: some View {
         Form {
@@ -134,8 +142,8 @@ private struct ChatSettingsView: View {
                 }
                 .task {
                     while !Task.isCancelled {
-                        microphones = VoiceInputDevice.available()
-                        defaultMicrophoneID = VoiceInputDevice.defaultDeviceID
+                        microphones = microphoneDevices()
+                        defaultMicrophoneID = systemMicrophoneID()
                         do { try await Task.sleep(for: .seconds(2)) } catch { break }
                     }
                 }
@@ -177,7 +185,7 @@ private extension View {
     }
 }
 
-private struct HeartbeatsSettingsView: View {
+struct HeartbeatsSettingsView: View {
     @Environment(NoodleStore.self) private var store
 
     private static let suggestedIntervals = [5, 10, 15, 30, 45, 60, 120, 240, 480, 720, 1_440]

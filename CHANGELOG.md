@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Cover saved general, chat, microphone, and heartbeat preferences with hidden-window tests, including native toggle and segmented-control changes, settings reopening, runtime recreation, and disconnected microphone recovery.
+
 - Cover native bot harness/model/effort selection, model search, default choices, creation, unavailable-harness validation, and preservation of saved settings with hidden-window tests.
 
 - Cover bot editor save, failed-save retry, blank-name validation, and cancel through native controls in hidden test windows.
