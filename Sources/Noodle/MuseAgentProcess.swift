@@ -267,7 +267,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
                 guard approvalStages.insert(stage).inserted else { return }
                 request(.approvalDecision, method: "approval/decide", params: decision)
             } else if method == "userInput/requested" || method == "userInput/request" {
-                terminated("Muse Code needs interactive approval or input. Check the session in Muse Terminal, then Retry Startup.")
+                terminated("Muse Code needs interactive approval or input. Check the session in Muse Terminal, then choose Kick in Settings → Harness.")
             } else if method == "turn/retryScheduled", turnIsActive,
                       params["turnId"] as? String == activeTurnID,
                       let detail = MuseProtocol.retryDetail(params) {
@@ -291,7 +291,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
                 sendPending()
                 return
             }
-            terminated("Muse Code rejected a session request. Check muse login and the selected model in Terminal, then Retry Startup. Unfinished work is preserved.")
+            terminated("Muse Code rejected a session request. Check muse login and the selected model in Terminal, then choose Kick in Settings → Harness. Unfinished work is preserved.")
             return
         }
         switch purpose {
@@ -321,7 +321,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
                 try saveState()
             } catch { terminated("Could not save the Muse Code session"); return }
             if let pending = result["pendingRequests"] as? [Any], !pending.isEmpty {
-                terminated("Muse Code has pending interactive requests. Resolve them in Muse Terminal, then Retry Startup."); return
+                terminated("Muse Code has pending interactive requests. Resolve them in Muse Terminal, then choose Kick in Settings → Harness."); return
             }
             if let active = session["activeTurnId"] as? String {
                 activeTurnID = active; turnIsActive = true; recoveryPending = false
@@ -380,7 +380,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
         catch { terminated("Could not record finished Muse work"); return }
         turnIsActive = false; activeTurnID = nil
         projectionRecoveryAttempted = false; needsHistoryRecovery = false
-        do { try saveState() } catch { pause("Could not save completed Muse session state. Retry Startup."); return }
+        do { try saveState() } catch { pause("Could not save completed Muse session state. Choose Kick in Settings → Harness."); return }
         trace.finish(.turnCompleted)
         update(.ready, "Muse Code ready")
         sendPending()
@@ -400,7 +400,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
         projectionRecoveryAttempted = true
         needsHistoryRecovery = true
         // Persist the attempt before replacing the pointer; crashes cannot loop resets.
-        do { try saveState() } catch { pause("Could not preserve Muse recovery state. Retry Startup."); return }
+        do { try saveState() } catch { pause("Could not preserve Muse recovery state. Choose Kick in Settings → Harness."); return }
         previousSessionIDs.append(oldSession)
         sessionID = nil; activeTurnID = nil; turnIsActive = false
         earlyCompletions.removeAll(); requests.removeAll(); approvalStages.removeAll()
@@ -409,7 +409,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
         startupTimeout = Task { [weak self] in
             try? await Task.sleep(for: .seconds(60))
             guard !Task.isCancelled else { return }
-            self?.pause("Muse context recovery timed out. Retry Startup; chat history is preserved.")
+            self?.pause("Muse context recovery timed out. Choose Kick in Settings → Harness; chat history is preserved.")
         }
         openSession()
     }

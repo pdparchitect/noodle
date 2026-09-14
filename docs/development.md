@@ -172,9 +172,15 @@ the fixture.
 
 Run native UI fixtures from a logged-in Mac. They use isolated test data.
 
+Standalone fixtures link NoodleCore and its shared dependencies through
+`Tests/core-link-objects.py`, using SwiftPM's current output maps. This excludes
+cached object files left behind when source files are removed.
+
 | Area | Command | Check |
 | --- | --- | --- |
-| Chat | `zsh Tests/chat-features.sh` | Name menu, profiles, Markdown, draft and keyboard behavior |
+| Chat | `zsh Tests/chat-features.sh` | Name menu, profiles, Markdown, draft and keyboard behavior using the production composer; add `--check` for automatic menu/avatar checks without opening the manual fixture |
+| Conversation annotations | `zsh Tests/conversation-annotations.sh` | Selected transcript text and region capture in a sandboxed native fixture |
+| Attachment annotations | `zsh Tests/attachment-annotations.sh` | Native Quick Look annotation flow in an isolated sandboxed fixture; see [capture limits](attachment-annotations.md) |
 | Chat input | `zsh Tests/scrollable-composer.sh` | Cursor visibility beyond six lines, scrolling, wrapping, resize, IME, undo and paste |
 | Transcript layout | `swift test --disable-sandbox --filter TranscriptLayoutTests` | Real thumbnail loading, annotation height stability, cached previews, legacy notes, scrolling during incoming replies, composer growth, resizing and full-chat navigation |
 | Transcript restoration | `zsh Tests/transcript-startup.sh` | Delayed loading, persisted reading position, changed-width relaunch and rapid chat switching |
@@ -222,7 +228,3 @@ NOODLE_SIMULATE_NO_HARNESSES=1 '.build/Noodle Local.app/Contents/MacOS/Noodle'
 excluding app-bundled copies. Relaunch without the flag to restore normal detection.
 
 [Releases](releases.md) · [Documentation](README.md)
-
-Conversation annotation checks: `Tests/conversation-annotations.sh` exercises selected transcript text and region capture in a sandboxed native fixture.
-
-Attachment annotation checks: `Tests/attachment-annotations.sh` exercises the native Quick Look flow in an isolated sandboxed fixture. See [attachment annotations](attachment-annotations.md) for behavior and capture limits.

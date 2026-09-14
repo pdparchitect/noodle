@@ -13,9 +13,9 @@ public enum FxProtocol {
             "HttpConnectionClosing", "ConnectionResetByPeer", "ConnectionTimedOut", "SystemResumed"
         ]
         if let name = error["message"] as? String, networkErrors.contains(name) {
-            return "FX's model connection was interrupted (\(name)). Use Retry Startup to resume unfinished work."
+            return "FX's model connection was interrupted (\(name)). Use Kick in Settings → Harness to resume unfinished work."
         }
-        return "FX could not complete the turn. Check FX's provider and model, then use Retry Startup. Your unfinished work is preserved."
+        return "FX could not complete the turn. Check FX's provider and model, then use Kick in Settings → Harness. Your unfinished work is preserved."
     }
     public static var initializeParameters: [String: Any] {
         ["protocolVersion": 1,

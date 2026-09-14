@@ -6,6 +6,7 @@ export SWIFTPM_MODULECACHE_OVERRIDE="$CLANG_MODULE_CACHE_PATH"
 swift build --disable-sandbox --package-path "$project_root" --target NoodleCore
 swift build --disable-sandbox --package-path "$project_root" --target NoodleAudioCapture
 bin_path="$(swift build --disable-sandbox --package-path "$project_root" --show-bin-path)"
+core_objects=("${(@f)$(python3 "$project_root/Tests/core-link-objects.py" "$bin_path")}")
 swiftc -parse-as-library -I "$bin_path/Modules" \
     -I "$project_root/Sources/NoodleAudioCapture/include" \
     -Xcc -fmodule-map-file="$bin_path/NoodleAudioCapture.build/module.modulemap" \
@@ -19,8 +20,7 @@ swiftc -parse-as-library -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/VoiceRecordingCommand.swift" \
     "$project_root/Tests/NativeFixtureChecks.swift" \
     "$project_root/Tests/voice-composer.swift" \
-    "$bin_path"/NoodleCore.build/*.swift.o "$bin_path"/NoodleWallpaperCore.build/*.swift.o \
-    "$bin_path"/ComputerBridge.build/*.swift.o "$bin_path"/AppletBridge.build/*.swift.o \
+    "${core_objects[@]}" \
     "$bin_path"/NoodleAudioCapture.build/*.o \
     -o "$project_root/.build/voice-composer-tests"
 "$project_root/.build/voice-composer-tests"

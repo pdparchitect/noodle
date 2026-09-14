@@ -4,10 +4,6 @@ import Foundation
 /// Extend this catalogue and the UI renderer together. Effects never execute code.
 public enum ConversationEffectKind: String, Codable, CaseIterable, Sendable {
     case confetti
-
-    static var messengerInstructions: String {
-        allCases.map { $0.reference.guidance }.joined(separator: "\n\n")
-    }
 }
 
 public struct ConversationEffect: Codable, Equatable, Identifiable, Sendable {

@@ -99,7 +99,6 @@ actor FilePreviewCache {
             items[id] = nil
         } catch { /* Keep the reservation if bytes could not be removed. */ }
     }
-    func clearUnused() { for (id, item) in items where item.users == 0 { discard(id) } }
     var reservedBytes: Int64 { items.values.reduce(0) { $0 + $1.size } }
     deinit { sweeper?.cancel() }
 }

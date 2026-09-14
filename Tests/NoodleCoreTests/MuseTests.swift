@@ -5,7 +5,7 @@ final class MuseTests: XCTestCase {
     func testTurnFailuresAndRetriesAreVisibleWithoutInventedStatus() {
         let failure = MuseProtocol.turnFailureDetail(["terminal": "failed", "error": ["kind": "projectionError", "message": "Incompatible history", "retryable": false]])
         XCTAssertTrue(failure.contains("Incompatible history"))
-        XCTAssertTrue(failure.contains("Retry Startup"))
+        XCTAssertTrue(failure.contains("Kick in Settings → Harness"))
         XCTAssertTrue(MuseProtocol.turnFailureDetail(["reason": "Cancelled"]).contains("Cancelled"))
         XCTAssertNil(MuseProtocol.retryDetail([:]))
         XCTAssertNil(MuseProtocol.retryDetail(["nextAttempt": 2, "maxAttempts": 1, "retryDelayMs": -1]))

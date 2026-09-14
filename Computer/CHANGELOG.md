@@ -10,6 +10,8 @@
 
 ### Changed
 
+- Remove unused command and preview-cache helpers, and exercise normal cache expiration in the file-browser regression fixture.
+
 - Own `.noodlecomputer` reference files and sandboxed Quick Look previews and thumbnails. Opening a file selects and starts its computer in the main window, without an extra preview window or agent assignment checks. Saved previews work offline and show only their desktop or terminal content, without extra titles or footers.
 
 - Honor the image's configured user and environment in native terminals, agent terminals, commands, and file transfers, allowing the Shell and Desktop images to use a non-root account with sudo.

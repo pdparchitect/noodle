@@ -35,7 +35,8 @@ struct KeyboardFixture: View {
                 Spacer()
                 ScrollableChatComposer(text: $model.text, isFocused: $model.focused,
                     conversationID: model.ids[model.selection ?? 0], placeholder: "Message fixture",
-                    agents: [], preferredIDs: [], completion: model.completion, submit: {},
+                    agents: [], preferredIDs: [], separatesPreferredAgents: false,
+                    completion: model.completion, submit: {},
                     focusSidebar: { model.sidebarFocusRequest = UUID() })
             }.frame(width: 320)
         }.padding(20).frame(height: 300)

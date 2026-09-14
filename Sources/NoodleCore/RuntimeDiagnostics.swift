@@ -1,6 +1,5 @@
 import Foundation
 import OSLog
-import Darwin
 
 /// Diagnostics only: no messages, tool arguments, names, paths, or raw errors.
 public enum RuntimeDiagnostics {
@@ -47,10 +46,6 @@ public enum RuntimeDiagnostics {
         var deliveries = 0
     }
 
-    static func receiptURL(in workspace: URL) -> URL {
-        workspace.appendingPathComponent(".noodle/runtime-log-inbox.json")
-    }
-
     static func readReceipt(in workspace: URL, context: Context) -> InboxReceipt? {
         guard let mailbox = try? WorkspaceMailbox(workspace: workspace, path: ".noodle"),
               let data = try? mailbox.read("runtime-log-inbox.json", limit: 4096),
@@ -92,10 +87,6 @@ public enum RuntimeDiagnostics {
         (try? WorkspaceMailbox(workspace: workspace, path: ".noodle"))?.remove("runtime-log-inbox.json")
     }
 
-    static func contextURL(in workspace: URL) -> URL {
-        workspace.appendingPathComponent(".noodle/runtime-log-context.json")
-    }
-
     static func readContext(in workspace: URL, agentID: UUID) -> Context? {
         guard let mailbox = try? WorkspaceMailbox(workspace: workspace, path: ".noodle"),
               let data = try? mailbox.read("runtime-log-context.json", limit: 4096),
@@ -103,12 +94,6 @@ public enum RuntimeDiagnostics {
               context.agentID == agentID,
               AgentWakeReason(rawValue: context.reason) != nil else { return nil }
         return context
-    }
-
-    static func hasSafeContextDirectory(in workspace: URL) -> Bool {
-        let directory = contextURL(in: workspace).deletingLastPathComponent()
-        return directory.resolvingSymlinksInPath().standardizedFileURL
-            == workspace.resolvingSymlinksInPath().appendingPathComponent(".noodle").standardizedFileURL
     }
 
     static func record(_ event: Event, agentID: UUID, provider: HarnessProvider?, context: Context?, count: Int = 0, reads: Int = 0) {

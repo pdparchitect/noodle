@@ -81,7 +81,8 @@ import XCTest
         var envelope = ComputerAgentRequest(token: session.token, request: request)
         edit(&envelope)
         let stem = bridge.appendingPathComponent(envelope.id.uuidString.lowercased())
-        try ComputerAgentFiles.write(envelope, to: stem.appendingPathExtension("request"))
+        try WorkspaceMailbox(workspace: repository.directory(for: agent), path: ".noodle/computer-bridge")
+            .write(envelope, named: stem.lastPathComponent + ".request")
         controller.scan()
         return stem.appendingPathExtension("response")
     }

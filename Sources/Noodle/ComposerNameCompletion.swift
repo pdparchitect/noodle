@@ -148,31 +148,3 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
         editor.breakUndoCoalescing()
     }
 }
-
-/// Keeps SwiftUI's existing multiline field, including undo, paste and spelling.
-struct ChatComposerBridge: NSViewRepresentable {
-    @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showDescriptions = true
-    let isActive: Bool
-    let draft: String
-    let agents: [AgentRecord]
-    let preferredIDs: Set<UUID>
-    let completion: ComposerNameCompletion
-
-    func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
-
-    func makeCoordinator() -> ComposerNameCompletion { completion }
-
-    func updateNSView(_ view: NSView, context: Context) {
-        DispatchQueue.main.async {
-            guard isActive else { completion.detach(); return }
-            guard let editor = view.window?.firstResponder as? NSTextView,
-                  editor.string == draft else { return }
-            completion.attach(to: editor, anchor: view, agents: agents, preferredIDs: preferredIDs,
-                              showDescriptions: showDescriptions)
-        }
-    }
-
-    static func dismantleNSView(_ nsView: NSView, coordinator: ComposerNameCompletion) {
-        coordinator.detach()
-    }
-}

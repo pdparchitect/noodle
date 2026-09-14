@@ -218,10 +218,13 @@ private struct ChatRoot: View {
 @available(macOS 26.0, *)
 private struct VoiceShortcutApp: App {
     var body: some Scene {
+        WindowGroup("Voice Shortcut Tests") {
+            ChatRoot(id: "first", model: Checks.first)
+        }
+        .commands { ConversationCommands(search: {}) }
         WindowGroup("Voice Shortcut Tests", for: String.self) { $id in
             ChatRoot(id: id ?? "first", model: id == "second" ? Checks.second : Checks.first)
         }
-        .commands { ConversationCommands(search: {}) }
         Settings {
             Text("Synthetic settings").padding(20).frame(width: 300, height: 120)
                 .background(WindowProbe(id: "voice-shortcut-settings"))
@@ -234,6 +237,11 @@ private struct VoiceShortcutApp: App {
         setbuf(stdout, nil)
         guard #available(macOS 26.0, *) else { print("SKIP: voice recording requires macOS 26"); return }
         NSApplication.shared.setActivationPolicy(.regular)
+        Task { @MainActor in
+            try await Task.sleep(for: .seconds(30))
+            print("FAIL: voice shortcut fixture did not finish within 30 seconds")
+            exit(1)
+        }
         VoiceShortcutApp.main()
     }
 }

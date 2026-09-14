@@ -78,17 +78,24 @@ final class ACPWireFixture {
     }
     func stop() {
         stdout.fileHandleForReading.readabilityHandler = nil
+        // A launcher can exit while its worker still owns the other pipe end.
+        // Closing our endpoint must not depend on the launcher's running state.
+        writeLock.lock()
+        try? stdin.fileHandleForWriting.close()
+        writeLock.unlock()
         if process.isRunning {
             let finished = DispatchSemaphore(value: 0)
             process.terminationHandler = { _ in finished.signal() }
-            // Mirror Agent Host teardown, including native runtime children
-            // that can retain a session lock after their stdio parent exits.
+            // Let a stdio server release its session before escalating to
+            // signals. Keeping stdin open can leave a durable session lease.
             let pid = process.processIdentifier
             let target = getpgid(pid) == pid ? -pid : pid
-            kill(target, SIGTERM)
             if finished.wait(timeout: .now() + 2) != .success {
-                kill(target, SIGKILL)
-                _ = finished.wait(timeout: .now() + 2)
+                kill(target, SIGTERM)
+                if finished.wait(timeout: .now() + 2) != .success {
+                    kill(target, SIGKILL)
+                    _ = finished.wait(timeout: .now() + 2)
+                }
             }
         }
     }

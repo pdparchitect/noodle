@@ -96,7 +96,7 @@ final class FileBrowserTests: XCTestCase {
             await cache.complete(lease); await cache.release(lease)
         }
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path).count, 128)
-        await cache.clearUnused()
+        await cache.expire(now: Date().addingTimeInterval(601))
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
     }
 }

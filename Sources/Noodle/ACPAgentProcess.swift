@@ -283,7 +283,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
                 interruptRequested = false
                 turnIsActive = false
                 trace.finish(.turnFailed)
-                update(.failed, provider == .apple ? (error["message"] as? String ?? "Apple could not finish this turn. Retry Startup to continue.") : (provider == .fx ? FxProtocol.turnFailureDescription(error) : "Grok Build could not complete the turn. Check its account and model, then use Retry Startup. Unfinished work is preserved."))
+                update(.failed, provider == .apple ? (error["message"] as? String ?? "Apple could not finish this turn. Choose Kick in Settings → Harness to continue.") : (provider == .fx ? FxProtocol.turnFailureDescription(error) : "Grok Build could not complete the turn. Check its account and model, then use Kick in Settings → Harness. Unfinished work is preserved."))
             } else { terminated(provider == .apple ? (error["message"] as? String ?? "Apple session setup failed. Check Apple Intelligence in System Settings.") : "\(name) session setup failed. Check its sign-in and selected model in Settings.") }
             return
         }
@@ -326,7 +326,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
             turnIsActive = false
             guard !reviewHeld, stopReason == "end_turn" || wasInterrupted else {
                 trace.finish(.turnFailed)
-                update(.failed, reviewHeld ? "\(name) held tool execution: its safety reviewer is unavailable. Retry when the review service recovers." : "\(name) stopped before completing the turn. Retry Startup to resume.")
+                update(.failed, reviewHeld ? "\(name) held tool execution: its safety reviewer is unavailable. Retry when the review service recovers." : "\(name) stopped before completing the turn. Choose Kick in Settings → Harness to resume.")
                 return
             }
             do {

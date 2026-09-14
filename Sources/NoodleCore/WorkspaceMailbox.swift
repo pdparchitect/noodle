@@ -61,8 +61,10 @@ public final class WorkspaceMailbox: @unchecked Sendable {
         let handle = FileHandle(fileDescriptor: file, closeOnDealloc: true)
         defer { try? handle.close() }
         var info = stat()
+        // Atomic replacement may unlink this already-open inode before fstat.
+        // It remains safe to read; multiple links would expose another file.
         guard fstat(file, &info) == 0, info.st_mode & S_IFMT == S_IFREG,
-              info.st_nlink == 1, info.st_size >= 0, info.st_size <= limit else { throw Self.invalid() }
+              info.st_nlink <= 1, info.st_size >= 0, info.st_size <= limit else { throw Self.invalid() }
         let data = try handle.read(upToCount: limit + 1) ?? Data()
         guard data.count <= limit else { throw Self.invalid() }
         return data

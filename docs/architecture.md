@@ -37,6 +37,7 @@ Drivers share a `start`, `stop`, and `notify` interface:
 | Claude Code | stream-json |
 | FX, Grok Build | ACP |
 | Muse Code | MSP |
+| Apple Intelligence | ACP through the bundled `NoodleAppleAgent` helper |
 
 Noodle starts configured bots when it opens and stops them when it quits. Closing
 a window leaves them running. Notifications coalesce while a bot is busy.
@@ -84,7 +85,7 @@ App Sandbox and brokers remote tools and Computer
 requests after checking assignments. See [agent access](security.md),
 [MCP connections](mcp-connections.md), and the [Computer bridge](../Computer/Bridge/README.md).
 
-## Built-in Apple harness
+## Built-in Apple Intelligence harness
 
 `NoodleAppleAgent` is a signed private executable bundled in `Contents/Helpers`.
 Agent Host validates its exact bundle path and signing identity. It reports its

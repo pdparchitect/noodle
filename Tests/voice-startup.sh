@@ -6,6 +6,7 @@ export SWIFTPM_MODULECACHE_OVERRIDE="$CLANG_MODULE_CACHE_PATH"
 swift build --disable-sandbox --package-path "$project_root" --target NoodleCore
 swift build --disable-sandbox --package-path "$project_root" --target NoodleAudioCapture
 bin_path="$(swift build --disable-sandbox --package-path "$project_root" --show-bin-path)"
+core_objects=("${(@f)$(python3 "$project_root/Tests/core-link-objects.py" "$bin_path")}")
 fixture_app="$project_root/.build/Noodle Voice Startup Tests.app"
 mkdir -p "$fixture_app/Contents/MacOS"
 swiftc -O -parse-as-library -I "$bin_path/Modules" \
@@ -15,8 +16,8 @@ swiftc -O -parse-as-library -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/VoiceInputDevice.swift" \
     "$project_root/Sources/Noodle/VoiceCaptureRecovery.swift" \
     "$project_root/Tests/voice-startup.swift" \
-    "$bin_path"/NoodleCore.build/*.swift.o "$bin_path"/NoodleWallpaperCore.build/*.swift.o \
-    "$bin_path"/ComputerBridge.build/*.swift.o "$bin_path"/NoodleAudioCapture.build/*.o \
+    "${core_objects[@]}" \
+    "$bin_path"/NoodleAudioCapture.build/*.o \
     -o "$fixture_app/Contents/MacOS/VoiceStartupTests"
 cp "$project_root/Tests/voice-startup-Info.plist" "$fixture_app/Contents/Info.plist"
 codesign --force --sign - --options runtime --entitlements "$project_root/Tests/voice-startup.entitlements" "$fixture_app"

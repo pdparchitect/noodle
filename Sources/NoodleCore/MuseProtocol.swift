@@ -51,7 +51,7 @@ public enum MuseProtocol {
         let error = params["error"] as? [String: Any]
         let message = error?["message"] as? String ?? params["reason"] as? String ?? "The turn did not complete."
         let bounded = String(String.UnicodeScalarView(message.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }.prefix(500)))
-        return "Muse Code stopped: \(bounded) Retry Startup to try again. Unfinished work is preserved."
+        return "Muse Code stopped: \(bounded) Choose Kick in Settings → Harness to try again. Unfinished work is preserved."
     }
 
     public static func retryDetail(_ params: [String: Any]) -> String? {

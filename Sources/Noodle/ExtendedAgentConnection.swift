@@ -22,7 +22,7 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
         connection.exportedObject = self
         connection.invalidationHandler = { [weak self] in
             guard let self, !self.stopping else { return }
-            self.onFailure?("Agent runtime disconnected. Retry Startup to reconnect.")
+            self.onFailure?("Agent runtime disconnected. Choose Kick in Settings → Harness to reconnect.")
         }
         connection.interruptionHandler = { [weak self] in
             guard let self, !self.stopping else { return }

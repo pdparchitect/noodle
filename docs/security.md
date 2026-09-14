@@ -4,10 +4,10 @@
 
 | Harness | Access in Noodle |
 | --- | --- |
-| Codex, FX, Grok Build, Muse Code, Apple | Restricted by default; autonomous access is optional |
+| Codex, FX, Grok Build, Muse Code, Apple Intelligence | Restricted by default; autonomous access is optional |
 | Claude Code | Autonomous access is required |
 
-Change access for Codex, FX, Grok Build, Muse Code, or Apple in **Settings → Security**.
+Change access for Codex, FX, Grok Build, Muse Code, or Apple Intelligence in **Settings → Security**.
 Claude Code's switch stays on after authorization because its Noodle integration
 does not support restricted mode. Selecting it in the bot editor authorizes that
 harness for that bot. Copied bots may need

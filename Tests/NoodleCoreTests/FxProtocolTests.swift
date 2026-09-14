@@ -6,7 +6,7 @@ final class FxProtocolTests: XCTestCase {
         XCTAssertTrue(FxProtocol.turnFailureDescription(["message": "ConnectionResetByPeer"]).contains("model connection was interrupted"))
         let unknown = FxProtocol.turnFailureDescription(["message": "secret-account-token"])
         XCTAssertFalse(unknown.contains("secret-account-token"))
-        XCTAssertTrue(unknown.contains("Retry Startup"))
+        XCTAssertTrue(unknown.contains("Kick in Settings → Harness"))
     }
     func testHeldReviewsAreNotSuccessfulToolRuns() {
         let content: [[String: Any]] = [["content": ["type": "text", "text": #"{"error":{"type":"tool_review_held","held":true}}"#]]]

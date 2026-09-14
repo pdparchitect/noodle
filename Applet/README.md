@@ -51,7 +51,7 @@ the repository. Local builds disable update checks, matching Computer.
 
 [Release preparation](RELEASING.md) uses the shared CI pipeline, signing secrets,
 notarization, and signed feeds, with independent `applet-vX.Y.Z` releases and an
-`applet-latest` channel. No public feed exists until the first release is published.
+[`applet-latest` download channel](https://github.com/pdparchitect/noodle/releases/tag/applet-latest).
 
 ## Create a noodlet
 

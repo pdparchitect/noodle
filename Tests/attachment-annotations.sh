@@ -8,6 +8,7 @@ export SWIFTPM_MODULECACHE_OVERRIDE="$CLANG_MODULE_CACHE_PATH"
 fixture_build="$project_root/.build/annotation-fixture"
 swift build --disable-sandbox --package-path "$project_root" --scratch-path "$fixture_build" --target NoodleCore
 bin_path="$(swift build --disable-sandbox --package-path "$project_root" --scratch-path "$fixture_build" --show-bin-path)"
+core_objects=("${(@f)$(python3 "$project_root/Tests/core-link-objects.py" "$bin_path")}")
 fixture_app="$project_root/.build/Noodle Annotation Tests.app"
 mkdir -p "$fixture_app/Contents/MacOS"
 swiftc -parse-as-library -target "$(uname -m)-apple-macosx15.0" -I "$bin_path/Modules" \
@@ -25,8 +26,7 @@ swiftc -parse-as-library -target "$(uname -m)-apple-macosx15.0" -I "$bin_path/Mo
     "$project_root/Tests/AnnotationVisualChecks.swift" \
     "$project_root/Tests/AnnotationCursorChecks.swift" \
     "$project_root/Tests/attachment-annotations.swift" \
-    "$bin_path"/NoodleCore.build/*.swift.o "$bin_path"/NoodleWallpaperCore.build/*.swift.o \
-    "$bin_path"/ComputerBridge.build/*.swift.o "$bin_path"/AppletBridge.build/*.swift.o \
+    "${core_objects[@]}" \
     -o "$fixture_app/Contents/MacOS/AnnotationTests"
 cp "$project_root/Tests/attachment-annotations-Info.plist" "$fixture_app/Contents/Info.plist"
 codesign --force --sign - --options runtime --entitlements "$project_root/Tests/attachment-annotations.entitlements" "$fixture_app"

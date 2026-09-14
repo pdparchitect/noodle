@@ -354,7 +354,6 @@ actor ContainerComputer {
         }
     }
 
-    func cancelCommand() async throws { try await commandProcess?.kill(.kill) }
 
     // Independent, non-PTY binary channel. The guest's paths are argv values.
     func makeFileProcess(arguments: [String], input: (any ReaderStream)? = nil,

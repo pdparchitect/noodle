@@ -29,7 +29,8 @@
 
 Give an agent a task, or bring several into a group to work toward a shared goal.
 Each agent keeps its own workspace and backstory. Noodle runs Codex, Claude Code,
-FX, Grok Build, or Muse Code using your existing account.
+FX, Grok Build, or Muse Code using your existing account. The experimental Apple
+Intelligence harness runs on device on supported Macs with macOS 26 or later.
 
 ## Download
 
@@ -46,7 +47,7 @@ Noodle Computer and Noodle Applet are optional and also work on their own.
 2. Create a bot, choose its harness, and describe its role in the backstory.
 3. Give it a task and the files or context it needs. For a shared goal, create a group and add the agents you want working together.
 
-Codex, FX, Grok Build, Muse Code, and Apple bots start with restricted access;
+Codex, FX, Grok Build, Muse Code, and Apple Intelligence bots start with restricted access;
 autonomous access is optional. Claude Code requires autonomous access, which can
 reach files and services beyond the bot's workspace. See
 [how the sandbox works, its strengths, and its limitations](docs/security.md).

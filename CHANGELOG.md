@@ -34,6 +34,12 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Keep complete mailbox messages readable during atomic replacement, while continuing to reject linked files. Exercise the production mailbox and composer in fixtures, and link native tests against current build outputs and bridge dependencies instead of stale object files.
+
+- Repair native fixture startup and close inherited IPC pipes during teardown so harness restarts can release their previous sessions.
+
+- Update runtime recovery messages and help to point to Kick in Harness settings, and align harness setup documentation with Apple Intelligence.
+
 - Open Computer attachments with the running provider, or the neighbouring local Computer build during development, instead of an older installed copy that cannot handle reference files.
 
 - Correct Computer skill and CLI guidance: attachments show saved previews and open the computer's normal desktop or human terminal, rather than resuming an agent's terminal session.

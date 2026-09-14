@@ -6,6 +6,7 @@ export CLANG_MODULE_CACHE_PATH="$fixture_build/module-cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$CLANG_MODULE_CACHE_PATH"
 swift build --disable-sandbox --package-path "$project_root" --scratch-path "$fixture_build" --jobs 4 --target NoodleCore
 bin_path="$(swift build --disable-sandbox --package-path "$project_root" --scratch-path "$fixture_build" --show-bin-path)"
+core_objects=("${(@f)$(python3 "$project_root/Tests/core-link-objects.py" "$bin_path")}")
 fixture_app="$fixture_build/Noodle Conversation Annotation Tests.app"
 mkdir -p "$fixture_app/Contents/MacOS"
 preview_support=()
@@ -26,8 +27,7 @@ swiftc -parse-as-library -target "$(uname -m)-apple-macosx15.0" -I "$bin_path/Mo
     "$project_root/Sources/Noodle/ConversationAnnotationContent.swift" \
     "$project_root/Tests/NativeFixtureChecks.swift" \
     "$project_root/Tests/conversation-annotations.swift" \
-    "$bin_path"/NoodleCore.build/*.swift.o "$bin_path"/NoodleWallpaperCore.build/*.swift.o \
-    "$bin_path"/ComputerBridge.build/*.swift.o "$bin_path"/AppletBridge.build/*.swift.o \
+    "${core_objects[@]}" \
     -o "$fixture_app/Contents/MacOS/ConversationAnnotationTests"
 cat > "$fixture_app/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

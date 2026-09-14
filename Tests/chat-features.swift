@@ -100,7 +100,8 @@ private struct FixtureView: View {
     @State private var directProfile = false
     @State private var attachmentMenu = false
     @State private var attachmentAction = "None"
-    @FocusState private var focused: Bool
+    @State private var focused = false
+    @State private var conversationID = UUID()
     private let agents = [
         AgentRecord(displayName: "Angy", publicDescription: "Designs friendly interfaces."),
         AgentRecord(displayName: "Mara", publicDescription: "Reviews ideas and asks useful questions.", avatarImageData: fixtureAvatarData()),
@@ -123,11 +124,10 @@ private struct FixtureView: View {
                     capture: { attachmentAction = "Capture" }))
             Text("Attachment action: \(attachmentAction)")
             Spacer()
-            TextField("Message", text: $draft, axis: .vertical)
-                .textFieldStyle(.plain).lineLimit(1...6).focused($focused)
-                .background(ChatComposerBridge(isActive: focused, draft: draft, agents: agents,
-                                               preferredIDs: [agents[1].id], completion: completion))
-                .onSubmit { submissions += 1 }
+            ScrollableChatComposer(text: $draft, isFocused: $focused,
+                conversationID: conversationID, placeholder: "Message", agents: agents,
+                preferredIDs: [agents[1].id], separatesPreferredAgents: true,
+                completion: completion, submit: { submissions += 1 })
                 .padding(12)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 18))
         }

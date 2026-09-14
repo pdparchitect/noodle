@@ -177,7 +177,8 @@ import XCTest
         envelope.localPath = localPath
         edit(&envelope)
         let stem = directory.appendingPathComponent(envelope.id.uuidString.lowercased())
-        try ComputerAgentFiles.write(envelope, to: stem.appendingPathExtension("request"))
+        try WorkspaceMailbox(workspace: repository.directory(for: agent), path: ".noodle/computer-bridge")
+            .write(envelope, named: stem.lastPathComponent + ".request")
         return SentRequest(url: stem.appendingPathExtension("response"))
     }
 

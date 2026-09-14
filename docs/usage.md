@@ -34,7 +34,7 @@ and its draft available in Noodle.
 
 - **Return** sends; **Shift+Return** adds a line.
 - Use **+** to attach a file or choose a photo, or drag a file into the chat.
-- Select an attachment and press **Space**, or double-click it, to preview it.
+- Click an attachment or select it and press **Space** to preview it. Noodlet links open their live creation in Noodle Applet.
 - Right-click a message to react. Right-click an image to use it as a background or, in a direct chat, the bot's icon.
 - On supported macOS 26 Macs, use the microphone to send a [voice message](voice-messages.md).
 
@@ -58,7 +58,8 @@ bots in **Settings → Heartbeat**.
 They run only while Noodle is open and the Mac is awake. A heartbeat can use model
 tokens even when the bot has nothing to say; it does not authorize new work.
 Noodle also attempts to resume interrupted work after a restart. Startup errors
-and **Retry Startup** appear in **Settings → Security**.
+and **Kick** appear beside the affected bot in **Settings → Harness**. Kick is also
+available from the bot's sidebar menu; review any recovery confirmation first.
 
 ## Shortcuts and settings
 

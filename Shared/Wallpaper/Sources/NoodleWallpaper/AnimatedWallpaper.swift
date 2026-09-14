@@ -135,7 +135,6 @@ struct AnimatedWallpaper: NSViewRepresentable {
             imageLayer.add(transition, forKey: "wallpaper-frame")
         }
         imageLayer.contents = image
-        frameIndex = index
     }
 
     public func stop() {
