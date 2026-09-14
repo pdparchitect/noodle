@@ -16,12 +16,15 @@ public struct TransferProgress: Sendable {
     }
 
     public var detail: String {
-        let bytes = ByteCountFormatter.string(fromByteCount: received, countStyle: .file)
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        formatter.zeroPadsFractionDigits = true
+        let bytes = formatter.string(fromByteCount: received)
         let total =
             expected > 0
-            ? " of " + ByteCountFormatter.string(fromByteCount: expected, countStyle: .file) : " downloaded"
+            ? " of " + formatter.string(fromByteCount: expected) : " downloaded"
         guard elapsed >= 1, received > 0 else { return bytes + total }
-        let rate = ByteCountFormatter.string(fromByteCount: Int64(Double(received) / elapsed), countStyle: .file)
+        let rate = formatter.string(fromByteCount: Int64(Double(received) / elapsed))
         return bytes + total + " · " + rate + "/s"
     }
 }

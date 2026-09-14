@@ -1018,7 +1018,7 @@ struct ComputerCreationProgressView: View {
           .accessibilityLabel(store.creationStatus ?? "Creation progress")
         if store.creationDetail != nil || store.creationProgress != nil {
           HStack {
-            if let detail = store.creationDetail { Text(detail) }
+            if let detail = store.creationDetail { Text(detail).monospacedDigit() }
             Spacer()
             if let progress = store.creationProgress {
               Text(progress, format: .percent.precision(.fractionLength(0))).monospacedDigit()

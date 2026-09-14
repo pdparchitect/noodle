@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep trailing decimal zeroes and use equal-width digits in image download progress so changing byte counts and speeds stay visually steady.
+
 ## [0.6.0] - 2026-09-14
 
 ### Fixed
