@@ -92,6 +92,8 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Remove the Preview menu; annotation actions remain available in Conversation and through keyboard shortcuts.
+
 - Show saved images for Computer attachments and open the referenced computer in Noodle Computer when clicked, keeping agent assignment checks on the CLI path.
 
 - Remove unused in-chat action approval and question forms, their pending-request queue, and sidebar indicators. Keep runtime permission replies tied to saved bot access, skip structured questions immediately without adding a replacement prompt.

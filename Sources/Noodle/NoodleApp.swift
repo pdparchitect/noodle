@@ -80,8 +80,6 @@ struct NoodleApp: App {
                 .appShortcut(.newGroup)
             }
 
-            AnnotationCommands()
-
             ConversationCommands {
                 NotificationCenter.default.post(name: .focusSearch, object: nil)
             }
