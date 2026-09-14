@@ -8,6 +8,7 @@ import NoodleCore
     let preview: AttachmentPreviewController
     let messages: [ChatMessage]
     let save: (AttachmentAnnotation, Data, ConversationAttachment, Data) throws -> Void
+    @FocusState private var composerFocused: Bool
     var body: some View {
         VStack(alignment: .leading, spacing: 35) {
             ForEach(messages) { message in
@@ -16,12 +17,14 @@ import NoodleCore
                     .background(ConversationAnnotationText(message: message))
             }
             TextField("Message", text: .constant("Composer text"))
+                .focused($composerFocused)
             Spacer()
         }
         .padding(40).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .environment(\.conversationAnnotations, controller)
         .background(ConversationAnnotationHost(controller: controller, conversationID: messages[0].conversationID,
-            title: "Annotation test", save: save).frame(width: 0, height: 0))
+            title: "Annotation test", save: save,
+            focusComposer: { composerFocused = true }).frame(width: 0, height: 0))
         .background(AttachmentPreviewHost(controller: preview))
     }
 }
@@ -165,7 +168,10 @@ import NoodleCore
         require(beforeSave.isEmpty, "Opening an annotation must not persist a source")
         controller.editor.commentInput!.string = "Please explain this"
         try await key("\r", code: 36, flags: .command, in: controller.editor.commentInput!.window!)
-        try await until("Save must return focus to the conversation") { self.window.isKeyWindow && !self.controller.editor.hasPendingAnnotation }
+        try await until("Save must focus the chat input") {
+            self.window.isKeyWindow && !self.controller.editor.hasPendingAnnotation &&
+                (self.window.firstResponder as? NSTextView)?.isEditable == true
+        }
         require(saved.count == 1 && saved[0].attachment.annotation?.quote == "Quoted")
         require(saved[0].attachment.annotation?.sourceMessageID == messages[1].id)
 
@@ -201,7 +207,10 @@ import NoodleCore
         try await chooseRegion()
         editor.commentInput!.string = "Move this detail"
         try await key("\r", code: 36, flags: .command, in: editor.commentInput!.window!)
-        try await until("Region save must return focus") { self.window.isKeyWindow && !editor.hasPendingAnnotation }
+        try await until("Region save must focus the chat input") {
+            self.window.isKeyWindow && !editor.hasPendingAnnotation &&
+                (self.window.firstResponder as? NSTextView)?.isEditable == true
+        }
         require(saved.count == 2 && saved[1].attachment.mediaType == "image/png")
         require(saved[1].attachment.annotation?.comment == "Move this detail")
         let png = try Data(contentsOf: repository.attachmentFileURL(saved[1].attachment))

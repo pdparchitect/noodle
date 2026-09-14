@@ -19,11 +19,12 @@ struct ConversationAnnotationHost: NSViewRepresentable {
     let conversationID: UUID
     let title: String
     let save: (AttachmentAnnotation, Data, ConversationAttachment, Data) throws -> Void
+    var focusComposer: (() -> Void)? = nil
 
     func makeNSView(context: Context) -> Host { Host(controller: controller) }
     func updateNSView(_ view: Host, context: Context) {
         view.setController(controller)
-        controller.configure(conversationID: conversationID, title: title, save: save)
+        controller.configure(conversationID: conversationID, title: title, save: save, focusComposer: focusComposer)
     }
     static func dismantleNSView(_ view: Host, coordinator: ()) { view.setController(nil) }
 
@@ -113,9 +114,11 @@ struct ConversationAnnotationText: NSViewRepresentable {
     }
 
     func configure(conversationID: UUID, title: String,
-                   save: @escaping (AttachmentAnnotation, Data, ConversationAttachment, Data) throws -> Void) {
+                   save: @escaping (AttachmentAnnotation, Data, ConversationAttachment, Data) throws -> Void,
+                   focusComposer: (() -> Void)? = nil) {
         if self.conversationID != conversationID { cancel(); selectedText = nil }
         self.conversationID = conversationID; self.title = title; self.save = save
+        editor.focusConversationComposer = focusComposer
         updateCommands()
     }
 

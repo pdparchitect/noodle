@@ -100,6 +100,7 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
     var isConversationAnnotation: Bool { conversationWindow != nil }
     var conversationCanvas: AnnotationRegionCanvas?
     var onAnnotationStateChange: (() -> Void)?
+    var focusConversationComposer: (() -> Void)?
     var hasPendingAnnotation: Bool { busy || pending != nil || commentPanel != nil || closingPopover != nil || overlay != nil || conversationCanvas != nil }
     var commentPanel: NSPanel?
     var commentPopover: NSPopover?
@@ -563,14 +564,14 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
         guard note.isValid else { NSSound.beep(); return }
         do {
             try save(note, AnnotationContent.data(for: note, snapshot: pendingImage), pending.source)
-            dismissAnnotation(returnFocus: true)
+            dismissAnnotation(returnFocus: true, saved: true)
         } catch { showAnnotationError(error) }
     }
     @objc func cancelAnnotation() {
         trace("annotation cancelled")
         dismissAnnotation(returnFocus: true)
     }
-    func dismissAnnotation(returnFocus: Bool = false) {
+    func dismissAnnotation(returnFocus: Bool = false, saved: Bool = false) {
         guard !isDismissing else { return }
         if returnFocus {
             guard closingPopover == nil,
@@ -587,7 +588,10 @@ private struct AttachmentPreviewMount: NSViewControllerRepresentable {
             if let conversation, let self, self.generation == token, NSApp.isActive,
                conversation.isVisible, !self.hasPendingAnnotation, conversation.attachedSheet == nil {
                 conversation.makeKey()
-                if let responder { conversation.makeFirstResponder(responder) }
+                // Wait for the popover to finish closing before asking SwiftUI
+                // to focus the composer; its teardown can otherwise reclaim focus.
+                if saved, let focusComposer = self.focusConversationComposer { focusComposer() }
+                else if let responder { conversation.makeFirstResponder(responder) }
                 return
             }
             guard let self, self.generation == token, Self.active === self,

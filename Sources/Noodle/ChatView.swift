@@ -39,6 +39,8 @@ struct ChatView: View {
                 conversationID: conversation.id, title: store.title(for: conversation),
                 save: { note, content, source, raw in
                     try store.saveConversationAnnotation(note, content: content, source: source, sourceData: raw)
+                }, focusComposer: { [focus = $composerFocused] in
+                    focus.wrappedValue = true
                 }).frame(width: 0, height: 0))
             .background(CaptureShortcut(capture: { showCapture(.window) }).frame(width: 0, height: 0))
             .background(Color(nsColor: .textBackgroundColor).opacity(0.28))

@@ -10,6 +10,10 @@ All notable changes to Noodle are documented here, following
 
 - Encourage Git checkpoints in the applet skill, with the repository root above the `.noodlet` folder to keep Git metadata out of imported packages.
 
+### Fixed
+
+- Refocus the chat input after saving a text or region annotation in the conversation window, ready to submit the draft.
+
 ## [0.15.0] - 2026-09-14
 
 ### Added
