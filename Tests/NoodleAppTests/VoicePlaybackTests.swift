@@ -188,6 +188,19 @@ import NoodleCore
         let absent = host(VoiceTranscriptSheet(voice: VoiceMessage(transcript: nil, duration: 0, waveform: [], localeIdentifier: nil)))
         _ = try await control("No transcript available.", in: absent)
     }
+
+    func testReplacingAFailedRecordingClearsItsErrorBeforeTheNextPlayback() async throws {
+        let f = playbackFixture(), selection = VoiceSelection(); f.factory.failures.insert(a)
+        let view = host(VoiceFixtureView(selection: selection, voice: voice, playback: f.playback))
+        press(try await control("Play voice message", in: view))
+        let previousError = try XCTUnwrap(f.playback.error)
+        _ = try await control(previousError, in: view)
+        selection.url = b
+        try await wait { f.playback.error == nil }
+        try await wait { !self.hasControl(previousError, in: view) }
+        press(try await control("Play voice message", in: view))
+        try await wait { f.factory.players[self.b]?.isPlaying == true }
+    }
 }
 
 @MainActor private struct VoiceFixtureView: View {

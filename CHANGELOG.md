@@ -34,7 +34,7 @@ All notable changes to Noodle are documented here, following
 
 - Reuse the saved preset account when tool creation retries a failed workspace refresh, including after switching presets. Preserve independent accounts for separate creations and cover catalogue search, custom setup navigation, repeated clicks, cancellation, and save failures with hidden-window tests.
 
-- Stop old voice playback when a message's recording changes, load the replacement recording, and reset the displayed playhead immediately on replay. Cover pause/resume, seeking, completion, failures, active-message handoff, and view removal with silent playback fixtures.
+- Stop old voice playback and clear its error when a message's recording changes, load the replacement recording, and reset the displayed playhead immediately on replay. Cover pause/resume, seeking, completion, failures, active-message handoff, and view removal with silent playback fixtures.
 
 - Reset reused link-preview cards when their URL changes and ignore results from the previous request. Cover shared requests, cached failures, metadata/image deadlines, cancellation, and visibility with controlled loaders and hidden views.
 

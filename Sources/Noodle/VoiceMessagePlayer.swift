@@ -111,10 +111,7 @@ extension AVAudioPlayer: VoicePlaybackPlayer {}
     }
 
     func toggle(url: URL) {
-        if loadedURL != url {
-            stop(reset: true)
-            player = nil; loadedURL = nil
-        }
+        if loadedURL != url { resetRecording() }
         if playing { stop(reset: false); return }
         do {
             if player == nil { player = try makePlayer(url); loadedURL = url }
@@ -150,6 +147,11 @@ extension AVAudioPlayer: VoicePlaybackPlayer {}
         player?.pause()
         playing = false
         if reset { player?.currentTime = 0; position = 0 }
+    }
+
+    func resetRecording() {
+        stop(reset: true)
+        player = nil; loadedURL = nil; error = nil
     }
 }
 
@@ -196,7 +198,7 @@ struct VoiceMessagePlayer: View {
         .frame(width: 270)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
         .onDisappear { playback.stop() }
-        .onChange(of: url) { _, _ in playback.stop(reset: true) }
+        .onChange(of: url) { _, _ in playback.resetRecording() }
         .onChange(of: shouldPlay) { _, visible in if !visible { playback.stop() } }
     }
 }
