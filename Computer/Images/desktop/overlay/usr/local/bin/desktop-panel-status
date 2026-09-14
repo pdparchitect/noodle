@@ -1,0 +1,7 @@
+#!/bin/bash
+# desktop-panel-status - text for the tint2 status slot.
+#
+# The base has no product status to report and prints nothing, which leaves the
+# panel item empty. A product image replaces this script through its overlay.
+
+exit 0

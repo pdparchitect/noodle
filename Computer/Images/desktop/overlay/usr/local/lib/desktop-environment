@@ -1,0 +1,16 @@
+# POSIX shell, sourced by desktop entrypoints and session helpers.
+for desktop_config in /etc/desktop/conf.d/*.sh; do
+    [ ! -r "$desktop_config" ] || . "$desktop_config"
+done
+unset desktop_config
+. /etc/desktop/config.sh
+export DESKTOP_TITLE DESKTOP_PORT DESKTOP_GEOMETRY DESKTOP_FRAME_RATE
+export DESKTOP_WALLPAPER DESKTOP_BROWSER_URL DESKTOP_BROWSER_AUTOSTART
+export DESKTOP_TERMINAL_AUTOSTART DESKTOP_TILING_AUTOSTART DESKTOP_PANEL_AUTOSTART
+export DESKTOP_COMPOSITOR_AUTOSTART DESKTOP_STARTUP_DIR DESKTOP_SESSION_DIR
+export HOME=/home/agent
+export DISPLAY="${DISPLAY:-:1}" XAUTHORITY="${XAUTHORITY:-/run/desktop/Xauthority}"
+export XDG_RUNTIME_DIR=/run/user/1000
+export XDG_CONFIG_HOME="$HOME/.config" XDG_DATA_HOME="$HOME/.local/share"
+export BROWSER="${BROWSER:-chromium}" GTK_THEME="${GTK_THEME:-Desktop}"
+export G_RESOURCE_OVERLAYS="${G_RESOURCE_OVERLAYS:-/org/gtk/libgtk=/usr/share/desktop/gtk-overlay}"

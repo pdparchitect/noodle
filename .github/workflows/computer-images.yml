@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'Computer/Images/**'
+      - 'Computer/Sources/NoodleComputer/ContainerComputer.swift'
       - '.github/workflows/computer-images.yml'
       - '!**.md'
       - 'Computer/Images/CHANGELOG.md'
@@ -45,6 +46,15 @@ jobs:
           for kind in shell desktop; do
             docker run --rm --network none --entrypoint /bin/sh "noodle-computer-$kind-image:check" /usr/local/lib/noodle-image-check "$kind"
           done
+      - name: Verify native app desktop startup contract
+        run: python3 Computer/Images/tests/native-startup.py docker noodle-computer-desktop-image:check
+      - name: Verify authenticated startup and extension hooks
+        run: docker run --rm -i --user root --network none --entrypoint /bin/bash noodle-computer-desktop-image:check < Computer/Images/tests/startup.sh
+      - name: Build and verify a downstream desktop image
+        run: |
+          docker build --build-arg DESKTOP_IMAGE=noodle-computer-desktop-image:check \
+            -t noodle-computer-desktop-derived:check Computer/Images/examples/desktop
+          docker run --rm -i --user root --network none --entrypoint /bin/bash noodle-computer-desktop-derived:check < Computer/Images/tests/startup.sh
       - name: Verify interactive welcome in both images
         run: python3 Computer/Images/tests/welcome.py docker noodle-computer-shell-image:check noodle-computer-desktop-image:check
       - name: Verify non-root defaults and explicit sudo in both images

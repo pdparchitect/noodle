@@ -1,3 +1,5 @@
 #!/bin/sh
 # Runs inside the authenticated X11/D-Bus session, after the keyring is ready.
-exec chromium >>/var/log/launcher-desktop/browser.log 2>&1
+. /usr/local/lib/desktop-environment
+[ "$DESKTOP_BROWSER_AUTOSTART" = 1 ] || exit 0
+exec chromium >>/var/log/desktop/browser.log 2>&1

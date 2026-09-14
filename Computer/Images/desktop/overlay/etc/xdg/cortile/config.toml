@@ -1,0 +1,138 @@
+#                    Cortile config for the Noodle desktop            #
+#           https://github.com/leukipp/cortile/blob/main/config.toml          #
+################################################################################
+
+#################################### Tiling ####################################
+
+# Start in floating mode; user enables tiling via right-click menu or keyboard.
+tiling_enabled = false
+
+# Default tiling layout when enabled.
+tiling_layout = "vertical-right"
+
+# Layouts available when cycling with next/previous.
+# @note "maximized" is intentionally excluded - it causes every window
+# to appear maximized and prevents genuine tiling after manual maximize
+tiling_cycle = [
+    "vertical-left",
+    "vertical-right",
+    "horizontal-top",
+    "horizontal-bottom",
+]
+
+# Show overlay briefly when layout changes (ms, 0 = disabled).
+tiling_gui = 1200
+
+# Systray menu entries (action name from [keys], display label).
+tiling_icon = [
+    ["toggle", "Toggle Tiling"],
+    ["", ""],
+    ["cycle_next", "Next Layout"],
+    ["cycle_previous", "Previous Layout"],
+    ["", ""],
+    ["reset", "Reset"],
+    ["", ""],
+    ["exit", "Exit"],
+]
+
+#################################### Window ####################################
+
+# Regex to ignore windows from tiling (WM_CLASS, WM_NAME).
+window_ignore = [
+    ["tint2.*", ""],
+    ["nm.*", ""],
+    ["gcr.*", ""],
+    ["polkit.*", ""],
+    ["wrapper.*", ""],
+]
+
+window_masters_max = 1
+window_slaves_max = 3
+window_gap_size = 8
+window_focus_delay = 0
+window_decoration = true
+
+################################## Proportion ##################################
+
+proportion_step = 0.05
+proportion_min = 0.2
+
+##################################### Edge #####################################
+
+# Openbox <margins> already reserves 8px on all screen edges;
+# Cortile sees the reduced workspace, so no extra edge margin needed.
+edge_margin = [0, 0, 0, 0]
+edge_margin_primary = [0, 0, 0, 0]
+edge_corner_size = 10
+edge_center_size = 100
+
+################################################################################
+[colors]
+################################################################################
+
+gui_text = [255, 255, 255, 255]
+gui_background = [30, 30, 40, 230]
+gui_client_slave = [58, 58, 78, 255]
+gui_client_master = [98, 98, 128, 255]
+icon_background = [0, 0, 0, 0]
+icon_foreground = [255, 255, 255, 255]
+
+################################################################################
+[keys]
+################################################################################
+
+enable = "Control-Shift-Home"
+disable = "Control-Shift-End"
+toggle = "Control-Shift-T"
+decoration = "Control-Shift-D"
+restore = "Control-Shift-R"
+reset = "Control-Shift-BackSpace"
+cycle_next = "Control-Shift-Next"
+cycle_previous = "Control-Shift-Prior"
+layout_vertical_left = "Control-Shift-Left"
+layout_vertical_right = "Control-Shift-Right"
+layout_horizontal_top = "Control-Shift-Up"
+layout_horizontal_bottom = "Control-Shift-Down"
+# @note maximized layout is intentionally unbound to prevent accidental activation
+layout_maximized = ""
+layout_fullscreen = "Control-Shift-Return"
+slave_increase = "Control-Shift-plus"
+slave_decrease = "Control-Shift-minus"
+master_increase = "Control-Shift-KP_Add"
+master_decrease = "Control-Shift-KP_Subtract"
+window_next = "Control-Shift-KP_2"
+window_previous = "Control-Shift-KP_8"
+screen_next = "Control-Shift-KP_9"
+screen_previous = "Control-Shift-KP_7"
+master_make = "Control-Shift-KP_5"
+master_make_next = "Control-Shift-KP_6"
+master_make_previous = "Control-Shift-KP_4"
+proportion_increase = "Control-Shift-KP_3"
+proportion_decrease = "Control-Shift-KP_1"
+mod_screens = "Mod1"
+mod_workspaces = "Mod4"
+
+################################################################################
+[corners]
+################################################################################
+
+top_left = ""
+top_center = ""
+top_right = ""
+center_right = ""
+bottom_right = ""
+bottom_center = ""
+bottom_left = ""
+center_left = ""
+
+################################################################################
+[systray]
+################################################################################
+
+click_left = ""
+click_middle = "toggle"
+click_right = ""
+scroll_up = "cycle_previous"
+scroll_down = "cycle_next"
+scroll_left = "proportion_decrease"
+scroll_right = "proportion_increase"

@@ -1,9 +1,9 @@
 #!/bin/bash
 # Disposable guest only: no networking, host mounts, real accounts or credentials.
 set -euo pipefail
-export DISPLAY=:99 XAUTHORITY=/run/launcher-desktop/Xauthority
-mkdir -p /run/launcher-desktop /run/user/1000 /var/log/launcher-desktop
-chown agent:agent /run/launcher-desktop /run/user/1000 /var/log/launcher-desktop
+export DISPLAY=:99 XAUTHORITY=/run/desktop/Xauthority
+mkdir -p /run/desktop /run/user/1000 /var/log/desktop
+chown agent:agent /run/desktop /run/user/1000 /var/log/desktop
 chmod 700 /run/user/1000
 touch "$XAUTHORITY"
 xauth -f "$XAUTHORITY" add "$DISPLAY" . "$(openssl rand -hex 16)"
@@ -30,17 +30,17 @@ window_pid=$!
 runuser -u agent -- env HOME=/home/agent XDG_RUNTIME_DIR=/run/user/1000 \
     dbus-run-session -- /bin/sh -c '
         set -e
-        printf "%s\n" "$DBUS_SESSION_BUS_ADDRESS" > /run/launcher-desktop/dbus-session-address
+        printf "%s\n" "$DBUS_SESSION_BUS_ADDRESS" > /run/desktop/dbus-session-address
         desktop-keyring
-        touch /run/launcher-desktop/test-keyring-ready
+        touch /run/desktop/test-keyring-ready
         exec sleep 300
     ' >/tmp/noodle-browser-keyring.log 2>&1 &
 bus_pid=$!
 for attempt in $(seq 1 40); do
-    if [ -e /run/launcher-desktop/test-keyring-ready ]; then break; fi
+    if [ -e /run/desktop/test-keyring-ready ]; then break; fi
     sleep 0.25
 done
-test -e /run/launcher-desktop/test-keyring-ready
+test -e /run/desktop/test-keyring-ready
 
 node <<'JS'
 const assert = require('node:assert/strict');
@@ -92,7 +92,7 @@ const server = http.createServer((request, response) => {
     // Seed a prior desktop profile, then shut it down before the first migration.
     const legacyProcess = launch('runuser', ['-u', 'agent', '--', 'env',
       'HOME=/home/agent',
-      'DBUS_SESSION_BUS_ADDRESS=' + fs.readFileSync('/run/launcher-desktop/dbus-session-address', 'utf8').trim(),
+      'DBUS_SESSION_BUS_ADDRESS=' + fs.readFileSync('/run/desktop/dbus-session-address', 'utf8').trim(),
       '/usr/local/lib/noodle-chromium-base',
       '--user-data-dir=/home/agent/.config/chromium', '--remote-debugging-port=9333',
       '--remote-debugging-address=127.0.0.1', url + '/login']);
@@ -166,7 +166,7 @@ const server = http.createServer((request, response) => {
 })().catch(error => {
   console.error(error);
   console.error(fs.readFileSync('/tmp/noodle-browser-test.log', 'utf8'));
-  console.error(fs.readFileSync('/var/log/launcher-desktop/browser.log', 'utf8'));
+  console.error(fs.readFileSync('/var/log/desktop/browser.log', 'utf8'));
   process.exitCode = 1;
 });
 JS

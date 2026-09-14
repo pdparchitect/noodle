@@ -1,0 +1,10 @@
+#!/bin/bash
+# desktop-harness - opens the product's primary interface.
+#
+# Bound to Control-Shift-G in the Openbox configuration. The base has no
+# product interface to open, so it falls back to a terminal. A product image
+# replaces this script through its overlay.
+
+set -euo pipefail
+
+exec kitty --title "${DESKTOP_TITLE:-Desktop}" -e bash -l

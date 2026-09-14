@@ -1,0 +1,3 @@
+#!/bin/sh
+# A session hook sees the real display, keyring and desktop account.
+notify-send "$DESKTOP_TITLE" 'Your workspace is ready.'

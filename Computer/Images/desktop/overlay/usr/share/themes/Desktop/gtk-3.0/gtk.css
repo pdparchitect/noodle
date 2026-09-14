@@ -1,0 +1,121 @@
+@define-color theme_bg_color #000000;
+@define-color theme_fg_color #edf2f2;
+@define-color theme_base_color #000000;
+@define-color theme_text_color #edf2f2;
+@define-color theme_selected_bg_color #132221;
+@define-color theme_selected_fg_color #ffffff;
+@define-color insensitive_bg_color #050707;
+@define-color insensitive_fg_color #778282;
+@define-color borders #172020;
+
+* {
+  color: #edf2f2;
+  border-color: #172020;
+  caret-color: #24dbc9;
+}
+
+window,
+.background,
+headerbar,
+menubar,
+toolbar {
+  background-color: #000000;
+  color: #edf2f2;
+}
+
+/*
+ * Chrome uses GTK's client-side decoration node for its focused window edge,
+ * even though it draws the tab strip and caption buttons itself.
+ */
+window.background.csd decoration,
+window.background.solid-csd decoration {
+  border: 1px solid #172020;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+window.background.csd decoration:not(:backdrop),
+window.background.solid-csd decoration:not(:backdrop) {
+  border-color: #ffffff;
+}
+
+/*
+ * Keep Chrome's window controls at the right edge. The fallback GTK padding
+ * moves the group too far inward.
+ */
+headerbar.header-bar.titlebar {
+  border-radius: 0;
+  padding-left: 0;
+  padding-right: 4px;
+}
+
+headerbar.header-bar.titlebar windowcontrols button.titlebutton {
+  background-color: transparent;
+  color: #d3dae3;
+  box-shadow: none;
+}
+
+headerbar.header-bar.titlebar windowcontrols button.titlebutton:backdrop {
+  color: #1f2328;
+}
+
+headerbar.header-bar.titlebar windowcontrols button.titlebutton:hover {
+  background-color: transparent;
+  color: #afb8c5;
+}
+
+headerbar.header-bar.titlebar windowcontrols button.titlebutton:active {
+  background-color: transparent;
+  color: #dc143c;
+}
+
+headerbar.header-bar.titlebar windowcontrols button.titlebutton:disabled {
+  color: #000000;
+}
+
+popover,
+popover.background,
+popover.background.menu,
+menu,
+.menu {
+  background-color: #020303;
+  color: #edf2f2;
+}
+
+menuitem,
+modelbutton {
+  background-color: transparent;
+  color: #edf2f2;
+}
+
+menuitem:hover,
+menuitem:focus,
+modelbutton:hover,
+modelbutton:focus {
+  background-color: #101716;
+}
+
+entry,
+textview,
+textview text {
+  background-color: #000000;
+  color: #edf2f2;
+}
+
+button {
+  background-color: #050707;
+  color: #edf2f2;
+}
+
+button:hover,
+button:focus {
+  background-color: #101716;
+}
+
+separator {
+  background-color: #172020;
+}
+
+:disabled {
+  color: #778282;
+}

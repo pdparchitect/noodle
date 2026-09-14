@@ -1,0 +1,47 @@
+/* KasmVNC UI overrides - hide branding, sidebar, black background. */
+.noVNC_logo {
+  display: none !important;
+}
+body,
+#noVNC_container,
+.noVNC_container {
+  background-color: #000 !important;
+  background-image: none !important;
+}
+#noVNC_control_bar {
+  display: none !important;
+}
+#noVNC_control_bar_hint {
+  display: none !important;
+}
+
+/* Hide loading / transition / status screens. */
+#noVNC_transition {
+  display: none !important;
+  background: #000 !important;
+  background-image: none !important;
+}
+#noVNC_transition_text {
+  display: none !important;
+}
+.noVNC_spinner,
+.noVNC_spinner::before,
+.noVNC_spinner::after {
+  display: none !important;
+}
+#noVNC_status {
+  display: none !important;
+}
+#noVNC_connect_dlg {
+  display: none !important;
+}
+.noVNC_connect_layer {
+  display: none !important;
+}
+
+/* Hide version / fallback error branding. */
+.noVNC_version_wrapper,
+.noVNC_version,
+.noVNC_version_separator {
+  display: none !important;
+}

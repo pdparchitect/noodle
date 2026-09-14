@@ -73,7 +73,7 @@ import WebKit
                 guard let runtime = session.container else { throw ComputerError("Missing fixture runtime") }
                 let fixture = try await runtime.execute(#"""
                     command -v xterm && for n in 1 2 3 4 5 6 7 8 9 10; do pgrep -x openbox >/dev/null && break; sleep 1; done
-                    DISPLAY=:1 XAUTHORITY=/run/launcher-desktop/Xauthority xterm -geometry 70x20+40+60 -title 'Preview Verification' -e /bin/sh -c 'printf "Native desktop preview\nNo grey browser bands\nCorrect text proportions\n"; sleep 180' >/tmp/noodle-preview-xterm.log 2>&1 &
+                    DISPLAY=:1 XAUTHORITY=${XAUTHORITY:-/run/desktop/Xauthority} xterm -geometry 70x20+40+60 -title 'Preview Verification' -e /bin/sh -c 'printf "Native desktop preview\nNo grey browser bands\nCorrect text proportions\n"; sleep 180' >/tmp/noodle-preview-xterm.log 2>&1 &
                     """#)
                 print("SNAPSHOT FIXTURE: \(fixture)")
                 var connected = false
@@ -762,7 +762,7 @@ import WebKit
         await store.stop(session, force: true)
         window.close()
         guard rendered else { throw ComputerError("Desktop display did not connect: \(lastState)") }
-        print("DESKTOP TEST PASSED: real Launcher desktop, Xvnc/Openbox, authenticated HTTPS, pinned certificate and connected WebKit desktop canvas")
+        print("DESKTOP TEST PASSED: real Noodle desktop, Xvnc/Openbox, authenticated HTTPS, pinned certificate and connected WebKit desktop canvas")
         try? FileManager.default.removeItem(at: root)
     }
 

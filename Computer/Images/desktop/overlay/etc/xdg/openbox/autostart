@@ -1,0 +1,126 @@
+#!/bin/bash
+# Openbox autostart - runs when the desktop session begins.
+#
+# Openbox executes this with sh, not bash, whatever the shebang says. Keep it
+# POSIX.
+
+set -e
+. /usr/local/lib/desktop-environment
+
+# dbus-run-session creates a private address that container exec shells and
+# privilege-dropped product processes do not inherit. Publish it at a stable,
+# read-only location before starting the notification owner. The notify-send
+# adapter reads this file instead of allowing libnotify to autolaunch an
+# isolated bus.
+printf '%s\n' "$DBUS_SESSION_BUS_ADDRESS" > /run/desktop/dbus-session-address
+
+# Own the Secret Service before anything that might ask for a secret. This runs
+# to completion rather than in the background: an application started below and
+# finding no keyring does not retry, it reports a lost or unstorable secret. A
+# session without one is still a session, so a failure here is reported and
+# stepped over.
+desktop-keyring || echo "autostart: continuing without a Secret Service" >&2
+
+# Register the chromium wrapper as the default browser when MIME associations
+# have not already been configured.
+if [ ! -f "$HOME/.config/mimeapps.list" ]; then
+  mkdir -p "$HOME/.local/share/applications" "$HOME/.config"
+  cat > "$HOME/.local/share/applications/chromium-desktop.desktop" <<'CHROMEDESKTOP'
+[Desktop Entry]
+Name=Browser
+Exec=chromium %u
+Type=Application
+MimeType=x-scheme-handler/http;x-scheme-handler/https;text/html;
+NoDisplay=true
+CHROMEDESKTOP
+  cat > "$HOME/.config/mimeapps.list" <<'MIMEAPPS'
+[Default Applications]
+x-scheme-handler/http=chromium-desktop.desktop
+x-scheme-handler/https=chromium-desktop.desktop
+text/html=chromium-desktop.desktop
+MIMEAPPS
+  xdg-settings set default-web-browser chromium-desktop.desktop 2>/dev/null || true
+fi
+export BROWSER=chromium
+
+# Seed a system-config link once so derivatives can change defaults while a
+# user's own kitty.conf remains authoritative.
+mkdir -p "$HOME/.config/kitty"
+if [ ! -e "$HOME/.config/kitty/kitty.conf" ]; then
+  ln -s /etc/xdg/kitty/kitty.conf "$HOME/.config/kitty/kitty.conf"
+fi
+
+# Desktop notifications remain on the session bus; there is no HTTP bridge.
+dunst &
+
+# Wallpaper resolution, most specific first:
+#
+#   1. DESKTOP_WALLPAPER, for a run-time override
+#   2. /usr/share/backgrounds/desktop-wallpaper.*, the drop-in a product image
+#      installs; any format feh reads, so the extension is not fixed here
+#   3. the neutral wallpaper shipped by this base
+#
+# A product therefore only has to install a file at the drop-in path. It does
+# not need to know this path, set an environment variable, or edit the base.
+select_wallpaper() {
+  candidate=""
+
+  if [ -n "${DESKTOP_WALLPAPER:-}" ] && [ -f "${DESKTOP_WALLPAPER}" ]; then
+    printf '%s\n' "$DESKTOP_WALLPAPER"
+    return
+  fi
+
+  for candidate in /usr/share/backgrounds/desktop-wallpaper.*; do
+    if [ -f "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+  done
+
+  printf '%s\n' /usr/share/backgrounds/desktop-wallpaper.png
+}
+
+wallpaper="$(select_wallpaper)"
+
+# Wallpaper watcher - KasmVNC resizes the display when the browser connects,
+# which invalidates any root pixmap set earlier. This loop detects resolution
+# changes and re-applies the wallpaper so it is always scaled to fill the
+# screen instead of being tiled.
+if [ -f "$wallpaper" ]; then
+  rm -f "$HOME/.fehbg"
+  (
+    last_res=""
+    while true; do
+      cur_res="$(xdpyinfo -display "${DISPLAY:-:1}" 2>/dev/null \
+        | awk '/dimensions/{print $2}')"
+      if [ -n "$cur_res" ] && [ "$cur_res" != "$last_res" ]; then
+        feh --no-fehbg --bg-fill "$wallpaper"
+        last_res="$cur_res"
+      fi
+      sleep 2
+    done
+  ) &
+fi
+
+# The image owns the panel layout. Load it explicitly so tint2 does not prefer
+# a stale tint2rc copied into the user config on an earlier run.
+if [ "$DESKTOP_PANEL_AUTOSTART" = 1 ]; then tint2 -c /etc/xdg/tint2/tint2rc & fi
+
+# Start Cortile so tiling can be toggled on demand. Floating remains the
+# default because tiling_enabled is false in the Cortile config.
+if [ "$DESKTOP_TILING_AUTOSTART" = 1 ]; then cortilectl start & fi
+
+# Product session programs. The entrypoint's /etc/desktop/startup.d hook runs
+# before X exists, which is right for a daemon and wrong for anything that
+# draws: these run inside the session, so they have DISPLAY and a window
+# manager. A product drops executables here through its overlay rather than
+# replacing this file.
+if [ -d "$DESKTOP_SESSION_DIR" ]; then
+  for session_program in "$DESKTOP_SESSION_DIR"/*; do
+    [ -x "$session_program" ] || continue
+    "$session_program" &
+  done
+fi
+
+# Open a terminal window on startup with a welcome greeting.
+if [ "$DESKTOP_TERMINAL_AUTOSTART" = 1 ]; then desktop-welcome & fi

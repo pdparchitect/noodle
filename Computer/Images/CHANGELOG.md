@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Build Desktop directly from pinned Ubuntu and Node images, with repository-owned desktop configuration and verified KasmVNC/Cortile downloads. Remove the Launcher base image and control bridge dependency.
+- Provide authenticated startup, configurable session defaults, overlay hooks, workspace seeds, and a working derivative example for downstream images.
+
 ## [0.2.0] - 2026-09-14
 
 ### Added

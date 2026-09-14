@@ -115,7 +115,7 @@ and [release checks](RELEASING.md#local-checks) for packaging.
 
 Add templates in [`container-registry.json`](Sources/ComputerCore/Resources/container-registry.json).
 Use a unique ID, an image reference, and an existing `desktop` or `shell` runtime
-type. Desktop images must support the desktop service contract. New runtime types
+type. Desktop images must support the [desktop service contract](Images/README.md#desktop-startup-contract-v1). New runtime types
 need code as well as a registry entry.
 
 The source retains macOS and installer-based Linux VM support, but these are not

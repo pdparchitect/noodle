@@ -1,0 +1,97 @@
+#!/bin/bash
+# Own org.freedesktop.secrets for this desktop session.
+#
+# Two details make an unattended keyring work:
+#
+#   * The daemon is started here rather than left to D-Bus activation. An
+#     activated daemon holds no password, so the first secret write raises a
+#     gcr-prompter dialog and the caller blocks on it until someone answers a
+#     dialog that a headless product start has no way to answer.
+#   * `default` names the login keyring as the default collection. Without it a
+#     client asking for the default collection raises that same prompt even
+#     though the login keyring is already unlocked.
+#
+# The password is generated once and kept beside the keyring it unlocks, so the
+# two are lost or kept together. It protects nothing on its own: the container
+# is the security boundary, and a product that wants its secrets to survive a
+# container replacement persists $XDG_DATA_HOME/keyrings like any other state.
+#
+# Idempotent, and safe to call from more than one place.
+
+set -uo pipefail
+
+keyring_dir="${XDG_DATA_HOME:-$HOME/.local/share}/keyrings"
+password_file="$keyring_dir/.keyring-password"
+lock_file="$keyring_dir/.keyring-lock"
+
+# dbus-run-session gives the session a private address that container exec
+# shells do not inherit. Fall back to the address the session publishes, the
+# same contract notify-send uses.
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+    address_file=/run/desktop/dbus-session-address
+    if [ -s "$address_file" ]; then
+        DBUS_SESSION_BUS_ADDRESS="$(head -n 1 "$address_file")"
+        export DBUS_SESSION_BUS_ADDRESS
+    else
+        echo "desktop-keyring: no session bus address" >&2
+        exit 1
+    fi
+fi
+
+# NameHasOwner rather than a call on the service itself: asking the service
+# anything would activate the password-less daemon this program exists to
+# pre-empt.
+secret_service_running() {
+    dbus-send --session --print-reply=literal \
+        --dest=org.freedesktop.DBus \
+        /org/freedesktop/DBus \
+        org.freedesktop.DBus.NameHasOwner \
+        string:org.freedesktop.secrets 2>/dev/null |
+        grep -q true
+}
+
+mkdir -p "$keyring_dir"
+chmod 700 "$keyring_dir"
+
+# Serialise concurrent callers. Two daemons racing for the bus name leave the
+# loser running password-less, and the prompts come back. The wait is bounded:
+# a keyring that cannot start must not hold up the session that asked for it.
+exec 9>"$lock_file"
+if ! flock -w 30 9; then
+    echo "desktop-keyring: another start is still running" >&2
+    exit 1
+fi
+
+if secret_service_running; then
+    exit 0
+fi
+
+if [ ! -f "$keyring_dir/default" ]; then
+    printf '%s' login > "$keyring_dir/default"
+fi
+
+if [ ! -s "$password_file" ]; then
+    (umask 077; openssl rand -hex 32 > "$password_file")
+fi
+
+# --unlock creates the login keyring with this password on first boot and
+# unlocks it on every boot after that, then daemonises.
+#
+# 9>&- matters: the daemon outlives this script and inherits what it is given,
+# and a daemon holding the lock descriptor makes the next caller - the
+# idempotent path this program promises - block until the session ends.
+if ! tr -d '\r\n' < "$password_file" |
+    gnome-keyring-daemon --unlock --components=secrets 9>&- >/dev/null 2>&1; then
+    echo "desktop-keyring: gnome-keyring-daemon did not start" >&2
+    exit 1
+fi
+
+for _ in $(seq 1 20); do
+    if secret_service_running; then
+        exit 0
+    fi
+    sleep 0.5
+done
+
+echo "desktop-keyring: org.freedesktop.secrets never appeared on the bus" >&2
+exit 1

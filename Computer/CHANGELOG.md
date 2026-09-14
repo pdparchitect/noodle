@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Start repository-owned desktop images through their authenticated startup contract and honor image appearance/session defaults, while retaining startup support for existing saved images.
+
 ### Fixed
 
 - Keep trailing decimal zeroes and use equal-width digits in image download progress so changing byte counts and speeds stay visually steady.

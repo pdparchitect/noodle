@@ -1,0 +1,15 @@
+# System defaults. Derived images add /etc/desktop/conf.d/*.sh; use the same
+# default-assignment form there when runtime environment overrides should win.
+: "${DESKTOP_TITLE:=${DESKTOP_DEFAULT_TITLE:-Noodle Computer}}"
+: "${DESKTOP_PORT:=6901}"
+: "${DESKTOP_GEOMETRY:=1280x800}"
+: "${DESKTOP_FRAME_RATE:=30}"
+: "${DESKTOP_WALLPAPER:=/usr/share/backgrounds/desktop-wallpaper.png}"
+: "${DESKTOP_BROWSER_URL:=file:///opt/browser/index.html}"
+: "${DESKTOP_BROWSER_AUTOSTART:=1}"
+: "${DESKTOP_TERMINAL_AUTOSTART:=1}"
+: "${DESKTOP_TILING_AUTOSTART:=1}"
+: "${DESKTOP_PANEL_AUTOSTART:=1}"
+: "${DESKTOP_COMPOSITOR_AUTOSTART:=1}"
+: "${DESKTOP_STARTUP_DIR:=/etc/desktop/startup.d}"
+: "${DESKTOP_SESSION_DIR:=/etc/desktop/session.d}"

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Neutral root menu for the desktop base.
+
+  Product-specific entries (sign-in flows, daemon logs, product tools) are not
+  here. A product image replaces this file through its overlay when it needs
+  them, which is the only case that justifies owning the whole menu.
+-->
+<openbox_menu xmlns="http://openbox.org/3.4/menu">
+  <menu id="root-menu" label="Desktop">
+    <item label="Welcome">
+      <action name="Execute">
+        <command>desktop-welcome</command>
+      </action>
+    </item>
+    <separator />
+    <item label="Terminal">
+      <action name="Execute">
+        <command>kitty</command>
+      </action>
+    </item>
+    <separator />
+    <item label="File Manager">
+      <action name="Execute">
+        <command>kitty -e ranger /workspace</command>
+      </action>
+    </item>
+    <item label="Task Manager">
+      <action name="Execute">
+        <command>kitty -e htop</command>
+      </action>
+    </item>
+    <separator />
+    <item label="Browser">
+      <action name="Execute">
+        <command>chromium</command>
+      </action>
+    </item>
+    <separator />
+    <menu id="tiling-menu" label="Tiling Mode">
+      <item label="Enable Tiling">
+        <action name="Execute">
+          <command>cortilectl on</command>
+        </action>
+      </item>
+      <item label="Disable Tiling (Floating)">
+        <action name="Execute">
+          <command>cortilectl off</command>
+        </action>
+      </item>
+      <item label="Toggle Tiling">
+        <action name="Execute">
+          <command>cortilectl toggle</command>
+        </action>
+      </item>
+      <separator />
+      <item label="Next Layout">
+        <action name="Execute">
+          <command>cortilectl next-layout</command>
+        </action>
+      </item>
+      <item label="Previous Layout">
+        <action name="Execute">
+          <command>cortilectl prev-layout</command>
+        </action>
+      </item>
+      <separator />
+      <item label="Stop Tiling Helper">
+        <action name="Execute">
+          <command>cortilectl stop</command>
+        </action>
+      </item>
+      <item label="Start Tiling Helper">
+        <action name="Execute">
+          <command>cortilectl start</command>
+        </action>
+      </item>
+    </menu>
+  </menu>
+</openbox_menu>

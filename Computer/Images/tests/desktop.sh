@@ -3,6 +3,7 @@
 set -eu
 sh /usr/local/lib/noodle-image-check desktop
 export DISPLAY=:99
+. /usr/local/lib/desktop-environment
 # Test-only X server: loopback RFB, no web server or host-published ports.
 Xvnc "$DISPLAY" -geometry 1024x768 -depth 24 -localhost -nolisten tcp \
   -publicIP 127.0.0.1 -noWebsocket -rfbport 5999 -SecurityTypes None \

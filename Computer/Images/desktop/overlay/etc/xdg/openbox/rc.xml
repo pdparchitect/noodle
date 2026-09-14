@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <resistance>
+    <strength>10</strength>
+    <screen_edge_strength>20</screen_edge_strength>
+  </resistance>
+  <focus>
+    <focusNew>yes</focusNew>
+    <followMouse>no</followMouse>
+    <focusLast>yes</focusLast>
+    <underMouse>no</underMouse>
+    <focusDelay>200</focusDelay>
+    <raiseOnFocus>no</raiseOnFocus>
+  </focus>
+  <placement>
+    <policy>Smart</policy>
+    <center>yes</center>
+  </placement>
+  <margins>
+    <left>8</left>
+    <right>8</right>
+    <top>52</top>
+    <bottom>8</bottom>
+  </margins>
+  <resize>
+    <popupShow>Never</popupShow>
+  </resize>
+  <theme>
+    <name>Desktop</name>
+    <titleLayout>LIMC</titleLayout>
+    <keepBorder>yes</keepBorder>
+    <animateIconify>no</animateIconify>
+    <font place="ActiveWindow">
+      <name>Noto Sans</name>
+      <size>9</size>
+      <weight>Bold</weight>
+      <slant>Normal</slant>
+    </font>
+    <font place="InactiveWindow">
+      <name>Noto Sans</name>
+      <size>9</size>
+      <weight>Normal</weight>
+      <slant>Normal</slant>
+    </font>
+    <font place="MenuHeader">
+      <name>Noto Sans</name>
+      <size>9</size>
+      <weight>Bold</weight>
+      <slant>Normal</slant>
+    </font>
+    <font place="MenuItem">
+      <name>Noto Sans</name>
+      <size>9</size>
+      <weight>Normal</weight>
+      <slant>Normal</slant>
+    </font>
+    <font place="ActiveOnScreenDisplay">
+      <name>Noto Sans</name>
+      <size>9</size>
+      <weight>Bold</weight>
+      <slant>Normal</slant>
+    </font>
+    <font place="InactiveOnScreenDisplay">
+      <name>Noto Sans</name>
+      <size>9</size>
+      <weight>Normal</weight>
+      <slant>Normal</slant>
+    </font>
+  </theme>
+  <desktops>
+    <number>1</number>
+    <firstdesk>1</firstdesk>
+    <names>
+      <name>Desktop</name>
+    </names>
+  </desktops>
+  <keyboard>
+    <keybind key="A-F4">
+      <action name="Close" />
+    </keybind>
+    <keybind key="A-Tab">
+      <action name="NextWindow">
+        <finalactions>
+          <action name="Focus" />
+          <action name="Raise" />
+          <action name="Unshade" />
+        </finalactions>
+      </action>
+    </keybind>
+    <keybind key="A-S-Tab">
+      <action name="PreviousWindow">
+        <finalactions>
+          <action name="Focus" />
+          <action name="Raise" />
+          <action name="Unshade" />
+        </finalactions>
+      </action>
+    </keybind>
+    <keybind key="A-Return">
+      <action name="Execute">
+        <command>kitty</command>
+      </action>
+    </keybind>
+    <keybind key="C-A-t">
+      <action name="Execute">
+        <command>kitty</command>
+      </action>
+    </keybind>
+    <keybind key="A-F11">
+      <action name="ToggleFullscreen" />
+    </keybind>
+    <!-- Open the selected agent harness. The desktop mascot in the KasmVNC
+         client synthesises this same chord, so both paths run one command.
+         Control and Shift are deliberate and must not be swapped for Alt or
+         Super: noVNC rewrites both of those for Mac clients, so the chord
+         would arrive on a different modifier and this grab would never match.
+         See the comment in kasm/mascot.js. -->
+    <keybind key="C-S-g">
+      <action name="Execute">
+        <command>desktop-harness</command>
+      </action>
+    </keybind>
+    <keybind key="A-space">
+      <action name="ShowMenu">
+        <menu>root-menu</menu>
+      </action>
+    </keybind>
+    <keybind key="W-F1">
+      <action name="ShowMenu">
+        <menu>root-menu</menu>
+      </action>
+    </keybind>
+  </keyboard>
+  <mouse>
+    <context name="Frame">
+      <mousebind button="A-Left" action="Press">
+        <action name="Focus" />
+        <action name="Raise" />
+      </mousebind>
+      <mousebind button="A-Left" action="Click">
+        <action name="Unshade" />
+      </mousebind>
+      <mousebind button="A-Left" action="Drag">
+        <action name="Move" />
+      </mousebind>
+      <mousebind button="A-Right" action="Press">
+        <action name="Focus" />
+        <action name="Raise" />
+        <action name="Unshade" />
+      </mousebind>
+      <mousebind button="A-Right" action="Drag">
+        <action name="Resize" />
+      </mousebind>
+    </context>
+    <context
+      name="Titlebar Top Right Bottom Left TLCorner TRCorner BRCorner BLCorner"
+    >
+      <mousebind button="Left" action="Press">
+        <action name="Focus" />
+        <action name="Raise" />
+        <action name="Unshade" />
+      </mousebind>
+    </context>
+    <context name="Titlebar">
+      <mousebind button="Left" action="Drag">
+        <action name="Move" />
+      </mousebind>
+      <mousebind button="Left" action="DoubleClick">
+        <action name="ToggleMaximize" />
+      </mousebind>
+    </context>
+    <context name="Top Bottom Left Right TLCorner TRCorner BRCorner BLCorner">
+      <mousebind button="Left" action="Press">
+        <action name="Focus" />
+        <action name="Raise" />
+        <action name="Unshade" />
+      </mousebind>
+      <mousebind button="Left" action="Drag">
+        <action name="Resize" />
+      </mousebind>
+    </context>
+    <context name="Client">
+      <mousebind button="Left" action="Press">
+        <action name="Focus" />
+        <action name="Raise" />
+      </mousebind>
+      <mousebind button="Middle" action="Press">
+        <action name="Focus" />
+        <action name="Raise" />
+      </mousebind>
+      <mousebind button="Right" action="Press">
+        <action name="Focus" />
+        <action name="Raise" />
+      </mousebind>
+    </context>
+    <context name="Desktop">
+      <mousebind button="Right" action="Press">
+        <action name="ShowMenu">
+          <menu>root-menu</menu>
+        </action>
+      </mousebind>
+    </context>
+    <context name="Close">
+      <mousebind button="Left" action="Release">
+        <action name="Close" />
+      </mousebind>
+    </context>
+    <context name="Maximize">
+      <mousebind button="Left" action="Release">
+        <action name="ToggleMaximize" />
+      </mousebind>
+    </context>
+    <context name="Iconify">
+      <mousebind button="Left" action="Release">
+        <action name="Iconify" />
+      </mousebind>
+    </context>
+  </mouse>
+  <applications>
+    <!-- Prevent new windows from inheriting maximized state so that
+         manual maximize on one window does not propagate to future
+         instances of the same application. -->
+    <application class="*">
+      <maximized>no</maximized>
+    </application>
+  </applications>
+</openbox_config>

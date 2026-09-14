@@ -1,0 +1,122 @@
+#!/bin/bash
+# cortilectl - thin wrapper to manage cortile from Openbox menus.
+# Usage: cortilectl {start|stop|on|off|toggle|next-layout|prev-layout}
+
+set -euo pipefail
+
+# Ensure DISPLAY is set (Openbox menu inherits it, but autostart may not).
+export DISPLAY="${DISPLAY:-:1}"
+
+log_file="/tmp/cortile.log"
+
+is_running() {
+  pgrep -u "$(id -u)" -x cortile >/dev/null 2>&1
+}
+
+start_cortile() {
+  if ! is_running; then
+    nohup cortile -v >>"$log_file" 2>&1 &
+    disown
+    # Wait for cortile to connect to X and start listening.
+    local i=0
+    while [ $i -lt 20 ]; do
+      if is_running; then
+        break
+      fi
+      sleep 0.25
+      i=$((i + 1))
+    done
+
+    # Give Cortile a brief moment to finish grabbing keybindings after process start.
+    if is_running; then
+      sleep 0.75
+    fi
+  fi
+}
+
+unmaximize_all() {
+  # @note strip _NET_WM_STATE maximized hints from every window so Cortile
+  # and Openbox both see them as normal-sized; without this, maximized
+  # windows resist any tiling resize
+  local wids
+  if command -v wmctrl >/dev/null 2>&1; then
+    wmctrl -l | awk '{print $1}' | while read -r wid; do
+      wmctrl -i -r "$wid" -b remove,maximized_vert,maximized_horz 2>/dev/null || true
+    done
+  else
+    # Fallback using xprop (always available in X11 installs).
+    wids=$(xprop -root _NET_CLIENT_LIST 2>/dev/null \
+      | grep -o '0x[0-9a-f]\+' || true)
+    for wid in $wids; do
+      # Read current state, strip maximized atoms, rewrite.
+      local cur
+      cur=$(xprop -id "$wid" _NET_WM_STATE 2>/dev/null \
+        | sed 's/.*= //' | tr ',' '\n' \
+        | grep -iv 'maximized' | tr '\n' ',' \
+        | sed 's/,$//' || true)
+      if [ -n "$cur" ]; then
+        xprop -id "$wid" -f _NET_WM_STATE 32a -set _NET_WM_STATE "$cur" 2>/dev/null || true
+      else
+        xprop -id "$wid" -remove _NET_WM_STATE 2>/dev/null || true
+      fi
+    done
+  fi
+}
+
+reset_cortile_layout() {
+  # @note send Cortile's reset key to clear any stuck internal layout state
+  # (e.g. "maximized" mode), then force the default vertical-right layout
+  sleep 0.1
+  xdotool key --clearmodifiers "ctrl+shift+BackSpace" 2>>"$log_file" || true
+  sleep 0.1
+  xdotool key --clearmodifiers "ctrl+shift+Right" 2>>"$log_file" || true
+}
+
+send_key() {
+  # @note openbox holds a keyboard grab while closing the menu that triggered
+  # this command; a short pause lets it release the grab so the synthetic
+  # keypress reaches cortile's global key listener on the first attempt
+  sleep 0.3
+  # Use xdotool to simulate the Cortile keybinding.
+  xdotool key --clearmodifiers "$1" 2>>"$log_file" || true
+}
+
+mode="${1:-toggle}"
+
+case "$mode" in
+  start)
+    start_cortile
+    ;;
+  stop)
+    pkill -u "$(id -u)" -x cortile 2>/dev/null || true
+    ;;
+  on|enable)
+    start_cortile
+    unmaximize_all
+    send_key "ctrl+shift+Home"
+    reset_cortile_layout
+    ;;
+  off|disable)
+    if is_running; then
+      send_key "ctrl+shift+End"
+    fi
+    ;;
+  toggle)
+    start_cortile
+    unmaximize_all
+    send_key "ctrl+shift+t"
+    reset_cortile_layout
+    ;;
+  next-layout)
+    start_cortile
+    send_key "ctrl+shift+Next"
+    ;;
+  prev-layout)
+    start_cortile
+    send_key "ctrl+shift+Prior"
+    ;;
+  *)
+    echo "Usage: cortilectl {start|stop|on|off|toggle|next-layout|prev-layout}" >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,6 @@
+{
+  "browser": {"has_seen_welcome_page": true, "check_default_browser": false},
+  "bookmark_bar": {"show_on_all_tabs": false},
+  "distribution": {"skip_first_run_ui": true, "show_welcome_page": false},
+  "extensions": {"theme": {"system_theme": 1}}
+}

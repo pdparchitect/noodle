@@ -1,0 +1,24 @@
+#!/bin/bash
+# Contract v1: prepare authentication as root; stdout is only the DER cert in base64.
+set -euo pipefail
+[ "$(id -u)" = 0 ] || { echo 'desktop-prepare must run as root' >&2; exit 1; }
+. /usr/local/lib/desktop-environment
+# Accept a file for standalone use so credentials need not enter shell history.
+password="${DESKTOP_PASSWORD:-${NOODLE_DESKTOP_PASSWORD:-}}"
+if [ -n "${DESKTOP_PASSWORD_FILE:-}" ]; then password="$(cat "$DESKTOP_PASSWORD_FILE")"; fi
+if [[ ! "$password" =~ ^[A-Za-z0-9]{16,128}$ ]]; then
+    echo 'Supply DESKTOP_PASSWORD or DESKTOP_PASSWORD_FILE with 16–128 letters/digits.' >&2
+    exit 1
+fi
+install -d -m 0755 /run/desktop
+install -d -m 0700 -o agent -g agent /home/agent/.vnc /run/user/1000
+chown agent:agent /run/desktop
+umask 077
+openssl req -x509 -nodes -days 1 -newkey rsa:2048 \
+    -keyout "$HOME/.vnc/self.pem" -out "$HOME/.vnc/self.pem" \
+    -subj /CN=noodle-computer >/dev/null 2>&1
+chown agent:agent "$HOME/.vnc/self.pem"
+printf '%s\n%s\n' "$password" "$password" | runuser -u agent -- kasmvncpasswd -u agent -wo >/dev/null 2>&1
+# The root supervisor checks health without exposing credentials in argv or logs.
+printf 'user = "agent:%s"\ninsecure\nsilent\nfail\n' "$password" > /run/desktop/health.curl
+openssl x509 -in "$HOME/.vnc/self.pem" -outform DER | base64 -w0

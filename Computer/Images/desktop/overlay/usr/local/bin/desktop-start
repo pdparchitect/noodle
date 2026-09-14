@@ -1,0 +1,6 @@
+#!/bin/bash
+# Optional standalone entrypoint; Noodle calls prepare and /init separately.
+set -euo pipefail
+desktop-prepare >/dev/null
+unset DESKTOP_PASSWORD NOODLE_DESKTOP_PASSWORD DESKTOP_PASSWORD_FILE
+exec /init

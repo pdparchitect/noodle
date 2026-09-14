@@ -1,0 +1,231 @@
+#-------------------------------------
+# Backgrounds
+#-------------------------------------
+# Background 1: Panel
+rounded = 12
+border_width = 0
+border_sides = TBLR
+border_content_tint_weight = 0
+background_content_tint_weight = 0
+background_color = #000000 100
+border_color = #000000 0
+background_color_hover = #000000 100
+border_color_hover = #000000 0
+background_color_pressed = #000000 100
+border_color_pressed = #000000 0
+
+# Background 2: Active task
+rounded = 0
+border_width = 0
+border_sides = TBLR
+border_content_tint_weight = 0
+background_content_tint_weight = 0
+background_color = #1a1a1a 100
+border_color = #1a1a1a 0
+background_color_hover = #222222 100
+border_color_hover = #222222 0
+background_color_pressed = #222222 100
+border_color_pressed = #222222 0
+
+# Background 3: Taskbar
+rounded = 0
+border_width = 0
+border_sides = TBLR
+border_content_tint_weight = 0
+background_content_tint_weight = 0
+background_color = #000000 0
+border_color = #000000 0
+background_color_hover = #000000 0
+border_color_hover = #000000 0
+background_color_pressed = #000000 0
+border_color_pressed = #000000 0
+
+# Background 4: Tooltip
+rounded = 0
+border_width = 0
+border_sides = TBLR
+border_content_tint_weight = 0
+background_content_tint_weight = 0
+background_color = #000000 85
+border_color = #000000 0
+background_color_hover = #000000 85
+border_color_hover = #000000 0
+background_color_pressed = #000000 85
+border_color_pressed = #000000 0
+
+# Background 5: Menu button
+rounded = 0
+border_width = 0
+border_sides = TBLR
+border_content_tint_weight = 0
+background_content_tint_weight = 0
+background_color = #000000 0
+border_color = #000000 0
+background_color_hover = #ffffff 10
+border_color_hover = #000000 0
+background_color_pressed = #ffffff 15
+border_color_pressed = #000000 0
+
+# Background 6: Clock / Executor badge
+rounded = 0
+border_width = 0
+border_sides = TBLR
+border_content_tint_weight = 0
+background_content_tint_weight = 0
+background_color = #000000 0
+border_color = #ffffff 0
+background_color_hover = #ffffff 10
+border_color_hover = #ffffff 0
+background_color_pressed = #ffffff 10
+border_color_pressed = #ffffff 0
+
+#-------------------------------------
+# Panel
+panel_items = PTSEC
+panel_size = 100% 36
+panel_margin = 16 8
+panel_padding = 4 4 4
+panel_background_id = 1
+wm_menu = 0
+panel_dock = 0
+panel_position = top center horizontal
+panel_layer = top
+panel_monitor = all
+panel_shrink = 0
+autohide = 0
+autohide_show_timeout = 0.3
+autohide_hide_timeout = 1.5
+autohide_height = 4
+strut_policy = follow_size
+panel_window_name = tint2
+disable_transparency = 0
+mouse_effects = 1
+font_shadow = 0
+mouse_hover_icon_asb = 100 0 10
+mouse_pressed_icon_asb = 100 0 0
+
+#-------------------------------------
+# Taskbar
+taskbar_mode = single_desktop
+taskbar_hide_if_empty = 0
+taskbar_padding = 0 0 4
+taskbar_background_id = 3
+taskbar_active_background_id = 3
+taskbar_name = 0
+taskbar_hide_inactive_tasks = 0
+taskbar_hide_different_monitor = 0
+taskbar_hide_different_desktop = 0
+taskbar_always_show_all_desktop_tasks = 0
+taskbar_name_padding = 6 2
+taskbar_name_background_id = 6
+taskbar_name_active_background_id = 6
+taskbar_name_font = Noto Sans 9
+taskbar_name_font_color = #a0a0a0 100
+taskbar_name_active_font_color = #ffffff 100
+taskbar_distribute_size = 0
+taskbar_sort_order = none
+task_align = left
+
+#-------------------------------------
+# Task
+task_text = 1
+task_icon = 0
+task_centered = 1
+urgent_nb_of_blink = 20
+task_maximum_size = 200 30
+task_padding = 8 2 2
+task_font = Noto Sans 9
+task_tooltip = 1
+task_thumbnail = 0
+task_thumbnail_size = 210
+task_font_color = #b0b0b0 100
+task_active_font_color = #ffffff 100
+task_urgent_font_color = #ff4444 100
+task_iconified_font_color = #666666 100
+task_icon_asb = 100 0 0
+task_active_icon_asb = 100 0 0
+task_urgent_icon_asb = 100 0 0
+task_iconified_icon_asb = 80 0 0
+task_background_id = 0
+task_active_background_id = 2
+task_urgent_background_id = 0
+task_iconified_background_id = 0
+mouse_left = toggle_iconify
+mouse_middle = none
+mouse_right = close
+mouse_scroll_up = toggle
+mouse_scroll_down = iconify
+
+#-------------------------------------
+# System tray (notification area)
+systray_padding = 4 2 3
+systray_background_id = 0
+systray_sort = right2left
+systray_icon_size = 18
+systray_icon_asb = 100 0 0
+systray_monitor = 1
+systray_name_filter =
+
+#-------------------------------------
+# Product status hook
+execp = new
+execp_command = desktop-panel-status
+execp_interval = 5
+execp_continuous = 0
+execp_has_icon = 0
+execp_tooltip =
+execp_font = Noto Sans 9
+execp_font_color = #cccccc 100
+execp_markup = 1
+execp_background_id = 6
+execp_centered = 1
+execp_padding = 8 4 0
+execp_monitor = all
+execp_lclick_command =
+execp_mclick_command =
+execp_rclick_command =
+execp_uwheel_command =
+execp_dwheel_command =
+
+#-------------------------------------
+# Clock
+time1_format = %a %d %b  %H:%M
+time2_format =
+time1_font = Noto Sans 9
+time1_timezone =
+time2_timezone =
+clock_font_color = #cccccc 100
+clock_padding = 8 4
+clock_background_id = 6
+clock_tooltip =
+clock_tooltip_timezone =
+clock_lclick_command =
+clock_rclick_command =
+clock_mclick_command =
+clock_uwheel_command =
+clock_dwheel_command =
+
+#-------------------------------------
+# Button (menu launcher)
+button = new
+button_text = ≡
+button_font = Noto Sans Bold 12
+button_font_color = #ffffff 80
+button_padding = 8 0
+button_background_id = 5
+button_centered = 1
+button_max_icon_size = 0
+button_lclick_command = xdotool key --clearmodifiers super+F1
+button_rclick_command = xdotool key --clearmodifiers super+F1
+button_mclick_command =
+button_uwheel_command =
+button_dwheel_command =
+
+#-------------------------------------
+# Tooltip
+tooltip_show_timeout = 0.5
+tooltip_hide_timeout = 0
+tooltip_padding = 6 4
+tooltip_background_id = 4
+tooltip_font_color = #cccccc 100
+tooltip_font = Noto Sans 9

@@ -179,18 +179,31 @@ actor ContainerComputer {
         }
     }
 
+    static func desktopEnvironment(imageEnvironment: [String], password: String) -> [String] {
+        // Preserve image/derivative defaults. Only transport and authentication
+        // settings are fixed by the native client's desktop contract.
+        let reserved = ["PATH", "HOME", "DISPLAY", "DESKTOP_PORT", "NOODLE_DESKTOP_PASSWORD",
+                        "DESKTOP_PASSWORD", "DESKTOP_PASSWORD_FILE"]
+        return imageEnvironment.filter {
+            !reserved.contains(String($0.prefix { $0 != "=" }))
+        } + ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+             "HOME=/home/agent", "DISPLAY=:1", "DESKTOP_PORT=6901",
+             "NOODLE_DESKTOP_PASSWORD=" + password]
+    }
+
     private func launchDesktop(in runtime: LinuxPod, address: String) async throws -> DesktopConnection {
         let password = UUID().uuidString.replacingOccurrences(of: "-", with: "")
-        let environment = ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-            "HOME=/home/agent", "DISPLAY=:1", "BROWSER=chromium", "GTK_THEME=Desktop",
-            "G_RESOURCE_OVERLAYS=/org/gtk/libgtk=/usr/share/launcher-desktop/gtk-overlay",
-            "XAUTHORITY=/run/launcher-desktop/Xauthority", "DESKTOP_TITLE=Noodle Computer",
-            "NOODLE_DESKTOP_PASSWORD=" + password]
+        let environment = Self.desktopEnvironment(imageEnvironment: guestConfiguration.environmentVariables,
+                                                  password: password)
         let setupOutput = ComputerOutput()
         let setup = try await runtime.execInContainer("workspace", processID: "desktop-security") { config in
             config.arguments = ["/bin/bash", "-c", #"""
                 set -eu
                 printf '127.0.0.1 localhost noodle-computer\n::1 localhost\n' > /etc/hosts
+                if [ -x /usr/local/bin/desktop-prepare ]; then
+                    exec /usr/local/bin/desktop-prepare
+                fi
+                # Existing saved images still use the pre-contract startup.
                 mkdir -p /home/agent/.vnc /run/launcher-desktop
                 chown agent:agent /run/launcher-desktop
                 openssl req -x509 -nodes -days 1 -newkey rsa:2048 -keyout /home/agent/.vnc/self.pem -out /home/agent/.vnc/self.pem -subj /CN=noodle-computer >/dev/null 2>&1
@@ -215,7 +228,13 @@ actor ContainerComputer {
         }
         let output = ComputerOutput()
         let process = try await runtime.execInContainer("workspace", processID: "desktop") { config in
-            config.arguments = ["/bin/bash", "/run/noodle-desktop-init"]
+            config.arguments = ["/bin/bash", "-c", """
+                if [ -x /usr/local/bin/desktop-prepare ]; then
+                    exec /init
+                else
+                    exec /bin/bash /run/noodle-desktop-init
+                fi
+                """]
             config.environmentVariables = environment
             config.stdout = output
             config.stderr = output

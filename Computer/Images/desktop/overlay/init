@@ -1,0 +1,100 @@
+#!/bin/bash
+# Authenticated desktop supervisor, contract v1. Configuration and hooks belong
+# to the image; no host rewriting, external bridge or fixed-mount root fallback.
+set -euo pipefail
+[ "$(id -u)" = 0 ] || { echo '/init must run as root' >&2; exit 1; }
+. /usr/local/lib/desktop-environment
+[[ "$DESKTOP_PORT" =~ ^[0-9]{1,5}$ ]] && ((10#$DESKTOP_PORT > 0 && 10#$DESKTOP_PORT < 65536))
+[[ "$DISPLAY" =~ ^:[0-9]{1,3}$ ]]
+[[ "$DESKTOP_GEOMETRY" =~ ^[0-9]{3,5}x[0-9]{3,5}$ ]]
+[[ "$DESKTOP_FRAME_RATE" =~ ^[0-9]{1,3}$ ]] && ((10#$DESKTOP_FRAME_RATE > 0))
+if [ ! -s "$HOME/.vnc/self.pem" ] || [ ! -s "$HOME/.kasmpasswd" ] || [ ! -s /run/desktop/health.curl ]; then
+    echo 'Run desktop-prepare before /init (or use desktop-start).' >&2
+    exit 1
+fi
+unset DESKTOP_PASSWORD NOODLE_DESKTOP_PASSWORD DESKTOP_PASSWORD_FILE
+# KasmVNC requires the UTS hostname to resolve even in an offline container.
+# The native app already supplies it; standalone runtimes may not.
+if ! getent hosts "$(hostname)" >/dev/null; then
+    printf '127.0.0.1 %s\n' "$(hostname)" >> /etc/hosts
+fi
+install -d -m 1777 /tmp/.X11-unix
+install -d -m 0700 -o agent -g agent "$XDG_RUNTIME_DIR"
+install -d -o agent -g agent /run/desktop /var/log/desktop "$HOME/.config" "$HOME/.local/share" /workspace
+# Refuse to become root merely because a mounted workspace cannot be written.
+runuser -u agent -- test -w /workspace
+: > /run/desktop/dbus-session-address
+chown agent:agent /run/desktop/dbus-session-address
+chmod 0644 /run/desktop/dbus-session-address
+runuser -u agent -- touch "$XAUTHORITY"
+chmod 0600 "$XAUTHORITY"
+
+# Copy only missing workspace seeds as the desktop user, preserving existing
+# files (including dotfiles) and avoiding recursive ownership changes on boot.
+if [ -d /usr/local/share/desktop/workspace ]; then
+    runuser -u agent -- cp -r --update=none /usr/local/share/desktop/workspace/. /workspace/
+fi
+runuser -u agent -- mkdir -p "$XDG_DATA_HOME/ranger" "$XDG_CONFIG_HOME/cortile"
+bookmarks="$XDG_DATA_HOME/ranger/bookmarks"
+runuser -u agent -- touch "$bookmarks"
+grep -q '^W:' "$bookmarks" || printf 'W:/workspace\n' >> "$bookmarks"
+grep -q '^H:' "$bookmarks" || printf 'H:%s\n' "$HOME" >> "$bookmarks"
+if [ ! -e "$XDG_CONFIG_HOME/cortile/config.toml" ]; then
+    install -m 0644 -o agent -g agent /etc/xdg/cortile/config.toml "$XDG_CONFIG_HOME/cortile/config.toml"
+fi
+
+cat > "$HOME/.vnc/kasmvnc.yaml" <<YAML
+network:
+  protocol: http
+  ssl:
+    require_ssl: true
+    pem_certificate: /home/agent/.vnc/self.pem
+    pem_key: /home/agent/.vnc/self.pem
+  interface: 0.0.0.0
+  websocket_port: $DESKTOP_PORT
+desktop:
+  pixel_depth: 24
+  gpu:
+    hw3d: false
+encoding:
+  max_frame_rate: $DESKTOP_FRAME_RATE
+YAML
+cat > "$HOME/.vnc/xstartup" <<'XSTARTUP'
+#!/bin/bash
+exec dbus-run-session -- openbox-session
+XSTARTUP
+chmod 0755 "$HOME/.vnc/xstartup"
+touch "$HOME/.vnc/.de-was-selected"
+chown agent:agent "$HOME/.vnc/"*
+
+cleanup() {
+    trap - EXIT INT TERM
+    runuser -u agent -- kasmvncserver -kill "$DISPLAY" >/dev/null 2>&1 || true
+    jobs -pr | xargs -r kill 2>/dev/null || true
+}
+trap cleanup EXIT
+trap 'exit 0' INT TERM
+# Startup hooks run in lexical order as root and must return. A failed hook
+# fails startup; long-running services should background their child process.
+for hook in "$DESKTOP_STARTUP_DIR"/*; do
+    [ ! -x "$hook" ] || "$hook"
+done
+runuser -u agent -- kasmvncserver -kill "$DISPLAY" >/dev/null 2>&1 || true
+rm -f "/tmp/.X${DISPLAY#:}-lock" "/tmp/.X11-unix/X${DISPLAY#:}"
+runuser -u agent -- kasmvncserver "$DISPLAY" \
+    -interface 0.0.0.0 -websocketPort "$DESKTOP_PORT" -publicIP 127.0.0.1 \
+    -geometry "$DESKTOP_GEOMETRY" -depth 24 -httpd /usr/share/kasmvnc/www \
+    -FreeKeyMappings >>/var/log/desktop/kasmvnc.log 2>&1 &
+health() { curl --config /run/desktop/health.curl --max-time 2 "https://127.0.0.1:$DESKTOP_PORT/" >/dev/null; }
+for attempt in $(seq 1 40); do
+    if health; then break; fi
+    if [ "$attempt" = 40 ]; then
+        tail -n 100 /var/log/desktop/kasmvnc.log >&2
+        exit 1
+    fi
+    sleep 1
+done
+printf '[desktop] ready on HTTPS port %s\n' "$DESKTOP_PORT"
+while health; do sleep 5; done
+echo '[desktop] display stopped unexpectedly' >&2
+exit 1

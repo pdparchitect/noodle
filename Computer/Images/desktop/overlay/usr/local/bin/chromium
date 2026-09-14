@@ -1,8 +1,9 @@
 #!/bin/bash
 # Every desktop/menu/terminal launch shares the visible browser and its profile.
 set -euo pipefail
+. /usr/local/lib/desktop-environment
 
-# Guest terminal commands run as root; the visible desktop belongs to agent.
+# Root invocations join the visible desktop account and profile.
 if [ "$(id -u)" = 0 ]; then
     exec runuser -u agent -- env -u XDG_CONFIG_HOME -u XDG_CACHE_HOME -u XDG_DATA_HOME \
         HOME=/home/agent XDG_RUNTIME_DIR=/run/user/1000 "$0" "$@"
@@ -14,9 +15,9 @@ fi
 
 export HOME=/home/agent
 export DISPLAY="${DISPLAY:-:1}"
-export XAUTHORITY="${XAUTHORITY:-/run/launcher-desktop/Xauthority}"
-if [ -s /run/launcher-desktop/dbus-session-address ]; then
-    export DBUS_SESSION_BUS_ADDRESS="$(head -n 1 /run/launcher-desktop/dbus-session-address)"
+export XAUTHORITY="${XAUTHORITY:-/run/desktop/Xauthority}"
+if [ -s /run/desktop/dbus-session-address ]; then
+    export DBUS_SESSION_BUS_ADDRESS="$(head -n 1 /run/desktop/dbus-session-address)"
 fi
 if ! xdpyinfo >/dev/null 2>&1; then
     echo 'The Noodle desktop display is unavailable. Start the Desktop computer before opening Browser.' >&2
@@ -53,6 +54,10 @@ if [ ! -e "$profile" ]; then
     trap 'rm -rf -- "$staging"' EXIT
     if [ -d "$legacy" ]; then
         cp -a -- "$legacy/." "$staging/"
+    else
+        mkdir -p "$staging/Default"
+        cp /etc/desktop/browser-preferences.json "$staging/Default/Preferences"
+        touch "$staging/First Run"
     fi
     rm -f -- "$staging/SingletonLock" "$staging/SingletonCookie" "$staging/SingletonSocket"
     chmod 700 "$staging"
@@ -61,6 +66,8 @@ if [ ! -e "$profile" ]; then
 fi
 flock -u 9
 exec 9>&-
+
+[ "$#" -ne 0 ] || set -- "$DESKTOP_BROWSER_URL"
 
 exec /usr/local/lib/noodle-chromium-base \
     --user-data-dir="$profile" \
