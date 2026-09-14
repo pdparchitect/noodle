@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-14
+
 ### Changed
 
 - Build Desktop directly from pinned Ubuntu and Node images, with repository-owned desktop configuration and verified KasmVNC/Cortile downloads. Remove the Launcher base image and control bridge dependency.

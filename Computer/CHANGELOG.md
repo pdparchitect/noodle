@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-14
+
 ### Changed
 
 - Keep container and Local Mac creation separate; name the standard image flow “New Container” and expose Local Mac in both creation menus.
@@ -35,6 +37,10 @@
 
 - Experimental Local Mac computers backed by retained standard accounts, with a 1280 × 800 native viewer, account terminals and file transfers, and saved `.noodlecomputer` previews. Account setup uses an explicitly enabled lifecycle helper; stopping retains the account and its permissions.
 - Prepare a per-account setup-skip marker and onboarding history before background login so Local Mac opens its desktop without clicking through Setup Assistant.
+
+### Known limitations
+
+- Local Mac remains experimental and depends on private macOS APIs investigated on macOS 26.6.2. Live validation of the final signed app's permissions, agent access, update/reconnect, sleep/wake, and reboot behavior remains outstanding; see [Local Mac validation](https://github.com/pdparchitect/noodle/blob/computer-v0.7.0/Computer/LocalMac/README.md#validation).
 
 ## [0.6.0] - 2026-09-14
 

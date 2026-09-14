@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-14
+
 ### Added
 
 - Drag conversation attachments and draft attachment chips into Finder, other apps, or another conversation, preserving their filenames and keeping the originals in Noodle.
@@ -561,7 +563,8 @@ All notable changes to Noodle are documented here, following
 - Signed and notarized macOS packaging with a dedicated Developer ID identity.
 - Sandboxed messaging and explicit attachment paths for agent file access.
 
-[Unreleased]: https://github.com/pdparchitect/noodle/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/pdparchitect/noodle/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/pdparchitect/noodle/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/pdparchitect/noodle/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/pdparchitect/noodle/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/pdparchitect/noodle/compare/v0.12.0...v0.12.1
