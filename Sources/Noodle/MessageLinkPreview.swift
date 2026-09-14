@@ -9,15 +9,24 @@ struct MessageLinkPreview: View {
 
     let url: URL
     let shouldLoad: Bool
+    private let cache: LinkPreviewMetadataCache
+    private let openURL: (URL) -> Void
 
     @State private var metadata: LPLinkMetadata?
     @State private var previewImage: NSImage?
     @State private var requested = false
     @State private var loading = false
+    @State private var requestID = UUID()
+
+    init(url: URL, shouldLoad: Bool, cache: LinkPreviewMetadataCache = .shared,
+         openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }) {
+        self.url = url; self.shouldLoad = shouldLoad
+        self.cache = cache; self.openURL = openURL
+    }
 
     var body: some View {
         Button {
-            NSWorkspace.shared.open(url)
+            openURL(url)
         } label: {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack {
@@ -74,6 +83,11 @@ struct MessageLinkPreview: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Open link: \(title)")
+        .onChange(of: url) { _, _ in
+            requestID = UUID(); requested = false
+            metadata = nil; previewImage = nil; loading = false
+            if shouldLoad { requestMetadata() }
+        }
         .onChange(of: shouldLoad, initial: true) { _, visible in
             guard visible else { return }
             requestMetadata()
@@ -84,7 +98,9 @@ struct MessageLinkPreview: View {
         guard !requested else { return }
         requested = true
         loading = true
-        LinkPreviewMetadataCache.shared.load(url) { result in
+        let id = requestID
+        cache.load(url) { result in
+            guard requestID == id else { return }
             metadata = result.metadata
             loading = false
             withAnimation(.easeOut(duration: 0.15)) {
@@ -139,13 +155,16 @@ final class LinkPreviewMetadataCache {
     typealias ImageLoader = (NSItemProvider, @escaping (NSImage?) -> Void) -> (() -> Void)
     private let fetchMetadata: MetadataLoader
     private let fetchImage: ImageLoader
+    private let sleep: (Duration) async throws -> Void
     private let cache = NSCache<NSURL, Result>()
     private var pending: [URL: Request] = [:]
 
     init(fetchMetadata: @escaping MetadataLoader = LinkPreviewMetadataCache.nativeMetadata,
-         fetchImage: @escaping ImageLoader = LinkPreviewMetadataCache.nativeImage) {
+         fetchImage: @escaping ImageLoader = LinkPreviewMetadataCache.nativeImage,
+         sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         self.fetchMetadata = fetchMetadata
         self.fetchImage = fetchImage
+        self.sleep = sleep
         cache.countLimit = 128
     }
     func load(_ url: URL, timeout: TimeInterval = LinkPreviewSettings.timeout(), completion: @escaping (Result) -> Void) {
@@ -162,8 +181,9 @@ final class LinkPreviewMetadataCache {
         pending[url] = request
         // One deadline covers metadata AND its image, independently of whether
         // Apple's callbacks arrive. Every terminal outcome stops the spinner.
+        let sleep = sleep
         request.deadline = Task { [weak self, weak request] in
-            try? await Task.sleep(for: .seconds(max(0.01, timeout)))
+            try? await sleep(.seconds(max(0.01, timeout)))
             guard !Task.isCancelled, let request else { return }
             self?.finish(url, request: request, image: nil)
         }
