@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Open a bot’s editor from its profile, with Reply, Message, and Edit arranged in one compact action row.
+
 ### Changed
 
 - Encourage Git checkpoints in the applet skill, with the repository root above the `.noodlet` folder to keep Git metadata out of imported packages.

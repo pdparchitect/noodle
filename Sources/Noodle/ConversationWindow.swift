@@ -21,7 +21,8 @@ struct ConversationWindowView: View {
         AttachmentPreviewScope(conversationID: conversationID) { preview in
             if let conversation {
                 ChatView(conversation: conversation, attachmentPreview: preview,
-                    openDirectMessage: { openWindow(id: "conversation", value: $0) })
+                    openDirectMessage: { openWindow(id: "conversation", value: $0) },
+                    editAgent: { agentBeingEdited = $0 })
             } else {
                 ContentUnavailableView("Conversation Unavailable", systemImage: "bubble.left",
                     description: Text("This conversation has been deleted."))

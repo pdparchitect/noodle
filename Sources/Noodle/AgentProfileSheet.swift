@@ -6,6 +6,7 @@ import NoodleCore
 struct AgentProfileSheet: View {
     @Environment(\.dismiss) private var dismiss
     let agent: AgentRecord
+    let edit: () -> Void
     var canOpenDirectMessage = false
     var reply: (() -> Void)? = nil
     var directMessage: (() -> Void)? = nil
@@ -33,29 +34,47 @@ struct AgentProfileSheet: View {
                     .frame(maxWidth: .infinity)
             }
             .frame(maxHeight: 120)
-            if reply != nil || directMessage != nil {
-                VStack(spacing: 10) {
-                    if let reply {
-                        Button(action: reply) {
-                            Label("Reply in Group", systemImage: "arrowshape.turn.up.left")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
+            HStack(spacing: 8) {
+                if let reply {
+                    Button(action: reply) {
+                        actionLabel("Reply", systemImage: "arrowshape.turn.up.left")
                     }
-                    if let directMessage {
-                        Button(action: directMessage) {
-                            Label("Direct Message", systemImage: "bubble.left")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(!canOpenDirectMessage)
-                    }
+                    .buttonStyle(.borderedProminent)
+                    .help("Reply in Group")
+                    .accessibilityLabel("Reply in Group")
                 }
+                if let directMessage {
+                    Button(action: directMessage) {
+                        actionLabel("Message", systemImage: "bubble.left")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!canOpenDirectMessage)
+                    .help("Direct Message")
+                    .accessibilityLabel("Direct Message")
+                }
+                Button(action: edit) {
+                    actionLabel("Edit", systemImage: "pencil")
+                }
+                .buttonStyle(.bordered)
+                .help("Edit Bot")
+                .accessibilityLabel("Edit Bot")
             }
         }
         .padding(20)
         .frame(width: 320)
         .background(ProfileOutsideClickDismissal { dismiss() })
+    }
+
+    private func actionLabel(_ title: String, systemImage: String) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18))
+                .frame(height: 20)
+            Text(title)
+                .font(.caption)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
     }
 
     private var description: String {

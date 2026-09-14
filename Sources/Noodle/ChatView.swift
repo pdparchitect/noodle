@@ -12,6 +12,7 @@ struct ChatView: View {
     var composerFocusRequest: UUID? = nil
     var focusSidebar: (() -> Void)? = nil
     var openDirectMessage: ((UUID) -> Void)? = nil
+    var editAgent: ((AgentRecord) -> Void)? = nil
     @State private var composerFocused = false
     @State private var choosingAttachments = false
     @State private var showingAttachmentMenu = false
@@ -30,6 +31,7 @@ struct ChatView: View {
     private enum ProfileAction {
         case reply(name: String, conversationID: UUID)
         case directMessage(UUID)
+        case edit(UUID)
     }
 
     var body: some View {
@@ -86,11 +88,18 @@ struct ChatView: View {
                     $0.kind == .direct && $0.participantIDs == [agent.id]
                 }
                 if conversation.kind == .direct {
-                    AgentProfileSheet(agent: agent)
+                    AgentProfileSheet(agent: agent, edit: {
+                        profileAction = .edit(agent.id)
+                        profileAgent = nil
+                    })
                         .noodleSheetSizing()
                 } else {
                     AgentProfileSheet(
                         agent: agent,
+                        edit: {
+                            profileAction = .edit(agent.id)
+                            profileAgent = nil
+                        },
                         canOpenDirectMessage: direct != nil,
                         reply: {
                             profileAction = .reply(name: agent.displayName, conversationID: conversation.id)
@@ -417,6 +426,11 @@ struct ChatView: View {
         case .directMessage(let id):
             if let openDirectMessage { openDirectMessage(id) }
             else { store.selectedConversationID = id }
+        case .edit(let id):
+            guard let agent = store.agents.first(where: { $0.id == id }) else { return }
+            if let editAgent { editAgent(agent) }
+            else { store.agentBeingEdited = agent }
+            return
         }
         // Restore keyboard focus after AppKit finishes dismissing the sheet.
         DispatchQueue.main.async { composerFocused = true }

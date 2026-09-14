@@ -58,9 +58,9 @@ private func pixelDifference(_ lhs: NSImage, _ rhs: NSImage) -> CGFloat {
     editor.setMarkedText("composing", selectedRange: NSRange(location: 0, length: 0), replacementRange: editor.selectedRange())
     try require(!ComposerNameCompletion.insertLineBreak(for: returnEvent(.shift), in: editor))
     let agent = AgentRecord(displayName: "Mara", publicDescription: "  Reviews\n ideas.  ", avatarImageData: fixtureAvatarData())
-    let directProfile = AgentProfileSheet(agent: agent)
+    let directProfile = AgentProfileSheet(agent: agent, edit: {})
     try require(directProfile.reply == nil && directProfile.directMessage == nil)
-    let groupProfile = AgentProfileSheet(agent: agent, canOpenDirectMessage: true, reply: {}, directMessage: {})
+    let groupProfile = AgentProfileSheet(agent: agent, edit: {}, canOpenDirectMessage: true, reply: {}, directMessage: {})
     try require(groupProfile.reply != nil && groupProfile.directMessage != nil)
     try require(ComposerNameCompletion.menuTitle(for: agent, showDescriptions: false) == "Mara")
     try require(ComposerNameCompletion.menuTitle(for: agent, showDescriptions: true) == "Mara  Reviews ideas.")
@@ -137,9 +137,15 @@ private struct FixtureView: View {
             DispatchQueue.main.async { focused = true }
         }) { agent in
             if directProfile {
-                AgentProfileSheet(agent: agent).noodleSheetSizing()
+                AgentProfileSheet(agent: agent, edit: {
+                    destination = "Edit \(agent.displayName)"
+                    profile = nil
+                }).noodleSheetSizing()
             } else {
-                AgentProfileSheet(agent: agent, canOpenDirectMessage: true, reply: {
+                AgentProfileSheet(agent: agent, edit: {
+                    destination = "Edit \(agent.displayName)"
+                    profile = nil
+                }, canOpenDirectMessage: true, reply: {
                     pendingReply = agent.displayName
                     profile = nil
                 }, directMessage: {
