@@ -46,9 +46,10 @@ struct NoodleComputerApp: App {
     let action = openWindow
     let _ = delegate.openLibrary = { action(id: "library") }
     CommandGroup(replacing: .newItem) {
-      Button("New Computer…") { NotificationCenter.default.post(name: .newComputer, object: nil) }
+      Button("New Container…") { NotificationCenter.default.post(name: .newComputer, object: nil) }
         .keyboardShortcut("n")
       Button("New from Container Image…") { NotificationCenter.default.post(name: .newCustomComputer, object: nil) }
+      Button("New Local Mac…") { NotificationCenter.default.post(name: .newLocalMac, object: nil) }
     }
   }
 }
@@ -56,6 +57,7 @@ struct NoodleComputerApp: App {
 extension Notification.Name {
   static let newComputer = Self("NoodleComputer.New")
   static let newCustomComputer = Self("NoodleComputer.NewCustom")
+  static let newLocalMac = Self("NoodleComputer.NewLocalMac")
 }
 
 @MainActor final class ComputerAppDelegate: NSObject, NSApplicationDelegate {
@@ -212,6 +214,11 @@ struct ComputerRootView: View {
           NSApplication.shared.terminate(nil)
           return
         }
+        if CommandLine.arguments.contains("--localmac-creation-preview") {
+          try await LocalMacCreationPreview.run()
+          NSApplication.shared.terminate(nil)
+          return
+        }
         if CommandLine.arguments.contains("--creation-form-test") {
           try await ComputerSmokeTest.checkCreationForm()
           NSApplication.shared.terminate(nil)
@@ -271,6 +278,7 @@ struct ComputerRootView: View {
           || CommandLine.arguments.contains("--library-layout-test")
           || CommandLine.arguments.contains("--provider-integration-test")
           || CommandLine.arguments.contains("--creation-form-test")
+          || CommandLine.arguments.contains("--localmac-creation-preview")
           || CommandLine.arguments.contains("--desktop-smoke-test")
           || CommandLine.arguments.contains("--self-test")
           || CommandLine.arguments.contains("--overlay-test")
@@ -290,6 +298,7 @@ struct ComputerLibraryView: View {
   @ObservedObject var store: ComputerStore
   @State private var showingNew = false
   @State private var showingCustom = false
+  @State private var showingLocalMac = false
   @State private var searchText = ""
   @State private var columnVisibility = NavigationSplitViewVisibility.all
   @AppStorage("ComputerSidebarVisible") private var sidebarVisible = true
@@ -333,7 +342,7 @@ struct ComputerLibraryView: View {
         } description: {
           Text("Create a computer to get started.")
         } actions: {
-          Button("Create a Computer…") { showingNew = true }
+          Button("Create a Container…") { showingNew = true }
         }
       }
     }
@@ -347,9 +356,10 @@ struct ComputerLibraryView: View {
     .toolbar {
       ToolbarItem(placement: .navigation) {
         Menu {
-          Button("New Computer", systemImage: "desktopcomputer") { showingNew = true }
+          Button("New Container", systemImage: "desktopcomputer") { showingNew = true }
             .keyboardShortcut("n", modifiers: .command)
           Button("New from Container Image…", systemImage: "shippingbox") { showingCustom = true }
+          Button("New Local Mac…", systemImage: "person.crop.rectangle") { showingLocalMac = true }
         } label: {
           Label("Create", systemImage: "square.and.pencil")
         }.help("Create Computer")
@@ -359,8 +369,10 @@ struct ComputerLibraryView: View {
     .onChange(of: columnVisibility) { _, value in sidebarVisible = value != .detailOnly }
     .sheet(isPresented: $showingNew) { NewComputerView(store: store) }
     .sheet(isPresented: $showingCustom) { NewComputerView(store: store, custom: true) }
+    .sheet(isPresented: $showingLocalMac) { NewLocalMacView(store: store) }
     .onReceive(NotificationCenter.default.publisher(for: .newComputer)) { _ in showingNew = true }
     .onReceive(NotificationCenter.default.publisher(for: .newCustomComputer)) { _ in showingCustom = true }
+    .onReceive(NotificationCenter.default.publisher(for: .newLocalMac)) { _ in showingLocalMac = true }
     .onChange(of: store.selection) { _, id in
       UserDefaults.standard.set(id?.uuidString, forKey: "SelectedComputer")
     }
@@ -419,7 +431,7 @@ struct ComputerRow: View {
       }.disabled(session.phase.busy)
       Divider()
       Button("Delete Computer…", systemImage: "trash", role: .destructive) { deleting = true }
-        .disabled(session.phase != .stopped || session.virtual != nil || session.container != nil)
+        .disabled(session.phase != .stopped || session.virtual != nil || session.container != nil || session.localMac != nil)
     }
     .computerImageUpdateConfirmation(store: store, session: session, isPresented: $updating)
     .sheet(isPresented: $editing) { EditComputerView(store: store, session: session) }
@@ -429,10 +441,10 @@ struct ComputerRow: View {
         set: { store.rename(session, name: session.computer.name, appearance: $0) }),
         directory: store.library.directory(for: session.id))
     }
-    .alert("Move \(session.computer.name) to Trash?", isPresented: $deleting) {
+    .alert(session.computer.kind == .localMac ? "Delete \(session.computer.name) and its account?" : "Move \(session.computer.name) to Trash?", isPresented: $deleting) {
       Button("Cancel", role: .cancel) {}
-      Button("Move to Trash", role: .destructive) { store.remove(session) }
-    } message: { Text("The computer and its disks will be moved to the Trash.") }
+      Button(session.computer.kind == .localMac ? "Delete Account" : "Move to Trash", role: .destructive) { store.remove(session) }
+    } message: { Text(session.computer.kind == .localMac ? "This permanently deletes the managed account and its home directory. Stop preserves them; Delete removes them." : "The computer and its disks will be moved to the Trash.") }
     .computerStopConfirmation(isPresented: $stopping, name: session.computer.name) {
       guard session.phase == .running else { return }
       Task { await store.stop(session) }
@@ -464,6 +476,18 @@ struct ComputerDetailView: View {
           Text(session.updateStatus ?? "Updating the computer image…")
           Button("Cancel") { store.cancelImageUpdate(session) }
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else if let local = session.localMac {
+        ZStack {
+          LocalMacDesktopView(runtime: local, active: session.displayMode == .desktop)
+            .opacity(session.displayMode == .desktop ? 1 : 0)
+            .allowsHitTesting(session.displayMode == .desktop)
+            .accessibilityHidden(session.displayMode != .desktop)
+          if session.showingFiles {
+            ComputerFilesView(model: session.filesModel(for: local), appearance: session.computer.appearance ?? .init()).id(session.id)
+          } else if session.showingTerminal, let terminal = session.terminal {
+            ComputerTerminalView(terminal: terminal, appearance: session.computer.appearance ?? .init())
+          }
+        }
       } else if let virtual = session.virtual {
         VirtualMachineDisplay(machine: virtual.machine).ignoresSafeArea(edges: .top)
       } else if let browser = session.browser {
@@ -515,6 +539,12 @@ struct ComputerDetailView: View {
               session.phase == .running
                 ? "Connecting to the desktop…" : "Start this computer to open its screen.")
           }
+        } actions: {
+          if session.localMacSetupRequired {
+            Button("Enable Local Mac…") {
+              do { try LocalMacSetup.enable() } catch { store.error = error.localizedDescription }
+            }
+          }
         }
       }
     }
@@ -553,7 +583,7 @@ struct ComputerDetailView: View {
           .help(session.phase.busy ? session.phase.label : session.phase == .running ? "Stop" : "Start")
           .accessibilityLabel(session.phase.busy ? session.phase.label : session.phase == .running ? "Stop" : "Start")
       }
-      if session.computer.kind == .container {
+      if session.computer.kind == .container || session.computer.kind == .localMac {
         ToolbarItem(id: "computer-display", placement: .primaryAction) {
           Picker("Computer View", selection: Binding(
             get: { session.displayMode },
@@ -609,7 +639,7 @@ struct EditComputerView: View {
   @State private var forceStopping = false
   @State private var updating = false
   @State private var appearance = ComputerAppearance()
-  private var stopLabel: String { session.computer.kind == .container ? "Stop" : "Force Stop" }
+  private var stopLabel: String { session.computer.kind == .macOS || session.computer.kind == .linux || session.computer.kind == .omarchy ? "Force Stop" : "Stop" }
 
   var body: some View {
     VStack(spacing: 0) {
@@ -637,9 +667,14 @@ struct EditComputerView: View {
         VStack(alignment: .leading, spacing: 12) {
           LabeledContent("Computer", value: session.computer.displayType)
           Divider()
-          LabeledContent("CPUs", value: String(session.computer.cpuCount))
-          LabeledContent("Memory", value: "\(session.computer.memoryGiB) GB")
-          LabeledContent("Disk capacity", value: "\(session.computer.diskGiB) GB")
+          if session.computer.kind == .localMac {
+            LabeledContent("Resources", value: "Shared with this Mac")
+            LabeledContent("Files", value: "Retained in its own account")
+          } else {
+            LabeledContent("CPUs", value: String(session.computer.cpuCount))
+            LabeledContent("Memory", value: "\(session.computer.memoryGiB) GB")
+            LabeledContent("Disk capacity", value: "\(session.computer.diskGiB) GB")
+          }
         }.padding(12).background(
           Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 12))
         if let result = session.updateResult {
@@ -651,18 +686,18 @@ struct EditComputerView: View {
           Text(session.updateStatus ?? "Updating…").font(.caption).foregroundStyle(.secondary)
         }
         ComputerAppearanceRow(appearance: $appearance, directory: store.library.directory(for: session.id))
-        if !session.computer.installationComplete && session.phase == .stopped {
+        if session.computer.usesVirtualMachine && !session.computer.installationComplete && session.phase == .stopped {
           Button("Installation Finished — Eject ISO") { store.finishInstallation(session) }
         }
         Divider()
         HStack {
           DestructiveActionButton(title: "Delete Computer") { deleting = true }
-            .disabled(session.phase != .stopped || session.virtual != nil || session.container != nil)
+            .disabled(session.phase != .stopped || session.virtual != nil || session.container != nil || session.localMac != nil)
           Spacer()
           if session.computer.kind == .container {
             ComputerImageUpdateButton(session: session) { updating = true }
           }
-          if session.virtual != nil || session.container != nil {
+          if session.virtual != nil || session.container != nil || session.localMac != nil {
             Button(stopLabel) { forceStopping = true }.disabled(session.phase.busy)
           }
         }
@@ -671,17 +706,17 @@ struct EditComputerView: View {
     .frame(width: 520).noodleSheetSizing()
     .computerImageUpdateConfirmation(store: store, session: session, isPresented: $updating)
     .onAppear { name = session.computer.name; appearance = session.computer.appearance ?? .init() }
-    .alert("Move \(session.computer.name) to Trash?", isPresented: $deleting) {
+    .alert(session.computer.kind == .localMac ? "Delete \(session.computer.name) and its account?" : "Move \(session.computer.name) to Trash?", isPresented: $deleting) {
       Button("Cancel", role: .cancel) {}
-      Button("Move to Trash", role: .destructive) {
+      Button(session.computer.kind == .localMac ? "Delete Account" : "Move to Trash", role: .destructive) {
         store.remove(session)
         dismiss()
       }
     } message: {
-      Text("The computer and its disks will be moved to the Trash.")
+      Text(session.computer.kind == .localMac ? "This permanently deletes the managed account and its home directory. Stop preserves them; Delete removes them." : "The computer and its disks will be moved to the Trash.")
     }
     .computerStopConfirmation(isPresented: $forceStopping, name: session.computer.name, actionTitle: stopLabel) {
-      guard !session.phase.busy, session.virtual != nil || session.container != nil else { return }
+      guard !session.phase.busy, session.virtual != nil || session.container != nil || session.localMac != nil else { return }
       Task { await store.stop(session, force: true) }
     }
   }
@@ -772,7 +807,7 @@ struct NewComputerView: View {
             Button("Cancel") { dismiss() }.disabled(creating).keyboardShortcut(.cancelAction)
               .buttonStyle(.plain).foregroundStyle(.blue)
             Spacer()
-            Text(custom ? "New from Container Image" : "New Computer").font(.headline)
+            Text(custom ? "New from Container Image" : "New Container").font(.headline)
             Spacer()
             Button("Create") {
               Task {

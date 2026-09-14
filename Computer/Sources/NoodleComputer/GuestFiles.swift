@@ -123,10 +123,34 @@ final class FileInput: ReaderStream, @unchecked Sendable {
     deinit { try? handle.close() }
 }
 
-actor GuestFiles: FileImportDestination, FileExportSource {
+protocol ComputerFileService: FileImportDestination, FileExportSource {
+    func homeDirectory() async throws -> String
+    func change(_ operation: String, path: String, extra: [String]) async throws
+}
+
+extension ComputerFileService {
+    func read(_ file: GuestFile, path: String, to destination: URL, preview: Bool) async throws {
+        try await read(file, path: path, to: destination, preview: preview, progress: { _ in })
+    }
+    func change(_ operation: String, path: String) async throws { try await change(operation, path: path, extra: []) }
+    func importItems(_ urls: [URL], to folder: String, progress: @escaping @Sendable (FileTransferProgress) async -> Void) async throws {
+        let scoped = urls.filter { $0.startAccessingSecurityScopedResource() }
+        defer { for url in scoped { url.stopAccessingSecurityScopedResource() } }
+        let plan = try FileImportPlan.prepare(urls, folder: folder)
+        try await plan.send(to: self, progress: progress)
+    }
+}
+
+actor GuestFiles: ComputerFileService {
     let runtime: ContainerComputer
     private var installation: Task<String, Error>?
     init(runtime: ContainerComputer) { self.runtime = runtime }
+
+    func homeDirectory() async throws -> String {
+        let data = try await run(arguments: ["/bin/sh", "-c", GuestHome.command], limit: 4096)
+        guard let path = String(data: data, encoding: .utf8) else { throw ComputerError("Invalid home directory.") }
+        return try GuestFile.normalize(path)
+    }
 
     private func helper() async throws -> String {
         if let installation { return try await installation.value }

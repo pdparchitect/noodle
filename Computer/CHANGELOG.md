@@ -4,12 +4,37 @@
 
 ### Changed
 
+- Keep container and Local Mac creation separate; name the standard image flow “New Container” and expose Local Mac in both creation menus.
+- Use the shared name, icon, background and automatic-start conventions for Local Mac creation; show account resources in its settings without container or display-resolution assumptions.
 - Start repository-owned desktop images through their authenticated startup contract and honor image appearance/session defaults, while retaining startup support for existing saved images.
 
 ### Fixed
 
+- Repair damaged Local Mac desktop helpers, publish updates atomically with rollback, and reconnect to updated lifecycle services without resetting their approval or retained accounts.
+- Report Local Mac folder permission denials accurately, include account folder access descriptions, and keep desktop capture and input responsive while file operations wait for macOS consent.
+- Clear Local Mac capture coordinates when recording fails so input cannot use a stopped display.
 - Handle Control-C explicitly in the focused terminal and add an Interrupt Command context-menu action.
+- Treat an intentional Local Mac stop as normal shutdown, ignore stale connection callbacks, and preserve connection state when a status refresh fails.
+- Verify Local Mac helper protocol compatibility before capture and keep display separation checks active during status updates and frame delivery.
+- Start Local Mac capture independently of resolution changes; remove unused display/window-targeting experiments, the obsolete Finder command and service re-registration maintenance path.
+- Capture the verified Local Mac display as a whole so sharing controls no longer cover each window’s traffic-light buttons.
+- Resolve the file browser's Home shortcut through the running system and account, including non-root Linux image users, instead of assuming `/root`.
+- Use the normal stopped-computer screen and toolbar Start for Local Mac; show the enable action only when startup finds the account service unavailable.
+- Remove the Open Finder recovery button and its banner from the Local Mac desktop.
+- Deliver Local Mac pointer and keyboard sequences through the verified background session, preserve drag releases under input load, and capture app shortcuts while the native desktop has focus.
 - Keep trailing decimal zeroes and use equal-width digits in image download progress so changing byte counts and speeds stay visually steady.
+- Local Mac desktop capture now checks the desktop helper's own permissions when launched by the account service.
+- Map Local Mac pointer coordinates correctly through the preview’s aspect-fit padding.
+- Stop reading scroll-wheel properties from ordinary mouse events, which caused AppKit to discard clicks and movement before they reached the Local Mac account.
+- Remove persistent display-resolution diagnostic banners from the Local Mac viewer; keep those details in logs.
+- Disable the managed account's idle screen saver at startup so unattended Local Mac desktops do not automatically lock after inactivity.
+- Use a short current-folder prompt in Local Mac shells, without the generated account or host name; preserve existing shell customizations.
+- Use the shared native file browser for Local Mac, including navigation, icon/list views, Quick Look, folder transfers, drag-and-drop, renaming and duplication. File operations remain confined to the managed account's home, with atomic uploads and cancellation cleanup.
+
+### Added
+
+- Experimental Local Mac computers backed by retained standard accounts, with a 1280 × 800 native viewer, account terminals and file transfers, and saved `.noodlecomputer` previews. Account setup uses an explicitly enabled lifecycle helper; stopping retains the account and its permissions.
+- Prepare a per-account setup-skip marker and onboarding history before background login so Local Mac opens its desktop without clicking through Setup Assistant.
 
 ## [0.6.0] - 2026-09-14
 

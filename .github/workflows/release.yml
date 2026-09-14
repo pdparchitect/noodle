@@ -123,6 +123,8 @@ jobs:
           lfs: true
       - name: Test Computer
         run: swift test --disable-sandbox --package-path Computer --scratch-path .build/computer
+      - name: Test Local Mac account boundaries and update recovery
+        run: swift test --disable-sandbox --package-path Computer/LocalMac --scratch-path .build/localmac
 
   test-applet:
     needs: [versions, checks]

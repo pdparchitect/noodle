@@ -2,6 +2,7 @@ import AppKit
 import ComputerBridge
 import ComputerCore
 import Darwin
+import LocalMacCore
 import Virtualization
 
 enum ComputerPhase: Equatable {
@@ -38,9 +39,10 @@ enum ComputerDisplayMode: String {
     nonisolated let id: UUID
     @Published var computer: Computer
     @Published var phase = ComputerPhase.stopped {
-        didSet { if case .failed = phase {} else { startupRecovery = nil } }
+        didSet { if case .failed = phase {} else { startupRecovery = nil; localMacSetupRequired = false } }
     }
     @Published var startupRecovery: ComputerStartupRecovery?
+    @Published var localMacSetupRequired = false
     @Published var console = ""
     @Published var commandRunning = false
     @Published var updateResult: String?
@@ -56,12 +58,16 @@ enum ComputerDisplayMode: String {
     @Published var openingTerminal = false
     var displayMode: ComputerDisplayMode {
         if showingFiles { return .files }
-        return computer.hasWebDisplay && !showingTerminal ? .desktop : .terminal
+        return computer.hasDisplay && !showingTerminal ? .desktop : .terminal
     }
     var availableDisplayModes: [ComputerDisplayMode] {
-        computer.hasWebDisplay ? [.desktop, .terminal, .files] : [.terminal, .files]
+        computer.hasDisplay ? [.desktop, .terminal, .files] : [.terminal, .files]
     }
     var virtual: VirtualComputer?
+    @Published var localMac: LocalMacComputer? {
+        didSet { if localMac == nil { fileBrowser?.disappear(); fileBrowser?.cancelTransfer(); fileBrowser = nil } }
+    }
+    var localTerminal: LocalMacTerminalConnection?
     var container: ContainerComputer? {
         didSet { if container == nil { fileBrowser?.disappear(); fileBrowser?.cancelTransfer(); fileBrowser = nil } }
     }
@@ -72,9 +78,19 @@ enum ComputerDisplayMode: String {
         fileBrowser = model
         return model
     }
+    func filesModel(for runtime: LocalMacComputer) -> ComputerFilesModel {
+        if let fileBrowser { return fileBrowser }
+        let model = ComputerFilesModel(service: LocalMacFileService(runtime: runtime), computerID: id)
+        fileBrowser = model
+        return model
+    }
     init(_ computer: Computer) {
         self.id = computer.id
         self.computer = computer
+    }
+    func localMacDisconnected(_ runtime: LocalMacComputer, reason: String) {
+        guard localMac === runtime, phase == .running || phase == .starting else { return }
+        phase = .failed(reason)
     }
     func append(_ text: String) { console = String((console + text).suffix(262_144)) }
     func recordStartupFailure(_ error: Error) {
@@ -209,14 +225,18 @@ enum ComputerDisplayMode: String {
             if computer.kind == .container {
                 try ContainerComputer.validateImageReference(computer.imageReference)
             }
-            guard computer.cpuCount <= VZVirtualMachineConfiguration.maximumAllowedCPUCount,
+            guard computer.kind == .localMac || (computer.cpuCount <= VZVirtualMachineConfiguration.maximumAllowedCPUCount &&
                 UInt64(computer.memoryGiB) * 1_073_741_824 <= VZVirtualMachineConfiguration.maximumAllowedMemorySize
-            else {
+            ) else {
                 throw ComputerError("The requested CPU or memory allocation exceeds this Mac’s virtualization limits.")
             }
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-            computer.macAddress = VZMACAddress.randomLocallyAdministered().string
-            if computer.kind == .container {
+            computer.macAddress = computer.kind == .localMac ? nil : VZMACAddress.randomLocallyAdministered().string
+            if computer.kind == .localMac {
+                // Creating a library entry does not install services or mutate
+                // accounts. Start resumes the separately approved setup.
+                computer.installationComplete = true
+            } else if computer.kind == .container {
                 guard FileManager.default.fileExists(atPath: kernel.path) else {
                     throw ComputerError(
                         "The bundled Linux kernel is missing. Rebuild Noodle Computer with its runtime resources.")
@@ -408,7 +428,20 @@ enum ComputerDisplayMode: String {
         do {
             let computer = session.computer
             let directory = library.directory(for: computer.id)
-            if computer.kind == .container {
+            if computer.kind == .localMac {
+                try await LocalMacSetup.check()
+                var saved = computer; saved.localMacSetupRequested = true
+                session.computer = try library.save(saved)
+                session.localMac?.close()
+                let runtime = LocalMacComputer()
+                session.localMac = runtime
+                runtime.onDisconnect = { [weak session, weak runtime] reason in
+                    guard let runtime else { return }
+                    session?.localMacDisconnected(runtime, reason: reason)
+                }
+                try await runtime.start(id: computer.id)
+                guard runtime.isConnected else { throw ComputerError("The desktop connection closed during startup.") }
+            } else if computer.kind == .container {
                 let runtime = session.container ?? ContainerComputer()
                 session.container = runtime
                 let text = try await runtime.start(
@@ -443,6 +476,10 @@ enum ComputerDisplayMode: String {
             }
             session.phase = .running
         } catch {
+            if session.computer.kind == .localMac {
+                session.localMac?.close(); session.localMac = nil
+                session.localTerminal?.close(); session.localTerminal = nil; session.terminal = nil
+            }
             if session.computer.kind == .container {
                 try? await session.container?.stop()
                 session.container = nil
@@ -451,6 +488,7 @@ enum ComputerDisplayMode: String {
             }
             if session.virtual?.machine.state == .stopped { session.virtual = nil }
             session.recordStartupFailure(error)
+            session.localMacSetupRequired = error is LocalMacSetupRequired
         }
     }
 
@@ -467,6 +505,12 @@ enum ComputerDisplayMode: String {
         }
         session.phase = .stopping
         do {
+            if session.computer.kind == .localMac {
+                session.localMac?.expectDisconnect(true)
+                try await LocalMacSetup.stop(session.id)
+                session.localTerminal?.close(); session.localTerminal = nil
+                session.localMac?.close(); session.localMac = nil
+            }
             if let virtual = session.virtual, virtual.machine.state != .stopped { try await virtual.stop() }
             try await session.container?.stop()
             session.virtual = nil
@@ -476,7 +520,10 @@ enum ComputerDisplayMode: String {
             session.showingTerminal = false
             session.showingFiles = false
             session.phase = .stopped
-        } catch { session.phase = .failed(error.localizedDescription) }
+        } catch {
+            session.localMac?.expectDisconnect(false)
+            session.phase = .failed(error.localizedDescription)
+        }
     }
 
     func execute(_ text: String, in session: ComputerSession) async {
@@ -491,6 +538,18 @@ enum ComputerDisplayMode: String {
 
     /// Select an available surface without replacing its existing session.
     func selectDisplay(_ mode: ComputerDisplayMode, in session: ComputerSession) async {
+        if let runtime = session.localMac, session.phase == .running {
+            do {
+                if mode == .terminal, session.localTerminal == nil {
+                    let terminal = GuestTerminal()
+                    let connection = LocalMacTerminalConnection(runtime: runtime, terminal: terminal)
+                    try await connection.start()
+                    session.localTerminal = connection; session.terminal = terminal
+                }
+                session.showingFiles = mode == .files; session.showingTerminal = mode == .terminal
+            } catch { self.error = error.localizedDescription }
+            return
+        }
         guard session.computer.kind == .container, session.phase == .running,
               !session.openingTerminal, session.container != nil,
               session.availableDisplayModes.contains(mode), session.displayMode != mode else { return }
@@ -586,7 +645,19 @@ enum ComputerDisplayMode: String {
     }
 
     func remove(_ session: ComputerSession) {
-        guard !storageCleaning, session.phase == .stopped, session.virtual == nil, session.container == nil else { return }
+        guard !storageCleaning, session.phase == .stopped, session.virtual == nil, session.container == nil, session.localMac == nil else { return }
+        if session.computer.kind == .localMac {
+            session.phase = .stopping
+            Task {
+                do {
+                    if session.computer.localMacSetupRequested == true { try await LocalMacSetup.stop(session.id, deleting: true) }
+                    try FileManager.default.trashItem(at: library.directory(for: session.id), resultingItemURL: nil)
+                    sessions.removeAll { $0.id == session.id }
+                    if selection == session.id { selection = sessions.first?.id }
+                } catch { session.phase = .stopped; self.error = error.localizedDescription }
+            }
+            return
+        }
         do {
             // Recoverable deletion, after the UI's explicit confirmation.
             try FileManager.default.trashItem(at: library.directory(for: session.id), resultingItemURL: nil)
@@ -602,7 +673,7 @@ enum ComputerDisplayMode: String {
         for task in imageUpdateTasks.values { task.cancel() }
         for task in Array(imageUpdateTasks.values) { await task.value }
         _ = await creationTask?.value
-        for session in sessions where session.phase == .running || session.container != nil || session.virtual != nil {
+        for session in sessions where session.phase == .running || session.container != nil || session.virtual != nil || session.localMac != nil {
             await stop(session, force: true)
         }
     }

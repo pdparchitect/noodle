@@ -3,7 +3,7 @@ import ComputerCore
 import Foundation
 
 @MainActor final class ComputerFilesModel: ObservableObject {
-    let service: GuestFiles
+    let service: any ComputerFileService
     let computerID: UUID
     @Published var folder = "/workspace"
     @Published var files: [GuestFile] = []
@@ -30,7 +30,10 @@ import Foundation
     private var previewID = UUID()
     private var transferID = UUID()
 
-    init(runtime: ContainerComputer, computerID: UUID) { service = GuestFiles(runtime: runtime); self.computerID = computerID }
+    init(service: any ComputerFileService, computerID: UUID) {
+        self.service = service; self.computerID = computerID
+    }
+    convenience init(runtime: ContainerComputer, computerID: UUID) { self.init(service: GuestFiles(runtime: runtime), computerID: computerID) }
     var selected: GuestFile? { files.first { $0.name == selection } }
     var visible: [GuestFile] { files.filter { (showHidden || !$0.name.hasPrefix(".")) && (filter.isEmpty || $0.name.localizedCaseInsensitiveContains(filter)) } }
     var parent: String { folder == "/" ? "/" : (folder as NSString).deletingLastPathComponent }
@@ -38,12 +41,19 @@ import Foundation
     func navigate(_ path: String, record: Bool = true, selecting: String? = nil, clearStatus: Bool = true) {
         let destination: String
         do { destination = try GuestFile.normalize(path) } catch { self.error = error.localizedDescription; return }
+        navigate(resolving: { destination }, record: record, selecting: selecting, clearStatus: clearStatus)
+    }
+    func goHome() { navigate(resolving: { [service] in try await service.homeDirectory() }) }
+    private func navigate(resolving destination: @escaping () async throws -> String,
+                          record: Bool = true, selecting: String? = nil, clearStatus: Bool = true) {
         listing?.cancel()
         stopPreview(); selection = nil
         loading = true
         let id = UUID(); listingID = id
         listing = Task {
             do {
+                let destination = try GuestFile.normalize(await destination())
+                try Task.checkCancellation()
                 let items = try await service.list(destination)
                 try Task.checkCancellation()
                 guard listingID == id else { return }

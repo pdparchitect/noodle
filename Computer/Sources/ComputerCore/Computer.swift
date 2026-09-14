@@ -1,7 +1,7 @@
 import Foundation
 
 public enum ComputerKind: String, Codable, CaseIterable, Sendable {
-    case macOS, linux, container, omarchy
+    case macOS, linux, container, omarchy, localMac
 
     public var title: String {
         switch self {
@@ -9,6 +9,7 @@ public enum ComputerKind: String, Codable, CaseIterable, Sendable {
         case .linux: "Linux"
         case .container: "Linux Container"
         case .omarchy: "Omarchy · Experimental"
+        case .localMac: "Local Mac"
         }
     }
 
@@ -18,6 +19,7 @@ public enum ComputerKind: String, Codable, CaseIterable, Sendable {
         case .linux: "terminal"
         case .container: "shippingbox"
         case .omarchy: "square.grid.3x3"
+        case .localMac: "person.crop.rectangle"
         }
     }
 
@@ -27,6 +29,7 @@ public enum ComputerKind: String, Codable, CaseIterable, Sendable {
         case .linux: "An Alpine Linux virtual machine with a command-line console. Automatically downloads the ARM64 installer; no graphical desktop included."
         case .container: ContainerRegistry.bundled.defaultTemplate.description
         case .omarchy: "Experimental custom Linux preset. Choose an ARM64 Omarchy installer in Advanced Options. No verified default image is available; a standard x86-64 ISO will not boot."
+        case .localMac: "A separate standard account on this Mac, with its own desktop and files. Shares this Mac’s operating system and resources. One-time administrator setup is required."
         }
     }
 }
@@ -43,6 +46,8 @@ public struct Computer: Codable, Identifiable, Equatable, Sendable {
     public var isCustomContainer: Bool { kind == .container && customImage == true }
     public var hasDesktop: Bool { template?.type == .desktop }
     public var hasWebDisplay: Bool { hasDesktop || (isCustomContainer && webPort != nil) }
+    public var hasDisplay: Bool { hasWebDisplay || kind == .localMac }
+    public var usesVirtualMachine: Bool { kind == .macOS || kind == .linux || kind == .omarchy }
     public var template: ComputerTemplate? {
         ContainerRegistry.bundled.template(for: self)
     }
@@ -62,6 +67,7 @@ public struct Computer: Codable, Identifiable, Equatable, Sendable {
     public var customImage: Bool?
     public var webPort: Int?
     public var appearance: ComputerAppearance?
+    public var localMacSetupRequested: Bool?
 
     public init(id: UUID = UUID(), name: String, kind: ComputerKind, cpuCount: Int = 4,
                 memoryGiB: Int = 4, diskGiB: Int = 64, networkEnabled: Bool = true,

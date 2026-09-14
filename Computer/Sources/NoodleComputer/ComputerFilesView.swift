@@ -160,7 +160,7 @@ struct ComputerFilesView: View {
                     Button("Go to Folder…") { path = model.folder; enteringPath = true }
                     Button("Enclosing Folder") { model.navigate(model.parent) }.disabled(model.folder == "/")
                     Button("Workspace") { model.navigate("/workspace") }
-                    Button("Home") { model.navigate("/root") }
+                    Button("Home") { model.goHome() }
                     Button("Filesystem") { model.navigate("/") }
                     Divider()
                     Button("Refresh") { model.navigate(model.folder, record: false) }

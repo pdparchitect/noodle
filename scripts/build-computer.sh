@@ -39,6 +39,9 @@ swift build --disable-sandbox --package-path "$package" --scratch-path "$build_r
 for product in ComputerPreviewExtension ComputerThumbnailExtension; do
     swift build --disable-sandbox --package-path "$package" --scratch-path "$build_root" -c "$configuration" --product "$product" >&2
 done
+local_build="$project_root/.build/localmac"
+swift build --disable-sandbox --package-path "$package/LocalMac" --scratch-path "$local_build" -c "$configuration" >&2
+local_bin="$(swift build --disable-sandbox --package-path "$package/LocalMac" --scratch-path "$local_build" -c "$configuration" --show-bin-path)"
 bin_path="$(swift build --disable-sandbox --package-path "$package" --scratch-path "$build_root" -c "$configuration" --show-bin-path)"
 staging_root="$(mktemp -d "$build_root/App.XXXXXX")"
 trap 'rm -rf "$staging_root"' EXIT
@@ -123,6 +126,48 @@ fi
 computer_group="$team_id.com.pdparchitect.noodle.computers"
 /usr/libexec/PlistBuddy -c "Add :NoodleSigningTeam string $team_id" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :NoodleComputerGroup string $computer_group" "$app/Contents/Info.plist"
+# Registered only when the user enables Local Mac. The UI retains App Sandbox;
+# separate signed setup, service and desktop components implement its account boundary.
+setup_app="$app/Contents/Helpers/LocalMacSetup.app"
+mkdir -p "$setup_app/Contents/MacOS" "$setup_app/Contents/Library/LaunchServices" "$setup_app/Contents/Library/LaunchDaemons"
+cp "$local_bin/LocalMacSetup" "$setup_app/Contents/MacOS/LocalMacSetup"
+cp "$local_bin/LocalMacService" "$setup_app/Contents/Library/LaunchServices/LocalMacService"
+cat > "$setup_app/Contents/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>CFBundleIdentifier</key><string>$bundle_identifier.localmacsetup</string>
+    <key>CFBundleName</key><string>Local Mac Setup</string>
+    <key>CFBundleDisplayName</key><string>Noodle Local Mac Setup</string>
+    <key>CFBundleExecutable</key><string>LocalMacSetup</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleVersion</key><string>$version</string>
+    <key>LSMinimumSystemVersion</key><string>26.0</string>
+    <key>NSHighResolutionCapable</key><true/>
+</dict></plist>
+EOF
+desktop="$app/Contents/Helpers/LocalMacDesktop.app"
+mkdir -p "$desktop/Contents/MacOS"
+cp "$local_bin/LocalMacDesktop" "$desktop/Contents/MacOS/LocalMacDesktop"
+cp "$package/Support/LocalMacDesktop-Info.plist" "$desktop/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.desktop" "$desktop/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$desktop/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$desktop/Contents/Info.plist"
+daemon="$setup_app/Contents/Library/LaunchDaemons/com.pdparchitect.noodle.computer.localmac.plist"
+cat > "$daemon" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>Label</key><string>$computer_group.localmac</string>
+    <key>BundleProgram</key><string>Contents/Library/LaunchServices/LocalMacService</string>
+    <key>MachServices</key><dict><key>$computer_group.localmac</key><true/></dict>
+    <key>AssociatedBundleIdentifiers</key><array><string>$bundle_identifier</string></array>
+    <key>ProcessType</key><string>Interactive</string>
+</dict></plist>
+EOF
+codesign --force --options runtime "$timestamp_option" --identifier com.pdparchitect.noodle.computer.localmac --sign "$signing_identity" "$setup_app/Contents/Library/LaunchServices/LocalMacService"
+codesign --force --options runtime "$timestamp_option" --sign "$signing_identity" "$setup_app"
+codesign --force --options runtime "$timestamp_option" --sign "$signing_identity" "$desktop"
 resolved_entitlements="$staging_root/Computer.entitlements"
 cp "$package/Support/Computer.entitlements" "$resolved_entitlements"
 /usr/libexec/PlistBuddy -c 'Add :com.apple.security.application-groups array' "$resolved_entitlements"

@@ -3,12 +3,14 @@ import ComputerBridge
 import Containerization
 import Darwin
 import Foundation
+import LocalMacCore
 import WebKit
 
 @MainActor final class ComputerProvider {
     private weak var store: ComputerStore?
     private var server: ComputerConnectionServer?
     private var terminals: [UUID: ProviderTerminal] = [:]
+    private var localTerminals: [UUID: (computer: UUID, owner: String, runtime: LocalMacComputer)] = [:]
     private let transferRoot: URL
 
     init(store: ComputerStore, socket: URL? = nil) throws {
@@ -30,6 +32,10 @@ import WebKit
         guard let store else { throw ComputerBridgeError("Computer is closing.") }
         let owner = peer + ":" + (request.agentID?.uuidString ?? "human")
         if request.operation == .terminalResolve {
+            if let id = request.terminalID, let terminal = localTerminals[id], terminal.owner == owner,
+               store.sessions.contains(where: { $0.id == terminal.computer && $0.localMac === terminal.runtime && $0.phase == .running }) {
+                var response = ComputerResponse(); response.computerID = terminal.computer; return response
+            }
             guard let id = request.terminalID, let terminal = terminals[id], terminal.owner == owner else {
                 throw ComputerBridgeError("Terminal session is unavailable or belongs to another agent.")
             }
@@ -43,20 +49,22 @@ import WebKit
                 response.capabilities = ComputerCapabilities()
                 return response
             }
-            var response = ComputerResponse(computers: store.sessions.filter { $0.computer.kind == .container }.map { session in
+            var response = ComputerResponse(computers: store.sessions.filter { $0.computer.kind == .container || $0.computer.kind == .localMac }.map { session in
                 let appearance = session.computer.appearance
                 let icon = appearance?.iconImage
                 return RemoteComputer(id: session.id, name: session.computer.name, kind: session.computer.displayType,
                     state: session.phase.label, symbol: appearance?.iconSymbol ?? session.computer.displaySymbol,
                     colour: appearance?.iconColour ?? 0, icon: (icon?.count ?? 0) <= 65_536 ? icon : nil,
-                    hasWebDisplay: session.desktop != nil)
+                    hasWebDisplay: session.desktop != nil || session.computer.kind == .localMac)
             })
             response.capabilities = ComputerCapabilities()
             return response
         }
-        guard let session = store.sessions.first(where: { $0.id == request.computerID }), session.computer.kind == .container else {
+        guard let session = store.sessions.first(where: { $0.id == request.computerID }),
+              session.computer.kind == .container || session.computer.kind == .localMac else {
             throw ComputerBridgeError("This computer no longer exists or is not supported by this provider version.")
         }
+        if session.computer.kind == .localMac { return try await handleLocal(request, session: session, store: store, owner: owner) }
         if request.operation == .revoke {
             let ids = terminals.filter { $0.value.owner == owner && $0.value.computerID == session.id }.map(\.key)
             for id in ids { await terminals.removeValue(forKey: id)?.close() }
@@ -162,6 +170,79 @@ import WebKit
         default: throw ComputerBridgeError("Unsupported computer operation.")
         }
         return .init()
+    }
+    private func handleLocal(_ request: ComputerRequest, session: ComputerSession, store: ComputerStore, owner: String) async throws -> ComputerResponse {
+        localTerminals = localTerminals.filter { _, value in
+            store.sessions.contains { $0.id == value.computer && $0.localMac === value.runtime && $0.phase == .running }
+        }
+        if request.operation == .revoke {
+            for (id, terminal) in localTerminals where terminal.owner == owner && terminal.computer == session.id {
+                localTerminals.removeValue(forKey: id)
+                var close = LocalMacRequest(.terminalClose); close.terminalID = id
+                _ = try? await terminal.runtime.call(close)
+            }
+            return .init()
+        }
+        if request.operation == .start {
+            if session.phase.canStart { await store.start(session) }
+            guard session.phase == .running else { throw ComputerBridgeError(session.phase.startFailureDescription) }
+            return .init()
+        }
+        guard session.phase == .running, let runtime = session.localMac else { throw ComputerBridgeError("Start this Local Mac in Noodle Computer.") }
+        func terminal(_ id: UUID?) throws -> UUID {
+            guard let id, let value = localTerminals[id], value.owner == owner, value.computer == session.id, value.runtime === runtime else {
+                throw ComputerBridgeError("Terminal session is unavailable or belongs to another agent.")
+            }
+            return id
+        }
+        if request.operation.isFileTransfer {
+            guard let id = request.transferID, let path = request.path else { throw ComputerBridgeError("Missing broker file-transfer reference.") }
+            let staging = try ComputerTransferFiles.staging(root: transferRoot, id: id, create: false)
+            var reply = ComputerResponse(); reply.path = path
+            if request.operation == .fileUpload {
+                let fd = try ComputerTransferFiles.openSource(staging); Darwin.close(fd)
+                reply.byteCount = try await runtime.upload(staging, to: path)
+            } else { reply.byteCount = try await runtime.download(path, to: staging) }
+            return reply
+        }
+        if request.operation == .terminalOpen {
+            guard localTerminals.count < 64 else { throw ComputerBridgeError("Close an unused terminal first.") }
+            let reply = try await runtime.call(.init(.terminalOpen))
+            guard let id = reply.terminalID, session.localMac === runtime, session.phase == .running else { throw ComputerBridgeError("The computer stopped while opening its terminal.") }
+            localTerminals[id] = (session.id, owner, runtime)
+            return .init(terminalID: id, offset: 0, exited: false)
+        }
+        if request.operation == .display { throw ComputerBridgeError("Open this computer’s reference file in Noodle Computer to use its native desktop.") }
+        if request.operation == .preview {
+            if let id = request.terminalID { _ = try terminal(id) }
+            let view = request.view ?? (request.terminalID == nil ? "web" : "terminal")
+            var reply = ComputerResponse(); reply.computerID = session.id; reply.view = view
+            if view == "web" {
+                let frame = try await runtime.call(.init(.screenshot))
+                reply.previewImage = frame.data
+            } else {
+                let id = try ComputerPresentation.terminal(explicit: request.terminalID,
+                    active: localTerminals.filter { $0.value.owner == owner && $0.value.computer == session.id }.map(\.key))
+                var read = LocalMacRequest(.terminalRead); read.terminalID = id; read.offset = 0
+                let result = try await runtime.call(read)
+                reply.terminalID = id; reply.data = result.data; reply.offset = result.offset; reply.exited = result.exited
+            }
+            return reply
+        }
+        let id = try terminal(request.terminalID)
+        let operation: LocalMacOperation
+        switch request.operation {
+        case .terminalRead: operation = .terminalRead
+        case .terminalWrite: operation = .terminalWrite
+        case .terminalResize: operation = .terminalResize
+        case .terminalClose: operation = .terminalClose
+        default: throw ComputerBridgeError("Unsupported Local Mac operation.")
+        }
+        var command = LocalMacRequest(operation); command.terminalID = id; command.offset = request.offset
+        command.data = request.data; command.width = request.columns; command.height = request.rows
+        let result = try await runtime.call(command)
+        if operation == .terminalClose { localTerminals.removeValue(forKey: id) }
+        return .init(terminalID: id, data: result.data, offset: result.offset, exited: result.exited)
     }
 }
 

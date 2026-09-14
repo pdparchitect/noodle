@@ -60,6 +60,7 @@ Run from the repository root:
 
 ```sh
 swift test --disable-sandbox --package-path Computer --scratch-path .build/computer
+swift test --disable-sandbox --package-path Computer/LocalMac --scratch-path .build/localmac
 swift test --disable-sandbox --package-path Computer/Bridge
 swift test --disable-sandbox
 swift Computer/Tests/ReleaseWorkflowTests.swift "$PWD"
@@ -72,5 +73,34 @@ For isolated updater UI checks, build with `NOODLE_COMPUTER_TEST_BUILD=1` and
 `NOODLE_COMPUTER_TEST_UPDATES=1`. The latter is rejected for production bundles.
 Check controls without installing updates or restarting the user's computers.
 Local checks do not replace CI notarization and distribution checks.
+
+## Local Mac validation
+
+The creation menu has separate entries for New Container, New from Container
+Image, and New Local Mac. Local Mac uses the same appearance and automatic-start
+preferences, without image, CPU, memory-allocation or virtual-disk controls.
+
+Local Mac's account-free boundary, file and update-recovery tests are part of the
+required Computer CI job. A signed build must also pass the helper identity,
+layout and entitlement checks in `verify-computer-release.sh`.
+
+For a native creation-form preview without creating a computer or account, build
+with `NOODLE_COMPUTER_TEST_BUILD=1` and run the test app with
+`--localmac-creation-preview`. It uses a temporary empty library, renders the form,
+prints its PNG path and exits; it never presses Create or registers the service.
+
+Before distributing the first Local Mac release, validate the signed candidate
+in the retained account: permissions for capture/input and Documents, human
+desktop/terminal/files, assigned-agent terminal and transfers, native preview
+opening, quit/reconnect, helper failure, sleep/wake, reboot, and a real signed
+old-to-new app update. Check that account identity, files and grants survive and
+the main desktop remains unaffected. A prototype service lacking the update
+handshake needs one normal Mac restart on its first upgrade.
+
+Keep one account for development and upgrades. Use a separate test machine for
+fresh-account setup, deletion and alternate display arrangements when available.
+Passing unit tests does not establish compatibility with an untested macOS build;
+the background login API is private. Record actual OS and display configurations
+and results in `LocalMac/README.md`; do not claim those live checks from a build.
 
 [Computer](README.md)

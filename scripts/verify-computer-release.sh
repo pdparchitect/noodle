@@ -17,3 +17,11 @@ for kind in Preview Thumbnail; do
     codesign -d --entitlements :- "$extension" > "$entitlements" 2>/dev/null
     swift "$project_root/Computer/Tests/VerifyPreviewExtension.swift" "$extension/Contents/Info.plist" "$entitlements" "$info" "$kind"
 done
+service_path="${app:A}/Contents/Helpers/LocalMacSetup.app/Contents/Library/LaunchServices/LocalMacService"
+"$service_path" --check-layout
+(cd /; exec -a Contents/Library/LaunchServices/LocalMacService "$service_path" --check-layout)
+for helper in "$app/Contents/Helpers/LocalMacSetup.app/Contents/Library/LaunchServices/LocalMacService" "$app/Contents/Helpers/LocalMacSetup.app" "$app/Contents/Helpers/LocalMacDesktop.app"; do
+    codesign --verify --strict "$helper"
+    codesign -d --entitlements :- "$helper" > "$entitlements" 2>/dev/null
+    swift "$project_root/Computer/Tests/VerifyLocalMacHelper.swift" "$helper" "$entitlements"
+done

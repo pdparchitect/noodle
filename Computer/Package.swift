@@ -12,6 +12,7 @@ let package = Package(
         .package(path: "../Shared/Wallpaper"),
         .package(path: "Bridge"),
         .package(path: "Presentation"),
+        .package(path: "LocalMac"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
         .package(url: "https://github.com/apple/containerization.git", exact: "0.43.0"),
         .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", exact: "1.20.0")
@@ -24,6 +25,7 @@ let package = Package(
             .product(name: "NoodleWallpaper", package: "Wallpaper"),
             .product(name: "Sparkle", package: "Sparkle"),
             .product(name: "ComputerBridge", package: "Bridge"),
+            .product(name: "LocalMacCore", package: "LocalMac"),
             .product(name: "SwiftTerm", package: "SwiftTerm"),
             .product(name: "Containerization", package: "containerization"),
             .product(name: "ContainerizationEXT4", package: "containerization"),
