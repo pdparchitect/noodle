@@ -178,9 +178,11 @@ struct VoiceMessagePlayer: View {
                 GeometryReader { geometry in
                     VoiceWaveform(samples: voice.waveform, progress: playback.position / max(voice.duration, 1))
                         .contentShape(Rectangle())
-                        .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-                            playback.seek(value.location.x / max(geometry.size.width, 1))
-                        })
+                        // Seeking must wait for a click so dragging anywhere
+                        // on the waveform can export the attachment instead.
+                        .onTapGesture { location in
+                            playback.seek(location.x / max(geometry.size.width, 1))
+                        }
                 }
                 .frame(height: 28)
                 .accessibilityElement()
@@ -197,6 +199,7 @@ struct VoiceMessagePlayer: View {
         .padding(.horizontal, 12).padding(.vertical, 7)
         .frame(width: 270)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .contentShape(Rectangle())
         .onDisappear { playback.stop() }
         .onChange(of: url) { _, _ in playback.resetRecording() }
         .onChange(of: shouldPlay) { _, visible in if !visible { playback.stop() } }

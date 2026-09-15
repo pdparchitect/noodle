@@ -255,7 +255,7 @@ struct MessageBubble: View {
             backgroundTargetName: conversation?.displayName ?? "this conversation",
             iconTargetName: iconAgent?.displayName,
             useAsIcon: attachment.flatMap { item in
-                iconAgent.map { _ in { Task { await store.useAttachmentAsIcon(item) } } }
+                iconAgent.map { _ in { () -> Void in Task { await store.useAttachmentAsIcon(item) } } }
             },
             showTranscript: attachment.flatMap { item in
                 item.voice == nil ? nil : { transcriptAttachment = item }

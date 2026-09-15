@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Drag voice-message attachments from the entire control, including the waveform and padding, while keeping click-to-seek and play/pause available.
+
 ## [0.16.0] - 2026-09-15
 
 ### Added
