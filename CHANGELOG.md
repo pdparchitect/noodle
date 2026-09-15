@@ -19,12 +19,12 @@ All notable changes to Noodle are documented here, following
 - Use “Meet your AI team.” as the animated website headline.
 - Update the animated landing page display and static fallback with the supplied Noodle Launch screenshot.
 - Improve screen clarity with a closer crop of the app window, filter-free illumination, and no reflection overlay once fully open.
+- Remove the unused 3D comparison, model archive, and rendering library after preserving the experiment in a Git checkpoint; keep the CSS animation and both still alternatives.
 
 ### Added
 
 - Drop images and videos from Finder or a browser directly onto the conversation background preview, including direct media links, using the same importer and drop target as Computer and Applet.
 - Show a bot’s live activity in a floating log window from its context menu, with recent in-memory history, selectable output, and context-menu commands to copy, clear, and follow the log.
-- Add a synchronized side-by-side comparison of the CSS MacBook and the supplied 3D model, keeping the lightweight landing pages independent of the model assets.
 - Add a separate dark website concept with Noodle displayed on a MacBook, preserving the existing light landing page.
 - Add a scroll-controlled MacBook reveal that turns from a closed lid to an open, gradually illuminated Noodle screen, with responsive 3D perspective and reduced-motion support; keep both still website versions.
 
