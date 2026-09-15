@@ -17,6 +17,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Disable Writing Tools in the message composer to suppress the floating Siri control on macOS 27.
 - Restore bot avatars in the composer @ menu on macOS 27.
 
 ## [0.16.1] - 2026-09-15

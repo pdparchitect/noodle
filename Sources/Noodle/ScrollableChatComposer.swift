@@ -155,6 +155,8 @@ struct ScrollableChatComposer: NSViewRepresentable {
         verticalScrollElasticity = .automatic
         editor.isRichText = false
         editor.importsGraphics = false
+        // Keep the system's floating Siri/Writing Tools control off the composer.
+        editor.writingToolsBehavior = .none
         editor.allowsUndo = true
         editor.drawsBackground = false
         editor.font = composerFont
