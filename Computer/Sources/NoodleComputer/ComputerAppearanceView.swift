@@ -237,6 +237,7 @@ struct ComputerAppearanceSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .padding(16)
             }.frame(height: 150).clipShape(RoundedRectangle(cornerRadius: 16))
+            .backgroundDropTarget(isBusy: $busy, failure: $failure, onLoad: useBackground)
             HStack(spacing: 12) {
                 choice(nil)
                 ForEach(ConversationBackgroundPreset.allCases, id: \.self) { choice($0.rawValue) }

@@ -45,6 +45,7 @@ struct AppletBackgroundSheet: View {
             ConversationBackgroundView(background: selected,
                 imageURL: preparedFile?.url ?? (selected.imageFilename == nil ? nil : store.imageURL))
                 .frame(height: 210).clipShape(RoundedRectangle(cornerRadius: 16))
+                .backgroundDropTarget(isBusy: $busy, failure: $failure, onLoad: useBackground)
             HStack(spacing: 12) {
                 choice("Default", background: ConversationBackground())
                 ForEach(ConversationBackgroundPreset.allCases, id: \.self) { preset in

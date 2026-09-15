@@ -37,11 +37,11 @@ final class ComputerBackgroundTests: XCTestCase {
         XCTAssertNotNil(BackgroundMedia.image(data: try XCTUnwrap(decoded.appearance?.backgroundImage)))
     }
 
-    func testMultiFrameHEICCommitReloadReplaceAndCleanup() async throws {
+    func testDroppedMultiFrameHEICCommitReloadReplaceAndCleanup() async throws {
         let url = root.appendingPathComponent("dynamic.heic")
         try imageFixture(url, type: .heic, count: 3)
         let original = try Data(contentsOf: url)
-        var file: PreparedBackgroundFile? = try await PreparedBackgroundFile.prepare(url)
+        var file: PreparedBackgroundFile? = try await BackgroundDrop.load(NSItemProvider(object: url as NSURL))
         let temporary = try XCTUnwrap(file?.url)
         var computer = try commit(file)
         XCTAssertNil(computer.appearance?.backgroundFile)
@@ -65,7 +65,7 @@ final class ComputerBackgroundTests: XCTestCase {
         for ext in ["mov", "mp4", "m4v"] {
             let url = root.appendingPathComponent("import.\(ext)")
             try await videoFixture(url, type: ext == "mov" ? .mov : .mp4)
-            let file = try await PreparedBackgroundFile.prepare(url)
+            let file = try await BackgroundDrop.load(NSItemProvider(object: url as NSURL))
             XCTAssertEqual(file.kind, .video)
             var computer = try commit()
             computer.appearance?.backgroundFile = file

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Drop images, videos, and direct web media links onto the background preview using the same importer and drop target as Noodle and Applet.
+
 ## [0.7.1] - 2026-09-15
 
 ### Changed

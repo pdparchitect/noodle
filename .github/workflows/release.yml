@@ -92,6 +92,8 @@ jobs:
         run: zsh Tests/build-sandbox-cli-fixture.sh
       - name: Test adapter delivery and private-session recovery
         run: zsh Tests/message-delivery.sh
+      - name: Test shared wallpaper imports and preview drops
+        run: swift test --disable-sandbox --package-path Shared/Wallpaper --scratch-path .build/wallpaper
       - name: Test Noodle and Computer integration
         id: tests
         env:

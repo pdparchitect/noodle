@@ -10,7 +10,9 @@ let package = Package(
     ],
     targets: [
         .target(name: "NoodleWallpaperCore"),
-        .target(name: "NoodleWallpaper", dependencies: ["NoodleWallpaperCore"])
+        .target(name: "NoodleWallpaper", dependencies: ["NoodleWallpaperCore"]),
+        .testTarget(name: "NoodleWallpaperCoreTests", dependencies: ["NoodleWallpaperCore"]),
+        .testTarget(name: "NoodleWallpaperTests", dependencies: ["NoodleWallpaper"])
     ],
     swiftLanguageModes: [.v5]
 )

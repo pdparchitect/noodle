@@ -19,6 +19,7 @@ struct ConversationBackgroundSheet: View {
     @State private var photoSelection: PhotosPickerItem?
     @State private var busy = false
     @State private var failure: String?
+    @State private var importTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 20) {
@@ -45,15 +46,16 @@ struct ConversationBackgroundSheet: View {
                 .keyboardShortcut(.defaultAction)
             }
             Text(store.title(for: conversation)).foregroundStyle(.secondary)
-            ConversationBackgroundView(background: selected,
-                imageURL: preparedFile?.url ?? store.repository.backgroundImageURL(selected, conversationID: conversation.id), previewImage: image)
-                .overlay {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("Make this space your own.").padding(10).background(.regularMaterial, in: Capsule())
-                        HStack { Spacer(); Text("Looks good!").padding(10).background(.regularMaterial, in: Capsule()) }
-                    }.padding(24)
-                }
-                .frame(height: 210).clipShape(RoundedRectangle(cornerRadius: 16))
+            ZStack {
+                ConversationBackgroundView(background: selected,
+                    imageURL: preparedFile?.url ?? store.repository.backgroundImageURL(selected, conversationID: conversation.id), previewImage: image)
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Make this space your own.").padding(10).background(.regularMaterial, in: Capsule())
+                    HStack { Spacer(); Text("Looks good!").padding(10).background(.regularMaterial, in: Capsule()) }
+                }.padding(24)
+            }
+            .frame(height: 210).clipShape(RoundedRectangle(cornerRadius: 16))
+            .backgroundDropTarget(isBusy: $busy, failure: $failure, onLoad: useFile)
             HStack(spacing: 12) {
                 choice("Default", background: ConversationBackground())
                 ForEach(ConversationBackgroundPreset.allCases, id: \.self) { preset in
@@ -84,20 +86,18 @@ struct ConversationBackgroundSheet: View {
         }
         .padding(24).frame(width: 520)
         .onAppear { original = store.background(for: conversation); selected = original }
-        .onDisappear { preparedFile = nil }
+        .onDisappear { importTask?.cancel(); importTask = nil; preparedFile = nil }
         .interactiveDismissDisabled(busy)
         .fileImporter(isPresented: $choosingImage, allowedContentTypes: BackgroundMedia.allowedContentTypes) { result in
             switch result {
             case .success(let url):
                 busy = true
-                Task {
+                importTask = Task {
                     do {
                         let file = try await Task.detached { try await PreparedBackgroundFile.prepare(url) }.value
-                        preparedFile = file
-                        imageData = nil; image = nil
-                        selected = ConversationBackground(imageFilename: "preview", mediaKind: file.kind)
-                        failure = nil
-                    } catch { failure = error.localizedDescription }
+                        guard !Task.isCancelled else { return }
+                        useFile(file)
+                    } catch { if !Task.isCancelled { failure = error.localizedDescription } }
                     busy = false
                 }
             case .failure(let error): failure = error.localizedDescription
@@ -125,6 +125,13 @@ struct ConversationBackgroundSheet: View {
                 }
             }
         }
+    }
+
+    private func useFile(_ file: PreparedBackgroundFile) {
+        preparedFile = file
+        imageData = nil; image = nil
+        selected = ConversationBackground(imageFilename: "preview", mediaKind: file.kind)
+        failure = nil
     }
 
     private func useImage(_ data: Data) throws {

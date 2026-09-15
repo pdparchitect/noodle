@@ -27,9 +27,12 @@ final class BackgroundTests: XCTestCase {
         XCTAssertTrue(AppletBackgroundStore(root: root).background.isDefault)
     }
 
-    @MainActor func testImportOwnsCopyAndReplacementRemovesOldMedia() async throws {
+    @MainActor func testDroppedImageOwnsCopyAndReplacementRemovesOldMedia() async throws {
         let store = AppletBackgroundStore(root: root)
-        var file: PreparedBackgroundFile? = try imageFixture()
+        var source: PreparedBackgroundFile? = try imageFixture()
+        let provider = NSItemProvider(object: try XCTUnwrap(source?.url) as NSURL)
+        var file: PreparedBackgroundFile? = try await BackgroundDrop.load(provider)
+        source = nil
         let temporary = try XCTUnwrap(file?.url)
         let expected = try Data(contentsOf: temporary)
         try await store.apply(ConversationBackground(), file: file)

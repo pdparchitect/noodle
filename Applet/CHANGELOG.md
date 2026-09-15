@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Drop images, videos, and direct web media links onto the library background preview using the same importer and drop target as Noodle and Computer.
+
 ## [0.2.0] - 2026-09-14
 
 ### Fixed
