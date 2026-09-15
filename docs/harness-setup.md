@@ -99,4 +99,15 @@ run the live Apple tests. Set `NOODLE_TEST_MLX_MODEL` to an existing model folde
 to run the sandboxed local-model test. `NOODLE_APPLE_TEST_HELPER` selects a bundled
 helper for testing its packaged resources. These tests use disposable bot storage.
 
+CI keeps the normal suites on `macos-26` and probes `macos-latest` for optional
+macOS 27 harness tests. `scripts/detect-apple27.py` checks the OS, Apple Silicon,
+and an installed SDK/compiler with full Xcode's XCTest support. When prerequisites
+are missing, the job summary reports a skip before any model build or Metal
+download. When they are present, CI builds the isolated helper and Metal shaders,
+asserts that local-model support was compiled in, and runs the regression suite.
+Build or test failures block Noodle release preparation; missing prerequisites do
+not. Live inference remains opt-in because hosted runners need not have Apple
+Intelligence enabled or model weights installed. This optional test job does not
+change the SDK used to package releases.
+
 [Documentation](README.md)

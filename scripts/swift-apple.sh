@@ -55,7 +55,10 @@ if [[ "$noodle_command" == package ]]; then
 fi
 # Swift Build currently chooses the selected Xcode SDK despite --sdk. The
 # native engine honors this mixed-installation override and XCTest search paths.
-noodle_developer="$(xcode-select -p)"
+noodle_developer="${DEVELOPER_DIR:-$(xcode-select -p)}"
+if [[ "$noodle_developer" == *.app ]]; then
+    noodle_developer="$noodle_developer/Contents/Developer"
+fi
 noodle_plugins="$noodle_developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 noodle_plugin_server="$noodle_developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-plugin-server"
 noodle_plugin_args=()

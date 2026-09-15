@@ -55,6 +55,7 @@ class WorkflowTests(unittest.TestCase):
             'github.event_name': 'push', 'github.ref': 'refs/heads/main',
             'needs.versions.outputs.any': 'true', 'needs.checks.result': 'success',
             'needs.workflow-lint.result': 'success',
+            'needs.test-noodle-apple27.result': 'success',
             **{f'needs.test-{p}.result': 'success' for p in ['noodle', 'computer', 'applet', 'bridge']},
             **{f'needs.versions.outputs.{p}': 'true' for p in ['noodle', 'computer', 'applet', 'images']},
             **{f'needs.prepare-{p}.result': 'success' for p in ['noodle', 'computer', 'applet', 'images']},
@@ -141,8 +142,26 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(steps[suite]['env']['NOODLE_TEST_CLI_APPLICATION'],
                          '${{ github.workspace }}/.build/Sandbox CLI Tests.app')
 
+    def test_apple27_uses_stable_runner_and_only_skips_missing_prerequisites(self):
+        job = self.jobs['test-noodle-apple27']
+        self.assertEqual(job['runs-on'], 'macos-latest')
+        self.assertNotIn('if', job)
+        probe = next(step for step in job['steps'] if step.get('id') == 'apple27')
+        self.assertIn('scripts/detect-apple27.py', probe['run'])
+        tests = next(step for step in job['steps'] if 'swift-apple.sh test' in step.get('run', ''))
+        for available in ['false', 'true']:
+            self.assertEqual(condition(tests['if'], {'steps.apple27.outputs.available': available}), available == 'true')
+        self.assertFalse(job.get('continue-on-error', False))
+        self.assertFalse(tests.get('continue-on-error', False))
+        self.assertIn('set -euo pipefail', tests['run'])
+        self.assertIn('localModelsSupported', tests['run'])
+        self.assertIn('build-mlx-metal.sh', tests['run'])
+        self.assertEqual(tests['env']['NOODLE_APPLE_HARNESS_ONLY'], '1')
+        self.assertNotIn('NOODLE_TEST_APPLE_MODEL', tests['env'])
+        self.assertIn('test-noodle-apple27', self.jobs['prepare-noodle']['needs'])
+
     def test_selected_test_failures_block_tagging(self):
-        for product in ['noodle', 'computer', 'applet', 'bridge']:
+        for product in ['noodle', 'computer', 'applet', 'bridge', 'noodle-apple27']:
             for result in ['failure', 'cancelled', 'skipped']:
                 self.assertFalse(condition(self.jobs['tag']['if'], {
                     **self.base(), f'needs.test-{product}.result': result}))
@@ -255,7 +274,7 @@ class WorkflowTests(unittest.TestCase):
             child = workflow(name)
             self.assertNotIn('push', child.get('on', child.get('true')))
         self.assertEqual(self.jobs['tag']['needs'], [
-            'versions', 'workflow-lint', 'checks', 'test-noodle', 'test-computer', 'test-applet', 'test-bridge',
+            'versions', 'workflow-lint', 'checks', 'test-noodle', 'test-noodle-apple27', 'test-computer', 'test-applet', 'test-bridge',
             'prepare-noodle', 'prepare-computer', 'prepare-applet', 'prepare-images'])
 
     def test_documentation_only_changes_skip_app_ci_but_release_inputs_do_not(self):

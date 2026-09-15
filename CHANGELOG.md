@@ -14,10 +14,12 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Make the Local Models dialog narrower than Settings, with one short import hint, a compact model list, and a separate action footer.
 - Encourage Git checkpoints in the applet skill, with the repository root above the `.noodlet` folder to keep Git metadata out of imported packages.
 
 ### Fixed
 
+- Run the macOS 27 Apple harness CI checks only when the runner has a compatible OS and SDK, with an explicit skip reason on older runners.
 - Fit the Tools settings list to its content, removing excess space below connection buttons while keeping long lists scrollable.
 - Keep tool sign-in progress and Cancel in the action row, with the sign-in message in the existing status line to prevent layout shifts.
 - Preserve the selected SDK throughout local builds, fixing Settings resizing and legacy macOS appearance after rebuilds. Reject app packages with mismatched SDK metadata.

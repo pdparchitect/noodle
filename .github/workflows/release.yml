@@ -113,6 +113,39 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  test-noodle-apple27:
+    needs: [versions, checks]
+    # Use an established label; run the new suite only when this stable image
+    # has the required OS and an installed SDK. Never queue on a preview label.
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - name: Detect macOS 27 test support
+        id: apple27
+        run: python3 scripts/detect-apple27.py
+      - name: Build and test the macOS 27 harness
+        if: steps.apple27.outputs.available == 'true'
+        shell: zsh {0}
+        env:
+          DEVELOPER_DIR: ${{ steps.apple27.outputs.developer_dir }}
+          NOODLE_SWIFT: ${{ steps.apple27.outputs.swift }}
+          NOODLE_MACOS_SDK: ${{ steps.apple27.outputs.sdk }}
+          NOODLE_APPLE_HARNESS_ONLY: '1'
+        run: |
+          set -euo pipefail
+          xcodebuild -downloadComponent MetalToolchain
+          zsh scripts/swift-apple.sh build --disable-sandbox --scratch-path .build/apple27
+          bin_path="$(zsh scripts/swift-apple.sh build --disable-sandbox --scratch-path .build/apple27 --show-bin-path)"
+          zsh scripts/build-mlx-metal.sh "$bin_path"
+          "$bin_path/NoodleAppleAgent" --inspect > .build/apple27/inspection.json
+          python3 -c 'import json; data = json.load(open(".build/apple27/inspection.json")); assert data.get("localModelsSupported") is True, "macOS 27 support was compiled out"'
+          export NOODLE_APPLE_TEST_HELPER="$bin_path/NoodleAppleAgent"
+          zsh scripts/swift-apple.sh test --disable-sandbox --scratch-path .build/apple27 --filter 'AppleLocalModelsTests|AppleModelBackendTests|AppleToolsTests|AppleConversationSessionTests|AppleHistoryReaderTests|AppleSandboxTests|Apple27LiveTests'
+          print 'macOS 27 harness build, Metal shaders, and regression tests passed. Live inference remains an explicit local opt-in.' >> "$GITHUB_STEP_SUMMARY"
+
   test-computer:
     needs: [versions, checks]
     runs-on: macos-26
@@ -147,7 +180,7 @@ jobs:
         run: swift test --disable-sandbox --package-path Computer/Bridge
 
   prepare-noodle:
-    needs: [versions, checks, test-noodle, test-bridge]
+    needs: [versions, checks, test-noodle, test-noodle-apple27, test-bridge]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.noodle == 'true'
     uses: ./.github/workflows/prepare-noodle-release.yml
     secrets: inherit
@@ -170,7 +203,7 @@ jobs:
     uses: ./.github/workflows/computer-images.yml
 
   tag:
-    needs: [versions, workflow-lint, checks, test-noodle, test-computer, test-applet, test-bridge, prepare-noodle, prepare-computer, prepare-applet, prepare-images]
+    needs: [versions, workflow-lint, checks, test-noodle, test-noodle-apple27, test-computer, test-applet, test-bridge, prepare-noodle, prepare-computer, prepare-applet, prepare-images]
     # Explicitly accept unselected/skipped products, never a failed/cancelled build.
     if: >-
       always() && !cancelled() && github.event_name != 'pull_request' &&
@@ -181,6 +214,7 @@ jobs:
        (needs.test-noodle.result == 'success' && needs.test-bridge.result == 'success')) &&
       (needs.versions.outputs.computer != 'true' || needs.test-computer.result == 'success') &&
       (needs.versions.outputs.applet != 'true' || needs.test-applet.result == 'success') &&
+      (needs.versions.outputs.noodle != 'true' || needs.test-noodle-apple27.result == 'success') &&
       (needs.versions.outputs.noodle != 'true' || needs.prepare-noodle.result == 'success') &&
       (needs.versions.outputs.computer != 'true' || needs.prepare-computer.result == 'success') &&
       (needs.versions.outputs.applet != 'true' || needs.prepare-applet.result == 'success') &&
