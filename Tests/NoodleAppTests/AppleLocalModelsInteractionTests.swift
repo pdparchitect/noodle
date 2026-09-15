@@ -112,7 +112,40 @@ import NoodleCore
         let unassigned = try await popover(containing: "Model Unassigned")
         XCTAssertTrue(hasControl("No bots use this model.", in: unassigned))
         press(try await control("Remove Model", in: unassigned))
+
+        func confirmation() async throws -> NSView {
+            try await wait { !window.sheets.isEmpty }
+            let content = try XCTUnwrap(window.sheets.first?.contentView)
+            _ = try await control("Remove Model?", in: content)
+            let text = elements(content).flatMap(labels).joined(separator: "\n")
+            XCTAssertTrue(text.contains(model.name), text)
+            XCTAssertEqual(try storage.models(), [model], "The model must remain until removal is confirmed")
+            return content
+        }
+
+        let cancelled = try await confirmation()
+        press(try await control("Cancel", in: cancelled))
+        try await wait { window.sheets.isEmpty }
+        XCTAssertEqual(try storage.models(), [model], "Cancel must keep the model")
+        XCTAssertTrue(try FileManager.default.fileExists(atPath: storage.folder(id: model.id).appendingPathComponent("model.safetensors").path))
+
+        // Recheck assignments when the user confirms, including changes made
+        // while the confirmation is already open.
+        press(try await control("Remove", in: view))
+        let reassigned = try await confirmation()
+        try select(model.id, for: fixture.a)
+        press(try await control("Remove", in: reassigned))
+        try await wait { window.sheets.isEmpty }
+        let usage = try await popover(containing: "Edit Ada")
+        XCTAssertEqual(try storage.models(), [model], "A newly assigned model must not be removed")
+        press(try await control("Close", in: usage))
+        try select("default", for: fixture.a)
+
+        press(try await control("Remove", in: view))
+        let confirmed = try await confirmation()
+        press(try await control("Remove", in: confirmed))
         try await wait { (try? storage.models().isEmpty) == true }
+        try await wait { window.sheets.isEmpty }
         XCTAssertTrue(window.sheets.isEmpty)
         XCTAssertTrue(FileManager.default.fileExists(atPath: source.path), "The original model folder must remain")
     }

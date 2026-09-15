@@ -18,6 +18,7 @@ struct AppleLocalModelsView: View {
     @State private var modelUsageID: String?
     @State private var editingAgent: AgentRecord?
     @State private var returnToModelID: String?
+    @State private var modelPendingRemoval: AppleLocalModel?
     private let checkSupport: @MainActor () async throws -> Bool
 
     init(checkSupport: @escaping @MainActor () async throws -> Bool = {
@@ -75,6 +76,15 @@ struct AppleLocalModelsView: View {
                 .environment(store)
                 .noodleSheetSizing(animated: true)
         }
+        .alert("Remove Model?", isPresented: Binding(
+            get: { modelPendingRemoval != nil },
+            set: { if !$0 { modelPendingRemoval = nil } }
+        ), presenting: modelPendingRemoval) { model in
+            Button("Remove", role: .destructive) { remove(model) }
+            Button("Cancel", role: .cancel) {}.keyboardShortcut(.defaultAction)
+        } message: { model in
+            Text("Noodle’s copy of “\(model.name)” will be deleted. You can download or import it again later.")
+        }
         .task {
             do {
                 models = try storage.models()
@@ -107,7 +117,7 @@ struct AppleLocalModelsView: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 4)
-                    Button("Remove", role: .destructive) { remove(model) }
+                    Button("Remove", role: .destructive) { requestRemoval(model) }
                         .disabled(busy)
                         .help(users.isEmpty ? "Remove Noodle’s copy of this model."
                               : "Used by \(users.map(\.displayName).joined(separator: ", ")).")
@@ -119,7 +129,7 @@ struct AppleLocalModelsView: View {
                                 returnToModelID = model.id
                                 modelUsageID = nil
                                 editingAgent = agent
-                            }, remove: { remove(model) }, close: { modelUsageID = nil })
+                            }, remove: { requestRemoval(model) }, close: { modelUsageID = nil })
                         }
                 }
                 .padding(.vertical, 6)
@@ -245,7 +255,18 @@ struct AppleLocalModelsView: View {
             .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
     }
 
+    private func requestRemoval(_ model: AppleLocalModel) {
+        guard !busy else { return }
+        guard botsUsing(model).isEmpty else {
+            modelUsageID = model.id
+            return
+        }
+        modelUsageID = nil
+        modelPendingRemoval = model
+    }
+
     private func remove(_ model: AppleLocalModel) {
+        modelPendingRemoval = nil
         guard !busy else { return }
         let users = botsUsing(model)
         guard users.isEmpty else {

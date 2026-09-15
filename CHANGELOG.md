@@ -13,6 +13,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Confirm local model removal before deleting its files, and recheck bot assignments when removal is confirmed.
 - Explain local model usage in a popover with direct access to each bot’s Harness settings, an updated assignment list after editing, and removal once no bots use the model.
 - Keep trailing decimal zeros and use monospaced digits in model download progress to reduce label movement.
 - Preserve Apple command results after a later generation fails and when resuming interrupted turns. Reserve space for native tool continuations, finish from existing results when a tool sequence fills the budget, and avoid redundant inbox checks for supplied chat messages.
