@@ -74,12 +74,12 @@ import NoodleCore
         XCTAssertTrue(f.runtime.factory.processes.isEmpty)
     }
 
-    func testImageLayoutsPersistAndDisplayTheirMatchingExplanationAfterReopen() async throws {
+    func testAttachmentLayoutsPersistAndRestoreTheSelectionAfterReopen() async throws {
         let f = try fixture()
         let settings = host(ChatSettingsView(microphoneDevices: { [] }, systemMicrophoneID: { 0 }).defaultAppStorage(f.runtime.defaults))
-        for layout in [ChatImageLayout.stack, .vertical, .wrap] {
+        for layout in [ChatAttachmentLayout.stack, .vertical, .wrap] {
             press(try await control(layout.displayName, in: settings))
-            try await wait { f.runtime.defaults.string(forKey: ChatImageLayout.defaultsKey) == layout.rawValue }
+            try await wait { f.runtime.defaults.string(forKey: ChatAttachmentLayout.defaultsKey) == layout.rawValue }
             let reopened = host(ChatSettingsView(microphoneDevices: { [] }, systemMicrophoneID: { 0 })
                 .defaultAppStorage(try reopenedDefaults(f)))
             _ = try await control(layout.explanation, in: reopened)

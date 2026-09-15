@@ -12,11 +12,6 @@ extension ConversationAttachment {
             || (originalFilename as NSString).pathExtension.lowercased() == "noodlecomputer")
     }
 
-    @MainActor func isInlineImage(at url: URL) -> Bool {
-        annotation == nil && computer == nil && voice == nil &&
-            (mediaType.hasPrefix("image/") || AttachmentThumbnailCache.isImage(url))
-    }
-
     var previewSymbolName: String {
         if annotation != nil { return "text.bubble.fill" }
         if let computer { return computer.computer.symbol }
@@ -152,7 +147,7 @@ struct AttachmentInlinePreview: View {
             }
             Text(note.comment).font(.callout).lineLimit(4)
         }
-        .padding(14).frame(width: 280, alignment: .leading)
+        .padding(14).frame(idealWidth: 280, maxWidth: 280, alignment: .leading)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 13))
         .overlay(RoundedRectangle(cornerRadius: 13).stroke(.orange.opacity(0.2)))
     }
@@ -195,7 +190,7 @@ struct AttachmentInlinePreview: View {
                         .foregroundStyle(.white.opacity(thumbnailUnavailable ? 0.72 : 0.42))
                 }
             }
-            .frame(width: 280, height: 165)
+            .frame(maxWidth: .infinity).frame(height: 165)
             .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
             .accessibilityHidden(true)
 
@@ -220,7 +215,7 @@ struct AttachmentInlinePreview: View {
             .foregroundStyle(.primary)
             .padding(.horizontal, 2)
         }
-        .frame(width: 280)
+        .frame(idealWidth: 280, maxWidth: 280)
     }
 
     @MainActor

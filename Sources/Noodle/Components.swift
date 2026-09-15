@@ -60,7 +60,7 @@ struct ConversationAvatar: View {
 
 struct MessageBubble: View {
     @Environment(NoodleStore.self) private var store
-    @AppStorage(ChatImageLayout.defaultsKey) private var imageLayout = ChatImageLayout.defaultValue.rawValue
+    @AppStorage(ChatAttachmentLayout.defaultsKey) private var attachmentLayout = ChatAttachmentLayout.defaultValue.rawValue
     @State private var inspectedReaction: String?
     @State private var changingReaction = false
     @State private var isVisible = false
@@ -145,24 +145,14 @@ struct MessageBubble: View {
                     MessageLinkPreview(url: linkPreviewURL, shouldLoad: isVisible)
                 }
 
-                ForEach(ImageAttachmentRun.group(attachments, isImage: {
-                    $0.isInlineImage(at: store.attachmentFileURL($0))
-                })) { run in
-                    Group {
-                        if run.isImage {
-                            ImageAttachmentGroup(attachments: run.attachments,
-                                                 mode: ChatImageLayout(rawValue: imageLayout) ?? .defaultValue,
-                                                 alignment: isUser ? .trailing : .leading) { attachment in
-                                attachmentPreview(attachment)
-                            }
-                        } else {
-                            ForEach(run.attachments) { attachment in attachmentPreview(attachment) }
-                        }
+                if !attachments.isEmpty {
+                    AttachmentGroup(attachments: attachments,
+                                    mode: ChatAttachmentLayout(rawValue: attachmentLayout) ?? .defaultValue,
+                                    alignment: isUser ? .trailing : .leading) { attachment in
+                        attachmentPreview(attachment)
                     }
-                    .overlay(alignment: .topTrailing) {
-                        if run.attachments.last?.id == attachments.last?.id { cornerReactions }
-                    }
-                    .padding(.top, hasReactions && run.attachments.last?.id == attachments.last?.id ? 12 : 0)
+                    .overlay(alignment: .topTrailing) { cornerReactions }
+                    .padding(.top, hasReactions ? 12 : 0)
                 }
 
                 if isUser {

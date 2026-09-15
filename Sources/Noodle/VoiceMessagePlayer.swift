@@ -197,7 +197,7 @@ struct VoiceMessagePlayer: View {
             if let error = playback.error { Text(error).font(.caption).foregroundStyle(.red) }
         }
         .padding(.horizontal, 12).padding(.vertical, 7)
-        .frame(width: 270)
+        .frame(idealWidth: 270, maxWidth: 270)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
         .contentShape(Rectangle())
         .onDisappear { playback.stop() }

@@ -18,12 +18,13 @@ struct NoodletAttachmentCard: View {
                 else { Image(systemName: unavailable ? "exclamationmark.link" : "square.grid.2x2")
                     .font(.system(size: 42)).foregroundStyle(.secondary) }
             }
-            .frame(width: 280, height: 150)
+            .frame(maxWidth: .infinity).frame(height: 150)
             Text(title).font(.headline).lineLimit(1)
             Text(unavailable ? "Noodlet unavailable" : "Noodlet · Click to open")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(12)
+        .frame(idealWidth: 304, maxWidth: 304)
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 13))
         .task(id: shouldLoad) {
             guard shouldLoad else { return }

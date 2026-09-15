@@ -1,10 +1,10 @@
 import SwiftUI
 import NoodleCore
 
-enum ChatImageLayout: String, CaseIterable, Identifiable {
+enum ChatAttachmentLayout: String, CaseIterable, Identifiable {
     case wrap, vertical, stack
 
-    static let defaultsKey = "chatImageLayout"
+    static let defaultsKey = "chatAttachmentLayout"
     static let defaultValue = Self.wrap
     var id: String { rawValue }
 
@@ -18,50 +18,35 @@ enum ChatImageLayout: String, CaseIterable, Identifiable {
 
     var explanation: String {
         switch self {
-        case .wrap: return "Fit images side by side and wrap onto new rows as needed."
-        case .vertical: return "Show images one below another, using the original chat layout."
-        case .stack: return "Overlap images while keeping part of each picture visible. Click any picture to preview it."
+        case .wrap: return "Fit attachments side by side and wrap onto new rows as needed."
+        case .vertical: return "Show attachments one below another."
+        case .stack: return "Overlap attachments while keeping part of each one visible."
         }
     }
 }
 
-/// Group only adjacent images within one message, preserving the position of
-/// annotations, documents, voice recordings, and other attachments.
-struct ImageAttachmentRun: Identifiable {
-    let id: UUID
-    let isImage: Bool
-    var attachments: [ConversationAttachment]
-
-    static func group(_ attachments: [ConversationAttachment],
-                      isImage: (ConversationAttachment) -> Bool) -> [Self] {
-        var runs: [Self] = []
-        for attachment in attachments {
-            let image = isImage(attachment)
-            if image, runs.last?.isImage == true {
-                runs[runs.count - 1].attachments.append(attachment)
-            } else {
-                runs.append(Self(id: attachment.id, isImage: image, attachments: [attachment]))
-            }
-        }
-        return runs
-    }
-}
-
-struct ImageAttachmentGroup<Content: View>: View {
+/// Lay out every attachment in a message in its original order.
+struct AttachmentGroup<Content: View>: View {
     let attachments: [ConversationAttachment]
-    let mode: ChatImageLayout
+    let mode: ChatAttachmentLayout
     let alignment: HorizontalAlignment
     @ViewBuilder let content: (ConversationAttachment) -> Content
 
     var body: some View {
         let layout = mode == .vertical
             ? AnyLayout(VStackLayout(alignment: alignment, spacing: 3))
-            : AnyLayout(WrappingImageLayout(alignment: alignment,
-                                           spacing: mode == .stack ? 12 : 8,
-                                           overlapsImages: mode == .stack))
+            : AnyLayout(WrappingAttachmentLayout(alignment: alignment,
+                                                 spacing: mode == .stack ? 12 : 8,
+                                                 overlapsAttachments: mode == .stack))
         layout {
             ForEach(attachments) { attachment in
                 content(attachment)
+                    .background {
+                        if mode == .stack && attachments.count > 1 {
+                            RoundedRectangle(cornerRadius: 13)
+                                .fill(Color(nsColor: .windowBackgroundColor))
+                        }
+                    }
                     .shadow(color: mode == .stack && attachments.count > 1 ? .black.opacity(0.25) : .clear,
                             radius: 3, y: 2)
             }
@@ -71,10 +56,10 @@ struct ImageAttachmentGroup<Content: View>: View {
 
 /// Uses each preview's natural size, so portrait screenshots share a row without
 /// being cropped into square cells. Measurement and placement share one plan.
-struct WrappingImageLayout: Layout {
+struct WrappingAttachmentLayout: Layout {
     var alignment: HorizontalAlignment = .leading
     var spacing: CGFloat = 8
-    var overlapsImages = false
+    var overlapsAttachments = false
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         plan(proposal: proposal, subviews: subviews).size
@@ -88,21 +73,21 @@ struct WrappingImageLayout: Layout {
         }
     }
 
-    private func plan(proposal: ProposedViewSize, subviews: Subviews) -> ImageRowPlan {
-        let width = overlapsImages ? min(220, proposal.width ?? 220) : proposal.width
+    private func plan(proposal: ProposedViewSize, subviews: Subviews) -> AttachmentRowPlan {
+        let width = overlapsAttachments ? min(220, proposal.width ?? 220) : proposal.width
         let sizes = subviews.map {
             $0.sizeThatFits(ProposedViewSize(width: width, height: nil))
         }
-        return ImageRowPlan(sizes: sizes, availableWidth: proposal.width,
-                            spacing: spacing, trailing: alignment == .trailing, overlapsImages: overlapsImages)
+        return AttachmentRowPlan(sizes: sizes, availableWidth: proposal.width,
+                                 spacing: spacing, trailing: alignment == .trailing, overlapsAttachments: overlapsAttachments)
     }
 }
 
-struct ImageRowPlan {
+struct AttachmentRowPlan {
     let size: CGSize
     let frames: [CGRect]
 
-    init(sizes: [CGSize], availableWidth: CGFloat?, spacing: CGFloat, trailing: Bool, overlapsImages: Bool = false) {
+    init(sizes: [CGSize], availableWidth: CGFloat?, spacing: CGFloat, trailing: Bool, overlapsAttachments: Bool = false) {
         let limit = max(0, availableWidth ?? .infinity)
         var rows: [[CGRect]] = []
         var row: [CGRect] = []
@@ -118,11 +103,11 @@ struct ImageRowPlan {
                 rowHeight = 0
             }
             // A substantial side strip and a staggered top edge leave every
-            // image recognizable and directly clickable. Start another row
+            // attachment recognizable and directly clickable. Start another row
             // when needed instead of squeezing the exposed strips away.
-            let stagger = overlapsImages ? CGFloat(row.count) * 12 : 0
+            let stagger = overlapsAttachments ? CGFloat(row.count) * 12 : 0
             row.append(CGRect(origin: CGPoint(x: x, y: y + stagger), size: size))
-            x += overlapsImages ? min(72, size.width * 0.42) : size.width + spacing
+            x += overlapsAttachments ? min(72, size.width * 0.42) : size.width + spacing
             rowHeight = max(rowHeight, stagger + size.height)
         }
         if !row.isEmpty { rows.append(row) }

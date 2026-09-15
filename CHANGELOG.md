@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Replace Image layout with Attachment layout for all message attachments, including annotations, documents, and voice messages, with Wrap as the default and Vertical and Stack options.
 - Give every Apple harness turn `bash`, `read`, and `write`, with shared CLI access for Messenger and assigned tools. Always resume and manage the saved session; remove the dedicated history tool and request classifier that could fail before replying.
 - Simplify Apple instructions around performing requests with current tools, keeping new requests separate from summaries of earlier conversation.
 
