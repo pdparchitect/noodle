@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Simplify the landing page to the MacBook hero and Download button, remove the feature galleries, and use a longer, smoother fade from black to #1d1d1f.
 - Replace the website experiments with one landing page, native system typography, a centered MacBook preview, and dark and light feature galleries with distinct abstract placeholder artwork, including floating conversation bubbles.
 - Give activity windows the preview panel’s rounded frame and single close control, with edge resizing and no maximise, minimise, or full-screen actions. Keep compact logs, context-menu commands, and plain-dash titles.
 - Refine the lightweight website using Apple product-page references, with natural system-font spacing, a simpler header, a blue pill download button, and a clean app preview.
