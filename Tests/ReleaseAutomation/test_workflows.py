@@ -314,8 +314,8 @@ class WorkflowTests(unittest.TestCase):
         docs = ['README.md', 'AGENTS.md', '.github/pull_request_template.md',
                 'Computer/README.md', 'Computer/Bridge/README.md',
                 'Computer/Images/README.md', 'Applet/RELEASING.md',
-                'docs/releases.md', 'docs/noodle-architecture.svg',
-                'docs/noodle-architecture.excalidraw.json', 'website/index.html',
+                'docs/releases.md', 'docs/example-diagram.svg',
+                'docs/example-diagram.json', 'website/index.html',
                 'website/assets/noodle.png']
         required = ['VERSION', 'Computer/VERSION', 'Applet/VERSION', 'Computer/Images/VERSION',
                     'CHANGELOG.md', 'Computer/CHANGELOG.md', 'Applet/CHANGELOG.md',
