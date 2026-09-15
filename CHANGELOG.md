@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Restore bot avatars in the composer @ menu on macOS 27.
+
 ## [0.16.1] - 2026-09-15
 
 ### Changed
