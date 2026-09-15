@@ -1,5 +1,11 @@
 # Project instructions
 
+## Apple history utilities
+
+When changing Apple context management or upgrading the Apple SDK/toolchain, read
+[`Sources/NoodleAppleRuntime/FoundationModelsUtilities/AGENTS.md`](Sources/NoodleAppleRuntime/FoundationModelsUtilities/AGENTS.md)
+and check the copied Apple utilities for upstream updates.
+
 ## Message and event documentation
 
 Keep message/event guidance in `Sources/NoodleCore/MessengerDocumentation.swift`. Runtime enums, group notices, and CLI dispatch use the catalogue; new cases must include handling guidance, recipients, and relevant payload fields or command usage. Agent runtime instructions, the Messenger skill, and CLI help are generated from this source.

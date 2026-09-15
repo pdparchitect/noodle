@@ -112,9 +112,20 @@ recent user requests, followed by local category classification. Assistant text
 cannot supply that reference. History retrieval remains available in every session;
 recall requests use the original messages rather than relying on model paraphrases.
 Both modes retain the bot's existing access policy.
-Restored native history includes up to eight complete turns within a 6,000-byte
-budget shared with the current prompt, retaining each turn's tool calls and
-results together. Older chat remains available
+On macOS 27, the native profile uses Apple's Foundation Models Utilities to
+summarize history beyond eight entries and remove completed tool exchanges from
+generation input. Successful summaries become part of the saved native session;
+they are instructed to preserve completed actions and retain the current request
+verbatim. Summarization uses the
+selected model without tools, with a 256-token response limit. If its input is
+too large, the fallback retains recent whole turns, so saved history stays bounded.
+Every tool exchange for the current prompt stays available. The executor's token
+budget trims whole older turns before each generation, including tool continuations.
+It also bounds large tool results and images and reserves room for the response.
+The macOS 26 fallback retains up to eight complete turns within a 6,000-byte budget
+shared with the current prompt, keeping each turn's calls and results together.
+The utilities' [source version, licence, and compatibility adaptations](../Support/ThirdParty/FoundationModelsUtilities/README.md)
+are recorded in the repository. Older chat remains available
 as compact speaker-and-message text through the conversation history tool, which
 can exclude assistant replies when retrieving user-provided facts.
 Chat prompts include up to 2,048 bytes of recent user messages as quoted reference,

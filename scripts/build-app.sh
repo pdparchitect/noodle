@@ -79,6 +79,7 @@ intent_const_values_list="$build_root/Noodle.AppIntentConstValues"
 
 rm -rf "$app"
 mkdir -p "$contents/MacOS" "$contents/Resources" "$contents/Helpers"
+ditto "$project_root/Support/ThirdParty" "$contents/Resources/ThirdParty"
 sparkle_source="$app_scratch/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 sparkle="$contents/Frameworks/Sparkle.framework"
 ditto "$sparkle_source" "$sparkle"

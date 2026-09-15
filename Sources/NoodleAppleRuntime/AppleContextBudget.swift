@@ -100,7 +100,7 @@ struct AppleContextBudget: Sendable {
         }
     }
 
-    private static func removeOldestTurn(_ entries: inout [Transcript.Entry]) -> Bool {
+    static func removeOldestTurn(_ entries: inout [Transcript.Entry]) -> Bool {
         let prompts = entries.indices.filter { if case .prompt = entries[$0] { return true }; return false }
         guard prompts.count > 1 else { return false }
         entries.removeSubrange(prompts[0]..<prompts[1])

@@ -41,9 +41,9 @@ struct AppleConversationSession: Codable {
         return transcript
     }
 
-    /// Keep complete turns, including their tool calls/results. Never start a
-    /// restored transcript in the middle of a tool exchange. Instructions and
-    /// tool definitions are supplied afresh by the runtime.
+    /// macOS 26 fallback: keep complete turns, including their tool calls/results.
+    /// Never restore the middle of a tool exchange. The runtime supplies fresh
+    /// instructions and tool definitions.
     func recentEntries(reservingPromptBytes: Int = 0) -> [Transcript.Entry] {
         let budget = max(0, 6_000 - reservingPromptBytes)
         var turns: [[Transcript.Entry]] = []

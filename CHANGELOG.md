@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Use Apple's Foundation Models Utilities history helpers on macOS 27 to summarize Apple Intelligence workspace conversations and trim completed tool exchanges, while retaining token limits and macOS 26 support.
 - Use a plus icon for the toolbar's Create menu.
 - Rename the Spotlight and Shortcuts action to Ask Agent, with an Agent or Group picker, a Message field, and Ask Bot search keywords and invocation phrases.
 

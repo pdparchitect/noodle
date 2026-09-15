@@ -27,6 +27,23 @@ final class Apple27LiveTests: XCTestCase {
         XCTAssertFalse(response.content.isEmpty)
     }
 
+    func testHistorySummaryRetainsUserFact() async throws {
+        guard #available(macOS 27, *) else { return }
+        let backend = try await backend()
+        let history = (0..<4).flatMap { index in
+            [Transcript.Entry.prompt(.init(segments: [.text(.init(content: index == 0
+                ? "The project label is saffron." : "Keep the same project label for step \(index)."))])),
+             .response(.init(segments: [.text(.init(content: "Recorded."))]))]
+        }
+        let session = backend.session(instructions: "Answer the user's current question using their stated facts. Be concise.", entries: history)
+        let response = try await session.respond(to: "What is the project label? Answer in one word.",
+            options: .init(samplingMode: .greedy, maximumResponseTokens: 32))
+        XCTAssertTrue(response.content.lowercased().contains("saffron"), response.content)
+        XCTAssertEqual(session.transcript.filter { if case .prompt = $0 { return true }; return false }.count, 1,
+                       "The native profile should have replaced the old turns with a summary")
+        XCTAssertTrue(session.transcript.map(\.description).joined(separator: "\n").contains("Summary of the conversation so far:"))
+    }
+
     func testImagePromptRecognizesSyntheticRedSquare() async throws {
         guard #available(macOS 27, *) else { return }
         let backend = try await backend()
