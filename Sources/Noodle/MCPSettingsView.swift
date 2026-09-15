@@ -6,6 +6,7 @@ struct MCPSettingsView: View {
     @State private var showingAdd = false
     @State private var editing: MCPConnectionRecord?
     @State private var removing: MCPConnectionRecord?
+    @State private var connectionsHeight: CGFloat = 80
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
@@ -20,16 +21,13 @@ struct MCPSettingsView: View {
                             MCPConnectionIcon(connection: connection, size: 32)
                             VStack(alignment: .leading, spacing: 5) {
                                 HStack {
-                                    Text(connection.name).font(.headline)
+                                    Text(connection.name).font(.headline).lineLimit(1)
                                     Spacer(minLength: 4)
                                     connectionStatus(connection)
                                 }
                                 Text(connection.endpoint.absoluteString).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                 if !connection.description.isEmpty {
                                     Text(connection.description).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                                }
-                                if store.mcp.signingIn == connection.id {
-                                    Text(store.mcp.signInStage).font(.caption).foregroundStyle(.secondary)
                                 }
                                 if let error = store.mcp.errors[connection.id] {
                                     Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
@@ -39,14 +37,26 @@ struct MCPSettingsView: View {
                                         .disabled(store.mcp.signingIn != nil)
                                     Button("Edit…") { editing = connection }
                                     Button("Remove…") { removing = connection }
+                                    if store.mcp.signingIn == connection.id {
+                                        Spacer(minLength: 4)
+                                        ProgressView().controlSize(.mini)
+                                            .frame(width: 12, height: 12)
+                                            .accessibilityLabel("Signing in")
+                                        Button("Cancel") { store.mcp.cancelSignIn() }
+                                    }
                                 }.controlSize(.small).padding(.top, 3)
                             }
                         }.padding(14)
                         if connection.id != store.mcp.registry.connections.last?.id { Divider().padding(.leading, 58) }
                     }
                 }
+                .onGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.size.height
+                } action: { height in
+                    connectionsHeight = height
+                }
             }
-            .frame(height: min(430, max(80, CGFloat(store.mcp.registry.connections.count) * 130)))
+            .frame(height: min(430, connectionsHeight))
             .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
             .padding(20)
             Divider()
@@ -76,10 +86,9 @@ struct MCPSettingsView: View {
 
     @ViewBuilder private func connectionStatus(_ connection: MCPConnectionRecord) -> some View {
         if store.mcp.signingIn == connection.id {
-            VStack {
-                ProgressView().controlSize(.small)
-                Button("Cancel") { store.mcp.cancelSignIn() }.controlSize(.small)
-            }
+            Text(store.mcp.signInStage.isEmpty ? "Signing in…" : store.mcp.signInStage)
+                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                .help(store.mcp.signInStage)
         } else if store.mcp.errors[connection.id] != nil {
             SettingsStatusLabel(title: "Needs attention", systemImage: "exclamationmark.triangle", color: .orange)
         } else if store.mcp.connected.contains(connection.id) {
