@@ -14,6 +14,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Remove bot profile button backgrounds and show vertical separators only between actions.
 - Make the Local Models dialog narrower than Settings, with one short import hint, a compact model list, and a separate action footer.
 - Encourage Git checkpoints in the applet skill, with the repository root above the `.noodlet` folder to keep Git metadata out of imported packages.
 

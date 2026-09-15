@@ -39,26 +39,26 @@ struct AgentProfileSheet: View {
                     Button(action: reply) {
                         actionLabel("Reply", systemImage: "arrowshape.turn.up.left")
                     }
-                    .buttonStyle(.borderedProminent)
                     .help("Reply in Group")
                     .accessibilityLabel("Reply in Group")
+                    Divider().frame(height: 32).accessibilityHidden(true)
                 }
                 if let directMessage {
                     Button(action: directMessage) {
                         actionLabel("Message", systemImage: "bubble.left")
                     }
-                    .buttonStyle(.bordered)
                     .disabled(!canOpenDirectMessage)
                     .help("Direct Message")
                     .accessibilityLabel("Direct Message")
+                    Divider().frame(height: 32).accessibilityHidden(true)
                 }
                 Button(action: edit) {
                     actionLabel("Edit", systemImage: "pencil")
                 }
-                .buttonStyle(.bordered)
                 .help("Edit Bot")
                 .accessibilityLabel("Edit Bot")
             }
+            .buttonStyle(.plain)
         }
         .padding(20)
         .frame(width: 320)
@@ -75,6 +75,7 @@ struct AgentProfileSheet: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
+        .contentShape(Rectangle())
     }
 
     private var description: String {
