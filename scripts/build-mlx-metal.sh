@@ -8,8 +8,10 @@ if [[ ! -d "$source_root" ]]; then
 fi
 [[ -d "$source_root" ]] || { print -u2 "Resolve Swift package dependencies first."; exit 1; }
 
-component="$(xcodebuild -showComponent MetalToolchain -json 2>/dev/null)"
-toolchain="$(print -r -- "$component" | plutil -extract toolchainSearchPath raw -o - -)"
+component="$(xcodebuild -showComponent MetalToolchain -json 2>/dev/null || true)"
+# Xcode omits toolchainSearchPath when its Metal component is uninstalled.
+# Let the executable check below report the installation command in that case.
+toolchain="$(print -r -- "$component" | plutil -extract toolchainSearchPath raw -o - - 2>/dev/null || true)"
 metal="$toolchain/Metal.xctoolchain/usr/bin/metal"
 metallib="$toolchain/Metal.xctoolchain/usr/bin/metallib"
 [[ -x "$metal" && -x "$metallib" ]] || {

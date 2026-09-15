@@ -44,8 +44,10 @@ import NoodleCore
         return report
     }
 
-    private static func fetchRelease(_ url: URL) async throws -> Data {
-        let config = URLSessionConfiguration.ephemeral
+    nonisolated static let maximumReleaseBytes = 2 * 1_024 * 1_024
+
+    nonisolated static func fetchRelease(_ url: URL, configuration: URLSessionConfiguration = .ephemeral) async throws -> Data {
+        let config = configuration
         config.timeoutIntervalForRequest = 8
         config.timeoutIntervalForResource = 10
         config.httpShouldSetCookies = false
@@ -55,10 +57,10 @@ import NoodleCore
         request.setValue("Noodle-Harness-Version-Check", forHTTPHeaderField: "User-Agent")
         let (bytes, response) = try await session.bytes(for: request)
         guard let response = response as? HTTPURLResponse, response.statusCode == 200,
-              response.expectedContentLength <= 262_144 else { throw HarnessSetupError("Release check unavailable.") }
+              response.expectedContentLength <= maximumReleaseBytes else { throw HarnessSetupError("Release check unavailable.") }
         var data = Data()
         for try await byte in bytes {
-            guard data.count < 262_144 else { throw HarnessSetupError("Release response too large.") }
+            guard data.count < maximumReleaseBytes else { throw HarnessSetupError("Release response too large.") }
             data.append(byte)
         }
         return data

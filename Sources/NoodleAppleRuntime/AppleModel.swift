@@ -3,6 +3,16 @@ import FoundationModels
 import NoodleCore
 
 public enum AppleModel {
+    /// Packaging must retain newer features even when the build host runs an
+    /// older OS and cannot report them through runtime model inspection.
+    public static var compiledWithMacOS27Support: Bool {
+        #if canImport(FoundationModels, _version: 2)
+        true
+        #else
+        false
+        #endif
+    }
+
     public static func inspection(version: String, modelsDirectory: URL? = nil) -> AppleHarnessInspection {
         var name = "Apple on-device"
         var description = "Apple Intelligence’s on-device model."

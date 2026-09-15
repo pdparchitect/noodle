@@ -8,7 +8,9 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-26
+    # The standard macOS 26 image has no SDK 27. This official image can
+    # compile the new Apple/MLX features while retaining macOS 15 deployment.
+    runs-on: xcode-27
     timeout-minutes: 45
 
     steps:
@@ -16,6 +18,14 @@ jobs:
         uses: actions/checkout@v6
         with:
           lfs: true
+
+      - name: Require the macOS 27 SDK and prepare Metal tools
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          sdk_version="$(xcrun --sdk macosx --show-sdk-version)"
+          [[ "${sdk_version%%.*}" -ge 27 ]] || { print -u2 "Noodle releases require SDK 27 or later; found $sdk_version"; exit 1; }
+          xcodebuild -downloadComponent MetalToolchain
 
       - name: Validate release version
         shell: zsh {0}
@@ -87,6 +97,8 @@ jobs:
 
       - name: Build, sign, notarize, and package
         shell: zsh {0}
+        env:
+          NOODLE_REQUIRE_APPLE27: '1'
         run: scripts/package-release.sh "v$NOODLE_VERSION"
 
       - name: Prepare release notes from changelog

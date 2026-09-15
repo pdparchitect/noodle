@@ -258,19 +258,25 @@ public struct AgentRuntimeSnapshot: Codable, Hashable, Sendable {
     public var detail: String
     public var processIdentifier: Int32?
     public var failure: AgentRuntimeFailure?
+    /// First connection retry in the current episode; repeated errors do not advance it.
+    public var reconnectingSince: Date?
+
+    public var canKick: Bool { phase == .failed || reconnectingSince != nil }
 
     public init(
         agentID: UUID,
         phase: AgentRuntimePhase,
         detail: String,
         processIdentifier: Int32? = nil,
-        failure: AgentRuntimeFailure? = nil
+        failure: AgentRuntimeFailure? = nil,
+        reconnectingSince: Date? = nil
     ) {
         self.agentID = agentID
         self.phase = phase
         self.detail = detail
         self.processIdentifier = processIdentifier
         self.failure = failure
+        self.reconnectingSince = reconnectingSince
     }
 }
 

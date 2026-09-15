@@ -115,12 +115,14 @@ import XCTest
         try await active(f, wire, p)
         wire.emit(["method": "error", "params": ["threadId": "fixture-thread", "turnId": "turn-one", "willRetry": true,
             "error": ["codexErrorInfo": ["responseStreamDisconnected": [:]], "message": "Private transport detail"]]])
-        try await f.wait { p.snapshot.phase == .failed }
-        XCTAssertTrue(p.snapshot.detail.contains("Retrying automatically"))
+        try await f.wait { p.snapshot.reconnectingSince != nil }
+        XCTAssertEqual(p.snapshot.phase, .working)
+        XCTAssertEqual(p.snapshot.detail, "Reconnecting…")
+        XCTAssertTrue(p.snapshot.canKick)
         XCTAssertFalse(p.snapshot.detail.contains("Private transport"))
         XCTAssertTrue(f.recovery(.codex).hasUnfinishedTurn)
         wire.emit(["method": "item/agentMessage/delta", "params": ["threadId": "fixture-thread", "turnId": "turn-one", "delta": "hello"]])
-        try await f.wait { p.snapshot.phase == .working }
+        try await f.wait { p.snapshot.reconnectingSince == nil }
         complete(wire); try await f.wait { p.canReceiveHeartbeat }
         XCTAssertTrue(f.failures.isEmpty)
     }
@@ -135,6 +137,44 @@ import XCTest
         XCTAssertEqual(wire.invalidations, 1)
         p.stop(); complete(wire); await f.drain()
         XCTAssertEqual(p.snapshot.phase, .offline)
+    }
+
+    func testRepeatedConnectionErrorsKeepOriginalDeadlineAndDeferSteeringUntilProgress() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.codex(wire)
+        try await active(f, wire, p)
+        func retry(turn: String = "turn-one") {
+            wire.emit(["method": "error", "params": ["threadId": "fixture-thread", "turnId": turn,
+                "willRetry": true, "error": ["codexErrorInfo": ["responseStreamDisconnected": [:]]]]])
+        }
+        retry(turn: "old-turn"); await f.drain()
+        XCTAssertNil(p.snapshot.reconnectingSince)
+        retry(); try await f.wait { p.snapshot.reconnectingSince != nil }
+        let since = p.snapshot.reconnectingSince
+        f.clock.date += 599
+        retry(); p.notify(immediately: true); await f.drain()
+        XCTAssertEqual(p.snapshot.reconnectingSince, since)
+        XCTAssertEqual(wire.count("turn/steer"), 0)
+        XCTAssertFalse(p.canReceiveHeartbeat)
+        wire.emit(["method": "item/agentMessage/delta", "params": ["threadId": "fixture-thread", "turnId": "old-turn"]])
+        await f.drain(); XCTAssertEqual(p.snapshot.reconnectingSince, since)
+        wire.emit(["method": "item/agentMessage/delta", "params": ["threadId": "fixture-thread", "turnId": "turn-one"]])
+        try await f.wait { wire.count("turn/steer") == 1 }
+        XCTAssertNil(p.snapshot.reconnectingSince)
+        retry(); try await f.wait { p.snapshot.reconnectingSince == f.clock.date }
+        complete(wire); try await f.wait { p.snapshot.phase == .ready }
+        XCTAssertNil(p.snapshot.reconnectingSince)
+    }
+
+    func testTerminalAndAccountErrorsDoNotEnableConnectionRecovery() async throws {
+        for info: Any in ["unauthorized", "usageLimitExceeded", "rateLimitExceeded", ["httpConnectionFailed": [:]]] {
+            let f = try fixture(), wire = HarnessWire(), p = f.codex(wire)
+            try await active(f, wire, p)
+            wire.emit(["method": "error", "params": ["threadId": "fixture-thread", "turnId": "turn-one",
+                "willRetry": info is String, "error": ["codexErrorInfo": info]]])
+            try await f.wait { p.snapshot.phase == .failed }
+            XCTAssertNil(p.snapshot.reconnectingSince)
+            XCTAssertTrue(f.recovery(.codex).hasUnfinishedTurn)
+        }
     }
     func testQuestionsAreAnsweredImmediatelyWithoutBlockingTurnCompletion() async throws {
         for extended in [false, true] {

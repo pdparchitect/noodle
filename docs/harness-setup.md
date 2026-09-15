@@ -30,7 +30,16 @@ access. Claude Code requires [autonomous access](security.md).
 - **Codex browser sign-in fails:** run `codex login` in Terminal if your account does not allow device-code login.
 - **Sign-in status unknown:** check the harness in Terminal, then choose **Check Again**. Unknown does not mean signed out.
 - **Update required:** follow the update instructions in Settings and recheck. Noodle does not install harness updates itself.
+- **Update check failed:** choose **Check Again** to retry the release check. The installed version remains visible while the latest version is unavailable.
 - **Bot fails to start:** resolve the reported installation, account, or service error, then choose **Kick** for that bot in **Settings → Harness**. Kick is also available from the bot's sidebar menu. Review any recovery confirmation before proceeding.
+
+Codex connection retries appear as amber **Reconnecting…** with elapsed time under
+each affected bot in **Settings → Harness → Codex**. You can wait or choose **Kick**.
+After ten minutes of connection retries without progress, Noodle stops the old
+process before restarting it with the saved session and unfinished work. Noodle
+allows two automatic restarts for the unfinished turn; another connection timeout
+pauses recovery until you choose **Kick**. Sign-in failures, usage limits, and ordinary long-running
+work do not trigger this connection-recovery timeout.
 
 Provider usage limits still apply in either access mode. If a provider reports a
 rate limit, wait for it to clear before retrying. Apple Intelligence is experimental;

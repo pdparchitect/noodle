@@ -358,8 +358,8 @@ import NoodleCore
             await settle()
             precondition(process.snapshot.phase == .working, "Ignore errors for other work")
             reportError()
-            await eventually { process.snapshot.phase == .failed }
-            precondition(process.snapshot.detail.contains("Retrying automatically"))
+            await eventually { process.snapshot.reconnectingSince != nil }
+            precondition(process.snapshot.detail == "Reconnecting…")
             precondition(!process.snapshot.detail.contains("private raw"))
             precondition(process.isAlive && recovery.hasUnfinishedTurn && !process.canReceiveHeartbeat)
             let stateAfterError = try Data(contentsOf: state)
@@ -369,7 +369,7 @@ import NoodleCore
             precondition(wire.prompts == 1 && wire.steers == 0)
             reportOutput(turn: "another-turn")
             await settle()
-            precondition(process.snapshot.phase == .failed, "Stale output must not clear the error")
+            precondition(process.snapshot.reconnectingSince != nil, "Stale output must not clear the error")
             reportOutput()
             await eventually { process.snapshot.phase == .working && wire.steers == 1 }
             wire.acknowledgeSteer()
@@ -387,10 +387,10 @@ import NoodleCore
             reportError()
             await settle()
             wire.acknowledgeStart()
-            await eventually { process.snapshot.phase == .failed }
+            await eventually { process.snapshot.reconnectingSince != nil }
             precondition(recovery.hasUnfinishedTurn, "An early retry error must preserve recovery")
             reportError(retry: false)
-            await eventually { !process.snapshot.detail.contains("Retrying automatically") }
+            await eventually { process.snapshot.phase == .failed }
             precondition(process.snapshot.detail.contains("Kick") && recovery.hasUnfinishedTurn)
             wire.emit(["method": "turn/completed", "params": ["threadId": wire.session,
                 "turn": ["id": wire.turn, "status": "failed", "error": ["message": "Connection failed"]]]])

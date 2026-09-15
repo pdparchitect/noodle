@@ -119,6 +119,9 @@ final class AgentRuntimeCoordinator {
     private var transitionIDs: [UUID: UUID] = [:]
     private var blockedRestarts: Set<UUID> = []
     private var restartAttempts: [UUID: Int] = [:]
+    // Startup success alone does not reset this budget: a turn must finish,
+    // or the user must explicitly retry.
+    private var connectionRecoveryAttempts: [UUID: Int] = [:]
     @ObservationIgnored private var restartTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var stabilityTasks: [UUID: Task<Void, Never>] = [:]
     private var recoveryPending: Set<UUID> = []
@@ -431,6 +434,7 @@ final class AgentRuntimeCoordinator {
             runtimeIDs[id] = nil
             processes.removeValue(forKey: id)?.stop { _ in }
             cancelSupervision(for: id)
+            connectionRecoveryAttempts[id] = nil
             changingAccess.remove(id)
             transitionIDs[id] = nil
             recoveryPending.remove(id)
@@ -440,6 +444,7 @@ final class AgentRuntimeCoordinator {
         }
 
         for agent in agents {
+            if blockedRecoveries.contains(agent.id), connectionRecoveryAttempts[agent.id] != nil { continue }
             if let process = processes[agent.id] {
                 snapshots[agent.id] = process.snapshot
             } else if agent.harnessIdentifier == nil {
@@ -466,7 +471,8 @@ final class AgentRuntimeCoordinator {
         snapshots = snapshots.filter { liveIDs.contains($0.key) }
 
         if let repository {
-            for agent in agents where processes[agent.id]?.configuration != agent {
+            for agent in agents where processes[agent.id]?.configuration != agent
+                && !(blockedRecoveries.contains(agent.id) && connectionRecoveryAttempts[agent.id] != nil) {
                 restart(agent: agent, repository: repository)
             }
         }
@@ -591,7 +597,8 @@ final class AgentRuntimeCoordinator {
     /// Ordinary Kick remains immediate; replacing a missing session requires a
     /// concrete confirmation. Account failures explain the prerequisite first.
     func kick(agent: AgentRecord, repository: WorkspaceRepository) -> AgentKickRequest? {
-        guard !isStoppingAll, !changingAccess.contains(agent.id), snapshot(for: agent.id).phase == .failed else { return nil }
+        guard !isStoppingAll, !changingAccess.contains(agent.id), snapshot(for: agent.id).canKick else { return nil }
+        connectionRecoveryAttempts[agent.id] = nil
         if let failure = snapshot(for: agent.id).failure, failure != .recoveryFailed {
             return AgentKickRequest(agent: agent, failure: failure, runtimeID: runtimeIDs[agent.id],
                 lifecycleID: lifecycleID, extendedAccess: accessConfiguration.isExtended(for: agent))
@@ -621,6 +628,8 @@ final class AgentRuntimeCoordinator {
         repository: WorkspaceRepository,
         resetThread: Bool = false
     ) {
+        guard !changingAccess.contains(agent.id) else { return }
+        connectionRecoveryAttempts[agent.id] = nil
         restart(agent: agent, repository: repository, resetThread: resetThread, sessionRecovery: nil)
     }
 
@@ -630,10 +639,12 @@ final class AgentRuntimeCoordinator {
         agent: AgentRecord,
         repository: WorkspaceRepository,
         resetThread: Bool = false,
-        sessionRecovery: SessionRecovery?
+        sessionRecovery: SessionRecovery?,
+        pauseAfterStop: Bool = false
     ) {
         guard !changingAccess.contains(agent.id) else { return }
         blockedRecoveries.remove(agent.id)
+        if pauseAfterStop { blockedRecoveries.insert(agent.id) }
         cancelSupervision(for: agent.id)
         changingAccess.insert(agent.id)
         let transitionID = UUID()
@@ -641,7 +652,9 @@ final class AgentRuntimeCoordinator {
         let lifecycle = lifecycleID
         runtimeIDs[agent.id] = nil
         let old = processes.removeValue(forKey: agent.id)
+        if !resetThread, old?.hasInterruptedWork == true { recoveryPending.insert(agent.id) }
         if resetThread {
+            recoveryPending.remove(agent.id)
             let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "") ?? .codex
             let state = repository.storage(for: agent.id).sessionState(provider: provider,
                 extendedAccess: accessConfiguration.isExtended(for: agent))
@@ -654,6 +667,11 @@ final class AgentRuntimeCoordinator {
             self.changingAccess.remove(agent.id)
             self.transitionIDs[agent.id] = nil
             if stopped {
+                if pauseAfterStop {
+                    self.snapshots[agent.id] = .init(agentID: agent.id, phase: .failed,
+                        detail: "Codex could not reconnect after two automatic restarts. Use Kick to retry. Unfinished work is preserved.")
+                    return
+                }
                 if let sessionRecovery {
                     do {
                         let storage = repository.storage(for: agent.id)
@@ -696,6 +714,7 @@ final class AgentRuntimeCoordinator {
     }
 
     func stop(agentID: UUID, revokeAccess: Bool = true) {
+        connectionRecoveryAttempts[agentID] = nil
         blockedRecoveries.remove(agentID)
         runtimeIDs[agentID] = nil
         cancelSupervision(for: agentID)
@@ -730,6 +749,7 @@ final class AgentRuntimeCoordinator {
         stabilityTasks.values.forEach { $0.cancel() }
         stabilityTasks.removeAll()
         restartAttempts.removeAll()
+        connectionRecoveryAttempts.removeAll()
         recoveryPending.removeAll()
         blockedRecoveries.removeAll()
         processes.values.forEach { $0.stop { _ in } }
@@ -742,7 +762,19 @@ final class AgentRuntimeCoordinator {
     func reconcile(agents: [AgentRecord], repository: WorkspaceRepository, immediately: Bool = false) {
         guard !isStoppingAll else { return }
         for agent in agents where installation(for: agent) != nil {
-            if let process = processes[agent.id], process.isAlive { continue }
+            if let process = processes[agent.id], process.isAlive {
+                if agent.harnessIdentifier == HarnessProvider.codex.rawValue,
+                   process.snapshot.phase == .working,
+                   let since = process.snapshot.reconnectingSince,
+                   now().timeIntervalSince(since) >= 10 * 60,
+                   !changingAccess.contains(agent.id), !blockedRecoveries.contains(agent.id) {
+                    let attempts = connectionRecoveryAttempts[agent.id] ?? 0
+                    connectionRecoveryAttempts[agent.id] = attempts + 1
+                    restart(agent: agent, repository: repository, resetThread: false, sessionRecovery: nil,
+                            pauseAfterStop: attempts >= 2)
+                }
+                continue
+            }
             if let process = processes.removeValue(forKey: agent.id) {
                 runtimeIDs[agent.id] = nil
                 if process.hasInterruptedWork {
@@ -822,10 +854,13 @@ final class AgentRuntimeCoordinator {
     }
 
     private func runtimeSnapshotHandler(for agentID: UUID, runtimeID: UUID) -> @MainActor (AgentRuntimeSnapshot) -> Void {
-        { [weak self] snapshot in
+        var previousPhase: AgentRuntimePhase?
+        return { [weak self] snapshot in
             guard let self, self.runtimeIDs[agentID] == runtimeID, snapshot.agentID == agentID else { return }
-            if self.snapshots[agentID]?.phase == .working, snapshot.phase == .ready {
+            defer { previousPhase = snapshot.phase }
+            if previousPhase == .working, snapshot.phase == .ready {
                 self.recordActivity(for: agentID)
+                self.connectionRecoveryAttempts[agentID] = nil
             }
             self.snapshots[agentID] = snapshot
             if snapshot.phase == .ready { self.markStable(agentID: agentID) }
@@ -873,6 +908,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private let extendedAccess: Bool
     private var connectionID: UUID?
     private let sleep: @MainActor (Duration) async throws -> Void
+    private let now: @MainActor () -> Date
     private let makeConnection: @MainActor () throws -> any HarnessRuntimeConnection
     private var hostConnection: (any HarnessRuntimeConnection)?
     private var hostRunning = false
@@ -892,6 +928,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private var earlyTurnCompletion: [String: Any]?
     private var earlyTurnError: [String: Any]?
     private var turnErrorDetail: String?
+    private var reconnectingSince: Date?
     private var steeringNotificationID: UUID?
     private var startupTimeout: Task<Void, Never>?
     private var steeringTimeout: Task<Void, Never>?
@@ -915,10 +952,12 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         onHeartbeat: @escaping @MainActor () -> Void,
         onUnexpectedTermination: @escaping @MainActor (CodexAgentProcess, String, Bool) -> Void,
         makeConnection: @escaping @MainActor () throws -> any HarnessRuntimeConnection = { try ExtendedAgentConnection() },
-        sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+        sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        now: @escaping @MainActor () -> Date = { Date() }
     ) {
         self.makeConnection = makeConnection
         self.sleep = sleep
+        self.now = now
         configuration = agent
         self.executableURL = executableURL
         self.workspaceURL = workspaceURL
@@ -1011,6 +1050,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         earlyTurnCompletion = nil
         earlyTurnError = nil
         turnErrorDetail = nil
+        reconnectingSince = nil
         steeringNotificationID = nil
         steeringTimeout?.cancel()
         notifications.take()
@@ -1173,7 +1213,13 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             turnErrorDetail = detail
             // A retry notification does not finish the turn. Keep its recovery
             // marker and queued messages until Codex reports actual completion.
-            update(.failed, detail)
+            if willRetry && Self.isConnectionError(error) {
+                if reconnectingSince == nil { reconnectingSince = now() }
+                update(.working, "Reconnecting…")
+            } else {
+                reconnectingSince = nil
+                update(.failed, detail)
+            }
             return
         }
         if ["item/started", "item/completed", "item/agentMessage/delta",
@@ -1183,6 +1229,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             trace.outputObserved()
             if turnErrorDetail != nil {
                 turnErrorDetail = nil
+                reconnectingSince = nil
                 update(.working, "Codex is responding again")
                 sendPendingNotificationIfPossible()
             }
@@ -1205,6 +1252,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             turnIsActive = false
             self.activeTurnID = nil
             turnErrorDetail = nil
+            reconnectingSince = nil
             let params = message["params"] as? [String: Any]
             let turn = params?["turn"] as? [String: Any]
             let status = turn?["status"] as? String
@@ -1241,12 +1289,16 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         }
     }
 
+    private static func isConnectionError(_ error: [String: Any]) -> Bool {
+        let variants = error["codexErrorInfo"] as? [String: Any] ?? [:]
+        return ["httpConnectionFailed", "responseStreamConnectionFailed", "responseStreamDisconnected",
+                "responseTooManyFailedAttempts"].contains { variants[$0] != nil }
+    }
+
     private static func turnErrorDescription(_ error: [String: Any], willRetry: Bool) -> String {
         let info = error["codexErrorInfo"]
-        let variants = info as? [String: Any] ?? [:]
         let summary: String
-        if ["httpConnectionFailed", "responseStreamConnectionFailed", "responseStreamDisconnected",
-            "responseTooManyFailedAttempts"].contains(where: { variants[$0] != nil }) {
+        if isConnectionError(error) {
             summary = "Codex could not maintain its connection to the model service."
         } else {
             summary = switch info as? String {
@@ -1297,7 +1349,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private func sendPendingNotificationIfPossible() {
         guard notificationPending, steeringNotificationID == nil, let threadID else { return }
         if turnIsActive {
-            guard notifications.isImmediate, snapshot.phase == .working, let activeTurnID,
+            guard notifications.isImmediate, snapshot.phase == .working, reconnectingSince == nil, let activeTurnID,
                   let notificationID = notifications.take() else { return }
             steeringNotificationID = notificationID
             do {
@@ -1329,6 +1381,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         earlyTurnCompletion = nil
         earlyTurnError = nil
         turnErrorDetail = nil
+        reconnectingSince = nil
         trace.begin(reason: reason)
         let policy: [String: Any] = extendedAccess ? [
             "type": "workspaceWrite",
@@ -1402,6 +1455,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     }
 
     private func fail(_ detail: String) {
+        reconnectingSince = nil
         startupTimeout?.cancel()
         trace.finish(.runtimeFailed)
         update(.failed, detail)
@@ -1412,7 +1466,8 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             agentID: configuration.id,
             phase: phase,
             detail: detail,
-            processIdentifier: hostPID
+            processIdentifier: hostPID,
+            reconnectingSince: reconnectingSince
         )
         onSnapshot(snapshot)
     }

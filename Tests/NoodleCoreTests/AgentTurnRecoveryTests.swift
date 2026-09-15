@@ -2,6 +2,19 @@ import XCTest
 @testable import NoodleCore
 
 final class AgentTurnRecoveryTests: XCTestCase {
+    func testReconnectingSnapshotRoundTripAndLegacySnapshotDecoding() throws {
+        let agentID = UUID()
+        let snapshot = AgentRuntimeSnapshot(agentID: agentID, phase: .working, detail: "Reconnecting…",
+            reconnectingSince: Date(timeIntervalSince1970: 1_800_000_000))
+        let encoded = try JSONEncoder().encode(snapshot)
+        XCTAssertEqual(try JSONDecoder().decode(AgentRuntimeSnapshot.self, from: encoded), snapshot)
+        let legacy = Data("{\"agentID\":\"\(agentID)\",\"phase\":\"working\",\"detail\":\"Working\"}".utf8)
+        let decoded = try JSONDecoder().decode(AgentRuntimeSnapshot.self, from: legacy)
+        XCTAssertNil(decoded.reconnectingSince)
+        XCTAssertFalse(decoded.canKick)
+        XCTAssertTrue(snapshot.canKick)
+    }
+
     private var root: URL!
 
     override func setUpWithError() throws {

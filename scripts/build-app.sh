@@ -64,7 +64,12 @@ if [[ ! -f "$bin_path/Noodle" || "$(xcrun --sdk macosx --show-sdk-version)" == 2
     bin_path="$(NOODLE_SWIFT="$(xcrun --find swift)" NOODLE_MACOS_SDK="$(xcrun --sdk macosx --show-sdk-path)" \
         zsh "$project_root/scripts/swift-apple.sh" build --disable-sandbox --scratch-path "$app_scratch" --configuration "$configuration" --show-bin-path)"
 fi
-if [[ "$("$apple_bin/NoodleAppleAgent" --inspect | plutil -extract localModelsSupported raw -o - - 2>/dev/null)" == true ]]; then
+apple27="$("$apple_bin/NoodleAppleAgent" --build-capabilities | plutil -extract apple27 raw -o - -)"
+if [[ "${NOODLE_REQUIRE_APPLE27:-0}" == 1 && "$apple27" != true ]]; then
+    print -u2 "This release requires an Apple helper compiled with the macOS 27 SDK."
+    exit 1
+fi
+if [[ "$apple27" == true ]]; then
     zsh "$project_root/scripts/build-mlx-metal.sh" "$apple_bin" >&2
 fi
 "$bin_path/NoodleDocumentation" --check "$project_root/docs/message-reference.md" >&2
@@ -139,8 +144,7 @@ packaged_metal="$contents/Helpers/mlx-swift_Cmlx.bundle/Contents/Resources/defau
 if [[ -f "$apple_bin/mlx.metallib" ]]; then
     cp "$apple_bin/mlx.metallib" "$packaged_metal"
 fi
-if [[ ! -f "$packaged_metal" &&
-      "$("$apple_bin/NoodleAppleAgent" --inspect | plutil -extract localModelsSupported raw -o - - 2>/dev/null)" == true ]]; then
+if [[ ! -f "$packaged_metal" && "$apple27" == true ]]; then
     print -u2 "Local model support requires compiled MLX Metal shaders. Install Xcode's Metal Toolchain and rebuild with scripts/swift-apple.sh."
     exit 1
 fi

@@ -9,6 +9,10 @@ import NoodleAppleRuntime
         let app = executable.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let version = Bundle(url: app)?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
         let args = Array(CommandLine.arguments.dropFirst())
+        if args == ["--build-capabilities"] {
+            print("{\"apple27\":\(AppleModel.compiledWithMacOS27Support)}")
+            return
+        }
         if args == ["--inspect"] || (args.count == 3 && args[0] == "--inspect" && args[1] == "--models-directory") {
             let models = args.count == 3 ? URL(fileURLWithPath: args[2], isDirectory: true) : nil
             do { try FileHandle.standardOutput.write(contentsOf: JSONEncoder().encode(AppleModel.inspection(version: version, modelsDirectory: models)) + Data([10])) }
@@ -16,7 +20,7 @@ import NoodleAppleRuntime
             return
         }
         if args == ["--version"] { print(version); return }
-        if args == ["--help"] { print("Usage: NoodleAppleAgent --serve | --inspect [--models-directory PATH] | --version"); return }
+        if args == ["--help"] { print("Usage: NoodleAppleAgent --serve | --inspect [--models-directory PATH] | --build-capabilities | --version"); return }
         guard args == ["--serve"] else { fputs("Use --serve or --inspect.\n", stderr); exit(2) }
         signal(SIGPIPE, SIG_IGN)
         signal(SIGTERM, SIG_IGN)

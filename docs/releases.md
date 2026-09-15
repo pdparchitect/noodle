@@ -52,6 +52,13 @@ remain drafts until their ZIP, checksum, signed feed, and notes are uploaded.
 A successful run requires every selected product to finish publishing.
 Computer and Applet releases never replace Noodle's repository-wide latest release.
 
+Noodle preparation uses GitHub's official [`xcode-27` image](https://github.com/actions/runner-images/issues/14404)
+and requires SDK 27 so the downloaded app includes the newer Apple and MLX features.
+The image is currently a public preview and may queue while capacity is limited.
+Shader packaging uses the helper's compile-time capabilities, since a macOS 26
+build host cannot report macOS 27 model availability. The main regression suites
+continue on macOS 26; live macOS 27 inference checks require a compatible host.
+
 Automatic app CI skips changes limited to ordinary Markdown, `docs/` assets,
 or `website/`. Changelogs remain release inputs, and direct edits to
 `docs/message-reference.md` still run its generated-documentation check. Source,

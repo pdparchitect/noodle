@@ -3,6 +3,15 @@
 Run commands from the repository root. You need macOS 15 or later and full Xcode.
 For Noodle Computer, see its [development guide](../Computer/DEVELOPMENT.md).
 
+Install the selected Xcode's Metal Toolchain to package the local-model shaders.
+Check this component again after upgrading Xcode:
+
+```sh
+xcodebuild -downloadComponent MetalToolchain
+```
+
+Build and launch the app, or run the smoke suite:
+
 ```sh
 scripts/build-and-launch.sh
 Tests/smoke-test.sh

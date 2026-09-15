@@ -100,4 +100,93 @@ import XCTest
         XCTAssertEqual(f.factory.processes.count, 2)
         XCTAssertEqual(f.runtime.snapshot(for: agent.id).phase, .ready)
     }
+
+    func testConnectionTimeoutWaitsTenMinutesAndRequiresConfirmedStop() throws {
+        let f = try fixture(), agent = try f.agent(), first = try f.start(agent)
+        first.hasInterruptedWork = true
+        first.automaticallyStops = false
+        first.transition(.working, reconnectingSince: f.clock.date)
+        f.clock.date += 599
+        f.runtime.reconcile(agents: [agent], repository: f.repository)
+        XCTAssertEqual(first.stops, 0)
+        f.clock.date += 1
+        f.runtime.reconcile(agents: [agent], repository: f.repository)
+        f.runtime.reconcile(agents: [agent], repository: f.repository, immediately: true)
+        f.runtime.refresh(agents: [agent], repository: f.repository)
+        XCTAssertEqual(first.stops, 1)
+        XCTAssertEqual(f.factory.processes.count, 1)
+        first.finishStop(true)
+        XCTAssertEqual(f.factory.processes.count, 2)
+        XCTAssertTrue(f.factory.processes.last!.launch.recoverInterruptedWork)
+        first.transition(.working, reconnectingSince: f.clock.date.addingTimeInterval(-600))
+        f.runtime.reconcile(agents: [agent], repository: f.repository)
+        XCTAssertEqual(f.factory.processes.count, 2, "Retired callbacks cannot restart a replacement")
+    }
+
+    func testFailedStopDoesNotLaunchOverlappingConnectionRecovery() throws {
+        let f = try fixture(), agent = try f.agent(), first = try f.start(agent)
+        first.automaticallyStops = false
+        first.transition(.working, reconnectingSince: f.clock.date.addingTimeInterval(-600))
+        f.runtime.reconcile(agents: [agent], repository: f.repository)
+        first.finishStop(false)
+        f.runtime.reconcile(agents: [agent], repository: f.repository, immediately: true)
+        XCTAssertEqual(f.factory.processes.count, 1)
+        XCTAssertEqual(f.runtime.snapshot(for: agent.id).detail, "The previous runtime could not be stopped.")
+    }
+
+    func testConnectionRecoveryPausesAfterTwoRestartsAndKickResumes() throws {
+        let f = try fixture(), agent = try f.agent()
+        var process = try f.start(agent)
+        for expectedCount in [2, 3, 3] {
+            process.hasInterruptedWork = true
+            process.transition(.working, reconnectingSince: f.clock.date.addingTimeInterval(-600))
+            f.runtime.reconcile(agents: [agent], repository: f.repository)
+            XCTAssertEqual(f.factory.processes.count, expectedCount)
+            process = f.factory.processes.last!
+        }
+        let paused = f.runtime.snapshot(for: agent.id)
+        XCTAssertEqual(paused.phase, .failed)
+        XCTAssertTrue(paused.detail.contains("two automatic restarts"))
+        f.runtime.reconcile(agents: [agent], repository: f.repository, immediately: true)
+        f.runtime.notify([agent], repository: f.repository)
+        f.runtime.refresh(agents: [agent], repository: f.repository)
+        XCTAssertEqual(f.factory.processes.count, 3)
+        XCTAssertEqual(f.runtime.snapshot(for: agent.id), paused)
+        XCTAssertNil(f.runtime.kick(agent: agent, repository: f.repository))
+        XCTAssertEqual(f.factory.processes.count, 4)
+        XCTAssertTrue(f.factory.processes.last!.launch.recoverInterruptedWork)
+        f.factory.processes.last!.transition(.working, reconnectingSince: f.clock.date.addingTimeInterval(-600))
+        f.runtime.reconcile(agents: [agent], repository: f.repository)
+        XCTAssertEqual(f.factory.processes.count, 5, "Kick resets the automatic recovery allowance")
+    }
+
+    func testProgressClearsTimeoutAndCompletedWorkResetsRecoveryAllowance() throws {
+        let f = try fixture(), agent = try f.agent(), first = try f.start(agent)
+        first.transition(.working, reconnectingSince: f.clock.date)
+        f.clock.date += 599
+        first.transition(.working)
+        f.clock.date += 600
+        f.runtime.reconcile(agents: [agent], repository: f.repository)
+        XCTAssertEqual(first.stops, 0)
+        for _ in 0..<3 {
+            let current = f.factory.processes.last!
+            current.transition(.working, reconnectingSince: f.clock.date.addingTimeInterval(-600))
+            f.runtime.reconcile(agents: [agent], repository: f.repository)
+            let replacement = f.factory.processes.last!
+            XCTAssertFalse(replacement === current)
+            replacement.transition(.working)
+            replacement.transition(.ready)
+        }
+        XCTAssertEqual(f.factory.processes.count, 4)
+    }
+
+    func testLongWorkAndTerminalFailureDoNotTriggerConnectionRecovery() throws {
+        let f = try fixture(), agent = try f.agent(), process = try f.start(agent)
+        for phase: AgentRuntimePhase in [.working, .failed] {
+            process.transition(phase)
+            f.clock.date += 3600
+            f.runtime.reconcile(agents: [agent], repository: f.repository)
+        }
+        XCTAssertEqual(process.stops, 0)
+    }
 }

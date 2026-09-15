@@ -170,6 +170,38 @@ class WorkflowTests(unittest.TestCase):
             **self.base(), 'needs.versions.outputs.computer': 'false',
             'needs.test-computer.result': 'skipped', 'needs.prepare-computer.result': 'skipped'}))
 
+    def test_noodle_release_checks_sdk_and_metal_before_signing(self):
+        job = workflow('prepare-noodle-release.yml')['jobs']['release']
+        self.assertEqual(job['runs-on'], 'xcode-27')
+        steps = job['steps']
+        prerequisite = next(i for i, step in enumerate(steps) if 'sdk_version=' in step.get('run', ''))
+        signing = next(i for i, step in enumerate(steps) if 'MACOS_CERTIFICATE_P12' in step.get('env', {}))
+        self.assertLess(prerequisite, signing)
+        package = next(step for step in steps if 'scripts/package-release.sh' in step.get('run', ''))
+        self.assertEqual(package['env']['NOODLE_REQUIRE_APPLE27'], '1')
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name, body in {
+                'xcrun': 'printf "%s\\n" "$FIXTURE_SDK"',
+                'xcodebuild': 'printf "%s\\n" "$*" > "$FIXTURE_METAL_LOG"; exit "$FIXTURE_METAL_STATUS"',
+            }.items():
+                path = root / name
+                path.write_text('#!/bin/sh\n' + body + '\n')
+                path.chmod(0o700)
+            for sdk, metal_status, succeeds in [('26.5', '0', False), ('27.0', '0', True), ('27.0', '1', False)]:
+                with self.subTest(sdk=sdk, metal_status=metal_status):
+                    log = root / 'metal.log'
+                    log.unlink(missing_ok=True)
+                    result = subprocess.run(['/bin/zsh', '-c', steps[prerequisite]['run']],
+                        env=dict(os.environ, PATH=f'{root}:/usr/bin:/bin', FIXTURE_SDK=sdk,
+                                 FIXTURE_METAL_STATUS=metal_status, FIXTURE_METAL_LOG=str(log)),
+                        capture_output=True, text=True)
+                    self.assertEqual(result.returncode == 0, succeeds, result.stderr)
+                    if sdk == '26.5':
+                        self.assertFalse(log.exists())
+                    else:
+                        self.assertEqual(log.read_text().strip(), '-downloadComponent MetalToolchain')
+
     def test_noodle_coverage_is_collected_without_masking_test_failures(self):
         steps = self.jobs['test-noodle']['steps']
         tests = next(step for step in steps if step.get('id') == 'tests')

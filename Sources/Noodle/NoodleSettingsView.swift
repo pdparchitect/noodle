@@ -335,7 +335,7 @@ private struct HarnessesSettingsView: View {
     }
 }
 
-private struct HarnessInstallationRow: View {
+struct HarnessInstallationRow: View {
     @Environment(NoodleStore.self) private var store
     let installation: HarnessInstallation
     let liveInstallation: HarnessInstallation?
@@ -353,10 +353,18 @@ private struct HarnessInstallationRow: View {
 
     private var id: HarnessProvider { installation.provider }
 
-    private var failedAgents: [AgentRecord] {
+    private var affectedAgents: [AgentRecord] {
         store.agents.filter {
-            $0.harnessIdentifier == id.rawValue && store.runtime.snapshot(for: $0.id).phase == .failed
+            $0.harnessIdentifier == id.rawValue && store.runtime.snapshot(for: $0.id).canKick
         }
+    }
+
+    private var hasFailedAgents: Bool {
+        affectedAgents.contains { store.runtime.snapshot(for: $0.id).phase == .failed }
+    }
+
+    private var hasReconnectingAgents: Bool {
+        affectedAgents.contains { store.runtime.snapshot(for: $0.id).reconnectingSince != nil }
     }
 
     var body: some View {
@@ -407,20 +415,6 @@ private struct HarnessInstallationRow: View {
                 if let error = setup.errors[id] {
                     Text(error).font(.caption).foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
-                }
-                ForEach(failedAgents) { agent in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(agent.displayName).font(.caption.weight(.semibold))
-                        Text(store.runtime.snapshot(for: agent.id).detail)
-                            .font(.caption).foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .textSelection(.enabled)
-                        Button("Kick") {
-                            kickRequest = store.runtime.kick(agent: agent, repository: store.repository)
-                        }
-                        .controlSize(.small)
-                        .disabled(store.runtime.changingAccess.contains(agent.id))
-                    }
                 }
                 if installation.isAvailable {
                     versionDetails
@@ -487,10 +481,40 @@ private struct HarnessInstallationRow: View {
                             .disabled(isRefreshing || liveInstallation?.isAvailable != true)
                     }
                 }
+                agentIssues
             }
         }
         .padding(.vertical, 6)
         .modifier(AgentKickConfirmation(request: $kickRequest))
+    }
+
+    @ViewBuilder private var agentIssues: some View {
+        if !affectedAgents.isEmpty {
+            Divider().padding(.vertical, 4)
+            ForEach(affectedAgents) { agent in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(agent.displayName).font(.caption.weight(.semibold))
+                    let snapshot = store.runtime.snapshot(for: agent.id)
+                    if let since = snapshot.reconnectingSince {
+                        TimelineView(.periodic(from: since, by: 1)) { context in
+                            let seconds = max(0, Int(context.date.timeIntervalSince(since)))
+                            Text("Reconnecting… · \(seconds / 60)m \(seconds % 60)s")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
+                    } else {
+                        Text(snapshot.detail)
+                            .font(.caption).foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    }
+                    Button("Kick") {
+                        kickRequest = store.runtime.kick(agent: agent, repository: store.repository)
+                    }
+                    .controlSize(.small)
+                    .disabled(store.runtime.changingAccess.contains(agent.id))
+                }
+            }
+        }
     }
 
     private func openTerminal() {
@@ -521,6 +545,13 @@ private struct HarnessInstallationRow: View {
         if let issue = version?.compatibilityIssue {
             Text(issue).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
         }
+        if let error = version?.checkError {
+            if isRefreshing {
+                Text("Checking for updates…").font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text(error).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            }
+        }
         if version?.updateAvailable == true {
             Button("Update Instructions…") { showsUpdateGuide.toggle() }
         }
@@ -529,16 +560,21 @@ private struct HarnessInstallationRow: View {
             Text(guide.instructions).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let command = guide.command {
                 HarnessCommandView(command: command)
-                Button("Open Terminal") { openTerminal() }
             }
-            Link("Official Update Guide", destination: guide.documentationURL)
+            HStack {
+                if guide.command != nil {
+                    Button("Open Terminal") { openTerminal() }
+                }
+                Button("Official Update Guide") { openURL(guide.documentationURL) }
+            }
             if let terminalError { Text(terminalError).font(.caption).foregroundStyle(.red) }
         }
     }
 
     private var statusText: String {
         if setup.activity[id] != nil { return "Setting up" }
-        if setup.errors[id] != nil || !failedAgents.isEmpty { return "Needs attention" }
+        if setup.errors[id] != nil || hasFailedAgents { return "Needs attention" }
+        if hasReconnectingAgents { return "Reconnecting" }
         if setup.snapshots[id] == nil { return "Checking…" }
         if !installation.isAvailable { return "Not installed" }
         switch setup.authentication[id] {
@@ -551,7 +587,8 @@ private struct HarnessInstallationRow: View {
     }
 
     private var statusIcon: String {
-        if setup.errors[id] != nil || !failedAgents.isEmpty { return "exclamationmark.triangle" }
+        if setup.errors[id] != nil || hasFailedAgents { return "exclamationmark.triangle" }
+        if hasReconnectingAgents { return "arrow.trianglehead.2.clockwise" }
         if setup.snapshots[id] == nil { return "ellipsis.circle" }
         if !installation.isAvailable { return "arrow.down.circle" }
         return setup.authentication[id] == .authenticated || setup.authentication[id] == .notRequired
@@ -559,7 +596,7 @@ private struct HarnessInstallationRow: View {
     }
 
     private var statusColor: Color {
-        if setup.errors[id] != nil || !failedAgents.isEmpty { return .orange }
+        if setup.errors[id] != nil || hasFailedAgents || hasReconnectingAgents { return .orange }
         if setup.authentication[id] == .authenticated || setup.authentication[id] == .notRequired { return .green }
         return .secondary
     }

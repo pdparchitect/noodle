@@ -6,16 +6,6 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
-### Changed
-
-- Use Apple's Foundation Models Utilities history helpers on macOS 27 to summarize Apple Intelligence workspace conversations and trim completed tool exchanges, while retaining token limits and macOS 26 support.
-- Use a plus icon for the toolbar's Create menu.
-- Name the Spotlight, Shortcuts, and contextual Services actions Send to Agent, with an Agent or Group picker, a Message field, and Send to Bot search keywords and invocation phrases.
-
-### Fixed
-
-- Drag voice-message attachments from the entire control, including the waveform and padding, while keeping click-to-seek and play/pause available.
-
 ## [0.16.0] - 2026-09-15
 
 ### Added
@@ -26,12 +16,23 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Use Apple's Foundation Models Utilities history helpers on macOS 27 to summarize Apple Intelligence workspace conversations and trim completed tool exchanges, while retaining token limits and macOS 26 support.
+- Use a plus icon for the toolbar's Create menu.
+- Name the Spotlight, Shortcuts, and contextual Services actions Send to Agent, with an Agent or Group picker, a Message field, and Send to Bot search keywords and invocation phrases.
 - Remove bot profile button backgrounds and show vertical separators only between actions.
 - Make the Local Models dialog narrower than Settings, with one short import hint, a compact model list, and a separate action footer.
 - Encourage Git checkpoints in the applet skill, with the repository root above the `.noodlet` folder to keep Git metadata out of imported packages.
 
 ### Fixed
 
+- Drag voice-message attachments from the entire control, including the waveform and padding, while keeping click-to-seek and play/pause available.
+- Detect harness updates when release metadata exceeds 256 KiB, retain a 2 MiB download limit, and show update-check failures in Harness settings.
+- Replace cached harness update-check errors with Checking for updates while a fresh check is running.
+- Place the Official Update Guide button beside Open Terminal in harness update instructions.
+- Group bot-specific harness errors and reconnecting messages below the harness details and actions, separated by a divider for every provider.
+- Explain how to install the selected Xcode's missing Metal Toolchain when a local build cannot package MLX shaders.
+- Show Codex connection retries as amber Reconnecting status with elapsed time and Kick in Harness settings. Recover after ten minutes without progress, preserving unfinished work and requiring a confirmed stop; pause after two unsuccessful automatic restarts.
+- Build Noodle releases with the macOS 27 SDK and include MLX shaders even when the build host runs macOS 26.
 - Budget Apple model context before every generation on macOS 27, including tool continuations, with bounded history and tool results, image sizing, and room for replies. Recover image chat from context-limit errors without replaying workspace actions.
 - Use the canonical helper cache path for MLX shader compilation and delegate only that cache and read-only bundled resources to Apple's Metal compiler.
 - Run the macOS 27 Apple harness CI checks only when the runner has a compatible OS and SDK, with an explicit skip reason on older runners.

@@ -60,4 +60,52 @@ import XCTest
         do { _ = try await task.value; XCTFail("Cancelled check returned a release") }
         catch { XCTAssertTrue(error is CancellationError) }
     }
+
+    func testReleaseFetchAcceptsRealisticCodexMetadataAboveOldLimit() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ReleaseResponseFixture.self]
+        let checker = HarnessVersionChecker(inspect: { _ in .init(installedVersion: "0.153.4") },
+            fetch: { _ in try await HarnessVersionChecker.fetchRelease(URL(string: "https://example.invalid/large")!, configuration: config) })
+        let report = try await checker.check(installation, previous: nil, forceLatest: true)
+        XCTAssertEqual(report.latestVersion, "0.154.0")
+        XCTAssertTrue(report.updateAvailable)
+        XCTAssertNil(report.checkError)
+    }
+
+    func testReleaseFetchBoundsAdvertisedAndStreamedBodies() async throws {
+        for path in ["oversized-header", "oversized-stream", "unavailable"] {
+            let config = URLSessionConfiguration.ephemeral
+            config.protocolClasses = [ReleaseResponseFixture.self]
+            do {
+                _ = try await HarnessVersionChecker.fetchRelease(URL(string: "https://example.invalid/\(path)")!, configuration: config)
+                XCTFail("Accepted \(path)")
+            } catch { XCTAssertTrue(error is HarnessSetupError) }
+        }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ReleaseResponseFixture.self]
+        let data = try await HarnessVersionChecker.fetchRelease(URL(string: "https://example.invalid/exact-limit")!, configuration: config)
+        XCTAssertEqual(data.count, HarnessVersionChecker.maximumReleaseBytes)
+    }
+}
+
+private final class ReleaseResponseFixture: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let path = request.url!.lastPathComponent
+        let limit = 2 * 1_024 * 1_024
+        let data: Data
+        if path == "large" {
+            data = Data((#"{"tag_name":"rust-v0.154.0","body":""# + String(repeating: "x", count: 292_551) + #""}"#).utf8)
+        } else { data = Data(repeating: 32, count: path == "exact-limit" ? limit : limit + 1) }
+        let fields = path == "oversized-stream" ? [:] : ["Content-Length": String(data.count)]
+        let response = HTTPURLResponse(url: request.url!, statusCode: path == "unavailable" ? 503 : 200,
+                                       httpVersion: "HTTP/1.1", headerFields: fields)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        for offset in stride(from: 0, to: data.count, by: 32_768) {
+            client?.urlProtocol(self, didLoad: data.subdata(in: offset..<min(offset + 32_768, data.count)))
+        }
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
 }
