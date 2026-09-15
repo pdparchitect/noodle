@@ -5,7 +5,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import NoodleCore
 
-private enum BotEditorTab: String, CaseIterable {
+enum BotEditorTab: String, CaseIterable {
     case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers"
 }
 
@@ -246,8 +246,9 @@ struct EditBotSheet: View {
     @State private var selectedTab = BotEditorTab.general
     @FocusState private var nameFocused: Bool
 
-    init(agent: AgentRecord) {
+    init(agent: AgentRecord, initialTab: BotEditorTab = .general) {
         self.agent = agent
+        _selectedTab = State(initialValue: initialTab)
         _name = State(initialValue: agent.displayName)
         _selectedHarnessIdentifier = State(initialValue: agent.harnessIdentifier ?? "")
         _selectedModelIdentifier = State(initialValue: agent.modelIdentifier ?? "")
@@ -336,7 +337,7 @@ struct EditBotSheet: View {
         }
         .frame(width: 520)
         .onAppear {
-            nameFocused = true
+            nameFocused = selectedTab == .general
             backstory = store.backstory(for: agent)
             mcpConnectionIDs = store.mcp.selectedIDs(for: agent)
             computerIDs = store.computers.selectedIDs(for: agent)

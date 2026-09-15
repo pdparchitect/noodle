@@ -15,6 +15,16 @@ struct AppleLocalModelsView: View {
     @State private var downloadProgress: AppleModelDownloadProgress?
     @State private var downloadTask: Task<AppleLocalModel, Error>?
     @State private var cancelling = false
+    @State private var modelUsageID: String?
+    @State private var editingAgent: AgentRecord?
+    @State private var returnToModelID: String?
+    private let checkSupport: @MainActor () async throws -> Bool
+
+    init(checkSupport: @escaping @MainActor () async throws -> Bool = {
+        try await AppleHostProbe().load().localModelsSupported == true
+    }) {
+        self.checkSupport = checkSupport
+    }
 
     private var storage: AppleLocalModelStore { .init(repository: store.repository.rootURL) }
     private var busy: Bool { importing || downloadingID != nil }
@@ -57,10 +67,18 @@ struct AppleLocalModelsView: View {
         .fixedSize(horizontal: false, vertical: true)
         .interactiveDismissDisabled(busy)
         .onDisappear { downloadTask?.cancel() }
+        .sheet(item: $editingAgent, onDismiss: {
+            if let id = returnToModelID, models.contains(where: { $0.id == id }) { modelUsageID = id }
+            returnToModelID = nil
+        }) { agent in
+            EditBotSheet(agent: agent, initialTab: .runtime)
+                .environment(store)
+                .noodleSheetSizing(animated: true)
+        }
         .task {
             do {
                 models = try storage.models()
-                supported = try await AppleHostProbe().load().localModelsSupported == true
+                supported = try await checkSupport()
             } catch { self.error = error.localizedDescription }
             checking = false
         }
@@ -81,7 +99,7 @@ struct AppleLocalModelsView: View {
         } else if !models.isEmpty {
             Text("Installed").font(.headline)
             List(models) { model in
-                let inUse = store.agents.contains { $0.harnessIdentifier == "apple" && $0.modelIdentifier == model.id }
+                let users = botsUsing(model)
                 HStack(alignment: .center, spacing: 12) {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(model.name).fontWeight(.medium).lineLimit(2)
@@ -90,8 +108,19 @@ struct AppleLocalModelsView: View {
                     }
                     Spacer(minLength: 4)
                     Button("Remove", role: .destructive) { remove(model) }
-                        .disabled(inUse || busy)
-                        .help(inUse ? "Change bots using this model before removing it." : "Remove Noodle’s copy of this model.")
+                        .disabled(busy)
+                        .help(users.isEmpty ? "Remove Noodle’s copy of this model."
+                              : "Used by \(users.map(\.displayName).joined(separator: ", ")).")
+                        .popover(isPresented: Binding(
+                            get: { modelUsageID == model.id },
+                            set: { if !$0, modelUsageID == model.id { modelUsageID = nil } }
+                        ), arrowEdge: .trailing) {
+                            AppleModelUsagePopover(model: model, agents: botsUsing(model), edit: { agent in
+                                returnToModelID = model.id
+                                modelUsageID = nil
+                                editingAgent = agent
+                            }, remove: { remove(model) }, close: { modelUsageID = nil })
+                        }
                 }
                 .padding(.vertical, 6)
             }
@@ -211,11 +240,70 @@ struct AppleLocalModelsView: View {
         }
     }
 
+    private func botsUsing(_ model: AppleLocalModel) -> [AgentRecord] {
+        store.agents.filter { $0.harnessIdentifier == "apple" && $0.modelIdentifier == model.id }
+            .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+    }
+
     private func remove(_ model: AppleLocalModel) {
+        guard !busy else { return }
+        let users = botsUsing(model)
+        guard users.isEmpty else {
+            modelUsageID = model.id
+            return
+        }
+        modelUsageID = nil
         do {
             try storage.remove(id: model.id)
             models = try storage.models()
             Task { await store.runtime.checkExternalInstallation(.apple) }
         } catch { self.error = error.localizedDescription }
+    }
+}
+
+private struct AppleModelUsagePopover: View {
+    let model: AppleLocalModel
+    let agents: [AgentRecord]
+    let edit: (AgentRecord) -> Void
+    let remove: () -> Void
+    let close: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(agents.isEmpty ? "Model Unassigned" : "Model in Use").font(.headline)
+                Spacer()
+                Button(action: close) { Image(systemName: "xmark") }
+                    .buttonStyle(.plain).foregroundStyle(.secondary)
+                    .accessibilityLabel("Close").help("Close")
+            }
+            Text(model.name).font(.subheadline).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if agents.isEmpty {
+                Text("No bots use this model.").font(.callout)
+                Button("Remove Model", role: .destructive, action: remove)
+            } else {
+                Text("Choose another model for these bots before removing it.")
+                    .font(.callout).fixedSize(horizontal: false, vertical: true)
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(agents) { agent in
+                            HStack(spacing: 10) {
+                                BotAvatar(agent: agent, size: 28)
+                                Text(agent.displayName).lineLimit(2)
+                                Spacer(minLength: 8)
+                                Button("Edit") { edit(agent) }
+                                    .accessibilityLabel("Edit \(agent.displayName)")
+                                    .help("Edit \(agent.displayName)’s model settings")
+                            }
+                            .frame(minHeight: 44)
+                        }
+                    }
+                }
+                .frame(height: min(240, CGFloat(agents.count) * 44))
+            }
+        }
+        .padding(16)
+        .frame(width: 340)
     }
 }
