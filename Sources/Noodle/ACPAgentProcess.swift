@@ -13,6 +13,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
     private let extendedAccess: Bool
     private let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
     private let onHeartbeat: @MainActor () -> Void
+    private let onActivity: @MainActor ([String: Any]) -> Void
     private let onUnexpectedTermination: @MainActor (ACPAgentProcess, String, Bool) -> Void
     private let stateURL: URL
     private var turnRecovery: AgentTurnRecovery
@@ -50,6 +51,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
          onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void,
          onHeartbeat: @escaping @MainActor () -> Void,
          onUnexpectedTermination: @escaping @MainActor (ACPAgentProcess, String, Bool) -> Void,
+         onActivity: @escaping @MainActor ([String: Any]) -> Void = { _ in },
         makeConnection: @escaping @MainActor () throws -> any HarnessRuntimeConnection = { try ExtendedAgentConnection() },
         sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         precondition(provider == .apple || provider == .fx || provider == .grokBuild)
@@ -62,6 +64,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         self.extendedAccess = extendedAccess
         self.onSnapshot = onSnapshot
         self.onHeartbeat = onHeartbeat
+        self.onActivity = onActivity
         self.onUnexpectedTermination = onUnexpectedTermination
         stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: provider, extendedAccess: extendedAccess)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
@@ -242,6 +245,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
                     send(["jsonrpc": "2.0", "id": id.json, "error": ["code": -32601, "message": "Unsupported client request"]])
                 }
             } else if method == "session/update", params["sessionId"] as? String == sessionID, turnIsActive {
+                onActivity(object)
                 trace.outputObserved()
                 if let update = params["update"] as? [String: Any], FxProtocol.reviewWasHeld(update) { reviewHeld = true }
             } else if provider == .grokBuild, method == "_x.ai/session/update",

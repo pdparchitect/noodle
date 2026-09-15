@@ -38,6 +38,7 @@ struct AgentRuntimeLaunch {
     let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
     let onHeartbeat: @MainActor () -> Void
     let onUnexpectedTermination: @MainActor (any AgentRuntimeProcess, String, Bool) -> Void
+    var onActivity: @MainActor ([String: Any]) -> Void = { _ in }
 
     func makeProcess() -> any AgentRuntimeProcess {
         switch provider {
@@ -45,22 +46,22 @@ struct AgentRuntimeLaunch {
             return MuseAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
                 extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
-                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) })
+                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) }, onActivity: onActivity)
         case .apple, .fx, .grokBuild:
             return ACPAgentProcess(provider: provider, agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
                 extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
-                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) })
+                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) }, onActivity: onActivity)
         case .codex:
             return CodexAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
                 extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
-                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) })
+                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) }, onActivity: onActivity)
         case .claudeCode:
             return ClaudeAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
                 extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
-                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) })
+                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) }, onActivity: onActivity)
         }
     }
 }
@@ -100,6 +101,7 @@ struct AgentKickRequest: Identifiable {
 @MainActor
 @Observable
 final class AgentRuntimeCoordinator {
+    let activity = AgentActivityStore()
     private(set) var installations: [HarnessInstallation]
     private(set) var modelsByProvider: [HarnessProvider: [HarnessModel]] = [:]
     private(set) var capabilityErrors: [HarnessProvider: String] = [:]
@@ -107,7 +109,10 @@ final class AgentRuntimeCoordinator {
     private(set) var isRefreshingInstallations = false
     private(set) var installationErrors: [HarnessProvider: String] = [:]
     private(set) var snapshots: [UUID: AgentRuntimeSnapshot] = [:] {
-        didSet { updateSleepAssertion() }
+        didSet {
+            activity.recordSnapshots(snapshots.filter { oldValue[$0.key] != $0.value })
+            updateSleepAssertion()
+        }
     }
     private(set) var preventIdleSleepWhileWorking: Bool
     private(set) var heartbeatConfiguration: AgentHeartbeatConfiguration
@@ -428,6 +433,7 @@ final class AgentRuntimeCoordinator {
     func refresh(agents: [AgentRecord], repository: WorkspaceRepository? = nil) {
         installations = discoveredInstallations()
         let liveIDs = Set(agents.map(\.id))
+        activity.retainAgents(liveIDs)
         let trackedIDs = Set(processes.keys).union(restartTasks.keys).union(stabilityTasks.keys)
             .union(changingAccess).union(recoveryPending).union(blockedRecoveries)
         for id in trackedIDs where !liveIDs.contains(id) {
@@ -588,6 +594,10 @@ final class AgentRuntimeCoordinator {
             onUnexpectedTermination: { [weak self] terminated, detail, needsRecovery in
                 self?.runtimeTerminated(terminated, agent: agent, repository: repository,
                     detail: detail, needsRecovery: needsRecovery)
+            },
+            onActivity: { [weak self] message in
+                guard let self, self.runtimeIDs[agent.id] == runtimeID else { return }
+                self.activity.record(message, provider: installation.provider, agentID: agent.id)
             }))
         processes[agent.id] = process
         process.start()
@@ -915,6 +925,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private var hostPID: Int32?
     private let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
     private let onHeartbeat: @MainActor () -> Void
+    private let onActivity: @MainActor ([String: Any]) -> Void
     private let onUnexpectedTermination: @MainActor (CodexAgentProcess, String, Bool) -> Void
     private let stateURL: URL
     private var turnRecovery: AgentTurnRecovery
@@ -951,6 +962,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void,
         onHeartbeat: @escaping @MainActor () -> Void,
         onUnexpectedTermination: @escaping @MainActor (CodexAgentProcess, String, Bool) -> Void,
+        onActivity: @escaping @MainActor ([String: Any]) -> Void = { _ in },
         makeConnection: @escaping @MainActor () throws -> any HarnessRuntimeConnection = { try ExtendedAgentConnection() },
         sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         now: @escaping @MainActor () -> Date = { Date() }
@@ -964,6 +976,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         self.extendedAccess = extendedAccess
         self.onSnapshot = onSnapshot
         self.onHeartbeat = onHeartbeat
+        self.onActivity = onActivity
         self.onUnexpectedTermination = onUnexpectedTermination
         stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: .codex, extendedAccess: extendedAccess)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
@@ -1197,6 +1210,13 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         }
 
         guard let method = message["method"] as? String else { return }
+        if method.hasPrefix("item/"), turnIsActive,
+           let params = message["params"] as? [String: Any],
+           params["threadId"] as? String == threadID,
+           let reportedTurn = params["turnId"] as? String,
+           activeTurnID == nil || reportedTurn == activeTurnID {
+            onActivity(message)
+        }
         if method == "error" {
             guard turnIsActive, let params = message["params"] as? [String: Any],
                   params["threadId"] as? String == threadID,

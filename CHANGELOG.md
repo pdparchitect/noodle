@@ -6,9 +6,14 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- Give activity windows the preview panel’s rounded frame and single close control, with edge resizing and no maximise, minimise, or full-screen actions. Keep compact logs, context-menu commands, and plain-dash titles.
+
 ### Added
 
 - Drop images and videos from Finder or a browser directly onto the conversation background preview, including direct media links, using the same importer and drop target as Computer and Applet.
+- Show a bot’s live activity in a floating log window from its context menu, with recent in-memory history, selectable output, and context-menu commands to copy, clear, and follow the log.
 
 ### Fixed
 

@@ -501,6 +501,9 @@ private struct ConversationStartView: View {
                 .buttonStyle(.plain)
                 .help(agent.displayName)
                 .accessibilityLabel("Show \(agent.displayName)'s profile")
+                .contextMenu {
+                    Button("Show Activity") { store.showActivity(for: agent) }
+                }
             } else {
                 avatar
             }

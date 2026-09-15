@@ -90,6 +90,7 @@ final class NoodleStore {
         drafts[conversationID].attachments
     }
     let conversationWindows = ConversationWindowRegistry()
+    let activityWindows = AgentActivityWindows()
     @ObservationIgnored private var voiceRecorders: [UUID: AnyObject] = [:]
 
     @available(macOS 26.0, *)
@@ -186,6 +187,7 @@ final class NoodleStore {
             try repository.prepare()
             let migratedIDs = Set(try repository.migrateAgentStorage())
             agents = try repository.loadAgents()
+            activityWindows.synchronize(agents: agents)
             runtime.prepareAccessForExistingAgents(agents, migratedIDs: migratedIDs)
             try repository.synchronizeAgentWorkspaces(agents)
             if connectsServices {

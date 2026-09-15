@@ -30,6 +30,7 @@ struct SidebarView: View {
                                 Button("Change Background…") { store.backgroundBeingEdited = conversation }
                                 if let agent = store.participants(for: conversation).first {
                                     Divider()
+                                    Button("Show Activity") { store.showActivity(for: agent) }
                                     Button("Show Workspace in Finder") {
                                         store.revealWorkspace(for: agent)
                                     }

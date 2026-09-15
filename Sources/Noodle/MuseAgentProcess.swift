@@ -37,6 +37,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
     private let extendedAccess: Bool
     private let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
     private let onHeartbeat: @MainActor () -> Void
+    private let onActivity: @MainActor ([String: Any]) -> Void
     private let onUnexpectedTermination: @MainActor (MuseAgentProcess, String, Bool) -> Void
     private let stateURL: URL
     private var turnRecovery: AgentTurnRecovery
@@ -84,6 +85,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
          onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void,
          onHeartbeat: @escaping @MainActor () -> Void,
          onUnexpectedTermination: @escaping @MainActor (MuseAgentProcess, String, Bool) -> Void,
+         onActivity: @escaping @MainActor ([String: Any]) -> Void = { _ in },
          makeConnection: @escaping @MainActor () throws -> any MuseRuntimeConnection = { try ExtendedAgentConnection() }) {
         self.makeConnection = makeConnection
         configuration = agent
@@ -92,6 +94,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
         self.extendedAccess = extendedAccess
         self.onSnapshot = onSnapshot
         self.onHeartbeat = onHeartbeat
+        self.onActivity = onActivity
         self.onUnexpectedTermination = onUnexpectedTermination
         stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: .muse, extendedAccess: extendedAccess)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
@@ -258,6 +261,9 @@ final class MuseAgentProcess: AgentRuntimeProcess {
         if let method = object["method"] as? String {
             let params = object["params"] as? [String: Any] ?? [:]
             guard params["sessionId"] as? String == sessionID, sessionID != nil else { return }
+            if method.hasPrefix("item/") || method == "view/gap" {
+                onActivity(object)
+            }
             if method == "approval/requested" || method == "approval/request" || method == "approval/updated" {
                 guard let decision = MuseProtocol.approvalParameters(params, sessionID: sessionID,
                                                                     extendedAccess: extendedAccess, restrictedAccess: !extendedAccess) else {

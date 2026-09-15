@@ -11,6 +11,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     private let extendedAccess: Bool
     private let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
     private let onHeartbeat: @MainActor () -> Void
+    private let onActivity: @MainActor ([String: Any]) -> Void
     private let onUnexpectedTermination: @MainActor (ClaudeAgentProcess, String, Bool) -> Void
     private var sessionState: ClaudeSessionState
     private var turnRecovery: AgentTurnRecovery
@@ -47,6 +48,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void,
         onHeartbeat: @escaping @MainActor () -> Void,
         onUnexpectedTermination: @escaping @MainActor (ClaudeAgentProcess, String, Bool) -> Void,
+        onActivity: @escaping @MainActor ([String: Any]) -> Void = { _ in },
         makeConnection: @escaping @MainActor () throws -> any HarnessRuntimeConnection = { try ExtendedAgentConnection() },
         sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
@@ -58,6 +60,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         self.extendedAccess = extendedAccess
         self.onSnapshot = onSnapshot
         self.onHeartbeat = onHeartbeat
+        self.onActivity = onActivity
         self.onUnexpectedTermination = onUnexpectedTermination
         let stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: .claudeCode, extendedAccess: extendedAccess)
         sessionState = ClaudeSessionState(url: stateURL)
@@ -254,6 +257,9 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
 
     private func handle(_ message: [String: Any]) {
         guard !intentionallyStopped, running else { return }
+        if turnIsActive, let rawID = message["session_id"] as? String, UUID(uuidString: rawID) == sessionID {
+            onActivity(message)
+        }
         let type = message["type"] as? String
         if type == "control_response", let response = message["response"] as? [String: Any],
            let id = response["request_id"] as? String, id == interruptRequestID {

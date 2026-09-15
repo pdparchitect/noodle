@@ -244,7 +244,14 @@ struct AnnotationPreviewContent: View {
 /// Uses the same native HUD material and compact chrome as Noodle's other
 /// preview panels. The header is draggable; feedback stays outside the image.
 @MainActor final class AnnotationPreviewFrame: NSVisualEffectView {
-    init(content: NSView, filename: String, kindLabel: String = "Annotation", closeHint: String = "Close Preview (Esc or ⌘W)") {
+    private let title = NSTextField(labelWithString: "")
+    var filename: String {
+        get { title.stringValue }
+        set { title.stringValue = newValue }
+    }
+
+    init(content: NSView, filename: String, kindLabel: String = "Annotation", closeHint: String = "Close Preview (Esc or ⌘W)",
+         closeLabel: String = "Close Preview") {
         super.init(frame: .zero)
         material = .hudWindow; blendingMode = .behindWindow; state = .active
         appearance = NSAppearance(named: .darkAqua)
@@ -253,11 +260,11 @@ struct AnnotationPreviewContent: View {
         layer?.borderWidth = 1; layer?.borderColor = NSColor.white.withAlphaComponent(0.22).cgColor
 
         let header = AnnotationPreviewHeader()
-        let close = NSButton(image: NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Close Preview")!,
+        let close = NSButton(image: NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: closeLabel)!,
                              target: header, action: #selector(AnnotationPreviewHeader.closePreview))
         close.isBordered = false; close.contentTintColor = .secondaryLabelColor
-        close.toolTip = closeHint; close.setAccessibilityLabel("Close Preview")
-        let title = NSTextField(labelWithString: filename)
+        close.toolTip = closeHint; close.setAccessibilityLabel(closeLabel)
+        title.stringValue = filename
         title.font = .systemFont(ofSize: 13, weight: .semibold); title.lineBreakMode = .byTruncatingMiddle
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let kind = NSTextField(labelWithString: kindLabel)

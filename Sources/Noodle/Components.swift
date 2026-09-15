@@ -114,8 +114,14 @@ struct MessageBubble: View {
                     .buttonStyle(.plain)
                     .help(agent.displayName)
                     .accessibilityLabel("Show \(agent.displayName)'s profile")
+                    .contextMenu {
+                        Button("Show Activity") { store.showActivity(for: agent) }
+                    }
                 } else {
                     BotAvatar(agent: agent, size: 27)
+                        .contextMenu {
+                            Button("Show Activity") { store.showActivity(for: agent) }
+                        }
                 }
             }
 

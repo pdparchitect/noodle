@@ -30,6 +30,24 @@ Messages, unsent text, attachments, and conversation details update in both
 places. Each window scrolls independently. Closing a window keeps the conversation
 and its draft available in Noodle.
 
+## Watch an agent’s activity
+
+Right-click a bot in the sidebar or its avatar in a conversation and choose
+**Show Activity**. Each bot has one floating log window showing its runtime
+status, tool activity, and output across direct and group conversations.
+The window uses the same frame as previews: drag the header to move it, resize
+from its edges, and close it with the close control, **Esc**, or **⌘W**.
+
+Scroll up or select text to pause automatic following. Right-click the log for
+**Copy**, **Copy All**, **Select All**, **Follow Latest**, and **Clear**.
+Selected text also supports the standard **⌘C** shortcut.
+Recent activity stays in memory while Noodle is open, including while the window
+is closed. Logs are limited to 500 entries and 256 KiB per bot, with long output
+trimmed. Restarting Noodle clears them.
+
+Available detail depends on the harness. Apple currently reports working and
+lifecycle status; other harnesses also expose tool activity and text output.
+
 ## Messages and files
 
 - **Return** sends; **Shift+Return** adds a line.
