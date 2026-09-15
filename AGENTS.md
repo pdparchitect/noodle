@@ -1,5 +1,11 @@
 # Project instructions
 
+## UI copy
+
+Keep visible copy focused on functional labels and necessary status or error messages.
+Do not add persistent instructional hints, shortcut legends, or explanatory footer
+text unless explicitly requested. Put optional guidance in tooltips or documentation.
+
 ## Apple history utilities
 
 When changing Apple context management or upgrading the Apple SDK/toolchain, read

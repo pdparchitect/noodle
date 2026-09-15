@@ -253,31 +253,53 @@ struct ScreenCapturePreview: View {
             ContentUnavailableView("No \(model.kind.rawValue.lowercased()) with a preview", systemImage: "display",
                 description: Text("Open or restore a window, or connect a screen, then refresh."))
         } else {
-            ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 16)], spacing: 16) {
-                    ForEach(model.sources) { source in
-                        Button { model.select(source) } label: {
-                            VStack(alignment: .leading, spacing: 8) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 8).fill(.black.opacity(0.15))
-                                    if let thumbnail = model.thumbnails[source.id] {
-                                        Image(decorative: thumbnail, scale: 1).resizable().scaledToFit().padding(5)
-                                    } else {
-                                        Image(systemName: model.kind == .screen ? "display" : "macwindow")
-                                            .font(.largeTitle).foregroundStyle(.secondary)
-                                    }
-                                }.frame(height: 145)
-                                Text(source.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                                Text(source.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                            }.padding(10).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain).help("Preview \(source.title)")
-                        .accessibilityLabel("Preview \(source.title), \(source.subtitle)")
+            GeometryReader { geometry in
+                // Use the same column count for layout and vertical keyboard movement.
+                let columns = max(1, Int((geometry.size.width - 36 + 16) / (220 + 16)))
+                ScrollViewReader { scroll in
+                    ScrollView {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: columns), spacing: 16) {
+                            ForEach(model.sources) { source in
+                                sourceButton(source).id(source.id)
+                            }
+                        }.padding(18)
                     }
-                }.padding(18)
+                    .onChange(of: model.focusedSourceID) { _, id in
+                        if let id { scroll.scrollTo(id) }
+                    }
+                    .onChange(of: columns) { _, _ in
+                        if let id = model.focusedSourceID { scroll.scrollTo(id) }
+                    }
+                    .background(CapturePickerKeyboard(model: model, columns: columns))
+                }
             }
         }
+    }
+    private func sourceButton(_ source: ScreenCaptureSource) -> some View {
+        let focused = model.focusedSourceID == source.id
+        return Button { model.select(source) } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8).fill(.black.opacity(0.15))
+                    if let thumbnail = model.thumbnails[source.id] {
+                        Image(decorative: thumbnail, scale: 1).resizable().scaledToFit().padding(5)
+                    } else {
+                        Image(systemName: model.kind == .screen ? "display" : "macwindow")
+                            .font(.largeTitle).foregroundStyle(.secondary)
+                    }
+                }.frame(height: 145)
+                Text(source.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                Text(source.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }.padding(10).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(focused ? Color.accentColor : .clear, lineWidth: 2)
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).help("Preview \(source.title)")
+        .accessibilityLabel("Preview \(source.title), \(source.subtitle)")
+        .accessibilityAddTraits(focused ? .isSelected : [])
     }
     private var commentEditor: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -296,10 +318,6 @@ struct ScreenCapturePreview: View {
                 Button("Refresh", systemImage: "arrow.clockwise") { model.chooseSources(retryUnavailable: true) }.disabled(model.loadingSources)
                 if model.loadingSources { ProgressView().controlSize(.small).help("Loading previews…") }
                 Spacer()
-                Text(model.kind == .window
-                     ? "This display first, then other desktops and full-screen windows. Largest first."
-                     : "Each screen shows its active Space. Use Windows for apps in other Spaces.")
-                    .font(.caption).foregroundStyle(.secondary)
             } else {
                 Button("Choose Another…") { model.chooseSources() }
                     .help(model.phase == .annotating ? "Choose another window or screen" : "Choose Another (⌫)")
@@ -315,6 +333,52 @@ struct ScreenCapturePreview: View {
                     Button("Capture") { model.capture() }.buttonStyle(.borderedProminent).disabled(!model.canCapture)
                 }
             }
+        }
+    }
+}
+
+private struct CapturePickerKeyboard: NSViewRepresentable {
+    let model: ScreenCaptureModel
+    let columns: Int
+    func makeNSView(context: Context) -> ScreenCapturePickerKeyboardView { ScreenCapturePickerKeyboardView() }
+    func updateNSView(_ view: ScreenCapturePickerKeyboardView, context: Context) {
+        view.model = model; view.columns = columns
+    }
+}
+
+/// Give the source grid initial focus without taking keys from other focused controls.
+@MainActor final class ScreenCapturePickerKeyboardView: NSView {
+    weak var model: ScreenCaptureModel?
+    var columns = 1
+    override var acceptsFirstResponder: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.model?.phase == .choosing else { return }
+            self.window?.makeFirstResponder(self)
+        }
+    }
+    override func keyDown(with event: NSEvent) {
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        if event.keyCode == 48, modifiers.isEmpty || modifiers == .shift {
+            if modifiers == .shift { window?.selectPreviousKeyView(nil) } else { window?.selectNextKeyView(nil) }
+            return
+        }
+        // Physical arrows also carry .function and .numericPad on macOS.
+        guard let model, model.phase == .choosing,
+              modifiers.isEmpty else {
+            super.keyDown(with: event); return
+        }
+        switch event.keyCode {
+        case 123: model.moveSourceFocus(.left, columns: columns)
+        case 124: model.moveSourceFocus(.right, columns: columns)
+        case 125: model.moveSourceFocus(.down, columns: columns)
+        case 126: model.moveSourceFocus(.up, columns: columns)
+        case 36, 76: if !event.isARepeat { model.selectFocusedSource() }
+        case 53: window?.cancelOperation(nil)
+        default: super.keyDown(with: event)
         }
     }
 }

@@ -53,6 +53,94 @@ import XCTest
             isARepeat: repeatKey, keyCode: code)!
     }
 
+    func testPickerArrowKeysFollowGridEdgesResizeAndOpenHighlightedSource() async throws {
+        let service = CaptureTestService(); service.preview = image()
+        service.list = (1...8).map { .init(id: .window(UInt32($0)), title: "Window \($0)", subtitle: "Fixture") }
+        let c = preview(service), panel = try XCTUnwrap(c.panel), model = try XCTUnwrap(c.model)
+        try await wait {
+            panel.contentView?.layoutSubtreeIfNeeded()
+            return !model.loadingSources && (panel.firstResponder as? ScreenCapturePickerKeyboardView)?.columns == 3
+        }
+        let sources = model.sources
+        XCTAssertEqual(model.focusedSourceID, sources[0].id)
+        func arrow(_ code: UInt16, _ text: String, expected: Int, repeating: Bool = false) {
+            panel.sendEvent(key(panel, code: code, text: text, flags: [.function, .numericPad], repeatKey: repeating))
+            XCTAssertEqual(model.focusedSourceID, sources[expected].id)
+            XCTAssertEqual(model.phase, .choosing)
+            XCTAssertTrue(service.feeds.isEmpty)
+        }
+        arrow(123, "\u{f702}", expected: 0)
+        arrow(126, "\u{f700}", expected: 0)
+        arrow(124, "\u{f703}", expected: 1)
+        arrow(124, "\u{f703}", expected: 2, repeating: true)
+        arrow(124, "\u{f703}", expected: 2)
+        arrow(125, "\u{f701}", expected: 5)
+        arrow(125, "\u{f701}", expected: 7)
+        arrow(125, "\u{f701}", expected: 7)
+        arrow(126, "\u{f700}", expected: 4)
+        arrow(123, "\u{f702}", expected: 3)
+        arrow(123, "\u{f702}", expected: 3)
+        panel.setContentSize(.init(width: 580, height: 440))
+        try await wait {
+            panel.contentView?.layoutSubtreeIfNeeded()
+            return (panel.firstResponder as? ScreenCapturePickerKeyboardView)?.columns == 2
+        }
+        arrow(125, "\u{f701}", expected: 5)
+        arrow(126, "\u{f700}", expected: 3)
+        panel.sendEvent(key(panel, code: 36, text: "\r", flags: [], repeatKey: true))
+        XCTAssertEqual(model.phase, .choosing)
+        panel.sendEvent(key(panel, code: 36, text: "\r", flags: []))
+        XCTAssertEqual(model.source, sources[3]); XCTAssertEqual(model.phase, .loading)
+        try await wait { service.feeds.first?.started == true }
+        service.feeds[0].send(image())
+        try await wait { model.canCapture }
+        panel.sendEvent(key(panel, code: 51, text: "\u{7f}", flags: []))
+        try await wait {
+            panel.contentView?.layoutSubtreeIfNeeded()
+            return !model.loadingSources && panel.firstResponder is ScreenCapturePickerKeyboardView
+        }
+        XCTAssertEqual(model.focusedSourceID, model.sources.first?.id)
+        panel.sendEvent(key(panel, code: 76, text: "\u{3}", flags: .numericPad))
+        XCTAssertEqual(model.source, sources[0])
+    }
+
+    func testPickerKeepsKeyboardSelectionVisibleAndLeavesOtherControlsAlone() async throws {
+        let service = CaptureTestService(); service.preview = image()
+        service.list = (1...20).map { .init(id: .window(UInt32($0)), title: "Window \($0)", subtitle: "Fixture") }
+        let c = preview(service), panel = try XCTUnwrap(c.panel), model = try XCTUnwrap(c.model)
+        try await wait {
+            panel.contentView?.layoutSubtreeIfNeeded()
+            return !model.loadingSources && panel.firstResponder is ScreenCapturePickerKeyboardView
+        }
+        let keyboard = try XCTUnwrap(panel.firstResponder as? ScreenCapturePickerKeyboardView)
+        func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+        let scroll = try XCTUnwrap(descendants(try XCTUnwrap(panel.contentView)).compactMap { $0 as? NSScrollView }.first)
+        let initial = scroll.documentVisibleRect
+        for _ in 0..<10 {
+            panel.sendEvent(key(panel, code: 125, text: "\u{f701}", flags: [.function, .numericPad]))
+        }
+        try await wait {
+            panel.contentView?.layoutSubtreeIfNeeded()
+            return scroll.documentVisibleRect.minY > initial.minY
+        }
+        let focused = model.focusedSourceID
+        keyboard.keyDown(with: key(panel, code: 123, text: "\u{f702}", flags: [.shift, .function, .numericPad]))
+        XCTAssertEqual(model.focusedSourceID, focused)
+        let field = NSTextField(string: "Editable control")
+        panel.contentView?.addSubview(field)
+        panel.autorecalculatesKeyViewLoop = false
+        keyboard.nextKeyView = field
+        panel.sendEvent(key(panel, code: 48, text: "\t", flags: []))
+        XCTAssertTrue(panel.firstResponder is NSTextView)
+        panel.sendEvent(key(panel, code: 123, text: "\u{f702}", flags: [.function, .numericPad]))
+        XCTAssertEqual(model.focusedSourceID, focused)
+        XCTAssertTrue(panel.firstResponder is NSTextView)
+        XCTAssertFalse(panel.isVisible)
+        XCTAssertTrue(panel.makeFirstResponder(keyboard))
+        panel.sendEvent(key(panel, code: 53, text: "\u{1b}", flags: []))
+        XCTAssertNil(c.panel); XCTAssertEqual(model.phase, .closed)
+    }
+
     func testReopeningPickerPreservesOriginalSaveDestinationAndLiveSession() async throws {
         let service = CaptureTestService(); var first = 0, second = 0
         let c = preview(service) { _, _, _, _ in first += 1 }

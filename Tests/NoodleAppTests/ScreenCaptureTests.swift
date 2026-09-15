@@ -348,16 +348,23 @@ import NoodleCore
         model.chooseSources()
         await until { service.thumbnailWaiters.count == 3 }
         XCTAssertTrue(model.sources.isEmpty)
+        model.moveSourceFocus(.down, columns: 3); model.selectFocusedSource()
+        XCTAssertNil(model.focusedSourceID); XCTAssertTrue(service.feeds.isEmpty)
         service.thumbnailWaiters.removeValue(forKey: b.id)?.resume(returning: image())
         await until { service.activeThumbnails == 2 }
         XCTAssertTrue(model.sources.isEmpty)
         service.thumbnailWaiters.removeValue(forKey: a.id)?.resume(throwing: ScreenCaptureFailure(message: "Closed"))
         await until { model.sources == [b] }
+        XCTAssertEqual(model.focusedSourceID, b.id)
         XCTAssertTrue(model.loadingSources)
         service.thumbnailWaiters.removeValue(forKey: c.id)?.resume(returning: image())
         await until { !model.loadingSources }
         XCTAssertEqual(model.sources, [b, c])
+        XCTAssertEqual(model.focusedSourceID, b.id)
+        model.moveSourceFocus(.right, columns: 3)
+        XCTAssertEqual(model.focusedSourceID, c.id)
         model.close()
+        XCTAssertNil(model.focusedSourceID)
     }
 
     func testPickerRefreshRejectsLateThumbnailsFromPreviousTab() async {
@@ -374,6 +381,7 @@ import NoodleCore
         service.thumbnailWaiters.removeValue(forKey: a.id)?.resume(returning: image())
         await until { service.activeThumbnails == 0 }
         XCTAssertEqual(model.sources, [b]); XCTAssertEqual(Set(model.thumbnails.keys), Set([b.id]))
+        XCTAssertEqual(model.focusedSourceID, b.id)
         model.close()
     }
 

@@ -8,6 +8,7 @@ Open **Noodle → Settings → Keybindings** to discover commands and change the
 | New Group | ⇧⌘N | Noodle |
 | Search Conversations | ⌘F | The current chat window |
 | Record / Stop Voice Message | ⇧⌘D | The current chat, on macOS 26 or later |
+| Capture | ⇧⌘S | The current chat window |
 | Add Annotation | ⇧⌘A | Selected conversation text or attachment-preview text; starts region selection for previewed images |
 | Annotate Region | ⇧⌘R | The current conversation window or attachment preview |
 | Save Annotation Comment | ⌘Return | The annotation popup or an unsent annotation's comment editor |
@@ -17,6 +18,8 @@ Click a binding, then press the new combination using Command (⌘) or Control (
 Bindings apply immediately to menus, native preview handlers and shortcut hints, and persist across launches. A cleared binding leaves its menu command or button available. Recording a shortcut consumes the keystroke so it does not execute the command. Capture ends when Settings loses keyboard focus, the control is removed, or you click elsewhere.
 
 These are shortcuts within Noodle. Standard controls retain their native behavior: Return sends a chat message, Shift-Return inserts a line break, Escape cancels an annotation or closes an idle preview, and Space opens a focused attachment. Submitting an annotation makes its comment read-only regardless of the save shortcut.
+
+In the screen and window capture picker, use Left/Right to move across a row and Up/Down to move between rows. The highlighted source stays visible as you browse. Press Return to open its live preview, Delete to choose another source, or Escape to close the preview.
 
 ## Validation
 

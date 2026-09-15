@@ -6,6 +6,14 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Remove instructional footer labels from the screen and window capture picker.
+
+### Added
+
+- Navigate the screen and window capture picker with arrow keys, keep the highlighted source in view, and press Return to preview it.
+
 ## [0.16.0] - 2026-09-15
 
 ### Added

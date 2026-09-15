@@ -9,6 +9,7 @@ import NoodleCore
     private(set) var phase: Phase = .choosing { didSet { onCommandsChange?() } }
     var kind: ScreenCaptureKind
     private(set) var sources: [ScreenCaptureSource] = []
+    private(set) var focusedSourceID: ScreenCaptureSource.ID?
     private(set) var thumbnails: [ScreenCaptureSource.ID: CGImage] = [:]
     private(set) var source: ScreenCaptureSource?
     private(set) var image: CGImage?
@@ -45,7 +46,7 @@ import NoodleCore
         let token = cancelOperation()
         if retryUnavailable { unavailableSources.removeAll() }
         phase = .choosing; source = nil; image = nil; region = nil; comment = ""
-        sources = []; thumbnails = [:]; error = nil; loadingSources = false
+        sources = []; focusedSourceID = nil; thumbnails = [:]; error = nil; loadingSources = false
         needsPermission = !service.hasPermission
         guard !needsPermission else { return }
         loadingSources = true
@@ -76,6 +77,7 @@ import NoodleCore
                                 let candidate = candidates[next]
                                 self.thumbnails[candidate.id] = image
                                 self.sources.append(candidate)
+                                if self.focusedSourceID == nil { self.focusedSourceID = candidate.id }
                             }
                             next += 1
                         }
@@ -99,6 +101,27 @@ import NoodleCore
     func permissionMayHaveChanged() {
         if phase == .choosing, needsPermission, service.hasPermission { chooseSources() }
     }
+    enum SourceDirection { case left, right, up, down }
+    func moveSourceFocus(_ direction: SourceDirection, columns: Int) {
+        guard phase == .choosing, !sources.isEmpty else { return }
+        guard let index = sources.firstIndex(where: { $0.id == focusedSourceID }) else {
+            focusedSourceID = sources[0].id; return
+        }
+        let columns = max(1, columns)
+        var next = index
+        switch direction {
+        case .left: if index % columns > 0 { next -= 1 }
+        case .right: if index % columns < columns - 1 { next = min(index + 1, sources.count - 1) }
+        case .up: if index >= columns { next -= columns }
+        case .down:
+            if (index / columns + 1) * columns < sources.count { next = min(index + columns, sources.count - 1) }
+        }
+        focusedSourceID = sources[next].id
+    }
+    func selectFocusedSource() {
+        guard phase == .choosing, let source = sources.first(where: { $0.id == focusedSourceID }) else { return }
+        select(source)
+    }
     private func selectionFailed(_ source: ScreenCaptureSource) {
         unavailableSources.insert(source.id)
         chooseSources()
@@ -107,7 +130,7 @@ import NoodleCore
     func select(_ source: ScreenCaptureSource) {
         let token = cancelOperation()
         self.source = source; image = nil; region = nil; comment = ""; error = nil; phase = .loading
-        sources = []; thumbnails = [:]; loadingSources = false
+        sources = []; focusedSourceID = nil; thumbnails = [:]; loadingSources = false
         let excluded = excludedWindows()
         operation = Task { [weak self, service] in
             var feed: (any ScreenCaptureFeed)?
@@ -164,7 +187,7 @@ import NoodleCore
     }
     func close() {
         _ = cancelOperation(); phase = .closed; image = nil; sources = []; thumbnails = [:]
-        loadingSources = false
+        loadingSources = false; focusedSourceID = nil
         source = nil; region = nil; comment = ""
     }
 }
