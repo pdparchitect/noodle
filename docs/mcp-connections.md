@@ -60,5 +60,8 @@ Use `swift test --disable-sandbox --filter NoodleMCPTests` for protocol tests an
 `zsh Tests/mcp-fixture.sh --check` for the isolated signed CLI/broker check.
 `zsh Tests/mcp-fixture.sh --open` opens an interactive sign-in fixture; it requires
 a real provider account. Its discovery check does not execute provider tools.
+`zsh Tests/mcp-window-routing.sh` checks repeated main-window launches, closing and
+reopening, separate conversation windows, and synthetic sign-in callbacks in a
+sandboxed app without accounts or bots.
 
 [Agent access](security.md) · [Documentation](README.md)

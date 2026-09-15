@@ -46,15 +46,15 @@ struct NoodleApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("Noodle", id: "main") {
+        MainWindowScene {
             RootView()
                 .environment(store)
                 .frame(minWidth: 980, minHeight: 670)
                 .preferredColorScheme(.dark)
                 .background(WindowConfiguration())
-                .reuseWindowForExternalEvents { store.mcp.receiveAuthorizationCallback($0) }
+        } onOpenURL: {
+            store.mcp.receiveAuthorizationCallback($0)
         }
-        .handlesExternalEvents(matching: ["*"])
         .defaultSize(width: 1160, height: 810)
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified(showsTitle: false))
@@ -148,14 +148,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard urls.contains(where: { $0.scheme == "noodle" && $0.host == "shared" }) else { return }
         Task { await NoodleStore.active?.processSharedInbox() }
     }
-
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag {
-            sender.windows.first?.makeKeyAndOrderFront(nil)
-        }
-        return true
-    }
-
 }
 
 extension AppDelegate: UNUserNotificationCenterDelegate {

@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Fixed
 
 - Remove instructional footer labels from the screen and window capture picker.
+- Reuse a single main window when launching or reopening Noodle, preventing duplicate conversation lists while preserving separate chat windows.
 
 ### Added
 

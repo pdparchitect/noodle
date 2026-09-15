@@ -1,12 +1,18 @@
 import AppKit
 import SwiftUI
 
-extension View {
-    // Without an explicit preference, WindowGroup can create another chat window
-    // even when the application delegate has already consumed an OAuth URL.
-    func reuseWindowForExternalEvents(perform action: @escaping (URL) -> Void) -> some View {
-        onOpenURL(perform: action)
-            .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
+/// Main app state belongs to one window; separate conversations use their own group.
+struct MainWindowScene<Content: View>: Scene {
+    @ViewBuilder var content: () -> Content
+    var onOpenURL: (URL) -> Void
+
+    var body: some Scene {
+        Window("Noodle", id: "main") {
+            content()
+                .onOpenURL(perform: onOpenURL)
+                .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
+        }
+        .handlesExternalEvents(matching: ["*"])
     }
 }
 
