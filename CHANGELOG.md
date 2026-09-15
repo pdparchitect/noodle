@@ -18,6 +18,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Resize Settings to the selected pane's measured height on macOS 27, keeping taller panes and their controls visible in local builds.
 - Accept Markdown, text, source code, and other file types dropped into conversations, including directly onto the message input.
 - Keep explicit Apple harness tool requests out of the tool-free chat recovery path.
 - Refocus the chat input after saving a text or region annotation in the conversation window, ready to submit the draft.

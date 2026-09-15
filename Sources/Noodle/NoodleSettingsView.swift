@@ -8,55 +8,63 @@ enum NoodleSettingsTab: Hashable {
 
 struct NoodleSettingsView: View {
     @Environment(NoodleStore.self) private var store
+    @State private var contentHeights: [NoodleSettingsTab: CGFloat] = [:]
 
     var body: some View {
         @Bindable var store = store
 
         TabView(selection: $store.selectedSettingsTab.animation(.easeInOut(duration: 0.22))) {
             GeneralSettingsView()
-                .settingsContentSize()
+                .settingsContentSize(for: .general)
                 .tabItem {
                     Label("General", systemImage: "gearshape")
                 }
                 .tag(NoodleSettingsTab.general)
             ChatSettingsView()
-                .settingsContentSize()
+                .settingsContentSize(for: .chat)
                 .tabItem {
                     Label("Chat", systemImage: "bubble.left.and.bubble.right")
                 }
                 .tag(NoodleSettingsTab.chat)
             HarnessesSettingsView()
-                .settingsContentSize()
+                .settingsContentSize(for: .harnesses)
                 .tabItem {
                     Label("Harness", systemImage: "terminal")
                 }
                 .tag(NoodleSettingsTab.harnesses)
             HeartbeatsSettingsView()
-                .settingsContentSize()
+                .settingsContentSize(for: .heartbeats)
                 .tabItem {
                     Label("Heartbeat", systemImage: "waveform.path.ecg")
                 }
                 .tag(NoodleSettingsTab.heartbeats)
             AgentAccessSettingsView()
-                .settingsContentSize()
+                .settingsContentSize(for: .security)
                 .tabItem { Label("Security", systemImage: "lock.shield") }
                 .tag(NoodleSettingsTab.security)
             MCPSettingsView()
-                .settingsContentSize()
+                .settingsContentSize(for: .mcps)
                 .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
                 .tag(NoodleSettingsTab.mcps)
             KeybindingsSettingsView()
-                .settingsContentSize()
+                .settingsContentSize(for: .keybindings)
                 .tabItem { Label("Keybindings", systemImage: "keyboard") }
                 .tag(NoodleSettingsTab.keybindings)
             CompanionAppsSettingsView()
-                .settingsContentSize()
+                .settingsContentSize(for: .companions)
                 .tabItem { Label("Companions", systemImage: "square.stack.3d.up") }
                 .tag(NoodleSettingsTab.companions)
             UpdatesSettingsView()
-                .settingsContentSize()
+                .settingsContentSize(for: .updates)
                 .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }
                 .tag(NoodleSettingsTab.updates)
+        }
+        // The native Settings tab controller can retain the previous pane's
+        // height on macOS 27. Give the scene the selected pane's measured ideal
+        // height explicitly, without recreating its controls or presentation state.
+        .frame(height: contentHeights[store.selectedSettingsTab])
+        .onPreferenceChange(SettingsContentHeights.self) { heights in
+            contentHeights.merge(heights) { _, new in new }
         }
         .modifier(SettingsWindowResizeAnchor())
     }
@@ -178,10 +186,23 @@ private struct SettingsWindowResizeAnchor: ViewModifier {
     }
 }
 
+private struct SettingsContentHeights: PreferenceKey {
+    static let defaultValue: [NoodleSettingsTab: CGFloat] = [:]
+
+    static func reduce(value: inout [NoodleSettingsTab: CGFloat], nextValue: () -> [NoodleSettingsTab: CGFloat]) {
+        value.merge(nextValue()) { _, new in new }
+    }
+}
+
 private extension View {
-    func settingsContentSize() -> some View {
+    func settingsContentSize(for tab: NoodleSettingsTab) -> some View {
         frame(width: 580)
             .fixedSize(horizontal: false, vertical: true)
+            .background {
+                GeometryReader { geometry in
+                    Color.clear.preference(key: SettingsContentHeights.self, value: [tab: geometry.size.height])
+                }
+            }
     }
 }
 
