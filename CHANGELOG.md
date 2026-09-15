@@ -20,7 +20,7 @@ All notable changes to Noodle are documented here, following
 
 - Fit the Tools settings list to its content, removing excess space below connection buttons while keeping long lists scrollable.
 - Keep tool sign-in progress and Cancel in the action row, with the sign-in message in the existing status line to prevent layout shifts.
-- Resize Settings to the selected pane's measured height on macOS 27, keeping taller panes and their controls visible in local builds.
+- Preserve the selected SDK throughout local builds, fixing Settings resizing and legacy macOS appearance after rebuilds. Reject app packages with mismatched SDK metadata.
 - Accept Markdown, text, source code, and other file types dropped into conversations, including directly onto the message input.
 - Keep explicit Apple harness tool requests out of the tool-free chat recovery path.
 - Refocus the chat input after saving a text or region annotation in the conversation window, ready to submit the draft.

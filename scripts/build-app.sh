@@ -71,6 +71,7 @@ fi
 developer_dir="$(xcode-select -p)"
 toolchain_dir="$developer_dir/Toolchains/XcodeDefault.xctoolchain"
 sdk_root="$(xcrun --sdk macosx --show-sdk-path)"
+python3 "$project_root/scripts/verify-build-sdk.py" "$bin_path/Noodle" "$(xcrun --sdk macosx --show-sdk-version)" >&2
 xcode_build_version="$(xcodebuild -version | awk '/Build version/ { print $3 }')"
 target_arch="$(uname -m)"
 intent_source_list="$build_root/Noodle.AppIntentSources"

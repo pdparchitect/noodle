@@ -16,6 +16,11 @@ if [[ -z "${NOODLE_SWIFT:-}" && -z "${NOODLE_MACOS_SDK:-}" &&
     noodle_swift=/Library/Developer/CommandLineTools/usr/bin/swift
     noodle_sdk=/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk
 fi
+# Direct toolchain executables bypass xcrun's environment setup. SwiftPM's
+# --sdk alone does not give Clang the SDK version: it can record macOS 15.0
+# (the deployment target) and select legacy SwiftUI behavior in a new build.
+# Keep the SDK environment consistent for manifests, compilation, and linking.
+export SDKROOT="$noodle_sdk"
 noodle_scratch_args=()
 if [[ "$noodle_sdk" != "$noodle_xcode_sdk" ]]; then
     export NOODLE_APPLE_HARNESS_ONLY=1
@@ -70,4 +75,7 @@ if [[ -d "$noodle_plugins" && -x "$noodle_plugin_server" ]]; then
     done
     noodle_plugin_args=(-Xswiftc -external-plugin-path -Xswiftc "$noodle_macro_links#$noodle_plugin_server")
 fi
-exec "$noodle_swift" "$noodle_command" --build-system native --sdk "$noodle_sdk" "${noodle_scratch_args[@]}" "${noodle_plugin_args[@]}" "$@"
+# Include the linker sysroot in the build key as well. Changing SDKROOT alone
+# does not invalidate executables previously linked with the incorrect version.
+exec "$noodle_swift" "$noodle_command" --build-system native --sdk "$noodle_sdk" "${noodle_scratch_args[@]}" "${noodle_plugin_args[@]}" \
+    -Xlinker -syslibroot -Xlinker "$noodle_sdk" "$@"
