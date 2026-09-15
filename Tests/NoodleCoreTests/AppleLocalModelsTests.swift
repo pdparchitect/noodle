@@ -19,6 +19,7 @@ final class AppleLocalModelsTests: XCTestCase {
             let imported = try store.importModel(from: source)
             XCTAssertEqual(try store.models(), [imported])
             XCTAssertEqual(imported.contextSize, 32_768)
+            XCTAssertNil(imported.sourceRepository)
             XCTAssertTrue(AppleLocalModelStore.validIdentifier(imported.id))
             XCTAssertTrue(imported.harnessModel.displayName.contains("MLX"))
             let copied = try store.folder(id: imported.id).appendingPathComponent("model.safetensors")

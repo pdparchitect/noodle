@@ -64,12 +64,23 @@ finish its response. Tool success still depends on the model and the request.
 ### Import a local model
 
 1. Open **Settings → Harness → Apple Intelligence → Local Models**.
-2. Choose **Import Model** and select an already downloaded MLX Qwen2, Qwen3, or
+2. Choose **Download** beside a recommended model to download and import it.
+   The list shows each download size and links to its model details and license.
+   Downloads use pinned Hugging Face revisions, verify each file, and publish the
+   model only after import validation succeeds. **Cancel** removes partial files;
+   retry a failed or cancelled download with **Download**.
+3. Alternatively, choose **Import Model** and select an already downloaded MLX Qwen2, Qwen3, or
    Llama text chat/instruct model folder. It must contain regular files, including
    `config.json`, `tokenizer.json`, `tokenizer_config.json`, and `.safetensors`
    weights, plus a chat template. Linked Hugging Face cache snapshots must first
    be copied into a folder with real files.
-3. Edit a bot, choose Apple Intelligence, and select the imported model.
+4. Edit a bot, choose Apple Intelligence, and select the imported model.
+
+The recommended list is available before downloading any weights. It starts with
+Qwen3 4B Instruct (2507, 4-bit) and Qwen3 8B (4-bit); both accept text and tools.
+Downloads run in the app using its existing outbound network access and private
+storage. The restricted bot helper remains offline. Allow space for both the
+download and the imported copy during installation.
 
 Noodle copies model resources into its private `AppleModels` directory. In
 restricted mode the helper can read the selected model but cannot modify the

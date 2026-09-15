@@ -7,6 +7,7 @@ public struct AppleLocalModel: Codable, Identifiable, Equatable, Sendable {
     public let contextSize: Int
     public let byteCount: Int64
     public let modelType: String
+    public let sourceRepository: String?
 
     public var harnessModel: HarnessModel {
         .init(id: id, displayName: name + " (MLX)",
@@ -59,7 +60,7 @@ public struct AppleLocalModelStore: Sendable {
 
     /// Copy only model resources, never executable code or linked files. Publish
     /// the catalogue entry only after the complete copy has been validated.
-    public func importModel(from source: URL) throws -> AppleLocalModel {
+    public func importModel(from source: URL, sourceRepository: String? = nil) throws -> AppleLocalModel {
         let source = source.standardizedFileURL
         guard source.resolvingSymlinksInPath().path == source.path else {
             throw HarnessSetupError("Choose a model folder containing regular files, not symbolic links.")
@@ -109,7 +110,9 @@ public struct AppleLocalModelStore: Sendable {
             size += (try FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? NSNumber)?.int64Value ?? 0
         }
         let model = AppleLocalModel(id: id, name: String(source.lastPathComponent.prefix(120)),
-                                   contextSize: context, byteCount: size, modelType: modelType)
+                                   contextSize: context, byteCount: size, modelType: modelType,
+                                   sourceRepository: sourceRepository)
+        try Task.checkCancellation()
         try JSONEncoder().encode(model).write(to: staging.appendingPathComponent(Self.metadata), options: .atomic)
         try FileManager.default.moveItem(at: staging, to: folder(id: id))
         return model

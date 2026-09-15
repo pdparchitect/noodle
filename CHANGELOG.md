@@ -8,11 +8,13 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Keep trailing decimal zeros and use monospaced digits in model download progress to reduce label movement.
 - Remove instructional footer labels from the screen and window capture picker.
 - Reuse a single main window when launching or reopening Noodle, preventing duplicate conversation lists while preserving separate chat windows.
 
 ### Added
 
+- Download recommended MLX models directly from Apple Intelligence’s Local Models settings, with size and source details, progress, cancellation, and verified imports.
 - Navigate the screen and window capture picker with arrow keys, keep the highlighted source in view, and press Return to preview it.
 
 ## [0.16.0] - 2026-09-15
