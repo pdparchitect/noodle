@@ -143,7 +143,7 @@ jobs:
           "$bin_path/NoodleAppleAgent" --inspect > .build/apple27/inspection.json
           python3 -c 'import json; data = json.load(open(".build/apple27/inspection.json")); assert data.get("localModelsSupported") is True, "macOS 27 support was compiled out"'
           export NOODLE_APPLE_TEST_HELPER="$bin_path/NoodleAppleAgent"
-          zsh scripts/swift-apple.sh test --disable-sandbox --scratch-path .build/apple27 --filter 'AppleLocalModelsTests|AppleModelBackendTests|AppleToolsTests|AppleConversationSessionTests|AppleContextBudgetTests|AppleHistoryReaderTests|AppleSandboxTests|Apple27LiveTests'
+          zsh scripts/swift-apple.sh test --disable-sandbox --scratch-path .build/apple27 --filter 'AppleLocalModelsTests|AppleModelDownloaderTests|NoodleAppleRuntimeTests'
           print 'macOS 27 harness build, Metal shaders, and regression tests passed. Live inference remains an explicit local opt-in.' >> "$GITHUB_STEP_SUMMARY"
 
   test-computer:

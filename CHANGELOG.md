@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-09-15
+
 ### Changed
 
 - Replace Image layout with Attachment layout for all message attachments, including annotations, documents, and voice messages, with Wrap as the default and Vertical and Stack options.
@@ -14,6 +16,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Include every Apple runtime regression suite in the macOS 27 CI checks.
 - Confirm local model removal before deleting its files, and recheck bot assignments when removal is confirmed.
 - Explain local model usage in a popover with direct access to each bot’s Harness settings, an updated assignment list after editing, and removal once no bots use the model.
 - Keep trailing decimal zeros and use monospaced digits in model download progress to reduce label movement.
