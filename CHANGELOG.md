@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-09-15
+
 ### Added
 
 - Open a bot’s editor from its profile, with Reply, Message, and Edit arranged in one compact action row.
@@ -20,6 +22,8 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Budget Apple model context before every generation on macOS 27, including tool continuations, with bounded history and tool results, image sizing, and room for replies. Recover image chat from context-limit errors without replaying workspace actions.
+- Use the canonical helper cache path for MLX shader compilation and delegate only that cache and read-only bundled resources to Apple's Metal compiler.
 - Run the macOS 27 Apple harness CI checks only when the runner has a compatible OS and SDK, with an explicit skip reason on older runners.
 - Fit the Tools settings list to its content, removing excess space below connection buttons while keeping long lists scrollable.
 - Keep tool sign-in progress and Cancel in the action row, with the sign-in message in the existing status line to prevent layout shifts.

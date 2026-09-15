@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-15
+
 ### Fixed
 
 - Keep other Local Mac folders readable while one folder waits for macOS consent, and prevent repeated folder reads from filling the file-operation queue.

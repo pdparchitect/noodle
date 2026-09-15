@@ -27,7 +27,8 @@ struct AppleModelBackend {
             #if canImport(FoundationModels, _version: 2)
             if #available(macOS 27, *) {
                 await AppleMLXCache.shared.evict()
-                return .init(identifier: id, contextSize: max(4_096, SystemLanguageModel.default.contextSize),
+                let size = SystemLanguageModel.default.contextSize
+                return .init(identifier: id, contextSize: size > 0 ? size : 4_096,
                              supportsImages: SystemLanguageModel.default.capabilities.contains(.vision), responseTokens: 768, local: nil)
             }
             return .init(identifier: id, contextSize: 4_096, supportsImages: false, responseTokens: 768, local: nil)
@@ -51,11 +52,27 @@ struct AppleModelBackend {
     }
 
     func session(tools: [any FoundationModels.Tool] = [], instructions: String, entries: [Transcript.Entry] = [],
-                 requireTool: Bool = false) -> LanguageModelSession {
+                 requireTool: Bool = false, contextReserve: Int = 512) -> LanguageModelSession {
         #if canImport(FoundationModels, _version: 2)
         if #available(macOS 27, *) {
-            let model: any FoundationModels.LanguageModel = (local as? MLXLanguageModel).map { $0 as any FoundationModels.LanguageModel }
-                ?? SystemLanguageModel.default
+            let budget = AppleContextBudget(contextSize: contextSize, responseTokens: responseTokens, reserve: contextReserve)
+            let model: any FoundationModels.LanguageModel
+            if let local = local as? MLXLanguageModel {
+                model = AppleContextModel(base: local, budget: budget) { request in
+                    let container = try await local.loadContainer()
+                    // Include schemas and role/call metadata as well as text.
+                    // Serialized tokens plus per-entry framing are conservative
+                    // for the supported local chat templates.
+                    let text = String(decoding: try JSONEncoder().encode(request.transcript), as: UTF8.self)
+                        + (try request.schema.map { String(decoding: try JSONEncoder().encode($0), as: UTF8.self) } ?? "")
+                    return await container.tokenizer.encode(text: text).count + request.transcript.count * 32
+                }
+            } else {
+                let system = SystemLanguageModel.default
+                model = AppleContextModel(base: system, budget: budget) { request in
+                    try await AppleContextBudget.systemTokenCount(request, model: system)
+                }
+            }
             return LanguageModelSession(profile: AppleTurnProfile(model: model, tools: tools,
                 instructions: instructions, requireTool: requireTool), history: entries)
         }

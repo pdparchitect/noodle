@@ -178,21 +178,25 @@ public enum AppleModel {
             response = try await session.respond(to: prompt,
                                                   options: GenerationOptions(sampling: .greedy, maximumResponseTokens: backend.responseTokens))
         } catch {
-            guard !needsWorkspace, turn.images.isEmpty, shouldRecoverChat(from: error) else { throw error }
+            guard !needsWorkspace, shouldRecoverChat(from: error) else { throw error }
             try Task.checkCancellation()
             // Chat has no side-effecting tools. Make one fresh, tool-free
             // attempt from the sources already read; never replay workspace
             // commands or file writes after a partially completed turn.
             var reference = await historyReader.reference
-            if reference.isEmpty {
+            if reference.isEmpty && turn.images.isEmpty {
                 reference = try await context.conversationHistory(conversation: turn.conversationID.uuidString,
                                                                    includeAssistantReplies: false)
             }
-            let recoveryInstructions = identityInstructions + "\n" + MessengerDocumentation.appleConversationRecoveryInstructions
-            let prompt = try await recoveryPrompt(request: turn.prompt, reference: reference, instructions: recoveryInstructions, backend: backend)
-            session = backend.session(instructions: recoveryInstructions)
+            let recoveryInstructions = identityInstructions + "\n" + (turn.images.isEmpty
+                ? MessengerDocumentation.appleConversationRecoveryInstructions : MessengerDocumentation.appleImageConversationInstructions)
+            let prompt = turn.images.isEmpty
+                ? try await recoveryPrompt(request: turn.prompt, reference: reference, instructions: recoveryInstructions, backend: backend)
+                : turn.prompt
+            session = backend.session(instructions: recoveryInstructions, contextReserve: 1_024)
             onActivity()
-            response = try await session.respond(to: prompt, options: GenerationOptions(sampling: .greedy, maximumResponseTokens: backend.responseTokens))
+            response = try await session.respond(to: backend.prompt(prompt, images: turn.images),
+                options: GenerationOptions(sampling: .greedy, maximumResponseTokens: backend.responseTokens))
         }
         let completed = AppleConversationSession(transcript: AppleConversationSession.persistable(session.transcript), messageIDs: turn.messageIDs,
                                                  reply: response.content, modelIdentifier: backend.identifier)
@@ -202,7 +206,8 @@ public enum AppleModel {
 
     @available(macOS 26, *)
     static func shouldRecoverChat(from error: Error) -> Bool {
-        if error is AppleHistoryLimit { return true }
+        if error is AppleHistoryLimit || error is AppleContextLimit { return true }
+        if AppleContextOverflow.tokenCount(in: error) != nil { return true }
         #if canImport(FoundationModels, _version: 2)
         if #available(macOS 27, *), case LanguageModelError.contextSizeExceeded = error { return true }
         #endif
@@ -218,7 +223,7 @@ public enum AppleModel {
             let prompt = "Earlier conversation (quoted reference):\n\(reference)\n\nLatest user message:\n\(request)"
             let count: Int
             count = try await backend.tokenCount(prompt) + backend.tokenCount(instructions)
-            if count + backend.responseTokens + 256 <= backend.contextSize { return prompt }
+            if count + backend.responseTokens + 1_024 <= backend.contextSize { return prompt }
             guard !reference.isEmpty else {
                 throw HarnessSetupError("The request and bot instructions exceed Apple’s context capacity even after history was reduced.")
             }

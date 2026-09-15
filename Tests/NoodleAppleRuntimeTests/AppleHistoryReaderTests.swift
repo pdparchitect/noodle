@@ -74,6 +74,11 @@ final class AppleHistoryReaderTests: XCTestCase {
         XCTAssertTrue(AppleModel.shouldRecoverChat(from: AppleHistoryLimit()))
         XCTAssertTrue(AppleModel.shouldRecoverChat(from: LanguageModelSession.ToolCallError(tool: HistoryFailureTool(), underlyingError: AppleHistoryLimit())))
         XCTAssertTrue(AppleModel.shouldRecoverChat(from: LanguageModelSession.GenerationError.exceededContextWindowSize(context)))
+        XCTAssertTrue(AppleModel.shouldRecoverChat(from: AppleContextLimit()))
+        XCTAssertTrue(AppleModel.shouldRecoverChat(from: NSError(domain: "TokenGenerationInference.DecoderModelError", code: 3,
+            userInfo: [NSLocalizedDescriptionKey: "Provided 4,130 tokens, but the maximum allowed is 4,096."])))
+        XCTAssertFalse(AppleModel.shouldRecoverChat(from: NSError(domain: "UnrelatedService", code: 3,
+            userInfo: [NSLocalizedDescriptionKey: "Provided 4,130 tokens, but the maximum allowed is 4,096."])))
         XCTAssertFalse(AppleModel.shouldRecoverChat(from: CancellationError()))
         XCTAssertFalse(AppleModel.shouldRecoverChat(from: LanguageModelSession.GenerationError.guardrailViolation(context)))
         XCTAssertFalse(AppleModel.shouldRecoverChat(from: LanguageModelSession.GenerationError.rateLimited(context)))

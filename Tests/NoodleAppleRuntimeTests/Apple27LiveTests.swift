@@ -40,11 +40,27 @@ final class Apple27LiveTests: XCTestCase {
         XCTAssertTrue(response.content.lowercased().contains("red"), response.content)
     }
 
-    static func writeSquare(to file: URL, color: CGColor = CGColor(red: 1, green: 0, blue: 0, alpha: 1)) throws {
-        let context = try XCTUnwrap(CGContext(data: nil, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 256,
+    func testLargeImageUsesContextBudget() async throws {
+        guard #available(macOS 27, *) else { return }
+        let backend = try await backend()
+        guard backend.supportsImages else { throw XCTSkip("This device has no image capability.") }
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("apple-image-budget-\(UUID()).png")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try Self.writeSquare(to: file, size: 2_048)
+        let oldPrompt = Transcript.Entry.prompt(.init(segments: [.text(.init(content: String(repeating: "Old unrelated conversation. ", count: 2_000)))]))
+        let oldAnswer = Transcript.Entry.response(.init(segments: [.text(.init(content: "Previous reply."))]))
+        let session = backend.session(instructions: "Identify the color of the attached image. Answer in one word.", entries: [oldPrompt, oldAnswer])
+        let response = try await session.respond(to: backend.prompt("What color is this square?", images: [file]),
+            options: .init(samplingMode: .greedy, maximumResponseTokens: 32))
+        XCTAssertTrue(response.content.lowercased().contains("red"), response.content)
+        XCTAssertTrue(session.transcript.contains(oldPrompt), "Only the generation input should be compacted")
+    }
+
+    static func writeSquare(to file: URL, color: CGColor = CGColor(red: 1, green: 0, blue: 0, alpha: 1), size: Int = 64) throws {
+        let context = try XCTUnwrap(CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: size * 4,
             space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
         context.setFillColor(color)
-        context.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+        context.fill(CGRect(x: 0, y: 0, width: size, height: size))
         let destination = try XCTUnwrap(CGImageDestinationCreateWithURL(file as CFURL, "public.png" as CFString, 1, nil))
         CGImageDestinationAddImage(destination, try XCTUnwrap(context.makeImage()), nil)
         XCTAssertTrue(CGImageDestinationFinalize(destination))

@@ -55,6 +55,18 @@ public enum AppleAgentSandbox {
             usesGPU = true
             imagePreparation = "(allow iokit-open (iokit-user-client-class \"IOSurfaceRootUserClient\"))"
         } else { imagePreparation = "" }
+        let metalDelegation: String
+        if localModel, let cache = metalCacheDirectory {
+            // MLX compiles specialized kernels. Apple's separately sandboxed
+            // compiler needs extensions for resources this helper already owns.
+            // Never delegate model weights, bot files or the wider user cache.
+            metalDelegation = """
+            (allow file-issue-extension
+              (require-all (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write") (subpath \(quote(cache.path)))))
+            (allow file-issue-extension
+              (require-all (extension-class "com.apple.app-sandbox.read") (subpath \(quote(canonical(application.path))))))
+            """
+        } else { metalDelegation = "" }
         return """
         (version 1)
         (deny default)
@@ -76,6 +88,7 @@ public enum AppleAgentSandbox {
           (global-name "com.apple.system.notification_center")
           (global-name "com.apple.modelmanager"))
         \(imagePreparation)
+        \(metalDelegation)
         \(usesGPU ? """
         (allow mach-lookup (global-name "com.apple.MTLCompilerService"))
         (allow iokit-open (iokit-user-client-class "AGXDeviceUserClient"))
@@ -94,7 +107,9 @@ public enum AppleAgentSandbox {
         guard confstr(_CS_DARWIN_USER_CACHE_DIR, &buffer, count) > 1 else { return nil }
         // Resolve only the OS-owned parent. The helper-writable child must
         // never redirect a later launch's grant through a symbolic link.
-        return URL(fileURLWithPath: String(cString: buffer), isDirectory: true).resolvingSymlinksInPath()
+        // URL.resolvingSymlinksInPath can retain /var on this SDK; Seatbelt
+        // evaluates the real /private/var path. Use realpath for the OS parent.
+        return URL(fileURLWithPath: canonical(String(cString: buffer)), isDirectory: true)
             .appendingPathComponent("com.pdparchitect.noodle.apple-agent", isDirectory: true)
     }
 

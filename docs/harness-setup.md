@@ -69,8 +69,33 @@ cached in that bot's helper; switching models or stopping the helper releases
 the cached weights. Importing does not enable Apple Intelligence and local models
 do not depend on its availability. Change bots using a model before removing it.
 Different bots can load separate copies, so account for their combined memory.
+Specialized MLX shaders compile in the helper's own Metal cache. The compiler
+receives scoped access to that cache and read-only bundled resources; model
+weights, bot workspaces, and other applications' caches are not delegated.
 Local models currently accept text and tools; use a capable Apple model for images.
 Noodle caps local model context at 32,768 tokens, even if the model supports more.
+
+### Context limits
+
+On macOS 27, Noodle budgets input before each model generation, including the
+continuations after tool calls. It keeps the current request, instructions,
+tool definitions and completed calls, then removes old complete turns or
+shortens large tool results as needed. The full text transcript remains saved;
+compaction does not rerun completed tools. Older information outside the input
+window remains available through conversation history and workspace files.
+
+The budget reserves space for the reply and model overhead. Apple text and
+schemas use the system token counter. Because the current macOS 27 counter
+rejects image attachments, images use a conservative size-based allowance;
+Noodle can reduce their input resolution down to a 512-pixel longest edge.
+Original attachments stay unchanged. Local models use their own tokenizer with
+conservative allowances for serialized schemas and chat framing.
+
+If a chat still exceeds the limit, Noodle makes one smaller, tool-free attempt,
+retaining its current images. Workspace actions are never automatically replayed
+by this recovery. Requests that cannot fit after compaction ask for smaller input
+or a model with a larger context window. macOS 26 retains the earlier history
+trimming and text-chat recovery behavior.
 
 Private Cloud Compute is not enabled. Apple's managed entitlement and supported
 distribution requirements need to be resolved before it can be shipped here.

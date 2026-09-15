@@ -91,6 +91,73 @@ final class AppleSandboxTests: XCTestCase {
         XCTAssertEqual(result.unavailableReason, AppleModel.inspection(version: "test").unavailableReason)
     }
 
+    func testMetalDelegationCannotGrantWeightsOrOutsideFiles() throws {
+        guard #available(macOS 27, *) else { return }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("metal-delegation-\(UUID())").resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let app = root.appendingPathComponent("application")
+        let model = root.appendingPathComponent("model")
+        try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: model, withIntermediateDirectories: true)
+        let outside = root.appendingPathComponent("outside.txt")
+        let weights = model.appendingPathComponent("weights.txt")
+        try Data("outside".utf8).write(to: outside)
+        try Data("weights".utf8).write(to: weights)
+        let link = app.appendingPathComponent("outside-link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
+        let source = app.appendingPathComponent("probe.c")
+        let binary = app.appendingPathComponent("probe")
+        try """
+        #include <dlfcn.h>
+        #include <stdint.h>
+        #include <limits.h>
+        #include <stdio.h>
+        #include <errno.h>
+        #include <stdlib.h>
+        #include <string.h>
+        #include <unistd.h>
+        typedef char *(*issue_fn)(const char *, const char *, uint32_t);
+        int main(int argc, char **argv) {
+            issue_fn issue = (issue_fn)dlsym(RTLD_DEFAULT, "sandbox_extension_issue_file");
+            if (!issue || argc != 5) return 10;
+            char cache[PATH_MAX], resolved[PATH_MAX];
+            confstr(_CS_DARWIN_USER_CACHE_DIR, cache, sizeof(cache));
+            strlcat(cache, "/com.pdparchitect.noodle.apple-agent/com.apple.metalfe", sizeof(cache));
+            if (realpath(cache, resolved)) {
+                char *grant = issue("com.apple.app-sandbox.read-write", resolved, 0);
+                if (!grant) { fprintf(stderr, "Canonical cache grant failed: %s (%d)\\n", resolved, errno); return 30; }
+                free(grant);
+                grant = issue("com.apple.app-sandbox.read-write", cache, 0);
+                if (!grant) { fprintf(stderr, "Raw cache grant failed: %s (%d)\\n", cache, errno); return 31; }
+                free(grant);
+            }
+            char *token = issue("com.apple.app-sandbox.read", argv[1], 0);
+            if (!token) return 11;
+            free(token);
+            if ((token = issue("com.apple.app-sandbox.read-write", argv[1], 0))) { free(token); return 12; }
+            for (int i = 2; i < argc; i++) {
+                if ((token = issue("com.apple.app-sandbox.read", argv[i], 0))) { free(token); return 13 + i; }
+                if ((token = issue("com.apple.app-sandbox.read-write", argv[i], 0))) { free(token); return 20 + i; }
+            }
+            return 0;
+        }
+        """.write(to: source, atomically: true, encoding: .utf8)
+        let compiler = Process()
+        compiler.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        compiler.environment = ProcessInfo.processInfo.environment.filter { $0.key != "SDKROOT" }
+        compiler.arguments = ["--sdk", "macosx", "clang", source.path, "-o", binary.path]
+        try compiler.run(); compiler.waitUntilExit()
+        guard compiler.terminationStatus == 0 else { return XCTFail("Could not compile the sandbox probe") }
+        let child = Process(), errors = Pipe()
+        child.standardError = errors
+        child.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
+        let policy = AppleAgentSandbox.profile(application: app, modelsDirectory: model, localModel: true)
+        child.arguments = ["-p", policy,
+                           binary.path, app.path, weights.path, outside.path, link.path]
+        try child.run(); child.waitUntilExit()
+        XCTAssertEqual(child.terminationStatus, 0, String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
+    }
+
     func testRestrictedFilesystemAndCommandDescendants() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("apple-sandbox-\(UUID())").resolvingSymlinksInPath()
         defer { try? FileManager.default.removeItem(at: root) }
