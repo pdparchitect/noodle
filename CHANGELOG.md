@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Replace the website experiments with one landing page, native system typography, a centered MacBook preview, and dark and light feature galleries with distinct abstract placeholder artwork, including floating conversation bubbles.
 - Give activity windows the preview panel’s rounded frame and single close control, with edge resizing and no maximise, minimise, or full-screen actions. Keep compact logs, context-menu commands, and plain-dash titles.
 - Refine the lightweight website using Apple product-page references, with natural system-font spacing, a simpler header, a blue pill download button, and a clean app preview.
 - Refine the CSS MacBook with flush shell edges, model-measured keyboard and trackpad proportions, customizable matte-black aluminum, a narrower curved notch, and a larger lid logo; prevent text selection and image dragging.
