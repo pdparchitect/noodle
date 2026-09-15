@@ -9,11 +9,24 @@ All notable changes to Noodle are documented here, following
 ### Changed
 
 - Give activity windows the preview panel’s rounded frame and single close control, with edge resizing and no maximise, minimise, or full-screen actions. Keep compact logs, context-menu commands, and plain-dash titles.
+- Refine the lightweight website using Apple product-page references, with natural system-font spacing, a simpler header, a blue pill download button, and a clean app preview.
+- Refine the CSS MacBook with flush shell edges, model-measured keyboard and trackpad proportions, customizable matte-black aluminum, a narrower curved notch, and a larger lid logo; prevent text selection and image dragging.
+- Give the CSS MacBook solid matte keycaps without bright outlines, and use the supplied model's keyboard lettering for accurate symbols and placement.
+- Constrain the animated CSS MacBook to a maximum visible width of 960 pixels on large displays while preserving its fit on smaller screens.
+- Open the animated landing page with only the laptop, revealing the headline and download action as the opening sequence finishes.
+- Add a text-only scroll cue with a quick white shimmer to the animated website opening, fading it away as scrolling begins and omitting it for reduced motion.
+- Simplify the animated website hero to Noodle, its headline, and a centered Download button; remove the top bar, app icon, compatibility line, and redundant platform labels.
+- Use “Meet your AI team.” as the animated website headline.
+- Update the animated landing page display and static fallback with the supplied Noodle Launch screenshot.
+- Improve screen clarity with a closer crop of the app window, filter-free illumination, and no reflection overlay once fully open.
 
 ### Added
 
 - Drop images and videos from Finder or a browser directly onto the conversation background preview, including direct media links, using the same importer and drop target as Computer and Applet.
 - Show a bot’s live activity in a floating log window from its context menu, with recent in-memory history, selectable output, and context-menu commands to copy, clear, and follow the log.
+- Add a synchronized side-by-side comparison of the CSS MacBook and the supplied 3D model, keeping the lightweight landing pages independent of the model assets.
+- Add a separate dark website concept with Noodle displayed on a MacBook, preserving the existing light landing page.
+- Add a scroll-controlled MacBook reveal that turns from a closed lid to an open, gradually illuminated Noodle screen, with responsive 3D perspective and reduced-motion support; keep both still website versions.
 
 ### Fixed
 
