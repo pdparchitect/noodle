@@ -30,21 +30,7 @@ struct AppleConversationTurn: Sendable {
             + "\n\nLatest user message to answer:\n" + prompt
     }
 
-    /// A small model can mistake ordinary chat memory for a file operation.
-    /// Require a concrete workspace reference in user requests before asking
-    /// it to select filesystem tools. Assistant claims cannot grant tools.
-    var hasWorkspaceReference: Bool {
-        let userText = ([prompt] + history.suffix(4).filter { !$0.isAssistant }.map(\.text)).joined(separator: "\n")
-        let pattern = #"(?i)\b(read_file|write_file|execute_command|files?|folders?|director(?:y|ies)|workspace|terminal|shell|commands?|scripts?|attachments?|filesystem|execute|run|bash|zsh|python|swift|javascript|pdf|spreadsheet)\b|(?:^|\s)(?:~?/|\.{1,2}/)\S+|\b[\w-]+\.[a-z0-9]{1,8}\b|(?m)^\s*(?:ls|pwd|cat|mkdir|touch|git|curl|find|rg)\b"#
-        return userText.range(of: pattern, options: .regularExpression) != nil
-    }
 
-    /// Explicit tool requests must not be downgraded to tool-free chat by the
-    /// classifier. Only the current user request can select this path.
-    var explicitlyRequestsWorkspaceTool: Bool {
-        prompt.range(of: #"(?i)^\s*(?:please\s+)?(?:use|call)\s+(?:the\s+)?(?:read_file|write_file|execute_command)\b"#,
-                     options: .regularExpression) != nil
-    }
 }
 
 /// Tool implementations are independent of the model API so bounds, cancellation,
@@ -113,7 +99,7 @@ public actor AppleToolContext {
         let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
         let page = try textPage(bytes)
         let end = offset + page.count
-        return page.text + "\n[bytes \(offset)..<\(end) of \(size)\(end < size ? "; call read_file with offset \(end) to continue" : "; end")]"
+        return page.text + "\n[bytes \(offset)..<\(end) of \(size)\(end < size ? "; call read with offset \(end) to continue" : "; end")]"
     }
 
     public func write(path: String, content: String) throws -> String {
@@ -173,35 +159,6 @@ public actor AppleToolContext {
         inboxResult = try present(json(inboxDeliveries))
         guard !inboxDeliveries.isEmpty else { return nil }
         return try inboxPrompt()
-    }
-
-    public func history(conversation: String) throws -> String {
-        try beginCall()
-        let id = try conversationID(conversation)
-        let messages: [MessengerDelivery] = try messenger.call(.listMessages(conversationID: id))
-        return try present(json(messages))
-    }
-
-    /// The model needs the conversation's words, not repeated routing envelopes.
-    /// Keep the full Messenger representation for event tools and the CLI.
-    func conversationHistory(conversation: String, offset: Int = 0, includeAssistantReplies: Bool = true) throws -> String {
-        try conversationHistoryPage(conversation: conversation, offset: offset, includeAssistantReplies: includeAssistantReplies).text
-    }
-
-    func conversationHistoryPage(conversation: String, offset: Int, includeAssistantReplies: Bool) throws -> AppleHistoryPage {
-        try beginCall()
-        let id = try conversationID(conversation)
-        let messages: [MessengerDelivery] = try messenger.call(.listMessages(conversationID: id))
-        let text = try messages.filter { includeAssistantReplies || $0.message.author == .user }.map { delivery in
-            let role = delivery.message.author == .agent(agentID) ? "Assistant" : delivery.sender.displayName
-            return "\(role): \(try conversationText(delivery))"
-        }.joined(separator: "\n\n")
-        let bytes = Data(text.utf8)
-        guard offset >= 0, offset <= bytes.count else { throw HarnessSetupError("Use a history byte offset from 0 through \(bytes.count).") }
-        let page = try textPage(Data(bytes.dropFirst(offset).prefix(3_072)))
-        let end = offset + page.count
-        return AppleHistoryPage(text: page.text + "\n[bytes \(offset)..<\(end) of \(bytes.count)\(end < bytes.count ? "; call conversation_history with offset \(end) to continue" : "; end")]",
-                                nextOffset: end < bytes.count ? end : nil)
     }
 
     /// Rebuild ordinary chat from durable messages, preserving user/assistant
@@ -310,12 +267,6 @@ public actor AppleToolContext {
         return text
     }
 
-    public func conversations() throws -> String {
-        try beginCall()
-        let conversations: [BotConversation] = try messenger.call(.listConversations)
-        return try present(json(conversations))
-    }
-
     public func send(conversation: String, body: String) throws -> String {
         try beginCall()
         guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw HarnessSetupError("A reply cannot be empty.") }
@@ -336,7 +287,7 @@ public actor AppleToolContext {
         if data.count <= 3_072 { return value }
         let page = try textPage(Data(data.prefix(3_072)))
         return page.text
-            + "\n[Full result saved at \(file.path); \(data.count) bytes.\(data.count > page.count ? " Read remaining bytes with read_file offset \(page.count) before considering this result complete." : "")]"
+            + "\n[Full result saved at \(file.path); \(data.count) bytes.\(data.count > page.count ? " Read remaining bytes with read offset \(page.count) before considering this result complete." : "")]"
     }
 
     private func json<T: Encodable>(_ value: T) throws -> String {
@@ -352,7 +303,7 @@ public actor AppleToolContext {
             let page = bytes.prefix(bytes.count - removed)
             if let text = String(data: page, encoding: .utf8) { return (text, page.count) }
         }
-        throw HarnessSetupError("This is not UTF-8 text, or the offset splits a character. Use the next offset returned by read_file.")
+        throw HarnessSetupError("This is not UTF-8 text, or the offset splits a character. Use the next offset returned by read.")
     }
 }
 
@@ -401,7 +352,7 @@ private final class CommandJob: @unchecked Sendable {
         CommandRegistry.shared.add(self, id: id)
         defer { CommandRegistry.shared.remove(id) }
         let child = Process(), pipe = Pipe(), finished = DispatchSemaphore(value: 0), drained = DispatchSemaphore(value: 0)
-        child.executableURL = URL(fileURLWithPath: "/bin/sh")
+        child.executableURL = URL(fileURLWithPath: "/bin/bash")
         child.arguments = ["-c", command]
         child.currentDirectoryURL = workspace
         child.environment = ["HOME": workspace.path, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",

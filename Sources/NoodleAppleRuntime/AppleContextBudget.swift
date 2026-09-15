@@ -44,7 +44,10 @@ struct AppleContextBudget: Sendable {
     static func systemTokenCount(_ request: LanguageModelExecutorGenerationRequest,
                                  model: SystemLanguageModel) async throws -> Int {
         let (entries, imageTokens) = textAndImageBudget(Array(request.transcript))
-        var count = try await model.tokenCount(for: entries) + imageTokens
+        // Leave room for per-entry framing in the inference service as a
+        // turn accumulates tool exchanges. Its native count can understate
+        // the decoder input, even when no images are involved.
+        var count = try await model.tokenCount(for: entries) + imageTokens + entries.count * 32
         if let schema = request.schema { count += try await model.tokenCount(for: schema) }
         return count
     }
@@ -69,7 +72,8 @@ struct AppleContextBudget: Sendable {
              count: (LanguageModelExecutorGenerationRequest) async throws -> Int) async throws -> LanguageModelExecutorGenerationRequest {
         var request = original
         var entries = Array(request.transcript)
-        let wanted = max(1, min(request.generationOptions.maximumResponseTokens ?? responseTokens, responseTokens))
+        var wanted = max(1, min(request.generationOptions.maximumResponseTokens ?? responseTokens, responseTokens))
+        var reserved = reserve
         let minimum = min(wanted, 128)
         while true {
             try Task.checkCancellation()
@@ -82,7 +86,7 @@ struct AppleContextBudget: Sendable {
                 guard let reported = AppleContextOverflow.tokenCount(in: error) else { throw error }
                 used = reported
             }
-            if used + wanted + reserve <= contextSize {
+            if used + wanted + reserved <= contextSize {
                 request.generationOptions.maximumResponseTokens = wanted
                 return request
             }
@@ -91,7 +95,18 @@ struct AppleContextBudget: Sendable {
             if Self.removeOldestTurn(&entries) { continue }
             if Self.shortenToolOutput(&entries) { continue }
             if Self.reduceImage(&entries) { continue }
-            let available = contextSize - used - reserve
+            if !request.enabledToolDefinitions.isEmpty,
+               entries.contains(where: { if case .toolOutput = $0 { return true }; return false }) {
+                // The current tool chain is filling the window. Finish from
+                // the results already obtained, in this same session, before
+                // another action leaves no room to answer. No tool is replayed.
+                request.enabledToolDefinitions = []
+                request.generationOptions.toolCallingMode = .disallowed
+                wanted = min(wanted, 256)
+                reserved = min(reserved, 512)
+                continue
+            }
+            let available = contextSize - used - reserved
             if available >= minimum {
                 request.generationOptions.maximumResponseTokens = min(wanted, available)
                 return request
@@ -173,6 +188,16 @@ struct AppleContextLimit: Error, LocalizedError {
 }
 
 enum AppleContextOverflow {
+    @available(macOS 26, *)
+    static func matches(_ error: Error) -> Bool {
+        if error is AppleContextLimit || tokenCount(in: error) != nil { return true }
+        #if canImport(FoundationModels, _version: 2)
+        if #available(macOS 27, *), case LanguageModelError.contextSizeExceeded = error { return true }
+        #endif
+        if case LanguageModelSession.GenerationError.exceededContextWindowSize = error { return true }
+        return false
+    }
+
     @available(macOS 26, *)
     static func tokenCount(in error: Error) -> Int? {
         #if canImport(FoundationModels, _version: 2)

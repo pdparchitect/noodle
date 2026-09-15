@@ -46,22 +46,26 @@ extension LanguageModelSession.DynamicProfile {
 private struct DropCompletedToolCallsModifier: LanguageModelSession.DynamicProfileModifier {
   func body(content: Content) -> some DynamicProfile {
     content.historyTransform { history in
-      // Noodle: retain every exchange for the current prompt. Keeping only
-      // the latest call would lose earlier results in a multi-step task.
-      let lastOutputIndex = history.lastIndex(where: { entry in
-        if case .prompt = entry { return true }
-        return false
-      }) ?? history.startIndex
-
-      let prefix = history.prefix(upTo: lastOutputIndex).filter { entry in
-        if case .toolCalls = entry { return false }
-        if case .toolOutput = entry { return false }
-        return true
+      // Noodle: keep current work and interrupted turns. Only a final response
+      // establishes that a prior turn completed; a new prompt can follow a
+      // failure after a command already ran.
+      let entries = Array(history)
+      let prompts = entries.indices.filter { if case .prompt = entries[$0] { return true }; return false }
+      var result: [Transcript.Entry] = []
+      var start = entries.startIndex
+      for end in prompts.dropFirst() {
+        let turn = entries[start..<end]
+        let completed: Bool
+        if case .response = turn.last { completed = true } else { completed = false }
+        result += turn.filter { entry in
+          guard completed else { return true }
+          if case .toolCalls = entry { return false }
+          if case .toolOutput = entry { return false }
+          return true
+        }
+        start = end
       }
-
-      let suffix = history.suffix(from: lastOutputIndex)
-
-      return prefix + suffix
+      return result + entries[start...]
     }
   }
 }

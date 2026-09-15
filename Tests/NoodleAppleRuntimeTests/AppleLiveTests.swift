@@ -7,6 +7,51 @@ import CoreGraphics
 /// Explicit opt-in: a real on-device model and a synthetic disposable bot. Never
 /// opens the user's Noodle storage, accounts, or external model services.
 final class AppleLiveTests: XCTestCase {
+    func testSandboxedNaturalRequestExecutesBashAndReturnsObservedTime() throws {
+        guard #available(macOS 26, *) else { throw XCTSkip("Requires Foundation Models.") }
+        let local = ProcessInfo.processInfo.environment["NOODLE_TEST_MLX_MODEL"].map { URL(fileURLWithPath: $0) }
+        try exercise(history: [
+            (false, "Can you run commands?"), (true, "I cannot run external commands."),
+            (false, "You have bash access."), (true, "I have access to bash."),
+            (false, "What is the system time?"), (true, "You can run the date command to find the time.")
+        ], tasks: [["Use the bash tool to run a command to find the exact system time"]],
+           modelDirectory: local, nativeHistory: true) { workspace, replies in
+            let transcript = try JSONDecoder().decode(Transcript.self,
+                from: Data(contentsOf: workspace.appendingPathComponent(".noodle/apple/last-transcript.json")))
+            let calls = transcript.flatMap { entry -> [Transcript.ToolCall] in
+                if case .toolCalls(let calls) = entry { return Array(calls) }; return []
+            }
+            XCTAssertTrue(calls.contains { $0.toolName == "bash" && $0.arguments.jsonString.contains("date") },
+                          "Expected an actual Bash date call, received: \(replies[0].body)")
+            let outputs = transcript.compactMap { entry -> String? in
+                if case .toolOutput(let output) = entry, output.toolName == "bash" { return entry.description }; return nil
+            }.joined(separator: "\n")
+            XCTAssertTrue(outputs.contains("Exit status: 0"), outputs)
+            let range = try XCTUnwrap(outputs.range(of: #"\b\d{2}:\d{2}(?::\d{2})?\b"#, options: .regularExpression), outputs)
+            XCTAssertTrue(replies[0].body.contains(String(outputs[range])), replies[0].body)
+        }
+    }
+
+    func testSandboxedToolDiscoveryAndCLIFollowupUseManagedSession() throws {
+        let local = ProcessInfo.processInfo.environment["NOODLE_TEST_MLX_MODEL"].map { URL(fileURLWithPath: $0) }
+        try exercise(tasks: [
+            ["What tools do you have access to?"],
+            ["No execute_command ?"],
+            ["Use bash to run ./.agents/skills/messenger/messenger --list-conversations > conversations.json, then report success."]
+        ], modelDirectory: local) { workspace, replies in
+            let inventory = replies[0].body.lowercased()
+            for name in ["bash", "read", "write"] { XCTAssertTrue(inventory.contains(name), replies[0].body) }
+            XCTAssertFalse(inventory.contains("conversation_history"), replies[0].body)
+            XCTAssertFalse(replies[1].body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let conversations = try decoder.decode([BotConversation].self,
+                from: Data(contentsOf: workspace.appendingPathComponent("conversations.json")))
+            XCTAssertEqual(conversations.count, 1)
+            XCTAssertEqual(conversations.first?.displayName, "Apple test")
+        }
+    }
+
     func testSandboxedImageAttachmentIsRecognized() throws {
         #if canImport(FoundationModels, _version: 2)
         guard #available(macOS 27, *), SystemLanguageModel.default.capabilities.contains(.vision) else {
@@ -34,14 +79,14 @@ final class AppleLiveTests: XCTestCase {
         guard let path = ProcessInfo.processInfo.environment["NOODLE_TEST_MLX_MODEL"] else {
             throw XCTSkip("Set NOODLE_TEST_MLX_MODEL to a local MLX model folder for offline inference.")
         }
-        try exercise(tasks: [["Use write_file to create result.txt containing exactly: saffron"]],
+        try exercise(tasks: [["Use write to create result.txt containing exactly: saffron"]],
                      modelDirectory: URL(fileURLWithPath: path)) { workspace, replies in
             XCTAssertEqual(try String(contentsOf: workspace.appendingPathComponent("result.txt")).trimmingCharacters(in: .whitespacesAndNewlines), "saffron")
             XCTAssertFalse(replies.isEmpty)
         }
     }
     func testSandboxedCompletedReplyDoesNotRepeatItsCommand() throws {
-        try exercise(tasks: [["Use execute_command to run: printf repeated > should-not-run.txt"]],
+        try exercise(tasks: [["Use bash to run: printf repeated > should-not-run.txt"]],
                      completedReply: "The operation finished before the interruption.") { workspace, replies in
             XCTAssertEqual(replies[0].body, "The operation finished before the interruption.")
             XCTAssertFalse(FileManager.default.fileExists(atPath: workspace.appendingPathComponent("should-not-run.txt").path))
@@ -50,9 +95,9 @@ final class AppleLiveTests: XCTestCase {
 
     func testSandboxedAgentReadsWritesExecutesAndReplies() throws {
         try exercise(tasks: [
-            ["Use write_file to create result.txt with this content:\na small apple"],
-            ["Use read_file to read seed.txt, then send me its text in your reply."],
-            ["Use execute_command to run this shell command:\n```sh\nprintf ready > command.txt\n```"]
+            ["Use write to create result.txt with this content:\na small apple"],
+            ["Use read to read seed.txt, then send me its text in your reply."],
+            ["Use bash to run this shell command:\n```sh\nprintf ready > command.txt\n```"]
         ]) { workspace, replies in
             XCTAssertEqual(try String(contentsOf: workspace.appendingPathComponent("result.txt"), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines), "a small apple")
             XCTAssertEqual(try String(contentsOf: workspace.appendingPathComponent("command.txt"), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines), "ready")
@@ -65,7 +110,6 @@ final class AppleLiveTests: XCTestCase {
         let followup = "What did I ask you to remember?"
         try exercise(tasks: [["Hi there", remember], ["What is the secret word?"], [followup]]) { _, replies in
             for reply in replies {
-                XCTAssertFalse(reply.body.lowercased().contains("file"), "Invented a file task for chat: \(reply.body)")
                 XCTAssertFalse(reply.body.contains("[bytes ") || reply.body.contains("User:"), "Dumped history instead of answering: \(reply.body)")
             }
             XCTAssertNotEqual(replies.first?.body, remember)
@@ -84,7 +128,6 @@ final class AppleLiveTests: XCTestCase {
             (false, "Remember the secret word avocado"), (true, "Remember the secret word avocado"),
             (false, "What is the secret word?"), (true, "The secret word is password.")
         ], tasks: [[correction]]) { _, replies in
-            XCTAssertFalse(replies[0].body.lowercased().contains("file"), "Invented file persistence: \(replies[0].body)")
             XCTAssertNotEqual(replies[0].body, correction)
             XCTAssertTrue(replies[0].body.lowercased().contains("avocado"), "Correction ignored user history: \(replies[0].body)")
             // Merely mentioning the correct word must not pass when the model
@@ -105,9 +148,6 @@ final class AppleLiveTests: XCTestCase {
             (false, "Remember the secret word tutifruti"), (true, "Hello!")
         ], tasks: [["Remember the secret word avocado"], ["What is the secret word?"],
                    ["Change the word to marigold"], ["What is the word now?"]]) { workspace, replies in
-            for reply in replies {
-                XCTAssertFalse(reply.body.lowercased().contains("file"), "Invented file persistence: \(reply.body)")
-            }
             XCTAssertNotEqual(replies[0].body, "Hello!")
             XCTAssertTrue(replies[1].body.lowercased().contains("avocado"), "Lost remembered word: \(replies[1].body)")
             XCTAssertTrue(replies[3].body.lowercased().contains("marigold"), "Ignored the update: \(replies[3].body)")
@@ -135,7 +175,7 @@ final class AppleLiveTests: XCTestCase {
         }
     }
 
-    private func exercise(named name: String = "Apple test", history: [(Bool, String)] = [], tasks: [[String]], completedReply: String? = nil, modelDirectory: URL? = nil, image: URL? = nil,
+    private func exercise(named name: String = "Apple test", history: [(Bool, String)] = [], tasks: [[String]], completedReply: String? = nil, modelDirectory: URL? = nil, image: URL? = nil, nativeHistory: Bool = false,
                           verify: (URL, [ChatMessage]) throws -> Void) throws {
         guard ProcessInfo.processInfo.environment["NOODLE_TEST_APPLE_MODEL"] == "1" || modelDirectory != nil else {
             throw XCTSkip("Set NOODLE_TEST_APPLE_MODEL=1 for the real on-device model test.")
@@ -143,7 +183,12 @@ final class AppleLiveTests: XCTestCase {
         if modelDirectory == nil, let reason = AppleModel.inspection(version: "test").unavailableReason { throw XCTSkip(reason) }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("apple-live-\(UUID())").resolvingSymlinksInPath()
         defer { try? FileManager.default.removeItem(at: root) }
-        let repository = WorkspaceRepository(rootURL: root)
+        let project = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let helper = ProcessInfo.processInfo.environment["NOODLE_APPLE_TEST_HELPER"].map { URL(fileURLWithPath: $0) }
+            ?? project.appendingPathComponent(".build/debug/NoodleAppleAgent")
+        let messenger = helper.deletingLastPathComponent().appendingPathComponent(
+            helper.deletingLastPathComponent().lastPathComponent == "Helpers" ? "messenger" : "NoodleMessenger")
+        let repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: messenger)
         let modelStore = AppleLocalModelStore(repository: root)
         let local = try modelDirectory.map { try modelStore.importModel(from: $0) }
         let bot = try repository.createAgent(named: name, harnessIdentifier: "apple")
@@ -157,11 +202,16 @@ final class AppleLiveTests: XCTestCase {
         try broker.start(agents: [bot.agent])
         defer { broker.stop() }
         let workspace = repository.directory(for: bot.agent)
+        if #available(macOS 26, *), nativeHistory {
+            let entries: [Transcript.Entry] = history.map { isAssistant, text in
+                isAssistant ? .response(.init(assetIDs: [], segments: [.text(.init(content: text))]))
+                    : .prompt(.init(segments: [.text(.init(content: text))]))
+            }
+            try AppleConversationSession(transcript: Transcript(entries: entries), messageIDs: [], reply: "",
+                modelIdentifier: local?.id ?? "default").save(in: workspace, conversationID: bot.conversation.id)
+        }
         try FileManager.default.createDirectory(at: workspace.appendingPathComponent(".noodle/tmp"), withIntermediateDirectories: true)
         try Data("a crisp pear".utf8).write(to: workspace.appendingPathComponent("seed.txt"))
-        let project = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        let helper = ProcessInfo.processInfo.environment["NOODLE_APPLE_TEST_HELPER"].map { URL(fileURLWithPath: $0) }
-            ?? project.appendingPathComponent(".build/debug/NoodleAppleAgent")
         let application = helper.deletingLastPathComponent().lastPathComponent == "Helpers"
             ? helper.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             : helper.deletingLastPathComponent()
@@ -227,6 +277,16 @@ final class AppleLiveTests: XCTestCase {
                 print("Synthetic Apple transcript: \(trace)")
             }
             XCTAssertEqual(result["stopReason"] as? String, "end_turn")
+            if #available(macOS 26, *), completedReply == nil {
+                let saved = try JSONDecoder().decode(AppleConversationSession.self,
+                    from: Data(contentsOf: AppleConversationSession.file(in: workspace, conversationID: bot.conversation.id)))
+                XCTAssertEqual(saved.messageIDs, messageIDs)
+                if index > 0 {
+                    let transcript = saved.transcript.map(\.description).joined(separator: "\n")
+                    XCTAssertTrue(transcript.contains(tasks[index - 1].last!) || transcript.contains("Summary of the conversation so far:"),
+                                  "The follow-up must resume or summarize the saved session")
+                }
+            }
             print("Synthetic Apple completed turn \(index + 1)/\(tasks.count)")
             fflush(stdout)
         }

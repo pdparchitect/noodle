@@ -1,4 +1,5 @@
 import XCTest
+import FoundationModels
 import NoodleCore
 @testable import NoodleAppleRuntime
 
@@ -35,36 +36,6 @@ final class AppleToolsTests: XCTestCase {
         XCTAssertThrowsError(try AppleToolContext.imageURLs([first]))
     }
 
-    func testChatMemoryDoesNotEnableFilesFromAssistantClaims() {
-        let history: [AppleConversationTurn.Message] = [
-            .init(isAssistant: false, text: "Remember the secret word avocado"),
-            .init(isAssistant: true, text: "Saved to secret_word.txt in the workspace.")
-        ]
-        for prompt in ["Hello", "What is the secret word?", "Change the word to marigold"] {
-            let turn = AppleConversationTurn(conversationID: UUID(), messageIDs: [], history: history, prompt: prompt)
-            XCTAssertFalse(turn.hasWorkspaceReference)
-        }
-        for prompt in ["Read notes.md", "List the files here", "Run pwd", "Use execute_command to run ls"] {
-            let turn = AppleConversationTurn(conversationID: UUID(), messageIDs: [], history: [], prompt: prompt)
-            XCTAssertTrue(turn.hasWorkspaceReference)
-        }
-        let followup = AppleConversationTurn(conversationID: UUID(), messageIDs: [],
-            history: [.init(isAssistant: false, text: "Create notes.md")], prompt: "Change its title to Hello")
-        XCTAssertTrue(followup.hasWorkspaceReference)
-    }
-
-    func testExplicitToolRequestsCannotBeReclassifiedAsChat() {
-        for prompt in ["Use read_file to read seed.txt", "Call the write_file tool", "Use execute_command to run pwd"] {
-            XCTAssertTrue(AppleConversationTurn(conversationID: UUID(), messageIDs: [], history: [], prompt: prompt).explicitlyRequestsWorkspaceTool)
-        }
-        let chat = AppleConversationTurn(conversationID: UUID(), messageIDs: [],
-            history: [.init(isAssistant: true, text: "Use read_file to open a file")], prompt: "What does read_file do?")
-        XCTAssertFalse(chat.explicitlyRequestsWorkspaceTool)
-        let quoted = AppleConversationTurn(conversationID: UUID(), messageIDs: [], history: [],
-            prompt: "Explain this instruction: Use execute_command to run pwd")
-        XCTAssertFalse(quoted.explicitlyRequestsWorkspaceTool)
-    }
-
     func testChatPromptProvidesBoundedUserSourcesWithoutRepeatingAssistantMistakes() {
         let turn = AppleConversationTurn(conversationID: UUID(), messageIDs: [], history: [
             .init(isAssistant: false, text: String(repeating: "old", count: 1_000)),
@@ -92,10 +63,24 @@ final class AppleToolsTests: XCTestCase {
     }
 
     func testCommandReturnsExitCodeAndUsesWorkspace() async throws {
-        let result = try await AppleCommand.run("pwd; printf expected; exit 7", workspace: workspace)
+        let result = try await AppleCommand.run("[[ -n $BASH_VERSION ]] || exit 9; pwd; printf expected; exit 7", workspace: workspace)
         XCTAssertEqual(result.status, 7)
         XCTAssertTrue(result.output.contains(workspace.path))
         XCTAssertTrue(result.output.hasSuffix("expected"))
+    }
+
+    func testContextOverflowDoesNotMaskCancellationRefusalOrServiceErrors() throws {
+        guard #available(macOS 26, *) else { throw XCTSkip("Requires Foundation Models") }
+        let context = LanguageModelSession.GenerationError.Context(debugDescription: "synthetic")
+        XCTAssertTrue(AppleContextOverflow.matches(AppleContextLimit()))
+        XCTAssertTrue(AppleContextOverflow.matches(LanguageModelSession.GenerationError.exceededContextWindowSize(context)))
+        XCTAssertTrue(AppleContextOverflow.matches(NSError(domain: "TokenGenerationInference.DecoderModelError", code: 3,
+            userInfo: [NSLocalizedDescriptionKey: "Provided 4,130 tokens, but the maximum allowed is 4,096."])))
+        XCTAssertFalse(AppleContextOverflow.matches(CancellationError()))
+        XCTAssertFalse(AppleContextOverflow.matches(LanguageModelSession.GenerationError.guardrailViolation(context)))
+        XCTAssertFalse(AppleContextOverflow.matches(LanguageModelSession.GenerationError.rateLimited(context)))
+        XCTAssertFalse(AppleContextOverflow.matches(NSError(domain: "UnrelatedService", code: 3,
+            userInfo: [NSLocalizedDescriptionKey: "Provided 4,130 tokens, but the maximum allowed is 4,096."])))
     }
 
     func testReadPagesDoNotSplitUTF8Characters() async throws {
@@ -160,13 +145,6 @@ final class AppleToolsTests: XCTestCase {
         XCTAssertEqual(turn.prompt, "What is the secret word?")
         XCTAssertEqual(turn.history.map(\.text), ["Remember the secret word avocado", "I’ll remember avocado."])
         XCTAssertEqual(turn.history.map(\.isAssistant), [false, true])
-        let history = try await restarted.conversationHistory(conversation: chat.id.uuidString)
-        XCTAssertTrue(history.contains("User: Remember the secret word avocado"))
-        XCTAssertTrue(history.contains("Assistant: I’ll remember avocado."))
-        XCTAssertLessThan(history.utf8.count, 300)
-        let userHistory = try await restarted.conversationHistory(conversation: chat.id.uuidString, includeAssistantReplies: false)
-        XCTAssertTrue(userHistory.contains("Remember the secret word avocado"))
-        XCTAssertFalse(userHistory.contains("I’ll remember avocado."))
         try await restarted.deliverReply("Avocado.", to: turn)
         XCTAssertEqual(try repository.loadMessages(conversationID: chat.id).last?.author, .agent(agent.id))
         let finished = try AppleToolContext(workspace: workspace)
@@ -215,7 +193,7 @@ final class AppleToolsTests: XCTestCase {
         XCTAssertEqual(recovered.first?.prompt, "A later request")
     }
 
-    func testLongHistoryKeepsRecentContextAndOlderMessagesRemainReadable() async throws {
+    func testLongConversationSeedsOnlyBoundedRecentContext() async throws {
         let agent = try repository.loadAgents()[0]
         let chat = try repository.loadConversations()[0]
         for index in 0..<20 {
@@ -230,7 +208,5 @@ final class AppleToolsTests: XCTestCase {
         XCTAssertEqual(turn.prompt, "What was fact 19?")
         XCTAssertTrue(turn.history.contains { $0.text.hasPrefix("Fact 19:") })
         XCTAssertFalse(turn.history.contains { $0.text.hasPrefix("Fact 0:") })
-        let fullHistory = try await tools.history(conversation: chat.id.uuidString)
-        XCTAssertTrue(fullHistory.contains("Fact 0:"))
     }
 }

@@ -134,7 +134,9 @@ private struct SummarizeHistoryModifier<Model: LanguageModel>: LanguageModelSess
         }
       )
 
-      let textRepresentation = history.chatLog()
+      // Summarize completed history. The latest prompt remains the request to
+      // execute, not material for a meta-summary of what the user is asking.
+      let textRepresentation = history.dropLast().chatLog()
 
       // Noodle: summarization is an optimization. A large transcript can
       // exceed even the summarizer's budget; retain recent whole turns then
@@ -151,7 +153,7 @@ private struct SummarizeHistoryModifier<Model: LanguageModel>: LanguageModelSess
       } catch {
         try Task.checkCancellation()
         if error is CancellationError { throw error }
-        guard AppleModel.shouldRecoverChat(from: error) else { throw error }
+        guard AppleContextOverflow.matches(error) else { throw error }
         // Keep saved sessions bounded even when a large old turn prevents
         // summaries. Reuse the executor's whole-turn trimming, so calls and
         // results stay together and the current prompt always survives.

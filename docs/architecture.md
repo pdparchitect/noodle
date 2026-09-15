@@ -98,43 +98,42 @@ bots retain their selected harness.
 
 The helper uses the same ACP lifecycle as other harnesses, including interrupted
 turn recovery, session cancellation, heartbeats, and changing access by stopping
-the old runtime first. It supports `read_file`, `write_file`, `execute_command`,
-and bot-bound Messenger operations. The helper loads the inbox once. Chat turns
-start fresh and retrieve original conversation messages through the history tool,
-preventing an earlier mistaken answer or refusal from conditioning every later reply.
-Workspace turns resume the actual Foundation Models transcript saved for that conversation.
-Visible chat history is never converted into synthetic model response entries:
-it may include other harnesses, grouped deliveries, or broken earlier replies.
-The harness delivers ordinary chat answers to their original conversation
-automatically. Background events use explicit Messenger sends.
-File and command tools require a concrete workspace reference in the current or
-recent user requests, followed by local category classification. Assistant text
-cannot supply that reference. History retrieval remains available in every session;
-recall requests use the original messages rather than relying on model paraphrases.
-Both modes retain the bot's existing access policy.
+the old runtime first. Every turn exposes exactly `bash`, `read`, and `write`.
+Bash runs the same workspace CLIs used by other harnesses: Messenger, assigned
+MCP connections, Computer, and Applet, with their existing broker permissions.
+Workspace `AGENTS.md` and the relevant skills describe these interfaces. There
+is no request classification or dedicated conversation-history model tool.
+
+The helper loads the inbox once and automatically delivers ordinary chat answers
+to their original conversation. Background events use explicit Messenger CLI
+sends. All conversation turns resume their saved Foundation Models transcript,
+including text chat and images, with current instructions and tools. Visible chat
+history is never converted into synthetic model response entries: it may include
+other harnesses, grouped deliveries, or broken earlier replies. A first session
+receives a bounded excerpt of recent user messages as quoted context. Older
+messages remain available through the shared Messenger CLI.
+
 On macOS 27, the native profile uses Apple's Foundation Models Utilities to
 summarize history beyond eight entries and remove completed tool exchanges from
 generation input. Successful summaries become part of the saved native session;
-they are instructed to preserve completed actions and retain the current request
-verbatim. Summarization uses the
-selected model without tools, with a 256-token response limit. If its input is
+the newest request is excluded from summary input. Failed generations preserve
+their transcript, and completed commands in interrupted turns remain available
+on resume until a final response or summary records their results.
+Summaries preserve completed actions; the current request remains verbatim.
+Summarization uses the selected model without tools, with a 256-token response limit. If its input is
 too large, the fallback retains recent whole turns, so saved history stays bounded.
 Every tool exchange for the current prompt stays available. The executor's token
 budget trims whole older turns before each generation, including tool continuations.
 It also bounds large tool results and images and reserves room for the response.
+When the current tool sequence fills the budget, the next generation finishes
+from the existing results with further tool calls disabled. This uses the same
+session and never replays completed commands.
 The macOS 26 fallback retains up to eight complete turns within a 6,000-byte budget
 shared with the current prompt, keeping each turn's calls and results together.
 The utilities' [source version, licence, and compatibility adaptations](../Support/ThirdParty/FoundationModelsUtilities/README.md)
 are recorded in the repository. Older chat remains available
-as compact speaker-and-message text through the conversation history tool, which
-can exclude assistant replies when retrieving user-provided facts.
-Chat prompts include up to 2,048 bytes of recent user messages as quoted reference,
-so ordinary follow-ups do not require a separate history tool call.
-History retrieval also has a per-turn budget (four unique pages and 6,400 bytes)
-and rejects duplicate page requests. If chat exhausts retrieval or model context,
-one fresh session without tools answers from bounded retrieved source text.
-The recovery prompt uses system token counts where available, reserving space
-for the answer. File and command turns are never automatically replayed this way.
+through the Messenger CLI. Every turn can execute actions, so a context or tool
+failure propagates without a fresh tool-free retry that could repeat work.
 Pending replies survive restarts; completed model results are saved before delivery
 and reused on retry, avoiding repeat tool execution after interrupted delivery.
 The limited on-device context is intended for small tasks. Long tool results
@@ -144,6 +143,9 @@ and cancellation stops command descendants. A turn is limited to 32 tool calls
 and five minutes. The last model transcript and an unfinished-turn marker stay
 in `.noodle/apple` for local diagnostics and recovery, including after cancellation.
 Native session caches are in `.noodle/apple/conversations/<conversation-id>.json`.
+Background events resume `.noodle/apple/events.json` with the same context
+management. Interrupted transcripts are saved without a completed reply receipt;
+unreadable session files report an error instead of silently resetting context.
 
 Opt-in live regressions (`NOODLE_TEST_APPLE_MODEL=1`) exercise synthetic conversations
 and files through the helper sandbox. They cover recall across wakes, recovery from

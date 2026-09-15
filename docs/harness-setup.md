@@ -58,8 +58,10 @@ systems and text-only local models report that image input is unsupported.
 The helper decodes images locally at up to 2,048 pixels on the longest side,
 preserving orientation and the original attachments. Saved model context keeps
 text references to images alongside the reply; original images remain in Noodle.
-macOS 27 workspace turns require an initial tool call, then allow the model to
-finish its response. Tool success still depends on the model and the request.
+Every turn provides `bash`, `read`, and `write`. Use Bash for the shared
+workspace CLIs, including Messenger history and assigned integrations. The model
+chooses when to use tools; no request classifier restricts their availability.
+Tool success still depends on the model and the request.
 
 ### Import a local model
 
@@ -111,11 +113,15 @@ Noodle can reduce their input resolution down to a 512-pixel longest edge.
 Original attachments stay unchanged. Local models use their own tokenizer with
 conservative allowances for serialized schemas and chat framing.
 
-If a chat still exceeds the limit, Noodle makes one smaller, tool-free attempt,
-retaining its current images. Workspace actions are never automatically replayed
-by this recovery. Requests that cannot fit after compaction ask for smaller input
-or a model with a larger context window. macOS 26 retains the earlier history
-trimming and text-chat recovery behavior.
+All conversation turns resume their saved native session, with fresh instructions
+and tools. On macOS 27, Noodle summarizes older history; macOS 26 retains bounded
+complete turns. If input still cannot fit, the turn reports an error and preserves
+unfinished work. It does not start a tool-free chat retry or replay actions.
+On macOS 27, failed generations retain completed command results in the saved
+session. Native Apple budgets include extra space for tool-continuation framing.
+When a tool sequence fills the budget, the next generation finishes from its
+existing results with further tool calls disabled, using the same session.
+Older messages remain accessible through the Messenger CLI.
 
 Private Cloud Compute is not enabled. Apple's managed entitlement and supported
 distribution requirements need to be resolved before it can be shipped here.

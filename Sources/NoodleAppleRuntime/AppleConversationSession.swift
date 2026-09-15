@@ -16,8 +16,16 @@ struct AppleConversationSession: Codable {
         workspace.appendingPathComponent(".noodle/apple/conversations/\(conversationID.uuidString.lowercased()).json")
     }
 
+    static func load(from file: URL) throws -> Self? {
+        guard FileManager.default.fileExists(atPath: file.path) else { return nil }
+        return try JSONDecoder().decode(Self.self, from: Data(contentsOf: file))
+    }
+
     func save(in workspace: URL, conversationID: UUID) throws {
-        let file = Self.file(in: workspace, conversationID: conversationID)
+        try save(to: Self.file(in: workspace, conversationID: conversationID))
+    }
+
+    func save(to file: URL) throws {
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try AtomicFile.write(JSONEncoder().encode(self), to: file)
     }

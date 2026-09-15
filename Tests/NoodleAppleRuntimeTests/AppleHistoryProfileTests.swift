@@ -4,6 +4,34 @@ import FoundationModels
 @testable import NoodleAppleRuntime
 
 final class AppleHistoryProfileTests: XCTestCase {
+    func testFailureAfterToolCallPreservesCompletedWorkForRecovery() async throws {
+        guard #available(macOS 27, *) else { return }
+        let state = HistoryFixtureState(failAfterOperation: true)
+        let session = AppleTurnProfile.session(model: model(state), tools: [HistoryFixtureTool(state: state)],
+            instructions: "Perform the requested operation once.", requireTool: true)
+        do {
+            _ = try await session.respond(to: "Do the operation.")
+            XCTFail("Expected the continuation to fail")
+        } catch is AppleContextLimit {}
+        let calls = await state.calls
+        XCTAssertEqual(calls, 1)
+        let receipt = AppleConversationSession(transcript: session.transcript, messageIDs: [], reply: "")
+        let restored = try JSONDecoder().decode(AppleConversationSession.self, from: JSONEncoder().encode(receipt))
+        XCTAssertTrue(restored.transcript.contains { if case .toolCalls = $0 { return true }; return false })
+        XCTAssertTrue(restored.transcript.contains { if case .toolOutput(let output) = $0 {
+            return output.description.contains("Completed operation with saffron")
+        }; return false }, "A later failure must not erase the completed command's result")
+        let resumedState = HistoryFixtureState()
+        let resumed = AppleTurnProfile.session(model: model(resumedState), tools: [HistoryFixtureTool(state: resumedState)],
+            instructions: "Report the completed operation; do not repeat it.",
+            history: restored.transcript.filter { if case .instructions = $0 { return false }; return true })
+        _ = try await resumed.respond(to: "Continue from the saved result.")
+        let resumedRequest = await resumedState.lastRequest()
+        XCTAssertTrue(resumedRequest?.transcript.contains { if case .toolOutput = $0 { return true }; return false } == true)
+        let repeatedCalls = await resumedState.calls
+        XCTAssertEqual(repeatedCalls, 0)
+    }
+
     func testSummarySurvivesSavingAndKeepsCurrentRequestAndFreshInstructions() async throws {
         guard #available(macOS 27, *) else { return }
         let state = HistoryFixtureState()
@@ -14,6 +42,8 @@ final class AppleHistoryProfileTests: XCTestCase {
         XCTAssertEqual(requests.count, 2, "One summary followed by the actual answer")
         let summary = try XCTUnwrap(requests.first)
         XCTAssertTrue(summary.transcript.map(\.description).joined(separator: "\n").contains("saffron"))
+        XCTAssertFalse(summary.transcript.map(\.description).joined(separator: "\n").contains("Verify output.txt now."),
+                       "The new request must not become material for a conversation summary")
         XCTAssertTrue(summary.enabledToolDefinitions.isEmpty, "Summarizing must not execute actions")
         XCTAssertEqual(summary.generationOptions.maximumResponseTokens, 256)
         let answer = try XCTUnwrap(requests.last)
@@ -166,11 +196,13 @@ private actor HistoryFixtureState {
     static let summary = "The marker is saffron. Completed writing output.txt; verification is pending."
     let cancelSummary: Bool
     let requiredOperations: Int
+    let failAfterOperation: Bool
     var requests: [LanguageModelExecutorGenerationRequest] = []
     var calls = 0
-    init(cancelSummary: Bool = false, requiredOperations: Int = 1) {
+    init(cancelSummary: Bool = false, requiredOperations: Int = 1, failAfterOperation: Bool = false) {
         self.cancelSummary = cancelSummary
         self.requiredOperations = requiredOperations
+        self.failAfterOperation = failAfterOperation
     }
     func record(_ request: LanguageModelExecutorGenerationRequest) { requests.append(request) }
     func lastRequest() -> LanguageModelExecutorGenerationRequest? { requests.last }
@@ -196,6 +228,7 @@ private struct HistoryFixtureModel: LanguageModel {
                 await channel.send(.toolCalls(action: .toolCall(id: UUID().uuidString, name: "operation",
                     action: .appendArguments(#"{"value":"saffron"}"#, tokenCount: 5))))
             } else {
+                if model.state.failAfterOperation { throw AppleContextLimit() }
                 await channel.send(.response(action: .appendText("done", tokenCount: 1)))
             }
         }

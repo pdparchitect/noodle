@@ -3,6 +3,23 @@ import FoundationModels
 @testable import NoodleAppleRuntime
 
 final class AppleConversationSessionTests: XCTestCase {
+    func testLoadDistinguishesMissingSessionFromUnreadableSession() throws {
+        guard #available(macOS 26, *) else { throw XCTSkip("Foundation Models requires macOS 26") }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("apple-load-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("events.json")
+        XCTAssertNil(try AppleConversationSession.load(from: file))
+        let session = AppleConversationSession(transcript: Transcript(entries: [
+            .prompt(.init(segments: [.text(.init(content: "Continue the pending task."))]))
+        ]), messageIDs: [], reply: "")
+        try session.save(to: file)
+        let loaded = try XCTUnwrap(AppleConversationSession.load(from: file))
+        XCTAssertEqual(loaded.transcript, session.transcript)
+        XCTAssertTrue(loaded.messageIDs.isEmpty, "An interrupted session must not pretend it completed a reply")
+        try Data("corrupt".utf8).write(to: file)
+        XCTAssertThrowsError(try AppleConversationSession.load(from: file), "Unreadable context must not silently start a fresh session")
+    }
+
     func testImageReceiptPersistsTextReferenceAndFinalResponse() throws {
         #if canImport(FoundationModels, _version: 2)
         guard #available(macOS 27, *) else { return }

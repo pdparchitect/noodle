@@ -402,7 +402,7 @@ public struct WorkspaceRepository: Sendable {
     public let launcherExecutableURL: URL?
     private let discoverAppletApplication: @Sendable () -> URL?
 
-    public static let managedSkillVersion = 25
+    public static let managedSkillVersion = 26
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil,
                 discoverAppletApplication: @escaping @Sendable () -> URL? = { AppletAgentSkill.installedApplicationURL() }) {

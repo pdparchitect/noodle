@@ -4,6 +4,9 @@ Source: [apple/foundation-models-utilities](https://github.com/apple/foundation-
 
 Version: `1.0.0-beta5`, commit `2aa12937e30d310687f40fc470ea35495816c9a4`.
 
+Upstream tags and `main` checked on 2026-09-15: both remain at this revision;
+there are no newer history changes to incorporate.
+
 The three files in `Sources/NoodleAppleRuntime/FoundationModelsUtilities` come
 from upstream's `Sources/FoundationModelsUtilities/History` directory:
 `DropCompletedToolCalls.swift`, `SummarizeHistory.swift`, and
@@ -20,12 +23,15 @@ Local changes to preserve when updating:
 
 - SDK and runtime availability guards, ordinary imports, internal visibility,
   and documentation matching this subset.
-- Summaries use greedy generation with a 256-token output limit.
+- Summaries use greedy generation with a 256-token output limit and exclude
+  the new prompt, which remains a request to carry out.
 - Completed-tool trimming preserves every exchange for the current prompt,
-  including earlier results in a multi-step task.
+  including earlier results in a multi-step task, and retains tool results in
+  prior interrupted turns that have no final response.
 - A context-limit failure during summarization retains recent complete turns
   using the existing executor trimming helper. This bounds saved history while
-  preserving the current request. Cancellation and other errors propagate.
+  preserving the current request. The shared `AppleContextOverflow` predicate
+  recognizes only context limits; cancellation and other errors propagate.
 
 The production profile supplies the selected model (including Noodle's executor
 token budget), an eight-entry summary threshold, and concise instructions that

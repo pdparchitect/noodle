@@ -6,9 +6,15 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- Give every Apple harness turn `bash`, `read`, and `write`, with shared CLI access for Messenger and assigned tools. Always resume and manage the saved session; remove the dedicated history tool and request classifier that could fail before replying.
+- Simplify Apple instructions around performing requests with current tools, keeping new requests separate from summaries of earlier conversation.
+
 ### Fixed
 
 - Keep trailing decimal zeros and use monospaced digits in model download progress to reduce label movement.
+- Preserve Apple command results after a later generation fails and when resuming interrupted turns. Reserve space for native tool continuations, finish from existing results when a tool sequence fills the budget, and avoid redundant inbox checks for supplied chat messages.
 - Remove instructional footer labels from the screen and window capture picker.
 - Reuse a single main window when launching or reopening Noodle, preventing duplicate conversation lists while preserving separate chat windows.
 

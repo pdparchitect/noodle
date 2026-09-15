@@ -27,6 +27,19 @@ final class Apple27LiveTests: XCTestCase {
         XCTAssertFalse(response.content.isEmpty)
     }
 
+    func testLargeToolResultFinishesWithoutRepeatingTheCommand() async throws {
+        guard #available(macOS 27, *) else { return }
+        let backend = try await backend()
+        let calls = CallCount()
+        let session = backend.session(tools: [LargeResult(calls: calls)],
+            instructions: "Read the report once, then answer with its final status. Do not request it again.", requireTool: true)
+        let response = try await session.respond(to: "Read the report and give me its final status.",
+            options: .init(sampling: .greedy, maximumResponseTokens: 128))
+        XCTAssertTrue(response.content.lowercased().contains("saffron"), response.content)
+        let count = await calls.count
+        XCTAssertEqual(count, 1)
+    }
+
     func testHistorySummaryRetainsUserFact() async throws {
         guard #available(macOS 27, *) else { return }
         let backend = try await backend()
@@ -96,6 +109,19 @@ private struct RecordValue: Tool {
     func call(arguments: Arguments) async throws -> String {
         await calls.record()
         return "Recorded \(arguments.value). The task is complete."
+    }
+}
+
+@available(macOS 27, *)
+private struct LargeResult: Tool {
+    let calls: CallCount
+    let name = "report"
+    let description = "Read the long report and its final status."
+    @Generable struct Arguments { let title: String }
+    func call(arguments: Arguments) async throws -> String {
+        await calls.record()
+        return "Exit status: 0\n" + (0..<1_000).map { "Item \($0): checked successfully." }.joined(separator: "\n")
+            + "\nFinal status: saffron."
     }
 }
 #endif

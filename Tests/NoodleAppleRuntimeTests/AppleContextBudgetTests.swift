@@ -5,6 +5,28 @@ import CoreGraphics
 @testable import NoodleAppleRuntime
 
 final class AppleContextBudgetTests: XCTestCase {
+    func testFullToolChainFinishesFromExistingResultsWithoutReplaying() async throws {
+        guard #available(macOS 27, *) else { return }
+        let state = ContextFixtureState()
+        let model = AppleContextModel(base: ContextFixtureModel(state: state),
+            budget: AppleContextBudget(contextSize: 4_096, responseTokens: 768, reserve: 1_024), count: { request in
+                request.transcript.contains { if case .toolOutput = $0 { return true }; return false } ? 2_900 : 500
+            })
+        let session = AppleTurnProfile.session(model: model, tools: [ContextFixtureTool(state: state)],
+            instructions: "Perform the operation and report its result.")
+        let response = try await session.respond(to: "Do the operation.")
+        XCTAssertEqual(response.content, "done")
+        let requests = await state.requests
+        XCTAssertEqual(requests.count, 2)
+        let last = try XCTUnwrap(requests.last)
+        XCTAssertEqual(last.generationOptions.toolCallingMode, .disallowed)
+        XCTAssertTrue(last.enabledToolDefinitions.isEmpty)
+        XCTAssertEqual(last.generationOptions.maximumResponseTokens, 256)
+        XCTAssertTrue(last.transcript.contains { if case .toolOutput = $0 { return true }; return false })
+        let calls = await state.calls
+        XCTAssertEqual(calls, 1)
+    }
+
     func testDropsWholeOldTurnsAndPreservesCurrentWork() async throws {
         guard #available(macOS 27, *) else { return }
         let instruction = Transcript.Entry.instructions(.init(segments: [.text(.init(content: "Keep these instructions."))], toolDefinitions: []))
