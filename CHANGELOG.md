@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Use a plus icon for the toolbar's Create menu.
 - Rename the Spotlight and Shortcuts action to Ask Agent, with an Agent or Group picker, a Message field, and Ask Bot search keywords and invocation phrases.
 
 ### Fixed

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Use a plus icon for the toolbar's Create menu.
+
 ## [0.7.1] - 2026-09-15
 
 ### Fixed

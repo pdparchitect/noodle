@@ -361,7 +361,7 @@ struct ComputerLibraryView: View {
           Button("New from Container Image…", systemImage: "shippingbox") { showingCustom = true }
           Button("New Local Mac…", systemImage: "person.crop.rectangle") { showingLocalMac = true }
         } label: {
-          Label("Create", systemImage: "square.and.pencil")
+          Label("Create", systemImage: "plus")
         }.help("Create Computer")
       }
     }

@@ -314,7 +314,7 @@ struct RootView: View {
                     .appShortcut(.newGroup)
                     .disabled(store.agents.isEmpty)
                 } label: {
-                    Label("Create", systemImage: "square.and.pencil")
+                    Label("Create", systemImage: "plus")
                 }
                 .help("Create Bot or Group")
             }
