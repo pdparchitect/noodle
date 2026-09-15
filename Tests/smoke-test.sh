@@ -80,7 +80,7 @@ if [[ ! -f "$intent_metadata" ]]; then
 fi
 
 if ! grep -q 'SendNoodleCommandIntent' "$intent_metadata"; then
-    print -u2 "The Send Noodle Command intent is missing from App Intents metadata."
+    print -u2 "The Ask Agent intent is missing from App Intents metadata."
     exit 1
 fi
 

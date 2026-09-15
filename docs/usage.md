@@ -63,8 +63,9 @@ available from the bot's sidebar menu; review any recovery confirmation first.
 
 ## Shortcuts and settings
 
-After launching Noodle once, search Spotlight for **Send Noodle Command** to send
-a message without opening the chat window. The same action is available in Shortcuts.
+After launching Noodle once, search Spotlight for **Ask Agent**, choose an
+**Agent or Group**, and enter a **Message**. The same action is available in
+Shortcuts. Replies appear in the chosen conversation in Noodle.
 
 **Settings → General** includes bot naming and **Keep Mac awake while agents work**.
 **Settings → Chat** includes message delivery, the recording microphone, bot

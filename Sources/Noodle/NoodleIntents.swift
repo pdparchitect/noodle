@@ -16,7 +16,7 @@ struct NoodleConversationEntity: AppEntity {
     var displayRepresentation: DisplayRepresentation {
         DisplayRepresentation(
             title: "\(name)",
-            subtitle: kind == .direct ? "Bot" : "Group",
+            subtitle: kind == .direct ? "Agent" : "Group",
             image: .init(systemName: kind == .direct ? "person.crop.circle" : "person.3.fill")
         )
     }
@@ -57,22 +57,23 @@ struct NoodleConversationQuery: EntityStringQuery {
 }
 
 struct SendNoodleCommandIntent: AppIntent {
-    static let title: LocalizedStringResource = "Send Noodle Command"
+    static let title: LocalizedStringResource = "Ask Agent"
     static let description = IntentDescription(
-        "Send a command to a Noodle bot or group without opening the app."
+        "Send a message to a Noodle agent or group of agents. Replies appear in the conversation in Noodle.",
+        searchKeywords: ["Ask Bot", "Ask a Bot", "Bot"]
     )
 
     @Parameter(
         title: "Agent or Group",
-        description: "The bot or group that should receive the command.",
-        requestValueDialog: "Who should receive the command?"
+        description: "The agent or group of agents that should receive the message.",
+        requestValueDialog: "Who would you like to ask?"
     )
     var conversation: NoodleConversationEntity
 
     @Parameter(
-        title: "Command",
-        description: "The command or message to send.",
-        requestValueDialog: "What do you want to send?"
+        title: "Message",
+        description: "The question, instruction, or message to send.",
+        requestValueDialog: "What would you like to ask?"
     )
     var command: String
 
@@ -105,11 +106,15 @@ struct NoodleShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: SendNoodleCommandIntent(),
             phrases: [
+                "Ask an agent with \(.applicationName)",
+                "Ask a bot with \(.applicationName)",
+                "Ask bot with \(.applicationName)",
+                "Ask \(\.$conversation) with \(.applicationName)",
                 "Send a command with \(.applicationName)",
                 "Message \(\.$conversation) with \(.applicationName)",
                 "Tell \(\.$conversation) using \(.applicationName)"
             ],
-            shortTitle: "Send Command",
+            shortTitle: "Ask Agent",
             systemImageName: "paperplane.fill"
         )
     }
@@ -141,7 +146,7 @@ private enum NoodleIntentError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .emptyCommand:
-            "Enter a command to send."
+            "Enter a message to send."
         case .missingConversation:
             "That Noodle conversation is no longer available."
         }

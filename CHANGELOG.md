@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- Rename the Spotlight and Shortcuts action to Ask Agent, with an Agent or Group picker, a Message field, and Ask Bot search keywords and invocation phrases.
+
 ### Fixed
 
 - Drag voice-message attachments from the entire control, including the waveform and padding, while keeping click-to-seek and play/pause available.
