@@ -36,7 +36,7 @@ Intelligence harness runs on device on supported Macs with macOS 26 or later.
 
 - **[Noodle](https://github.com/pdparchitect/noodle/releases/latest)**: work with agents individually or as a team. Requires macOS 15 or later.
 - **[Noodle Computer](https://github.com/pdparchitect/noodle/releases/tag/computer-latest)**: Linux computers for you and your agents. Requires Apple silicon and macOS 26 or later.
-- **[Noodle Applet](https://github.com/pdparchitect/noodle/releases/tag/applet-latest)**: run little tools, websites, experiments, and games created by you and your agents. Requires macOS 15 or later.
+- **[Noodle Applet](https://github.com/pdparchitect/noodle/releases/tag/applet-latest)**: run tools, websites, experiments, and games created by you and your agents. Requires macOS 15 or later.
 
 Download the app ZIP, unzip it, and move the app to **Applications**.
 Noodle Computer and Noodle Applet are optional and also work on their own.
