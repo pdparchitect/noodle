@@ -33,18 +33,19 @@ final class AppleSandboxTests: XCTestCase {
             }
             served.fulfill()
         }
-        func fetch(restricted: Bool) throws -> Int32 {
+        func fetch(restricted: Bool, localModel: Bool = false) throws -> Int32 {
             let child = Process()
             let args = ["--silent", "--fail", "--noproxy", "*", "--max-time", "2", url]
             if restricted {
                 child.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
-                child.arguments = ["-p", AppleAgentSandbox.profile(application: project), "/usr/bin/curl"] + args
+                child.arguments = ["-p", AppleAgentSandbox.profile(application: project, localModel: localModel), "/usr/bin/curl"] + args
             } else { child.executableURL = URL(fileURLWithPath: "/usr/bin/curl"); child.arguments = args }
             child.standardOutput = FileHandle.nullDevice; child.standardError = FileHandle.nullDevice
             try child.run(); child.waitUntilExit()
             return child.terminationStatus
         }
         XCTAssertNotEqual(try fetch(restricted: true), 0)
+        XCTAssertNotEqual(try fetch(restricted: true, localModel: true), 0)
         XCTAssertEqual(try fetch(restricted: false), 0)
         wait(for: [served], timeout: 3)
     }
@@ -53,9 +54,39 @@ final class AppleSandboxTests: XCTestCase {
         URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     }
 
+    private var helper: URL {
+        ProcessInfo.processInfo.environment["NOODLE_APPLE_TEST_HELPER"].map { URL(fileURLWithPath: $0) }
+            ?? project.appendingPathComponent(".build/debug/NoodleAppleAgent")
+    }
+
+    private var application: URL {
+        helper.deletingLastPathComponent().lastPathComponent == "Helpers"
+            ? helper.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            : helper.deletingLastPathComponent()
+    }
+
+    func testLocalModelGrantAllowsReadingButNotChangingWeights() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("model-grant-\(UUID())").resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let models = root.appendingPathComponent("model")
+        try FileManager.default.createDirectory(at: models, withIntermediateDirectories: true)
+        let weights = models.appendingPathComponent("weights.txt")
+        let outside = root.appendingPathComponent("secret.txt")
+        try Data("weights".utf8).write(to: weights)
+        try Data("secret".utf8).write(to: outside)
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
+        child.arguments = ["-p", AppleAgentSandbox.profile(application: project.appendingPathComponent(".build"), modelsDirectory: models, localModel: true),
+            "/bin/sh", "-c", "cat \"$1\" || exit 10; if printf changed > \"$1\"; then exit 11; fi; if cat \"$2\"; then exit 12; fi; exit 0", "probe", weights.path, outside.path]
+        child.standardOutput = FileHandle.nullDevice
+        child.standardError = FileHandle.nullDevice
+        try child.run(); child.waitUntilExit()
+        XCTAssertEqual(child.terminationStatus, 0)
+        XCTAssertEqual(try String(contentsOf: weights), "weights")
+    }
+
     func testAvailabilityThroughSeparateSandbox() throws {
-        let helper = project.appendingPathComponent(".build/debug/NoodleAppleAgent")
-        let result = try AppleHarnessProbe.inspect(executable: helper, application: helper.deletingLastPathComponent())
+        let result = try AppleHarnessProbe.inspect(executable: helper, application: application)
         XCTAssertEqual(result.models.map(\.id), ["default"])
         XCTAssertEqual(result.unavailableReason, AppleModel.inspection(version: "test").unavailableReason)
     }
@@ -74,7 +105,8 @@ final class AppleSandboxTests: XCTestCase {
         let layout = repository.storage(for: bot.agent.id)
         let protected = root.appendingPathComponent("outside.txt")
         try Data("secret".utf8).write(to: protected)
-        let policy = AppleAgentSandbox.profile(application: project.appendingPathComponent(".build/debug"), workspace: layout.workspace, repository: repository.rootURL)
+        let policy = AppleAgentSandbox.profile(application: application, workspace: layout.workspace, repository: repository.rootURL)
+        let messenger = helper.deletingLastPathComponent().appendingPathComponent(helper.deletingLastPathComponent().lastPathComponent == "Helpers" ? "messenger" : "NoodleMessenger")
         let child = Process(), errors = Pipe()
         child.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
         child.arguments = ["-p", policy, "/bin/sh", "-c", """
@@ -92,7 +124,7 @@ final class AppleSandboxTests: XCTestCase {
         if printf changed > "$6/messages.json"; then exit 19; fi
         "$7" --agent-directory "$1" --list-conversations > "$1/conversations.json"
         """, "probe", layout.workspace.path, protected.path, layout.configuration.path, layout.runtime.path, privateFile.path,
-            repository.conversationDirectory(id: bot.conversation.id).path, project.appendingPathComponent(".build/debug/NoodleMessenger").path]
+            repository.conversationDirectory(id: bot.conversation.id).path, messenger.path]
         child.standardError = errors
         try child.run(); child.waitUntilExit()
         XCTAssertEqual(child.terminationStatus, 0, String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))

@@ -1,6 +1,7 @@
 // swift-tools-version: 6.0
 
 import PackageDescription
+import Foundation
 
 let package = Package(
     name: "Noodle",
@@ -18,14 +19,22 @@ let package = Package(
         .package(path: "Computer/Bridge"),
         .package(path: "Applet/Protocol"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
+        // The macOS 27 Foundation Models adapter is not in an MLX release yet.
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", revision: "3e6ea1ede1596f05c1715d6b82567619276e98f0"),
+        .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.3.4"),
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk", exact: "0.12.1")
     ],
     targets: [
         .target(name: "NoodleAgentBridge"),
         .target(name: "NoodleAudioCapture", cSettings: [.unsafeFlags(["-fobjc-arc"])]),
         .executableTarget(name: "NoodleAgentHost", dependencies: ["NoodleCore", "NoodleAgentBridge"]),
-        .target(name: "NoodleAppleRuntime", dependencies: ["NoodleCore"]),
-        .executableTarget(name: "NoodleAppleAgent", dependencies: ["NoodleAppleRuntime", "NoodleCore"]),
+        .target(name: "NoodleAppleRuntime", dependencies: ["NoodleCore",
+            .product(name: "MLXFoundationModels", package: "mlx-swift-lm"),
+            .product(name: "MLXLLM", package: "mlx-swift-lm"),
+            .product(name: "Tokenizers", package: "swift-transformers")]),
+        .executableTarget(name: "NoodleAppleAgent", dependencies: ["NoodleAppleRuntime", "NoodleCore"],
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist",
+                                         "-Xlinker", "Support/AppleAgent-Info.plist"])]),
         .target(name: "NoodleCore", dependencies: [.product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper")]),
         .executableTarget(name: "NoodleComputerCLI", dependencies: ["NoodleCore", .product(name: "ComputerBridge", package: "Bridge")]),
         .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "MCP", package: "swift-sdk")]),
@@ -81,3 +90,12 @@ let package = Package(
     ],
     swiftLanguageModes: [.v5]
 )
+
+// A newer CLT SDK can build the isolated Apple helper while an older full
+// Xcode builds SwiftUI and packages the app. Keep their compiler outputs apart.
+if ProcessInfo.processInfo.environment["NOODLE_APPLE_HARNESS_ONLY"] == "1" {
+    let targets: Set<String> = ["NoodleCore", "NoodleAppleRuntime", "NoodleAppleAgent",
+                               "NoodleMessenger", "NoodleDocumentation", "NoodleCoreTests", "NoodleAppleRuntimeTests"]
+    package.targets.removeAll { !targets.contains($0.name) }
+    package.products.removeAll { !["NoodleCore", "NoodleMessenger", "NoodleDocumentation"].contains($0.name) }
+}

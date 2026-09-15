@@ -9,6 +9,8 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - Open a bot’s editor from its profile, with Reply, Message, and Edit arranged in one compact action row.
+- Show the active Apple model and its capabilities on macOS 27, analyze image attachments, and require a tool call for workspace tasks before allowing a final reply.
+- Import and select local MLX Qwen2, Qwen3, and Llama text chat models in Harness settings on macOS 27, with private model storage and offline loading inside the restricted helper.
 
 ### Changed
 
@@ -17,6 +19,7 @@ All notable changes to Noodle are documented here, following
 ### Fixed
 
 - Accept Markdown, text, source code, and other file types dropped into conversations, including directly onto the message input.
+- Keep explicit Apple harness tool requests out of the tool-free chat recovery path.
 - Refocus the chat input after saving a text or region annotation in the conversation window, ready to submit the draft.
 
 ## [0.15.0] - 2026-09-14

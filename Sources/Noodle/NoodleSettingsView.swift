@@ -347,6 +347,7 @@ private struct HarnessInstallationRow: View {
     @State private var terminalError: String?
     @State private var showsUpdateGuide = false
     @State private var showsExperimentalInfo = false
+    @State private var showsLocalModels = false
     @State private var kickRequest: AgentKickRequest?
     @Environment(\.openURL) private var openURL
 
@@ -423,6 +424,10 @@ private struct HarnessInstallationRow: View {
                 }
                 if installation.isAvailable {
                     versionDetails
+                }
+                if id == .apple {
+                    Button("Local Models…") { showsLocalModels = true }
+                        .sheet(isPresented: $showsLocalModels) { AppleLocalModelsView() }
                 }
                 if let activity = setup.activity[id] {
                     HStack {

@@ -3,6 +3,28 @@ import FoundationModels
 @testable import NoodleAppleRuntime
 
 final class AppleConversationSessionTests: XCTestCase {
+    func testImageReceiptPersistsTextReferenceAndFinalResponse() throws {
+        #if canImport(FoundationModels, _version: 2)
+        guard #available(macOS 27, *) else { return }
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("receipt-image-\(UUID()).png")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try Apple27LiveTests.writeSquare(to: file)
+        let prompt = Transcript.Entry.prompt(.init(segments: [
+            .text(.init(content: "What color?")),
+            .attachment(.init(content: .image(.init(imageURL: file)), label: "square.png"))
+        ]))
+        let response = Transcript.Entry.response(.init(assetIDs: ["synthetic"], segments: [.text(.init(content: "Red"))]))
+        let stored = AppleConversationSession.persistable(Transcript(entries: [prompt, response]))
+        let data = try JSONEncoder().encode(stored)
+        let restored = try JSONDecoder().decode(Transcript.self, from: data)
+        XCTAssertEqual(restored.last, response)
+        XCTAssertTrue(restored.first?.description.contains("square.png") == true)
+        guard case .prompt(let saved) = restored.first else { return XCTFail("Missing prompt") }
+        XCTAssertTrue(saved.segments.allSatisfy { if case .text = $0 { return true }; return false })
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+        #endif
+    }
+
     func testCachePreservesNativeMetadataAndCompletedDelivery() throws {
         guard #available(macOS 26, *) else { throw XCTSkip("Foundation Models requires macOS 26") }
         let prompt = Transcript.Entry.prompt(.init(id: "user-turn", segments: [.text(.init(content: "Remember saffron"))]))

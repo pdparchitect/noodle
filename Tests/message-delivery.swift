@@ -41,7 +41,7 @@ import NoodleCore
     func startRestrictedCodex(agentID: UUID, executablePath: String, reply: @escaping (Int32, String?) -> Void) {
         start(provider: .codex, agentID: agentID, executablePath: executablePath, reply: reply)
     }
-    func startRestrictedApple(agentID: UUID, reply: @escaping (Int32, String?) -> Void) {
+    func startRestrictedApple(agentID: UUID, modelIdentifier: String?, reply: @escaping (Int32, String?) -> Void) {
         start(provider: .apple, agentID: agentID, executablePath: "/fixture/apple", reply: reply)
     }
     func startRestrictedACP(provider: HarnessProvider, agentID: UUID, executablePath: String,

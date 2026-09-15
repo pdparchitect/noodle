@@ -8,10 +8,12 @@ public struct AppleHarnessInspection: Codable, Sendable {
     public let models: [HarnessModel]
     public let unavailableReason: String?
     public let version: String
-    public init(models: [HarnessModel], unavailableReason: String?, version: String) {
+    public let localModelsSupported: Bool?
+    public init(models: [HarnessModel], unavailableReason: String?, version: String, localModelsSupported: Bool? = nil) {
         self.models = models
         self.unavailableReason = unavailableReason
         self.version = version
+        self.localModelsSupported = localModelsSupported
     }
 }
 
@@ -38,12 +40,21 @@ public enum AppleExecutableTrust {
 /// Applied by Agent Host, before exec. It does not inherit the UI sandbox.
 /// Inspection uses the same system-service grants, without bot storage access.
 public enum AppleAgentSandbox {
-    public static func profile(application: URL, workspace: URL? = nil, repository: URL? = nil) -> String {
+    public static func profile(application: URL, workspace: URL? = nil, repository: URL? = nil,
+                               modelsDirectory: URL? = nil, localModel: Bool = false) -> String {
         var reads = ["/System", "/usr", "/bin", "/sbin", "/dev", "/Library/Apple",
                      "/Library/Preferences", "/private/etc", "/private/var/db/timezone", application.path]
         if let workspace { reads.append(AgentStorageLayout(workspace: workspace).package.path) }
         var writes: [String] = []
         if let workspace { reads.append(workspace.path); writes.append(workspace.path) }
+        let imagePreparation: String
+        var usesGPU = localModel
+        if #available(macOS 27, *) {
+            // Foundation Models renders CGImage attachments through Core Image.
+            // IOSurface alone allocates a buffer but cannot fill its pixels.
+            usesGPU = true
+            imagePreparation = "(allow iokit-open (iokit-user-client-class \"IOSurfaceRootUserClient\"))"
+        } else { imagePreparation = "" }
         return """
         (version 1)
         (deny default)
@@ -56,6 +67,7 @@ public enum AppleAgentSandbox {
           (preference-domain "com.apple.gms.availability"))
         (allow file-read* file-map-executable
           \(reads.map { "(subpath \(quote(canonical($0))))" }.joined(separator: "\n  ")))
+        \(modelsDirectory.map { "(allow file-read* (subpath \(quote(canonical($0.path)))))" } ?? "")
         \(writes.isEmpty ? "" : "(allow file-write* " + writes.map { "(subpath \(quote(canonical($0))))" }.joined(separator: " ") + ")")
         (allow file-read* file-write-data file-ioctl (literal "/dev/null") (subpath "/dev/fd"))
         (allow mach-lookup
@@ -63,7 +75,27 @@ public enum AppleAgentSandbox {
           (global-name "com.apple.logd")
           (global-name "com.apple.system.notification_center")
           (global-name "com.apple.modelmanager"))
+        \(imagePreparation)
+        \(usesGPU ? """
+        (allow mach-lookup (global-name "com.apple.MTLCompilerService"))
+        (allow iokit-open (iokit-user-client-class "AGXDeviceUserClient"))
+        \(metalCacheDirectory.map { "(allow file-read* file-write* (subpath \(quote($0.path))))" } ?? "")
+        """ : "")
         """
+    }
+
+    /// Metal's binary-archive bookkeeping requires its per-bundle cache on
+    /// macOS 27. Keep this identity aligned with AppleAgent-Info.plist; granting
+    /// the whole Darwin user cache would expose other applications' data.
+    private static var metalCacheDirectory: URL? {
+        let count = confstr(_CS_DARWIN_USER_CACHE_DIR, nil, 0)
+        guard count > 1 else { return nil }
+        var buffer = [CChar](repeating: 0, count: count)
+        guard confstr(_CS_DARWIN_USER_CACHE_DIR, &buffer, count) > 1 else { return nil }
+        // Resolve only the OS-owned parent. The helper-writable child must
+        // never redirect a later launch's grant through a symbolic link.
+        return URL(fileURLWithPath: String(cString: buffer), isDirectory: true).resolvingSymlinksInPath()
+            .appendingPathComponent("com.pdparchitect.noodle.apple-agent", isDirectory: true)
     }
 
     private static func canonical(_ path: String) -> String {

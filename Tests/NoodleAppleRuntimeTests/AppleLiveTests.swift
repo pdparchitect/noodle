@@ -1,11 +1,45 @@
 import XCTest
 import NoodleCore
 import FoundationModels
+import CoreGraphics
 @testable import NoodleAppleRuntime
 
 /// Explicit opt-in: a real on-device model and a synthetic disposable bot. Never
 /// opens the user's Noodle storage, accounts, or external model services.
 final class AppleLiveTests: XCTestCase {
+    func testSandboxedImageAttachmentIsRecognized() throws {
+        #if canImport(FoundationModels, _version: 2)
+        guard #available(macOS 27, *), SystemLanguageModel.default.capabilities.contains(.vision) else {
+            throw XCTSkip("This device has no image capability.")
+        }
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("apple-image-\(UUID()).png")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let samples: [(String, CGColor)] = [
+            ("red", CGColor(red: 1, green: 0, blue: 0, alpha: 1)),
+            ("green", CGColor(red: 0, green: 1, blue: 0, alpha: 1)),
+            ("blue", CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+        ]
+        for (expected, color) in samples {
+            try Apple27LiveTests.writeSquare(to: file, color: color)
+            try exercise(tasks: [["What color is the square in the attached image? Answer in one word."]], image: file) { _, replies in
+                XCTAssertTrue(replies[0].body.lowercased().contains(expected), "Expected \(expected), received \(replies[0].body)")
+            }
+        }
+        #else
+        throw XCTSkip("Build with the macOS 27 SDK for image input.")
+        #endif
+    }
+
+    func testSandboxedImportedLocalModelWritesAndReplies() throws {
+        guard let path = ProcessInfo.processInfo.environment["NOODLE_TEST_MLX_MODEL"] else {
+            throw XCTSkip("Set NOODLE_TEST_MLX_MODEL to a local MLX model folder for offline inference.")
+        }
+        try exercise(tasks: [["Use write_file to create result.txt containing exactly: saffron"]],
+                     modelDirectory: URL(fileURLWithPath: path)) { workspace, replies in
+            XCTAssertEqual(try String(contentsOf: workspace.appendingPathComponent("result.txt")).trimmingCharacters(in: .whitespacesAndNewlines), "saffron")
+            XCTAssertFalse(replies.isEmpty)
+        }
+    }
     func testSandboxedCompletedReplyDoesNotRepeatItsCommand() throws {
         try exercise(tasks: [["Use execute_command to run: printf repeated > should-not-run.txt"]],
                      completedReply: "The operation finished before the interruption.") { workspace, replies in
@@ -101,15 +135,17 @@ final class AppleLiveTests: XCTestCase {
         }
     }
 
-    private func exercise(named name: String = "Apple test", history: [(Bool, String)] = [], tasks: [[String]], completedReply: String? = nil,
+    private func exercise(named name: String = "Apple test", history: [(Bool, String)] = [], tasks: [[String]], completedReply: String? = nil, modelDirectory: URL? = nil, image: URL? = nil,
                           verify: (URL, [ChatMessage]) throws -> Void) throws {
-        guard ProcessInfo.processInfo.environment["NOODLE_TEST_APPLE_MODEL"] == "1" else {
+        guard ProcessInfo.processInfo.environment["NOODLE_TEST_APPLE_MODEL"] == "1" || modelDirectory != nil else {
             throw XCTSkip("Set NOODLE_TEST_APPLE_MODEL=1 for the real on-device model test.")
         }
-        if let reason = AppleModel.inspection(version: "test").unavailableReason { throw XCTSkip(reason) }
+        if modelDirectory == nil, let reason = AppleModel.inspection(version: "test").unavailableReason { throw XCTSkip(reason) }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("apple-live-\(UUID())").resolvingSymlinksInPath()
         defer { try? FileManager.default.removeItem(at: root) }
         let repository = WorkspaceRepository(rootURL: root)
+        let modelStore = AppleLocalModelStore(repository: root)
+        let local = try modelDirectory.map { try modelStore.importModel(from: $0) }
         let bot = try repository.createAgent(named: name, harnessIdentifier: "apple")
         for (isAssistant, body) in history {
             if isAssistant { _ = try repository.sendAgentMessage(agentID: bot.agent.id, conversationID: bot.conversation.id, body: body) }
@@ -131,10 +167,17 @@ final class AppleLiveTests: XCTestCase {
             : helper.deletingLastPathComponent()
         let child = Process(), input = Pipe(), output = Pipe(), errors = Pipe(), responses = Responses()
         child.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
-        child.arguments = ["-p", AppleAgentSandbox.profile(application: application, workspace: workspace, repository: root), helper.path, "--serve"]
+        child.arguments = ["-p", AppleAgentSandbox.profile(application: application, workspace: workspace, repository: root,
+            modelsDirectory: try local.map { try modelStore.folder(id: $0.id) }, localModel: local != nil), helper.path, "--serve"]
         child.currentDirectoryURL = workspace
         child.environment = ["HOME": workspace.path, "PATH": "/usr/bin:/bin", "TMPDIR": workspace.appendingPathComponent(".noodle/tmp").path]
         child.standardInput = input; child.standardOutput = output; child.standardError = errors
+        let diagnostics = DiagnosticBuffer()
+        errors.fileHandleForReading.readabilityHandler = { handle in
+            let bytes = handle.availableData
+            if bytes.isEmpty { handle.readabilityHandler = nil } else { diagnostics.append(bytes) }
+        }
+        child.terminationHandler = { _ in responses.closed() }
         let reader = JSONLineReader { responses.receive($0) }
         output.fileHandleForReading.readabilityHandler = { handle in
             let bytes = handle.availableData
@@ -143,6 +186,7 @@ final class AppleLiveTests: XCTestCase {
         try child.run()
         defer {
             output.fileHandleForReading.readabilityHandler = nil
+            errors.fileHandleForReading.readabilityHandler = nil
             input.fileHandleForWriting.closeFile()
             if child.isRunning { child.terminate() }
             child.waitUntilExit()
@@ -150,21 +194,23 @@ final class AppleLiveTests: XCTestCase {
         func request(_ id: Int, _ method: String, _ params: [String: Any]) throws -> [String: Any] {
             try input.fileHandleForWriting.write(contentsOf: JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "id": id, "method": method, "params": params]) + Data([10]))
             guard let response = responses.wait(id, timeout: method == "session/prompt" ? 180 : 20) else {
-                throw HarnessSetupError("No response to \(method).")
+                throw HarnessSetupError("No response to \(method).\n\(diagnostics.text)")
             }
             if let error = response["error"] {
                 let trace = (try? String(contentsOf: workspace.appendingPathComponent(".noodle/apple/last-transcript.json"), encoding: .utf8)) ?? "No transcript"
-                throw HarnessSetupError("\(error)\nSynthetic transcript: \(String(trace.suffix(10_000)))")
+                let detail = (try? String(contentsOf: workspace.appendingPathComponent(".noodle/apple/last-error.txt"), encoding: .utf8)) ?? ""
+                throw HarnessSetupError("\(error)\nSynthetic transcript: \(String(trace.suffix(10_000)))\n\(detail)\n\(diagnostics.text)")
             }
             return try XCTUnwrap(response["result"] as? [String: Any])
         }
         _ = try request(1, "initialize", FxProtocol.initializeParameters)
         let session = try XCTUnwrap(request(2, "session/new", ["cwd": workspace.path, "mcpServers": []])["sessionId"] as? String)
-        _ = try request(3, "session/set_model", ["sessionId": session, "modelId": "default"])
+        _ = try request(3, "session/set_model", ["sessionId": session, "modelId": local?.id ?? "default"])
         for (index, messages) in tasks.enumerated() {
             var messageIDs: Set<UUID> = []
             for body in messages {
-                messageIDs.insert(try repository.sendUserMessage(conversationID: bot.conversation.id, body: body).id)
+                let attachmentIDs = try image.map { [try repository.importAttachment(from: $0, into: bot.conversation.id, mediaType: "image/png").id] } ?? []
+                messageIDs.insert(try repository.sendUserMessage(conversationID: bot.conversation.id, body: body, attachmentIDs: attachmentIDs).id)
             }
             if #available(macOS 26, *), let completedReply {
                 // Simulate a helper stopping after generation was saved but
@@ -198,6 +244,8 @@ final class AppleLiveTests: XCTestCase {
 private final class Responses: @unchecked Sendable {
     private let condition = NSCondition()
     private var values: [Int: [String: Any]] = [:]
+    private var ended = false
+    func closed() { condition.lock(); ended = true; condition.broadcast(); condition.unlock() }
     func receive(_ value: [String: Any]) {
         guard let id = value["id"] as? Int else { return }
         condition.lock(); defer { condition.unlock() }
@@ -207,7 +255,21 @@ private final class Responses: @unchecked Sendable {
     func wait(_ id: Int, timeout: TimeInterval) -> [String: Any]? {
         condition.lock(); defer { condition.unlock() }
         let deadline = Date().addingTimeInterval(timeout)
-        while values[id] == nil, condition.wait(until: deadline) {}
+        while values[id] == nil, !ended, condition.wait(until: deadline) {}
         return values.removeValue(forKey: id)
+    }
+}
+
+private final class DiagnosticBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var data = Data()
+    func append(_ bytes: Data) {
+        lock.lock(); defer { lock.unlock() }
+        data.append(bytes)
+        if data.count > 24_000 { data = data.suffix(24_000) }
+    }
+    var text: String {
+        lock.lock(); defer { lock.unlock() }
+        return String(decoding: data, as: UTF8.self)
     }
 }

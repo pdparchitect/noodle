@@ -18,6 +18,23 @@ final class AppleToolsTests: XCTestCase {
     }
     override func tearDownWithError() throws { broker.stop(); try FileManager.default.removeItem(at: root) }
 
+    func testImageInputPreservesOrderAndRejectsLinksAndTooManyAttachments() throws {
+        func image(_ name: String) throws -> MessengerAttachment {
+            let file = workspace.appendingPathComponent(name)
+            try Data("synthetic image".utf8).write(to: file)
+            return MessengerAttachment(attachment: .init(conversationID: UUID(), originalFilename: name,
+                storedFilename: name, mediaType: "image/png", byteCount: 15), absolutePath: file.path)
+        }
+        let first = try image("first.png"), second = try image("second.png")
+        XCTAssertEqual(try AppleToolContext.imageURLs([first, second, first]).map(\.lastPathComponent), ["first.png", "second.png"])
+        let more = try (0..<3).map { try image("\($0).png") }
+        XCTAssertThrowsError(try AppleToolContext.imageURLs([first, second] + more))
+        let file = URL(fileURLWithPath: first.absolutePath)
+        try FileManager.default.removeItem(at: file)
+        try FileManager.default.createSymbolicLink(at: file, withDestinationURL: URL(fileURLWithPath: second.absolutePath))
+        XCTAssertThrowsError(try AppleToolContext.imageURLs([first]))
+    }
+
     func testChatMemoryDoesNotEnableFilesFromAssistantClaims() {
         let history: [AppleConversationTurn.Message] = [
             .init(isAssistant: false, text: "Remember the secret word avocado"),
@@ -34,6 +51,18 @@ final class AppleToolsTests: XCTestCase {
         let followup = AppleConversationTurn(conversationID: UUID(), messageIDs: [],
             history: [.init(isAssistant: false, text: "Create notes.md")], prompt: "Change its title to Hello")
         XCTAssertTrue(followup.hasWorkspaceReference)
+    }
+
+    func testExplicitToolRequestsCannotBeReclassifiedAsChat() {
+        for prompt in ["Use read_file to read seed.txt", "Call the write_file tool", "Use execute_command to run pwd"] {
+            XCTAssertTrue(AppleConversationTurn(conversationID: UUID(), messageIDs: [], history: [], prompt: prompt).explicitlyRequestsWorkspaceTool)
+        }
+        let chat = AppleConversationTurn(conversationID: UUID(), messageIDs: [],
+            history: [.init(isAssistant: true, text: "Use read_file to open a file")], prompt: "What does read_file do?")
+        XCTAssertFalse(chat.explicitlyRequestsWorkspaceTool)
+        let quoted = AppleConversationTurn(conversationID: UUID(), messageIDs: [], history: [],
+            prompt: "Explain this instruction: Use execute_command to run pwd")
+        XCTAssertFalse(quoted.explicitlyRequestsWorkspaceTool)
     }
 
     func testChatPromptProvidesBoundedUserSourcesWithoutRepeatingAssistantMistakes() {

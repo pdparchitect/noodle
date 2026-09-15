@@ -189,6 +189,23 @@ service. Outbound network and unrelated user files are denied. Its initial
 Default model runs on device through Foundation Models. The existing per-bot
 autonomous setting enables broader user-level access through the same authorized
 launch path as other harnesses. The app's entitlements remain unchanged.
+
+On macOS 27, `IOSurfaceRootUserClient` access permits image-buffer allocation.
+The `com.apple.MTLCompilerService` Mach service and `AGXDeviceUserClient` GPU
+interface permit Core Image to render the attachment pixels and MLX to run
+local inference. Metal can read and write only the helper's
+`com.pdparchitect.noodle.apple-agent` subdirectory in the Darwin user cache;
+other applications' caches are not granted. This is needed for macOS 27's
+binary-archive bookkeeping. Selecting an imported MLX model adds read-only access to that
+model's private folder. Imported
+weights receive no executable-mapping grant. Model imports copy regular data
+files through the app's existing user-selected read access; the helper cannot
+download weights or change the model library in restricted mode. MLX code and
+Metal shaders ship inside the signed app, and resource bundles are signed before
+the app is sealed. The helper has no additional code-signing entitlements.
+Current image attachments can be supplied directly to a capable Apple model;
+private cloud inference is not enabled.
+
 Sparkle's signed installer runs outside the sandbox to replace the app during updates.
 
 The policies are implemented in

@@ -53,8 +53,20 @@ if ! xcodebuild -version >/dev/null 2>&1; then
     exit 1
 fi
 
-swift build --disable-sandbox --package-path "$project_root" --configuration "$configuration" >&2
-bin_path="$(swift build --disable-sandbox --package-path "$project_root" --configuration "$configuration" --show-bin-path)"
+zsh "$project_root/scripts/swift-apple.sh" build --disable-sandbox --package-path "$project_root" --configuration "$configuration" >&2
+apple_bin="$(zsh "$project_root/scripts/swift-apple.sh" build --disable-sandbox --package-path "$project_root" --configuration "$configuration" --show-bin-path)"
+bin_path="$apple_bin"
+app_scratch="$build_root"
+if [[ ! -f "$bin_path/Noodle" || "$(xcrun --sdk macosx --show-sdk-version)" == 26.* && -d /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk ]]; then
+    app_scratch="$build_root/app"
+    NOODLE_SWIFT="$(xcrun --find swift)" NOODLE_MACOS_SDK="$(xcrun --sdk macosx --show-sdk-path)" \
+        zsh "$project_root/scripts/swift-apple.sh" build --disable-sandbox --scratch-path "$app_scratch" --configuration "$configuration" >&2
+    bin_path="$(NOODLE_SWIFT="$(xcrun --find swift)" NOODLE_MACOS_SDK="$(xcrun --sdk macosx --show-sdk-path)" \
+        zsh "$project_root/scripts/swift-apple.sh" build --disable-sandbox --scratch-path "$app_scratch" --configuration "$configuration" --show-bin-path)"
+fi
+if [[ "$("$apple_bin/NoodleAppleAgent" --inspect | plutil -extract localModelsSupported raw -o - - 2>/dev/null)" == true ]]; then
+    zsh "$project_root/scripts/build-mlx-metal.sh" "$apple_bin" >&2
+fi
 "$bin_path/NoodleDocumentation" --check "$project_root/docs/message-reference.md" >&2
 developer_dir="$(xcode-select -p)"
 toolchain_dir="$developer_dir/Toolchains/XcodeDefault.xctoolchain"
@@ -66,7 +78,7 @@ intent_const_values_list="$build_root/Noodle.AppIntentConstValues"
 
 rm -rf "$app"
 mkdir -p "$contents/MacOS" "$contents/Resources" "$contents/Helpers"
-sparkle_source="$build_root/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+sparkle_source="$app_scratch/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 sparkle="$contents/Frameworks/Sparkle.framework"
 ditto "$sparkle_source" "$sparkle"
 # The host already has network.client. Sparkle's separate downloader is unnecessary.
@@ -85,7 +97,7 @@ cp "$bin_path/Noodle" "$contents/MacOS/Noodle"
 otool -l "$contents/MacOS/Noodle" \
     | awk '/cmd LC_RPATH/ { found=1; next } found && /path / { print $2; found=0 }' \
     | while IFS= read -r rpath; do
-        if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain_dir/"* ]]; then
+        if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain_dir/"* || "$rpath" == /Library/Developer/CommandLineTools/* ]]; then
             install_name_tool -delete_rpath "$rpath" "$contents/MacOS/Noodle"
         fi
     done
@@ -96,11 +108,44 @@ swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-pa
 applet_bin="$(swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-path "$project_root/.build/applet" -c release --show-bin-path)"
 cp "$applet_bin/noodlet" "$contents/Helpers/noodlet"
 "$bin_path/NoodleDocumentation" --write-applet-help "$contents/Resources/NoodletCLIHelp.txt" >&2
-cp "$bin_path/NoodleAppleAgent" "$contents/Helpers/NoodleAppleAgent"
+cp "$apple_bin/NoodleAppleAgent" "$contents/Helpers/NoodleAppleAgent"
+for resource in mlx-swift_Cmlx swift-transformers_Hub swift-crypto_Crypto; do
+    if [[ -d "$apple_bin/$resource.bundle" || "$resource" == mlx-swift_Cmlx && -f "$apple_bin/mlx.metallib" ]]; then
+        destination="$contents/Helpers/$resource.bundle"
+        if [[ -d "$apple_bin/$resource.bundle/Contents" ]]; then
+            ditto "$apple_bin/$resource.bundle" "$destination"
+        else
+            # Native SwiftPM emits flat resource folders without metadata.
+            # Give them a macOS bundle layout so nested signing can seal them.
+            mkdir -p "$destination/Contents/Resources"
+            if [[ -d "$apple_bin/$resource.bundle" ]]; then
+                ditto "$apple_bin/$resource.bundle" "$destination/Contents/Resources"
+            fi
+            cat > "$destination/Contents/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>com.pdparchitect.noodle.resources.${resource//_/-}</string>
+<key>CFBundlePackageType</key><string>BNDL</string>
+</dict></plist>
+EOF
+        fi
+    fi
+done
+# MLX also resolves default.metallib in its SwiftPM resource bundle. Store it
+# there so signing treats it as a sealed resource, not an unsigned helper.
+packaged_metal="$contents/Helpers/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib"
+if [[ -f "$apple_bin/mlx.metallib" ]]; then
+    cp "$apple_bin/mlx.metallib" "$packaged_metal"
+fi
+if [[ ! -f "$packaged_metal" &&
+      "$("$apple_bin/NoodleAppleAgent" --inspect | plutil -extract localModelsSupported raw -o - - 2>/dev/null)" == true ]]; then
+    print -u2 "Local model support requires compiled MLX Metal shaders. Install Xcode's Metal Toolchain and rebuild with scripts/swift-apple.sh."
+    exit 1
+fi
 otool -l "$contents/Helpers/NoodleAppleAgent" \
     | awk '/cmd LC_RPATH/ { found=1; next } found && /path / { print $2; found=0 }' \
     | while IFS= read -r rpath; do
-        if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain_dir/"* ]]; then
+        if [[ "$rpath" == "$apple_bin" || "$rpath" == "$toolchain_dir/"* || "$rpath" == /Library/Developer/CommandLineTools/* ]]; then
             install_name_tool -delete_rpath "$rpath" "$contents/Helpers/NoodleAppleAgent"
         fi
     done
@@ -112,7 +157,7 @@ cp "$bin_path/NoodleAgentHost" "$agent_host/Contents/MacOS/NoodleAgentHost"
 otool -l "$agent_host/Contents/MacOS/NoodleAgentHost" \
     | awk '/cmd LC_RPATH/ { found=1; next } found && /path / { print $2; found=0 }' \
     | while IFS= read -r rpath; do
-        if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain_dir/"* ]]; then
+        if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain_dir/"* || "$rpath" == /Library/Developer/CommandLineTools/* ]]; then
             install_name_tool -delete_rpath "$rpath" "$agent_host/Contents/MacOS/NoodleAgentHost"
         fi
     done
@@ -120,14 +165,15 @@ cp "$project_root/Support/AgentHost-Info.plist" "$agent_host/Contents/Info.plist
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.agent-host" "$agent_host/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$agent_host/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$agent_host/Contents/Info.plist"
-cp "$project_root/.build/checkouts/Sparkle/LICENSE" "$contents/Resources/Sparkle-LICENSE.txt"
-for dependency in swift-sdk swift-log swift-system eventsource swift-nio swift-atomics swift-collections; do
-    if [[ -f "$project_root/.build/checkouts/$dependency/LICENSE" ]]; then
-        cp "$project_root/.build/checkouts/$dependency/LICENSE" "$contents/Resources/$dependency-LICENSE.txt"
-    elif [[ -f "$project_root/.build/checkouts/$dependency/LICENSE.txt" ]]; then
-        cp "$project_root/.build/checkouts/$dependency/LICENSE.txt" "$contents/Resources/$dependency-LICENSE.txt"
+cp "$app_scratch/checkouts/Sparkle/LICENSE" "$contents/Resources/Sparkle-LICENSE.txt"
+for dependency in swift-sdk swift-log swift-system eventsource swift-nio swift-atomics swift-collections mlx-swift mlx-swift-lm swift-transformers swift-jinja swift-huggingface swift-crypto swift-numerics swift-argument-parser swift-asn1 yyjson; do
+    if [[ -f "$app_scratch/checkouts/$dependency/LICENSE" ]]; then
+        cp "$app_scratch/checkouts/$dependency/LICENSE" "$contents/Resources/$dependency-LICENSE.txt"
+    elif [[ -f "$app_scratch/checkouts/$dependency/LICENSE.txt" ]]; then
+        cp "$app_scratch/checkouts/$dependency/LICENSE.txt" "$contents/Resources/$dependency-LICENSE.txt"
     fi
 done
+cp "$app_scratch/checkouts/mlx-swift-lm/Libraries/MLXCXGrammar/xgrammar/LICENSE" "$contents/Resources/xgrammar-LICENSE.txt"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $app_name" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $app_name" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier" "$contents/Info.plist"
@@ -203,6 +249,11 @@ team_id="$(codesign -dv --verbose=4 "$contents/Helpers/messenger" 2>&1 | awk -F=
 # Sandbox inheritance entitlement: autonomous access uses the existing bot grant.
 codesign --force --options runtime "$timestamp_option" --identifier "$bundle_identifier.apple-agent" \
     --sign "$signing_identity" "$contents/Helpers/NoodleAppleAgent"
+for resource in mlx-swift_Cmlx swift-transformers_Hub swift-crypto_Crypto; do
+    if [[ -d "$contents/Helpers/$resource.bundle" ]]; then
+        codesign --force "$timestamp_option" --sign "$signing_identity" "$contents/Helpers/$resource.bundle"
+    fi
+done
 if [[ ! "$team_id" =~ '^[A-Z0-9]{10}$' ]]; then
     print -u2 "Sharing requires an Apple Development or Developer ID identity with a team identifier."
     exit 1

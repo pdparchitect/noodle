@@ -11,6 +11,7 @@ struct AppleConversationTurn: Sendable {
     let messageIDs: Set<UUID>
     let history: [Message]
     let prompt: String
+    var images: [URL] = []
 
     /// Give follow-ups immediate grounding without requiring the model to
     /// discover that it needs history. Old assistant mistakes are not facts.
@@ -36,6 +37,13 @@ struct AppleConversationTurn: Sendable {
         let userText = ([prompt] + history.suffix(4).filter { !$0.isAssistant }.map(\.text)).joined(separator: "\n")
         let pattern = #"(?i)\b(read_file|write_file|execute_command|files?|folders?|director(?:y|ies)|workspace|terminal|shell|commands?|scripts?|attachments?|filesystem|execute|run|bash|zsh|python|swift|javascript|pdf|spreadsheet)\b|(?:^|\s)(?:~?/|\.{1,2}/)\S+|\b[\w-]+\.[a-z0-9]{1,8}\b|(?m)^\s*(?:ls|pwd|cat|mkdir|touch|git|curl|find|rg)\b"#
         return userText.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    /// Explicit tool requests must not be downgraded to tool-free chat by the
+    /// classifier. Only the current user request can select this path.
+    var explicitlyRequestsWorkspaceTool: Bool {
+        prompt.range(of: #"(?i)^\s*(?:please\s+)?(?:use|call)\s+(?:the\s+)?(?:read_file|write_file|execute_command)\b"#,
+                     options: .regularExpression) != nil
     }
 }
 
@@ -221,7 +229,7 @@ public actor AppleToolContext {
                 continue
             }
             let pending = Array(deliveries[first...last])
-            let prompt = try present(pending.map { try conversationText($0) }.joined(separator: "\n\n"))
+            let prompt = try present(pending.map { try conversationText($0, compactImages: true) }.joined(separator: "\n\n"))
             var budget = max(0, 6_000 - prompt.utf8.count)
             var history: [AppleConversationTurn.Message] = []
             for delivery in deliveries[..<first].suffix(16).reversed() {
@@ -230,11 +238,32 @@ public actor AppleToolContext {
                 budget -= text.utf8.count
                 history.append(.init(isAssistant: delivery.message.author == .agent(agentID), text: text))
             }
-            turns.append(.init(conversationID: conversation, messageIDs: ids, history: history.reversed(), prompt: prompt))
+            let imageAttachments = pending.flatMap(\.attachments).filter { $0.url == nil && $0.mediaType.hasPrefix("image/") }
+            let images = try Self.imageURLs(imageAttachments)
+            turns.append(.init(conversationID: conversation, messageIDs: ids, history: history.reversed(), prompt: prompt, images: images))
         }
         try savePendingReplies()
         try saveReplyReceipts()
         return turns
+    }
+
+    static func imageURLs(_ attachments: [MessengerAttachment]) throws -> [URL] {
+        var seen = Set<UUID>()
+        let images = attachments.filter { seen.insert($0.id).inserted }
+        guard images.count <= 4 else { throw HarnessSetupError("Send at most four images in one Apple model turn.") }
+        var bytes: Int64 = 0
+        return try images.map { attachment in
+            let url = URL(fileURLWithPath: attachment.absolutePath).standardizedFileURL
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            guard url.resolvingSymlinksInPath() == url,
+                  attributes[.type] as? FileAttributeType == .typeRegular,
+                  let size = attributes[.size] as? NSNumber, size.int64Value > 0, size.int64Value <= 20_971_520 else {
+                throw HarnessSetupError("Images must be regular files smaller than 20 MiB.")
+            }
+            bytes += size.int64Value
+            guard bytes <= 41_943_040 else { throw HarnessSetupError("Send at most 40 MiB of images in one turn.") }
+            return url
+        }
     }
 
     func deliverReply(_ body: String, to turn: AppleConversationTurn) throws {
@@ -264,12 +293,20 @@ public actor AppleToolContext {
         try AtomicFile.write(JSONEncoder().encode(pendingReplies), to: pendingRepliesFile)
     }
 
-    private func conversationText(_ delivery: MessengerDelivery) throws -> String {
+    private func conversationText(_ delivery: MessengerDelivery, compactImages: Bool = false) throws -> String {
         var text = delivery.message.body
         if delivery.conversation.kind == .group || delivery.message.author == .system {
             text = "\(delivery.sender.displayName): \(text)"
         }
-        if !delivery.attachments.isEmpty { text += "\nAttachments: " + (try json(delivery.attachments)) }
+        var attachments = delivery.attachments
+        if compactImages {
+            for image in attachments where image.url == nil && image.mediaType.hasPrefix("image/") {
+                text += "\nAttached image: \(image.originalFilename)"
+                if let annotation = image.annotation { text += "\nImage annotation: " + (try json(annotation)) }
+            }
+            attachments.removeAll { $0.url == nil && $0.mediaType.hasPrefix("image/") }
+        }
+        if !attachments.isEmpty { text += "\nAttachments: " + (try json(attachments)) }
         return text
     }
 

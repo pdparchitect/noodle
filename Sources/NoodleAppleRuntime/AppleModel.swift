@@ -3,7 +3,39 @@ import FoundationModels
 import NoodleCore
 
 public enum AppleModel {
-    public static func inspection(version: String) -> AppleHarnessInspection {
+    public static func inspection(version: String, modelsDirectory: URL? = nil) -> AppleHarnessInspection {
+        var name = "Apple on-device"
+        var description = "Apple Intelligence’s on-device model."
+        var localSupported = false
+        #if canImport(FoundationModels, _version: 2)
+        if #available(macOS 27, *) {
+            localSupported = true
+            let model = SystemLanguageModel.default
+            if model.isAvailable {
+                name = model.variant.displayName
+                let context = model.contextSize
+                var details = ["On device"]
+                if context > 0 { details.append("\(context.formatted()) token context") }
+                if model.capabilities.contains(.vision) { details.append("Images") }
+                if model.capabilities.contains(.toolCalling) { details.append("Tools") }
+                if model.capabilities.contains(.guidedGeneration) { details.append("Structured output") }
+                if model.capabilities.contains(.reasoning) { details.append("Reasoning") }
+                description = details.joined(separator: " · ")
+            }
+        }
+        #endif
+        var models = [HarnessModel(id: "default", displayName: name, description: description,
+                                  supportedEfforts: [], defaultEffort: "", isDefault: true)]
+        if localSupported, let modelsDirectory {
+            models += ((try? AppleLocalModelStore(directory: modelsDirectory).models()) ?? []).map(\.harnessModel)
+        }
+        let reason = systemUnavailableReason
+        if reason != nil, models.count > 1 { models.removeFirst() }
+        return .init(models: models, unavailableReason: models.contains(where: { $0.id != "default" }) ? nil : reason,
+                     version: version, localModelsSupported: localSupported)
+    }
+
+    static var systemUnavailableReason: String? {
         let reason: String?
         if #available(macOS 26, *) {
             switch SystemLanguageModel.default.availability {
@@ -14,18 +46,14 @@ public enum AppleModel {
             case .unavailable: reason = "Apple Intelligence is currently unavailable. Check System Settings."
             }
         } else { reason = "The Apple harness requires macOS 26 or later and an Apple Intelligence capable Mac." }
-        return .init(models: [HarnessModel(id: "default", displayName: "Default",
-            description: "Apple Intelligence’s on-device model.", supportedEfforts: [], defaultEffort: "", isDefault: true)],
-            unavailableReason: reason, version: version)
+        return reason
     }
 
     public static func respond(workspace: URL, modelIdentifier: String?, wake: String,
                                onActivity: @escaping @Sendable () -> Void) async throws {
-        guard modelIdentifier == nil || modelIdentifier == "default" else {
-            throw HarnessSetupError("The Apple harness does not support the selected model.")
-        }
-        if let reason = inspection(version: "").unavailableReason { throw HarnessSetupError(reason) }
-        guard #available(macOS 26, *) else { return }
+        guard #available(macOS 26, *) else { throw HarnessSetupError("The Apple harness requires macOS 26 or later.") }
+        onActivity()
+        let backend = try await AppleModelBackend.prepare(identifier: modelIdentifier, workspace: workspace)
         let context = try AppleToolContext(workspace: workspace)
         let layout = try AgentStorageLayout.containing(workspace)
         let unfinished = workspace.appendingPathComponent(".noodle/apple/unfinished")
@@ -51,12 +79,13 @@ public enum AppleModel {
             do {
                 for turn in conversationTurns {
                     try await reply(to: turn, context: context, instructions: identityInstructions, workspaceInstructions: workspaceInstructions,
-                                    workspace: workspace, recovering: recovering, onActivity: onActivity)
+                                    workspace: workspace, backend: backend, recovering: recovering, onActivity: onActivity)
                 }
             } catch is CancellationError { throw CancellationError() }
             catch {
                 if Task.isCancelled { throw CancellationError() }
-                throw HarnessSetupError("Apple could not finish this turn: \(failureDescription(error)). Unfinished work is preserved; retry to continue.")
+                saveFailure(error, in: workspace)
+                throw HarnessSetupError("The selected model could not finish this turn: \(failureDescription(error)). Unfinished work is preserved; retry to continue.")
             }
         }
         // Ordinary chat uses fresh, bounded model sessions. Event
@@ -71,7 +100,7 @@ public enum AppleModel {
                                  ExecuteCommand(context: context, activity: onActivity), Messenger(context: context, activity: onActivity)]
         // A fresh small-context model session per wake. Durable Noodle history and
         // workspace files provide continuity instead of an ever-growing prompt.
-        let session = LanguageModelSession(model: .default, tools: tools, instructions: instructions)
+        let session = backend.session(tools: tools, instructions: instructions)
         defer {
             // Private local diagnostics and a recovery aid, like other harness
             // transcripts. Never sent to the app's visible conversation stream.
@@ -85,19 +114,20 @@ public enum AppleModel {
             \(inbox ?? "No unread messages.")
             Carry out the requests using your tools, then send replies through messenger to their original conversations.
             """
-            _ = try await session.respond(to: prompt, options: GenerationOptions(sampling: .greedy, maximumResponseTokens: 768))
+            _ = try await session.respond(to: prompt, options: GenerationOptions(sampling: .greedy, maximumResponseTokens: backend.responseTokens))
             try Task.checkCancellation()
             try FileManager.default.removeItem(at: unfinished)
         } catch is CancellationError { throw CancellationError() }
         catch {
             if Task.isCancelled { throw CancellationError() }
-            throw HarnessSetupError("Apple could not finish this turn: \(failureDescription(error)). Unfinished work is preserved; retry to continue.")
+            saveFailure(error, in: workspace)
+            throw HarnessSetupError("The selected model could not finish this turn: \(failureDescription(error)). Unfinished work is preserved; retry to continue.")
         }
     }
 
     @available(macOS 26, *)
     private static func reply(to turn: AppleConversationTurn, context: AppleToolContext, instructions: String,
-                              workspaceInstructions: String, workspace: URL, recovering: Bool,
+                              workspaceInstructions: String, workspace: URL, backend: AppleModelBackend, recovering: Bool,
                               onActivity: @escaping @Sendable () -> Void) async throws {
         onActivity()
         let file = AppleConversationSession.file(in: workspace, conversationID: turn.conversationID)
@@ -112,39 +142,43 @@ public enum AppleModel {
                let remaining = try await context.conversationTurns().first(where: { $0.conversationID == turn.conversationID }) {
                 try await reply(to: remaining, context: context, instructions: instructions,
                                 workspaceInstructions: workspaceInstructions, workspace: workspace,
-                                recovering: recovering, onActivity: onActivity)
+                                backend: backend, recovering: recovering, onActivity: onActivity)
             }
             return
         }
-        let needsWorkspace = try await needsWorkspaceTools(turn)
+        let needsWorkspace = try await needsWorkspaceTools(turn, backend: backend)
         // For chat, read original messages on demand instead of conditioning
         // the next answer on a previous model mistake or refusal. Workspace
         // turns retain native tool exchanges for continuity across steps.
-        let entries = needsWorkspace ? (saved?.recentEntries(reservingPromptBytes: turn.prompt.utf8.count) ?? []) : []
         let historyReader = AppleHistoryReader()
-        var tools: [any Tool] = [ConversationHistory(context: context, conversationID: turn.conversationID,
-                                                    reader: historyReader, activity: onActivity)]
+        // Current images already contain the requested evidence. A history
+        // tool can send small vision models into repeated text-only lookups.
+        var tools: [any Tool] = turn.images.isEmpty
+            ? [ConversationHistory(context: context, conversationID: turn.conversationID,
+                                   reader: historyReader, activity: onActivity)] : []
         if needsWorkspace {
             tools += [ReadFile(context: context, activity: onActivity), WriteFile(context: context, activity: onActivity),
                       ExecuteCommand(context: context, activity: onActivity)]
         }
         let identityInstructions = instructions
-        let instructions = instructions + "\n" + MessengerDocumentation.appleConversationInstructions
+        let instructions = instructions + "\n" + (turn.images.isEmpty
+            ? MessengerDocumentation.appleConversationInstructions : MessengerDocumentation.appleImageConversationInstructions)
             + (needsWorkspace ? "\n" + workspaceInstructions : "")
             + (recovering ? "\nAn earlier attempt was interrupted. Check history before repeating work." : "")
-        let seed = LanguageModelSession(model: .default, tools: tools, instructions: instructions)
-        var session = LanguageModelSession(model: .default, tools: tools,
-            transcript: Transcript(entries: Array(seed.transcript) + entries))
+        let entries = needsWorkspace && saved?.modelIdentifier == backend.identifier
+            ? try await backend.recentEntries(saved, prompt: turn.prompt, instructions: instructions, tools: tools) : []
+        var session = backend.session(tools: tools, instructions: instructions, entries: entries, requireTool: needsWorkspace)
         defer {
-            try? AtomicFile.write(JSONEncoder().encode(session.transcript), to: workspace.appendingPathComponent(".noodle/apple/last-transcript.json"))
+            try? AtomicFile.write(JSONEncoder().encode(AppleConversationSession.persistable(session.transcript)), to: workspace.appendingPathComponent(".noodle/apple/last-transcript.json"))
         }
         onActivity()
         let response: LanguageModelSession.Response<String>
         do {
-            response = try await session.respond(to: needsWorkspace ? turn.prompt : turn.chatPrompt,
-                                                  options: GenerationOptions(sampling: .greedy, maximumResponseTokens: 768))
+            let prompt = try backend.prompt(needsWorkspace ? turn.prompt : turn.chatPrompt, images: turn.images)
+            response = try await session.respond(to: prompt,
+                                                  options: GenerationOptions(sampling: .greedy, maximumResponseTokens: backend.responseTokens))
         } catch {
-            guard !needsWorkspace, shouldRecoverChat(from: error) else { throw error }
+            guard !needsWorkspace, turn.images.isEmpty, shouldRecoverChat(from: error) else { throw error }
             try Task.checkCancellation()
             // Chat has no side-effecting tools. Make one fresh, tool-free
             // attempt from the sources already read; never replay workspace
@@ -155,12 +189,13 @@ public enum AppleModel {
                                                                    includeAssistantReplies: false)
             }
             let recoveryInstructions = identityInstructions + "\n" + MessengerDocumentation.appleConversationRecoveryInstructions
-            let prompt = try await recoveryPrompt(request: turn.prompt, reference: reference, instructions: recoveryInstructions)
-            session = LanguageModelSession(model: .default, instructions: recoveryInstructions)
+            let prompt = try await recoveryPrompt(request: turn.prompt, reference: reference, instructions: recoveryInstructions, backend: backend)
+            session = backend.session(instructions: recoveryInstructions)
             onActivity()
-            response = try await session.respond(to: prompt, options: GenerationOptions(sampling: .greedy, maximumResponseTokens: 768))
+            response = try await session.respond(to: prompt, options: GenerationOptions(sampling: .greedy, maximumResponseTokens: backend.responseTokens))
         }
-        let completed = AppleConversationSession(transcript: session.transcript, messageIDs: turn.messageIDs, reply: response.content)
+        let completed = AppleConversationSession(transcript: AppleConversationSession.persistable(session.transcript), messageIDs: turn.messageIDs,
+                                                 reply: response.content, modelIdentifier: backend.identifier)
         try completed.save(in: workspace, conversationID: turn.conversationID)
         try await context.deliverReply(response.content, to: turn)
     }
@@ -168,26 +203,22 @@ public enum AppleModel {
     @available(macOS 26, *)
     static func shouldRecoverChat(from error: Error) -> Bool {
         if error is AppleHistoryLimit { return true }
+        #if canImport(FoundationModels, _version: 2)
+        if #available(macOS 27, *), case LanguageModelError.contextSizeExceeded = error { return true }
+        #endif
         if let call = error as? LanguageModelSession.ToolCallError { return call.underlyingError is AppleHistoryLimit }
         if case LanguageModelSession.GenerationError.exceededContextWindowSize = error { return true }
         return false
     }
 
     @available(macOS 26, *)
-    private static func recoveryPrompt(request: String, reference: String, instructions: String) async throws -> String {
+    private static func recoveryPrompt(request: String, reference: String, instructions: String, backend: AppleModelBackend) async throws -> String {
         var reference = reference
         while true {
             let prompt = "Earlier conversation (quoted reference):\n\(reference)\n\nLatest user message:\n\(request)"
             let count: Int
-            if #available(macOS 26.4, *) {
-                count = try await SystemLanguageModel.default.tokenCount(for: prompt)
-                    + SystemLanguageModel.default.tokenCount(for: Instructions(instructions))
-            } else {
-                // UTF-8 bytes provide a conservative fallback where the system
-                // tokenizer is unavailable. Reserve room for the answer too.
-                count = prompt.utf8.count + instructions.utf8.count
-            }
-            if count + 1_024 <= SystemLanguageModel.default.contextSize { return prompt }
+            count = try await backend.tokenCount(prompt) + backend.tokenCount(instructions)
+            if count + backend.responseTokens + 256 <= backend.contextSize { return prompt }
             guard !reference.isEmpty else {
                 throw HarnessSetupError("The request and bot instructions exceed Apple’s context capacity even after history was reduced.")
             }
@@ -196,11 +227,12 @@ public enum AppleModel {
     }
 
     @available(macOS 26, *)
-    private static func needsWorkspaceTools(_ turn: AppleConversationTurn) async throws -> Bool {
+    private static func needsWorkspaceTools(_ turn: AppleConversationTurn, backend: AppleModelBackend) async throws -> Bool {
+        if turn.explicitlyRequestsWorkspaceTool { return true }
         guard turn.hasWorkspaceReference else { return false }
         let recent = turn.history.suffix(4).map { "\($0.isAssistant ? "Assistant" : "User"): \($0.text.prefix(300))" }.joined(separator: "\n")
-        let classifier = LanguageModelSession(model: .default, instructions: """
-            Classify the request as conversation, files, or commands. Conversation includes greetings, remembering and recalling facts, answering questions, and writing text in chat. Files means the user asks to read or change actual files or attachments. Commands means the user asks to execute a shell command. Chat memory is automatic and never needs a file. Classify only; do not carry out the request.
+        let classifier = backend.session(instructions: """
+            Classify the request as conversation, files, or commands. Conversation includes greetings, recalling facts, answering questions about attached images, and writing text in chat. Files means the user asks to read or change actual files. Commands means the user asks to execute a shell command. Chat memory and attached image analysis never need a file tool. Classify only; do not carry out the request.
             Recent context, only for resolving references in the request:
             \(recent)
             """)
@@ -210,18 +242,44 @@ public enum AppleModel {
     }
 
     @available(macOS 26, *)
+    private static func saveFailure(_ error: Error, in workspace: URL) {
+        // Keep framework diagnostics local, alongside the private transcript.
+        // The visible conversation receives the short actionable error above.
+        let description = String(String(reflecting: error).prefix(8_192))
+        try? AtomicFile.write(Data(description.utf8), to: workspace.appendingPathComponent(".noodle/apple/last-error.txt"))
+    }
+
+    @available(macOS 26, *)
     private static func failureDescription(_ error: Error) -> String {
+        #if canImport(FoundationModels, _version: 2)
+        if #available(macOS 27, *) {
+            if let error = error as? LanguageModelError {
+                switch error {
+                case .contextSizeExceeded: return "the selected model’s context filled while processing the turn"
+                case .rateLimited: return "the selected model is busy; try again shortly"
+                case .guardrailViolation, .refusal: return "the selected model declined this request"
+                case .unsupportedCapability: return "the selected model does not support this request’s capabilities"
+                case .unsupportedTranscriptContent: return "the selected model cannot read this conversation’s content"
+                case .unsupportedGenerationGuide: return "the selected model cannot use this tool or response schema"
+                case .unsupportedLanguageOrLocale: return "the selected model does not support this language or locale"
+                case .timeout: return "the selected model timed out"
+                @unknown default: return error.localizedDescription
+                }
+            }
+            if let error = error as? SystemLanguageModel.Error { return error.localizedDescription }
+        }
+        #endif
         if let error = error as? LanguageModelSession.ToolCallError { return "\(error.tool.name): \(error.underlyingError.localizedDescription)" }
         guard let error = error as? LanguageModelSession.GenerationError else { return error.localizedDescription }
         switch error {
-        case .exceededContextWindowSize: return "the on-device context filled while processing the turn"
+        case .exceededContextWindowSize: return "the selected model’s context filled while processing the turn"
         case .assetsUnavailable: return "the on-device model assets are unavailable; check Apple Intelligence in System Settings"
-        case .guardrailViolation, .refusal: return "Apple’s model declined this request"
-        case .unsupportedGuide: return "Apple’s model could not use a tool schema"
-        case .unsupportedLanguageOrLocale: return "Apple’s model does not support this language or locale"
-        case .decodingFailure: return "Apple’s model returned an invalid tool response"
-        case .rateLimited, .concurrentRequests: return "Apple’s model is busy; try again shortly"
-        @unknown default: return "Apple Intelligence is temporarily unavailable"
+        case .guardrailViolation, .refusal: return "the selected model declined this request"
+        case .unsupportedGuide: return "the selected model could not use a response schema"
+        case .unsupportedLanguageOrLocale: return "the selected model does not support this language or locale"
+        case .decodingFailure: return "the selected model returned an invalid structured response"
+        case .rateLimited, .concurrentRequests: return "the selected model is busy; try again shortly"
+        @unknown default: return "the selected model is temporarily unavailable"
         }
     }
 }

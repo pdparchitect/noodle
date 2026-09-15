@@ -36,4 +36,67 @@ Provider usage limits still apply in either access mode. If a provider reports a
 rate limit, wait for it to clear before retrying. Apple Intelligence is experimental;
 its on-device model can respond slowly, miss earlier details, or fail tool tasks.
 
+## Apple Intelligence and local models
+
+On macOS 27, a build made with the macOS 27 SDK shows the installed Apple model
+variant, context capacity, and supported capabilities in the bot model picker.
+Apple selects and updates the system model. Noodle does not force a particular
+Apple variant. On macOS 26, the existing on-device text harness remains available.
+
+Apple models with image support receive current image attachments directly.
+Each turn accepts up to four images, 20 MiB per image and 40 MiB total. Older
+systems and text-only local models report that image input is unsupported.
+The helper decodes images locally at up to 2,048 pixels on the longest side,
+preserving orientation and the original attachments. Saved model context keeps
+text references to images alongside the reply; original images remain in Noodle.
+macOS 27 workspace turns require an initial tool call, then allow the model to
+finish its response. Tool success still depends on the model and the request.
+
+### Import a local model
+
+1. Open **Settings → Harness → Apple Intelligence → Local Models**.
+2. Choose **Import Model** and select an already downloaded MLX Qwen2, Qwen3, or
+   Llama text chat/instruct model folder. It must contain regular files, including
+   `config.json`, `tokenizer.json`, `tokenizer_config.json`, and `.safetensors`
+   weights, plus a chat template. Linked Hugging Face cache snapshots must first
+   be copied into a folder with real files.
+3. Edit a bot, choose Apple Intelligence, and select the imported model.
+
+Noodle copies model resources into its private `AppleModels` directory. In
+restricted mode the helper can read the selected model but cannot modify the
+model library or make network requests. Models load on first use and remain
+cached in that bot's helper; switching models or stopping the helper releases
+the cached weights. Importing does not enable Apple Intelligence and local models
+do not depend on its availability. Change bots using a model before removing it.
+Different bots can load separate copies, so account for their combined memory.
+Local models currently accept text and tools; use a capable Apple model for images.
+Noodle caps local model context at 32,768 tokens, even if the model supports more.
+
+Private Cloud Compute is not enabled. Apple's managed entitlement and supported
+distribution requirements need to be resolved before it can be shipped here.
+
+### Building and testing
+
+The MLX Foundation Models adapter is pinned to an upstream revision because its
+macOS 27 integration is not yet tagged. See `Package.swift` and `Package.resolved`.
+The new APIs are guarded by the Foundation Models module version and runtime OS
+availability, preserving builds with the older SDK. Use Xcode 27 and install its
+Metal Toolchain component for a build with local model support. Model resources
+and their licenses are supplied by the person importing them; weights are not
+distributed with Noodle. `scripts/build-app.sh` uses `scripts/swift-apple.sh`,
+which can select the installed macOS 27 Command Line Tools when Xcode's SDK is
+older. It does not change `xcode-select`. Use the same wrapper for `build`, `test`,
+and `run`, or override `NOODLE_SWIFT` and `NOODLE_MACOS_SDK` explicitly.
+With mixed installations, the wrapper builds and tests the Apple helper and core
+targets; app packaging separately builds SwiftUI with the matching full Xcode SDK.
+The newer helper uses `.build/apple27` so ordinary app builds cannot replace it.
+For local-model tests against an unbundled helper, run
+`zsh scripts/build-mlx-metal.sh "$(zsh scripts/swift-apple.sh build --show-bin-path)"`
+first. App packaging builds and includes these shaders automatically.
+
+Ordinary tests use synthetic model folders. Set `NOODLE_TEST_APPLE_MODEL=1` to
+run the live Apple tests. Set `NOODLE_TEST_MLX_MODEL` to an existing model folder
+to run the sandboxed local-model test. `NOODLE_APPLE_TEST_HELPER` selects a bundled
+helper for testing its packaged resources. These tests use disposable bot storage.
+
 [Documentation](README.md)

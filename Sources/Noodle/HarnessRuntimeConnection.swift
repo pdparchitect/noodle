@@ -30,7 +30,7 @@ extension ExtendedAgentConnection: HarnessRuntimeConnection {
             case .codex:
                 startRestrictedCodex(agentID: agentID, executablePath: executablePath, reply: reply)
             case .apple:
-                startRestrictedApple(agentID: agentID, reply: reply)
+                startRestrictedApple(agentID: agentID, modelIdentifier: modelIdentifier, reply: reply)
             case .fx, .grokBuild:
                 startRestrictedACP(provider: provider, agentID: agentID, executablePath: executablePath,
                                    modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier, reply: reply)

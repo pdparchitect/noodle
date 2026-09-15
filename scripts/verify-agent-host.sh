@@ -25,7 +25,7 @@ if otool -L "$host/Contents/MacOS/NoodleAgentHost" | grep -Eq '/opt/homebrew|/us
     print -u2 "Agent Host links a mutable external library."
     exit 1
 fi
-if otool -l "$host/Contents/MacOS/NoodleAgentHost" | grep -Eq 'path .*(\.build|Xcode.*Toolchains)'; then
+if otool -l "$host/Contents/MacOS/NoodleAgentHost" | grep -Eq 'path .*(\.build|Xcode.*Toolchains|/Library/Developer/CommandLineTools)'; then
     print -u2 "Agent Host contains a development-only library search path."
     exit 1
 fi
@@ -42,8 +42,15 @@ if otool -L "$apple_helper" | grep -Eq '/opt/homebrew|/usr/local'; then
     print -u2 "The Apple harness links a mutable external library."
     exit 1
 fi
-if otool -l "$apple_helper" | grep -Eq 'path .*(\.build|Xcode.*Toolchains)'; then
+if otool -l "$apple_helper" | grep -Eq 'path .*(\.build|Xcode.*Toolchains|/Library/Developer/CommandLineTools)'; then
     print -u2 "The Apple harness contains a development-only library search path."
     exit 1
 fi
 print "Apple harness signature, bundled identity, hardened runtime and linkage verified"
+if [[ "$("$apple_helper" --inspect | plutil -extract localModelsSupported raw -o - - 2>/dev/null)" == true ]]; then
+    test -s "$app/Contents/Helpers/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib"
+    for resource in mlx-swift_Cmlx swift-transformers_Hub swift-crypto_Crypto; do
+        codesign --verify --strict "$app/Contents/Helpers/$resource.bundle"
+    done
+    print "Local model shaders and signed resource bundles verified"
+fi

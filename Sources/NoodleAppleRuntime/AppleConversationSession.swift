@@ -10,6 +10,7 @@ struct AppleConversationSession: Codable {
     let transcript: Transcript
     let messageIDs: Set<UUID>
     let reply: String
+    var modelIdentifier: String? = nil
 
     static func file(in workspace: URL, conversationID: UUID) -> URL {
         workspace.appendingPathComponent(".noodle/apple/conversations/\(conversationID.uuidString.lowercased()).json")
@@ -19,6 +20,25 @@ struct AppleConversationSession: Codable {
         let file = Self.file(in: workspace, conversationID: conversationID)
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try AtomicFile.write(JSONEncoder().encode(self), to: file)
+    }
+
+    /// Original images stay in Noodle's attachment store. Keep a textual
+    /// reference in the resumable transcript rather than serializing pixels or
+    /// retaining process-local image objects in the completion receipt.
+    static func persistable(_ transcript: Transcript) -> Transcript {
+        #if canImport(FoundationModels, _version: 2)
+        if #available(macOS 27, *) {
+            return Transcript(entries: transcript.map { entry in
+                guard case .prompt(var prompt) = entry else { return entry }
+                prompt.segments = prompt.segments.map { segment in
+                    guard case .attachment(let attachment) = segment else { return segment }
+                    return .text(.init(id: attachment.id, content: "[Image attachment: \(attachment.label ?? "image"). The original message retains the image; these saved bytes contain no image data.]"))
+                }
+                return .prompt(prompt)
+            })
+        }
+        #endif
+        return transcript
     }
 
     /// Keep complete turns, including their tool calls/results. Never start a

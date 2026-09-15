@@ -4,11 +4,12 @@ import Darwin
 public enum AppleHarnessProbe {
     /// Called only after the host verifies the bundled executable. Availability
     /// inspection receives no bot workspace and no network permission.
-    public static func inspect(executable: URL, application: URL) throws -> AppleHarnessInspection {
+    public static func inspect(executable: URL, application: URL, modelsDirectory: URL? = nil) throws -> AppleHarnessInspection {
         let process = Process(), output = Pipe(), finished = DispatchSemaphore(value: 0)
         let drained = DispatchSemaphore(value: 0), capture = Capture()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
-        process.arguments = ["-p", AppleAgentSandbox.profile(application: application), executable.path, "--inspect"]
+        process.arguments = ["-p", AppleAgentSandbox.profile(application: application, modelsDirectory: modelsDirectory), executable.path, "--inspect"]
+            + (modelsDirectory.map { ["--models-directory", $0.path] } ?? [])
         process.environment = ["PATH": "/usr/bin:/bin", "HOME": HarnessStorage.userHome.path]
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = output

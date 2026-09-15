@@ -9,13 +9,14 @@ import NoodleAppleRuntime
         let app = executable.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let version = Bundle(url: app)?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
         let args = Array(CommandLine.arguments.dropFirst())
-        if args == ["--inspect"] {
-            do { try FileHandle.standardOutput.write(contentsOf: JSONEncoder().encode(AppleModel.inspection(version: version)) + Data([10])) }
+        if args == ["--inspect"] || (args.count == 3 && args[0] == "--inspect" && args[1] == "--models-directory") {
+            let models = args.count == 3 ? URL(fileURLWithPath: args[2], isDirectory: true) : nil
+            do { try FileHandle.standardOutput.write(contentsOf: JSONEncoder().encode(AppleModel.inspection(version: version, modelsDirectory: models)) + Data([10])) }
             catch { exit(1) }
             return
         }
         if args == ["--version"] { print(version); return }
-        if args == ["--help"] { print("Usage: NoodleAppleAgent --serve | --inspect | --version"); return }
+        if args == ["--help"] { print("Usage: NoodleAppleAgent --serve | --inspect [--models-directory PATH] | --version"); return }
         guard args == ["--serve"] else { fputs("Use --serve or --inspect.\n", stderr); exit(2) }
         signal(SIGPIPE, SIG_IGN)
         signal(SIGTERM, SIG_IGN)
@@ -87,7 +88,8 @@ import NoodleAppleRuntime
                     throw HarnessSetupError("The session must use the bot workspace selected by Agent Host.")
                 }
                 _ = try AgentStorageLayout.containing(workspace)
-                if let reason = AppleModel.inspection(version: version).unavailableReason { throw HarnessSetupError(reason) }
+                // The selected model is validated on set_model and loaded at the
+                // first prompt. Local models do not require Apple Intelligence.
                 let file = workspace.appendingPathComponent(".noodle/apple/session.json")
                 if method == "session/load" {
                     guard let data = try? Data(contentsOf: file), let state = try? JSONDecoder().decode(State.self, from: data),
@@ -104,10 +106,12 @@ import NoodleAppleRuntime
                 result(["sessionId": sessionID!])
             case "session/set_model":
                 try requireSession(params)
-                guard let model = params["modelId"] as? String,
-                      AppleModel.inspection(version: version).models.contains(where: { $0.id == model }) else {
+                let layout = try AgentStorageLayout.containing(workspace)
+                let repository = layout.package.deletingLastPathComponent().deletingLastPathComponent()
+                guard let model = params["modelId"] as? String else {
                     throw HarnessSetupError("The Apple harness does not support the selected model.")
                 }
+                if model != "default" { _ = try AppleLocalModelStore(repository: repository).model(id: model) }
                 modelIdentifier = model
                 result([:])
             case "session/prompt":

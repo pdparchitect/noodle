@@ -9,6 +9,9 @@ private enum HostPaths {
         Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     }
     static var apple: URL { application.appendingPathComponent("Contents/Helpers/NoodleAppleAgent") }
+    static var appleModels: URL {
+        home.appendingPathComponent("Library/Containers/\(AgentHostIdentity.application)/Data/Library/Application Support/Noodle/AppleModels", isDirectory: true)
+    }
     static let home: URL = {
         guard let entry = getpwuid(getuid()), let path = entry.pointee.pw_dir else { fatalError("No user home") }
         return URL(fileURLWithPath: String(cString: path), isDirectory: true)
@@ -88,6 +91,7 @@ if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-chi
         switch provider {
         case .apple:
             guard effort == nil, model.map(FxProtocol.validIdentifier) ?? true else { throw HostError("Unsupported Apple model configuration.") }
+            if let model, model != "default" { _ = try AppleLocalModelStore(directory: HostPaths.appleModels).model(id: model) }
             strings = [executable.path, "--serve"]
         case .muse:
             guard model.map(FxProtocol.validIdentifier) ?? true,
@@ -142,7 +146,10 @@ if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-chi
             let profile: String
             switch provider {
             case .apple:
-                profile = AppleAgentSandbox.profile(application: HostPaths.application, workspace: workspace, repository: repository)
+                let localModel = model.map(AppleLocalModelStore.validIdentifier) ?? false
+                let modelDirectory = try localModel ? AppleLocalModelStore(directory: HostPaths.appleModels).folder(id: model!) : nil
+                profile = AppleAgentSandbox.profile(application: HostPaths.application, workspace: workspace, repository: repository,
+                    modelsDirectory: modelDirectory, localModel: localModel)
             case .codex:
                 let certificates = try RestrictedCodexCertificates.prepare(workspace: workspace)
                 setenv("CODEX_CA_CERTIFICATE", certificates.path, 1)
@@ -214,9 +221,9 @@ private final class HostSession: NSObject, AgentHostService {
                      restricted: true, reply: reply)
     }
 
-    func startRestrictedApple(agentID: String, withReply reply: @escaping (Int32, String?) -> Void) {
+    func startRestrictedApple(agentID: String, modelIdentifier: String?, withReply reply: @escaping (Int32, String?) -> Void) {
         startRuntime(harnessIdentifier: HarnessProvider.apple.rawValue, agentID: agentID, executablePath: HostPaths.apple.path,
-                     sessionID: nil, resumeSession: false, modelIdentifier: nil, effortIdentifier: nil,
+                     sessionID: nil, resumeSession: false, modelIdentifier: modelIdentifier, effortIdentifier: nil,
                      restricted: true, reply: reply)
     }
 
@@ -236,7 +243,7 @@ private final class HostSession: NSObject, AgentHostService {
         queue.async {
             do {
                 let executable = try HostPaths.executable(HostPaths.apple.path, provider: .apple)
-                let result = try AppleHarnessProbe.inspect(executable: executable, application: HostPaths.application)
+                let result = try AppleHarnessProbe.inspect(executable: executable, application: HostPaths.application, modelsDirectory: HostPaths.appleModels)
                 reply(try JSONEncoder().encode(result), nil)
             } catch { reply(nil, error.localizedDescription) }
         }
