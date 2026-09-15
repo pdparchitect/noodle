@@ -63,9 +63,12 @@ available from the bot's sidebar menu; review any recovery confirmation first.
 
 ## Shortcuts and settings
 
-After launching Noodle once, search Spotlight for **Ask Agent**, choose an
+After launching Noodle once, search Spotlight for **Send to Agent**, choose an
 **Agent or Group**, and enter a **Message**. The same action is available in
 Shortcuts. Replies appear in the chosen conversation in Noodle.
+
+To send selected text or files from another app, choose **Services → Send to Agent…**
+and select the agent or group that should receive them.
 
 **Settings → General** includes bot naming and **Keep Mac awake while agents work**.
 **Settings → Chat** includes message delivery, the recording microphone, bot

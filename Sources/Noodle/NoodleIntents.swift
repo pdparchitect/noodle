@@ -57,23 +57,23 @@ struct NoodleConversationQuery: EntityStringQuery {
 }
 
 struct SendNoodleCommandIntent: AppIntent {
-    static let title: LocalizedStringResource = "Ask Agent"
+    static let title: LocalizedStringResource = "Send to Agent"
     static let description = IntentDescription(
         "Send a message to a Noodle agent or group of agents. Replies appear in the conversation in Noodle.",
-        searchKeywords: ["Ask Bot", "Ask a Bot", "Bot"]
+        searchKeywords: ["Send to Bot", "Send to a Bot", "Bot"]
     )
 
     @Parameter(
         title: "Agent or Group",
         description: "The agent or group of agents that should receive the message.",
-        requestValueDialog: "Who would you like to ask?"
+        requestValueDialog: "Who should receive the message?"
     )
     var conversation: NoodleConversationEntity
 
     @Parameter(
         title: "Message",
         description: "The question, instruction, or message to send.",
-        requestValueDialog: "What would you like to ask?"
+        requestValueDialog: "What would you like to send?"
     )
     var command: String
 
@@ -106,15 +106,14 @@ struct NoodleShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: SendNoodleCommandIntent(),
             phrases: [
-                "Ask an agent with \(.applicationName)",
-                "Ask a bot with \(.applicationName)",
-                "Ask bot with \(.applicationName)",
-                "Ask \(\.$conversation) with \(.applicationName)",
+                "Send to an agent with \(.applicationName)",
+                "Send to a bot with \(.applicationName)",
+                "Send to \(\.$conversation) with \(.applicationName)",
                 "Send a command with \(.applicationName)",
                 "Message \(\.$conversation) with \(.applicationName)",
                 "Tell \(\.$conversation) using \(.applicationName)"
             ],
-            shortTitle: "Ask Agent",
+            shortTitle: "Send to Agent",
             systemImageName: "paperplane.fill"
         )
     }

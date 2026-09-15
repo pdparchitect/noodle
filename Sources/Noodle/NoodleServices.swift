@@ -24,7 +24,7 @@ final class NoodleServices: NSObject, NSWindowDelegate {
             let model = ShareComposerModel(inbox: inbox)
             let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 460, height: 360),
                 styleMask: [.titled, .closable], backing: .buffered, defer: false)
-            panel.title = userData == "ask" ? "Ask Agent" : "Send to Agent"
+            panel.title = "Send to Agent"
             panel.isReleasedWhenClosed = false
             panel.delegate = self
             panel.contentView = NSHostingView(rootView: ShareComposer(model: model, send: { [weak panel] in

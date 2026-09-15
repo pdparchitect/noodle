@@ -72,10 +72,9 @@
             <key>NSRequiredContext</key><dict/>
         </dict>
         <dict>
-            <key>NSMenuItem</key><dict><key>default</key><string>Ask Agent…</string></dict>
+            <key>NSMenuItem</key><dict><key>default</key><string>Send to Agent…</string></dict>
             <key>NSMessage</key><string>sendToAgent</string>
             <key>NSPortName</key><string>Noodle</string>
-            <key>NSUserData</key><string>ask</string>
             <key>NSSendTypes</key><array><string>public.utf8-plain-text</string><string>public.url</string></array>
             <key>NSRequiredContext</key><dict/>
         </dict>
