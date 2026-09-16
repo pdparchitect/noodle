@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Show clickable bot avatars in Security and Heartbeat settings, opening the existing profile with Message and Edit actions.
+
 ### Fixed
 
 - Recheck Applet broker sessions and conversation access after asynchronous work, preventing queued requests and result payloads from surviving access revocation.

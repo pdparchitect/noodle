@@ -14,7 +14,8 @@ struct AgentAccessSettingsView: View {
                     SettingsBotList(agents: store.agents) { agent in
                         let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")
                         let requiresAutonomousAccess = provider?.supportsRestrictedAccess == false
-                        HStack(alignment: .top) {
+                        HStack(alignment: .top, spacing: 12) {
+                            SettingsBotProfileButton(agent: agent)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(agent.displayName).font(.body)
                                 AgentAccessStatusLabel(
