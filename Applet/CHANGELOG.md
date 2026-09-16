@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Suppress settings scrollbar flashes during tab changes and dynamic window resizing on macOS 27, restoring indicators after the layout settles.
+
 ### Added
 
 - Drop images, videos, and direct web media links onto the library background preview using the same importer and drop target as Noodle and Computer.

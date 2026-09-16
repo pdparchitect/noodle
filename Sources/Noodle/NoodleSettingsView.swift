@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import NoodleCore
+import NoodleSettingsUI
 
 enum NoodleSettingsTab: Hashable {
     case general, chat, harnesses, mcps, heartbeats, security, keybindings, companions, updates
@@ -59,6 +60,7 @@ struct NoodleSettingsView: View {
                 .tag(NoodleSettingsTab.updates)
         }
         .modifier(SettingsWindowResizeAnchor())
+        .settingsScrollIndicators(selection: store.selectedSettingsTab)
     }
 }
 

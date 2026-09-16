@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import NoodleSettingsUI
 
 enum AppletSettingsTab: Hashable { case general, updates }
 
@@ -21,6 +22,7 @@ struct AppletSettingsView: View {
                 .tag(AppletSettingsTab.updates)
         }
         .modifier(AppletSettingsResizeAnchor())
+        .settingsScrollIndicators(selection: selection)
     }
 }
 

@@ -9,6 +9,7 @@ let package = Package(
         .executable(name: "ComputerPreviewExtension", targets: ["ComputerPreviewExtension"]),
         .executable(name: "ComputerThumbnailExtension", targets: ["ComputerThumbnailExtension"])],
     dependencies: [
+        .package(path: "../Shared/SettingsUI"),
         .package(path: "../Shared/Wallpaper"),
         .package(path: "Bridge"),
         .package(path: "Presentation"),
@@ -21,6 +22,7 @@ let package = Package(
         .target(name: "ComputerCore", dependencies: [.product(name: "NoodleWallpaperCore", package: "Wallpaper")], resources: [.process("Resources")]),
         .executableTarget(name: "NoodleComputer", dependencies: [
             "ComputerCore",
+            .product(name: "NoodleSettingsUI", package: "SettingsUI"),
             .product(name: "ComputerDocument", package: "Presentation"),
             .product(name: "NoodleWallpaper", package: "Wallpaper"),
             .product(name: "Sparkle", package: "Sparkle"),

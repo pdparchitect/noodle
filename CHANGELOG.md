@@ -32,6 +32,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Suppress settings scrollbar flashes during tab changes and dynamic window resizing on macOS 27, restoring indicators after the layout settles.
 - Disable Writing Tools in the message composer to suppress the floating Siri control on macOS 27.
 - Restore bot avatars in the composer @ menu on macOS 27.
 

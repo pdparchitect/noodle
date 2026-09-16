@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import Sparkle
 import SwiftUI
+import NoodleSettingsUI
 
 @MainActor final class ComputerUpdater: ObservableObject {
     static let shared = ComputerUpdater()
@@ -60,6 +61,7 @@ struct ComputerSettingsView: View {
                 .tag(ComputerSettingsTab.updates)
         }
         .windowResizeAnchor(.top)
+        .settingsScrollIndicators(selection: selection)
     }
 }
 

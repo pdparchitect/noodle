@@ -94,6 +94,8 @@ jobs:
         run: zsh Tests/message-delivery.sh
       - name: Test shared wallpaper imports and preview drops
         run: swift test --disable-sandbox --package-path Shared/Wallpaper --scratch-path .build/wallpaper
+      - name: Test settings window behavior
+        run: swift test --disable-sandbox --package-path Shared/SettingsUI --scratch-path .build/settings-ui
       - name: Test Noodle and Computer integration
         id: tests
         env:
@@ -128,6 +130,9 @@ jobs:
       - name: Detect macOS 27 test support
         id: apple27
         run: python3 scripts/detect-apple27.py
+      - name: Test settings resizing on macOS 27
+        if: steps.apple27.outputs.available == 'true'
+        run: swift test --disable-sandbox --package-path Shared/SettingsUI --scratch-path .build/settings-ui
       - name: Build and test the macOS 27 harness
         if: steps.apple27.outputs.available == 'true'
         shell: zsh {0}

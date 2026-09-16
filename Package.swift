@@ -15,6 +15,7 @@ let package = Package(
         .executable(name: "NoodleDocumentation", targets: ["NoodleDocumentation"])
     ],
     dependencies: [
+        .package(path: "Shared/SettingsUI"),
         .package(path: "Shared/Wallpaper"),
         .package(path: "Computer/Bridge"),
         .package(path: "Applet/Protocol"),
@@ -50,7 +51,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: ["NoodleCore", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", "NoodleAudioCapture", .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge")],
+            dependencies: ["NoodleCore", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", "NoodleAudioCapture", .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",

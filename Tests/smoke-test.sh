@@ -10,6 +10,7 @@ export SWIFTPM_MODULECACHE_OVERRIDE="$module_cache"
 
 swift test --disable-sandbox --package-path "$project_root"
 swift test --disable-sandbox --package-path "$project_root/Shared/Wallpaper" --scratch-path "$project_root/.build/wallpaper"
+swift test --disable-sandbox --package-path "$project_root/Shared/SettingsUI" --scratch-path "$project_root/.build/settings-ui"
 zsh "$project_root/Tests/message-delivery.sh"
 zsh "$project_root/Tests/scrollable-composer.sh"
 zsh "$project_root/Tests/voice-shortcut.sh"
