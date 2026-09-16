@@ -126,6 +126,23 @@ final class MCPGuardedHTTPTests: XCTestCase {
         XCTAssertEqual(client.finishes, 0)
     }
 
+    func testHTTPFailuresPreserveStatusWithoutForwardingPrivateResponseBodies() async throws {
+        for status in [400, 401, 403, 404, 429, 503] {
+            GuardHTTPFixture.reset(status: status, chunks: [Data("private-provider-detail".utf8)])
+            let client = GuardClient()
+            let loader = makeLoader(URLRequest(url: endpoint), client: client)
+            loader.startLoading()
+            await fulfillment(of: [client.completed], timeout: 5)
+            let error = try XCTUnwrap(client.errors.first) as NSError
+            XCTAssertEqual(error.domain, MCPHTTPError.errorDomain)
+            XCTAssertEqual(error.code, status)
+            XCTAssertTrue(client.body.isEmpty)
+            XCTAssertTrue(client.responses.isEmpty)
+            XCTAssertEqual(client.errors.count, 1)
+            XCTAssertEqual(client.finishes, 0)
+        }
+    }
+
     func testResponseAtByteLimitSucceeds() async {
         let first = Data(repeating: 0x61, count: limit / 2)
         let second = Data(repeating: 0x62, count: limit / 2)

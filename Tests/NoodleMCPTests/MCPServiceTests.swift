@@ -25,8 +25,10 @@ private final class FixtureState: @unchecked Sendable {
     var pathMetadataMissing = false
     var tokenResources: [String] = []
     var tokenScope: String?
+    var transportError: Error?
     func response(_ request: URLRequest) throws -> (Int, [String: Any]) {
         try lock.withLock {
+            if let transportError { throw transportError }
             switch request.url!.path {
             case "/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-protected-resource":
                 if pathMetadataMissing && request.url!.path.hasSuffix("/mcp") { return (404, [:]) }
@@ -200,6 +202,24 @@ final class MCPServiceTests: XCTestCase {
             _ = try await oauth.authorize(stored, configuration: settings, browser: Self.callback)
             XCTFail("Missing configured scope accepted")
         } catch MCPServiceError.signInRequired {}
+    }
+
+    func testHTTPStatusSurvivesSDKTransportAndProducesActionableConnectionError() async throws {
+        let client = service(vault: TestVault())
+        let record = try MCPConnectionRecord(name: "Fixture", endpoint: endpoint)
+        try await client.signIn(record, redirectURI: redirect, browser: Self.callback)
+        for status in [401, 403, 404, 429, 503] {
+            FixtureProtocol.state.transportError = MCPHTTPError(status: status)
+            do {
+                _ = try await client.perform(MCPBridgeRequest(session: "", connectionID: record.id,
+                    action: .tools, tool: nil, arguments: nil), connection: record)
+                XCTFail("Expected HTTP failure")
+            } catch MCPServiceError.network(let received) {
+                XCTAssertEqual(received, status)
+                XCTAssertTrue(MCPServiceError.network(received).localizedDescription.contains("HTTP \(status)"))
+                if status == 403 { XCTAssertTrue(MCPServiceError.network(received).localizedDescription.contains("MCP API is enabled")) }
+            }
+        }
     }
 
     func testTwoAccountsPersistIndependentRegistrationsAcrossRestart() async throws {

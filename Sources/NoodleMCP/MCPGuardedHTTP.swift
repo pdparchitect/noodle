@@ -1,12 +1,20 @@
 import Foundation
 import NoodleCore
 
+/// Retains the HTTP status across URLSession without exposing response contents.
+struct MCPHTTPError: Error, CustomNSError, Sendable {
+    let status: Int
+    static var errorDomain: String { "Noodle.MCP.HTTP" }
+    var errorCode: Int { status }
+}
+
 /// Supplies the SDK's HTTP transport with a no-redirect, bounded data loader.
 /// In particular, bearer credentials must never follow a server redirect.
 final class MCPGuardedHTTP: URLProtocol, URLSessionDataDelegate, @unchecked Sendable {
     private var session: URLSession?
     private var loadingTask: URLSessionDataTask?
     private var received = 0
+    private var responseError: MCPHTTPError?
     // Per-instance configuration lets transport tests run without shared session state.
     var sessionConfiguration: () -> URLSessionConfiguration = {
         let configuration = URLSessionConfiguration.ephemeral
@@ -42,6 +50,11 @@ final class MCPGuardedHTTP: URLProtocol, URLSessionDataDelegate, @unchecked Send
             completionHandler(.cancel)
             return
         }
+        guard (200..<300).contains(response.statusCode) else {
+            responseError = MCPHTTPError(status: response.statusCode)
+            completionHandler(.cancel)
+            return
+        }
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         completionHandler(.allow)
     }
@@ -54,7 +67,8 @@ final class MCPGuardedHTTP: URLProtocol, URLSessionDataDelegate, @unchecked Send
         client?.urlProtocol(self, didLoad: data)
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        if let error { client?.urlProtocol(self, didFailWithError: error) }
+        if let responseError { client?.urlProtocol(self, didFailWithError: responseError) }
+        else if let error { client?.urlProtocol(self, didFailWithError: error) }
         else { client?.urlProtocolDidFinishLoading(self) }
         session.finishTasksAndInvalidate()
         self.session = nil

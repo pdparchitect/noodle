@@ -196,12 +196,14 @@ public actor MCPService {
         // A fresh protocol session per operation avoids leaking server-side session
         // context between agents sharing an account. Credentials remain per connection.
         let client = Client(name: "Noodle", version: "1.0")
+        var initialized = false
         do {
             let result = try await withTaskCancellationHandler {
                 try checkActive(connection.id, epoch: epoch, deadline: deadline)
-                let initialized = try await client.connect(transport: transport)
+                let initialization = try await client.connect(transport: transport)
+                initialized = true
                 try checkActive(connection.id, epoch: epoch, deadline: deadline)
-                rememberIcons(initialized.serverInfo.icons ?? [], id: connection.id, epoch: epoch)
+                rememberIcons(initialization.serverInfo.icons ?? [], id: connection.id, epoch: epoch)
                 let data: Data
                 switch request.action {
                 case .tools, .inspect:
@@ -270,7 +272,19 @@ public actor MCPService {
             // Never echo transport errors containing a provider's private response.
             if let error = error as? MCPServiceError { throw error }
             if let error = error as? MCPConnectionError { throw error }
-            throw MCPConnectionError.message("The tool request failed. Check the connection in Settings → Tools. Verify remote changes before retrying.")
+            let underlying: Error
+            if case MCPError.transportError(let cause) = error { underlying = cause }
+            else { underlying = error }
+            let http = underlying as NSError
+            if http.domain == MCPHTTPError.errorDomain { throw MCPServiceError.network(http.code) }
+            let message: String
+            if !initialized { message = "The MCP server could not start a connection. Try connecting again." }
+            else if request.action == .call {
+                message = "The tool request failed. Check whether the remote action completed before retrying."
+            } else {
+                message = "The MCP server could not return the requested tools or resources. Try again."
+            }
+            throw MCPConnectionError.message(message)
         }
     }
 }

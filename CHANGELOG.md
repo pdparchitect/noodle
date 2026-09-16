@@ -15,6 +15,10 @@ All notable changes to Noodle are documented here, following
 
 - Consolidate MCP connection, catalogue and Google Workspace documentation into one guide.
 
+### Fixed
+
+- Show MCP HTTP failures and actionable access errors instead of directing failed connections back to the same Settings screen.
+
 ## [0.17.0] - 2026-09-16
 
 ### Added
