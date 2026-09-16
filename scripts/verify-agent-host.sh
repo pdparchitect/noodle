@@ -10,9 +10,10 @@ app_team="$(codesign -dv --verbose=4 "$app" 2>&1 | awk -F= '/^TeamIdentifier=/ {
 app_identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")"
 host_team="$(print -r -- "$host_signature" | awk -F= '/^TeamIdentifier=/ { print $2 }')"
 [[ "$app_team" == "$host_team" && "$app_team" =~ '^[A-Z0-9]{10}$' ]]
-print -r -- "$host_signature" | grep -q 'runtime'
+# Consume full output so pipefail cannot turn a matched check into SIGPIPE.
+print -r -- "$host_signature" | grep 'runtime' >/dev/null
 host_entitlements="$(codesign -d --entitlements :- "$host" 2>/dev/null)"
-if print -r -- "$host_entitlements" | grep -q '<key>'; then
+if print -r -- "$host_entitlements" | grep '<key>' >/dev/null; then
     print -u2 "The Agent Host must have no additional entitlements."
     exit 1
 fi
@@ -21,11 +22,11 @@ fi
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$host/Contents/Info.plist")" == "$app_identifier.agent-host" ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :NoodleApplicationIdentifier' "$host/Contents/Info.plist")" == "$app_identifier" ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :NoodleAgentHostService' "$host/Contents/Info.plist")" == "$app_identifier.agent-host" ]]
-if otool -L "$host/Contents/MacOS/NoodleAgentHost" | grep -Eq '/opt/homebrew|/usr/local'; then
+if otool -L "$host/Contents/MacOS/NoodleAgentHost" | grep -E '/opt/homebrew|/usr/local' >/dev/null; then
     print -u2 "Agent Host links a mutable external library."
     exit 1
 fi
-if otool -l "$host/Contents/MacOS/NoodleAgentHost" | grep -Eq 'path .*(\.build|Xcode.*Toolchains|/Library/Developer/CommandLineTools)'; then
+if otool -l "$host/Contents/MacOS/NoodleAgentHost" | grep -E 'path .*(\.build|Xcode.*Toolchains|/Library/Developer/CommandLineTools)' >/dev/null; then
     print -u2 "Agent Host contains a development-only library search path."
     exit 1
 fi
@@ -33,16 +34,16 @@ print "Agent Host signature, identity, hardened runtime and zero entitlements ve
 apple_helper="$app/Contents/Helpers/NoodleAppleAgent"
 codesign --verify --strict -R "=anchor apple generic and identifier \"$app_identifier.apple-agent\" and certificate leaf[subject.OU] = \"$app_team\"" "$apple_helper"
 apple_signature="$(codesign -dv --verbose=4 "$apple_helper" 2>&1)"
-print -r -- "$apple_signature" | grep -q 'runtime'
-if codesign -d --entitlements :- "$apple_helper" 2>/dev/null | grep -q '<key>'; then
+print -r -- "$apple_signature" | grep 'runtime' >/dev/null
+if codesign -d --entitlements :- "$apple_helper" 2>/dev/null | grep '<key>' >/dev/null; then
     print -u2 "The Apple harness must use the Agent Host policy without extra entitlements."
     exit 1
 fi
-if otool -L "$apple_helper" | grep -Eq '/opt/homebrew|/usr/local'; then
+if otool -L "$apple_helper" | grep -E '/opt/homebrew|/usr/local' >/dev/null; then
     print -u2 "The Apple harness links a mutable external library."
     exit 1
 fi
-if otool -l "$apple_helper" | grep -Eq 'path .*(\.build|Xcode.*Toolchains|/Library/Developer/CommandLineTools)'; then
+if otool -l "$apple_helper" | grep -E 'path .*(\.build|Xcode.*Toolchains|/Library/Developer/CommandLineTools)' >/dev/null; then
     print -u2 "The Apple harness contains a development-only library search path."
     exit 1
 fi
