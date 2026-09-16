@@ -123,11 +123,61 @@ struct ConversationErrorAlert: ViewModifier {
 /// or treating Settings, previews, and minimized windows as a viewed conversation.
 @MainActor final class ConversationWindowRegistry: NSObject {
     fileprivate let hosts = NSHashTable<ConversationWindowHost.Probe>.weakObjects()
+    private let session: ConversationWindowSession
+    private var knownConversationIDs: Set<UUID>?
+    private var hasRestoredWindows = false
+    private var isTerminating = false
 
-    override init() {
+    init(fileURL: URL? = nil) {
+        session = ConversationWindowSession(fileURL: fileURL)
         super.init()
         NotificationCenter.default.addObserver(self, selector: #selector(openRequestedConversation),
             name: .openConversation, object: nil)
+    }
+
+    func retainConversations(_ ids: Set<UUID>) {
+        knownConversationIDs = ids
+        session.retainConversations(ids)
+    }
+
+    func restoreWindows(openWindow: (UUID) -> Void) {
+        guard !hasRestoredWindows else { return }
+        hasRestoredWindows = true
+        for id in session.frames.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
+            // The main window can display this same conversation independently.
+            guard !hosts.allObjects.contains(where: { !$0.isMainWindow && $0.conversationID == id }) else { continue }
+            openWindow(id)
+        }
+    }
+
+    func prepareForTermination() {
+        // AppKit closing windows during Quit must not look like explicit closes.
+        isTerminating = true
+    }
+
+    fileprivate func checkpoint(_ host: ConversationWindowHost.Probe) {
+        guard !isTerminating, !host.isClosed, !host.isMainWindow, !host.isRestoringFrame,
+              let id = host.conversationID, let window = host.window,
+              knownConversationIDs?.contains(id) != false else { return }
+        if host.restoredConversationID != id {
+            host.restoredConversationID = id
+            if let frame = session.frames[id] {
+                host.isRestoringFrame = true
+                window.setFrame(from: frame)
+                window.setFrame(window.constrainFrameRect(window.frame, to: window.screen ?? NSScreen.main), display: false)
+                host.isRestoringFrame = false
+            }
+        }
+        // Keep the normal frame while a window is full screen.
+        guard !window.styleMask.contains(.fullScreen) else { return }
+        session.save(frame: window.frameDescriptor, for: id)
+    }
+
+    fileprivate func closed(_ host: ConversationWindowHost.Probe) {
+        hosts.remove(host)
+        guard !isTerminating, !host.isMainWindow, let id = host.conversationID,
+              !hosts.allObjects.contains(where: { !$0.isMainWindow && $0.conversationID == id }) else { return }
+        session.remove(id)
     }
 
     @objc private func openRequestedConversation(_ notification: Notification) {
@@ -190,6 +240,9 @@ struct ConversationWindowHost: NSViewRepresentable {
         var title = "Noodle"
         var markRead: ((UUID?) -> Void)?
         var openConversation: ((UUID) -> Void)?
+        fileprivate var restoredConversationID: UUID?
+        fileprivate var isRestoringFrame = false
+        fileprivate var isClosed = false
 
         init(registry: ConversationWindowRegistry) {
             self.registry = registry
@@ -201,6 +254,8 @@ struct ConversationWindowHost: NSViewRepresentable {
             NotificationCenter.default.removeObserver(self)
             registry.hosts.remove(self)
             guard let window else { return }
+            isClosed = false
+            restoredConversationID = nil
             registry.hosts.add(self)
             for name in [NSWindow.didBecomeKeyNotification, NSWindow.didChangeOcclusionStateNotification] {
                 NotificationCenter.default.addObserver(self, selector: #selector(markVisibleRead), name: name, object: window)
@@ -208,18 +263,28 @@ struct ConversationWindowHost: NSViewRepresentable {
             NotificationCenter.default.addObserver(self, selector: #selector(markVisibleRead),
                 name: NSApplication.didBecomeActiveNotification, object: nil)
             NotificationCenter.default.addObserver(self, selector: #selector(closed), name: NSWindow.willCloseNotification, object: window)
+            for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
+                NotificationCenter.default.addObserver(self, selector: #selector(checkpoint), name: name, object: window)
+            }
             DispatchQueue.main.async { [weak self] in self?.updateWindow() }
         }
         func updateWindow() {
+            guard !isClosed else { return }
             window?.title = title
             window?.titlebarAppearsTransparent = true
             window?.backgroundColor = .windowBackgroundColor
+            checkpoint()
             markVisibleRead()
         }
+        @objc private func checkpoint() { registry.checkpoint(self) }
         @objc private func markVisibleRead() {
+            guard !isClosed else { return }
             if window?.isVisible == true { registry.hosts.add(self) }
             if let conversationID, registry.isViewing(conversationID) { markRead?(conversationID) }
         }
-        @objc private func closed() { registry.hosts.remove(self) }
+        @objc private func closed() {
+            isClosed = true
+            registry.closed(self)
+        }
     }
 }

@@ -179,6 +179,113 @@ import NoodleCore
         window.close()
         XCTAssertFalse(registry.focus(nextID))
     }
+
+    private func sessionURL() -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-window-session-\(UUID())")
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        return directory.appendingPathComponent("conversation-windows.json")
+    }
+
+    private func mount(_ id: UUID, in registry: ConversationWindowRegistry, isMain: Bool = false) -> NSWindow {
+        let window = NSWindow(contentRect: .init(x: 80, y: 80, width: 620, height: 510),
+            styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let host = ConversationWindowHost.Probe(registry: registry)
+        host.conversationID = id
+        host.isMainWindow = isMain
+        window.contentView = host
+        host.updateWindow()
+        return window
+    }
+
+    func testOpenWindowsAndMovedFramesSurviveWithoutTerminationCallback() throws {
+        let file = sessionURL(), first = UUID(), second = UUID(), mainOnly = UUID()
+        let registry = ConversationWindowRegistry(fileURL: file)
+        let firstWindow = mount(first, in: registry)
+        let secondWindow = mount(second, in: registry)
+        let mainWindow = mount(mainOnly, in: registry, isMain: true)
+        defer { firstWindow.close(); secondWindow.close(); mainWindow.close() }
+        firstWindow.setFrame(.init(x: 100, y: 100, width: 660, height: 560), display: false)
+
+        // Read from disk while the original process is still alive: no Quit flush.
+        let relaunched = ConversationWindowRegistry(fileURL: file)
+        relaunched.retainConversations([first, second, mainOnly])
+        let selectedMain = mount(first, in: relaunched, isMain: true)
+        defer { selectedMain.close() }
+        var opened: [UUID] = []
+        relaunched.restoreWindows { opened.append($0) }
+        XCTAssertEqual(Set(opened), [first, second], "Main selection must neither add nor suppress a pop-out")
+        relaunched.restoreWindows { opened.append($0) }
+        XCTAssertEqual(opened.count, 2, "Reopening the main window must not repeat restoration")
+
+        let restored = mount(first, in: relaunched)
+        defer { restored.close() }
+        XCTAssertEqual(restored.frame, firstWindow.frame)
+    }
+
+    func testExplicitClosePersistsAndLateCallbacksCannotReopenIt() throws {
+        let file = sessionURL(), closedID = UUID(), openID = UUID()
+        let registry = ConversationWindowRegistry(fileURL: file)
+        let closed = mount(closedID, in: registry), open = mount(openID, in: registry)
+        defer { open.close() }
+        let host = try XCTUnwrap(closed.contentView as? ConversationWindowHost.Probe)
+        closed.close()
+        host.updateWindow()
+        NotificationCenter.default.post(name: NSWindow.didResizeNotification, object: closed)
+        NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: closed)
+        XCTAssertFalse(registry.focus(closedID))
+
+        var reopened: [UUID] = []
+        ConversationWindowRegistry(fileURL: file).restoreWindows { reopened.append($0) }
+        XCTAssertEqual(reopened, [openID])
+    }
+
+    func testQuitKeepsPopoutsEvenWhenAppKitClosesTheirWindows() throws {
+        let (store, direct, group) = try fixture()
+        let first = mount(direct.id, in: store.conversationWindows)
+        let second = mount(group.id, in: store.conversationWindows)
+        XCTAssertEqual(AppDelegate().applicationShouldTerminate(NSApplication.shared), .terminateNow)
+        first.close()
+        second.close()
+
+        let relaunched = ConversationWindowRegistry(fileURL: store.repository.rootURL.appendingPathComponent("conversation-windows.json"))
+        var opened: [UUID] = []
+        relaunched.restoreWindows { opened.append($0) }
+        XCTAssertEqual(Set(opened), [direct.id, group.id])
+    }
+
+    func testDeletedConversationIsPrunedAndCannotBeSavedByAnOldHost() throws {
+        let (store, direct, group) = try fixture()
+        let first = mount(direct.id, in: store.conversationWindows)
+        let second = mount(group.id, in: store.conversationWindows)
+        defer { first.close(); second.close() }
+        XCTAssertTrue(store.delete(group))
+        (second.contentView as? ConversationWindowHost.Probe)?.updateWindow()
+        let file = store.repository.rootURL.appendingPathComponent("conversation-windows.json")
+        var reopened: [UUID] = []
+        ConversationWindowRegistry(fileURL: file).restoreWindows { reopened.append($0) }
+        XCTAssertEqual(reopened, [direct.id])
+    }
+
+    func testRestorationPrunesMissingConversationsAndToleratesCorruptState() throws {
+        let file = sessionURL(), valid = UUID(), deleted = UUID()
+        let session = ConversationWindowSession(fileURL: file)
+        session.save(frame: "", for: valid)
+        session.save(frame: "", for: deleted)
+        let relaunched = ConversationWindowRegistry(fileURL: file)
+        relaunched.retainConversations([valid])
+        var opened: [UUID] = []
+        relaunched.restoreWindows { opened.append($0) }
+        XCTAssertEqual(opened, [valid])
+        XCTAssertEqual(Set(ConversationWindowSession(fileURL: file).frames.keys), [valid])
+
+        try Data("partial data".utf8).write(to: file)
+        let recovered = ConversationWindowRegistry(fileURL: file)
+        recovered.restoreWindows { _ in XCTFail("Corrupt state must not open a window") }
+        let window = mount(valid, in: recovered)
+        defer { window.close() }
+        XCTAssertEqual(Set(ConversationWindowSession(fileURL: file).frames.keys), [valid])
+    }
 }
 
 private struct SwitchingChatFixture: View {

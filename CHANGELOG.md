@@ -21,6 +21,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Restore popped-out conversations and their window positions and sizes after quitting or unexpectedly exiting the app, while keeping explicitly closed windows closed.
 - Fix local and Runbar launches stopping after packaging when Agent Host verification encounters a broken pipe.
 - Recheck Applet broker sessions and conversation access after asynchronous work, preventing queued requests and result payloads from surviving access revocation.
 - Keep background changes in Edit Bot and Group Info pending until Save, discard them on Cancel, and preserve the original background if saving settings fails.

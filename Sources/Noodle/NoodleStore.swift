@@ -89,7 +89,7 @@ final class NoodleStore {
     func pendingAttachments(for conversationID: UUID) -> [ConversationAttachment] {
         drafts[conversationID].attachments
     }
-    let conversationWindows = ConversationWindowRegistry()
+    let conversationWindows: ConversationWindowRegistry
     let activityWindows = AgentActivityWindows()
     @ObservationIgnored private var voiceRecorders: [UUID: AnyObject] = [:]
 
@@ -138,6 +138,7 @@ final class NoodleStore {
         }
 
         transcriptPositions = TranscriptPositionStore(fileURL: self.repository.rootURL.appendingPathComponent("scroll-positions.json"))
+        conversationWindows = ConversationWindowRegistry(fileURL: self.repository.rootURL.appendingPathComponent("conversation-windows.json"))
         messenger = MessengerBroker(repository: self.repository)
         mcp = MCPController(repository: self.repository)
         computers = ComputerController(repository: self.repository)
@@ -220,6 +221,7 @@ final class NoodleStore {
             let knownConversationIDs = Set(conversations.map(\.id))
             drafts.retainConversations(knownConversationIDs)
             try? transcriptPositions.retainConversations(knownConversationIDs)
+            conversationWindows.retainConversations(knownConversationIDs)
             let storedUnreadIDs = try repository.loadUnreadConversationIDs()
             unreadConversationIDs = storedUnreadIDs.intersection(knownConversationIDs)
             if unreadConversationIDs != storedUnreadIDs {
@@ -944,7 +946,10 @@ final class NoodleStore {
             reactionChanges = []
         }
 
-        if snapshot.conversationsChanged { conversations = snapshot.conversations }
+        if snapshot.conversationsChanged {
+            conversations = snapshot.conversations
+            conversationWindows.retainConversations(Set(conversations.map(\.id)))
+        }
         if snapshot.messagesChanged { messagesByConversation = snapshot.messages }
         if snapshot.attachmentsChanged { attachmentsByConversation = snapshot.attachments }
         for message in newAgentMessages {

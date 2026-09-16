@@ -94,6 +94,8 @@ struct NoodleApp: App {
             }
         }
         .defaultSize(width: 760, height: 810)
+        // Restore from the workspace even after a crash or when macOS Resume is off.
+        .restorationBehavior(.disabled)
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified(showsTitle: false))
 
@@ -129,6 +131,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSWorkspace.didWakeNotification,
             object: nil
         )
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        NoodleStore.active?.conversationWindows.prepareForTermination()
+        return .terminateNow
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -217,6 +224,7 @@ private struct WindowConfiguration: NSViewRepresentable {
 
 struct RootView: View {
     @Environment(NoodleStore.self) private var store
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var isFileDropTargeted = false
@@ -226,6 +234,10 @@ struct RootView: View {
     var body: some View {
         AttachmentPreviewScope(conversationID: store.selectedConversationID) { attachmentPreview in
             content(attachmentPreview: attachmentPreview)
+        }
+        .task(id: store.storageReady) {
+            guard store.storageReady else { return }
+            store.conversationWindows.restoreWindows { openWindow(id: "conversation", value: $0) }
         }
     }
 
