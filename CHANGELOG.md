@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Save MCP binary results as workspace files automatically, accept `@file` JSON input references (`@@` for a literal `@`), and expose resource listing/reading with `--raw` result output when needed.
 - Open bot profiles from member avatars in New Group and Group Info, with Message and Edit actions, and confirm before removing a member with the X button.
 - Show clickable bot avatars in Security and Heartbeat settings, opening the existing profile with Message and Edit actions.
 - Enable restricted Claude Code bots with private login and session storage, normal native tools under Noodle's process sandbox, and a working unrestricted-access switch. Verify native startup, tools, Messenger, outside-file denials, and resume with an offline API fixture.

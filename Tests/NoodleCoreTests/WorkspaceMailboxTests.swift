@@ -8,7 +8,8 @@ final class WorkspaceMailboxTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let folder = try WorkspaceMailbox(workspace: root, path: "own", create: true)
-        try folder.writeData(Data(), named: "empty", replaceExisting: false)
+        try folder.writeNewData(Data(), named: "empty")
+        XCTAssertThrowsError(try folder.writeNewData(Data("replacement".utf8), named: "empty"))
         try folder.writeData(Data("replacement".utf8), named: "empty", replaceExisting: false)
         XCTAssertEqual(try folder.read("empty", limit: 100), Data())
 

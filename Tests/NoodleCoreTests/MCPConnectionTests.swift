@@ -104,6 +104,17 @@ final class MCPConnectionTests: XCTestCase {
         XCTAssertLessThanOrEqual(data.count, MCPBridgeFiles.maxRequestEnvelopeBytes)
         XCTAssertEqual(try JSONDecoder().decode(MCPBridgeRequest.self, from: data).arguments, arguments)
     }
+    func testResourceReadBridgeEncodingAndLegacyRequests() throws {
+        let request = MCPBridgeRequest(session: "fixture", connectionID: UUID(), action: .readResource,
+            tool: nil, arguments: nil, uri: "reports://file")
+        let roundTrip = try JSONDecoder().decode(MCPBridgeRequest.self, from: JSONEncoder().encode(request))
+        XCTAssertEqual(roundTrip.action, .readResource)
+        XCTAssertEqual(roundTrip.uri, "reports://file")
+        let legacy = MCPBridgeRequest(session: "fixture", connectionID: UUID(), action: .call, tool: "echo", arguments: Data("{}".utf8))
+        let encoded = try JSONEncoder().encode(legacy)
+        XCTAssertFalse(String(decoding: encoded, as: UTF8.self).contains("\"uri\""))
+        XCTAssertNil(try JSONDecoder().decode(MCPBridgeRequest.self, from: encoded).uri)
+    }
     func testBootstrapIndexesOnlyAssignedAccountsAndPreservesBackstory() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

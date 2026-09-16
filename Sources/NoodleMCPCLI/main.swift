@@ -7,24 +7,43 @@ import NoodleCore
         do {
             let args = Array(CommandLine.arguments.dropFirst())
             if args.isEmpty || args == ["--help"] {
-                print("./mcpshim tools|inspect|call [--tool NAME] [--input JSON]\nRun the mcpshim in the relevant skill directory; its connection is selected automatically.\nThe shared CLI also accepts --connection UUID for compatibility. Calls accept a JSON object through --input or stdin.\nNoodle must be running; manage connections and sign-in in Settings → Tools.")
+                print("""
+                ./mcpshim tools|inspect|call [--tool NAME] [--input JSON] [--raw]
+                ./mcpshim resources
+                ./mcpshim read-resource --uri URI [--raw]
+                Run the mcpshim in the relevant skill directory; its connection is selected automatically.
+                The shared CLI also accepts --connection UUID for compatibility. Calls accept a JSON object through --input or stdin.
+                JSON string values starting with @ read a workspace file as base64; @@ escapes a literal @.
+                File paths are relative to the current directory. Encoded arguments must fit within 1 MiB.
+                Binary results become files in .noodle/mcp-attachments, with paths in the JSON output.
+                --raw preserves the original result JSON and saves no files. Results are limited to 8 MiB before extraction.
+                Noodle must be running; manage connections and sign-in in Settings → Tools.
+                """)
                 return
             }
-            guard let action = MCPBridgeAction(rawValue: args[0]), args.count % 2 == 1 else {
+            guard let action = MCPBridgeAction(rawValue: args[0]) else {
                 throw MCPConnectionError.message("Invalid command. Run mcpshim --help.")
             }
             var flags: [String: String] = [:]
-            for index in stride(from: 1, to: args.count, by: 2) {
+            var raw = false
+            var index = 1
+            while index < args.count {
                 let key = args[index]
-                guard ["--connection", "--tool", "--input"].contains(key), flags[key] == nil else {
+                if key == "--raw", !raw { raw = true; index += 1; continue }
+                guard ["--connection", "--tool", "--input", "--uri"].contains(key), flags[key] == nil,
+                      index + 1 < args.count else {
                     throw MCPConnectionError.message("Unknown or repeated option.")
                 }
                 flags[key] = args[index + 1]
+                index += 2
             }
-            guard action == .tools || !(flags["--tool"] ?? "").isEmpty,
+            let needsTool = action == .inspect || action == .call
+            guard needsTool ? !(flags["--tool"] ?? "").isEmpty : flags["--tool"] == nil,
                   action == .call || flags["--input"] == nil,
-                  action != .tools || flags["--tool"] == nil else {
-                throw MCPConnectionError.message("Specify a tool for inspect/call; input is only supported for call.")
+                  action == .readResource ? !(flags["--uri"] ?? "").isEmpty : flags["--uri"] == nil,
+                  (flags["--uri"]?.utf8.count ?? 0) <= 4096,
+                  !raw || action == .call || action == .readResource else {
+                throw MCPConnectionError.message("Specify --tool for inspect/call or --uri for read-resource. --input is only for call; --raw is only for call/read-resource.")
             }
             let context = try MCPInvocationContext.resolve(invocationPath: CommandLine.arguments[0],
                 currentDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
@@ -58,13 +77,11 @@ import NoodleCore
                     arguments = input
                 }
                 if arguments == nil || arguments?.isEmpty == true { arguments = Data("{}".utf8) }
-                guard let arguments, arguments.count <= MCPBridgeFiles.maxRequestBytes,
-                      (try? JSONSerialization.jsonObject(with: arguments)) is [String: Any] else {
-                    throw MCPConnectionError.message("Tool arguments must be a JSON object no larger than 1 MB.")
-                }
+                arguments = try MCPFileContent.arguments(arguments!, workspace: context.workspace,
+                    currentDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
             }
             let request = MCPBridgeRequest(session: session.token, connectionID: id, skillName: context.skillName, action: action,
-                                           tool: flags["--tool"], arguments: arguments)
+                                           tool: flags["--tool"], arguments: arguments, uri: flags["--uri"])
             let stem = request.id.uuidString.lowercased()
             let requestFile = folder.appendingPathComponent(stem + ".request")
             let responseFile = folder.appendingPathComponent(stem + ".response")
@@ -80,7 +97,16 @@ import NoodleCore
                     let response = try JSONDecoder().decode(MCPBridgeResponse.self, from: data)
                     if let error = response.error { throw MCPConnectionError.message(error) }
                     guard let result = response.result else { throw MCPConnectionError.message("Empty MCP bridge response.") }
-                    try FileHandle.standardOutput.write(contentsOf: result)
+                    let output: Data
+                    if action == .call || action == .readResource {
+                        do {
+                            output = try MCPFileContent.result(result, workspace: context.workspace, callID: request.id,
+                                raw: raw, resourceRead: action == .readResource)
+                        } catch {
+                            throw MCPConnectionError.message("Could not prepare MCP result files: \(error.localizedDescription) The remote request has already completed; verify any remote changes before retrying.")
+                        }
+                    } else { output = result }
+                    try FileHandle.standardOutput.write(contentsOf: output)
                     print("")
                     if let object = try? JSONSerialization.jsonObject(with: result) as? [String: Any],
                        object["isError"] as? Bool == true { exit(1) }

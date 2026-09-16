@@ -1,7 +1,10 @@
 import Foundation
 import Darwin
 
-public enum MCPBridgeAction: String, Codable, Sendable { case tools, inspect, call }
+public enum MCPBridgeAction: String, Codable, Sendable {
+    case tools, inspect, call, resources
+    case readResource = "read-resource"
+}
 public struct MCPBridgeRequest: Codable, Sendable {
     public let id: UUID
     public let session: String
@@ -10,12 +13,13 @@ public struct MCPBridgeRequest: Codable, Sendable {
     public let action: MCPBridgeAction
     public let tool: String?
     public let arguments: Data?
+    public let uri: String?
     public let expiresAt: Date
     public init(id: UUID = UUID(), session: String, connectionID: UUID? = nil, skillName: String? = nil, action: MCPBridgeAction,
-                tool: String?, arguments: Data?, expiresAt: Date = Date().addingTimeInterval(120)) {
+                tool: String?, arguments: Data?, uri: String? = nil, expiresAt: Date = Date().addingTimeInterval(120)) {
         self.id = id; self.session = session; self.connectionID = connectionID
         self.skillName = skillName
-        self.action = action; self.tool = tool; self.arguments = arguments; self.expiresAt = expiresAt
+        self.action = action; self.tool = tool; self.arguments = arguments; self.uri = uri; self.expiresAt = expiresAt
     }
 
     /// Called by the broker with its own assignment list, never a CLI-supplied registry.
@@ -43,6 +47,7 @@ public enum MCPBridgeFiles {
     public static let maxRequestBytes = 1_048_576
     // JSON encodes the argument bytes as base64; allow that overhead separately.
     public static let maxRequestEnvelopeBytes = (maxRequestBytes + 2) / 3 * 4 + 4096
+    public static let maxResultBytes = 8 * 1_048_576
     public static let maxResponseBytes = 16 * 1_048_576
     public static func directory(workspace: URL) -> URL {
         workspace.appendingPathComponent(".noodle/mcp-bridge", isDirectory: true)

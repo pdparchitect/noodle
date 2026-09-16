@@ -17,6 +17,8 @@ private final class FixtureState: @unchecked Sendable {
     var registrations = 0
     var refreshes = 0
     var calls = 0
+    var resourceURIs: [String] = []
+    var repeatResourceCursor = false
     var invalidGrant = false
     var mismatchedIssuer = false
     var resourceIdentifier = "https://service.example/mcp"
@@ -50,7 +52,7 @@ private final class FixtureState: @unchecked Sendable {
                 let result: [String: Any]
                 switch object["method"] as? String {
                 case "initialize":
-                    result = ["protocolVersion": Version.latest, "capabilities": ["tools": [:]],
+                    result = ["protocolVersion": Version.latest, "capabilities": ["tools": [:], "resources": [:]],
                               "serverInfo": ["name": "Fixture", "version": "1"]]
                 case "tools/list":
                     let params = object["params"] as? [String: Any]
@@ -62,6 +64,17 @@ private final class FixtureState: @unchecked Sendable {
                 case "tools/call":
                     calls += 1
                     result = ["content": [["type": "text", "text": "ok"]], "structuredContent": ["accepted": true], "isError": false]
+                case "resources/list":
+                    let params = object["params"] as? [String: Any]
+                    if params?["cursor"] == nil || repeatResourceCursor {
+                        result = ["resources": [["uri": "reports://first", "name": "first"]], "nextCursor": "page2"]
+                    } else {
+                        result = ["resources": [["uri": "reports://second", "name": "second"]]]
+                    }
+                case "resources/read":
+                    let uri = (object["params"] as? [String: Any])?["uri"] as? String ?? ""
+                    resourceURIs.append(uri)
+                    result = ["contents": [["uri": uri, "mimeType": "application/pdf", "blob": "AP8="]], "_meta": ["source": "fixture"]]
                 default: result = [:]
                 }
                 return (200, ["jsonrpc": "2.0", "id": id, "result": result])
@@ -186,6 +199,27 @@ final class MCPServiceTests: XCTestCase {
         _ = try await (first, second)
         XCTAssertEqual(FixtureProtocol.state.refreshes, 1)
         XCTAssertEqual(vault.load(record.id)?.refreshToken, "rotated-1")
+    }
+    func testResourceDiscoveryReadsAndRevocation() async throws {
+        let vault = TestVault()
+        let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+        let client = service(vault: vault)
+        try await client.signIn(record, redirectURI: redirect, browser: Self.callback)
+        let list = MCPBridgeRequest(session: "", connectionID: record.id, action: .resources, tool: nil, arguments: nil)
+        let data = try await client.perform(list, connection: record)
+        XCTAssertEqual(try JSONDecoder().decode(ListResources.Result.self, from: data).resources.map(\.uri), ["reports://first", "reports://second"])
+        let read = MCPBridgeRequest(session: "", connectionID: record.id, action: .readResource,
+            tool: nil, arguments: nil, uri: "reports://first")
+        let result = try await client.perform(read, connection: record)
+        let decoded = try JSONDecoder().decode(ReadResource.Result.self, from: result)
+        XCTAssertEqual(decoded.contents.first?.blob, "AP8=")
+        XCTAssertNotNil(decoded._meta)
+        do { _ = try await client.perform(read, connection: record, authorized: { false }); XCTFail("Revoked resource access accepted") }
+        catch { XCTAssertTrue(error is MCPServiceError) }
+        XCTAssertEqual(FixtureProtocol.state.resourceURIs, ["reports://first"])
+        FixtureProtocol.state.repeatResourceCursor = true
+        do { _ = try await client.perform(list, connection: record); XCTFail("Repeated resource cursor accepted") }
+        catch { XCTAssertTrue(error is MCPServiceError) }
     }
     func testInvalidGrantStopsRefreshAndRequiresReconnect() async throws {
         let vault = TestVault()

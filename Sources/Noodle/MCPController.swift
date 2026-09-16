@@ -204,6 +204,7 @@ final class MCPController {
                       request.id == id, request.session == sessions[agent.id],
                       (request.arguments?.count ?? 0) <= MCPBridgeFiles.maxRequestBytes,
                       (request.tool?.utf8.count ?? 0) <= 1024,
+                      (request.uri?.utf8.count ?? 0) <= 4096,
                       (request.skillName?.utf8.count ?? 0) <= 64,
                       request.expiresAt > Date(), request.expiresAt < Date().addingTimeInterval(130),
                       claimed[id] == nil else {

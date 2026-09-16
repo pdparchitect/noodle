@@ -183,6 +183,7 @@ import XCTest
             ("expiresAt", Date().addingTimeInterval(-1).timeIntervalSinceReferenceDate),
             ("expiresAt", Date().addingTimeInterval(600).timeIntervalSinceReferenceDate),
             ("tool", String(repeating: "é", count: 513)),
+            ("uri", String(repeating: "x", count: 4097)),
             ("skillName", String(repeating: "x", count: 65)),
             ("arguments", Data(repeating: 65, count: MCPBridgeFiles.maxRequestBytes + 1).base64EncodedString()),
             ("action", "unknown-action")

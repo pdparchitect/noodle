@@ -77,6 +77,15 @@ public final class WorkspaceMailbox: @unchecked Sendable {
     /// With replacement disabled, preserve any existing entry, including links.
     /// Publish exclusively so a file created concurrently is also left untouched.
     public func writeData(_ data: Data, named name: String, replaceExisting: Bool = true) throws {
+        _ = try publishData(data, named: name, replaceExisting: replaceExisting)
+    }
+
+    /// Unlike an optional seed write, a result file must fail if its name is occupied.
+    public func writeNewData(_ data: Data, named name: String) throws {
+        guard try publishData(data, named: name, replaceExisting: false) else { throw Self.invalid() }
+    }
+
+    private func publishData(_ data: Data, named name: String, replaceExisting: Bool) throws -> Bool {
         guard Self.validName(name) else { throw Self.invalid() }
         let temporary = "." + UUID().uuidString.lowercased()
         let file = openat(descriptor, temporary, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
@@ -88,7 +97,9 @@ public final class WorkspaceMailbox: @unchecked Sendable {
             guard renameat(descriptor, temporary, descriptor, name) == 0 else { throw Self.invalid() }
         } else if renameatx_np(descriptor, temporary, descriptor, name, UInt32(RENAME_EXCL)) != 0 {
             guard errno == EEXIST else { throw Self.invalid() }
+            return false
         }
+        return true
     }
 
     public func claim(_ name: String, as claimed: String) throws {

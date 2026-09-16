@@ -167,6 +167,11 @@ Assigning a tool lets the bot use the permissions you granted during provider
 sign-in. Noodle does not ask again for each tool call. OAuth credentials stay in
 the macOS Keychain and are not written to bot skills or request files.
 
+The MCP CLI saves binary results under `workspace/.noodle/mcp-attachments` without
+overwriting existing files. Its `@file` inputs can read only regular workspace
+files, rejecting symlinks, hard links, and traversal. Resource links require an
+explicit read; returned links are never followed automatically.
+
 Removing an assignment blocks future calls; a call already sent may still finish.
 Removing the connection deletes its local credentials. To revoke the provider's
 grant too, use that provider's connected-app settings. An unrestricted bot's wider

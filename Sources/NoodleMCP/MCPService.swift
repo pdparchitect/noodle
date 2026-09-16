@@ -218,9 +218,30 @@ public actor MCPService {
                     let arguments = try JSONDecoder().decode([String: Value].self, from: request.arguments ?? Data("{}".utf8))
                     let context = try await client.send(CallTool.request(.init(name: name, arguments: arguments)))
                     data = try JSONEncoder().encode(try await context.value)
+                case .resources:
+                    var resources: [Resource] = []
+                    var cursor: String?
+                    var seen: Set<String> = []
+                    repeat {
+                        try checkActive(connection.id, epoch: epoch, deadline: deadline)
+                        let page = try await client.listResources(cursor: cursor)
+                        resources += page.resources
+                        cursor = page.nextCursor
+                        guard resources.count <= 5_000 else { throw MCPServiceError.responseTooLarge }
+                        if let cursor, !seen.insert(cursor).inserted { throw MCPServiceError.invalidMetadata }
+                    } while cursor != nil
+                    data = try JSONEncoder().encode(ListResources.Result(resources: resources))
+                case .readResource:
+                    guard await authorized() else { throw MCPServiceError.revoked }
+                    try checkActive(connection.id, epoch: epoch, deadline: deadline)
+                    guard let uri = request.uri, !uri.isEmpty, uri.utf8.count <= 4096 else {
+                        throw MCPServiceError.invalidMetadata
+                    }
+                    let context = try await client.send(ReadResource.request(.init(uri: uri)))
+                    data = try JSONEncoder().encode(try await context.value)
                 }
                 try checkActive(connection.id, epoch: epoch, deadline: deadline)
-                guard data.count <= 8 * 1_048_576 else { throw MCPServiceError.responseTooLarge }
+                guard data.count <= MCPBridgeFiles.maxResultBytes else { throw MCPServiceError.responseTooLarge }
                 return data
             } onCancel: {
                 // The SDK owns unstructured request tasks; cancelling our task
