@@ -215,7 +215,7 @@ struct HeartbeatsSettingsView: View {
                 .disabled(!store.runtime.heartbeatConfiguration.isEnabled)
             }
             if !store.agents.isEmpty {
-                Section("Bots") {
+                Section {
                     SettingsBotList(agents: store.agents) { agent in
                         HStack(spacing: 12) {
                             AgentProfileButton(agent: agent)
