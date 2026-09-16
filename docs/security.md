@@ -126,6 +126,9 @@ Revoke those separately in System Settings.
 - **Cloud harness networking is open outbound.** Codex, FX, Grok Build, and Muse
   Code are not limited to a list of model-provider domains. Readable data can be
   sent to remote services, and the policy does not block outbound LAN access.
+  Connections to localhost are allowed. The current profiles deny starting
+  listening sockets, including localhost servers; that is a pre-existing
+  development limitation, unchanged by the Applet authorization fix.
   Restricted Apple denies direct outbound networking and runs its default
   model on device. Separately assigned tools and computers have their own
   permissions; the local filesystem policy does not restrict actions they
@@ -143,6 +146,13 @@ Revoke those separately in System Settings.
   system or set CPU, memory, disk-use, or model-spending quotas. It relies on the
   macOS sandbox and Noodle's trusted launch and tool brokers. Signature checks
   identify code; they do not establish that its behavior is harmless.
+- **Process arguments are not a proven confidentiality boundary.** A marker-only
+  probe on the reviewed macOS 27 system read another same-user process's command
+  arguments through numeric `KERN_PROCARGS2` under the restricted cloud and Apple
+  profiles. The policy denials tested did not close that path. This remains
+  unresolved; the Applet broker fix does not address it. Keep credentials out of
+  command arguments rather than relying on workspace filesystem isolation to
+  hide them.
 
 ## Connected tools
 
@@ -154,6 +164,13 @@ Removing an assignment blocks future calls; a call already sent may still finish
 Removing the connection deletes its local credentials. To revoke the provider's
 grant too, use that provider's connected-app settings. An autonomous bot's wider
 system access means workspace assignment checks are not a hard isolation boundary.
+
+Applet requests are checked against the current bot session and conversation
+membership before dispatch, again after companion startup waits, and before any
+result is released. Removing and re-adding a bot does not reactivate requests
+from its previous session. Revoked callers receive neither success payloads nor
+provider diagnostics. An operation already dispatched to Applet may still finish;
+these checks do not undo its effects or erase files previously delivered.
 
 ## Files, recording, and computers
 
@@ -220,5 +237,24 @@ tests, offline initialization checks, opt-in live Messenger/resume checks, and
 signed-bundle verification. Those checks exercise specific allowed and denied
 operations; they are not an exhaustive security audit. See
 [architecture](architecture.md) for the surrounding process boundaries.
+
+### Applet authorization regression checks
+
+`AppletBrokerTests` reproduces three authorization gaps found during the September
+2026 sandbox review: a queued request surviving a session restart, a result
+surviving that restart, and a shared result surviving removal from a conversation.
+All three tests failed against the original broker. They now exercise revocation
+at a controlled suspension point, including success payloads, error payloads, and
+thrown provider errors. Existing tests cover current-session requests, shared
+noodlets, captures, presentation, owner isolation, and build diagnostics.
+
+Run these with `swift test --disable-sandbox --filter AppletBrokerTests`.
+`RestrictedAgentSandboxTests`, `RestrictedMuseSandboxTests`, `AppleSandboxTests`,
+and `BridgeCLISandboxTests` exercise real sandboxed processes, offline harness
+startup/resume, and the signed workspace CLIs. The localhost client test exercises
+all four cloud policies against a disposable local server. These are compatibility
+checks for the tested paths, not proof that every tool or live model turn works.
+The Applet authorization fix changes no Seatbelt policy, networking permission,
+filesystem grant, or entitlement.
 
 [Documentation](README.md)

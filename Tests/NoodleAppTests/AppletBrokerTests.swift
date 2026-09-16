@@ -5,6 +5,95 @@ import XCTest
 @testable import Noodle
 
 @MainActor final class AppletBrokerTests: XCTestCase {
+    private func token(for agent: AgentRecord, repository: WorkspaceRepository) throws -> String {
+        let workspace = repository.directory(for: agent)
+        let mailbox = try WorkspaceMailbox(workspace: workspace, path: ".noodle/applet-bridge")
+        return try JSONDecoder().decode(AppletAgentSession.self,
+            from: mailbox.read("session.json", limit: 4096)).token
+    }
+
+    func testRestartedSessionRejectsPreviouslyQueuedRequestButAcceptsCurrentToken() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let repository = WorkspaceRepository(rootURL: root)
+        try repository.prepare()
+        let agent = try repository.createAgent(named: "Session boundary").agent
+        let recorder = AppletRequestRecorder()
+        let controller = AppletController(repository: repository, connection: { await recorder.respond($0) })
+        controller.start(agents: [agent])
+        defer { controller.start(agents: []); try? FileManager.default.removeItem(at: root) }
+        let previous = try token(for: agent, repository: repository)
+        controller.start(agents: [])
+        controller.start(agents: [agent])
+        let current = try token(for: agent, repository: repository)
+        XCTAssertNotEqual(current, previous)
+        do {
+            _ = try await controller.perform(.init(token: previous, request: .init(.list)), agent: agent)
+            XCTFail("A queued request from the revoked session reached Applet")
+        } catch {}
+        _ = try await controller.perform(.init(token: current, request: .init(.list)), agent: agent)
+        let requests = await recorder.requests
+        XCTAssertEqual(requests.count, 1)
+    }
+
+    func testSharedResultIsWithheldWhenConversationAccessIsRevokedInFlight() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let repository = WorkspaceRepository(rootURL: root)
+        try repository.prepare()
+        let author = try repository.createAgent(named: "Author").agent
+        let reader = try repository.createAgent(named: "Reader").agent
+        let group = try repository.createGroup(named: "Shared", participantIDs: [author.id, reader.id], existingAgents: [author, reader])
+        let id = UUID()
+        let attachment = try repository.importLinkAttachment(NoodletLink.url(for: id), into: group.id)
+        _ = try repository.sendAgentMessage(agentID: author.id, conversationID: group.id, body: "Shared", attachmentIDs: [attachment.id])
+        let received = expectation(description: "Authorized request reached Applet")
+        let (release, continuation) = AsyncStream<Void>.makeStream()
+        let controller = AppletController(repository: repository, connection: { _ in
+            received.fulfill()
+            for await _ in release { break }
+            var response = AppletResponse()
+            response.text = "private shared result"
+            return response
+        })
+        controller.start(agents: [reader])
+        defer { continuation.finish(); controller.start(agents: []); try? FileManager.default.removeItem(at: root) }
+        var request = AppletRequest(.info); request.noodletID = id
+        let envelope = AppletAgentEnvelope(token: try token(for: reader, repository: repository), request: request, conversationID: group.id)
+        let pending = Task { try await controller.perform(envelope, agent: reader) }
+        await fulfillment(of: [received], timeout: 3)
+        _ = try repository.updateGroupParticipants(conversationID: group.id, participantIDs: [author.id], existingAgents: [author, reader])
+        continuation.yield(); continuation.finish()
+        do { _ = try await pending.value; XCTFail("Revoked participant received the shared result") } catch {}
+    }
+
+    func testSessionRevocationWithholdsSuccessAndErrorPayloadsInFlight() async throws {
+        for (error, throwsError) in [(nil, false), ("Compiler diagnostics", false), ("Private diagnostics", true)] as [(String?, Bool)] {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            let repository = WorkspaceRepository(rootURL: root)
+            try repository.prepare()
+            let agent = try repository.createAgent(named: "In flight").agent
+            let received = expectation(description: "Request reached Applet")
+            let (release, continuation) = AsyncStream<Void>.makeStream()
+            let controller = AppletController(repository: repository, connection: { _ in
+                received.fulfill()
+                for await _ in release { break }
+                if throwsError { throw AppletError(error!) }
+                var response = AppletResponse(error: error)
+                response.text = "private result"
+                return response
+            })
+            controller.start(agents: [agent])
+            defer { continuation.finish(); controller.start(agents: []); try? FileManager.default.removeItem(at: root) }
+            let envelope = AppletAgentEnvelope(token: try token(for: agent, repository: repository), request: .init(.list))
+            let pending = Task { try await controller.perform(envelope, agent: agent) }
+            await fulfillment(of: [received], timeout: 3)
+            controller.start(agents: [])
+            controller.start(agents: [agent])
+            continuation.yield(); continuation.finish()
+            do { _ = try await pending.value; XCTFail("A restarted session received a revoked session's payload") }
+            catch { XCTAssertEqual(error.localizedDescription, "This Applet session is no longer active.") }
+        }
+    }
+
     func testAttachmentPreviewOnlyRequestsMetadataWithoutOpeningTheNoodlet() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let package = root.appendingPathComponent("Preview.noodlet")
@@ -73,7 +162,7 @@ import XCTest
         var info = AppletRequest(.info)
         info.noodletID = id; info.includePreview = true; info.owner = "local"
         func invoke(_ request: AppletRequest, _ agent: AgentRecord = b) async throws -> AppletResponse {
-            try await controller.perform(AppletAgentEnvelope(token: "test", request: request, conversationID: group.id), agent: agent)
+            try await controller.perform(AppletAgentEnvelope(token: try token(for: agent, repository: repository), request: request, conversationID: group.id), agent: agent)
         }
         do { _ = try await invoke(info); XCTFail("An unsent draft granted access") } catch {}
         _ = try repository.sendAgentMessage(agentID: a.id, conversationID: group.id, body: "Try this", attachmentIDs: [attachment.id])
@@ -104,7 +193,7 @@ import XCTest
         do { _ = try await invoke(exact, outsider); XCTFail("Outsider targeted shared session") } catch {}
         let wrongGroup = try repository.createGroup(named: "Unshared", participantIDs: [a.id, b.id], existingAgents: [a, b])
         do {
-            _ = try await controller.perform(AppletAgentEnvelope(token: "test", request: exact, conversationID: wrongGroup.id), agent: b)
+            _ = try await controller.perform(AppletAgentEnvelope(token: try token(for: b, repository: repository), request: exact, conversationID: wrongGroup.id), agent: b)
             XCTFail("Wrong conversation granted session access")
         } catch {}
         _ = try repository.updateGroupParticipants(conversationID: group.id, participantIDs: [a.id], existingAgents: [a, b])
@@ -124,7 +213,7 @@ import XCTest
         })
         controller.start(agents: [a.agent])
         defer { controller.start(agents: []); try? FileManager.default.removeItem(at: root) }
-        _ = try await controller.perform(AppletAgentEnvelope(token: "test", request: AppletRequest(.present, sessionID: UUID()),
+        _ = try await controller.perform(AppletAgentEnvelope(token: try token(for: a.agent, repository: repository), request: AppletRequest(.present, sessionID: UUID()),
             conversationID: a.conversation.id), agent: a.agent)
         let attachments = try repository.loadAttachments(conversationID: a.conversation.id)
         XCTAssertEqual(attachments.count, 1)
@@ -217,13 +306,13 @@ import XCTest
         var request = AppletRequest(.list)
         request.owner = b.id.uuidString
         _ = try await controller.perform(
-            AppletAgentEnvelope(token: "test", request: request), agent: a)
+            AppletAgentEnvelope(token: try token(for: a, repository: repository), request: request), agent: a)
         let sent = await recorder.requests
         XCTAssertEqual(sent.first?.owner, a.id.uuidString.lowercased())
         controller.start(agents: [b])
         do {
             _ = try await controller.perform(
-                AppletAgentEnvelope(token: "test", request: request), agent: a)
+                AppletAgentEnvelope(token: try token(for: a, repository: repository), request: request), agent: a)
             XCTFail("Removed agent retained access")
         } catch {}
         let finalCount = await recorder.requests.count
@@ -248,7 +337,7 @@ import XCTest
             try? FileManager.default.removeItem(at: root)
         }
         let response = try await controller.perform(
-            AppletAgentEnvelope(token: "test", request: AppletRequest(.build)), agent: agent)
+            AppletAgentEnvelope(token: try token(for: agent, repository: repository), request: AppletRequest(.build)), agent: agent)
         XCTAssertEqual(response.sessionID, id)
         XCTAssertEqual(response.error, "Compiler error")
     }

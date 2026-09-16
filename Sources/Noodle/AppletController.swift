@@ -96,7 +96,8 @@ import Observation
         try Task.checkCancellation()
         return try await call(request).checked()
     }
-    private func call(_ request: AppletRequest) async throws -> AppletResponse {
+    private func call(_ request: AppletRequest, authorize: () throws -> Void = {}) async throws -> AppletResponse {
+        try authorize()
         if let connection { return try await connection(request) }
         let socket = try AppletConnection.socketURL()
         let team = try AppletConnection.signingTeam()
@@ -127,6 +128,9 @@ import Observation
                 }
             }
             for _ in 0..<40 {
+                // Companion startup and retries suspend this actor. Access may
+                // have changed since the request was read from the mailbox.
+                try authorize()
                 do {
                     return try await AppletConnection.call(request, socket: socket, team: team)
                 } catch let error as AppletError where error.unavailable {
@@ -185,16 +189,21 @@ import Observation
     }
     func perform(_ envelope: AppletAgentEnvelope, agent: AgentRecord) async throws -> AppletResponse
     {
-        guard agents.contains(where: { $0.id == agent.id }) else {
-            throw AppletError("This bot is no longer active.")
+        func checkAccess() throws {
+            guard agents.contains(where: { $0.id == agent.id }), tokens[agent.id] == envelope.token else {
+                throw AppletError("This Applet session is no longer active.")
+            }
+            if let conversation = envelope.conversationID {
+                do { _ = try repository.participantRoster(for: agent.id, conversationID: conversation) }
+                catch { throw AppletError(error.localizedDescription, code: "session-unavailable") }
+            }
         }
+        try checkAccess()
         var request = envelope.request
         request.includePreview = nil
         request.owner = agent.id.uuidString.lowercased()
         try request.validate()
         if let conversation = envelope.conversationID {
-            do { _ = try repository.participantRoster(for: agent.id, conversationID: conversation) }
-            catch { throw AppletError(error.localizedDescription, code: "session-unavailable") }
             if request.operation == .artifact {
                 guard let id = request.artifactID, let grant = sharedArtifacts[id],
                       grant.agent == agent.id, grant.conversation == conversation,
@@ -219,12 +228,17 @@ import Observation
         if request.operation == .present, envelope.conversationID == nil {
             throw AppletError("Specify --conversation to share a preview.")
         }
-        var response = try await call(request)
+        var response: AppletResponse
+        do { response = try await call(request, authorize: checkAccess) }
+        catch {
+            try checkAccess()
+            throw error
+        }
+        // Even error responses can carry logs or artifacts. Recheck before
+        // returning any payload or granting access to a shared capture.
+        try checkAccess()
         response.previewBookmark = nil
         if response.error != nil { return response }
-        guard agents.contains(where: { $0.id == agent.id }) else {
-            throw AppletError("This bot was removed during the request.")
-        }
         if let conversation = envelope.conversationID, let artifact = response.artifactID {
             sharedArtifacts[artifact] = (agent.id, conversation, request.owner!, Date())
         }

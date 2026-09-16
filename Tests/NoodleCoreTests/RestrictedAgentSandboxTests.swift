@@ -2,6 +2,66 @@ import XCTest
 @testable import NoodleCore
 
 final class RestrictedAgentSandboxTests: XCTestCase {
+    func testCloudHarnessesCanConnectToLocalhost() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = WorkspaceRepository(rootURL: root)
+        let agent = try repository.createAgent(named: "Localhost compatibility").agent
+        let workspace = repository.directory(for: agent)
+        // The server runs outside Seatbelt, like a user's existing dev server.
+        // Timeout bounds both sides; no internet or real account is involved.
+        let script = #"""
+        require 'socket'
+        require 'timeout'
+        server = TCPServer.new('127.0.0.1', 0)
+        worker = Thread.new do
+          client = server.accept
+          client.write('localhost-fixture')
+          client.close
+        end
+        child = <<~RUBY
+          require 'socket'
+          require 'timeout'
+          Timeout.timeout(5) do
+            client = TCPSocket.new('127.0.0.1', ARGV[0].to_i)
+            raise 'incorrect localhost response' unless client.read == 'localhost-fixture'
+            client.close
+          end
+          puts 'localhost-connected'
+        RUBY
+        pid = nil
+        begin
+          Timeout.timeout(10) do
+            pid = Process.spawn('/usr/bin/sandbox-exec', '-p', ARGV[0], '/usr/bin/ruby', '--disable-gems', '-e', child, server.addr[1].to_s)
+            Process.wait(pid)
+            status = $?.exitstatus || 1
+            pid = nil
+            exit(status)
+          end
+        ensure
+          Process.kill('KILL', pid) rescue nil if pid
+          server.close
+          worker.kill
+        end
+        """#
+        for provider: HarnessProvider in [.codex, .fx, .grokBuild, .muse] {
+            let policy = provider == .codex
+                ? RestrictedAgentSandbox.profile(workspace: workspace, repository: root, codexHome: workspace,
+                    executableDirectory: URL(fileURLWithPath: "/usr/bin"), application: workspace, temporary: workspace)
+                : try RestrictedAgentSandbox.profile(provider: provider, workspace: workspace, repository: root,
+                    home: root, executable: URL(fileURLWithPath: "/usr/bin/ruby"), application: workspace, temporary: workspace)
+            let process = Process(), output = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/ruby")
+            process.arguments = ["--disable-gems", "-e", script, policy]
+            process.standardOutput = output; process.standardError = output
+            try process.run()
+            let result = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            process.waitUntilExit()
+            XCTAssertEqual(process.terminationStatus, 0, "\(provider): \(result)")
+            XCTAssertTrue(result.contains("localhost-connected"), "\(provider): \(result)")
+        }
+    }
+
     func testInstalledCodexCanInitializeWithAnIsolatedAccountDirectory() throws {
         let candidates = [URL(fileURLWithPath: "/Applications/Codex.app/Contents/Resources/codex"),
                           URL(fileURLWithPath: "/Applications/ChatGPT.app/Contents/Resources/codex"),
