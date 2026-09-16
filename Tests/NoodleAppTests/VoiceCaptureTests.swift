@@ -107,7 +107,10 @@ import XCTest
 
     func testConverterFollowsDeliveredFormatAcrossMicrophoneChanges() throws {
         let url = try directory().appendingPathComponent("recording.caf")
-        let target = AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1)!
+        // Production asks SpeechAnalyzer for a compatible format. Use Int16 PCM
+        // here: macOS 27's AnalyzerInput traps on the synthetic Float32 target.
+        let target = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000,
+                                  channels: 1, interleaved: false)!
         let stream = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .bufferingOldest(64))
         let sink = try VoiceAudioSink(url: url, targetFormat: target, continuation: stream.continuation)
         // Reproduce the production transition from 16 kHz mono to 48 kHz stereo.

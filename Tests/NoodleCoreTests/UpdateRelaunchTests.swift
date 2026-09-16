@@ -14,7 +14,10 @@ final class UpdateRelaunchTests: XCTestCase {
         XCTAssertFalse(updater.contains("shouldPostponeRelaunchForUpdate"))
         XCTAssertFalse(updater.contains("NoodleStore.active"))
         XCTAssertFalse(updater.contains("isWaitingToRelaunch"))
-        XCTAssertFalse(app.contains("applicationShouldTerminate"))
+        // Window restoration may observe Quit, but must not delay or veto it.
+        // ConversationWindowTests also calls the production delegate and checks .terminateNow.
+        XCTAssertFalse(app.contains(".terminateCancel"))
+        XCTAssertFalse(app.contains(".terminateLater"))
         XCTAssertFalse(store.contains("canRelaunchForUpdate"))
         XCTAssertTrue(app.contains("NoodleStore.active?.stopMonitoring()"))
         XCTAssertTrue(store.contains("runtime.stopAll()"))
