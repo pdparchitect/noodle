@@ -74,6 +74,48 @@ final class ConversationBackgroundTests: XCTestCase {
         }
     }
 
+    func testFailedSettingsCommitRestoresMetadataAndKeepsPreviousMedia() throws {
+        let bot = try repository.createAgent(named: "Bot")
+        let id = bot.conversation.id
+        let original = try repository.setBackground(conversationID: id, imageData: fixtureImage())
+        let originalURL = try XCTUnwrap(repository.backgroundImageURL(original, conversationID: id))
+        let directory = originalURL.deletingLastPathComponent()
+        let metadata = repository.conversationDirectory(id: id).appendingPathComponent("background.json")
+        let originalMetadata = try Data(contentsOf: metadata)
+        let originalImage = try Data(contentsOf: originalURL)
+        let file = try PreparedBackgroundFile.prepare(imageData: fixtureImage())
+        var attempts = 0
+        let fail: () throws -> Void = { attempts += 1; throw CocoaError(.fileWriteUnknown) }
+
+        XCTAssertThrowsError(try repository.setBackground(conversationID: id, preset: .forest, commit: fail))
+        XCTAssertThrowsError(try repository.setBackground(conversationID: id, imageData: fixtureImage(), commit: fail))
+        XCTAssertThrowsError(try repository.setBackground(conversationID: id, file: file, commit: fail))
+        XCTAssertEqual(attempts, 3)
+        XCTAssertEqual(try Data(contentsOf: metadata), originalMetadata)
+        XCTAssertEqual(try Data(contentsOf: originalURL), originalImage)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), [originalURL.lastPathComponent])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.url.path), "A failed save must retain the draft for retry")
+
+        let saved = try repository.setBackground(conversationID: id, file: file, commit: { attempts += 1 })
+        XCTAssertEqual(attempts, 4)
+        XCTAssertEqual(try repository.loadBackground(conversationID: id), saved)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: originalURL.path))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), [try XCTUnwrap(saved.imageFilename)])
+    }
+
+    func testFailedSettingsCommitRestoresAbsentBackgroundAndWriteFailureSkipsSettings() throws {
+        let id = try repository.createAgent(named: "Bot").conversation.id
+        let metadata = repository.conversationDirectory(id: id).appendingPathComponent("background.json")
+        XCTAssertThrowsError(try repository.setBackground(conversationID: id, preset: .forest, commit: {
+            throw CocoaError(.fileWriteUnknown)
+        }))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: metadata.path))
+        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: false)
+        XCTAssertThrowsError(try repository.setBackground(conversationID: id, preset: .ocean, commit: {
+            XCTFail("Do not save other settings when the background cannot be saved")
+        }))
+    }
+
     func testAttachmentBackgroundsInDirectAndGroupChatsPreserveOriginals() throws {
         let bot = try repository.createAgent(named: "Bot")
         let group = try repository.createGroup(named: "Team", participantIDs: [bot.agent.id], existingAgents: [bot.agent])

@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep background changes in Edit Bot and Group Info pending until Save, discard them on Cancel, and preserve the original background if saving settings fails.
+
 ## [0.16.2] - 2026-09-16
 
 ### Changed

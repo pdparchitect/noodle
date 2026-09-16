@@ -9,8 +9,8 @@ struct ConversationBackgroundSheet: View {
     @Environment(NoodleStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let conversation: BotConversation
+    var draft: Binding<ConversationBackgroundDraft?>? = nil
     @State private var selected = ConversationBackground()
-    @State private var original = ConversationBackground()
     @State private var imageData: Data?
     @State private var image: NSImage?
     @State private var preparedFile: PreparedBackgroundFile?
@@ -20,6 +20,12 @@ struct ConversationBackgroundSheet: View {
     @State private var busy = false
     @State private var failure: String?
     @State private var importTask: Task<Void, Never>?
+    @State private var loaded = false
+    @State private var originalDraft: ConversationBackgroundDraft?
+
+    private var selection: ConversationBackgroundDraft {
+        ConversationBackgroundDraft(background: selected, imageData: imageData, file: preparedFile)
+    }
 
     var body: some View {
         VStack(spacing: 20) {
@@ -32,6 +38,11 @@ struct ConversationBackgroundSheet: View {
                 Text("Conversation Background").font(.headline)
                 Spacer()
                 Button("Apply") {
+                    if let draft {
+                        draft.wrappedValue = selection
+                        dismiss()
+                        return
+                    }
                     busy = true
                     Task {
                         do {
@@ -42,7 +53,7 @@ struct ConversationBackgroundSheet: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.blue)
-                .disabled(busy || (selected == original && imageData == nil && preparedFile == nil))
+                .disabled(busy || selection == originalDraft)
                 .keyboardShortcut(.defaultAction)
             }
             Text(store.title(for: conversation)).foregroundStyle(.secondary)
@@ -85,7 +96,16 @@ struct ConversationBackgroundSheet: View {
             if let failure { Text(failure).font(.caption).foregroundStyle(.red) }
         }
         .padding(24).frame(width: 520)
-        .onAppear { original = store.background(for: conversation); selected = original }
+        .onAppear {
+            guard !loaded else { return }
+            loaded = true
+            let initial = draft?.wrappedValue ?? ConversationBackgroundDraft(background: store.background(for: conversation))
+            originalDraft = initial
+            selected = initial.background
+            imageData = initial.imageData
+            image = initial.imageData.flatMap(NSImage.init(data:))
+            preparedFile = initial.file
+        }
         .onDisappear { importTask?.cancel(); importTask = nil; preparedFile = nil }
         .interactiveDismissDisabled(busy)
         .fileImporter(isPresented: $choosingImage, allowedContentTypes: BackgroundMedia.allowedContentTypes) { result in
@@ -187,6 +207,7 @@ struct ConversationBackgroundSheet: View {
 struct ConversationBackgroundSettingsRow: View {
     @Environment(NoodleStore.self) private var store
     let conversation: BotConversation
+    @Binding var draft: ConversationBackgroundDraft?
     @State private var editing = false
 
     var body: some View {
@@ -194,14 +215,14 @@ struct ConversationBackgroundSettingsRow: View {
             HStack {
                 Label("Conversation Background", systemImage: "photo")
                 Spacer()
-                Text(store.background(for: conversation).isDefault ? "Default" : "Custom")
+                Text((draft?.background ?? store.background(for: conversation)).isDefault ? "Default" : "Custom")
                     .foregroundStyle(.secondary)
                 Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
             }.padding(12).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $editing) {
-            ConversationBackgroundSheet(conversation: conversation)
+            ConversationBackgroundSheet(conversation: conversation, draft: $draft)
                 .environment(store)
                 .noodleSheetSizing()
         }

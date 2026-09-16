@@ -244,6 +244,7 @@ struct EditBotSheet: View {
     @State private var computerIDs: Set<UUID> = []
     @State private var confirmingDeletion = false
     @State private var selectedTab = BotEditorTab.general
+    @State private var backgroundDraft: ConversationBackgroundDraft?
     @FocusState private var nameFocused: Bool
 
     init(agent: AgentRecord, initialTab: BotEditorTab = .general) {
@@ -311,7 +312,7 @@ struct EditBotSheet: View {
                     BotPublicDescriptionEditor(publicDescription: $publicDescription)
                     BotBackstoryEditor(backstory: $backstory)
                     if let conversation = directConversation {
-                        ConversationBackgroundSettingsRow(conversation: conversation)
+                        ConversationBackgroundSettingsRow(conversation: conversation, draft: $backgroundDraft)
                     }
                     Divider()
                     DestructiveActionButton(title: "Delete Bot") {
@@ -396,20 +397,22 @@ struct EditBotSheet: View {
     }
 
     private func save() {
-        if store.updateAgent(
-            agent,
-            name: name,
-            harnessIdentifier: selectedHarnessIdentifier,
-            modelIdentifier: selectedModelIdentifier.nilIfEmpty,
-            reasoningEffort: selectedEffort.nilIfEmpty,
-            avatarSymbolName: avatarSymbolName,
-            avatarColorIndex: avatarColorIndex,
-            avatarImageData: avatarImageData,
-            publicDescription: publicDescription,
-            backstory: backstory,
-            mcpConnectionIDs: mcpConnectionIDs,
-            computerIDs: computerIDs
-        ) {
+        if store.saveSettings(background: backgroundDraft, for: directConversation, saving: {
+            store.updateAgent(
+                agent,
+                name: name,
+                harnessIdentifier: selectedHarnessIdentifier,
+                modelIdentifier: selectedModelIdentifier.nilIfEmpty,
+                reasoningEffort: selectedEffort.nilIfEmpty,
+                avatarSymbolName: avatarSymbolName,
+                avatarColorIndex: avatarColorIndex,
+                avatarImageData: avatarImageData,
+                publicDescription: publicDescription,
+                backstory: backstory,
+                mcpConnectionIDs: mcpConnectionIDs,
+                computerIDs: computerIDs
+            )
+        }) {
             dismiss()
         }
     }
@@ -785,6 +788,7 @@ struct GroupInfoSheet: View {
     @State private var name: String
     @State private var publicDescription: String
     @State private var selectedIDs: Set<UUID>
+    @State private var backgroundDraft: ConversationBackgroundDraft?
     @State private var confirmingDeletion = false
     @FocusState private var nameFocused: Bool
 
@@ -804,16 +808,7 @@ struct GroupInfoSheet: View {
                 Spacer()
                 Text("Group Info").font(.headline)
                 Spacer()
-                Button("Save") {
-                    if store.updateGroup(
-                        conversation,
-                        named: name,
-                        publicDescription: publicDescription,
-                        participantIDs: selectedIDs
-                    ) {
-                        dismiss()
-                    }
-                }
+                Button("Save", action: save)
                 .buttonStyle(.plain)
                 .foregroundStyle(canSave ? Color.blue : .secondary)
                 .disabled(!canSave)
@@ -835,17 +830,7 @@ struct GroupInfoSheet: View {
                             .textFieldStyle(.roundedBorder)
                             .autocorrectionDisabled(false)
                             .focused($nameFocused)
-                            .onSubmit {
-                                if canSave,
-                                   store.updateGroup(
-                                       conversation,
-                                       named: name,
-                                       publicDescription: publicDescription,
-                                       participantIDs: selectedIDs
-                                   ) {
-                                    dismiss()
-                                }
-                            }
+                            .onSubmit { if canSave { save() } }
                         Text(selectedIDs.count == 1 ? "1 bot" : "\(selectedIDs.count) bots")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -862,7 +847,7 @@ struct GroupInfoSheet: View {
                     .font(.caption)
                     .foregroundStyle(!selectedIDs.isEmpty ? Color.secondary : Color.red)
 
-                ConversationBackgroundSettingsRow(conversation: conversation)
+                ConversationBackgroundSettingsRow(conversation: conversation, draft: $backgroundDraft)
 
                 Divider()
 
@@ -892,13 +877,21 @@ struct GroupInfoSheet: View {
         store.agents.filter { selectedIDs.contains($0.id) }
     }
 
+    private func save() {
+        if store.saveSettings(background: backgroundDraft, for: conversation, saving: {
+            store.updateGroup(conversation, named: name, publicDescription: publicDescription, participantIDs: selectedIDs)
+        }) {
+            dismiss()
+        }
+    }
+
     private var canSave: Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDescription = publicDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         return ConversationName.error(for: name) == nil && !selectedIDs.isEmpty && (
             trimmedName != conversation.displayName ||
                 trimmedDescription != (conversation.publicDescription ?? "") ||
-                selectedIDs != Set(conversation.participantIDs)
+                selectedIDs != Set(conversation.participantIDs) || backgroundDraft != nil
         )
     }
 }
