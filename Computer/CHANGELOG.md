@@ -2,23 +2,17 @@
 
 ## [Unreleased]
 
-### Added
-
-- Show the images' Noodle Computer welcome banner in Local Mac interactive terminals, including Terminal.app inside the managed desktop, while preserving existing shell settings.
-
-### Fixed
-
-- Reconnect the terminal and file browser when restarting a failed Local Mac connection, and prevent an unfinished terminal startup from restoring the old connection.
-
 ## [0.7.2] - 2026-09-16
 
 ### Fixed
 
+- Reconnect the terminal and file browser when restarting a failed Local Mac connection, and prevent an unfinished terminal startup from restoring the old connection.
 - Remove development-only Metal toolchain framework search paths from packaged apps.
 - Suppress settings scrollbar flashes during tab changes and dynamic window resizing on macOS 27, restoring indicators after the layout settles.
 
 ### Added
 
+- Show the images' Noodle Computer welcome banner in Local Mac interactive terminals, including Terminal.app inside the managed desktop, while preserving existing shell settings.
 - Drop images, videos, and direct web media links onto the background preview using the same importer and drop target as Noodle and Applet.
 
 ## [0.7.1] - 2026-09-15

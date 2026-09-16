@@ -112,9 +112,11 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
             item.representedObject = agent.displayName
             if showDescriptions { item.toolTip = agent.publicDescription }
             item.image = Self.menuAvatar(for: agent)
+            #if canImport(AppKit, _version: 2775)
             if #available(macOS 27, *) {
                 item.preferredImageVisibility = .visible
             }
+            #endif
             picker.addItem(item)
         }
 

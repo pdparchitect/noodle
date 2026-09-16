@@ -20,6 +20,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Keep the composer avatar fix compatible with macOS 26 SDK builds used by release validation.
 - Remove development-only Metal toolchain framework search paths from packaged apps.
 - Prevent release checks from failing with broken-pipe errors while verifying updater signatures and bundle linking.
 - Label Apple/local-model turn setup as “Preparing turn” so cached model reuse is not reported as a fresh model load.
