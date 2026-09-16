@@ -15,6 +15,7 @@ final class MCPController {
     @ObservationIgnored private let service: MCPService
     @ObservationIgnored private var sessions: [UUID: String] = [:]
     @ObservationIgnored private var bridgeTask: Task<Void, Never>?
+    @ObservationIgnored private let mailboxMonitor = WorkspaceMailboxMonitor()
     @ObservationIgnored private var loginTask: Task<Void, Never>?
     @ObservationIgnored private var calls: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var agents: [AgentRecord] = []
@@ -37,6 +38,7 @@ final class MCPController {
         calls.values.forEach { $0.cancel() }
     }
     func start(agents: [AgentRecord]) {
+        mailboxMonitor.reset()
         self.agents = agents
         do {
             for agent in agents {
@@ -179,11 +181,12 @@ final class MCPController {
         for agent in agents { try repository.synchronizeAgentWorkspace(agent) }
     }
     private func scan() {
-        guard calls.count < 16 else { return }
+        guard calls.count < 16, mailboxMonitor.hasChanges() else { return }
         claimed = claimed.filter { $0.value > Date() }
         let manager = FileManager.default
         for agent in agents {
             let workspace = repository.directory(for: agent)
+            guard mailboxMonitor.needsScan(workspace: workspace, path: ".noodle/mcp-bridge") else { continue }
             let folder = MCPBridgeFiles.directory(workspace: workspace)
             guard let mailbox = try? WorkspaceMailbox(workspace: workspace, path: ".noodle/mcp-bridge") else { continue }
             guard folder.resolvingSymlinksInPath() == folder.standardizedFileURL,

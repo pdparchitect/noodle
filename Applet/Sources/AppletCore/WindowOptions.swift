@@ -1,7 +1,7 @@
 import AppletBridge
 import Foundation
 
-public struct NoodletWindowOptions: Codable, Sendable {
+public struct NoodletWindowOptions: Codable, Sendable, Equatable {
   public enum Kind: String, Codable, Sendable { case standard, floating, preview }
   public enum Background: String, Codable, Sendable { case opaque, translucent, transparent }
   public var type: Kind = .standard

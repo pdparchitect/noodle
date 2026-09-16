@@ -18,10 +18,11 @@ public final class NoodletRegistry {
 
     public func id(for package: URL) throws -> UUID {
         let url = package.resolvingSymlinksInPath().standardizedFileURL
-        let index = entries.firstIndex { entry in
-            entry.path == url.path || resolved(entry) == url
-        }
-        if let index, entries[index].path == url.path { return entries[index].id }
+        // Check every stored path before resolving bookmarks. Resolving earlier
+        // entries for each known package made library scans quadratic in costly
+        // bookmark lookups, even when nothing in the library had changed.
+        if let entry = entries.first(where: { $0.path == url.path }) { return entry.id }
+        let index = entries.firstIndex { resolved($0) == url }
         let bookmark = try url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
         let entry = Entry(id: index.map { entries[$0].id } ?? UUID(), path: url.path, bookmark: bookmark)
         let previous = entries

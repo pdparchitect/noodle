@@ -53,12 +53,14 @@ public final class MessengerBroker: @unchecked Sendable {
     private var sessions: [UUID: String] = [:]
     private var agents: [AgentRecord] = []
     private var claimed: [UUID: Date] = [:]
+    private let mailboxMonitor = WorkspaceMailboxMonitor()
 
     public init(repository: WorkspaceRepository) { self.repository = repository }
     deinit { timer?.cancel() }
 
     public func start(agents: [AgentRecord]) throws {
         try queue.sync {
+            mailboxMonitor.reset()
             self.agents = agents
             sessions = sessions.filter { id, _ in agents.contains { $0.id == id } }
             for agent in agents where sessions[agent.id] == nil {
@@ -79,12 +81,14 @@ public final class MessengerBroker: @unchecked Sendable {
     }
 
     public func stop() {
-        queue.sync { timer?.cancel(); timer = nil; sessions.removeAll(); agents.removeAll() }
+        queue.sync { timer?.cancel(); timer = nil; mailboxMonitor.reset(); sessions.removeAll(); agents.removeAll() }
     }
 
     private func scan() {
+        guard mailboxMonitor.hasChanges() else { return }
         claimed = claimed.filter { $0.value > Date() }
         for agent in agents {
+            guard mailboxMonitor.needsScan(workspace: repository.directory(for: agent), path: MessengerBridgeClient.path) else { continue }
             guard let mailbox = try? WorkspaceMailbox(workspace: repository.directory(for: agent), path: MessengerBridgeClient.path),
                   let names = try? mailbox.names() else { continue }
             for name in names where name.hasSuffix(".request") {

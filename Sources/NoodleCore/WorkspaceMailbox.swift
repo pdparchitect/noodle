@@ -29,6 +29,17 @@ public final class WorkspaceMailbox: @unchecked Sendable {
 
     deinit { close(descriptor) }
 
+    func observeChanges(on queue: DispatchQueue, handler: @escaping @Sendable () -> Void) throws -> DispatchSourceFileSystemObject {
+        let copy = fcntl(descriptor, F_DUPFD_CLOEXEC, 0)
+        guard copy >= 0 else { throw Self.invalid() }
+        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: copy,
+            eventMask: [.write, .delete, .rename, .revoke, .attrib, .extend], queue: queue)
+        source.setEventHandler(handler: handler)
+        source.setCancelHandler { close(copy) }
+        source.resume()
+        return source
+    }
+
     private static func validName(_ value: String) -> Bool {
         !value.isEmpty && value != "." && value != ".." && !value.contains("/") &&
             !value.utf8.contains(0) && value.utf8.count <= 255

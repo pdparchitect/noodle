@@ -1,9 +1,47 @@
 import AppletCore
+import Combine
 import XCTest
 
 @testable import NoodleApplet
 
 final class LibraryTests: XCTestCase {
+    @MainActor func testIdleScansDoNotRedrawButManifestAndPreviewChangesDo() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let suite = "AppletLibraryTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let library = AppletLibrary(root: root, defaults: defaults, installExamples: false, watchChanges: false)
+        let package = try NoodletPackage.install([
+            "noodlet.json": Data(#"{"version":1,"title":"Original","runtime":"html","entry":"index.html"}"#.utf8),
+            "index.html": Data("<title>Test</title>".utf8),
+        ], to: library.documents.appendingPathComponent("Test.noodlet"))
+        library.scan()
+        var updates = 0
+        let subscription = library.$entries.dropFirst().sink { _ in updates += 1 }
+        defer { subscription.cancel() }
+        for _ in 0..<3 { library.scan() }
+        XCTAssertEqual(updates, 0)
+        try Data(#"{"version":1,"title":"Updated","runtime":"html","entry":"index.html"}"#.utf8)
+            .write(to: package.url.appendingPathComponent("noodlet.json"), options: .atomic)
+        library.scan()
+        XCTAssertEqual(library.entries.first?.title, "Updated")
+        XCTAssertEqual(updates, 1)
+        let preview = package.url.appendingPathComponent("preview.png")
+        try Data([1, 2, 3]).write(to: preview)
+        library.scan()
+        XCTAssertEqual(updates, 2)
+        let thumbnails = root.appendingPathComponent("Thumbnails")
+        try FileManager.default.createDirectory(at: thumbnails, withIntermediateDirectories: true)
+        try Data([4, 5]).write(to: thumbnails.appendingPathComponent("\(package.key).png"))
+        library.scan()
+        XCTAssertEqual(updates, 3)
+        library.scan()
+        XCTAssertEqual(updates, 3)
+    }
+
     @MainActor func testOpenedPackagesPersistWithoutDuplicatesAndDisappearWhenDeleted() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "AppletLibraryTest-" + UUID().uuidString)

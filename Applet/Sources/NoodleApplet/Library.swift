@@ -3,10 +3,34 @@ import AppletCore
 import Foundation
 import UniformTypeIdentifiers
 
-struct LibraryEntry: Identifiable {
-  var id: String { package.key }
+struct LibraryEntry: Identifiable, Equatable {
+  let id: String
   let package: NoodletPackage
   var title: String { package.manifest.title }
+  private let previews: [PreviewStamp]
+
+  init(package: NoodletPackage, thumbnails: URL) {
+    self.package = package
+    id = package.key
+    previews = [thumbnails.appendingPathComponent("\(id).png"),
+                package.url.appendingPathComponent("preview.png")].map(PreviewStamp.init)
+  }
+
+  static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.id == rhs.id && lhs.package.manifest == rhs.package.manifest && lhs.previews == rhs.previews
+  }
+
+  /// Capture metadata now; comparing live computed revisions would reread every
+  /// package file and would compare both entries against the same current bytes.
+  private struct PreviewStamp: Equatable {
+    let modified: Date?
+    let size: Int?
+    init(_ url: URL) {
+      let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+      modified = values?.contentModificationDate
+      size = values?.fileSize
+    }
+  }
 }
 
 @MainActor final class AppletLibrary: ObservableObject {
@@ -135,10 +159,12 @@ struct LibraryEntry: Identifiable {
       defaults.set(pinned, forKey: "pinned")
     }
     var found: [String: LibraryEntry] = [:]
+    let thumbnails = root.appendingPathComponent("Thumbnails", isDirectory: true)
     for directory in [documents] + registrations.map(\.url) {
       if directory.pathExtension == "noodlet" {
         if let package = try? NoodletPackage(url: directory) {
-          found[package.key] = LibraryEntry(package: package)
+          let entry = LibraryEntry(package: package, thumbnails: thumbnails)
+          found[entry.id] = entry
         }
         continue
       }
@@ -158,16 +184,19 @@ struct LibraryEntry: Identifiable {
         if url.pathExtension == "noodlet" {
           walker.skipDescendants()
           if let package = try? NoodletPackage(url: url) {
-            found[package.key] = LibraryEntry(package: package)
+            let entry = LibraryEntry(package: package, thumbnails: thumbnails)
+            found[entry.id] = entry
           }
         } else if walker.level > 4 {
           walker.skipDescendants()
         }
       }
     }
-    entries = found.values.sorted {
-      $0.title.localizedStandardCompare($1.title) == .orderedAscending
+    let next = found.values.sorted {
+      let order = $0.title.localizedStandardCompare($1.title)
+      return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
     }
+    if entries != next { entries = next }
     for entry in entries {
       do { _ = try linkID(for: entry.package) } catch { self.error = error.localizedDescription }
     }

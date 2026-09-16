@@ -14,6 +14,7 @@ import Observation
     @ObservationIgnored private var claimed: [UUID: Date] = [:]
     @ObservationIgnored private var inFlight: [UUID: Int] = [:]
     @ObservationIgnored private var monitor: Task<Void, Never>?
+    @ObservationIgnored private let mailboxMonitor = WorkspaceMailboxMonitor()
     @ObservationIgnored private var launching: Task<Void, Error>?
     @ObservationIgnored private var sharedArtifacts: [UUID: (agent: UUID, conversation: UUID, owner: String, created: Date)] = [:]
     @ObservationIgnored private var skillExecutableURL: URL?
@@ -29,6 +30,7 @@ import Observation
         self.connection = connection
     }
     func start(agents: [AgentRecord]) {
+        mailboxMonitor.reset()
         self.agents = agents
         tokens = tokens.filter { id, _ in agents.contains { $0.id == id } }
         do {
@@ -142,10 +144,12 @@ import Observation
     }
     private func scan() {
         if Date().timeIntervalSince(lastSkillRefresh) >= 5 { refreshSkills() }
+        guard mailboxMonitor.hasChanges() else { return }
         sharedArtifacts = sharedArtifacts.filter { Date().timeIntervalSince($0.value.created) < 3600 }
         claimed = claimed.filter { Date().timeIntervalSince($0.value) < 300 }
         for agent in agents {
             guard (inFlight[agent.id] ?? 0) < 3, let token = tokens[agent.id],
+                mailboxMonitor.needsScan(workspace: repository.directory(for: agent), path: ".noodle/applet-bridge"),
                 let directory = try? AppletAgentSkill.bridge(
                     workspace: repository.directory(for: agent)),
                 let files = try? FileManager.default.contentsOfDirectory(

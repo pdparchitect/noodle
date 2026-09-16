@@ -16,6 +16,7 @@ import SwiftUI
     @ObservationIgnored private var readable = true
     @ObservationIgnored private var monitor: Task<Void, Never>?
     @ObservationIgnored private var bridge: Task<Void, Never>?
+    @ObservationIgnored private let mailboxMonitor = WorkspaceMailboxMonitor()
     @ObservationIgnored private var agents: [AgentRecord] = []
     @ObservationIgnored private var tokens: [UUID: String] = [:]
     @ObservationIgnored private var pending: Set<UUID> = []
@@ -49,6 +50,7 @@ import SwiftUI
         catch { readable = false; failure = "Could not read Computer assignments; they were not changed." }
     }
     func start(agents: [AgentRecord], monitoring: Bool = true) {
+        mailboxMonitor.reset()
         for removed in self.agents where !agents.contains(where: { $0.id == removed.id }) {
             for id in registry.assigned(to: removed.id) {
                 Task { [weak self] in _ = try? await self?.call(.init(.revoke, computerID: id, agentID: removed.id), launchIfNeeded: false) }
@@ -217,9 +219,11 @@ import SwiftUI
         catch { readable = false; throw error }
     }
     func scan() {
+        guard mailboxMonitor.hasChanges() else { return }
         claimed = claimed.filter { Date().timeIntervalSince($0.value) < 700 }
         for agent in agents {
             guard !pending.contains(agent.id), let token = tokens[agent.id],
+                  mailboxMonitor.needsScan(workspace: repository.directory(for: agent), path: ".noodle/computer-bridge"),
                   let directory = try? ComputerAgentSkill.bridge(workspace: repository.directory(for: agent)),
                   let files = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { continue }
             for file in files.prefix(512) where file.pathExtension == "request" {

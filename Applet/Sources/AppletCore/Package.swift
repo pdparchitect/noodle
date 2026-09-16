@@ -2,7 +2,7 @@ import AppletBridge
 import CryptoKit
 import Foundation
 
-public struct NoodletManifest: Codable, Sendable {
+public struct NoodletManifest: Codable, Sendable, Equatable {
   public var version: Int
   public var title: String
   public var runtime: String

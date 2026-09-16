@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Reduce idle library CPU usage by looking up known package paths before resolving bookmarks, caching library entry identifiers, and redrawing only when library details or previews change.
+
 ## [0.2.1] - 2026-09-16
 
 ### Fixed

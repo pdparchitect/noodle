@@ -17,6 +17,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Reduce idle CPU usage by scanning bot mailboxes when their directories change, with periodic recovery checks instead of repeated idle directory walks.
 - Show MCP HTTP failures and actionable access errors instead of directing failed connections back to the same Settings screen.
 
 ## [0.17.0] - 2026-09-16
