@@ -488,6 +488,9 @@ struct ComputerDetailView: View {
             ComputerTerminalView(terminal: terminal, appearance: session.computer.appearance ?? .init())
           }
         }
+        // Restart polling, native surfaces and the file view's StateObject when
+        // Start replaces a failed Local Mac connection for the same computer.
+        .id(ObjectIdentifier(local))
       } else if let virtual = session.virtual {
         VirtualMachineDisplay(machine: virtual.machine).ignoresSafeArea(edges: .top)
       } else if let browser = session.browser {

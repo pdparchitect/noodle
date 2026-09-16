@@ -65,7 +65,13 @@ enum ComputerDisplayMode: String {
     }
     var virtual: VirtualComputer?
     @Published var localMac: LocalMacComputer? {
-        didSet { if localMac == nil { fileBrowser?.disappear(); fileBrowser?.cancelTransfer(); fileBrowser = nil } }
+        didSet {
+            guard oldValue !== localMac else { return }
+            // A retry replaces the runtime directly, without passing through nil.
+            // Every surface tied to the old transport must be replaced with it.
+            fileBrowser?.disappear(); fileBrowser?.cancelTransfer(); fileBrowser = nil
+            localTerminal?.close(); localTerminal = nil; terminal = nil
+        }
     }
     var localTerminal: LocalMacTerminalConnection?
     var container: ContainerComputer? {
@@ -478,7 +484,6 @@ enum ComputerDisplayMode: String {
         } catch {
             if session.computer.kind == .localMac {
                 session.localMac?.close(); session.localMac = nil
-                session.localTerminal?.close(); session.localTerminal = nil; session.terminal = nil
             }
             if session.computer.kind == .container {
                 try? await session.container?.stop()
@@ -508,7 +513,6 @@ enum ComputerDisplayMode: String {
             if session.computer.kind == .localMac {
                 session.localMac?.expectDisconnect(true)
                 try await LocalMacSetup.stop(session.id)
-                session.localTerminal?.close(); session.localTerminal = nil
                 session.localMac?.close(); session.localMac = nil
             }
             if let virtual = session.virtual, virtual.machine.state != .stopped { try await virtual.stop() }
@@ -539,15 +543,24 @@ enum ComputerDisplayMode: String {
     /// Select an available surface without replacing its existing session.
     func selectDisplay(_ mode: ComputerDisplayMode, in session: ComputerSession) async {
         if let runtime = session.localMac, session.phase == .running {
+            guard !session.openingTerminal else { return }
             do {
                 if mode == .terminal, session.localTerminal == nil {
+                    session.openingTerminal = true
+                    defer { session.openingTerminal = false }
                     let terminal = GuestTerminal()
                     let connection = LocalMacTerminalConnection(runtime: runtime, terminal: terminal)
                     try await connection.start()
+                    guard session.localMac === runtime, session.phase == .running else {
+                        connection.close()
+                        return
+                    }
                     session.localTerminal = connection; session.terminal = terminal
                 }
                 session.showingFiles = mode == .files; session.showingTerminal = mode == .terminal
-            } catch { self.error = error.localizedDescription }
+            } catch {
+                if session.localMac === runtime, session.phase == .running { self.error = error.localizedDescription }
+            }
             return
         }
         guard session.computer.kind == .container, session.phase == .running,

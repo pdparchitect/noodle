@@ -9,7 +9,7 @@ import XCTest
 /// never register services, log into accounts or request desktop permissions.
 @MainActor final class LocalMacConnectionTests: XCTestCase {
     private func peer(_ input: Pipe, _ output: Pipe, count: Int,
-                      respond: @escaping (LocalMacRequest) throws -> LocalMacReply) -> Task<[LocalMacRequest], Error> {
+                      respond: @escaping (LocalMacRequest) async throws -> LocalMacReply) -> Task<[LocalMacRequest], Error> {
         Task.detached {
             defer { try? output.fileHandleForWriting.close(); try? input.fileHandleForReading.close() }
             var requests: [LocalMacRequest] = []
@@ -17,7 +17,7 @@ import XCTest
                 let data = try XCTUnwrap(LocalMacWire.read(input.fileHandleForReading))
                 let request = try LocalMacWire.decode(LocalMacRequest.self, from: data)
                 try request.validate(); requests.append(request)
-                let reply = try respond(request)
+                let reply = try await respond(request)
                 try LocalMacWire.write(JSONEncoder().encode(reply), to: output.fileHandleForWriting)
             }
             return requests
@@ -155,5 +155,98 @@ import XCTest
         session.phase = .starting
         session.localMacDisconnected(current, reason: "startup lost")
         XCTAssertEqual(session.phase, .failed("startup lost"))
+    }
+
+    func testRestartReplacesTerminalAndFileConnections() async throws {
+        let session = ComputerSession(Computer(name: "Retained", kind: .localMac))
+        let previous = LocalMacComputer()
+        session.localMac = previous
+        let terminal = GuestTerminal()
+        let connection = LocalMacTerminalConnection(runtime: previous, terminal: terminal)
+        connection.id = UUID()
+        session.localTerminal = connection; session.terminal = terminal
+        let oldFiles = session.filesModel(for: previous)
+        oldFiles.error = "The desktop connection is unavailable or busy."
+        session.phase = .failed("Desktop capture stopped")
+
+        let input = Pipe(), output = Pipe()
+        let helper = peer(input, output, count: 3) { request in
+            var reply = Self.reply(request, displayID: 99)
+            if request.operation == .fileHome { reply.homeDirectory = "/Users/retained" }
+            return reply
+        }
+        let current = LocalMacComputer(displayIDs: { [2] })
+        current.expectDisconnect(true)
+        try await current.connect(input: output.fileHandleForReading, output: input.fileHandleForWriting, protectedDisplays: [2])
+        session.localMac = current; session.phase = .running
+        defer { current.close() }
+
+        XCTAssertNil(session.localTerminal)
+        XCTAssertNil(session.terminal)
+        XCTAssertNil(connection.id)
+        let files = session.filesModel(for: current)
+        XCTAssertFalse(files === oldFiles)
+        XCTAssertNil(files.error)
+        let home = try await files.service.homeDirectory()
+        XCTAssertEqual(home, "/Users/retained")
+        let requests = try await helper.value
+        XCTAssertEqual(requests.map(\.operation), [.status, .stream, .fileHome])
+    }
+
+    func testSameConnectionPreservesSurfacesAndRemovalClosesThem() {
+        let session = ComputerSession(Computer(name: "Retained", kind: .localMac))
+        let runtime = LocalMacComputer()
+        session.localMac = runtime
+        let terminal = GuestTerminal()
+        let connection = LocalMacTerminalConnection(runtime: runtime, terminal: terminal)
+        connection.id = UUID()
+        session.localTerminal = connection; session.terminal = terminal
+        let files = session.filesModel(for: runtime)
+        files.folder = "/workspace/Documents"
+
+        session.localMac = runtime
+        XCTAssertTrue(session.localTerminal === connection)
+        XCTAssertTrue(session.terminal === terminal)
+        XCTAssertTrue(session.filesModel(for: runtime) === files)
+        XCTAssertEqual(files.folder, "/workspace/Documents")
+        XCTAssertNotNil(connection.id)
+
+        session.localMac = nil
+        XCTAssertNil(session.localTerminal)
+        XCTAssertNil(session.terminal)
+        XCTAssertNil(connection.id)
+    }
+
+    func testTerminalOpeningCannotRestoreAnOldConnectionAfterRestart() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ComputerStore(root: root)
+        let session = ComputerSession(Computer(name: "Retained", kind: .localMac))
+        let replacement = LocalMacComputer()
+        let input = Pipe(), output = Pipe()
+        let helper = peer(input, output, count: 3) { request in
+            var reply = Self.reply(request, displayID: 99)
+            if request.operation == .terminalOpen {
+                await MainActor.run { session.localMac = replacement }
+                reply.terminalID = UUID()
+            }
+            return reply
+        }
+        let runtime = LocalMacComputer(displayIDs: { [2] })
+        runtime.expectDisconnect(true)
+        try await runtime.connect(input: output.fileHandleForReading, output: input.fileHandleForWriting, protectedDisplays: [2])
+        defer { runtime.close() }
+        session.localMac = runtime; session.phase = .running
+
+        await store.selectDisplay(.terminal, in: session)
+
+        XCTAssertTrue(session.localMac === replacement)
+        XCTAssertNil(session.localTerminal)
+        XCTAssertNil(session.terminal)
+        XCTAssertEqual(session.displayMode, .desktop)
+        XCTAssertFalse(session.openingTerminal)
+        XCTAssertNil(store.error)
+        let requests = try await helper.value
+        XCTAssertEqual(requests.map(\.operation), [.status, .stream, .terminalOpen])
     }
 }

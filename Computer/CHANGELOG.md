@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Reconnect the terminal and file browser when restarting a failed Local Mac connection, and prevent an unfinished terminal startup from restoring the old connection.
+
 ## [0.7.2] - 2026-09-16
 
 ### Fixed
