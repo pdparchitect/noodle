@@ -24,6 +24,7 @@ private final class FixtureState: @unchecked Sendable {
     var resourceIdentifier = "https://service.example/mcp"
     var pathMetadataMissing = false
     var tokenResources: [String] = []
+    var tokenScope: String?
     func response(_ request: URLRequest) throws -> (Int, [String: Any]) {
         try lock.withLock {
             switch request.url!.path {
@@ -45,7 +46,9 @@ private final class FixtureState: @unchecked Sendable {
                     refreshes += 1
                     if invalidGrant { return (400, ["error": "invalid_grant"]) }
                 }
-                return (200, ["access_token": "private-token", "refresh_token": "rotated-\(refreshes)", "token_type": "Bearer", "expires_in": 3600])
+                var response: [String: Any] = ["access_token": "private-token", "refresh_token": "rotated-\(refreshes)", "token_type": "Bearer", "expires_in": 3600]
+                if let tokenScope { response["scope"] = tokenScope }
+                return (200, response)
             case "/mcp":
                 let object = try JSONSerialization.jsonObject(with: Self.body(request)) as! [String: Any]
                 guard let id = object["id"] else { return (202, [:]) }
@@ -137,6 +140,68 @@ final class MCPServiceTests: XCTestCase {
         response.queryItems = [.init(name: "code", value: "one-time-code"), query.first { $0.name == "state" }!]
         return response.url!
     }
+
+    private func fixedOAuth(parameters: [String: String] = [:], usesResourceIndicator: Bool = true) -> MCPOAuthConfiguration {
+        MCPOAuthConfiguration(issuer: URL(string: "https://service.example")!,
+            authorizationEndpoint: URL(string: "https://service.example/authorize")!,
+            tokenEndpoint: URL(string: "https://service.example/token")!,
+            clients: [.init(id: "bundled-fixture-client", bundleIdentifier: "fixture.app", redirectURI: redirect)],
+            scopes: ["read", "write"], authorizationParameters: parameters, usesResourceIndicator: usesResourceIndicator)
+    }
+
+    func testConfiguredOAuthUsesProviderSettingsForAuthorizationAndRefresh() async throws {
+        let oauth = MCPOAuth(session: URLSession(configuration: configuration()))
+        FixtureProtocol.state.tokenScope = "write extra read"
+        for usesResource in [false, true] {
+            let settings = fixedOAuth(parameters: ["audience": "fixture-api", "prompt": "choose"], usesResourceIndicator: usesResource)
+            let stored = try XCTUnwrap(MCPOAuth.preconfiguredCredentials(endpoint: endpoint, redirect: redirect, configuration: settings))
+            let authorized = try await oauth.authorize(stored, configuration: settings) { url in
+                XCTAssertEqual(url.host, "service.example")
+                let query = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
+                let values = Dictionary(uniqueKeysWithValues: query.map { ($0.name, $0.value ?? "") })
+                XCTAssertEqual(values["client_id"], "bundled-fixture-client")
+                XCTAssertEqual(values["scope"], "read write")
+                XCTAssertEqual(values["audience"], "fixture-api")
+                XCTAssertEqual(values["prompt"], "choose")
+                XCTAssertEqual(values["code_challenge_method"], "S256")
+                XCTAssertEqual(values["resource"], usesResource ? "https://service.example/mcp" : nil)
+                XCTAssertNil(values["access_type"])
+                var response = URLComponents(string: values["redirect_uri"]!)!
+                response.queryItems = [.init(name: "code", value: "configured-code"), .init(name: "state", value: values["state"])]
+                return response.url!
+            }
+            let refreshed = try await oauth.refresh(authorized, configuration: settings)
+            XCTAssertEqual(refreshed.clientID, stored.clientID)
+            XCTAssertEqual(refreshed.scope, "read write")
+            XCTAssertEqual(Array(FixtureProtocol.state.tokenResources.suffix(2)),
+                Array(repeating: usesResource ? endpoint.absoluteString : "", count: 2))
+        }
+        XCTAssertEqual(FixtureProtocol.state.registrations, 0)
+        XCTAssertEqual(FixtureProtocol.state.refreshes, 2)
+    }
+
+    func testConfiguredOAuthRejectsMissingScopesAndReservedParameters() async throws {
+        let oauth = MCPOAuth(session: URLSession(configuration: configuration()))
+        for parameter in ["state", "code_challenge", "client_id", "redirect_uri", "scope", "resource", "client_secret"] {
+            let settings = fixedOAuth(parameters: [parameter: "override"])
+            let stored = try XCTUnwrap(MCPOAuth.preconfiguredCredentials(endpoint: endpoint, redirect: redirect, configuration: settings))
+            do {
+                _ = try await oauth.authorize(stored, configuration: settings) { url in
+                    XCTFail("Invalid configuration opened the browser")
+                    return url
+                }
+                XCTFail("Reserved OAuth parameter accepted")
+            } catch MCPServiceError.invalidMetadata {}
+        }
+        let settings = fixedOAuth()
+        let stored = try XCTUnwrap(MCPOAuth.preconfiguredCredentials(endpoint: endpoint, redirect: redirect, configuration: settings))
+        FixtureProtocol.state.tokenScope = "read"
+        do {
+            _ = try await oauth.authorize(stored, configuration: settings, browser: Self.callback)
+            XCTFail("Missing configured scope accepted")
+        } catch MCPServiceError.signInRequired {}
+    }
+
     func testTwoAccountsPersistIndependentRegistrationsAcrossRestart() async throws {
         let vault = TestVault()
         let first = try MCPConnectionRecord(name: "Notion", endpoint: endpoint)

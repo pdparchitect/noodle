@@ -38,6 +38,7 @@ struct ToolCatalogView: View {
                                         Text(tool.summary).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                     }
                                     Spacer(minLength: 8)
+                                    ToolMaturityBadge(maturity: tool.maturity)
                                     Text(tool.kind.rawValue).font(.caption2).foregroundStyle(.secondary)
                                     Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
                                 }.padding(9).contentShape(Rectangle())
@@ -58,6 +59,26 @@ struct ToolCatalogView: View {
                 }
             }.padding(16)
         }.frame(width: 480)
+    }
+}
+
+struct ToolMaturityBadge: View {
+    let maturity: ToolMaturity
+    var body: some View {
+        if let badge = maturity.badge {
+            Text(badge).font(.caption2).foregroundStyle(.orange)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(.orange.opacity(0.12), in: Capsule())
+        }
+    }
+}
+
+struct MCPConnectionMaturityBadge: View {
+    let connection: MCPConnectionRecord
+    var body: some View {
+        if let tool = ToolCatalog.definition(forMCPEndpoint: connection.endpoint) {
+            ToolMaturityBadge(maturity: tool.maturity)
+        }
     }
 }
 

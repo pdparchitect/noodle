@@ -18,6 +18,10 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | exa.icon | https://exa.ai/images/favicon-32x32.png |
 | fireflies.icon | https://fireflies.ai/favicon.ico |
 | granola.icon | https://www.granola.ai/favicon/favicon-96x96.png |
+| gmail.icon (2026-09-16) | https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico |
+| google-calendar.icon (2026-09-16) | https://ssl.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_31_2x.png |
+| google-docs.icon (2026-09-16) | https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico |
+| google-drive.icon (2026-09-16) | https://ssl.gstatic.com/docs/doclist/images/drive_2022q3_32dp.png |
 | higgsfield.icon | https://higgsfield.ai/icon.png |
 | jam.icon | https://framerusercontent.com/images/PJzGWvCk8HH9Ho4kUWVsQtYI.png |
 | jotform.icon | https://cdn.jotfor.ms/assets/img/favicons/favicon-2021-light.png |

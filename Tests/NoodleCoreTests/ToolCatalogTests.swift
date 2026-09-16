@@ -3,7 +3,7 @@ import XCTest
 
 final class ToolCatalogTests: XCTestCase {
     func testPresetIdentitiesAndSafeEndpoints() throws {
-        XCTAssertEqual(ToolCatalog.entries.count, 36)
+        XCTAssertEqual(ToolCatalog.entries.count, 40)
         XCTAssertEqual(Set(ToolCatalog.entries.map(\.id)).count, ToolCatalog.entries.count)
         for tool in ToolCatalog.entries {
             XCTAssertFalse(tool.name.isEmpty)
@@ -62,5 +62,42 @@ final class ToolCatalogTests: XCTestCase {
             XCTAssertEqual(roundTrip, registry)
             XCTAssertEqual(connection.name, "Notion Work")
         }
+    }
+
+    func testExperimentalPresetsSortLastAndAreSearchable() throws {
+        let gmail = try XCTUnwrap(ToolCatalog.matching("experimental").first)
+        XCTAssertEqual(gmail.id, "gmail")
+        XCTAssertEqual(gmail.maturity, .experimental)
+        XCTAssertEqual(gmail.maturity.badge, "Experimental")
+        let experimental = ToolCatalog.matching("experimental")
+        XCTAssertEqual(experimental.map(\.id), ["gmail", "google-calendar", "google-docs", "google-drive"])
+        XCTAssertEqual(Array(ToolCatalog.matching("").suffix(experimental.count)), experimental)
+        XCTAssertEqual(ToolCatalog.matching("Gmail MCP experimental"), [gmail])
+        XCTAssertTrue(ToolCatalog.matching("").dropLast(experimental.count).allSatisfy { $0.maturity == .stable })
+        XCTAssertNil(ToolCatalog.matching("Notion").first?.maturity.badge)
+    }
+
+    func testGoogleOAuthConfigurationsBelongToSeparateCatalogueEntries() throws {
+        let services = [
+            ("gmail", "gmail", ["gmail.modify"]),
+            ("google-docs", "docs", ["documents"]),
+            ("google-drive", "drive", ["drive.readonly", "drive.file"]),
+            ("google-calendar", "calendar", ["calendar.calendarlist.readonly", "calendar.events"])
+        ]
+        var sharedClients: [MCPOAuthClientConfiguration]?
+        for (id, service, scopes) in services {
+            let tool = try XCTUnwrap(ToolCatalog.entries.first { $0.id == id })
+            guard case .mcp(let configuration) = tool.configuration else { return XCTFail("Expected MCP") }
+            XCTAssertEqual(configuration.endpoint.absoluteString, "https://\(service)mcp.googleapis.com/mcp/v1")
+            let oauth = try XCTUnwrap(configuration.oauth)
+            XCTAssertEqual(oauth.scopes, scopes.map { "https://www.googleapis.com/auth/" + $0 })
+            XCTAssertEqual(oauth.clients.count, 2)
+            if let sharedClients { XCTAssertEqual(oauth.clients, sharedClients) }
+            sharedClients = oauth.clients
+            for client in oauth.clients {
+                XCTAssertEqual(client.redirectURI.scheme, client.id.split(separator: ".").reversed().joined(separator: "."))
+            }
+        }
+        XCTAssertNil(MCPToolConfiguration(endpoint: URL(string: "https://custom.example/mcp")!).oauth)
     }
 }

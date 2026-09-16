@@ -60,6 +60,9 @@
     <array><dict>
         <key>CFBundleURLName</key><string>com.pdparchitect.noodle.sharing</string>
         <key>CFBundleURLSchemes</key><array><string>noodle</string></array>
+    </dict><dict>
+        <key>CFBundleURLName</key><string>com.pdparchitect.noodle.google</string>
+        <key>CFBundleURLSchemes</key><array><string>com.googleusercontent.apps.183234845746-flond96hao8g0cll1boruegemodo9fe5</string></array>
     </dict></array>
     <key>NSServices</key>
     <array>

@@ -69,8 +69,9 @@ private struct SettingsRoot: View {
                 guard NSApp.keyWindow === settings else {
                     throw MCPConnectionError.message("Settings did not gain focus before authorization")
                 }
-                let scheme = "noodle-mcp-window-tests"
-                let redirect = URL(string: "\(scheme)://mcp/oauth/callback")!
+                let redirect = URL(string: attempt == 3
+                    ? "com.googleusercontent.apps.noodle-window-tests:/oauth2callback"
+                    : "noodle-mcp-window-tests://mcp/oauth/callback")!
                 let callback = URL(string: "\(redirect)?state=state-\(attempt)&code=synthetic")!
                 let browser = MCPBrowserAuthorization(timeoutDuration: .seconds(5)) { _ in
                     // The runner delivers the URL from outside the app, like a browser.

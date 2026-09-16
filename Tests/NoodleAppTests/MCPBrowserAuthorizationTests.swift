@@ -4,6 +4,26 @@ import XCTest
 @testable import Noodle
 
 @MainActor final class MCPBrowserAuthorizationTests: XCTestCase {
+    func testNativeGoogleStyleCallbackUsesExistingBrowserAndRejectsOtherAppsAndReplays() async throws {
+        let redirect = URL(string: "com.googleusercontent.apps.fixture:/oauth2callback")!
+        let opened = expectation(description: "Browser opened")
+        let browser = MCPBrowserAuthorization { _ in opened.fulfill(); return true }
+        let task = Task { try await browser.authorize(url: authorization("native-state"), callbackURL: redirect) }
+        defer { task.cancel() }
+        await fulfillment(of: [opened], timeout: 2)
+        for raw in [
+            "com.googleusercontent.apps.other:/oauth2callback?state=native-state&code=test",
+            "com.googleusercontent.apps.fixture://host/oauth2callback?state=native-state&code=test",
+            "com.googleusercontent.apps.fixture:/other?state=native-state&code=test",
+            "com.googleusercontent.apps.fixture:/oauth2callback?state=wrong&code=test"
+        ] { XCTAssertFalse(browser.receive(URL(string: raw)!)) }
+        let callback = URL(string: redirect.absoluteString + "?state=native-state&code=test")!
+        XCTAssertTrue(browser.receive(callback))
+        let outcome = try await result(task)
+        XCTAssertEqual(try outcome.get(), callback)
+        XCTAssertFalse(browser.receive(callback))
+    }
+
     private let redirect = URL(string: "noodle-test://mcp/oauth/callback")!
 
     private func authorization(_ state: String) -> URL {

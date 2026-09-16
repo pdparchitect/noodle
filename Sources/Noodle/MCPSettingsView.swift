@@ -22,6 +22,7 @@ struct MCPSettingsView: View {
                             VStack(alignment: .leading, spacing: 5) {
                                 HStack {
                                     Text(connection.name).font(.headline).lineLimit(1)
+                                    MCPConnectionMaturityBadge(connection: connection)
                                     Spacer(minLength: 4)
                                     connectionStatus(connection)
                                 }
@@ -165,7 +166,7 @@ struct MCPEditor: View {
                         .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.18)) }
                         .help("Optional guidance for bots using this connection. Do not include passwords or tokens.")
                 }
-                Text("MCP connection · Sign-in opens in your browser. Requires automatic client registration; API keys are not supported.")
+                Text("MCP connection · Sign-in opens in your browser.")
                     .font(.caption).foregroundStyle(.secondary)
                 if existing != nil {
                     Text("Changes apply to every bot using this connection.").font(.caption).foregroundStyle(.secondary)
@@ -252,6 +253,7 @@ struct MCPAssignmentPicker: View {
                             HStack(spacing: 10) {
                                 MCPConnectionIcon(connection: connection, size: 26)
                                 Text(connection.name).lineLimit(1)
+                                MCPConnectionMaturityBadge(connection: connection)
                                 Spacer()
                                 Button { editing = connection } label: {
                                     Image(systemName: "pencil").foregroundStyle(.secondary)
@@ -295,7 +297,10 @@ struct MCPConnectionChooser: View {
                             HStack(spacing: 10) {
                                 MCPConnectionIcon(connection: connection, size: 28)
                                 VStack(alignment: .leading) {
-                                    Text(connection.name).foregroundStyle(.primary)
+                                    HStack {
+                                        Text(connection.name).foregroundStyle(.primary)
+                                        MCPConnectionMaturityBadge(connection: connection)
+                                    }
                                     Text(connection.description).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                 }
                                 Spacer()

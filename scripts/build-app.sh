@@ -12,11 +12,13 @@ case "$data_container" in
         app_name="Noodle Local"
         bundle_identifier="com.pdparchitect.noodle.local"
         url_scheme="noodle-local"
+        google_callback_scheme="com.googleusercontent.apps.183234845746-9homesnd85b490uj2ak37rpk0svtveap"
         ;;
     production)
         app_name="Noodle"
         bundle_identifier="com.pdparchitect.noodle"
         url_scheme="noodle"
+        google_callback_scheme="com.googleusercontent.apps.183234845746-flond96hao8g0cll1boruegemodo9fe5"
         ;;
     *)
         print -u2 "NOODLE_DATA_CONTAINER must be development or production."
@@ -185,6 +187,8 @@ cp "$app_scratch/checkouts/mlx-swift-lm/Libraries/MLXCXGrammar/xgrammar/LICENSE"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLName $bundle_identifier.sharing" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 $url_scheme" "$contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:1:CFBundleURLName $bundle_identifier.google" "$contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:1:CFBundleURLSchemes:0 $google_callback_scheme" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :NSServices:0:NSPortName $app_name" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :NSServices:1:NSPortName $app_name" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$contents/Info.plist"

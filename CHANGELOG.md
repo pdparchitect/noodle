@@ -6,6 +6,15 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Add Gmail MCP connections for reading mail, creating drafts and managing labels, with native Google sign-in and separate accounts. Mark experimental integrations and list them last in the catalogue.
+- Add separate experimental Google Docs, Drive and Calendar MCP connections for document editing, file access and creation, and calendar event management.
+
+### Changed
+
+- Consolidate MCP connection, catalogue and Google Workspace documentation into one guide.
+
 ## [0.17.0] - 2026-09-16
 
 ### Added

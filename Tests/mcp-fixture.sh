@@ -1,8 +1,8 @@
 #!/bin/zsh
 set -euo pipefail
 project_root="${0:A:h:h}"
-swift build --disable-sandbox --package-path "$project_root"
-bin_path="$(swift build --disable-sandbox --package-path "$project_root" --show-bin-path)"
+swift build --build-system native --disable-sandbox --package-path "$project_root"
+bin_path="$(swift build --build-system native --disable-sandbox --package-path "$project_root" --show-bin-path)"
 app="$project_root/.build/Noodle MCP Tests.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Helpers"
 objects=("${(@f)$(rg -v '/(Noodle|NoodleAgentBridge|NoodleSharing)\.build/' "$bin_path/Noodle.product/Objects.LinkFileList")}")
@@ -14,6 +14,7 @@ swiftc -parse-as-library -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/MCPSettingsView.swift" \
     "$project_root/Sources/Noodle/ToolCatalogView.swift" \
     "$project_root/Sources/Noodle/SheetSizing.swift" \
+    "$project_root/Sources/Noodle/SettingsStatusLabel.swift" \
     "$project_root/Tests/mcp-fixture.swift" \
     "$project_root/Tests/mcp-keychain-checks.swift" \
     "${objects[@]}" -o "$app/Contents/MacOS/MCPFixture"

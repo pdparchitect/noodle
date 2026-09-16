@@ -25,6 +25,32 @@ struct MCPOAuth {
         session = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
     }
 
+    static func preconfiguredCredentials(endpoint: URL, redirect: URL,
+                                         configuration: MCPOAuthConfiguration?) throws -> MCPCredentials? {
+        guard let configuration else { return nil }
+        guard let client = configuration.clients.first(where: { $0.redirectURI == redirect }) else {
+            throw MCPServiceError.invalidCallback
+        }
+        return MCPCredentials(endpoint: endpoint, issuer: configuration.issuer,
+            authorizationEndpoint: configuration.authorizationEndpoint,
+            tokenEndpoint: configuration.tokenEndpoint, clientID: client.id,
+            redirectURI: redirect, resource: endpoint, scope: configuration.scopes.joined(separator: " "))
+    }
+
+    func validateConfiguration(_ credentials: MCPCredentials, configuration: MCPOAuthConfiguration?) throws {
+        guard let configuration else { return }
+        guard let expected = try Self.preconfiguredCredentials(endpoint: credentials.endpoint,
+                redirect: credentials.redirectURI, configuration: configuration),
+              credentials.issuer == expected.issuer, credentials.authorizationEndpoint == expected.authorizationEndpoint,
+              credentials.tokenEndpoint == expected.tokenEndpoint, credentials.clientID == expected.clientID,
+              credentials.resource == expected.resource else {
+            throw MCPServiceError.invalidMetadata
+        }
+        guard Set(configuration.scopes).isSubset(of: Set((credentials.scope ?? "").split(separator: " ").map(String.init))) else {
+            throw MCPServiceError.signInRequired
+        }
+    }
+
     func request(_ url: URL, json: Object? = nil, form: [String: String]? = nil) async throws -> Object {
         _ = try MCPConnectionRecord.validatedEndpoint(url)
         var request = URLRequest(url: url)
@@ -124,7 +150,9 @@ struct MCPOAuth {
             canonical.query == nil
     }
 
-    func authorize(_ credentials: MCPCredentials, browser: @Sendable (URL) async throws -> URL) async throws -> MCPCredentials {
+    func authorize(_ credentials: MCPCredentials, configuration: MCPOAuthConfiguration? = nil,
+                   browser: @Sendable (URL) async throws -> URL) async throws -> MCPCredentials {
+        try validateConfiguration(credentials, configuration: configuration)
         let verifier = try Self.nonce()
         let state = try Self.nonce()
         let challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64EncodedString()
@@ -133,11 +161,18 @@ struct MCPOAuth {
         components.queryItems = [
             .init(name: "response_type", value: "code"), .init(name: "client_id", value: credentials.clientID),
             .init(name: "redirect_uri", value: credentials.redirectURI.absoluteString),
-            .init(name: "resource", value: credentials.resource.absoluteString),
             .init(name: "state", value: state), .init(name: "code_challenge", value: challenge),
             .init(name: "code_challenge_method", value: "S256")
         ]
+        if configuration?.usesResourceIndicator ?? true {
+            components.queryItems?.append(.init(name: "resource", value: credentials.resource.absoluteString))
+        }
         if let scope = credentials.scope, !scope.isEmpty { components.queryItems?.append(.init(name: "scope", value: scope)) }
+        let reserved = Set((components.queryItems ?? []).map(\.name)).union(["scope", "resource", "client_secret"])
+        for (name, value) in (configuration?.authorizationParameters ?? [:]).sorted(by: { $0.key < $1.key }) {
+            guard !reserved.contains(name) else { throw MCPServiceError.invalidMetadata }
+            components.queryItems?.append(.init(name: name, value: value))
+        }
         guard let authorizationURL = components.url else { throw MCPServiceError.invalidMetadata }
         let callback = try await browser(authorizationURL)
         let expected = URLComponents(url: credentials.redirectURI, resolvingAgainstBaseURL: false)!
@@ -151,27 +186,35 @@ struct MCPOAuth {
         guard values["state"]?.count == 1, values["state"]?.first?.value == state,
               values["error"] == nil, values["code"]?.count == 1,
               let code = values["code"]?.first?.value, !code.isEmpty else { throw MCPServiceError.invalidCallback }
-        let response = try await request(credentials.tokenEndpoint, form: [
+        var form = [
             "grant_type": "authorization_code", "code": code, "code_verifier": verifier,
-            "client_id": credentials.clientID, "redirect_uri": credentials.redirectURI.absoluteString,
-            "resource": credentials.resource.absoluteString
-        ])
-        return try updated(credentials, response: response)
+            "client_id": credentials.clientID, "redirect_uri": credentials.redirectURI.absoluteString
+        ]
+        if configuration?.usesResourceIndicator ?? true { form["resource"] = credentials.resource.absoluteString }
+        let response = try await request(credentials.tokenEndpoint, form: form)
+        return try updated(credentials, response: response, configuration: configuration)
     }
 
-    func refresh(_ credentials: MCPCredentials) async throws -> MCPCredentials {
+    func refresh(_ credentials: MCPCredentials, configuration: MCPOAuthConfiguration? = nil) async throws -> MCPCredentials {
+        try validateConfiguration(credentials, configuration: configuration)
         guard let refreshToken = credentials.refreshToken else { throw MCPServiceError.signInRequired }
-        let response = try await request(credentials.tokenEndpoint, form: [
+        var form = [
             "grant_type": "refresh_token", "refresh_token": refreshToken,
-            "client_id": credentials.clientID, "resource": credentials.resource.absoluteString
-        ])
-        return try updated(credentials, response: response)
+            "client_id": credentials.clientID
+        ]
+        if configuration?.usesResourceIndicator ?? true { form["resource"] = credentials.resource.absoluteString }
+        let response = try await request(credentials.tokenEndpoint, form: form)
+        return try updated(credentials, response: response, configuration: configuration)
     }
-    private func updated(_ credentials: MCPCredentials, response: Object) throws -> MCPCredentials {
+    private func updated(_ credentials: MCPCredentials, response: Object, configuration: MCPOAuthConfiguration?) throws -> MCPCredentials {
         guard let token = response["access_token"] as? String, !token.isEmpty,
               (response["token_type"] as? String)?.lowercased() == "bearer",
               let lifetime = response["expires_in"] as? Double, lifetime > 0 else { throw MCPServiceError.invalidMetadata }
         var result = credentials
+        if let configuration, let granted = response["scope"] as? String,
+           !Set(configuration.scopes).isSubset(of: Set(granted.split(separator: " ").map(String.init))) {
+            throw MCPServiceError.signInRequired
+        }
         result.accessToken = token
         result.refreshToken = response["refresh_token"] as? String ?? credentials.refreshToken
         result.expiresAt = Date().addingTimeInterval(lifetime)

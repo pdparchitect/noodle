@@ -27,7 +27,8 @@ public actor MCPService {
         self.credentials = credentials; self.oauth = oauth; self.httpConfiguration = httpConfiguration
     }
     public func hasCredentials(_ id: UUID) -> Bool {
-        (try? credentials.load(id)?.accessToken) != nil
+        guard let stored = try? credentials.load(id), stored.accessToken != nil else { return false }
+        return (try? oauth.validateConfiguration(stored, configuration: Self.oauthConfiguration(for: stored.endpoint))) != nil
     }
     public func disconnect(_ id: UUID) throws {
         epochs[id, default: 0] += 1
@@ -43,6 +44,14 @@ public actor MCPService {
     }
     public func icon(for connection: MCPConnectionRecord) async -> Data? {
         await MCPIcon.load(serverIcons[connection.id] ?? [], endpoint: connection.endpoint)
+    }
+    public nonisolated static func configuredRedirectURI(for endpoint: URL,
+                                                         bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> URL? {
+        oauthConfiguration(for: endpoint)?.clients.first { $0.bundleIdentifier == bundleIdentifier }?.redirectURI
+    }
+    private nonisolated static func oauthConfiguration(for endpoint: URL) -> MCPOAuthConfiguration? {
+        guard case .mcp(let configuration)? = ToolCatalog.definition(forMCPEndpoint: endpoint)?.configuration else { return nil }
+        return configuration.oauth
     }
     private func rememberIcons(_ icons: [Icon], id: UUID, epoch: Int) {
         if epochs[id, default: 0] == epoch { serverIcons[id] = icons }
@@ -72,7 +81,9 @@ public actor MCPService {
             try checkActive(connection.id, epoch: epoch)
             await progress("Checking saved sign-in…")
             try checkActive(connection.id, epoch: epoch)
-            var stored = try credentials.load(connection.id)
+            let configuration = Self.oauthConfiguration(for: connection.endpoint)
+            var stored = try MCPOAuth.preconfiguredCredentials(endpoint: connection.endpoint, redirect: redirectURI, configuration: configuration)
+                ?? credentials.load(connection.id)
             if stored?.endpoint != connection.endpoint || stored?.redirectURI != redirectURI {
                 stored = nil
             }
@@ -85,7 +96,7 @@ public actor MCPService {
             }
             await progress("Complete sign-in in your browser…")
             try checkActive(connection.id, epoch: epoch)
-            let authorized = try await oauth.authorize(stored!) { url in
+            let authorized = try await oauth.authorize(stored!, configuration: configuration) { url in
                 try await self.checkActive(connection.id, epoch: epoch)
                 let callback = try await browser(url)
                 try await self.checkActive(connection.id, epoch: epoch)
@@ -158,9 +169,11 @@ public actor MCPService {
                          authorized: @escaping @Sendable () async -> Bool) async throws -> Data {
         guard var stored = try credentials.load(connection.id), stored.endpoint == connection.endpoint,
               stored.accessToken != nil else { throw MCPServiceError.signInRequired }
+        let oauthConfiguration = Self.oauthConfiguration(for: connection.endpoint)
+        try oauth.validateConfiguration(stored, configuration: oauthConfiguration)
         if (stored.expiresAt ?? .distantPast) < Date().addingTimeInterval(60) {
             do {
-                stored = try await oauth.refresh(stored)
+                stored = try await oauth.refresh(stored, configuration: oauthConfiguration)
                 try checkActive(connection.id, epoch: epoch, deadline: deadline)
                 // Rotating refresh token and access token are committed together.
                 try credentials.save(stored, id: connection.id)

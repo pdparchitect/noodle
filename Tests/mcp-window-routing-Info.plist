@@ -10,6 +10,6 @@
 <key>NSPrincipalClass</key><string>NSApplication</string>
 <key>CFBundleURLTypes</key><array><dict>
 <key>CFBundleURLName</key><string>MCP Window Test Callback</string>
-<key>CFBundleURLSchemes</key><array><string>noodle-mcp-window-tests</string></array>
+<key>CFBundleURLSchemes</key><array><string>noodle-mcp-window-tests</string><string>com.googleusercontent.apps.noodle-window-tests</string></array>
 </dict></array>
 </dict></plist>
