@@ -2,11 +2,21 @@ import AppKit
 import SwiftUI
 import NoodleCore
 
-// Only artwork is a stand-in; the picker and destructive buttons are production views.
+// Artwork and profile actions are stand-ins; the picker and destructive controls are production views.
 struct BotAvatar: View {
     let agent: AgentRecord
     let size: CGFloat
     var body: some View { Circle().fill(.blue).frame(width: size, height: size) }
+}
+
+// These layout/control fixtures do not open bot profiles or load a runtime.
+// Profile presentation is covered by GroupInteractionTests.
+struct AgentProfileButton: View {
+    let agent: AgentRecord
+    let size: CGFloat
+    var showsShadow = true
+    var opensMessageInSeparateWindow = false
+    var body: some View { BotAvatar(agent: agent, size: size) }
 }
 
 private struct ButtonFixture: View {

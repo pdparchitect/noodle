@@ -34,7 +34,7 @@ extension ExtendedAgentConnection: HarnessRuntimeConnection {
                 startRestrictedACP(provider: provider, agentID: agentID, executablePath: executablePath,
                                    modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier, reply: reply)
             default:
-                reply(0, "This harness requires autonomous access.")
+                reply(0, "This harness requires unrestricted access.")
             }
         }
     }

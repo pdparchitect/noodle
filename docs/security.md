@@ -4,16 +4,17 @@
 
 | Harness | Access in Noodle |
 | --- | --- |
-| Codex, FX, Grok Build, Muse Code, Apple Intelligence | Restricted by default; autonomous access is optional |
-| Claude Code | Autonomous access is required |
+| Codex, FX, Grok Build, Muse Code, Apple Intelligence | Restricted by default; unrestricted access is optional |
+| Claude Code | Unrestricted access is required |
 
 Change access for Codex, FX, Grok Build, Muse Code, or Apple Intelligence in **Settings → Security**.
+Click its **Restricted** or **Unrestricted** label to see what that mode allows.
 Claude Code's switch stays on after authorization because its Noodle integration
 does not support restricted mode. Selecting it in the bot editor authorizes that
 harness for that bot. Copied bots may need
 authorization in Security settings. Restricted-capable harnesses use the bot's
 saved access preference. Previous required FX/Grok/Muse grants do not override that
-preference. Editing `agent.json` alone never grants autonomous access.
+preference. Editing `agent.json` alone never grants unrestricted access.
 
 ## How restricted mode works
 
@@ -23,7 +24,7 @@ the calling app, harness executable, and bot workspace. For restricted runs it
 applies a deny-by-default Seatbelt policy before executing the harness. The
 policy permits fixed paths and system services derived by the host; callers
 cannot supply their own permissions. If validation or policy application fails,
-startup fails instead of falling back to autonomous access.
+startup fails instead of falling back to unrestricted access.
 
 Shell commands and other child processes inherit the harness's OS restrictions.
 An automatically accepted tool approval cannot add filesystem permissions to
@@ -85,7 +86,7 @@ inner shell sandbox is disabled to avoid nesting Seatbelt policies. MSP tool
 approvals select only the offered once-only choice for the current session and
 stage, and cannot grant new filesystem access.
 
-Autonomous mode runs as your
+Unrestricted mode runs as your
 Mac user outside Noodle's app sandbox. It can reach files, signed-in services, and
 browser sessions beyond the bot's workspace, subject to macOS and tool permissions.
 Noodle accepts supported tool approvals automatically under the bot's saved
@@ -94,7 +95,7 @@ Structured runtime question requests receive an empty response immediately.
 Unknown requests and tool forms requiring user-entered data are declined
 without inventing answers or consent.
 
-Changing access restarts the bot. Turning autonomous access off does not undo
+Changing access restarts the bot. Turning unrestricted access off does not undo
 completed actions, stop detached applications, or revoke macOS privacy permissions.
 Revoke those separately in System Settings.
 
@@ -141,7 +142,7 @@ Revoke those separately in System Settings.
 - **Some tools will fail inside the boundary.** Dependencies, caches, global
   skills, services, or files outside the allowed paths may be unavailable.
   Harness updates can introduce new requirements. A tool approval does not fix
-  an OS permission denial; broader access requires the bot's autonomous setting.
+  an OS permission denial; broader access requires the bot's unrestricted setting.
 - **This is a native process sandbox.** It does not provide a separate operating
   system or set CPU, memory, disk-use, or model-spending quotas. It relies on the
   macOS sandbox and Noodle's trusted launch and tool brokers. Signature checks
@@ -162,7 +163,7 @@ the macOS Keychain and are not written to bot skills or request files.
 
 Removing an assignment blocks future calls; a call already sent may still finish.
 Removing the connection deletes its local credentials. To revoke the provider's
-grant too, use that provider's connected-app settings. An autonomous bot's wider
+grant too, use that provider's connected-app settings. An unrestricted bot's wider
 system access means workspace assignment checks are not a hard isolation boundary.
 
 Applet requests are checked against the current bot session and conversation
@@ -193,7 +194,7 @@ The Noodle app stays sandboxed. Harnesses run through the signed
 and a fixed set of launch options. Restricted Codex, FX, Grok Build, Muse Code, and Apple receive their filesystem
 policy before the harness executable starts; failure to apply it prevents
 startup. The host accepts no caller-supplied sandbox profile, arbitrary command,
-or writable roots. Autonomous harnesses use the separate authorized launch path.
+or writable roots. Unrestricted harnesses use the separate authorized launch path.
 The host runs as the current user, never root. App and helper entitlements are
 unchanged by bot isolation.
 
@@ -204,7 +205,7 @@ execution: system and own-bot package reads, workspace writes,
 read-only model-availability and global preferences, and the Apple model-manager
 service. Outbound network and unrelated user files are denied. Its initial
 Default model runs on device through Foundation Models. The existing per-bot
-autonomous setting enables broader user-level access through the same authorized
+unrestricted setting enables broader user-level access through the same authorized
 launch path as other harnesses. The app's entitlements remain unchanged.
 
 On macOS 27, `IOSurfaceRootUserClient` access permits image-buffer allocation.

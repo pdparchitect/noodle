@@ -218,7 +218,7 @@ struct HeartbeatsSettingsView: View {
                 Section("Bots") {
                     SettingsBotList(agents: store.agents) { agent in
                         HStack(spacing: 12) {
-                            SettingsBotProfileButton(agent: agent)
+                            AgentProfileButton(agent: agent)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(agent.displayName)
                                 if let date = store.runtime.lastHeartbeatDates[agent.id] {

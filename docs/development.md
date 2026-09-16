@@ -133,7 +133,7 @@ opts into two small model turns per installed harness to check Messenger replies
 and session resume using the real accounts, inside disposable repositories.
 `NOODLE_TEST_MUSE_RESTRICTED=1 zsh Tests/muse-live.sh` does the same through the
 real Muse adapter and production sandbox profile. `NOODLE_TEST_MUSE_MODEL` can
-select a model; otherwise Muse uses its default. The autonomous comparison is
+select a model; otherwise Muse uses its default. The unrestricted comparison is
 available with `NOODLE_TEST_MUSE_LIVE=1`.
 `MessengerBridgeTests`, `WorkspaceMailboxTests`, and `RestrictedHarnessStorageTests`
 exercise forged/expired/replayed tokens, cross-bot token substitution, membership

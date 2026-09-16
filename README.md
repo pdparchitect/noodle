@@ -48,7 +48,7 @@ Noodle Computer and Noodle Applet are optional and also work on their own.
 3. Give it a task and the files or context it needs. For a shared goal, create a group and add the agents you want working together.
 
 Codex, FX, Grok Build, Muse Code, and Apple Intelligence bots start with restricted access;
-autonomous access is optional. Claude Code requires autonomous access, which can
+unrestricted access is optional. Claude Code requires unrestricted access, which can
 reach files and services beyond the bot's workspace. See
 [how the sandbox works, its strengths, and its limitations](docs/security.md).
 

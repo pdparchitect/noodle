@@ -24,12 +24,22 @@ private struct PositionProbe: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
-// Only the artwork is a stand-in; the member picker and sheet sizing are the
+// Artwork and profile actions are stand-ins; the member picker and sheet sizing are the
 // production views. No runtime, model provider or persistent store is loaded.
 struct BotAvatar: View {
     let agent: AgentRecord
     let size: CGFloat
     var body: some View { Circle().fill(.blue).frame(width: size, height: size) }
+}
+
+// These layout/control fixtures do not open bot profiles or load a runtime.
+// Profile presentation is covered by GroupInteractionTests.
+struct AgentProfileButton: View {
+    let agent: AgentRecord
+    let size: CGFloat
+    var showsShadow = true
+    var opensMessageInSeparateWindow = false
+    var body: some View { BotAvatar(agent: agent, size: size) }
 }
 
 private struct FixtureRoot: View {

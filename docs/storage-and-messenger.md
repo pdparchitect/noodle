@@ -47,7 +47,7 @@ To carry an agent's core to another installation, quit Noodle and copy the entir
 installation's `Agents` directory. Use Noodle 0.14.0 or later for packages with
 Backstory in `agent.json`; earlier releases do not preserve that field. Keep the UUID folder name. Noodle refreshes its
 managed tool links on launch. Install and sign in to the selected harness and
-authorize autonomous access if needed. Chats and attachments remain in
+authorize unrestricted access if needed. Chats and attachments remain in
 `Conversations`; tool/computer assignments and credentials are separate.
 Session pointers do not contain the harness's full history. Muse starts a new
 session after a workspace move and recovers context from Noodle's chat history.

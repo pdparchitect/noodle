@@ -8,7 +8,12 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Open bot profiles from member avatars in New Group and Group Info, with Message and Edit actions, and confirm before removing a member with the X button.
 - Show clickable bot avatars in Security and Heartbeat settings, opening the existing profile with Message and Edit actions.
+
+### Changed
+
+- Rename Autonomous access to Unrestricted across settings, runtime messages, and current documentation. Keep the orange label and make both access labels open a popover explaining their permissions.
 
 ### Fixed
 

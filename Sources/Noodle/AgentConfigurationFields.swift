@@ -90,7 +90,7 @@ struct AgentConfigurationFields: View {
             HarnessExperimentalWarning(provider: selectedProvider)
 
             if let selectedProvider, !selectedProvider.supportsRestrictedAccess {
-                Text("\(selectedProvider.displayName) always uses autonomous access and can work beyond this bot's private workspace.")
+                Text("\(selectedProvider.displayName) always uses unrestricted access and can work beyond this bot's private workspace.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

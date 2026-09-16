@@ -563,7 +563,7 @@ final class AgentRuntimeCoordinator {
         if HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsRestrictedAccess == false,
            !accessConfiguration.isExtended(for: agent) {
             snapshots[agent.id] = .init(agentID: agent.id, phase: .failed,
-                detail: "This harness requires autonomous access. Allow it in Settings → Security before starting this bot.")
+                detail: "This harness requires unrestricted access. Allow it in Settings → Security before starting this bot.")
             return
         }
         do { try repository.synchronizeAgentWorkspace(agent) }
@@ -1521,8 +1521,8 @@ final class CodexAgentProcess: AgentRuntimeProcess {
 
     private var accessInstructions: String {
         let mode = extendedAccess
-            ? "This bot has autonomous extended access. Noodle resolves supported runtime permission requests automatically, so continue without asking the user to approve routine commands, file operations, or tool confirmations. Ask the user only when required information or a consequential product decision is missing. Never change your own access mode."
-            : "This bot is in restricted mode inside a dedicated macOS filesystem sandbox. Its workspace, conversations, Codex account/session directory, and temporary files are writable; its configuration and Noodle-owned runtime state are outside that writable boundary. Browser/computer-control runtimes may be unavailable. Do not try to bypass the sandbox; explain the limitation and direct the user to Settings → Security if the task requires autonomous access."
+            ? "This bot has unrestricted access. Noodle resolves supported runtime permission requests automatically, so continue without asking the user to approve routine commands, file operations, or tool confirmations. Ask the user only when required information or a consequential product decision is missing. Never change your own access mode."
+            : "This bot is in restricted mode inside a dedicated macOS filesystem sandbox. Its workspace, conversations, Codex account/session directory, and temporary files are writable; its configuration and Noodle-owned runtime state are outside that writable boundary. Browser/computer-control runtimes may be unavailable. Do not try to bypass the sandbox; explain the limitation and direct the user to Settings → Security if the task requires unrestricted access."
         return mode + " Do not promise browser or connected-tool access merely because a tool is listed. Verify the relevant capability with a safe check before claiming it works; report the actual failure when it does not."
     }
 

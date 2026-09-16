@@ -22,7 +22,7 @@ For an external harness:
 
 Once a harness is detected, create a bot and select its model and, where available,
 reasoning effort. Codex, FX, Grok Build, Muse Code, and Apple Intelligence support restricted
-access. Claude Code requires [autonomous access](security.md).
+access. Claude Code requires [unrestricted access](security.md).
 
 ## If setup fails
 

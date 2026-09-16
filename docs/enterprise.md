@@ -16,8 +16,8 @@ specialist roles and bring several into a group around a shared goal.
 The same integration carries through to security: Noodle runs in App Sandbox,
 macOS enforces restricted agents' file access, and Keychain holds connected-tool
 OAuth credentials. Microphone and screen capture follow macOS privacy
-permissions. Broader autonomous access is an explicit per-agent choice and is
-required for Claude Code. [Explore the security model](security.md).
+permissions. Unrestricted access is an explicit per-agent choice in
+**Settings → Security**. [Explore the security model](security.md).
 
 ## Deploy through familiar IT tools
 

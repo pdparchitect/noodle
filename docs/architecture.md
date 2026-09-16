@@ -70,7 +70,7 @@ migration and before bots load. It imports legacy marked Backstory, custom
 regeneration. A present string, including an empty one, marks completion. Missing
 or damaged legacy sources stop migration with their files intact. The parser is
 isolated for retirement after the 0.14.0 update milestone; the configuration check
-must remain. Backstory migration does not grant legacy autonomous access.
+must remain. Backstory migration does not grant legacy unrestricted access.
 
 The signed Agent Host applies a dedicated filesystem sandbox before starting
 restricted Codex, FX, Grok Build, Muse Code, or Apple. Each can read only its own
@@ -80,7 +80,7 @@ session stores are private to the bot, seeded only with provider login material.
 Messenger uses an app-side broker bound to the registered bot workspace and token.
 The broker checks conversation membership and copies attachments into the caller's
 workspace, keeping raw conversation files and other bots' packages inaccessible.
-Autonomous harnesses use a separate authorized launch path. The app remains in
+Unrestricted harnesses use a separate authorized launch path. The app remains in
 App Sandbox and brokers remote tools and Computer
 requests after checking assignments. See [agent access](security.md),
 [MCP connections](mcp-connections.md), and the [Computer bridge](../Computer/Bridge/README.md).
@@ -162,7 +162,7 @@ model a reliable default agent.
 Restricted Apple runs under its own deny-by-default Seatbelt policy: system and
 own-bot package reads, workspace writes, and the required
 Apple model services. It does not receive Codex credentials or outbound network
-access. Autonomous mode uses the existing explicit per-bot authorization.
+access. Unrestricted mode uses the existing explicit per-bot authorization.
 Additional models and tools can be added behind the helper protocol without
 hardcoding a model list in Noodle's UI.
 

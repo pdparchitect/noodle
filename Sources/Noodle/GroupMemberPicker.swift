@@ -7,6 +7,7 @@ struct GroupMemberPicker: View {
     @Binding var selectedIDs: Set<UUID>
     @State private var showingAdd = false
     @State private var search = ""
+    @State private var memberPendingRemoval: AgentRecord?
 
     private var selected: [AgentRecord] { agents.filter { selectedIDs.contains($0.id) } }
 
@@ -45,9 +46,10 @@ struct GroupMemberPicker: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 12)], spacing: 16) {
                         ForEach(selected) { agent in
                             VStack(spacing: 8) {
-                                BotAvatar(agent: agent, size: 48)
+                                AgentProfileButton(agent: agent, size: 48, showsShadow: true,
+                                    opensMessageInSeparateWindow: true)
                                     .overlay(alignment: .topTrailing) {
-                                        Button { selectedIDs.remove(agent.id) } label: {
+                                        Button { memberPendingRemoval = agent } label: {
                                             Image(systemName: "xmark.circle.fill")
                                                 .font(.system(size: 17))
                                                 .symbolRenderingMode(.palette)
@@ -75,6 +77,18 @@ struct GroupMemberPicker: View {
             // header and action buttons outside the available window.
             .frame(minHeight: 140, maxHeight: 280)
             .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
+        }
+        .confirmationDialog(
+            "Remove \(memberPendingRemoval?.displayName ?? "bot") from group?",
+            isPresented: Binding(
+                get: { memberPendingRemoval != nil },
+                set: { if !$0 { memberPendingRemoval = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: memberPendingRemoval
+        ) { agent in
+            Button("Remove from Group", role: .destructive) { selectedIDs.remove(agent.id) }
+            Button("Cancel", role: .cancel) {}
         }
     }
 }

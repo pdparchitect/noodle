@@ -5,12 +5,12 @@ them access appropriate to the work you want done.
 
 ## Agent access
 
-The Noodle app is sandboxed, but agents with autonomous access run outside that
+The Noodle app is sandboxed, but agents with unrestricted access run outside that
 sandbox as your Mac user. They can access files and signed-in services beyond
 their workspace. Noodle accepts supported tool approvals automatically.
 
-Codex starts restricted and supports optional autonomous access. Claude Code,
-FX, Grok Build, and Muse Code require autonomous access.
+Configure each bot’s access in **Settings → Security**. Click its Restricted or
+Unrestricted label for an explanation of the selected mode.
 
 ## Data and credentials
 

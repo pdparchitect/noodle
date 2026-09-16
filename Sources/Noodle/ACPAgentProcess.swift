@@ -83,7 +83,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
 
     func start() {
         guard connection == nil, !paused, !shutdown.isPending else { return }
-        guard extendedAccess || provider.supportsRestrictedAccess else { update(.failed, "\(name) requires autonomous access in Settings → Security"); return }
+        guard extendedAccess || provider.supportsRestrictedAccess else { update(.failed, "\(name) requires unrestricted access in Settings → Security"); return }
         stopped = false
         if state.needsHistoryRecovery {
             guard !state.recoveryBlocked else {
