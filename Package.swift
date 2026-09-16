@@ -40,7 +40,8 @@ let package = Package(
         .target(name: "NoodleCore", dependencies: [.product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper")]),
         .executableTarget(name: "NoodleComputerCLI", dependencies: ["NoodleCore", .product(name: "ComputerBridge", package: "Bridge")]),
         .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "MCP", package: "swift-sdk")]),
-        .executableTarget(name: "NoodleMCPCLI", dependencies: ["NoodleCore"]),
+        .target(name: "NoodleMCPScripting", dependencies: ["NoodleCore"]),
+        .executableTarget(name: "NoodleMCPCLI", dependencies: ["NoodleCore", "NoodleMCPScripting"]),
         .executableTarget(name: "NoodleDocumentation", dependencies: ["NoodleCore"]),
         .target(name: "NoodleSharing", dependencies: ["NoodleCore"]),
         .executableTarget(
@@ -85,6 +86,7 @@ let package = Package(
             name: "NoodleSharingTests",
             dependencies: ["NoodleSharing", "NoodleCore"]
         ),
+        .testTarget(name: "NoodleMCPScriptingTests", dependencies: ["NoodleMCPScripting", "NoodleCore"]),
         .testTarget(
             name: "NoodleMCPTests",
             dependencies: ["NoodleMCP", "NoodleCore", .product(name: "MCP", package: "swift-sdk")]

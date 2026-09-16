@@ -92,10 +92,87 @@ Requests use `.noodle/mcp-bridge`. Noodle checks the session and assignment, kee
 credentials in Keychain and serializes calls per account. Consumed requests are
 never automatically replayed after a crash.
 
-Validate catalogue and protocol changes with:
+### JavaScript workflows
+
+Use the macOS JavaScriptCore runtime to filter results, loop, or chain calls on
+the connection selected by the skill-local shim:
 
 ```sh
-swift test --disable-sandbox --filter 'ToolCatalogTests|NoodleMCPTests'
+./mcpshim eval 'print(mcp.tools().tools.map(t => t.name))'
+./mcpshim run workflow.js
+./mcpshim run - <<'JS'
+const tools = mcp.tools().tools;
+print(tools.filter(tool => /search/i.test(tool.name)));
+JS
+```
+
+Scripts have these synchronous methods:
+
+| Method | Result |
+| --- | --- |
+| `mcp.tools()` | Tool listing, including `tools` |
+| `mcp.inspect(name)` | One tool's schema and metadata |
+| `mcp.call(name, input = {}, options = {})` | Complete MCP tool result |
+| `mcp.resources()` | Resource listing, including `resources` |
+| `mcp.readResource(uri, options = {})` | Complete resource result |
+
+Results are JavaScript objects with the same fields as CLI JSON. Both methods
+with `options` accept `{raw: true}` to skip binary extraction. File references
+(`@file`, `@@literal`) and saved attachments work as described above. Paths
+resolve from the invocation's current directory, including when the script is
+in a different workspace subdirectory.
+
+`print(value)` writes one JSON value followed by a newline to stdout.
+`console.log`, `info`, `warn`, `error`, `debug`, and `dir` write diagnostics to
+stderr. Logging handles `undefined`, errors (including their stacks), and
+circular objects. The logging methods support `%s`, `%d`, `%i`, `%f`, `%o`,
+`%O`, and `%%` formatting; `dir` inspects its first argument directly.
+`console.trace(...values)` prints a labelled call stack, and
+`console.assert(condition, ...values)` logs when the condition is false.
+Console logging, including `error` and `assert`, does not change the exit status.
+Results and the final expression do not print implicitly. Bridge failures and tool results with
+`isError: true` throw; tool errors retain the complete result as `error.result`:
+
+```js
+try {
+  const result = mcp.call('TOOL_NAME', {argument: 'value'});
+  print(result.structuredContent ?? result.content);
+} catch (error) {
+  console.log(error.message, error.result ?? null);
+  throw error;
+}
+```
+
+Uncaught errors print a readable message, source location, and available stack
+frames to stderr, then exit nonzero. Syntax errors include their source line;
+runtime and MCP errors retain the script's calling functions and line numbers.
+Caught operation errors may be handled and the
+workflow continued; calls are never automatically retried. Each invocation
+uses a fresh context and one connection. There are no imports, Node/browser
+APIs, shell execution, or general filesystem/network APIs. Async workflows
+are unsupported; use ordinary loops and synchronous calls.
+
+Script files must be regular UTF-8 files inside the bot workspace, without
+symlinks, hard links, or `..` components. Source is limited to **1 MiB**.
+Each invocation allows **100 MCP operations**, **8 MiB combined stdout and
+diagnostic output**, and **300 seconds**, including input loading and remote
+calls. Use `--timeout SECONDS` after the file or code to choose **1–3600 seconds**.
+Call/output limit failures remain fatal even if caught. The deadline also stops
+infinite loops. Timing out cannot undo remote changes or guarantee cancellation
+of an in-flight call; verify writes before retrying. Existing per-call limits
+still apply.
+
+Scripts execute in the helper under the harness's existing process sandbox.
+Noodle authorizes every request through the same workspace broker, and retains
+the credentials. JavaScriptCore adds no external runtime or helper entitlements.
+
+Validate catalogue, protocol, and scripting changes with:
+
+```sh
+swift test --disable-sandbox --filter 'ToolCatalogTests|NoodleMCPTests|NoodleMCPScriptingTests'
+zsh Tests/build-sandbox-cli-fixture.sh
+NOODLE_TEST_CLI_APPLICATION="$PWD/.build/Sandbox CLI Tests.app" \
+  swift test --disable-sandbox --filter BridgeCLISandboxTests
 zsh Tests/mcp-fixture.sh --check
 ```
 
