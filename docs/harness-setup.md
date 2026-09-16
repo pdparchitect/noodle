@@ -21,8 +21,9 @@ For an external harness:
 | Apple Intelligence | Bundled with Noodle; enable Apple Intelligence in System Settings on a supported Mac running macOS 26 or later. No separate install or sign-in. |
 
 Once a harness is detected, create a bot and select its model and, where available,
-reasoning effort. Codex, FX, Grok Build, Muse Code, and Apple Intelligence support restricted
-access. Claude Code requires [unrestricted access](security.md).
+reasoning effort. All harnesses support restricted access, with optional
+[unrestricted access](security.md) in Settings → Security. Restricted Claude uses
+the Claude.ai sign-in from its standard native installation.
 
 ## If setup fails
 

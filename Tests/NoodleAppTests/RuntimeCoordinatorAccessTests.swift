@@ -52,19 +52,19 @@ import XCTest
         }
     }
 
-    func testRequiredHarnessNeedsItsOwnGrantAndCannotBeDowngradedToRestricted() throws {
+    func testClaudeCanSwitchFromRestrictedToAutonomousAndBack() throws {
         let f = try fixture(), agent = try f.agent(harness: .claudeCode)
-        AgentAccessConfiguration(autonomousAgentIDs: [agent.id]).save(to: f.defaults)
-        f.runtime.prepareAccessForExistingAgents([agent])
-        f.runtime.start(agent: agent, repository: f.repository)
-        XCTAssertTrue(f.factory.processes.isEmpty)
-        XCTAssertTrue(f.runtime.snapshot(for: agent.id).detail.contains("requires autonomous access"))
-        f.runtime.authorizeSelectedHarness(agent)
-        let process = try f.start(agent)
-        XCTAssertTrue(process.launch.extendedAccess)
+        let restricted = try f.start(agent)
+        XCTAssertFalse(restricted.launch.extendedAccess)
+        f.runtime.setExtendedAccess(true, agent: agent, repository: f.repository)
+        XCTAssertEqual(restricted.stops, 1)
+        let autonomous = try XCTUnwrap(f.factory.processes.last)
+        XCTAssertTrue(autonomous.launch.extendedAccess)
         f.runtime.setExtendedAccess(false, agent: agent, repository: f.repository)
-        XCTAssertEqual(process.stops, 0)
-        XCTAssertTrue(f.runtime.accessConfiguration.isExtended(for: agent))
+        XCTAssertEqual(autonomous.stops, 1)
+        XCTAssertFalse(try XCTUnwrap(f.factory.processes.last).launch.extendedAccess)
+        XCTAssertFalse(AgentAccessConfiguration.load(from: f.defaults).isExtended(for: agent))
+        XCTAssertEqual(f.factory.processes.count, 3)
     }
 
     func testDeletingOneBotRevokesOnlyItsAccess() throws {

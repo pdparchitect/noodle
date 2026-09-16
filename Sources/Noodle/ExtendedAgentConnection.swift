@@ -62,6 +62,13 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
                               reply: @escaping (Int32, String?) -> Void) {
         proxy()?.startRestrictedCodex(agentID: agentID.uuidString, executablePath: executablePath, withReply: reply)
     }
+    func startRestrictedClaude(agentID: UUID, executablePath: String, sessionID: UUID?, resumeSession: Bool,
+                               modelIdentifier: String?, effortIdentifier: String?,
+                               reply: @escaping (Int32, String?) -> Void) {
+        proxy()?.startRestrictedClaude(agentID: agentID.uuidString, executablePath: executablePath,
+            sessionID: sessionID?.uuidString, resumeSession: resumeSession, modelIdentifier: modelIdentifier,
+            effortIdentifier: effortIdentifier, withReply: reply)
+    }
     func startRestrictedApple(agentID: UUID, modelIdentifier: String?, reply: @escaping (Int32, String?) -> Void) {
         proxy()?.startRestrictedApple(agentID: agentID.uuidString, modelIdentifier: modelIdentifier, withReply: reply)
     }

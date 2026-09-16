@@ -28,6 +28,10 @@ extension ExtendedAgentConnection: HarnessRuntimeConnection {
             switch provider {
             case .codex:
                 startRestrictedCodex(agentID: agentID, executablePath: executablePath, reply: reply)
+            case .claudeCode:
+                startRestrictedClaude(agentID: agentID, executablePath: executablePath,
+                    sessionID: sessionID, resumeSession: resumeSession, modelIdentifier: modelIdentifier,
+                    effortIdentifier: effortIdentifier, reply: reply)
             case .apple:
                 startRestrictedApple(agentID: agentID, modelIdentifier: modelIdentifier, reply: reply)
             case .fx, .grokBuild:

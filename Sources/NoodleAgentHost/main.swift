@@ -113,26 +113,8 @@ if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-chi
             if let effort { strings += ["--reasoning-effort", effort] }
             strings += ["stdio"]
         case .claudeCode:
-            guard let sessionID else { throw HostError("Claude Code requires a valid session identifier.") }
-            if let model {
-                guard ClaudeCodeCapabilities.isValidModelIdentifier(model) else {
-                    throw HostError("Unsupported Claude Code model identifier.")
-                }
-            }
-            if let effort, !["low", "medium", "high", "xhigh", "max"].contains(effort) {
-                throw HostError("Unsupported Claude Code effort.")
-            }
-            strings = [
-                executable.path, "-p",
-                "--input-format", "stream-json",
-                "--output-format", "stream-json",
-                "--verbose",
-                "--permission-mode", "bypassPermissions",
-                "--permission-prompts", "none",
-                resumeSession ? "--resume" : "--session-id", sessionID.uuidString.lowercased()
-            ]
-            if let model { strings += ["--model", model] }
-            if let effort { strings += ["--effort", effort] }
+            strings = [executable.path] + (try ClaudeLaunch.arguments(sessionID: sessionID,
+                resumeSession: resumeSession, model: model, effort: effort, restricted: restricted))
         }
         if restricted {
             let layout = AgentStorageLayout(workspace: workspace)
@@ -156,15 +138,14 @@ if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-chi
                 profile = RestrictedAgentSandbox.profile(workspace: workspace, repository: repository,
                     codexHome: codexHome, executableDirectory: executable.deletingLastPathComponent().deletingLastPathComponent(),
                     application: HostPaths.application, temporary: temporary)
-            case .fx, .grokBuild, .muse:
+            case .claudeCode, .fx, .grokBuild, .muse:
                 profile = try RestrictedAgentSandbox.profile(provider: provider, workspace: workspace, repository: repository,
                     home: HostPaths.home, executable: executable, application: HostPaths.application, temporary: temporary)
-            default: throw HostError("Unsupported restricted harness.")
             }
             setenv("TMPDIR", temporary.path, 1)
             setenv("TMPPREFIX", temporary.appendingPathComponent("zsh").path, 1)
             setenv("CODEX_HOME", codexHome.path, 1)
-            if provider == .fx || provider == .grokBuild || provider == .muse {
+            if provider == .claudeCode || provider == .fx || provider == .grokBuild || provider == .muse {
                 for (key, value) in try RestrictedAgentSandbox.environment(provider: provider, home: HostPaths.home, workspace: workspace) {
                     setenv(key, value, 1)
                 }
@@ -219,6 +200,14 @@ private final class HostSession: NSObject, AgentHostService {
         startRuntime(harnessIdentifier: HarnessProvider.codex.rawValue, agentID: agentID, executablePath: executablePath,
                      sessionID: nil, resumeSession: false, modelIdentifier: nil, effortIdentifier: nil,
                      restricted: true, reply: reply)
+    }
+
+    func startRestrictedClaude(agentID: String, executablePath: String, sessionID: String?, resumeSession: Bool,
+                               modelIdentifier: String?, effortIdentifier: String?,
+                               withReply reply: @escaping (Int32, String?) -> Void) {
+        startRuntime(harnessIdentifier: HarnessProvider.claudeCode.rawValue, agentID: agentID, executablePath: executablePath,
+                     sessionID: sessionID, resumeSession: resumeSession, modelIdentifier: modelIdentifier,
+                     effortIdentifier: effortIdentifier, restricted: true, reply: reply)
     }
 
     func startRestrictedApple(agentID: String, modelIdentifier: String?, withReply reply: @escaping (Int32, String?) -> Void) {

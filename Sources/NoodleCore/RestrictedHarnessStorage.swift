@@ -16,13 +16,13 @@ public enum RestrictedHarnessStorage {
         let accountPath: String
         switch provider {
         case .codex: accountPath = ".codex"
+        case .claudeCode: accountPath = ".claude"
         case .fx: accountPath = ".fx"
         case .grokBuild: accountPath = ".grok"
         case .muse: accountPath = ".config/muse"
         default: throw HarnessSetupError("Unsupported restricted harness storage.")
         }
         let destination = try WorkspaceMailbox(workspace: workspace, path: ".noodle/home/" + accountPath, create: true)
-        let source = try WorkspaceMailbox(workspace: loginHome, path: accountPath)
         let runtime = try WorkspaceMailbox(workspace: AgentStorageLayout(workspace: workspace).package, path: "runtime")
         func seed(_ data: Data, name: String) throws {
             let stamp = "auth-seed-\(provider.rawValue)-\(name).sha256"
@@ -34,9 +34,20 @@ public enum RestrictedHarnessStorage {
             try runtime.writeData(fingerprint, named: stamp)
         }
         func sourceData(_ name: String) throws -> Data? {
-            source.contains(name) ? try source.read(name, limit: 1_048_576) : nil
+            let source = try WorkspaceMailbox(workspace: loginHome, path: accountPath)
+            return source.contains(name) ? try source.read(name, limit: 1_048_576) : nil
         }
         switch provider {
+        case .claudeCode:
+            // Noodle's sign-in uses the standard Claude.ai account. The native
+            // CLI prefers this exact Keychain item, with a file fallback. Copy
+            // only that OAuth login, never other integrations in the payload.
+            guard let data = try secret("Claude Code-credentials", NSUserName()) ?? sourceData(".credentials.json"),
+                  let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let oauth = payload["claudeAiOauth"] as? [String: Any],
+                  let token = oauth["accessToken"] as? String, !token.isEmpty else { throw missing(provider) }
+            try seed(JSONSerialization.data(withJSONObject: ["claudeAiOauth": oauth], options: [.sortedKeys]),
+                     name: ".credentials.json")
         case .codex, .grokBuild:
             guard let data = try sourceData("auth.json") else { throw missing(provider) }
             try seed(data, name: "auth.json")

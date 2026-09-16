@@ -72,10 +72,6 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
 
     func start() {
         guard connection == nil, !shutdown.isPending else { return }
-        guard extendedAccess else {
-            update(.failed, "Claude Code requires autonomous access in Settings → Security")
-            return
-        }
         intentionallyStopped = false
         terminationReported = false
         lastErrorText = nil
@@ -182,9 +178,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         running && snapshot.phase == .ready && !turnIsActive && !notificationPending && interruptRequestID == nil
     }
 
-    // A restricted Claude configuration is deliberately stable (failed), not a
-    // crashed process for the supervisor to relaunch repeatedly.
-    var isAlive: Bool { running || !extendedAccess }
+    var isAlive: Bool { running }
 
     var hasInterruptedWork: Bool {
         recoveryPending || turnIsActive || notificationPending || turnRecovery.hasUnfinishedTurn

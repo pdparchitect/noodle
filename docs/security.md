@@ -4,17 +4,12 @@
 
 | Harness | Access in Noodle |
 | --- | --- |
-| Codex, FX, Grok Build, Muse Code, Apple Intelligence | Restricted by default; unrestricted access is optional |
-| Claude Code | Unrestricted access is required |
+| Codex, Claude Code, FX, Grok Build, Muse Code, Apple Intelligence | Restricted by default; unrestricted access is optional |
 
-Change access for Codex, FX, Grok Build, Muse Code, or Apple Intelligence in **Settings → Security**.
-Click its **Restricted** or **Unrestricted** label to see what that mode allows.
-Claude Code's switch stays on after authorization because its Noodle integration
-does not support restricted mode. Selecting it in the bot editor authorizes that
-harness for that bot. Copied bots may need
-authorization in Security settings. Restricted-capable harnesses use the bot's
-saved access preference. Previous required FX/Grok/Muse grants do not override that
-preference. Editing `agent.json` alone never grants unrestricted access.
+Change any bot's access in **Settings → Security**. Click its **Restricted** or
+**Unrestricted** label to see what that mode allows. All harnesses use the bot's
+saved access preference. Previous required Claude/FX/Grok/Muse grants do not
+override that preference. Editing `agent.json` alone never grants unrestricted access.
 
 ## How restricted mode works
 
@@ -46,7 +41,7 @@ has no direct conversation-file fallback. Attachment reads return copies under
 `workspace/.noodle/messenger-attachments`; local attachment sends can import only
 regular files from the caller's workspace, without following symlinks.
 
-Cloud harnesses have a private home at `workspace/.noodle/home`. Codex, FX, Grok,
+Cloud harnesses have a private home at `workspace/.noodle/home`. Codex, Claude, FX, Grok,
 and Muse store their own configuration, sessions, and caches there; Muse's data,
 state, and runtime directories remain under `workspace/.noodle/muse`. The trusted
 Agent Host seeds only login material from the existing provider sign-in. It does
@@ -54,7 +49,7 @@ not copy standalone conversations, global skills, hooks, or MCP configuration.
 FX also receives its selected provider/model settings. Native installations stay
 read-only.
 
-For FX and Muse Keychain-backed sign-ins, the host requests only the exact
+For Claude, FX, and Muse Keychain-backed sign-ins, the host requests only the exact
 provider credential item, without prompting. The harness receives a private file
 credential store and has no access to the login Keychain or shared account
 folder. If macOS denies that item, startup fails with a Keychain-access error;
@@ -85,6 +80,17 @@ launcher. Agent Host applies the outer sandbox before running `serve`; Muse's
 inner shell sandbox is disabled to avoid nesting Seatbelt policies. MSP tool
 approvals select only the offered once-only choice for the current session and
 stage, and cannot grant new filesystem access.
+
+Claude uses its normal stream-json runtime and tools. Agent Host explicitly sets
+`sandbox.enabled=false` for restricted launches: Noodle's outer policy covers
+native Read/Edit/Write tools, Bash, and child processes. `CLAUDE_CONFIG_DIR` points
+to the bot's private `.claude` directory, and `CLAUDE_CODE_TMPDIR` keeps Claude's
+internal temporary files inside the workspace. The host seeds only `claudeAiOauth`
+from the standard `Claude Code-credentials` Keychain item for the current user,
+or the native `.claude/.credentials.json` fallback when that item is absent.
+Settings, hooks, MCP logins, and global history are not imported. Restricted and
+unrestricted sessions have separate pointers; switching access does not resume the
+other mode's native session.
 
 Unrestricted mode runs as your
 Mac user outside Noodle's app sandbox. It can reach files, signed-in services, and
@@ -124,7 +130,7 @@ Revoke those separately in System Settings.
   its messages and attachments through Messenger. Copies already delivered to
   a workspace are not erased when membership is removed. Bots using the same
   provider login share that provider account's permissions and billing.
-- **Cloud harness networking is open outbound.** Codex, FX, Grok Build, and Muse
+- **Cloud harness networking is open outbound.** Codex, Claude Code, FX, Grok Build, and Muse
   Code are not limited to a list of model-provider domains. Readable data can be
   sent to remote services, and the policy does not block outbound LAN access.
   Connections to localhost are allowed. The current profiles deny starting
@@ -191,7 +197,7 @@ LAN; Shell computers can have networking disabled.
 
 The Noodle app stays sandboxed. Harnesses run through the signed
 `NoodleAgentHost.xpc`, which validates Noodle's identity, the vendor-signed harness,
-and a fixed set of launch options. Restricted Codex, FX, Grok Build, Muse Code, and Apple receive their filesystem
+and a fixed set of launch options. Restricted Codex, Claude Code, FX, Grok Build, Muse Code, and Apple receive their filesystem
 policy before the harness executable starts; failure to apply it prevents
 startup. The host accepts no caller-supplied sandbox profile, arbitrary command,
 or writable roots. Unrestricted harnesses use the separate authorized launch path.
@@ -250,11 +256,19 @@ thrown provider errors. Existing tests cover current-session requests, shared
 noodlets, captures, presentation, owner isolation, and build diagnostics.
 
 Run these with `swift test --disable-sandbox --filter AppletBrokerTests`.
-`RestrictedAgentSandboxTests`, `RestrictedMuseSandboxTests`, `AppleSandboxTests`,
+`RestrictedAgentSandboxTests`, `RestrictedClaudeSandboxTests`,
+`RestrictedMuseSandboxTests`, `AppleSandboxTests`,
 and `BridgeCLISandboxTests` exercise real sandboxed processes, offline harness
 startup/resume, and the signed workspace CLIs. The localhost client test exercises
-all four cloud policies against a disposable local server. These are compatibility
+all five cloud policies against a disposable local server. These are compatibility
 checks for the tested paths, not proof that every tool or live model turn works.
+`RestrictedClaudeSandboxTests` launches the installed Anthropic-signed CLI against
+a synthetic local API using production launch arguments, storage, and policy. It
+checks private OAuth-file discovery, workspace Read/Write and Bash tools, Messenger,
+managed skill discovery, rejected outside reads/configuration writes, and session
+resume. It does not validate provider-side token refresh or every native tool.
+Build `Tests/build-sandbox-cli-fixture.sh`, set `NOODLE_TEST_CLI_APPLICATION` to the
+resulting app, and run `swift test --disable-sandbox --filter RestrictedClaudeSandboxTests`.
 The Applet authorization fix changes no Seatbelt policy, networking permission,
 filesystem grant, or entitlement.
 

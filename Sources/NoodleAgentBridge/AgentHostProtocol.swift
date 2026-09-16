@@ -36,6 +36,9 @@ public enum AgentHostIdentity {
     func inspectApple(withReply reply: @escaping (Data?, String?) -> Void)
     func startRestrictedCodex(agentID: String, executablePath: String,
                               withReply reply: @escaping (Int32, String?) -> Void)
+    func startRestrictedClaude(agentID: String, executablePath: String, sessionID: String?, resumeSession: Bool,
+                               modelIdentifier: String?, effortIdentifier: String?,
+                               withReply reply: @escaping (Int32, String?) -> Void)
     func startRestrictedACP(harnessIdentifier: String, agentID: String, executablePath: String,
                             modelIdentifier: String?, effortIdentifier: String?,
                             withReply reply: @escaping (Int32, String?) -> Void)

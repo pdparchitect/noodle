@@ -41,8 +41,6 @@ struct AgentAccessSettingsView: View {
                         }
                     }
                 }
-            } footer: {
-                Text("Codex, FX, Grok Build, Muse Code, and Apple start restricted and let you choose unrestricted access. Claude Code requires unrestricted access; selecting it in the bot editor authorizes it. Copied bots may need access enabled here.")
             }
         }
         .formStyle(.grouped)

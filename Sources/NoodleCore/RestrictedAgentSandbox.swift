@@ -10,6 +10,7 @@ public enum RestrictedAgentSandbox {
     public static func accountDirectory(provider: HarnessProvider, home: URL) throws -> URL {
         let name: String
         switch provider {
+        case .claudeCode: name = ".claude"
         case .fx: name = ".fx"
         case .grokBuild: name = ".grok"
         case .muse: name = ".config/muse"
@@ -41,6 +42,10 @@ public enum RestrictedAgentSandbox {
         let privateHome = RestrictedHarnessStorage.home(workspace: workspace)
         _ = try accountDirectory(provider: provider, home: privateHome)
         switch provider {
+        case .claudeCode:
+            return ["HOME": privateHome.path,
+                "CLAUDE_CONFIG_DIR": privateHome.appendingPathComponent(".claude").path,
+                "CLAUDE_CODE_TMPDIR": workspace.appendingPathComponent(".noodle/tmp").path]
         case .fx:
             var environment = ["HOME": privateHome.path, "FX_PERMISSION_MODE": "ask", "FX_DISABLE_KEYCHAIN": "1",
                 "TMPPREFIX": workspace.appendingPathComponent(".noodle/tmp/zsh").path]

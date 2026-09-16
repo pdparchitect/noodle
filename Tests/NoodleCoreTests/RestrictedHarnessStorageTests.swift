@@ -2,6 +2,78 @@ import XCTest
 @testable import NoodleCore
 
 final class RestrictedHarnessStorageTests: XCTestCase {
+    func testClaudeCopiesOnlyOAuthFromItsExactKeychainItemAndPreservesPrivateRefreshes() throws {
+        let (home, first, second) = try fixture()
+        // A Keychain login does not need a shared config directory to exist.
+        var login = Data(#"{"claudeAiOauth":{"accessToken":"first","refreshToken":"refresh","expiresAt":9999999999999},"mcpOAuth":{"unrelated":"secret"}}"#.utf8)
+        var lookups = 0
+        func prepare(_ workspace: URL) throws {
+            try RestrictedHarnessStorage.prepare(provider: .claudeCode, workspace: workspace, loginHome: home) { service, account in
+                XCTAssertEqual(service, "Claude Code-credentials")
+                XCTAssertEqual(account, NSUserName())
+                lookups += 1
+                return login
+            }
+        }
+        try prepare(first); try prepare(second)
+        let a = try WorkspaceMailbox(workspace: first, path: ".noodle/home/.claude")
+        let b = try WorkspaceMailbox(workspace: second, path: ".noodle/home/.claude")
+        let seeded = try a.read(".credentials.json", limit: 4096)
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: seeded) as? [String: Any])
+        XCTAssertEqual(Set(payload.keys), ["claudeAiOauth"])
+        XCTAssertEqual((payload["claudeAiOauth"] as? [String: Any])?["refreshToken"] as? String, "refresh")
+        let attributes = try FileManager.default.attributesOfItem(atPath: RestrictedHarnessStorage.home(workspace: first).appendingPathComponent(".claude/.credentials.json").path)
+        XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
+        let refreshed = Data(#"{"claudeAiOauth":{"accessToken":"refreshed","refreshToken":"rotated"}}"#.utf8)
+        try a.writeData(refreshed, named: ".credentials.json")
+        try prepare(first)
+        XCTAssertEqual(try a.read(".credentials.json", limit: 4096), refreshed)
+        XCTAssertEqual(try b.read(".credentials.json", limit: 4096), seeded)
+        login = Data(#"{"claudeAiOauth":{"accessToken":"new-sign-in"}}"#.utf8)
+        try prepare(first)
+        XCTAssertNotEqual(try a.read(".credentials.json", limit: 4096), refreshed)
+        XCTAssertEqual(lookups, 4)
+    }
+
+    func testClaudeFileFallbackImportsNoSettingsHooksOrHistory() throws {
+        let (home, workspace, _) = try fixture()
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let source = try WorkspaceMailbox(workspace: home, path: ".claude", create: true)
+        try source.writeData(Data(#"{"claudeAiOauth":{"accessToken":"file-login"}}"#.utf8), named: ".credentials.json")
+        for name in ["settings.json", "history.jsonl", "CLAUDE.md"] {
+            try source.writeData(Data("private account context".utf8), named: name)
+        }
+        try RestrictedHarnessStorage.prepare(provider: .claudeCode, workspace: workspace, loginHome: home, secret: { _, _ in nil })
+        let destination = try WorkspaceMailbox(workspace: workspace, path: ".noodle/home/.claude")
+        XCTAssertTrue(destination.contains(".credentials.json"))
+        for name in ["settings.json", "history.jsonl", "CLAUDE.md"] { XCTAssertFalse(destination.contains(name)) }
+    }
+
+    func testClaudeMissingMalformedAndDeniedLoginsFailClosed() throws {
+        for login in [nil, Data("invalid".utf8), Data(#"{"claudeAiOauth":{"accessToken":""}}"#.utf8)] as [Data?] {
+            let (home, workspace, _) = try fixture()
+            XCTAssertThrowsError(try RestrictedHarnessStorage.prepare(provider: .claudeCode, workspace: workspace, loginHome: home,
+                secret: { _, _ in login }))
+        }
+        let (home, workspace, _) = try fixture()
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let source = try WorkspaceMailbox(workspace: home, path: ".claude", create: true)
+        try source.writeData(Data(#"{"claudeAiOauth":{"accessToken":"stale-file"}}"#.utf8), named: ".credentials.json")
+        XCTAssertThrowsError(try RestrictedHarnessStorage.prepare(provider: .claudeCode, workspace: workspace, loginHome: home,
+            secret: { _, _ in throw HarnessSetupError("Keychain denied") }))
+        let destination = try WorkspaceMailbox(workspace: workspace, path: ".noodle/home/.claude")
+        XCTAssertFalse(destination.contains(".credentials.json"))
+    }
+
+    func testClaudeRedirectedCredentialDestinationIsRejectedBeforeLookup() throws {
+        let (home, workspace, other) = try fixture()
+        let privateHome = try WorkspaceMailbox(workspace: workspace, path: ".noodle/home", create: true)
+        try privateHome.symlink(".claude", destination: other.path)
+        XCTAssertThrowsError(try RestrictedHarnessStorage.prepare(provider: .claudeCode, workspace: workspace, loginHome: home,
+            secret: { _, _ in XCTFail("Must reject redirection before reading login"); return nil }))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: other.appendingPathComponent(".credentials.json").path))
+    }
+
     private func fixture() throws -> (URL, URL, URL) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }

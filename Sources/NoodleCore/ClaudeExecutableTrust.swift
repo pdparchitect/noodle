@@ -1,13 +1,13 @@
 import Foundation
 import Security
 
-/// Autonomous access accepts only Anthropic's signed native Claude Code install.
+/// Both access modes accept only Anthropic's signed native Claude Code install.
 public enum ClaudeExecutableTrust {
     public static func executable(at path: String, home: URL) throws -> URL {
         let officialLink = home.appendingPathComponent(".local/bin/claude").standardizedFileURL
         let requested = URL(fileURLWithPath: path).standardizedFileURL
         guard requested == officialLink else {
-            throw HarnessSetupError("Autonomous access requires Claude Code’s official native installation.")
+            throw HarnessSetupError("Noodle requires Claude Code’s official native installation.")
         }
 
         let executable = requested.resolvingSymlinksInPath()

@@ -6,7 +6,7 @@ final class AgentAccessTests: XCTestCase {
         var bot = AgentRecord(displayName: "Original", harnessIdentifier: "claude-code")
         var configuration = AgentAccessConfiguration()
         configuration.authorizeSelectedHarness(for: bot)
-        XCTAssertTrue(configuration.isExtended(for: bot))
+        XCTAssertFalse(configuration.isExtended(for: bot))
         bot.harnessIdentifier = "muse"
         XCTAssertFalse(configuration.isExtended(for: bot))
         let copy = AgentRecord(displayName: "Copy", harnessIdentifier: "claude-code")
@@ -22,18 +22,15 @@ final class AgentAccessTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         var configuration = AgentAccessConfiguration()
         configuration.migrateRequiredHarnessGrants([bot], in: defaults)
-        XCTAssertTrue(configuration.isExtended(for: bot))
+        XCTAssertFalse(configuration.isExtended(for: bot))
         let imported = AgentRecord(displayName: "Imported", harnessIdentifier: "claude-code")
         configuration = .load(from: defaults)
         configuration.migrateRequiredHarnessGrants([bot, imported], in: defaults)
         XCTAssertFalse(configuration.isExtended(for: imported))
     }
     func testHarnessAccessCapabilities() {
-        for provider in [HarnessProvider.codex, .apple, .fx, .grokBuild, .muse] {
+        for provider in HarnessProvider.allCases {
             XCTAssertTrue(provider.supportsRestrictedAccess)
-        }
-        for provider in [HarnessProvider.claudeCode] {
-            XCTAssertFalse(provider.supportsRestrictedAccess)
         }
     }
 
@@ -41,7 +38,7 @@ final class AgentAccessTests: XCTestCase {
         let suite = "Noodle.AccessTests.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        for provider in [HarnessProvider.fx, .grokBuild, .muse] {
+        for provider in [HarnessProvider.claudeCode, .fx, .grokBuild, .muse] {
             let bot = AgentRecord(displayName: "Existing", harnessIdentifier: provider.rawValue)
             defaults.set([bot.id.uuidString: [provider.rawValue]], forKey: "Noodle.access.requiredHarnessGrants")
             var access = AgentAccessConfiguration.load(from: defaults)
@@ -54,11 +51,11 @@ final class AgentAccessTests: XCTestCase {
         }
     }
 
-    func testRequiredHarnessNeedsAnExplicitGrantAfterRelaunch() {
+    func testSelectingAnyHarnessPreservesRestrictedAccessAfterRelaunch() {
         let suite = "Noodle.AccessTests.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        for provider in HarnessProvider.allCases where !provider.supportsRestrictedAccess {
+        for provider in HarnessProvider.allCases {
             let bot = AgentRecord(displayName: "Existing bot", harnessIdentifier: provider.rawValue)
             var configuration = AgentAccessConfiguration()
             XCTAssertFalse(configuration.isExtended(for: bot))
@@ -66,8 +63,8 @@ final class AgentAccessTests: XCTestCase {
             configuration.setExtended(false, for: bot.id)
             configuration.save(to: defaults)
             let restored = AgentAccessConfiguration.load(from: defaults)
-            XCTAssertTrue(restored.isExtended(for: bot))
-            XCTAssertFalse(restored.isExtended(bot.id), "Required access must not overwrite the saved preference")
+            XCTAssertFalse(restored.isExtended(for: bot))
+            XCTAssertFalse(restored.isExtended(bot.id), "Selecting a harness must not overwrite the saved preference")
         }
     }
 
@@ -78,7 +75,7 @@ final class AgentAccessTests: XCTestCase {
         bot.harnessIdentifier = HarnessProvider.claudeCode.rawValue
         XCTAssertFalse(configuration.isExtended(for: bot))
         configuration.authorizeSelectedHarness(for: bot)
-        XCTAssertTrue(configuration.isExtended(for: bot))
+        XCTAssertFalse(configuration.isExtended(for: bot))
         bot.harnessIdentifier = HarnessProvider.codex.rawValue
         XCTAssertFalse(configuration.isExtended(for: bot))
         configuration.setExtended(true, for: bot.id)

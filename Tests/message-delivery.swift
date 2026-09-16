@@ -27,6 +27,7 @@ import NoodleCore
     var promptID: Int?
     var permissionReply: [String: Any]?
     var invalidated = false
+    var restrictedClaude = false
     var restrictedACP = false
     var restrictedMuse = false
     init() throws { Self.current = self }
@@ -40,6 +41,13 @@ import NoodleCore
     }
     func startRestrictedCodex(agentID: UUID, executablePath: String, reply: @escaping (Int32, String?) -> Void) {
         start(provider: .codex, agentID: agentID, executablePath: executablePath, reply: reply)
+    }
+    func startRestrictedClaude(agentID: UUID, executablePath: String, sessionID: UUID?, resumeSession: Bool,
+                               modelIdentifier: String?, effortIdentifier: String?, reply: @escaping (Int32, String?) -> Void) {
+        restrictedClaude = true
+        start(provider: .claudeCode, agentID: agentID, executablePath: executablePath,
+              sessionID: sessionID, resumeSession: resumeSession, modelIdentifier: modelIdentifier,
+              effortIdentifier: effortIdentifier, reply: reply)
     }
     func startRestrictedApple(agentID: UUID, modelIdentifier: String?, reply: @escaping (Int32, String?) -> Void) {
         start(provider: .apple, agentID: agentID, executablePath: "/fixture/apple", reply: reply)
@@ -171,7 +179,7 @@ import NoodleCore
     }
     static func settle() async { try? await Task.sleep(for: .milliseconds(30)) }
 
-    @MainActor static func make(_ provider: HarnessProvider, root: URL, restrictedACP: Bool = false) async throws -> any AgentRuntimeProcess {
+    @MainActor static func make(_ provider: HarnessProvider, root: URL, restrictedACP: Bool = false, restrictedClaude: Bool = false) async throws -> any AgentRuntimeProcess {
         let workspace = root.appendingPathComponent(UUID().uuidString).appendingPathComponent("workspace")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         ExtendedAgentConnection.workspace = workspace.path
@@ -185,7 +193,7 @@ import NoodleCore
                 onUnexpectedTermination: { _, _, _ in })
         case .claudeCode:
             process = ClaudeAgentProcess(agent: agent, executableURL: executable, workspaceURL: workspace,
-                extendedAccess: true, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
+                extendedAccess: !restrictedClaude, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
                 onUnexpectedTermination: { _, _, _ in })
         case .muse:
             process = MuseAgentProcess(agent: agent, executableURL: executable, workspaceURL: workspace,
@@ -398,6 +406,18 @@ import NoodleCore
             precondition(process.snapshot.phase == .failed)
             process.stop { _ in }
             print("PASS: Codex retry errors are visible, scoped, recoverable, and preserve unfinished work")
+        }
+
+        do {
+            let process = try await make(.claudeCode, root: root, restrictedClaude: true)
+            let wire = ExtendedAgentConnection.current!
+            precondition(wire.restrictedClaude, "Restricted Claude must use the restricted host endpoint")
+            process.notify()
+            await eventually { wire.prompts == 1 }
+            wire.complete()
+            await eventually { process.canReceiveHeartbeat }
+            process.stop { _ in }
+            print("PASS: restricted Claude routes to its fixed host endpoint and completes a turn")
         }
 
         // Claude can acknowledge interruption before or after the old result.

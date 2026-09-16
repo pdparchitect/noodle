@@ -18,13 +18,41 @@ import XCTest
                    "is_error": failed, "result": failed ? "Fixture task failed" : "done"])
     }
 
-    func testRestrictedConfigurationNeverLaunchesAHelper() throws {
+    func testRestrictedStartupPersistsAndResumesItsOwnSession() async throws {
         let f = try fixture(), wire = HarnessWire(), p = f.claude(wire, extended: false)
-        p.start(); p.notify(); p.heartbeat()
-        XCTAssertTrue(wire.launches.isEmpty)
-        XCTAssertEqual(p.snapshot.phase, .failed)
-        XCTAssertFalse(p.canReceiveHeartbeat)
+        XCTAssertFalse(p.isAlive)
+        try await ready(f, wire, p)
+        XCTAssertEqual(wire.launches.first?.1, false)
+        XCTAssertTrue(p.isAlive)
+        try confirm(wire)
+        try await f.wait { FileManager.default.fileExists(atPath: f.state(.claudeCode, extended: false).path) }
+        p.notify(); try await f.wait { wire.count("user") == 1 }
+        try complete(wire); try await f.wait { p.canReceiveHeartbeat }
+        p.stop()
+        XCTAssertFalse(p.isAlive)
+        let next = HarnessWire(), resumed = f.claude(next, extended: false)
+        try await ready(f, next, resumed)
+        XCTAssertEqual(next.launches.first?.1, false)
+        XCTAssertEqual(next.launches.first?.2, wire.launches.first?.2)
+        XCTAssertEqual(next.launches.first?.3, true)
+        resumed.stop()
+        let other = HarnessWire(), autonomous = f.claude(other)
+        try await ready(f, other, autonomous)
+        XCTAssertEqual(other.launches.first?.1, true)
+        XCTAssertNotEqual(other.launches.first?.2, wire.launches.first?.2)
+        XCTAssertEqual(other.launches.first?.3, false)
         XCTAssertTrue(f.failures.isEmpty)
+    }
+
+    func testRestrictedStartupFailureDoesNotRetryWithAutonomousAccess() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.claude(wire, extended: false)
+        wire.automaticStart = false
+        p.start()
+        wire.startReply?(0, "Private login unavailable")
+        try await f.wait { p.snapshot.phase == .failed }
+        XCTAssertEqual(wire.launches.count, 1)
+        XCTAssertEqual(wire.launches.first?.1, false)
+        XCTAssertFalse(p.isAlive)
     }
 
     func testSessionIsSavedOnlyAfterConfirmationAndThenResumed() async throws {
