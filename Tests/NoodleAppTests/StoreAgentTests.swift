@@ -213,4 +213,40 @@ import XCTest
         XCTAssertEqual(f.runtime.factory.processes.count, 1)
     }
 
+    func testAddingComputerAfterMessageCanRecoverFromFailedStopWithoutLosingWork() throws {
+        let f = try fixture(), computerID = UUID()
+        var computers = ComputerAssignments()
+        computers.computers = [.init(id: computerID, name: "Fixture computer", kind: "linux",
+                                    state: "running", symbol: "desktopcomputer")]
+        try computers.save(root: f.repository.rootURL)
+        try f.store.computers.reloadAssignments()
+        _ = try f.repository.sendUserMessage(conversationID: f.directA.id, body: "Inspect the files on my computer")
+        let transcript = f.repository.conversationDirectory(id: f.directA.id).appendingPathComponent("messages.json")
+        let messages = try Data(contentsOf: transcript)
+        let old = try f.runtime.start(f.a)
+        old.transition(.working)
+        old.hasInterruptedWork = true
+        old.automaticallyStops = false
+        let state = f.repository.storage(for: f.a.id).sessionState(provider: .codex, extendedAccess: false)
+        try Data("saved session".utf8).write(to: state)
+        var work = AgentTurnRecovery(sessionStateURL: state)
+        try work.begin()
+        let backstory = try f.repository.loadAgentBackstory(f.a)
+        XCTAssertTrue(update(f, backstory: backstory, computers: [computerID]), f.store.errorMessage ?? "")
+        old.finishStop(false)
+        let saved = try XCTUnwrap(f.store.agents.first { $0.id == f.a.id })
+        XCTAssertEqual(f.store.computers.selectedIDs(for: saved), [computerID])
+        XCTAssertNil(f.runtime.runtime.kick(agent: saved, repository: f.repository))
+        XCTAssertEqual(old.stops, 2)
+        XCTAssertEqual(f.runtime.factory.processes.count, 1)
+        old.finishStop(true)
+        XCTAssertEqual(f.runtime.factory.processes.count, 2)
+        XCTAssertTrue(f.runtime.factory.processes.last!.launch.recoverInterruptedWork)
+        XCTAssertEqual(f.runtime.runtime.snapshot(for: saved.id).phase, .ready)
+        XCTAssertEqual(try Data(contentsOf: transcript), messages)
+        XCTAssertEqual(try Data(contentsOf: state), Data("saved session".utf8))
+        XCTAssertTrue(work.hasUnfinishedTurn)
+        XCTAssertEqual(try ComputerAssignments.load(root: f.repository.rootURL).assigned(to: saved.id), [computerID])
+    }
+
 }

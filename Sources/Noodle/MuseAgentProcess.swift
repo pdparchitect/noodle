@@ -3,7 +3,7 @@ import NoodleCore
 
 /// A narrow transport boundary; the default implementation retains the signed
 /// helper and its distinct restricted/autonomous launch entrypoints.
-@MainActor protocol MuseRuntimeConnection: AnyObject {
+@MainActor protocol MuseRuntimeConnection: RuntimeStopConnection {
     var onData: ((Data, Bool) -> Void)? { get set }
     var onExit: ((Int32) -> Void)? { get set }
     var onFailure: ((String) -> Void)? { get set }
@@ -11,7 +11,6 @@ import NoodleCore
                    extendedAccess: Bool, reply: @escaping (Int32, String?) -> Void)
     func write(_ data: Data)
     func invalidate()
-    func stop(reply: @escaping (Bool) -> Void)
 }
 
 extension ExtendedAgentConnection: MuseRuntimeConnection {
@@ -49,6 +48,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
     private var approvalStages = Set<String>()
     private let makeConnection: @MainActor () throws -> any MuseRuntimeConnection
     private var connection: (any MuseRuntimeConnection)?
+    private let shutdown = RuntimeShutdown()
     private var running = false
     private var stopped = false
     private var paused = false
@@ -123,7 +123,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
     var canReceiveHeartbeat: Bool { running && snapshot.phase == .ready && !turnIsActive && !notificationPending && steeringNotificationID == nil }
 
     func start() {
-        guard connection == nil else { return }
+        guard connection == nil, !shutdown.isPending else { return }
         stopped = false; paused = false
         update(.starting, "Starting Muse Code")
         trace.runtimeStarting()
@@ -172,7 +172,7 @@ final class MuseAgentProcess: AgentRuntimeProcess {
         let connection = connection
         self.connection = nil
         update(.offline, "Stopped")
-        if let connection { connection.stop(reply: completion) } else { completion(true) }
+        shutdown.stop(connection, completion: completion)
     }
     @discardableResult
     func notify(immediately: Bool = false) -> UUID {

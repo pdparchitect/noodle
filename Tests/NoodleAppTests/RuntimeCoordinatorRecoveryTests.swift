@@ -131,7 +131,7 @@ import XCTest
         first.finishStop(false)
         f.runtime.reconcile(agents: [agent], repository: f.repository, immediately: true)
         XCTAssertEqual(f.factory.processes.count, 1)
-        XCTAssertEqual(f.runtime.snapshot(for: agent.id).detail, "The previous runtime could not be stopped.")
+        XCTAssertEqual(f.runtime.snapshot(for: agent.id).detail, "The previous runtime could not be stopped. Use Kick to retry.")
     }
 
     func testConnectionRecoveryPausesAfterTwoRestartsAndKickResumes() throws {

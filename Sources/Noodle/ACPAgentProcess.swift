@@ -26,6 +26,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
     private let sleep: @MainActor (Duration) async throws -> Void
     private let makeConnection: @MainActor () throws -> any HarnessRuntimeConnection
     private var connection: (any HarnessRuntimeConnection)?
+    private let shutdown = RuntimeShutdown()
     private var running = false
     private var stopped = false
     private var paused = false
@@ -81,7 +82,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
     var canReceiveHeartbeat: Bool { running && snapshot.phase == .ready && !turnIsActive && !notificationPending }
 
     func start() {
-        guard connection == nil, !paused else { return }
+        guard connection == nil, !paused, !shutdown.isPending else { return }
         guard extendedAccess || provider.supportsRestrictedAccess else { update(.failed, "\(name) requires autonomous access in Settings → Security"); return }
         stopped = false
         if state.needsHistoryRecovery {
@@ -161,7 +162,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         let connection = connection
         self.connection = nil
         update(.offline, "Stopped")
-        if let connection { connection.stop(reply: completion) } else { completion(true) }
+        shutdown.stop(connection, completion: completion)
     }
     @discardableResult
     func notify(immediately: Bool = false) -> UUID {

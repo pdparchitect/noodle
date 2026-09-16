@@ -32,8 +32,14 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Label Apple/local-model turn setup as “Preparing turn” so cached model reuse is not reported as a fresh model load.
 - Suppress settings scrollbar flashes during tab changes and dynamic window resizing on macOS 27, restoring indicators after the layout settles.
+- Show Apple/local-model tool calls, command output and exit status, file errors, durations, and recovery steps in the Activity window as they happen.
 - Disable Writing Tools in the message composer to suppress the floating Siri control on macOS 27.
+- Load the workspace's complete `AGENTS.md` and discover skill names, descriptions, and paths on every Apple/local-model wake, including resumed sessions. Include managed and user-created skills in the system instructions while leaving full skill instructions available to read on demand.
+- Let Apple turns continue while generation or tools make progress, with a five-minute inactivity timeout and a 30-minute overall limit. Resume interrupted local-model work with recovery settings, bound optional thinking attempts, and preserve history when summaries fail.
+- Recover empty or truncated Apple/local-model replies in the existing session, preserve completed tool results, and disable optional MLX reasoning during recovery. Bound generation loops, warn on repeated actions, and checkpoint tool rounds before continuing.
+- Recover bots after saving tool or computer assignments during active work: wait for runtime shutdown to finish and let Kick retry an unconfirmed stop while preserving the session and unfinished work.
 - Restore bot avatars in the composer @ menu on macOS 27.
 
 ## [0.16.1] - 2026-09-15

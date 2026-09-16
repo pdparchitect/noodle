@@ -27,6 +27,56 @@ import XCTest
         XCTAssertEqual(f.factory.processes.count, 2)
     }
 
+    func testKickRetriesFailedSettingsRestartAndPreservesUnfinishedWork() throws {
+        let f = try fixture(), agent = try f.agent(), old = try f.start(agent)
+        old.hasInterruptedWork = true
+        old.transition(.working)
+        old.automaticallyStops = false
+        let state = f.repository.storage(for: agent.id).sessionState(provider: .codex, extendedAccess: false)
+        try Data("saved session".utf8).write(to: state)
+        var recovery = AgentTurnRecovery(sessionStateURL: state)
+        try recovery.begin()
+        let marker = try Data(contentsOf: state.appendingPathExtension("unfinished"))
+        var updated = agent
+        updated.updatedAt = agent.updatedAt.addingTimeInterval(1)
+        f.runtime.restart(agent: updated, repository: f.repository)
+        old.finishStop(false)
+        let failure = f.runtime.snapshot(for: agent.id)
+        f.runtime.refresh(agents: [updated], repository: f.repository)
+        f.runtime.reconcile(agents: [updated], repository: f.repository, immediately: true)
+        f.runtime.notify([updated], repository: f.repository)
+        XCTAssertEqual(f.runtime.snapshot(for: agent.id), failure)
+        XCTAssertEqual(old.stops, 1, "Automatic refresh must keep the failed stop available for explicit retry")
+
+        for attempt in 2...3 {
+            XCTAssertNil(f.runtime.kick(agent: updated, repository: f.repository))
+            XCTAssertEqual(old.stops, attempt, "Kick must retry the original runtime's stop")
+            XCTAssertEqual(f.factory.processes.count, 1, "Never overlap an unconfirmed old runtime")
+            old.finishStop(attempt == 3)
+        }
+        XCTAssertEqual(f.factory.processes.count, 2)
+        XCTAssertEqual(f.factory.processes.last?.configuration, updated)
+        XCTAssertTrue(f.factory.processes.last!.launch.recoverInterruptedWork)
+        XCTAssertEqual(try Data(contentsOf: state), Data("saved session".utf8))
+        XCTAssertEqual(try Data(contentsOf: state.appendingPathExtension("unfinished")), marker)
+        XCTAssertEqual(f.runtime.snapshot(for: agent.id).phase, .ready)
+    }
+
+    func testKickAfterFailedAccessRevocationRetainsRestrictedAccess() throws {
+        let f = try fixture(), agent = try f.agent()
+        f.runtime.setExtendedAccess(true, agent: agent, repository: f.repository)
+        let old = try XCTUnwrap(f.factory.processes.last)
+        old.automaticallyStops = false
+        f.runtime.setExtendedAccess(false, agent: agent, repository: f.repository)
+        old.finishStop(false)
+        XCTAssertNil(f.runtime.kick(agent: agent, repository: f.repository))
+        XCTAssertEqual(old.stops, 2)
+        XCTAssertEqual(f.factory.processes.count, 1)
+        old.finishStop(true)
+        XCTAssertEqual(f.factory.processes.count, 2)
+        XCTAssertFalse(f.factory.processes.last!.launch.extendedAccess)
+    }
+
     func testMissingSessionDoesNothingUntilConfirmedThenPreservesWorkAndOtherAccessMode() throws {
         let f = try fixture(), (agent, process, url, id) = try missingSession(f)
         let original = try Data(contentsOf: url)

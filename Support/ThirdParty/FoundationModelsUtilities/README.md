@@ -32,6 +32,11 @@ Local changes to preserve when updating:
   using the existing executor trimming helper. This bounds saved history while
   preserving the current request. The shared `AppleContextOverflow` predicate
   recognizes only context limits; cancellation and other errors propagate.
+- Bounded empty/truncated-response recovery keeps the original task and its
+  completed tool exchanges. Recovery nudges do not trigger summarization, and
+  empty or explicitly truncated responses do not mark tool history completed.
+  Summaries use the budgeted model without consuming the task's loop budget.
+- Empty or truncated summaries retain the original history and tool receipts.
 
 The production profile supplies the selected model (including Noodle's executor
 token budget), an eight-entry summary threshold, and concise instructions that

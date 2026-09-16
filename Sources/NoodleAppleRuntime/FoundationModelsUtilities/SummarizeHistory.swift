@@ -106,6 +106,9 @@ private struct SummarizeHistoryModifier<Model: LanguageModel>: LanguageModelSess
       guard case .prompt(let prompt) = history.last else {
         return
       }
+      // A bounded recovery is still the same task. Keep its actual completed
+      // tool results instead of summarizing them into claims about actions.
+      guard !AppleResponseRecovery.isRecoveryPrompt(prompt) else { return }
 
       let session = LanguageModelSession(
         model: model,
@@ -144,12 +147,17 @@ private struct SummarizeHistoryModifier<Model: LanguageModel>: LanguageModelSess
       // tools or swallow cancellation because a summary failed.
       let summary: String
       do {
-        summary = try await session.respond(
+        let response = try await session.respond(
           to: Prompt {
             "Summarize this conversation:\n\n\(textRepresentation)"
           },
           options: GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 256)
-        ).content
+        )
+        // A small model may use its summary allowance without producing a
+        // usable summary. Keep the original history and its tool receipts.
+        guard !response.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !AppleResponseRecovery.isIncomplete(response.transcriptEntries) else { return }
+        summary = response.content
       } catch {
         try Task.checkCancellation()
         if error is CancellationError { throw error }

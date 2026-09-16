@@ -117,12 +117,16 @@ public actor AppleToolContext {
     }
 
     public func execute(command: String) async throws -> String {
+        try await executeResult(command: command).text
+    }
+
+    func executeResult(command: String) async throws -> AppleToolResult {
         try beginCall()
         guard !command.isEmpty, command.utf8.count <= 16_384, !command.utf8.contains(0) else {
             throw HarnessSetupError("Provide a command of at most 16 KiB.")
         }
         let result = try await AppleCommand.run(command, workspace: workspace)
-        return try present("Exit status: \(result.status)\n\(result.output)")
+        return AppleToolResult(text: try present("Exit status: \(result.status)\n\(result.output)"), failed: result.status != 0)
     }
 
     public func inbox() throws -> String {

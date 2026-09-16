@@ -123,6 +123,7 @@ final class AgentRuntimeCoordinator {
     private var lifecycleID = UUID()
     private var transitionIDs: [UUID: UUID] = [:]
     private var blockedRestarts: Set<UUID> = []
+    private var failedStops: [UUID: any AgentRuntimeProcess] = [:]
     private var restartAttempts: [UUID: Int] = [:]
     // Startup success alone does not reset this budget: a turn must finish,
     // or the user must explicitly retry.
@@ -281,8 +282,9 @@ final class AgentRuntimeCoordinator {
             self.changingAccess.remove(agent.id)
             self.transitionIDs[agent.id] = nil
             guard stopped else {
+                self.failedStops[agent.id] = old
                 self.blockedRestarts.insert(agent.id)
-                self.snapshots[agent.id] = .init(agentID: agent.id, phase: .failed, detail: "Could not confirm that the old runtime stopped. Quit Noodle before restarting this bot.")
+                self.snapshots[agent.id] = .init(agentID: agent.id, phase: .failed, detail: "Could not confirm that the old runtime stopped. Use Kick to retry.")
                 return
             }
             if required { self.accessConfiguration.authorizeSelectedHarness(for: agent) }
@@ -435,10 +437,12 @@ final class AgentRuntimeCoordinator {
         let liveIDs = Set(agents.map(\.id))
         activity.retainAgents(liveIDs)
         let trackedIDs = Set(processes.keys).union(restartTasks.keys).union(stabilityTasks.keys)
-            .union(changingAccess).union(recoveryPending).union(blockedRecoveries)
+            .union(changingAccess).union(recoveryPending).union(blockedRecoveries).union(blockedRestarts)
         for id in trackedIDs where !liveIDs.contains(id) {
             runtimeIDs[id] = nil
             processes.removeValue(forKey: id)?.stop { _ in }
+            failedStops.removeValue(forKey: id)?.stop { _ in }
+            blockedRestarts.remove(id)
             cancelSupervision(for: id)
             connectionRecoveryAttempts[id] = nil
             changingAccess.remove(id)
@@ -450,6 +454,7 @@ final class AgentRuntimeCoordinator {
         }
 
         for agent in agents {
+            if blockedRestarts.contains(agent.id) { continue }
             if blockedRecoveries.contains(agent.id), connectionRecoveryAttempts[agent.id] != nil { continue }
             if let process = processes[agent.id] {
                 snapshots[agent.id] = process.snapshot
@@ -478,6 +483,7 @@ final class AgentRuntimeCoordinator {
 
         if let repository {
             for agent in agents where processes[agent.id]?.configuration != agent
+                && !blockedRestarts.contains(agent.id)
                 && !(blockedRecoveries.contains(agent.id) && connectionRecoveryAttempts[agent.id] != nil) {
                 restart(agent: agent, repository: repository)
             }
@@ -614,7 +620,8 @@ final class AgentRuntimeCoordinator {
                 lifecycleID: lifecycleID, extendedAccess: accessConfiguration.isExtended(for: agent))
         }
         restart(agent: agent, repository: repository,
-            sessionRecovery: snapshot(for: agent.id).failure == .recoveryFailed ? .retry : nil)
+            sessionRecovery: snapshot(for: agent.id).failure == .recoveryFailed ? .retry : nil,
+            retryFailedStop: true)
         return nil
     }
 
@@ -650,9 +657,11 @@ final class AgentRuntimeCoordinator {
         repository: WorkspaceRepository,
         resetThread: Bool = false,
         sessionRecovery: SessionRecovery?,
-        pauseAfterStop: Bool = false
+        pauseAfterStop: Bool = false,
+        retryFailedStop: Bool = false
     ) {
-        guard !changingAccess.contains(agent.id) else { return }
+        guard !isStoppingAll, !changingAccess.contains(agent.id),
+              !blockedRestarts.contains(agent.id) || retryFailedStop else { return }
         blockedRecoveries.remove(agent.id)
         if pauseAfterStop { blockedRecoveries.insert(agent.id) }
         cancelSupervision(for: agent.id)
@@ -661,7 +670,7 @@ final class AgentRuntimeCoordinator {
         transitionIDs[agent.id] = transitionID
         let lifecycle = lifecycleID
         runtimeIDs[agent.id] = nil
-        let old = processes.removeValue(forKey: agent.id)
+        let old = processes.removeValue(forKey: agent.id) ?? failedStops[agent.id]
         if !resetThread, old?.hasInterruptedWork == true { recoveryPending.insert(agent.id) }
         if resetThread {
             recoveryPending.remove(agent.id)
@@ -677,6 +686,8 @@ final class AgentRuntimeCoordinator {
             self.changingAccess.remove(agent.id)
             self.transitionIDs[agent.id] = nil
             if stopped {
+                self.failedStops[agent.id] = nil
+                self.blockedRestarts.remove(agent.id)
                 if pauseAfterStop {
                     self.snapshots[agent.id] = .init(agentID: agent.id, phase: .failed,
                         detail: "Codex could not reconnect after two automatic restarts. Use Kick to retry. Unfinished work is preserved.")
@@ -706,8 +717,9 @@ final class AgentRuntimeCoordinator {
                 self.start(agent: agent, repository: repository)
             }
             else {
+                self.failedStops[agent.id] = old
                 self.blockedRestarts.insert(agent.id)
-                self.snapshots[agent.id] = .init(agentID: agent.id, phase: .failed, detail: "The previous runtime could not be stopped.")
+                self.snapshots[agent.id] = .init(agentID: agent.id, phase: .failed, detail: "The previous runtime could not be stopped. Use Kick to retry.")
             }
         }
         if let old { old.stop(completion: finish) } else { finish(true) }
@@ -736,6 +748,8 @@ final class AgentRuntimeCoordinator {
             accessConfiguration.save(to: defaults)
         }
         processes.removeValue(forKey: agentID)?.stop { _ in }
+        failedStops.removeValue(forKey: agentID)?.stop { _ in }
+        blockedRestarts.remove(agentID)
         snapshots.removeValue(forKey: agentID)
         heartbeatScheduler.remove(agentID)
         saveHeartbeatActivityDates()
@@ -764,6 +778,13 @@ final class AgentRuntimeCoordinator {
         blockedRecoveries.removeAll()
         processes.values.forEach { $0.stop { _ in } }
         processes.removeAll()
+        for (id, process) in failedStops {
+            process.stop { [weak self] stopped in
+                guard let self, stopped, self.failedStops[id] === process else { return }
+                self.failedStops[id] = nil
+                self.blockedRestarts.remove(id)
+            }
+        }
         snapshots = snapshots.mapValues {
             AgentRuntimeSnapshot(agentID: $0.agentID, phase: .offline, detail: "Stopped")
         }
@@ -921,6 +942,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private let now: @MainActor () -> Date
     private let makeConnection: @MainActor () throws -> any HarnessRuntimeConnection
     private var hostConnection: (any HarnessRuntimeConnection)?
+    private let shutdown = RuntimeShutdown()
     private var hostRunning = false
     private var hostPID: Int32?
     private let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
@@ -988,7 +1010,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     }
 
     func start() {
-        guard hostConnection == nil else { return }
+        guard hostConnection == nil, !shutdown.isPending else { return }
         intentionallyStopped = false
         terminationReported = false
         lastErrorText = nil
@@ -1051,12 +1073,9 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         startupTimeout?.cancel()
         intentionallyStopped = true
         terminationReported = true
-        let hadHostConnection = hostConnection != nil
-        if let connection = hostConnection {
-            hostRunning = false
-            hostConnection = nil
-            connection.stop { stopped in Task { @MainActor in completion(stopped) } }
-        }
+        let connection = hostConnection
+        hostRunning = false
+        hostConnection = nil
         purposes.removeAll()
         turnIsActive = false
         activeTurnID = nil
@@ -1068,7 +1087,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         steeringTimeout?.cancel()
         notifications.take()
         update(.offline, "Stopped")
-        if !hadHostConnection { completion(true) }
+        shutdown.stop(connection, completion: completion)
     }
 
     @discardableResult

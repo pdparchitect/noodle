@@ -61,7 +61,9 @@ import NoodleAppleRuntime
     private var modelIdentifier: String?
     private var turn: Task<Void, Never>?
     private var deadline: Task<Void, Never>?
-    private var timedOut = false
+    private var turnDeadline: AppleTurnDeadline?
+    private var timeout: AppleTurnDeadline.Limit?
+    private var turnID: UUID?
     private struct State: Codable { let id: String }
 
     init(workspace: URL, version: String) { self.workspace = workspace; self.version = version }
@@ -127,26 +129,48 @@ import NoodleAppleRuntime
                     throw HarnessSetupError("Expected a Noodle wake event.")
                 }
                 let session = sessionID!, writer = output, workspace = workspace, model = modelIdentifier
-                timedOut = false
+                let token = UUID()
+                turnID = token
+                timeout = nil
+                turnDeadline = AppleTurnDeadline(now: ProcessInfo.processInfo.systemUptime)
                 turn = Task { [weak self] in
+                    guard let agent = self else { return }
                     do {
-                        try await AppleModel.respond(workspace: workspace, modelIdentifier: model, wake: wake) {
-                            writer.send(["method": "session/update", "params": ["sessionId": session,
-                                "update": ["sessionUpdate": "agent_thought_chunk", "content": ["type": "text", "text": "Working"]]]])
-                        }
+                        try await AppleModel.respond(workspace: workspace, modelIdentifier: model, wake: wake,
+                            onEvent: { [weak agent] event in
+                                // Await delivery so the last tool result cannot
+                                // arrive after the prompt response closes the turn.
+                                await agent?.emitActivity(event, sessionID: session, token: token)
+                            }, onActivity: { [agent] in
+                            Task { @MainActor [weak agent] in
+                                guard agent?.turnID == token else { return }
+                                agent?.turnDeadline?.noteActivity(at: ProcessInfo.processInfo.systemUptime)
+                                writer.send(["method": "session/update", "params": ["sessionId": session,
+                                    "update": ["sessionUpdate": "agent_thought_chunk", "content": ["type": "text", "text": "Working"]]]])
+                            }
+                        })
                         writer.send(["id": id, "result": ["stopReason": "end_turn"]])
                     } catch is CancellationError {
-                        if self?.timedOut == true { writer.error(id, "Apple exceeded the five-minute turn limit. Unfinished work is preserved.") }
+                        if let timeout = self?.timeout { writer.error(id, timeout.message) }
                         else { writer.send(["id": id, "result": ["stopReason": "cancelled"]]) }
                     } catch { writer.error(id, error.localizedDescription) }
                     self?.deadline?.cancel()
                     self?.turn = nil
+                    self?.turnDeadline = nil
+                    self?.turnID = nil
                 }
                 deadline = Task { [weak self] in
-                    do { try await Task.sleep(for: .seconds(300)) } catch { return }
-                    self?.timedOut = true
-                    self?.turn?.cancel()
-                    AppleCommand.stopAll()
+                    while let self, self.turnID == token, let limit = self.turnDeadline {
+                        let now = ProcessInfo.processInfo.systemUptime
+                        if let exceeded = limit.exceeded(at: now) {
+                            self.timeout = exceeded
+                            self.turn?.cancel()
+                            AppleCommand.stopAll()
+                            return
+                        }
+                        do { try await Task.sleep(for: .seconds(limit.remaining(at: now))) }
+                        catch { return }
+                    }
                 }
             default: output.error(id, "Unsupported method.", code: -32601)
             }
@@ -155,6 +179,10 @@ import NoodleAppleRuntime
 
     private func requireSession(_ params: [String: Any]) throws {
         guard let sessionID, params["sessionId"] as? String == sessionID else { throw HarnessSetupError("Session not found") }
+    }
+    private func emitActivity(_ event: AppleActivityEvent, sessionID: String, token: UUID) {
+        guard turnID == token else { return }
+        output.send(event.message(sessionID: sessionID))
     }
     func shutdown() { turn?.cancel(); deadline?.cancel(); AppleCommand.stopAll() }
 }

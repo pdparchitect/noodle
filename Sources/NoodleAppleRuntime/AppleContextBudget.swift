@@ -11,6 +11,9 @@ struct AppleContextModel<Base: LanguageModel>: LanguageModel {
     let base: Base
     let budget: AppleContextBudget
     let count: @Sendable (LanguageModelExecutorGenerationRequest) async throws -> Int
+    var control: AppleTurnControl? = nil
+    var canDisableReasoning = false
+    var checkpoint: (@Sendable (Transcript) throws -> Void)? = nil
 
     var capabilities: LanguageModelCapabilities { base.capabilities }
     var executorConfiguration: Base.Executor.Configuration { base.executorConfiguration }
@@ -24,7 +27,12 @@ struct AppleContextModel<Base: LanguageModel>: LanguageModel {
 
         func respond(to request: LanguageModelExecutorGenerationRequest, model: Model,
                      streamingInto channel: LanguageModelExecutorGenerationChannel) async throws {
-            let fitted = try await model.budget.fit(request, count: model.count)
+            try Task.checkCancellation()
+            // Save completed tool rounds before starting another generation.
+            // An abrupt helper exit can then resume from their receipts.
+            try model.checkpoint?(request.transcript)
+            let controlled = try await model.control?.prepare(request, canDisableReasoning: model.canDisableReasoning) ?? request
+            let fitted = try await model.budget.fit(controlled, count: model.count)
             try Task.checkCancellation()
             try await underlying.respond(to: fitted, model: model.base, streamingInto: channel)
         }

@@ -15,6 +15,7 @@ struct AppleModelBackend {
     let contextSize: Int
     let supportsImages: Bool
     let responseTokens: Int
+    var canDisableReasoning = false
     #if canImport(FoundationModels, _version: 2)
     // The box keeps macOS 27 types out of the macOS 26 stored-property layout.
     private let local: Any?
@@ -43,23 +44,33 @@ struct AppleModelBackend {
             let store = AppleLocalModelStore(repository: repository)
             let descriptor = try store.model(id: id)
             let model = try await AppleMLXCache.shared.load(descriptor, store: store)
+            let configuration = await (try model.loadContainer()).configuration
+            let canDisableReasoning: Bool
+            if case .templateFlag? = configuration.reasoningConfig?.promptStrategy { canDisableReasoning = true }
+            else { canDisableReasoning = false }
             try Task.checkCancellation()
             return .init(identifier: id, contextSize: min(descriptor.contextSize, 32_768), supportsImages: false,
-                         responseTokens: min(2_048, descriptor.contextSize / 4), local: model)
+                         responseTokens: min(2_048, descriptor.contextSize / 4), canDisableReasoning: canDisableReasoning, local: model)
         }
         #endif
         throw HarnessSetupError("Local models require macOS 27 and a Noodle build made with the macOS 27 SDK.")
     }
 
     func session(tools: [any FoundationModels.Tool] = [], instructions: String, entries: [Transcript.Entry] = [],
-                 requireTool: Bool = false, contextReserve: Int = 512) -> LanguageModelSession {
+                 requireTool: Bool = false, contextReserve: Int = 512, control: AppleTurnControl = AppleTurnControl(),
+                 checkpoint: (@Sendable (Transcript) throws -> Void)? = nil) -> LanguageModelSession {
         #if canImport(FoundationModels, _version: 2)
         if #available(macOS 27, *) {
             let budget = AppleContextBudget(contextSize: contextSize, responseTokens: responseTokens,
                 reserve: identifier == "default" ? max(contextReserve, 1_024) : contextReserve)
             func makeSession<Base: FoundationModels.LanguageModel>(base: Base,
                 count: @escaping @Sendable (LanguageModelExecutorGenerationRequest) async throws -> Int) -> LanguageModelSession {
-                AppleTurnProfile.session(model: AppleContextModel(base: base, budget: budget, count: count),
+                let summaryModel = AppleContextModel(base: base, budget: budget, count: count)
+                var turnModel = summaryModel
+                turnModel.control = control
+                turnModel.canDisableReasoning = canDisableReasoning
+                turnModel.checkpoint = checkpoint
+                return AppleTurnProfile.session(model: turnModel, summaryModel: summaryModel,
                     tools: tools, instructions: instructions, requireTool: requireTool, history: entries)
             }
             if let local = local as? MLXLanguageModel {
@@ -154,14 +165,15 @@ private extension SessionPropertyValues {
 @available(macOS 27, *)
 struct AppleTurnProfile<Model: FoundationModels.LanguageModel>: LanguageModelSession.DynamicProfile {
     let model: Model
+    let summaryModel: Model
     let tools: [any FoundationModels.Tool]
     let instructions: String
     let requireTool: Bool
     @SessionProperty(\.appleToolCalled) private var called
 
-    static func session(model: Model, tools: [any FoundationModels.Tool] = [], instructions: String,
+    static func session(model: Model, summaryModel: Model? = nil, tools: [any FoundationModels.Tool] = [], instructions: String,
                         requireTool: Bool = false, history: [Transcript.Entry] = []) -> LanguageModelSession {
-        LanguageModelSession(profile: Self(model: model, tools: tools, instructions: instructions,
+        LanguageModelSession(profile: Self(model: model, summaryModel: summaryModel ?? model, tools: tools, instructions: instructions,
                                           requireTool: requireTool), history: history)
     }
 
@@ -178,7 +190,7 @@ struct AppleTurnProfile<Model: FoundationModels.LanguageModel>: LanguageModelSes
         .onPrompt { called = false }
         // Required mode must end after a call, or the framework keeps calling tools.
         .onToolOutput { called = true }
-        .summarizeHistory(entryThreshold: 8, model: model,
+        .summarizeHistory(entryThreshold: 8, model: summaryModel,
             instructions: Instructions("""
                 Summarize the conversation in at most 100 words. Preserve the current task,
                 user facts and decisions, file paths, completed actions and their results,

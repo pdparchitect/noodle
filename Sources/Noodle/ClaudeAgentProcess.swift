@@ -21,6 +21,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     private let sleep: @MainActor (Duration) async throws -> Void
     private let makeConnection: @MainActor () throws -> any HarnessRuntimeConnection
     private var connection: (any HarnessRuntimeConnection)?
+    private let shutdown = RuntimeShutdown()
     private var running = false
     private var processIdentifier: Int32?
     private var notifications = PendingAgentNotification()
@@ -70,7 +71,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     }
 
     func start() {
-        guard connection == nil else { return }
+        guard connection == nil, !shutdown.isPending else { return }
         guard extendedAccess else {
             update(.failed, "Claude Code requires autonomous access in Settings → Security")
             return
@@ -157,14 +158,10 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         turnIsActive = false
         notifications.take()
         processIdentifier = nil
-        guard let connection else {
-            update(.offline, "Stopped")
-            completion(true)
-            return
-        }
+        let connection = connection
         self.connection = nil
         update(.offline, "Stopped")
-        connection.stop { stopped in Task { @MainActor in completion(stopped) } }
+        shutdown.stop(connection, completion: completion)
     }
 
     @discardableResult

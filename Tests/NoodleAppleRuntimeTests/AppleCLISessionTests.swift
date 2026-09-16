@@ -16,11 +16,12 @@ final class AppleCLISessionTests: XCTestCase {
         try Apple27LiveTests.writeSquare(to: image)
         let context = try AppleToolContext(workspace: workspace)
         let state = CLIState()
+        let activity = ActivityEvents()
         let prompts = ["Create a sample.", "Show me that.", "Save a copy beside it."]
         var history: [Transcript.Entry] = []
         for (index, prompt) in prompts.enumerated() {
             let session = AppleTurnProfile.session(model: CLIModel(state: state),
-                tools: AppleModel.workspaceTools(context: context, onActivity: {}),
+                tools: AppleModel.workspaceTools(context: context, onEvent: { await activity.append($0) }, onActivity: {}),
                 instructions: MessengerDocumentation.appleConversationInstructions, history: history)
             _ = try await session.respond(to: Prompt {
                 prompt
@@ -43,6 +44,19 @@ final class AppleCLISessionTests: XCTestCase {
         XCTAssertTrue(requests[4].transcript.map(\.description).joined().contains(prompts[1]))
         XCTAssertTrue(requests[3].transcript.map(\.description).joined().contains("saffron"))
         XCTAssertEqual(try String(contentsOf: workspace.appendingPathComponent("copy.txt"), encoding: .utf8), "saffron")
+        let events = await activity.values
+        XCTAssertEqual(events.count, 6, "Emit exactly one start and finish for each executed tool, without replaying history")
+        for (index, name) in ["Bash", "Read file", "Write file"].enumerated() {
+            guard case .toolStarted(let id, let actual, _) = events[index * 2],
+                  case .toolFinished(let endID, _, let input, let result, let failed, _) = events[index * 2 + 1] else {
+                return XCTFail("Missing tool activity pair")
+            }
+            XCTAssertEqual(actual, name)
+            XCTAssertEqual(id, endID)
+            XCTAssertFalse(failed)
+            XCTAssertFalse(result.isEmpty)
+            if name == "Write file" { XCTAssertEqual(input["bytes"], "7"); XCTAssertNil(input["content"]) }
+        }
     }
 }
 

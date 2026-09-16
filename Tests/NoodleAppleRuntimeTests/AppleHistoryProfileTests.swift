@@ -4,6 +4,21 @@ import FoundationModels
 @testable import NoodleAppleRuntime
 
 final class AppleHistoryProfileTests: XCTestCase {
+    func testEmptyOrTruncatedSummaryCannotEraseSavedWork() async throws {
+        guard #available(macOS 27, *) else { return }
+        for (text, incomplete) in [("", false), (" \n", false), ("unfinished summary", true)] {
+            let state = HistoryFixtureState(summaryText: text, incompleteSummary: incomplete)
+            let saved = history(firstPrompt: "Keep the original task and its constraints.")
+            let session = AppleTurnProfile.session(model: model(state), instructions: "Continue the work.", history: saved)
+            _ = try await session.respond(to: "Continue the current task.")
+            let lastRequest = await state.lastRequest()
+            let request = try XCTUnwrap(lastRequest)
+            XCTAssertTrue(request.transcript.map(\.description).joined().contains("Keep the original task and its constraints."))
+            XCTAssertTrue(session.transcript.contains(saved[0]))
+            XCTAssertFalse(session.transcript.map(\.description).joined().contains("Summary of the conversation so far:"))
+        }
+    }
+
     func testFailureAfterToolCallPreservesCompletedWorkForRecovery() async throws {
         guard #available(macOS 27, *) else { return }
         let state = HistoryFixtureState(failAfterOperation: true)
@@ -197,12 +212,17 @@ private actor HistoryFixtureState {
     let cancelSummary: Bool
     let requiredOperations: Int
     let failAfterOperation: Bool
+    let summaryText: String
+    let incompleteSummary: Bool
     var requests: [LanguageModelExecutorGenerationRequest] = []
     var calls = 0
-    init(cancelSummary: Bool = false, requiredOperations: Int = 1, failAfterOperation: Bool = false) {
+    init(cancelSummary: Bool = false, requiredOperations: Int = 1, failAfterOperation: Bool = false,
+         summaryText: String = HistoryFixtureState.summary, incompleteSummary: Bool = false) {
         self.cancelSummary = cancelSummary
         self.requiredOperations = requiredOperations
         self.failAfterOperation = failAfterOperation
+        self.summaryText = summaryText
+        self.incompleteSummary = incompleteSummary
     }
     func record(_ request: LanguageModelExecutorGenerationRequest) { requests.append(request) }
     func lastRequest() -> LanguageModelExecutorGenerationRequest? { requests.last }
@@ -223,7 +243,8 @@ private struct HistoryFixtureModel: LanguageModel {
             let needsSecondOperation = await model.state.needsSecondOperation()
             if request.transcript.map(\.description).joined(separator: "\n").contains("Summarize this conversation:") {
                 if model.state.cancelSummary { throw CancellationError() }
-                await channel.send(.response(action: .appendText(HistoryFixtureState.summary, tokenCount: 20)))
+                await channel.send(.response(entryID: "summary", action: .updateMetadata(["incompleteOutput": model.state.incompleteSummary])))
+                await channel.send(.response(entryID: "summary", action: .appendText(model.state.summaryText, tokenCount: 20)))
             } else if request.generationOptions.toolCallingMode == .required || needsSecondOperation {
                 await channel.send(.toolCalls(action: .toolCall(id: UUID().uuidString, name: "operation",
                     action: .appendArguments(#"{"value":"saffron"}"#, tokenCount: 5))))

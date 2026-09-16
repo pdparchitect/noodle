@@ -12,6 +12,10 @@ struct AppleConversationSession: Codable {
     let reply: String
     var modelIdentifier: String? = nil
 
+    var hasCompletedReply: Bool {
+        !messageIDs.isEmpty && !reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     static func file(in workspace: URL, conversationID: UUID) -> URL {
         workspace.appendingPathComponent(".noodle/apple/conversations/\(conversationID.uuidString.lowercased()).json")
     }

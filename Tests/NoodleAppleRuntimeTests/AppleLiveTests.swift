@@ -7,6 +7,114 @@ import CoreGraphics
 /// Explicit opt-in: a real on-device model and a synthetic disposable bot. Never
 /// opens the user's Noodle storage, accounts, or external model services.
 final class AppleLiveTests: XCTestCase {
+    func testSandboxedToolActivityArrivesBeforeTurnCompletion() throws {
+        let local = ProcessInfo.processInfo.environment["NOODLE_TEST_MLX_MODEL"].map { URL(fileURLWithPath: $0) }
+        try exercise(tasks: [["Use bash to run exactly once: printf activity-evidence; exit 7. Report the command's exit code."]],
+            modelDirectory: local, promptTimeout: 300, verifyActivity: { _, messages in
+                let updates = messages.compactMap { ($0["params"] as? [String: Any])?["update"] as? [String: Any] }
+                XCTAssertTrue(updates.contains { ($0["title"] as? String) == "Loaded AGENTS.md and skill catalogue" })
+                let start = try XCTUnwrap(updates.firstIndex { $0["sessionUpdate"] as? String == "tool_call" && $0["title"] as? String == "Bash" })
+                let id = try XCTUnwrap(updates[start]["toolCallId"] as? String)
+                let end = try XCTUnwrap(updates.firstIndex { $0["sessionUpdate"] as? String == "tool_call_update" && $0["toolCallId"] as? String == id })
+                XCTAssertLessThan(start, end)
+                XCTAssertEqual(updates[end]["status"] as? String, "failed")
+                let result = String(decoding: try JSONSerialization.data(withJSONObject: updates[end]), as: UTF8.self)
+                XCTAssertTrue(result.contains("Exit status: 7"))
+                XCTAssertTrue(result.contains("activity-evidence"))
+                XCTAssertTrue(result.contains("Duration:"))
+                XCTAssertTrue(updates.contains { $0["title"] as? String == "Reply delivered" },
+                              "All activity must arrive before the prompt-completed response")
+            }) { _, replies in
+                XCTAssertTrue(replies[0].body.contains("7"))
+            }
+    }
+
+    func testSandboxedLocalModelRoutesResumedGuestTaskThroughComputerCLI() throws {
+        guard #available(macOS 27, *) else { throw XCTSkip("Local models require macOS 27.") }
+        guard let modelPath = ProcessInfo.processInfo.environment["NOODLE_TEST_MLX_MODEL"] else {
+            throw XCTSkip("Set NOODLE_TEST_MLX_MODEL for the local-model computer-routing test.")
+        }
+        let computer = UUID().uuidString.lowercased(), terminal = UUID().uuidString.lowercased()
+        let observed = UUID().uuidString.lowercased()
+        try exercise(history: [(false, "An earlier attempt was interrupted before reading the assigned computer.")],
+            tasks: [["On my assigned computer, read /workspace/check.txt and reply with its exact contents."]],
+            modelDirectory: URL(fileURLWithPath: modelPath), nativeHistory: true, promptTimeout: 600,
+            assignedComputer: UUID(uuidString: computer),
+            configure: { workspace in
+                let skill = workspace.appendingPathComponent(".agents/skills/computer")
+                // A synthetic Computer provider: the real model must discover
+                // IDs, send the guest command, then read its observed output.
+                // No production computer or conversation is touched.
+                let script = """
+                #!/bin/bash
+                set -eu
+                printf '%s\\n' "$*" >> computer-calls.txt
+                operation="$1"; shift
+                computer=''; terminal=''; command=''
+                while [ "$#" -gt 0 ]; do
+                  case "$1" in
+                    --computer) computer="$2";;
+                    --terminal) terminal="$2";;
+                    --text) command="$2";;
+                    --offset) ;;
+                    *) exit 2;;
+                  esac
+                  shift 2
+                done
+                case "$operation" in
+                  list) printf '%s\\n' '{"computers":[{"id":"\(computer)","name":"Test computer","kind":"shell","state":"running"}]}' ;;
+                  open)
+                    [ "$computer" = '\(computer)' ]
+                    printf '%s\\n' '{"terminalID":"\(terminal)"}' ;;
+                  write)
+                    [ "$computer" = '\(computer)' ] && [ "$terminal" = '\(terminal)' ]
+                    case "$command" in *'/workspace/check.txt'*) printf '%s' "$command" > guest-command.txt;; *) exit 3;; esac
+                    printf '%s\\n' '{"ok":true}' ;;
+                  read)
+                    [ "$computer" = '\(computer)' ] && [ "$terminal" = '\(terminal)' ] && [ -f guest-command.txt ]
+                    printf '%s\\n' '{"text":"\(observed)","offset":36,"truncated":false,"exited":false}' ;;
+                  *) exit 2 ;;
+                esac
+                """
+                let cli = skill.appendingPathComponent("computer")
+                // Replace a generated CLI link without writing through it.
+                try? FileManager.default.removeItem(at: cli)
+                try Data(script.utf8).write(to: cli)
+                try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
+                try Data("unfinished".utf8).write(to: workspace.appendingPathComponent(".noodle/apple/unfinished"))
+            }) { workspace, replies in
+                let transcript = try JSONDecoder().decode(Transcript.self,
+                    from: Data(contentsOf: workspace.appendingPathComponent(".noodle/apple/last-transcript.json")))
+                let instructions = transcript.compactMap { entry -> String? in
+                    if case .instructions = entry { return entry.description }; return nil
+                }.joined(separator: "\n")
+                XCTAssertTrue(instructions.contains("<name>computer</name>"))
+                XCTAssertTrue(instructions.contains("Run commands in guest terminals"))
+                XCTAssertFalse(instructions.contains("A write acknowledgement only confirms input was sent"),
+                               "Discover the skill through metadata, not a Computer-specific prompt recipe")
+                let modelCalls = transcript.flatMap { entry -> [Transcript.ToolCall] in
+                    if case .toolCalls(let calls) = entry { return Array(calls) }; return []
+                }
+                XCTAssertTrue(modelCalls.contains {
+                    ($0.toolName == "read" || $0.toolName == "bash")
+                        && $0.arguments.jsonString.contains(".agents/skills/computer/SKILL.md")
+                }, "The model must read the skill discovered through the system catalogue")
+                XCTAssertTrue(replies[0].body.contains(observed), "The reply must use observed guest output")
+                let calls = try String(contentsOf: workspace.appendingPathComponent("computer-calls.txt"), encoding: .utf8)
+                    .split(separator: "\n").map(String.init)
+                for operation in ["list", "open", "write", "read"] {
+                    XCTAssertTrue(calls.contains { $0 == operation || $0.hasPrefix(operation + " ") }, "Missing \(operation): \(calls)")
+                }
+                let guestCommand = try String(contentsOf: workspace.appendingPathComponent("guest-command.txt"), encoding: .utf8)
+                XCTAssertTrue(guestCommand.contains("/workspace/check.txt"))
+                for call in modelCalls where call.arguments.jsonString.contains("/workspace/check.txt") {
+                    XCTAssertEqual(call.toolName, "bash")
+                    XCTAssertTrue(call.arguments.jsonString.contains(".agents/skills/computer/computer write"),
+                                  "Guest paths must not be executed as local workspace commands")
+                }
+            }
+    }
+
     func testSandboxedNaturalRequestExecutesBashAndReturnsObservedTime() throws {
         guard #available(macOS 26, *) else { throw XCTSkip("Requires Foundation Models.") }
         let local = ProcessInfo.processInfo.environment["NOODLE_TEST_MLX_MODEL"].map { URL(fileURLWithPath: $0) }
@@ -176,6 +284,9 @@ final class AppleLiveTests: XCTestCase {
     }
 
     private func exercise(named name: String = "Apple test", history: [(Bool, String)] = [], tasks: [[String]], completedReply: String? = nil, modelDirectory: URL? = nil, image: URL? = nil, nativeHistory: Bool = false,
+                          promptTimeout: TimeInterval = 180, assignedComputer: UUID? = nil,
+                          configure: (URL) throws -> Void = { _ in },
+                          verifyActivity: (Int, [[String: Any]]) throws -> Void = { _, _ in },
                           verify: (URL, [ChatMessage]) throws -> Void) throws {
         guard ProcessInfo.processInfo.environment["NOODLE_TEST_APPLE_MODEL"] == "1" || modelDirectory != nil else {
             throw XCTSkip("Set NOODLE_TEST_APPLE_MODEL=1 for the real on-device model test.")
@@ -192,6 +303,12 @@ final class AppleLiveTests: XCTestCase {
         let modelStore = AppleLocalModelStore(repository: root)
         let local = try modelDirectory.map { try modelStore.importModel(from: $0) }
         let bot = try repository.createAgent(named: name, harnessIdentifier: "apple")
+        if let assignedComputer {
+            var assignments = ComputerAssignments()
+            assignments.agents[bot.agent.id.uuidString] = [assignedComputer]
+            try assignments.save(root: root)
+            try repository.synchronizeAgentWorkspace(bot.agent)
+        }
         for (isAssistant, body) in history {
             if isAssistant { _ = try repository.sendAgentMessage(agentID: bot.agent.id, conversationID: bot.conversation.id, body: body) }
             else { _ = try repository.sendUserMessage(conversationID: bot.conversation.id, body: body) }
@@ -212,6 +329,7 @@ final class AppleLiveTests: XCTestCase {
         }
         try FileManager.default.createDirectory(at: workspace.appendingPathComponent(".noodle/tmp"), withIntermediateDirectories: true)
         try Data("a crisp pear".utf8).write(to: workspace.appendingPathComponent("seed.txt"))
+        try configure(workspace)
         let application = helper.deletingLastPathComponent().lastPathComponent == "Helpers"
             ? helper.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             : helper.deletingLastPathComponent()
@@ -243,7 +361,7 @@ final class AppleLiveTests: XCTestCase {
         }
         func request(_ id: Int, _ method: String, _ params: [String: Any]) throws -> [String: Any] {
             try input.fileHandleForWriting.write(contentsOf: JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "id": id, "method": method, "params": params]) + Data([10]))
-            guard let response = responses.wait(id, timeout: method == "session/prompt" ? 180 : 20) else {
+            guard let response = responses.wait(id, timeout: method == "session/prompt" ? promptTimeout : 20) else {
                 throw HarnessSetupError("No response to \(method).\n\(diagnostics.text)")
             }
             if let error = response["error"] {
@@ -272,6 +390,7 @@ final class AppleLiveTests: XCTestCase {
             }
             let result = try request(4 + index, "session/prompt", ["sessionId": session,
                 "prompt": [["type": "text", "text": AgentWakeReason.inboxChanged.eventText]]])
+            try verifyActivity(index, responses.activity(through: 4 + index))
             if ProcessInfo.processInfo.environment["NOODLE_APPLE_TEST_TRACE"] == "1" {
                 let trace = try String(contentsOf: workspace.appendingPathComponent(".noodle/apple/last-transcript.json"), encoding: .utf8)
                 print("Synthetic Apple transcript: \(trace)")
@@ -304,13 +423,21 @@ final class AppleLiveTests: XCTestCase {
 private final class Responses: @unchecked Sendable {
     private let condition = NSCondition()
     private var values: [Int: [String: Any]] = [:]
+    private var updates: [[String: Any]] = []
+    private var updatesAtResponse: [Int: [[String: Any]]] = [:]
     private var ended = false
     func closed() { condition.lock(); ended = true; condition.broadcast(); condition.unlock() }
     func receive(_ value: [String: Any]) {
-        guard let id = value["id"] as? Int else { return }
         condition.lock(); defer { condition.unlock() }
+        if value["method"] as? String == "session/update" { updates.append(value) }
+        guard let id = value["id"] as? Int else { return }
         values[id] = value
+        updatesAtResponse[id] = updates
         condition.broadcast()
+    }
+    func activity(through id: Int) -> [[String: Any]] {
+        condition.lock(); defer { condition.unlock() }
+        return updatesAtResponse[id] ?? []
     }
     func wait(_ id: Int, timeout: TimeInterval) -> [String: Any]? {
         condition.lock(); defer { condition.unlock() }

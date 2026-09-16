@@ -83,8 +83,11 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
     func write(_ data: Data) { proxy()?.write(data) }
     func stop(reply: @escaping (Bool) -> Void) {
         stopping = true
-        proxy(failure: { [weak self] _ in self?.connection.invalidate(); reply(false) })?.stop { [weak self] stopped in
-            self?.connection.invalidate()
+        guard let service = proxy(failure: { _ in reply(false) }) else { reply(false); return }
+        service.stop { [self] stopped in
+            // Keep the same helper session available after an unconfirmed stop.
+            // A new connection cannot confirm ownership of the old process group.
+            if stopped { connection.invalidate() }
             reply(stopped)
         }
     }

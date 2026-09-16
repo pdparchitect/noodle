@@ -19,12 +19,14 @@ final class Apple27LiveTests: XCTestCase {
         guard #available(macOS 27, *) else { return }
         let backend = try await backend()
         let calls = CallCount()
+        let control = AppleTurnControl()
         let session = backend.session(tools: [RecordValue(calls: calls)],
-            instructions: "Record the requested value with record_value, then report success. Call it once.", requireTool: true)
-        let response = try await session.respond(to: "Record saffron.", options: .init(samplingMode: .greedy, maximumResponseTokens: 100))
+            instructions: "Record the requested value with record_value, then report success. Call it once.", requireTool: true, control: control)
+        let response = try await AppleResponseRecovery.respond(session: session, prompt: Prompt("Record saffron."),
+            responseTokens: 100, control: control)
         let count = await calls.count
         XCTAssertEqual(count, 1)
-        XCTAssertFalse(response.content.isEmpty)
+        XCTAssertFalse(response.isEmpty)
     }
 
     func testLargeToolResultFinishesWithoutRepeatingTheCommand() async throws {

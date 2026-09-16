@@ -14,6 +14,7 @@ import XCTest
     var replacement: HarnessWire?
     var automaticStart = true
     var automaticStop = true
+    var stopCalls = 0
     var invalidations = 0
     func startHarness(provider: HarnessProvider, agentID: UUID, executablePath: String,
                       extendedAccess: Bool, sessionID: UUID?, resumeSession: Bool,
@@ -38,7 +39,7 @@ import XCTest
         let id = try XCTUnwrap(last(method)["id"])
         emit(error.map { ["id": id, "error": $0] } ?? ["id": id, "result": result])
     }
-    func stop(reply: @escaping (Bool) -> Void) { stopReply = reply; if automaticStop { reply(true) } }
+    func stop(reply: @escaping (Bool) -> Void) { stopCalls += 1; stopReply = reply; if automaticStop { reply(true) } }
     func invalidate() { invalidations += 1 }
 }
 

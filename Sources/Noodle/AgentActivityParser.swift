@@ -105,6 +105,9 @@ enum AgentActivityParser {
               let update = params["update"] as? [String: Any],
               let type = update["sessionUpdate"] as? String else { return [] }
         switch type {
+        case "noodle_activity" where provider == .apple:
+            guard let title = update["title"] as? String, !title.isEmpty else { return [] }
+            return [.init(title: title)]
         case "agent_message_chunk", "agent_thought_chunk":
             let text = contentText(update["content"])
             if provider == .apple && text == "Working" { return [.init(title: "Working", streamID: "apple-working")] }
@@ -113,7 +116,8 @@ enum AgentActivityParser {
         case "tool_call", "tool_call_update":
             let id = update["toolCallId"] as? String
             let title = update["title"] as? String ?? "Tool"
-            let status = update["status"] as? String ?? "started"
+            let rawStatus = update["status"] as? String ?? "started"
+            let status = provider == .apple && rawStatus == "in_progress" ? "started" : rawStatus
             let detail = contentText(update["content"])
             let input = update["rawInput"].map(render) ?? ""
             // Updates may omit the initial title/input. Separate entries retain

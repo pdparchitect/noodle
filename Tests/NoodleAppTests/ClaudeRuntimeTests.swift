@@ -107,14 +107,20 @@ import XCTest
         XCTAssertEqual(f.failures.first?.1, true)
     }
 
-    func testLateStopConfirmationDoesNotOverwriteRestartedState() async throws {
+    func testRestartWaitsForStopConfirmationAndIgnoresDuplicateReply() async throws {
         let f = try fixture(), wire = HarnessWire(), p = f.claude(wire)
         try await ready(f, wire, p)
         wire.automaticStop = false
         var confirmed: Bool?
         p.stop { confirmed = $0 }
+        p.start()
+        XCTAssertEqual(wire.launches.count, 1)
+        XCTAssertFalse(p.canReceiveHeartbeat)
+        let reply = try XCTUnwrap(wire.stopReply)
+        reply(true); await f.drain()
+        XCTAssertEqual(confirmed, true)
         p.start(); try await f.wait { p.canReceiveHeartbeat }
-        wire.stopReply?(true); await f.drain()
+        reply(false); await f.drain()
         XCTAssertEqual(confirmed, true)
         XCTAssertEqual(p.snapshot.phase, .ready)
     }

@@ -18,6 +18,8 @@ import XCTest
     var terminalErrors: [String] = []
     var invalidations = 0
     var stops = 0
+    var automaticStop = true
+    var stopReply: ((Bool) -> Void)?
     init(workspace: URL) { self.workspace = workspace }
     func startMuse(agentID: UUID, executablePath: String, modelIdentifier: String?, effortIdentifier: String?,
                    extendedAccess: Bool, reply: @escaping (Int32, String?) -> Void) {
@@ -69,7 +71,7 @@ import XCTest
     }
     func count(_ method: String) -> Int { calls.filter { $0.0 == method }.count }
     func invalidate() { invalidations += 1 }
-    func stop(reply: @escaping (Bool) -> Void) { stops += 1; reply(true) }
+    func stop(reply: @escaping (Bool) -> Void) { stops += 1; stopReply = reply; if automaticStop { reply(true) } }
 }
 
 @MainActor final class MuseRuntimeFixture {

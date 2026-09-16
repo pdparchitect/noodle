@@ -56,7 +56,14 @@ private struct DropCompletedToolCallsModifier: LanguageModelSession.DynamicProfi
       for end in prompts.dropFirst() {
         let turn = entries[start..<end]
         let completed: Bool
-        if case .response = turn.last { completed = true } else { completed = false }
+        if case .response(let response) = turn.last {
+          completed = !response.segments.isEmpty
+            && response.segments.contains { segment in
+              if case .text(let text) = segment { return !text.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+              return false
+            }
+            && !AppleResponseRecovery.isIncomplete(turn)
+        } else { completed = false }
         result += turn.filter { entry in
           guard completed else { return true }
           if case .toolCalls = entry { return false }

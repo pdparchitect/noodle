@@ -338,10 +338,9 @@ private final class HostSession: NSObject, AgentHostService {
             self.queue.asyncAfter(deadline: .now() + 0.5) {
                 if kill(-id, 0) == 0 { kill(-id, SIGKILL) }
                 if self.process?.isRunning == true { kill(id, SIGKILL) }
-                self.queue.asyncAfter(deadline: .now() + 0.2) {
+                ProcessExitConfirmation.wait(process: self.process, groupID: id, queue: self.queue) { stopped in
                     self.outputs.forEach { $0.readabilityHandler = nil }
                     self.outputs = []
-                    let stopped = kill(-id, 0) != 0 && self.process?.isRunning != true
                     if stopped { self.groupID = nil; self.process = nil }
                     self.finishStop(stopped)
                 }

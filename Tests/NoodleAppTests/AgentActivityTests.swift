@@ -4,6 +4,28 @@ import XCTest
 @testable import Noodle
 
 @MainActor final class AgentActivityTests: XCTestCase {
+    func testAppleStatusesAndToolResultsReachWindowLog() {
+        let log = AgentActivityLog()
+        func feed(_ update: [String: Any]) {
+            let message: [String: Any] = ["method": "session/update", "params": ["sessionId": "apple", "update": update]]
+            AgentActivityParser.events(message, provider: .apple).forEach { log.record($0) }
+        }
+        feed(["sessionUpdate": "noodle_activity", "title": "Loaded AGENTS.md and skill catalogue"])
+        feed(["sessionUpdate": "tool_call", "toolCallId": "call", "title": "Bash", "status": "in_progress", "rawInput": ["command": "cat missing.txt"]])
+        feed(["sessionUpdate": "tool_call_update", "toolCallId": "call", "title": "Bash", "status": "failed",
+              "content": [["type": "content", "content": ["type": "text", "text": "Duration: 0.10s\nExit status: 1\nFile not found"]]]])
+        feed(["sessionUpdate": "noodle_activity", "title": "Retrying an empty model reply (1/2)"])
+        XCTAssertEqual(log.entries.count, 4)
+        XCTAssertTrue(log.text.contains("Bash: started"))
+        XCTAssertTrue(log.text.contains("cat missing.txt"))
+        XCTAssertTrue(log.text.contains("Bash: failed"))
+        XCTAssertTrue(log.text.contains("File not found"))
+        XCTAssertTrue(log.text.contains("Duration: 0.10s"))
+        XCTAssertFalse(log.text.contains("Reasoning summary"))
+        let status: [String: Any] = ["method": "session/update", "params": ["update": ["sessionUpdate": "noodle_activity", "title": "Apple only"]]]
+        XCTAssertTrue(AgentActivityParser.events(status, provider: .fx).isEmpty)
+    }
+
     func testStreamCoalescingCompletionAndLifecycleBoundaries() {
         let log = AgentActivityLog()
         let id = UUID()
