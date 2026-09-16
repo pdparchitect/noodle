@@ -21,7 +21,13 @@ struct MessageLinkPreview: View {
     @MainActor init(url: URL, shouldLoad: Bool, cache: LinkPreviewMetadataCache? = nil,
          openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }) {
         self.url = url; self.shouldLoad = shouldLoad
-        self.cache = cache ?? .shared; self.openURL = openURL
+        let cache = cache ?? .shared
+        self.cache = cache; self.openURL = openURL
+        // Lazy rows need their cached content before the first visible frame.
+        let result = cache.cachedResult(for: url)
+        _metadata = State(initialValue: result?.metadata)
+        _previewImage = State(initialValue: result?.image)
+        _requested = State(initialValue: result != nil)
     }
 
     var body: some View {
@@ -84,8 +90,8 @@ struct MessageLinkPreview: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Open link: \(title)")
         .onChange(of: url) { _, _ in
-            requestID = UUID(); requested = false
-            metadata = nil; previewImage = nil; loading = false
+            requestID = UUID()
+            restoreCachedResult()
             if shouldLoad { requestMetadata() }
         }
         .onChange(of: shouldLoad, initial: true) { _, visible in
@@ -94,8 +100,23 @@ struct MessageLinkPreview: View {
         }
     }
 
+    @discardableResult
+    private func restoreCachedResult() -> Bool {
+        let result = cache.cachedResult(for: url)
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            metadata = result?.metadata
+            previewImage = result?.image
+            requested = result != nil
+            loading = false
+        }
+        return result != nil
+    }
+
     private func requestMetadata() {
-        guard !requested else { return }
+        // Another row may have filled the cache while this one was offscreen.
+        guard !requested, !restoreCachedResult() else { return }
         requested = true
         loading = true
         let id = requestID
@@ -167,8 +188,11 @@ final class LinkPreviewMetadataCache {
         self.sleep = sleep
         cache.countLimit = 128
     }
+    func cachedResult(for url: URL) -> Result? {
+        cache.object(forKey: url as NSURL)
+    }
     func load(_ url: URL, timeout: TimeInterval = LinkPreviewSettings.timeout(), completion: @escaping (Result) -> Void) {
-        if let result = cache.object(forKey: url as NSURL) {
+        if let result = cachedResult(for: url) {
             completion(result)
             return
         }

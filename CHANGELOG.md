@@ -19,6 +19,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Restore cached link preview titles and images immediately when conversation rows reappear, without replaying the loading animation.
 - Reduce idle CPU usage by scanning bot mailboxes when their directories change, with periodic recovery checks instead of repeated idle directory walks.
 - Show MCP HTTP failures and actionable access errors instead of directing failed connections back to the same Settings screen.
 

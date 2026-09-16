@@ -144,6 +144,58 @@ import XCTest
         XCTAssertEqual(f.metadata.count, 1)
     }
 
+    func testRecreatedPreviewRendersCachedImageBeforeBecomingVisible() async throws {
+        let f = loader(); var completed = false
+        f.cache.load(first) { _ in completed = true }
+        f.metadata[0].1(f.result("Cached article", image: true))
+        try await wait { f.images.count == 1 }
+        let image = NSImage(size: .init(width: 40, height: 40), flipped: false) { rect in
+            NSColor(srgbRed: 0, green: 0, blue: 1, alpha: 1).setFill(); rect.fill(); return true
+        }
+        f.images[0].1(image)
+        try await wait { completed }
+        let reference = ImageRenderer(content: Image(nsImage: image).resizable().frame(width: 280, height: 158))
+        let referenceBitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(reference.cgImage))
+        let expected = try XCTUnwrap(referenceBitmap.colorAt(x: 140, y: 79)?.usingColorSpace(.sRGB))
+
+        // Lazy rows can be recreated before their visibility callback arrives.
+        // The very first frame must contain the cached image, without a fade-in.
+        for _ in 0..<3 {
+            let preview = MessageLinkPreview(url: first, shouldLoad: false, cache: f.cache)
+            let renderer = ImageRenderer(content: preview)
+            let bitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(renderer.cgImage))
+            let color = try XCTUnwrap(bitmap.colorAt(x: 140, y: 79)?.usingColorSpace(.sRGB))
+            XCTAssertEqual(color.blueComponent, expected.blueComponent, accuracy: 0.01)
+            XCTAssertEqual(color.redComponent, expected.redComponent, accuracy: 0.01)
+            XCTAssertEqual(color.greenComponent, expected.greenComponent, accuracy: 0.01)
+            let view = host(preview)
+            _ = try await control("Open link: Cached article", in: view)
+        }
+        XCTAssertEqual(f.metadata.count, 1)
+        XCTAssertEqual(f.images.count, 1)
+    }
+
+    func testHiddenReusedPreviewRestoresCachedURLAndRejectsItsOldRequest() async throws {
+        let f = loader(), selection = LinkSelection(); var completed = false
+        f.cache.load(second) { _ in completed = true }
+        f.metadata[0].1(f.result("Cached replacement"))
+        try await wait { completed }
+
+        selection.visible = true
+        let view = host(LinkFixtureView(selection: selection, cache: f.cache, openURL: { _ in }))
+        try await wait { f.metadata.count == 2 }
+        selection.visible = false
+        selection.url = second
+        _ = try await control("Open link: Cached replacement", in: view)
+        f.metadata[1].1(f.result("Retired article"))
+        for _ in 0..<5 { await Task.yield() }
+        XCTAssertTrue(hasControl("Open link: Cached replacement", in: view))
+        XCTAssertFalse(hasControl("Open link: Retired article", in: view))
+        selection.visible = true
+        _ = try await control("Open link: Cached replacement", in: view)
+        XCTAssertEqual(f.metadata.count, 2)
+    }
+
     func testReusedPreviewResetsOnURLChangeAndRejectsTheOldResult() async throws {
         let f = loader(), selection = LinkSelection(); selection.visible = true
         let view = host(LinkFixtureView(selection: selection, cache: f.cache, openURL: { _ in }))
