@@ -181,7 +181,7 @@ private struct SettingsWindowResizeAnchor: ViewModifier {
 
 private extension View {
     func settingsContentSize() -> some View {
-        frame(width: 580)
+        frame(width: 680)
             .fixedSize(horizontal: false, vertical: true)
     }
 }
