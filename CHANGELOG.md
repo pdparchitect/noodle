@@ -14,6 +14,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Rename the Chat settings tab to Conversation to match the menu.
 - Remove the Bots heading from Heartbeat settings.
 - Rename Autonomous access to Unrestricted across settings, runtime messages, and current documentation. Keep the orange label and make both access labels open a popover explaining their permissions.
 

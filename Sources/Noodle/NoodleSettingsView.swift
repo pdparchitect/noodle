@@ -23,7 +23,7 @@ struct NoodleSettingsView: View {
             ChatSettingsView()
                 .settingsContentSize()
                 .tabItem {
-                    Label("Chat", systemImage: "bubble.left.and.bubble.right")
+                    Label("Conversation", systemImage: "bubble.left.and.bubble.right")
                 }
                 .tag(NoodleSettingsTab.chat)
             HarnessesSettingsView()
