@@ -2,6 +2,37 @@ import XCTest
 @testable import NoodleCore
 
 final class AgentAccessTests: XCTestCase {
+    func testAppsDefaultOffAndStaySeparateFromSystemAccessAndHarnessSelection() {
+        let suite = "Noodle.AppAccessTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var bot = AgentRecord(displayName: "Bot", harnessIdentifier: "codex")
+        var config = AgentAccessConfiguration.migrateExistingAgents([bot.id], in: defaults)
+        XCTAssertTrue(config.isExtended(for: bot))
+        XCTAssertFalse(config.appsEnabled(for: bot), "Existing unrestricted bots must also default apps off")
+        config.setAppsEnabled(true, for: bot)
+        config.setExtended(false, for: bot.id)
+        config.save(to: defaults)
+        config = .load(from: defaults)
+        XCTAssertTrue(config.appsEnabled(for: bot))
+        XCTAssertFalse(config.isExtended(for: bot))
+        bot.harnessIdentifier = "claude-code"
+        XCTAssertFalse(config.appsEnabled(for: bot))
+        config.setAppsEnabled(true, for: bot)
+        bot.harnessIdentifier = "apple"
+        config.setAppsEnabled(true, for: bot)
+        XCTAssertFalse(config.appsEnabled(for: bot))
+        bot.harnessIdentifier = "codex"
+        config.setAppsEnabled(false, for: bot)
+        XCTAssertFalse(config.appsEnabled(for: bot))
+        bot.harnessIdentifier = "claude-code"
+        XCTAssertTrue(config.appsEnabled(for: bot))
+        XCTAssertFalse(config.appsEnabled(for: AgentRecord(displayName: "Copy", harnessIdentifier: "claude-code")))
+        config.remove(bot.id)
+        config.save(to: defaults)
+        XCTAssertFalse(AgentAccessConfiguration.load(from: defaults).appsEnabled(for: bot))
+    }
+
     func testEditingOrCopyingHarnessConfigurationCannotCreateAGrant() {
         var bot = AgentRecord(displayName: "Original", harnessIdentifier: "claude-code")
         var configuration = AgentAccessConfiguration()

@@ -55,6 +55,22 @@ import XCTest
         XCTAssertFalse(p.isAlive)
     }
 
+    func testAppsSelectionReachesNewAndResumedRuntimesInBothAccessModes() async throws {
+        for extended in [false, true] {
+            let f = try fixture()
+            for (index, apps) in [false, true, false].enumerated() {
+                let wire = HarnessWire(), process = f.claude(wire, extended: extended, apps: apps)
+                try await ready(f, wire, process)
+                XCTAssertEqual(wire.appSelections, [apps])
+                XCTAssertEqual(wire.launches.first?.1, extended)
+                XCTAssertEqual(wire.launches.first?.3, index > 0)
+                try confirm(wire)
+                try await f.wait { FileManager.default.fileExists(atPath: f.state(.claudeCode, extended: extended).path) }
+                await f.drain(); process.stop()
+            }
+        }
+    }
+
     func testSessionIsSavedOnlyAfterConfirmationAndThenResumed() async throws {
         let f = try fixture(), wire = HarnessWire(), first = f.claude(wire)
         try await ready(f, wire, first)

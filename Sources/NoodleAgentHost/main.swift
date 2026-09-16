@@ -71,7 +71,7 @@ if CommandLine.arguments == [CommandLine.arguments[0], "--check-process-group"] 
 
 // The child creates a dedicated process group before starting the harness. Disabling
 // extended access terminates this group, including ordinary tool descendants.
-if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-child" {
+if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-child" {
     do {
         guard let provider = HarnessProvider(rawValue: CommandLine.arguments[2]) else {
             throw HostError("Unsupported harness.")
@@ -83,6 +83,9 @@ if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-chi
         let model = CommandLine.arguments[7].isEmpty ? nil : CommandLine.arguments[7]
         let effort = CommandLine.arguments[8].isEmpty ? nil : CommandLine.arguments[8]
         let restricted = CommandLine.arguments[9] == "restricted"
+        guard ["0", "1"].contains(CommandLine.arguments[10]) else { throw HostError("Unsupported apps selection.") }
+        let appsEnabled = CommandLine.arguments[10] == "1"
+        guard !appsEnabled || provider.supportsAccountApps else { throw HostError("This harness does not support account apps.") }
         guard restricted || CommandLine.arguments[9] == "autonomous",
               !restricted || provider.supportsRestrictedAccess else { throw HostError("Unsupported runtime access mode.") }
         try isolateProcessGroup()
@@ -100,7 +103,7 @@ if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-chi
             // try to stack Muse's shell sandbox inside the process sandbox.
             strings = [executable.path, "serve", "--disable-sandbox", "--trust-workspace"]
         case .codex:
-            strings = [executable.path, "app-server"]
+            strings = [executable.path] + CodexLaunch.appServerArguments(appsEnabled: appsEnabled)
         case .fx:
             guard effort == nil, model.map(FxProtocol.validIdentifier) ?? true else { throw HostError("Unsupported FX model or effort.") }
             strings = [executable.path, "acp"]
@@ -114,7 +117,7 @@ if CommandLine.arguments.count == 10, CommandLine.arguments[1] == "--harness-chi
             strings += ["stdio"]
         case .claudeCode:
             strings = [executable.path] + (try ClaudeLaunch.arguments(sessionID: sessionID,
-                resumeSession: resumeSession, model: model, effort: effort, restricted: restricted))
+                resumeSession: resumeSession, model: model, effort: effort, restricted: restricted, appsEnabled: appsEnabled))
         }
         if restricted {
             let layout = AgentStorageLayout(workspace: workspace)
@@ -188,26 +191,27 @@ private final class HostSession: NSObject, AgentHostService {
         resumeSession: Bool,
         modelIdentifier: String?,
         effortIdentifier: String?,
+        appsEnabled: Bool,
         withReply reply: @escaping (Int32, String?) -> Void
     ) {
         startRuntime(harnessIdentifier: harnessIdentifier, agentID: agentID, executablePath: executablePath,
                      sessionID: sessionID, resumeSession: resumeSession, modelIdentifier: modelIdentifier,
-                     effortIdentifier: effortIdentifier, restricted: false, reply: reply)
+                     effortIdentifier: effortIdentifier, restricted: false, appsEnabled: appsEnabled, reply: reply)
     }
 
-    func startRestrictedCodex(agentID: String, executablePath: String,
+    func startRestrictedCodex(agentID: String, executablePath: String, appsEnabled: Bool,
                               withReply reply: @escaping (Int32, String?) -> Void) {
         startRuntime(harnessIdentifier: HarnessProvider.codex.rawValue, agentID: agentID, executablePath: executablePath,
                      sessionID: nil, resumeSession: false, modelIdentifier: nil, effortIdentifier: nil,
-                     restricted: true, reply: reply)
+                     restricted: true, appsEnabled: appsEnabled, reply: reply)
     }
 
     func startRestrictedClaude(agentID: String, executablePath: String, sessionID: String?, resumeSession: Bool,
-                               modelIdentifier: String?, effortIdentifier: String?,
+                               modelIdentifier: String?, effortIdentifier: String?, appsEnabled: Bool,
                                withReply reply: @escaping (Int32, String?) -> Void) {
         startRuntime(harnessIdentifier: HarnessProvider.claudeCode.rawValue, agentID: agentID, executablePath: executablePath,
                      sessionID: sessionID, resumeSession: resumeSession, modelIdentifier: modelIdentifier,
-                     effortIdentifier: effortIdentifier, restricted: true, reply: reply)
+                     effortIdentifier: effortIdentifier, restricted: true, appsEnabled: appsEnabled, reply: reply)
     }
 
     func startRestrictedApple(agentID: String, modelIdentifier: String?, withReply reply: @escaping (Int32, String?) -> Void) {
@@ -247,7 +251,7 @@ private final class HostSession: NSObject, AgentHostService {
 
     private func startRuntime(harnessIdentifier: String, agentID: String, executablePath: String,
                               sessionID: String?, resumeSession: Bool, modelIdentifier: String?, effortIdentifier: String?,
-                              restricted: Bool, reply: @escaping (Int32, String?) -> Void) {
+                              restricted: Bool, appsEnabled: Bool = false, reply: @escaping (Int32, String?) -> Void) {
         queue.async {
             guard self.process == nil, !self.stopping else { reply(0, "Runtime already started or stopping."); return }
             do {
@@ -264,7 +268,8 @@ private final class HostSession: NSObject, AgentHostService {
                 child.arguments = [
                     "--harness-child", provider.rawValue, executablePath, agentID,
                     sessionID ?? "", resumeSession ? "1" : "0",
-                    modelIdentifier ?? "", effortIdentifier ?? "", restricted ? "restricted" : "autonomous"
+                    modelIdentifier ?? "", effortIdentifier ?? "", restricted ? "restricted" : "autonomous",
+                    appsEnabled ? "1" : "0"
                 ]
                 child.currentDirectoryURL = workspace
                 // Do not inherit DYLD, shell startup hooks, or arbitrary app environment.

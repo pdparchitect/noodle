@@ -10,6 +10,60 @@ import XCTest
         return f
     }
 
+    func testAppsGrantWaitsForStopAndDoesNotGrantSystemAccess() throws {
+        for provider: HarnessProvider in [.codex, .claudeCode] {
+            let f = try fixture(), agent = try f.agent(harness: provider), process = try f.start(agent)
+            XCTAssertFalse(process.launch.appsEnabled)
+            process.automaticallyStops = false
+            f.runtime.setAppsEnabled(true, agent: agent, repository: f.repository)
+            XCTAssertFalse(AgentAccessConfiguration.load(from: f.defaults).appsEnabled(for: agent))
+            f.runtime.setExtendedAccess(true, agent: agent, repository: f.repository)
+            XCTAssertEqual(process.stops, 1)
+            process.finishStop(true)
+            XCTAssertTrue(AgentAccessConfiguration.load(from: f.defaults).appsEnabled(for: agent))
+            XCTAssertTrue(try XCTUnwrap(f.factory.processes.last).launch.appsEnabled)
+            XCTAssertFalse(try XCTUnwrap(f.factory.processes.last).launch.extendedAccess)
+        }
+    }
+
+    func testAppsRevocationPersistsBeforeFailedStopAndKickKeepsItRevoked() throws {
+        let f = try fixture(), agent = try f.agent()
+        f.runtime.setAppsEnabled(true, agent: agent, repository: f.repository)
+        let process = try XCTUnwrap(f.factory.processes.last)
+        process.automaticallyStops = false
+        f.runtime.setAppsEnabled(false, agent: agent, repository: f.repository)
+        XCTAssertFalse(AgentAccessConfiguration.load(from: f.defaults).appsEnabled(for: agent))
+        process.finishStop(false)
+        f.runtime.start(agent: agent, repository: f.repository)
+        XCTAssertEqual(f.factory.processes.count, 1)
+        XCTAssertNil(f.runtime.kick(agent: agent, repository: f.repository))
+        process.finishStop(true)
+        XCTAssertFalse(try XCTUnwrap(f.factory.processes.last).launch.appsEnabled)
+        XCTAssertEqual(f.factory.processes.count, 2)
+    }
+
+    func testFailedOrCancelledAppsGrantNeverPersists() throws {
+        for shutdown in [false, true] {
+            let f = try fixture(), agent = try f.agent(), process = try f.start(agent)
+            process.automaticallyStops = false
+            f.runtime.setAppsEnabled(true, agent: agent, repository: f.repository)
+            if shutdown { f.runtime.stopAll() }
+            process.finishStop(shutdown)
+            XCTAssertFalse(AgentAccessConfiguration.load(from: f.defaults).appsEnabled(for: agent))
+            XCTAssertEqual(f.factory.processes.count, 1)
+        }
+    }
+
+    func testAppsCannotBeEnabledForUnsupportedHarnessAndDeletionRevokesGrant() throws {
+        let f = try fixture(), agent = try f.agent(), unsupported = try f.agent(harness: .grokBuild)
+        f.runtime.setAppsEnabled(true, agent: unsupported, repository: f.repository)
+        XCTAssertFalse(f.runtime.accessConfiguration.appsEnabled(for: unsupported))
+        XCTAssertTrue(f.factory.processes.isEmpty)
+        f.runtime.setAppsEnabled(true, agent: agent, repository: f.repository)
+        f.runtime.stop(agentID: agent.id)
+        XCTAssertFalse(AgentAccessConfiguration.load(from: f.defaults).appsEnabled(for: agent))
+    }
+
     func testGrantIsPersistedOnlyAfterTheRestrictedProcessStops() throws {
         let f = try fixture(), agent = try f.agent(), process = try f.start(agent)
         process.automaticallyStops = false

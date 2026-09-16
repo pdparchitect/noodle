@@ -37,6 +37,19 @@ import XCTest
         }
     }
 
+    func testAppsSelectionReachesNewAndResumedRuntimesInBothAccessModes() async throws {
+        for extended in [false, true] {
+            let f = try fixture()
+            for (index, apps) in [false, true, false].enumerated() {
+                let wire = HarnessWire(), process = f.codex(wire, extended: extended, apps: apps)
+                process.start(); try await f.openCodex(wire, resuming: index > 0)
+                XCTAssertEqual(wire.appSelections, [apps])
+                XCTAssertEqual(wire.launches.first?.1, extended)
+                process.stop()
+            }
+        }
+    }
+
     func testRejectedResumeStartsFreshWithHistoryRecovery() async throws {
         let f = try fixture(), old = HarnessWire(), first = f.codex(old)
         first.start(); try await f.openCodex(old); first.stop()

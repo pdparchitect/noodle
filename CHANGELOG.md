@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Add an Apps switch beside Unrestricted in Security settings for Codex and Claude Code. Account apps default to off, are remembered separately for each bot and harness, and have a clickable explanation and lowercase access status.
 - Add Gmail MCP connections for reading mail, creating drafts and managing labels, with native Google sign-in and separate accounts. Mark experimental integrations and list them last in the catalogue.
 - Add separate experimental Google Docs, Drive and Calendar MCP connections for document editing, file access and creation, and calendar event management.
 

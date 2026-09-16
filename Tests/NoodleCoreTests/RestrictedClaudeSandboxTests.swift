@@ -58,7 +58,20 @@ final class RestrictedClaudeSandboxTests: XCTestCase {
         let id = UUID()
         let normal = try ClaudeLaunch.arguments(sessionID: id, resumeSession: false, model: nil, effort: nil, restricted: false)
         let restricted = try ClaudeLaunch.arguments(sessionID: id, resumeSession: false, model: nil, effort: nil, restricted: true)
-        XCTAssertEqual(restricted, normal + ["--settings", #"{"sandbox":{"enabled":false}}"#])
+        func settings(_ arguments: [String]) throws -> [String: Any] {
+            let index = try XCTUnwrap(arguments.firstIndex(of: "--settings"))
+            return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(arguments[index + 1].utf8)) as? [String: Any])
+        }
+        XCTAssertEqual(try settings(normal)["disableClaudeAiConnectors"] as? Bool, true)
+        XCTAssertEqual(try settings(restricted)["disableClaudeAiConnectors"] as? Bool, true)
+        XCTAssertEqual(try (settings(restricted)["sandbox"] as? [String: Bool])?["enabled"], false)
+        XCTAssertNil(try settings(normal)["sandbox"])
+        for restricted in [false, true] {
+            let allowed = try ClaudeLaunch.arguments(sessionID: id, resumeSession: true, model: nil,
+                effort: nil, restricted: restricted, appsEnabled: true)
+            XCTAssertEqual(try settings(allowed)["disableClaudeAiConnectors"] as? Bool, false)
+            XCTAssertTrue(allowed.contains("--resume"))
+        }
         let workspace = URL(fileURLWithPath: "/fixture/bot/workspace"), home = URL(fileURLWithPath: "/fixture/home")
         let environment = try RestrictedAgentSandbox.environment(provider: .claudeCode, home: home, workspace: workspace)
         XCTAssertEqual(environment["HOME"], workspace.path + "/.noodle/home")

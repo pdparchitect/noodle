@@ -45,6 +45,7 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
         resumeSession: Bool = false,
         modelIdentifier: String? = nil,
         effortIdentifier: String? = nil,
+        appsEnabled: Bool = false,
         reply: @escaping (Int32, String?) -> Void
     ) {
         proxy()?.start(
@@ -55,19 +56,20 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
             resumeSession: resumeSession,
             modelIdentifier: modelIdentifier,
             effortIdentifier: effortIdentifier,
+            appsEnabled: appsEnabled,
             withReply: reply
         )
     }
-    func startRestrictedCodex(agentID: UUID, executablePath: String,
+    func startRestrictedCodex(agentID: UUID, executablePath: String, appsEnabled: Bool,
                               reply: @escaping (Int32, String?) -> Void) {
-        proxy()?.startRestrictedCodex(agentID: agentID.uuidString, executablePath: executablePath, withReply: reply)
+        proxy()?.startRestrictedCodex(agentID: agentID.uuidString, executablePath: executablePath, appsEnabled: appsEnabled, withReply: reply)
     }
     func startRestrictedClaude(agentID: UUID, executablePath: String, sessionID: UUID?, resumeSession: Bool,
-                               modelIdentifier: String?, effortIdentifier: String?,
+                               modelIdentifier: String?, effortIdentifier: String?, appsEnabled: Bool,
                                reply: @escaping (Int32, String?) -> Void) {
         proxy()?.startRestrictedClaude(agentID: agentID.uuidString, executablePath: executablePath,
             sessionID: sessionID?.uuidString, resumeSession: resumeSession, modelIdentifier: modelIdentifier,
-            effortIdentifier: effortIdentifier, withReply: reply)
+            effortIdentifier: effortIdentifier, appsEnabled: appsEnabled, withReply: reply)
     }
     func startRestrictedApple(agentID: UUID, modelIdentifier: String?, reply: @escaping (Int32, String?) -> Void) {
         proxy()?.startRestrictedApple(agentID: agentID.uuidString, modelIdentifier: modelIdentifier, withReply: reply)

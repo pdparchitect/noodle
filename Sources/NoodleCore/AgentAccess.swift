@@ -3,8 +3,10 @@ import Foundation
 public struct AgentAccessConfiguration: Equatable, Sendable {
     public private(set) var autonomousAgentIDs: Set<UUID>
     public private(set) var requiredHarnessGrants: [String: [String]] = [:]
+    public private(set) var accountAppGrants: [String: [String]] = [:]
     private static let storageKey = "Noodle.access.autonomousAgents"
     private static let harnessGrantsKey = "Noodle.access.requiredHarnessGrants"
+    private static let accountAppsKey = "Noodle.access.accountApps"
 
     public init(autonomousAgentIDs: Set<UUID> = []) { self.autonomousAgentIDs = autonomousAgentIDs }
     public func isExtended(_ id: UUID) -> Bool { autonomousAgentIDs.contains(id) }
@@ -21,6 +23,16 @@ public struct AgentAccessConfiguration: Equatable, Sendable {
     public mutating func setExtended(_ enabled: Bool, for id: UUID) {
         if enabled { autonomousAgentIDs.insert(id) } else { autonomousAgentIDs.remove(id) }
     }
+    public func appsEnabled(for agent: AgentRecord) -> Bool {
+        guard let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? ""), provider.supportsAccountApps else { return false }
+        return accountAppGrants[agent.id.uuidString]?.contains(provider.rawValue) == true
+    }
+    public mutating func setAppsEnabled(_ enabled: Bool, for agent: AgentRecord) {
+        guard let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? ""), provider.supportsAccountApps else { return }
+        var grants = Set(accountAppGrants[agent.id.uuidString] ?? [])
+        if enabled { grants.insert(provider.rawValue) } else { grants.remove(provider.rawValue) }
+        accountAppGrants[agent.id.uuidString] = grants.isEmpty ? nil : grants.sorted()
+    }
     public mutating func authorizeSelectedHarness(for agent: AgentRecord) {
         guard let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? ""), !provider.supportsRestrictedAccess else { return }
         var grants = Set(requiredHarnessGrants[agent.id.uuidString] ?? [])
@@ -30,10 +42,12 @@ public struct AgentAccessConfiguration: Equatable, Sendable {
     public mutating func remove(_ id: UUID) {
         autonomousAgentIDs.remove(id)
         requiredHarnessGrants.removeValue(forKey: id.uuidString)
+        accountAppGrants.removeValue(forKey: id.uuidString)
     }
     public static func load(from defaults: UserDefaults) -> Self {
         var result = Self(autonomousAgentIDs: Set((defaults.stringArray(forKey: storageKey) ?? []).compactMap(UUID.init(uuidString:))))
         result.requiredHarnessGrants = defaults.dictionary(forKey: harnessGrantsKey) as? [String: [String]] ?? [:]
+        result.accountAppGrants = defaults.dictionary(forKey: accountAppsKey) as? [String: [String]] ?? [:]
         return result
     }
 
@@ -50,13 +64,15 @@ public struct AgentAccessConfiguration: Equatable, Sendable {
     public static func migrateExistingAgents(_ ids: Set<UUID>, in defaults: UserDefaults) -> Self {
         guard defaults.object(forKey: storageKey) == nil else { return load(from: defaults) }
         let restricted = Set((defaults.stringArray(forKey: "Noodle.access.restrictedAgents") ?? []).compactMap(UUID.init(uuidString:)))
-        let configuration = Self(autonomousAgentIDs: ids.subtracting(restricted))
+        var configuration = load(from: defaults)
+        configuration.autonomousAgentIDs = ids.subtracting(restricted)
         defaults.set(configuration.autonomousAgentIDs.map(\.uuidString).sorted(), forKey: storageKey)
         return configuration
     }
     public func save(to defaults: UserDefaults) {
         defaults.set(autonomousAgentIDs.map(\.uuidString).sorted(), forKey: Self.storageKey)
         defaults.set(requiredHarnessGrants, forKey: Self.harnessGrantsKey)
+        defaults.set(accountAppGrants, forKey: Self.accountAppsKey)
     }
 }
 

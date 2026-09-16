@@ -9,6 +9,7 @@ import XCTest
     var onFailure: ((String) -> Void)?
     var writes: [[String: Any]] = []
     var launches: [(HarnessProvider, Bool, UUID?, Bool)] = []
+    var appSelections: [Bool] = []
     var startReply: ((Int32, String?) -> Void)?
     var stopReply: ((Bool) -> Void)?
     var replacement: HarnessWire?
@@ -17,9 +18,10 @@ import XCTest
     var stopCalls = 0
     var invalidations = 0
     func startHarness(provider: HarnessProvider, agentID: UUID, executablePath: String,
-                      extendedAccess: Bool, sessionID: UUID?, resumeSession: Bool,
+                      extendedAccess: Bool, appsEnabled: Bool, sessionID: UUID?, resumeSession: Bool,
                       modelIdentifier: String?, effortIdentifier: String?, reply: @escaping (Int32, String?) -> Void) {
         launches.append((provider, extendedAccess, sessionID, resumeSession))
+        appSelections.append(appsEnabled)
         startReply = reply
         if automaticStart { reply(1234, nil) }
     }
@@ -57,17 +59,17 @@ import XCTest
     func recovery(_ provider: HarnessProvider, extended: Bool = true) -> AgentTurnRecovery {
         AgentTurnRecovery(sessionStateURL: state(provider, extended: extended))
     }
-    func codex(_ wire: HarnessWire, extended: Bool = true) -> CodexAgentProcess {
+    func codex(_ wire: HarnessWire, extended: Bool = true, apps: Bool = false) -> CodexAgentProcess {
         let p = CodexAgentProcess(agent: agent(.codex), executableURL: root, workspaceURL: workspace,
-            extendedAccess: extended, recoverInterruptedWork: false,
+            extendedAccess: extended, appsEnabled: apps, recoverInterruptedWork: false,
             onSnapshot: { _ in }, onHeartbeat: { [weak self] in self?.heartbeats += 1 },
             onUnexpectedTermination: { [weak self] _, detail, recovery in self?.failures.append((detail, recovery)) },
             makeConnection: { wire.replacement ?? wire }, sleep: { [clock] in try await clock.sleep($0) }, now: { [clock] in clock.date })
         processes.append(p); return p
     }
-    func claude(_ wire: HarnessWire, extended: Bool = true) -> ClaudeAgentProcess {
+    func claude(_ wire: HarnessWire, extended: Bool = true, apps: Bool = false) -> ClaudeAgentProcess {
         let p = ClaudeAgentProcess(agent: agent(.claudeCode), executableURL: root, workspaceURL: workspace,
-            extendedAccess: extended, recoverInterruptedWork: false,
+            extendedAccess: extended, appsEnabled: apps, recoverInterruptedWork: false,
             onSnapshot: { _ in }, onHeartbeat: { [weak self] in self?.heartbeats += 1 },
             onUnexpectedTermination: { [weak self] _, detail, recovery in self?.failures.append((detail, recovery)) },
             makeConnection: { wire.replacement ?? wire }, sleep: { [clock] in try await clock.sleep($0) })

@@ -130,7 +130,7 @@ enum CodexAccountResponse {
                 do {
                     let child = Process(), stdinPipe = Pipe(), stdoutPipe = Pipe()
                     child.executableURL = executableURL
-                    child.arguments = ["app-server"]
+                    child.arguments = CodexLaunch.appServerArguments()
                     child.currentDirectoryURL = FileManager.default.temporaryDirectory
                     var environment = ProcessInfo.processInfo.environment
                     environment["CODEX_HOME"] = codexHome.path

@@ -8,7 +8,7 @@ import NoodleCore
     var onExit: ((Int32) -> Void)? { get set }
     var onFailure: ((String) -> Void)? { get set }
     func startHarness(provider: HarnessProvider, agentID: UUID, executablePath: String,
-                      extendedAccess: Bool, sessionID: UUID?, resumeSession: Bool,
+                      extendedAccess: Bool, appsEnabled: Bool, sessionID: UUID?, resumeSession: Bool,
                       modelIdentifier: String?, effortIdentifier: String?,
                       reply: @escaping (Int32, String?) -> Void)
     func write(_ data: Data)
@@ -17,21 +17,21 @@ import NoodleCore
 
 extension ExtendedAgentConnection: HarnessRuntimeConnection {
     @MainActor func startHarness(provider: HarnessProvider, agentID: UUID, executablePath: String,
-                                extendedAccess: Bool, sessionID: UUID?, resumeSession: Bool,
+                                extendedAccess: Bool, appsEnabled: Bool, sessionID: UUID?, resumeSession: Bool,
                                 modelIdentifier: String?, effortIdentifier: String?,
                                 reply: @escaping (Int32, String?) -> Void) {
         if extendedAccess {
             start(provider: provider, agentID: agentID, executablePath: executablePath,
                   sessionID: sessionID, resumeSession: resumeSession,
-                  modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier, reply: reply)
+                  modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier, appsEnabled: appsEnabled, reply: reply)
         } else {
             switch provider {
             case .codex:
-                startRestrictedCodex(agentID: agentID, executablePath: executablePath, reply: reply)
+                startRestrictedCodex(agentID: agentID, executablePath: executablePath, appsEnabled: appsEnabled, reply: reply)
             case .claudeCode:
                 startRestrictedClaude(agentID: agentID, executablePath: executablePath,
                     sessionID: sessionID, resumeSession: resumeSession, modelIdentifier: modelIdentifier,
-                    effortIdentifier: effortIdentifier, reply: reply)
+                    effortIdentifier: effortIdentifier, appsEnabled: appsEnabled, reply: reply)
             case .apple:
                 startRestrictedApple(agentID: agentID, modelIdentifier: modelIdentifier, reply: reply)
             case .fx, .grokBuild:

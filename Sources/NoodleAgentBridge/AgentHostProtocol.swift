@@ -34,10 +34,10 @@ public enum AgentHostIdentity {
 @objc public protocol AgentHostService {
     func startRestrictedApple(agentID: String, modelIdentifier: String?, withReply reply: @escaping (Int32, String?) -> Void)
     func inspectApple(withReply reply: @escaping (Data?, String?) -> Void)
-    func startRestrictedCodex(agentID: String, executablePath: String,
+    func startRestrictedCodex(agentID: String, executablePath: String, appsEnabled: Bool,
                               withReply reply: @escaping (Int32, String?) -> Void)
     func startRestrictedClaude(agentID: String, executablePath: String, sessionID: String?, resumeSession: Bool,
-                               modelIdentifier: String?, effortIdentifier: String?,
+                               modelIdentifier: String?, effortIdentifier: String?, appsEnabled: Bool,
                                withReply reply: @escaping (Int32, String?) -> Void)
     func startRestrictedACP(harnessIdentifier: String, agentID: String, executablePath: String,
                             modelIdentifier: String?, effortIdentifier: String?,
@@ -52,6 +52,7 @@ public enum AgentHostIdentity {
         resumeSession: Bool,
         modelIdentifier: String?,
         effortIdentifier: String?,
+        appsEnabled: Bool,
         withReply reply: @escaping (Int32, String?) -> Void
     )
     func write(_ data: Data)

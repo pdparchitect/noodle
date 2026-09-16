@@ -34,16 +34,17 @@ import NoodleCore
     func start(provider: HarnessProvider, agentID: UUID, executablePath: String,
                sessionID: UUID? = nil, resumeSession: Bool = false,
                modelIdentifier: String? = nil, effortIdentifier: String? = nil,
+               appsEnabled: Bool = false,
                reply: @escaping (Int32, String?) -> Void) {
         self.provider = provider
         if let sessionID { session = sessionID.uuidString }
         reply(12345, nil)
     }
-    func startRestrictedCodex(agentID: UUID, executablePath: String, reply: @escaping (Int32, String?) -> Void) {
+    func startRestrictedCodex(agentID: UUID, executablePath: String, appsEnabled: Bool, reply: @escaping (Int32, String?) -> Void) {
         start(provider: .codex, agentID: agentID, executablePath: executablePath, reply: reply)
     }
     func startRestrictedClaude(agentID: UUID, executablePath: String, sessionID: UUID?, resumeSession: Bool,
-                               modelIdentifier: String?, effortIdentifier: String?, reply: @escaping (Int32, String?) -> Void) {
+                               modelIdentifier: String?, effortIdentifier: String?, appsEnabled: Bool, reply: @escaping (Int32, String?) -> Void) {
         restrictedClaude = true
         start(provider: .claudeCode, agentID: agentID, executablePath: executablePath,
               sessionID: sessionID, resumeSession: resumeSession, modelIdentifier: modelIdentifier,

@@ -63,6 +63,10 @@ final class RestrictedAgentSandboxTests: XCTestCase {
     }
 
     func testInstalledCodexCanInitializeWithAnIsolatedAccountDirectory() throws {
+        for enabled in [false, true] { try checkInstalledCodex(appsEnabled: enabled) }
+    }
+
+    private func checkInstalledCodex(appsEnabled: Bool) throws {
         let candidates = [URL(fileURLWithPath: "/Applications/Codex.app/Contents/Resources/codex"),
                           URL(fileURLWithPath: "/Applications/ChatGPT.app/Contents/Resources/codex"),
                           FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin/codex")]
@@ -78,12 +82,13 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         let workspace = repository.directory(for: bot.agent)
         let account = RestrictedHarnessStorage.home(workspace: workspace).appendingPathComponent(".codex"), temp = workspace.appendingPathComponent(".noodle/tmp")
         for directory in [account, temp] { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
+        try Data("[features]\napps = \(!appsEnabled)\n".utf8).write(to: account.appendingPathComponent("config.toml"))
         let policy = RestrictedAgentSandbox.profile(workspace: workspace, repository: repository.rootURL,
             codexHome: account, executableDirectory: installation,
             application: installation, temporary: temp)
         let process = Process(), input = Pipe(), output = Pipe(), errors = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
-        process.arguments = ["-p", policy, executable.path, "app-server"]
+        process.arguments = ["-p", policy, executable.path] + CodexLaunch.appServerArguments(appsEnabled: appsEnabled)
         process.currentDirectoryURL = workspace
         process.environment = ["HOME": workspace.path, "CODEX_HOME": account.path, "TMPDIR": temp.path,
                                "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"]
@@ -93,10 +98,17 @@ final class RestrictedAgentSandboxTests: XCTestCase {
             "clientInfo": ["name": "noodle_storage_probe", "version": "test"],
             "capabilities": ["experimentalApi": true]]]
         try input.fileHandleForWriting.write(contentsOf: JSONSerialization.data(withJSONObject: request) + Data([10]))
-        // A handshake only: no sign-in, model request, or real account directory.
+        // Metadata only: no sign-in, model request, or real account directory.
         let received = expectation(description: "Codex initialized")
+        let configured = expectation(description: "Noodle apps selection overrides account config")
         let reader = JSONLineReader { object in
             if object["id"] as? Int == 1, object["result"] != nil { received.fulfill() }
+            if object["id"] as? Int == 2 {
+                let result = object["result"] as? [String: Any]
+                let config = result?["config"] as? [String: Any]
+                XCTAssertEqual((config?["features"] as? [String: Any])?["apps"] as? Bool, appsEnabled)
+                configured.fulfill()
+            }
         }
         output.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
@@ -109,6 +121,10 @@ final class RestrictedAgentSandboxTests: XCTestCase {
             process.waitUntilExit()
         }
         wait(for: [received], timeout: 15)
+        try input.fileHandleForWriting.write(contentsOf: Data("{\"method\":\"initialized\"}\n".utf8))
+        let configRequest: [String: Any] = ["id": 2, "method": "config/read", "params": ["includeLayers": false]]
+        try input.fileHandleForWriting.write(contentsOf: JSONSerialization.data(withJSONObject: configRequest) + Data([10]))
+        wait(for: [configured], timeout: 15)
     }
 
     func testRealProcessCanWorkAndMessageButCannotChangeConfigurationOrRuntime() throws {

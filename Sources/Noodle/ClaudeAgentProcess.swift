@@ -9,6 +9,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     private let executableURL: URL
     private let workspaceURL: URL
     private let extendedAccess: Bool
+    private let appsEnabled: Bool
     private let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
     private let onHeartbeat: @MainActor () -> Void
     private let onActivity: @MainActor ([String: Any]) -> Void
@@ -45,6 +46,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         executableURL: URL,
         workspaceURL: URL,
         extendedAccess: Bool,
+        appsEnabled: Bool = false,
         recoverInterruptedWork: Bool,
         onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void,
         onHeartbeat: @escaping @MainActor () -> Void,
@@ -59,6 +61,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         self.executableURL = executableURL
         self.workspaceURL = workspaceURL
         self.extendedAccess = extendedAccess
+        self.appsEnabled = appsEnabled
         self.onSnapshot = onSnapshot
         self.onHeartbeat = onHeartbeat
         self.onActivity = onActivity
@@ -117,6 +120,7 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
                 agentID: configuration.id,
                 executablePath: executableURL.path,
                 extendedAccess: extendedAccess,
+                appsEnabled: appsEnabled,
                 sessionID: sessionID,
                 resumeSession: sessionState.shouldResume,
                 modelIdentifier: configuration.modelIdentifier,

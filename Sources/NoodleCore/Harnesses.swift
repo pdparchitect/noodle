@@ -12,6 +12,8 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
 
     public var isExperimental: Bool { self == .apple }
 
+    public var supportsAccountApps: Bool { self == .codex || self == .claudeCode }
+
     /// Whether the Agent Host can apply a separate restricted runtime policy.
     public var supportsRestrictedAccess: Bool {
         switch self {

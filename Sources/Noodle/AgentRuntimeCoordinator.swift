@@ -34,6 +34,7 @@ struct AgentRuntimeLaunch {
     let executableURL: URL
     let workspaceURL: URL
     let extendedAccess: Bool
+    let appsEnabled: Bool
     let recoverInterruptedWork: Bool
     let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
     let onHeartbeat: @MainActor () -> Void
@@ -54,12 +55,12 @@ struct AgentRuntimeLaunch {
                 onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) }, onActivity: onActivity)
         case .codex:
             return CodexAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
-                extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
+                extendedAccess: extendedAccess, appsEnabled: appsEnabled, recoverInterruptedWork: recoverInterruptedWork,
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
                 onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) }, onActivity: onActivity)
         case .claudeCode:
             return ClaudeAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
-                extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
+                extendedAccess: extendedAccess, appsEnabled: appsEnabled, recoverInterruptedWork: recoverInterruptedWork,
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
                 onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) }, onActivity: onActivity)
         }
@@ -260,8 +261,22 @@ final class AgentRuntimeCoordinator {
 
     func setExtendedAccess(_ enabled: Bool, agent: AgentRecord, repository: WorkspaceRepository) {
         let required = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsRestrictedAccess == false
-        guard (!required || enabled), !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id),
-              accessConfiguration.isExtended(for: agent) != enabled else { return }
+        guard (!required || enabled), accessConfiguration.isExtended(for: agent) != enabled else { return }
+        changeAccess(enabled, agent: agent, repository: repository) { configuration in
+            if required { configuration.authorizeSelectedHarness(for: agent) }
+            else { configuration.setExtended(enabled, for: agent.id) }
+        }
+    }
+
+    func setAppsEnabled(_ enabled: Bool, agent: AgentRecord, repository: WorkspaceRepository) {
+        guard HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsAccountApps == true,
+              accessConfiguration.appsEnabled(for: agent) != enabled else { return }
+        changeAccess(enabled, agent: agent, repository: repository) { $0.setAppsEnabled(enabled, for: agent) }
+    }
+
+    private func changeAccess(_ enabled: Bool, agent: AgentRecord, repository: WorkspaceRepository,
+                              apply: @escaping (inout AgentAccessConfiguration) -> Void) {
+        guard !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id) else { return }
         cancelSupervision(for: agent.id)
         changingAccess.insert(agent.id)
         let transitionID = UUID()
@@ -270,7 +285,7 @@ final class AgentRuntimeCoordinator {
         // Persist revocation before stopping so relaunch cannot restore access.
         // Grants are saved only after the previous process has stopped.
         if !enabled {
-            accessConfiguration.setExtended(false, for: agent.id)
+            apply(&accessConfiguration)
             accessConfiguration.save(to: defaults)
         }
         runtimeIDs[agent.id] = nil
@@ -287,8 +302,7 @@ final class AgentRuntimeCoordinator {
                 self.snapshots[agent.id] = .init(agentID: agent.id, phase: .failed, detail: "Could not confirm that the old runtime stopped. Use Kick to retry.")
                 return
             }
-            if required { self.accessConfiguration.authorizeSelectedHarness(for: agent) }
-            else { self.accessConfiguration.setExtended(enabled, for: agent.id) }
+            apply(&self.accessConfiguration)
             self.accessConfiguration.save(to: self.defaults)
             self.start(agent: agent, repository: repository)
         }
@@ -591,6 +605,7 @@ final class AgentRuntimeCoordinator {
             agent: agent, provider: installation.provider,
             executableURL: URL(fileURLWithPath: executablePath), workspaceURL: repository.directory(for: agent),
             extendedAccess: accessConfiguration.isExtended(for: agent),
+            appsEnabled: accessConfiguration.appsEnabled(for: agent),
             recoverInterruptedWork: recoveryPending.remove(agent.id) != nil,
             onSnapshot: runtimeSnapshotHandler(for: agent.id, runtimeID: runtimeID),
             onHeartbeat: { [weak self] in
@@ -937,6 +952,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     private let executableURL: URL
     private let workspaceURL: URL
     private let extendedAccess: Bool
+    private let appsEnabled: Bool
     private var connectionID: UUID?
     private let sleep: @MainActor (Duration) async throws -> Void
     private let now: @MainActor () -> Date
@@ -980,6 +996,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         executableURL: URL,
         workspaceURL: URL,
         extendedAccess: Bool,
+        appsEnabled: Bool = false,
         recoverInterruptedWork: Bool,
         onSnapshot: @escaping @MainActor (AgentRuntimeSnapshot) -> Void,
         onHeartbeat: @escaping @MainActor () -> Void,
@@ -996,6 +1013,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
         self.executableURL = executableURL
         self.workspaceURL = workspaceURL
         self.extendedAccess = extendedAccess
+        self.appsEnabled = appsEnabled
         self.onSnapshot = onSnapshot
         self.onHeartbeat = onHeartbeat
         self.onActivity = onActivity
@@ -1055,7 +1073,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
                 }
             }
             connection.startHarness(provider: .codex, agentID: configuration.id, executablePath: executableURL.path,
-                                    extendedAccess: extendedAccess, sessionID: nil, resumeSession: false,
+                                    extendedAccess: extendedAccess, appsEnabled: appsEnabled, sessionID: nil, resumeSession: false,
                                     modelIdentifier: nil, effortIdentifier: nil, reply: started)
         } catch { reportUnexpectedTermination(error.localizedDescription) }
     }
@@ -1554,7 +1572,7 @@ private final class CodexCapabilityProbe {
             let outputPipe = Pipe()
             let errorPipe = Pipe()
             child.executableURL = executableURL
-            child.arguments = ["app-server"]
+            child.arguments = CodexLaunch.appServerArguments()
             child.standardInput = inputPipe
             child.standardOutput = outputPipe
             child.standardError = errorPipe

@@ -141,7 +141,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
                 }
             }
             connection.startHarness(provider: provider, agentID: configuration.id, executablePath: executableURL.path,
-                                    extendedAccess: extendedAccess, sessionID: nil, resumeSession: false,
+                                    extendedAccess: extendedAccess, appsEnabled: false, sessionID: nil, resumeSession: false,
                                     modelIdentifier: configuration.modelIdentifier,
                                     effortIdentifier: provider == .grokBuild ? configuration.reasoningEffort : nil, reply: started)
         } catch { terminated(error.localizedDescription) }

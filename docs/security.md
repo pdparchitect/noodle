@@ -6,8 +6,8 @@
 | --- | --- |
 | Codex, Claude Code, FX, Grok Build, Muse Code, Apple Intelligence | Restricted by default; unrestricted access is optional |
 
-Change any bot's access in **Settings → Security**. Click its **Restricted** or
-**Unrestricted** label to see what that mode allows. All harnesses use the bot's
+Change any bot's access in **Settings → Security**. Click its **restricted** or
+**unrestricted** label to see what that mode allows. All harnesses use the bot's
 saved access preference. Previous required Claude/FX/Grok/Muse grants do not
 override that preference. Editing `agent.json` alone never grants unrestricted access.
 
@@ -160,6 +160,30 @@ Revoke those separately in System Settings.
   unresolved; the Applet broker fix does not address it. Keep credentials out of
   command arguments rather than relying on workspace filesystem isolation to
   hide them.
+
+## Account apps
+
+The **Apps** switch in **Settings → Security** lets a Codex bot use apps connected
+to its ChatGPT account, or a Claude Code bot use connectors from Claude.ai. Click
+the **Apps** heading or a bot's **apps** status to see the explanation.
+
+Apps are off by default, including for existing bots. The preference is saved
+separately for each bot and harness: enabling Codex apps does not enable Claude
+connectors when that bot switches harnesses. Unsupported harnesses show a dash.
+Unrestricted access and Noodle-assigned tools have separate settings.
+
+Changing Apps restarts the bot, retaining its conversation. Revocation is saved
+before shutdown; a grant is saved only once the previous runtime has stopped.
+Codex receives an explicit `apps` feature override at launch; Claude receives
+`disableClaudeAiConnectors` in its launch settings. Noodle does not edit either
+harness's global configuration. Provider or administrator restrictions still
+apply when Apps is on. Setup and model-discovery probes run with apps disabled.
+
+This switch controls those account apps, not every remote tool or network
+request. Apps use the permissions granted in the provider account. Turning Apps
+off does not disconnect the account, undo completed actions, or erase data
+already returned to the conversation. Manage individual apps and revoke their
+account permissions in ChatGPT or Claude.ai.
 
 ## Connected tools
 
