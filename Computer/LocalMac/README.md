@@ -74,10 +74,17 @@ launch. Preparation verifies the real account home and identity, then:
 
 - creates `~/.skipbuddy` and seeds per-user Setup Assistant presentation history;
 - sets per-user screen-saver `idleTime` to zero for current-host and any-host scopes;
-- creates `.zshrc` only when absent, with `PROMPT='%1~ %# '`.
+- creates `.zshrc` only when absent, with `PROMPT='%1~ %# '`, and appends the
+  interactive welcome hook once to ordinary account-owned `.zshrc` files.
 
 This preserves existing shell customization and changes neither the main user's
 preferences nor system power/password policy. Manual locking remains available.
+
+The welcome uses the same bundled ASCII banner as the container images, in both
+Noodle's terminal and Terminal.app inside the managed desktop. It prints once per
+interactive shell with a terminal attached; non-interactive commands stay silent.
+Set `NOODLE_BANNER=0` before the hook to disable it. Custom linked or read-only
+shell configuration is left alone.
 
 On this macOS build, nested helper apps inherit their enclosing app's Screen
 Recording attribution. The helper therefore verifies and maintains a signed copy

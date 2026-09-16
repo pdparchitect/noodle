@@ -25,17 +25,7 @@ func prepareOnboarding(_ account: LocalMacAccount) throws {
             throw LocalMacError("Cannot disable the managed account's idle screen saver.")
         }
     }
-    // Install an editable default once. Existing shell configuration belongs to
-    // the account and must survive every reconnect and application update.
-    let shellFD = Darwin.open(account.home + "/.zshrc",
-        O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
-    if shellFD >= 0 {
-        let file = FileHandle(fileDescriptor: shellFD, closeOnDealloc: true)
-        defer { try? file.close() }
-        try file.write(contentsOf: Data("# Noodle Local Mac default prompt. Customize this file as needed.\nPROMPT='%1~ %# '\n".utf8))
-    } else if errno != EEXIST {
-        throw LocalMacError("Cannot prepare the managed account's shell prompt.")
-    }
+    try LocalMacShellWelcome.prepare(home: account.home)
     let marker = account.home + "/.skipbuddy"
     let fd = Darwin.open(marker, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
     if fd >= 0 { Darwin.close(fd) }

@@ -17,6 +17,7 @@ for kind in Preview Thumbnail; do
     codesign -d --entitlements :- "$extension" > "$entitlements" 2>/dev/null
     swift "$project_root/Computer/Tests/VerifyPreviewExtension.swift" "$extension/Contents/Info.plist" "$entitlements" "$info" "$kind"
 done
+cmp "$project_root/Computer/Images/shared/noodle-welcome" "$app/Contents/Helpers/LocalMacDesktop.app/Contents/Resources/noodle-welcome"
 service_path="${app:A}/Contents/Helpers/LocalMacSetup.app/Contents/Library/LaunchServices/LocalMacService"
 "$service_path" --check-layout
 (cd /; exec -a Contents/Library/LaunchServices/LocalMacService "$service_path" --check-layout)

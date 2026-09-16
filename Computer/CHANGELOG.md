@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Show the images' Noodle Computer welcome banner in Local Mac interactive terminals, including Terminal.app inside the managed desktop, while preserving existing shell settings.
+
 ### Fixed
 
 - Reconnect the terminal and file browser when restarting a failed Local Mac connection, and prevent an unfinished terminal startup from restoring the old connection.

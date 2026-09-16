@@ -147,8 +147,9 @@ cat > "$setup_app/Contents/Info.plist" <<EOF
 </dict></plist>
 EOF
 desktop="$app/Contents/Helpers/LocalMacDesktop.app"
-mkdir -p "$desktop/Contents/MacOS"
+mkdir -p "$desktop/Contents/MacOS" "$desktop/Contents/Resources"
 cp "$local_bin/LocalMacDesktop" "$desktop/Contents/MacOS/LocalMacDesktop"
+cp "$package/Images/shared/noodle-welcome" "$desktop/Contents/Resources/noodle-welcome"
 cp "$package/Support/LocalMacDesktop-Info.plist" "$desktop/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.desktop" "$desktop/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$desktop/Contents/Info.plist"
