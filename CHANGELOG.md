@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-09-16
+
 ### Added
 
 - Save MCP binary results as workspace files automatically, accept `@file` JSON input references (`@@` for a literal `@`), and expose resource listing/reading with `--raw` result output when needed.
@@ -23,6 +25,7 @@ All notable changes to Noodle are documented here, following
 ### Fixed
 
 - Restore popped-out conversations and their window positions and sizes after quitting or unexpectedly exiting the app, while keeping explicitly closed windows closed.
+- Prevent false Claude Code “Update required” warnings when its help output is truncated through a pipe, and treat oversized help as an incomplete check instead of missing support.
 - Fix local and Runbar launches stopping after packaging when Agent Host verification encounters a broken pipe.
 - Recheck Applet broker sessions and conversation access after asynchronous work, preventing queued requests and result payloads from surviving access revocation.
 - Keep background changes in Edit Bot and Group Info pending until Save, discard them on Cancel, and preserve the original background if saving settings fails.

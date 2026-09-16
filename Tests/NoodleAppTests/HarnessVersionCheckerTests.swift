@@ -12,9 +12,11 @@ import XCTest
         var inspected = 0, fetched = 0
         let checker = HarnessVersionChecker(inspect: { _ in inspected += 1; return .init(installedVersion: "2.0.0") },
             fetch: { _ in fetched += 1; return self.release }, now: { self.now })
-        let previous = HarnessVersionReport(installedVersion: "1.0.0", latestVersion: "2.5.0", latestCheckedAt: now.addingTimeInterval(-60))
+        let previous = HarnessVersionReport(installedVersion: "1.0.0", latestVersion: "2.5.0",
+            compatibilityIssue: "Missing required options", latestCheckedAt: now.addingTimeInterval(-60))
         let report = try await checker.check(installation, previous: previous, forceLatest: false)
         XCTAssertEqual(report.installedVersion, "2.0.0"); XCTAssertEqual(report.latestVersion, "2.5.0")
+        XCTAssertNil(report.compatibilityIssue, "A successful inspection must clear a cached compatibility warning")
         XCTAssertEqual(inspected, 1); XCTAssertEqual(fetched, 0)
     }
 

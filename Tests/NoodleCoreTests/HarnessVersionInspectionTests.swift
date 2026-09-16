@@ -56,6 +56,33 @@ final class HarnessVersionInspectionTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(report.compatibilityIssue).contains("app-server"))
     }
 
+    func testHelpIsCapturedWithoutAPipeThatCanLoseBufferedOutputOnExit() throws {
+        let executable = try fixture(#"""
+        if [ "$1" = --version ]; then printf '%s\n' '2.1.273'; exit 0; fi
+        # Claude's native CLI can exit successfully before flushing help to a pipe.
+        if [ -p /dev/fd/1 ]; then printf '%s' 'Usage: claude [options]'; exit 0; fi
+        printf '%s\n' 'Usage: claude --input-format --output-format'
+        printf '%s\n' '--permission-mode --permission-prompts --session-id' >&2
+        """#)
+        let report = try HarnessVersionInspection.inspect(provider: .claudeCode, executable: executable, environment: [:])
+        XCTAssertEqual(report.installedVersion, "2.1.273")
+        XCTAssertNil(report.checkError)
+        XCTAssertNil(report.compatibilityIssue)
+    }
+
+    func testHelpBeyondCaptureLimitCannotBeReportedAsMissingRequiredOptions() throws {
+        let executable = try fixture(#"""
+        if [ "$1" = --version ]; then printf '%s\n' '1.2.3'; exit 0; fi
+        printf '%s\n' 'Usage: codex'
+        /usr/bin/head -c 262144 /dev/zero | /usr/bin/tr '\000' x
+        printf '\napp-server\n'
+        """#)
+        let report = try HarnessVersionInspection.inspect(provider: .codex, executable: executable, environment: [:])
+        XCTAssertEqual(report.installedVersion, "1.2.3")
+        XCTAssertNotNil(report.checkError)
+        XCTAssertNil(report.compatibilityIssue)
+    }
+
     func testFailedHelpDistinguishesIncompatibleCLIFromAccountErrors() throws {
         let executable = try fixture(#"""
         if [ "$1" = --version ]; then printf '%s\n' '1.2.3'; exit 0; fi
