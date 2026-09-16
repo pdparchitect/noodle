@@ -178,7 +178,7 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         "$6" --agent-directory "$1" --send --conversation "$7" --body 'sandbox reply'
         "$6" --agent-directory "$1" --get-latest
         """
-        let process = Process(), errors = Pipe(), output = Pipe()
+        let process = Process(), errors = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
         process.arguments = ["-p", policy, "/bin/sh", "-c", script, "probe", layout.workspace.path,
                              layout.configuration.path, state.path, layout.package.path, account.path, helper.path,
@@ -187,9 +187,11 @@ final class RestrictedAgentSandboxTests: XCTestCase {
                              provider == .fx ? "1" : "0", "0", otherSecret.path,
                              repository.conversationDirectory(id: created.conversation.id).path, other.conversation.id.uuidString]
         process.environment = ["PATH": "/usr/bin:/bin", "HOME": layout.workspace.path, "TMPDIR": temp.path, "TMPPREFIX": temp.appendingPathComponent("zsh").path]
-        process.standardOutput = output; process.standardError = errors
-        try process.run(); process.waitUntilExit()
+        process.standardOutput = FileHandle.nullDevice; process.standardError = errors
+        try process.run()
+        // Drain denials while the child runs so a full stderr pipe cannot block it.
         let details = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0, details)
         XCTAssertEqual(try Data(contentsOf: layout.configuration), original)
         XCTAssertEqual(try String(contentsOf: state, encoding: .utf8), "state")
@@ -297,8 +299,10 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
         process.arguments = ["-p", policy, "/bin/sh", "-c", "set -e; printf ok > \"$1/ok\"; if touch \"$2/denied\"; then exit 10; fi", "probe", workspace.path, root.path]
         process.standardError = errors
-        try process.run(); process.waitUntilExit()
-        XCTAssertEqual(process.terminationStatus, 0, String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
+        try process.run()
+        let details = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0, details)
         XCTAssertEqual(try String(contentsOf: workspace.appendingPathComponent("ok"), encoding: .utf8), "ok")
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("denied").path))
     }

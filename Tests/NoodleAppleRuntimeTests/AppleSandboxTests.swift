@@ -154,8 +154,10 @@ final class AppleSandboxTests: XCTestCase {
         let policy = AppleAgentSandbox.profile(application: app, modelsDirectory: model, localModel: true)
         child.arguments = ["-p", policy,
                            binary.path, app.path, weights.path, outside.path, link.path]
-        try child.run(); child.waitUntilExit()
-        XCTAssertEqual(child.terminationStatus, 0, String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
+        try child.run()
+        let details = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        child.waitUntilExit()
+        XCTAssertEqual(child.terminationStatus, 0, details)
     }
 
     func testRestrictedFilesystemAndCommandDescendants() throws {
@@ -193,8 +195,10 @@ final class AppleSandboxTests: XCTestCase {
         """, "probe", layout.workspace.path, protected.path, layout.configuration.path, layout.runtime.path, privateFile.path,
             repository.conversationDirectory(id: bot.conversation.id).path, messenger.path]
         child.standardError = errors
-        try child.run(); child.waitUntilExit()
-        XCTAssertEqual(child.terminationStatus, 0, String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
+        try child.run()
+        let details = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        child.waitUntilExit()
+        XCTAssertEqual(child.terminationStatus, 0, details)
         XCTAssertEqual(try String(contentsOf: protected, encoding: .utf8), "secret")
         XCTAssertEqual(try String(contentsOf: layout.workspace.appendingPathComponent("allowed.txt"), encoding: .utf8), "allowed")
     }

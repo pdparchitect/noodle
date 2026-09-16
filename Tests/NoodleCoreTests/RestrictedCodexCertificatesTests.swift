@@ -45,8 +45,9 @@ final class RestrictedCodexCertificatesTests: XCTestCase {
             """, "probe", bundle.path, layout.workspace.path]
         process.standardError = errors
         try process.run()
+        let details = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         process.waitUntilExit()
-        XCTAssertEqual(process.terminationStatus, 0, String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
+        XCTAssertEqual(process.terminationStatus, 0, details)
         XCTAssertEqual(try String(contentsOf: bundle, encoding: .utf8), pem)
     }
 

@@ -104,7 +104,7 @@ cp "$bin_path/Noodle" "$contents/MacOS/Noodle"
 otool -l "$contents/MacOS/Noodle" \
     | awk '/cmd LC_RPATH/ { found=1; next } found && /path / { print $2; found=0 }' \
     | while IFS= read -r rpath; do
-        if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain_dir/"* || "$rpath" == /Library/Developer/CommandLineTools/* ]]; then
+        if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain_dir/"* || "$rpath" == /Library/Developer/CommandLineTools/* || "$rpath" == /*/Metal.xctoolchain/* ]]; then
             install_name_tool -delete_rpath "$rpath" "$contents/MacOS/Noodle"
         fi
     done
@@ -151,7 +151,7 @@ fi
 otool -l "$contents/Helpers/NoodleAppleAgent" \
     | awk '/cmd LC_RPATH/ { found=1; next } found && /path / { print $2; found=0 }' \
     | while IFS= read -r rpath; do
-        if [[ "$rpath" == "$apple_bin" || "$rpath" == "$toolchain_dir/"* || "$rpath" == /Library/Developer/CommandLineTools/* ]]; then
+        if [[ "$rpath" == "$apple_bin" || "$rpath" == "$toolchain_dir/"* || "$rpath" == /Library/Developer/CommandLineTools/* || "$rpath" == /*/Metal.xctoolchain/* ]]; then
             install_name_tool -delete_rpath "$rpath" "$contents/Helpers/NoodleAppleAgent"
         fi
     done
@@ -163,7 +163,7 @@ cp "$bin_path/NoodleAgentHost" "$agent_host/Contents/MacOS/NoodleAgentHost"
 otool -l "$agent_host/Contents/MacOS/NoodleAgentHost" \
     | awk '/cmd LC_RPATH/ { found=1; next } found && /path / { print $2; found=0 }' \
     | while IFS= read -r rpath; do
-        if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain_dir/"* || "$rpath" == /Library/Developer/CommandLineTools/* ]]; then
+        if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain_dir/"* || "$rpath" == /Library/Developer/CommandLineTools/* || "$rpath" == /*/Metal.xctoolchain/* ]]; then
             install_name_tool -delete_rpath "$rpath" "$agent_host/Contents/MacOS/NoodleAgentHost"
         fi
     done

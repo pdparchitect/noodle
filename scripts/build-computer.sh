@@ -96,7 +96,7 @@ done
 toolchain="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain"
 otool -l "$app/Contents/MacOS/NoodleComputer" | awk '/cmd LC_RPATH/ { found=1; next } found && /path / { print $2; found=0 }' |
     while IFS= read -r rpath; do
-        if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain/"* ]]; then
+        if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain/"* || "$rpath" == /*/Metal.xctoolchain/* ]]; then
             install_name_tool -delete_rpath "$rpath" "$app/Contents/MacOS/NoodleComputer"
         fi
     done

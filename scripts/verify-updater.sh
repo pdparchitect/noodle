@@ -23,8 +23,9 @@ if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == "1" ]]; then
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :NoodleUpdatesEnabled' "$info")" == true ]]
 fi
 signed="$(codesign -d --entitlements :- "$app" 2>/dev/null | tr -d '[:space:]')"
-print -r -- "$signed" | grep -Fq '<key>com.apple.security.app-sandbox</key><true/>'
-print -r -- "$signed" | grep -Fq "<key>com.apple.security.temporary-exception.mach-lookup.global-name</key><array><string>$bundle_identifier-spks</string><string>$bundle_identifier-spki</string></array>"
+# Consume full command output so pipefail cannot mistake grep's early exit for a verification failure.
+print -r -- "$signed" | grep -F '<key>com.apple.security.app-sandbox</key><true/>' >/dev/null
+print -r -- "$signed" | grep -F "<key>com.apple.security.temporary-exception.mach-lookup.global-name</key><array><string>$bundle_identifier-spks</string><string>$bundle_identifier-spki</string></array>" >/dev/null
 for component in \
     "$sparkle/Versions/B/XPCServices/Installer.xpc" \
     "$sparkle/Versions/B/Autoupdate" \
@@ -32,18 +33,18 @@ for component in \
     "$sparkle"; do
     codesign --verify --strict "$component"
     details="$(codesign -dv --verbose=4 "$component" 2>&1)"
-    print -r -- "$details" | grep -Fq "TeamIdentifier=$team"
-    print -r -- "$details" | grep -q 'flags=.*runtime'
+    print -r -- "$details" | grep -F "TeamIdentifier=$team" >/dev/null
+    print -r -- "$details" | grep 'flags=.*runtime' >/dev/null
     entitlements="$(codesign -d --entitlements :- "$component" 2>/dev/null)"
-    if print -r -- "$entitlements" | grep -q '<key>'; then
+    if print -r -- "$entitlements" | grep '<key>' >/dev/null; then
         print -u2 "Unexpected entitlement in updater component: $component"; exit 1
     fi
 done
 binary="$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$info")"
-otool -L "$binary" | grep -Fq '@rpath/Sparkle.framework/Versions/B/Sparkle'
+otool -L "$binary" | grep -F '@rpath/Sparkle.framework/Versions/B/Sparkle' >/dev/null
 rpaths="$(otool -l "$binary" | awk '/cmd LC_RPATH/ { found=1; next } found && /path / { print $2; found=0 }')"
-print -r -- "$rpaths" | grep -Fxq '@executable_path/../Frameworks'
-if print -r -- "$rpaths" | grep '^/' | grep -Fvxq '/usr/lib/swift'; then
+print -r -- "$rpaths" | grep -Fx '@executable_path/../Frameworks' >/dev/null
+if print -r -- "$rpaths" | grep '^/' | grep -Fvx '/usr/lib/swift' >/dev/null; then
     print -u2 "App contains an absolute framework search path: $rpaths"; exit 1
 fi
 test -s "$app/Contents/Resources/Sparkle-LICENSE.txt"

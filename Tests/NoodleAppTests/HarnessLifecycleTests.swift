@@ -58,7 +58,10 @@ import XCTest
             let f = try fixture(), old = HarnessWire(), p = make(provider, f, old)
             p.start(); try await open(provider, f, old)
             let oldExit = old.onExit, oldData = old.onData, oldStarted = old.startReply
-            p.stop { _ in }
+            let stopped = await withCheckedContinuation { continuation in
+                p.stop { continuation.resume(returning: $0) }
+            }
+            XCTAssertTrue(stopped)
             let next = HarnessWire(); old.replacement = next
             p.start(); try await open(provider, f, next, resuming: provider != .claudeCode)
             oldExit?(3); oldStarted?(777, "Retired launch failed")

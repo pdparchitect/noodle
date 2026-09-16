@@ -2,8 +2,11 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-16
+
 ### Fixed
 
+- Remove development-only Metal toolchain framework search paths from packaged apps.
 - Suppress settings scrollbar flashes during tab changes and dynamic window resizing on macOS 27, restoring indicators after the layout settles.
 
 ### Added

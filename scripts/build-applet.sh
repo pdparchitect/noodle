@@ -30,7 +30,7 @@ toolchain="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain"
 for executable in "$app/Contents/MacOS/NoodleApplet" "$app/Contents/Helpers/noodlet" "$preview/Contents/MacOS/NoodletPreview"; do
     otool -l "$executable" | awk '/cmd LC_RPATH/ {found=1;next} found && /path / {print $2;found=0}' |
         while IFS= read -r rpath; do
-            if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain/"* ]]; then install_name_tool -delete_rpath "$rpath" "$executable"; fi
+            if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain/"* || "$rpath" == /*/Metal.xctoolchain/* ]]; then install_name_tool -delete_rpath "$rpath" "$executable"; fi
         done
 done
 cp -R "$bin_path/NoodleApplet_NoodleApplet.bundle" "$app/Contents/Resources/"
