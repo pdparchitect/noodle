@@ -59,12 +59,12 @@ public struct NoodletPackage: Sendable {
   public static func digest(_ data: Data) -> String {
     SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
   }
-  public init(url: URL) throws {
+  public init(url: URL, build: AppletBuildIdentity = .current) throws {
     self.url = url.resolvingSymlinksInPath().standardizedFileURL
-    guard self.url.pathExtension == "noodlet",
+    guard self.url.pathExtension == build.fileExtension,
       try self.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
     else {
-      throw AppletError("Open a .noodlet document package.")
+      throw AppletError("Open a .\(build.fileExtension) document package.")
     }
     let manifestURL = try Self.child("noodlet.json", in: self.url)
     guard try manifestURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0 <= 65536 else {
@@ -79,6 +79,17 @@ public struct NoodletPackage: Sendable {
     guard try entry.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
       throw AppletError("Missing entry file: \(manifest.entry)")
     }
+  }
+  /// Explicit transfer only: read a source from either channel and create a new copy.
+  /// Never relabel or overwrite the original document or an existing destination.
+  public static func convert(from source: URL, to destination: URL) throws -> Self {
+    guard let sourceBuild = AppletBuildIdentity.document(source),
+          let destinationBuild = AppletBuildIdentity.document(destination),
+          !FileManager.default.fileExists(atPath: destination.path) else {
+      throw AppletError("Choose a new .noodlet or .noodlet-local destination for the copy.")
+    }
+    let package = try Self(url: source, build: sourceBuild)
+    return try install(package.files(), to: destination, build: destinationBuild, replaceExisting: false)
   }
   public static func child(_ relative: String, in root: URL) throws -> URL {
     try AppletRequest.validateRelativePath(relative)
@@ -130,14 +141,17 @@ public struct NoodletPackage: Sendable {
     }
     return Self.digest(bytes)
   }
-  public static func install(_ files: [String: Data], to destination: URL) throws -> Self {
+  public static func install(_ files: [String: Data], to destination: URL, build: AppletBuildIdentity = .current, replaceExisting: Bool = true) throws -> Self {
+    guard destination.pathExtension == build.fileExtension else {
+      throw AppletError("Use a .\(build.fileExtension) destination.")
+    }
     var request = AppletRequest(.validate)
     request.files = files
     try request.validate()
     let fm = FileManager.default
     let parent = destination.deletingLastPathComponent()
     try fm.createDirectory(at: parent, withIntermediateDirectories: true)
-    let stage = parent.appendingPathComponent(".\(UUID().uuidString).noodlet")
+    let stage = parent.appendingPathComponent(".\(UUID().uuidString).\(build.fileExtension)")
     try fm.createDirectory(at: stage, withIntermediateDirectories: true)
     defer { try? fm.removeItem(at: stage) }
     for (name, data) in files {
@@ -146,12 +160,13 @@ public struct NoodletPackage: Sendable {
         at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
       try data.write(to: target, options: .atomic)
     }
-    _ = try Self(url: stage)
+    _ = try Self(url: stage, build: build)
     if fm.fileExists(atPath: destination.path) {
+      guard replaceExisting else { throw AppletError("The destination already exists.") }
       _ = try fm.replaceItemAt(destination, withItemAt: stage)
     } else {
       try fm.moveItem(at: stage, to: destination)
     }
-    return try Self(url: destination)
+    return try Self(url: destination, build: build)
   }
 }

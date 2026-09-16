@@ -19,7 +19,7 @@ import QuickLookUI
         let controller = AppletController(repository: repository)
         controller.start(agents: [author, participant])
         defer { controller.start(agents: []) }
-        let source = repository.directory(for: author).appendingPathComponent("Hello.noodlet")
+        let source = repository.directory(for: author).appendingPathComponent("Hello.\(AppletBuildIdentity.current.fileExtension)")
         try manager.createDirectory(at: source, withIntermediateDirectories: true)
         try Data(#"{"version":1,"title":"Noodlet link preview","runtime":"html","entry":"index.html","network":false}"#.utf8)
             .write(to: source.appendingPathComponent("noodlet.json"))

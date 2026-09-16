@@ -10,7 +10,7 @@ import OSLog
   @AppStorage("showMenuBar") private var showMenuBar = false
 
   var body: some Scene {
-    Window("Noodle Applet", id: "library") {
+    Window(AppletBuildIdentity.current.appName, id: "library") {
       LibraryView(library: delegate.library, runtime: delegate.runtime, background: delegate.background)
         .handlesExternalEvents(preferring: [], allowing: [])
         .frame(minWidth: 850, minHeight: 580)
@@ -36,12 +36,12 @@ import OSLog
     .commands {
       CommandGroup(after: .appSettings) { AppletCheckForUpdatesButton() }
       CommandGroup(replacing: .appInfo) {
-        Button("About Noodle Applet") {
-          NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "Noodle Applet"])
+        Button("About \(AppletBuildIdentity.current.appName)") {
+          NSApp.orderFrontStandardAboutPanel(options: [.applicationName: AppletBuildIdentity.current.appName])
         }
       }
       CommandGroup(replacing: .help) {
-        Button("Noodle Applet Help") { NSWorkspace.shared.open(AppletLinks.repository) }
+        Button("\(AppletBuildIdentity.current.appName) Help") { NSWorkspace.shared.open(AppletLinks.repository) }
       }
       AppletFileCommands(delegate: delegate)
     }
@@ -50,7 +50,7 @@ import OSLog
     }
     .windowResizability(.contentSize)
     .handlesExternalEvents(matching: [])
-    MenuBarExtra("Noodle Applet", systemImage: "square.grid.2x2.fill", isInserted: $showMenuBar) {
+    MenuBarExtra(AppletBuildIdentity.current.appName, systemImage: "square.grid.2x2.fill", isInserted: $showMenuBar) {
       AppletMenu(library: delegate.library, runtime: delegate.runtime)
     }
     .handlesExternalEvents(matching: [])
@@ -89,7 +89,7 @@ private struct AppletMenu: View {
       }
     }
     Divider()
-    Button("Quit Noodle Applet") { NSApp.terminate(nil) }.keyboardShortcut("q")
+    Button("Quit \(AppletBuildIdentity.current.appName)") { NSApp.terminate(nil) }.keyboardShortcut("q")
   }
 }
 
@@ -181,7 +181,8 @@ private struct AppletMenu: View {
         continue
       }
       do {
-        if let id = NoodletLink.id(in: url) {
+        if NoodletLink.id(in: url) != nil {
+          let id = try NoodletLink.requireID(in: url)
           runtime.open(try library.package(for: id))
         } else if url.isFileURL {
           try library.grant(url)
@@ -288,7 +289,7 @@ private struct LibraryView: View {
     .onAppear { columnVisibility = sidebarVisible ? .all : .detailOnly }
     .onChange(of: columnVisibility) { _, value in sidebarVisible = value != .detailOnly }
     .alert(
-      "Noodle Applet",
+      AppletBuildIdentity.current.appName,
       isPresented: Binding(
         get: { runtime.error != nil || library.error != nil },
         set: {

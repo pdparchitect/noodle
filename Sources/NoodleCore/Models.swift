@@ -402,7 +402,7 @@ public struct WorkspaceRepository: Sendable {
     public let launcherExecutableURL: URL?
     private let discoverAppletApplication: @Sendable () -> URL?
 
-    public static let managedSkillVersion = 26
+    public static let managedSkillVersion = 27
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil,
                 discoverAppletApplication: @escaping @Sendable () -> URL? = { AppletAgentSkill.installedApplicationURL() }) {
@@ -953,7 +953,7 @@ public struct WorkspaceRepository: Sendable {
     }
 
     public func importLinkAttachment(_ url: URL, into conversationID: UUID, now: Date = Date()) throws -> ConversationAttachment {
-        guard let url = NoodletLink.id(in: url).map(NoodletLink.url)
+        guard let url = NoodletLink.canonical(url)
             ?? MessageLink.publicWebURL(from: url, preservingFragment: true) else { throw AttachmentSource.InvalidSource() }
         let data = try PropertyListSerialization.data(fromPropertyList: ["URL": url.absoluteString], format: .xml, options: 0)
         return try importAttachment(data: data, originalFilename: NoodletLink.id(in: url) != nil ? "Noodlet.webloc" : "\(url.host ?? "Link").webloc", into: conversationID,

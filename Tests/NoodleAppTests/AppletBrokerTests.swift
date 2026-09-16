@@ -5,6 +5,23 @@ import XCTest
 @testable import Noodle
 
 @MainActor final class AppletBrokerTests: XCTestCase {
+    func testForeignConversationLinksNeverReachTheCompanion() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = WorkspaceRepository(rootURL: root)
+        try repository.prepare()
+        let recorder = AppletRequestRecorder()
+        let controller = AppletController(repository: repository, connection: { await recorder.respond($0) })
+        let foreign: AppletBuildIdentity = AppletBuildIdentity.current == .production ? .development : .production
+        let url = NoodletLink.url(for: UUID(), build: foreign)
+        do { _ = try await controller.openNoodlet(url); XCTFail("Foreign link opened") }
+        catch { XCTAssertEqual((error as? AppletError)?.code, "environment-mismatch") }
+        do { _ = try await controller.resolvePreview(url); XCTFail("Foreign preview requested") }
+        catch { XCTAssertEqual((error as? AppletError)?.code, "environment-mismatch") }
+        let requests = await recorder.requests
+        XCTAssertTrue(requests.isEmpty)
+    }
+
     private func token(for agent: AgentRecord, repository: WorkspaceRepository) throws -> String {
         let workspace = repository.directory(for: agent)
         let mailbox = try WorkspaceMailbox(workspace: workspace, path: ".noodle/applet-bridge")

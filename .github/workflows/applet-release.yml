@@ -77,7 +77,7 @@ jobs:
 
       - name: Verify signed HTML and Swift runtime behavior
         timeout-minutes: 8
-        run: python3 Applet/scripts/smoke.py
+        run: python3 Applet/scripts/smoke.py ".build/Noodle Applet.app"
 
       - name: Verify isolated session selection and offscreen animation
         timeout-minutes: 3

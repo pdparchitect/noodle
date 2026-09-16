@@ -116,7 +116,7 @@ struct AttachmentInlinePreview: View {
 
     private var openHint: String {
         if attachment.isComputerDocument { return "Click or press Space to open in Noodle Computer" }
-        if attachment.url.flatMap(NoodletLink.id) != nil { return "Click or press Space to open in Noodle Applet" }
+        if attachment.url.flatMap(NoodletLink.id) != nil { return "Click or press Space to open in \(AppletBuildIdentity.current.appName)" }
         return "Click or press Space to preview"
     }
 

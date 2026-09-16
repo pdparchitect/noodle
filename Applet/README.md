@@ -1,7 +1,45 @@
 # Noodle Applet
 
+## Local and production builds
+
+The default build and Runbar's **Noodle Applet → Build & Launch Local** use
+Noodle Applet Local. It connects only to Noodle Local. Production Noodle connects
+only to production Applet; neither falls back to the other when its companion is
+missing. Their app containers, libraries, bookmarks, settings, saved runtime data,
+WebKit stores, compiler caches, socket groups and preview caches are separate.
+
+| Channel | App ID | Document | Link |
+| --- | --- | --- | --- |
+| Production | `com.pdparchitect.noodle.applet` | `.noodlet` | `noodlet://UUID` |
+| Local | `com.pdparchitect.noodle.applet.local` | `.noodlet-local` | `noodlet-local://UUID` |
+
+The local app and Quick Look extension register only the local document type;
+they never claim the production type or URL scheme. Conversation links keep their
+original environment. A foreign link shows an environment mismatch rather than
+opening the other app or resolving its UUID in the wrong library.
+
+Package contents use the same `noodlet.json` manifest and source formats. There is
+no automatic migration or sharing. To transfer a creation, explicitly make a copy:
+
+```sh
+'.build/Noodle Applet Local.app/Contents/Helpers/noodlet' convert \
+  --path /path/Example.noodlet --output /path/Example.noodlet-local
+```
+
+Reverse the extensions to export a production copy. Conversion never overwrites
+an existing destination, creates a live link, or opens either app. Open or validate
+the copy in its matching environment to register a new link. Existing production
+files and links retain their current meaning. The examples below use production
+names; use `.noodlet-local` and `noodlet-local://` when following them locally.
+
+Explicit production packaging uses `NOODLE_APPLET_DATA_CONTAINER=production`;
+public release scripts set it themselves. Production updates are disabled in local
+builds. The guarded Runbar launcher always forces development and verifies the
+resulting app identity before opening it.
+
+
 A separate macOS companion for little tools, websites, experiments, and games.
-Noodlets are ordinary folders ending in `.noodlet`, displayed as document packages
+Noodlets are ordinary folders ending in `.noodlet` (production) or `.noodlet-local` (local), displayed as document packages
 in Finder. The app provides an interactive viewer and a visual library; agents
 write the source files using their usual tools.
 
@@ -12,11 +50,11 @@ identity. From the repository root:
 
 ```sh
 scripts/build-applet.sh
-open '.build/Noodle Applet.app'
+open '.build/Noodle Applet Local.app'
 swift test --disable-sandbox --package-path Applet --scratch-path .build/applet
 ```
 
-The signed application is `.build/Noodle Applet.app`. Its CLI is
+The default signed application is `.build/Noodle Applet Local.app`. Its CLI is
 `Contents/Helpers/noodlet`. Set `NOODLE_SIGNING_IDENTITY` to choose an identity and
 `NOODLE_APPLET_CONFIGURATION=debug` for a debug build. The default is optimized, matching Computer. This is a local
 development build; the script does not publish or notarize it.
@@ -26,7 +64,7 @@ through its shipped CLI. It checks interaction, persistence, captures, compiler
 diagnostics, native sandbox containment, and termination of blocked JavaScript.
 Temporary creations are removed; captures are saved under `.build/applet/smoke`.
 
-Run `'.build/Noodle Applet.app/Contents/MacOS/NoodleApplet' --rendering-test` for
+Run `'.build/Noodle Applet Local.app/Contents/MacOS/NoodleApplet' --rendering-test` for
 an isolated signed CLI fixture covering historical session selection, hidden
 visibility, synthetic frame stepping, Canvas/WebGL capture pixels, and test-data
 isolation. It uses its own runtime and socket without touching existing sessions.
@@ -345,3 +383,12 @@ not a full virtual browser clock or real-time gameplay/performance evidence.
 The clock is limited to HTML with headless test storage. Close the existing session
 before switching between normal/test storage or clocks. A headless restart retains
 the clock. Keep normal hidden-window pause behavior in shipping games.
+
+
+The read-only identity and socket regression can be run with
+`python3 Applet/scripts/test-connection-isolation.py`. It uses temporary signed
+headless peers, verifies matching broker/CLI identities and both directions of
+cross-environment rejection, and never opens a real app or library. Unit tests
+cover link preservation, discovery, package conversion, and rejected foreign
+imports. `scripts/verify-applet-release.sh` checks the actual signed app and preview
+extension for exact channel-specific file, URL and group declarations.

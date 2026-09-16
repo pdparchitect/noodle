@@ -4,6 +4,27 @@ import XCTest
 @testable import NoodleCore
 
 final class AppletAccessTests: XCTestCase {
+    func testLocalInstructionsAndAttachmentsKeepTheirEnvironment() throws {
+        let skill = MessengerDocumentation.appletSkill(for: .development)
+        XCTAssertTrue(skill.contains("Name.noodlet-local"))
+        XCTAssertTrue(skill.contains("noodlet-local://UUID"))
+        XCTAssertTrue(skill.contains("Noodle Applet Local"))
+        XCTAssertTrue(skill.contains("`noodlet.json`"))
+        XCTAssertFalse(skill.contains("Name.noodlet`"))
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let repository = WorkspaceRepository(rootURL: root)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try repository.prepare()
+        let conversation = try repository.createAgent(named: "Environment").conversation
+        for build in AppletBuildIdentity.allCases {
+            let url = NoodletLink.url(for: UUID(), build: build)
+            XCTAssertEqual(try AttachmentSource.resolve(url.absoluteString, relativeTo: root), url)
+            let attachment = try repository.importLinkAttachment(url, into: conversation.id)
+            XCTAssertEqual(attachment.url, url)
+            XCTAssertTrue(try repository.loadAttachments(conversationID: conversation.id).contains { $0.url == url })
+        }
+    }
+
     func testSkillRequiresInstalledCompanionAndBundledCLI() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

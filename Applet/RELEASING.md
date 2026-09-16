@@ -62,6 +62,7 @@ swift test --disable-sandbox --package-path Applet --scratch-path .build/applet
 swift test --disable-sandbox
 swift Applet/Tests/ReleaseWorkflowTests.swift "$PWD"
 zsh scripts/build-applet.sh
+# The release packaging script sets NOODLE_APPLET_DATA_CONTAINER=production.
 zsh scripts/verify-applet-release.sh '.build/Noodle Applet.app'
 '.build/Noodle Applet.app/Contents/MacOS/NoodleApplet' --noodle-background --updater-ui-test
 '.build/Noodle Applet.app/Contents/MacOS/NoodleApplet' --noodle-background --background-launch-ui-test

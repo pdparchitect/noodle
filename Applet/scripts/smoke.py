@@ -4,6 +4,7 @@ import json
 import http.server
 import threading
 import pathlib
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -11,7 +12,10 @@ import tempfile
 import time
 
 root = pathlib.Path(__file__).resolve().parents[2]
-app = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else root / '.build/Noodle Applet.app'
+app = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else root / '.build/Noodle Applet Local.app'
+bundle_id = plistlib.loads((app / 'Contents/Info.plist').read_bytes())['CFBundleIdentifier']
+assert bundle_id in ['com.pdparchitect.noodle.applet', 'com.pdparchitect.noodle.applet.local']
+extension = '.noodlet-local' if bundle_id.endswith('.local') else '.noodlet'
 cli = app / 'Contents/Helpers/noodlet'
 output = root / '.build/applet/smoke'
 output.mkdir(parents=True, exist_ok=True)
@@ -36,7 +40,7 @@ def call(*args, success=True):
 
 
 def package(directory, name, runtime, source):
-    path = directory / (name + '.noodlet')
+    path = directory / (name + extension)
     path.mkdir()
     entry = 'index.html' if runtime == 'html' else 'Main.swift'
     (path / 'noodlet.json').write_text(json.dumps(dict(version=1, title='Applet smoke ' + name, runtime=runtime, entry=entry, network=False)))
@@ -61,7 +65,7 @@ try:
         <canvas id="canvas" width="300" height="120"></canvas>
         <script>const ctx=canvas.getContext('2d');let t=0;setInterval(()=>{ctx.fillStyle=`hsl(${t++*5},80%,60%)`;ctx.fillRect(0,0,300,120)},80);console.log('ready');</script>''')
         sid = track(call('open', html, '--mode', 'headless'))
-        alias = directory / 'Alias.noodlet'
+        alias = directory / ('Alias' + extension)
         alias.symlink_to(html, target_is_directory=True)
         assert call('open', alias, '--mode', 'headless')['sessionID'] == sid
         call('click', '--session', sid, '--target', '#go')
@@ -177,7 +181,7 @@ finally:
             pass
     # Only remove imports made from this invocation's ephemeral fixtures.
     for path in set(imported):
-        if path.suffix == '.noodlet' and '/NoodleApplet/Noodlets/Imports/' in str(path):
+        if path.suffix == extension and '/NoodleApplet/Noodlets/Imports/' in str(path):
             shutil.rmtree(path, ignore_errors=True)
 
 print('Signed Applet smoke checks passed. Captures:', output)

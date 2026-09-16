@@ -13,24 +13,38 @@ for key in required where !key.contains("application-groups") && !key.contains("
     precondition(entitlements[key] as? Bool == true, "Missing grant: \(key)")
 }
 let team = info["NoodleSigningTeam"] as! String, bundle = info["CFBundleIdentifier"] as! String
-precondition(entitlements["com.apple.security.application-groups"] as? [String] == ["\(team).com.pdparchitect.noodle.applets"])
+let local = bundle == "com.pdparchitect.noodle.applet.local"
+precondition(local || bundle == "com.pdparchitect.noodle.applet")
+let group = "\(team).com.pdparchitect.noodle.applets" + (local ? ".local" : "")
+let documentExtension = local ? "noodlet-local" : "noodlet"
+let contentType = "com.pdparchitect.noodle." + documentExtension
+precondition(info["NoodleAppletGroup"] as? String == group)
+precondition(entitlements["com.apple.security.application-groups"] as? [String] == [group])
+if local { precondition(info["NoodleUpdatesEnabled"] as? Bool == false) }
 precondition(entitlements["com.apple.security.temporary-exception.mach-lookup.global-name"] as? [String] == ["\(bundle)-spks", "\(bundle)-spki"])
 precondition(info["CFBundleShortVersionString"] as? String == version && info["CFBundleVersion"] as? String == version)
 precondition(info["LSMinimumSystemVersion"] as? String == "15.0")
-precondition((info["CFBundleURLTypes"] as? [[String: Any]])?.contains {
-    $0["CFBundleURLSchemes"] as? [String] == ["noodlet"]
-} == true, "Missing noodlet URL handler")
+let links = info["CFBundleURLTypes"] as! [[String: Any]]
+precondition(links.count == 1 && links[0]["CFBundleURLSchemes"] as? [String] == [documentExtension], "Cross-environment URL registration")
+let types = info["CFBundleDocumentTypes"] as! [[String: Any]]
+precondition(types.count == 1 && types[0]["LSItemContentTypes"] as? [String] == [contentType], "Cross-environment file registration")
+let exports = info["UTExportedTypeDeclarations"] as! [[String: Any]]
+precondition(exports.count == 1 && exports[0]["UTTypeIdentifier"] as? String == contentType)
+precondition((exports[0]["UTTypeTagSpecification"] as! [String: Any])["public.filename-extension"] as? [String] == [documentExtension])
+precondition(info["UTImportedTypeDeclarations"] == nil)
 precondition(info["SUAllowsAutomaticUpdates"] as? Bool == true)
 precondition(info["SUAutomaticallyUpdate"] as? Bool == false)
 print("Applet version, six-key sandbox policy and opt-in automatic-install update policy verified")
 let previewInfo = try plist(CommandLine.arguments[4]), previewEntitlements = try plist(CommandLine.arguments[5])
-precondition(previewInfo["CFBundleIdentifier"] as? String == "com.pdparchitect.noodle.applet.preview")
+precondition(previewInfo["CFBundleIdentifier"] as? String == bundle + ".preview")
 precondition(previewInfo["CFBundleVersion"] as? String == version)
 let definition = previewInfo["NSExtension"] as! [String: Any]
 precondition(definition["NSExtensionPointIdentifier"] as? String == "com.apple.quicklook.preview")
-precondition((definition["NSExtensionAttributes"] as! [String: Any])["QLSupportedContentTypes"] as? [String] == ["com.pdparchitect.noodle.noodlet"])
+precondition((definition["NSExtensionAttributes"] as! [String: Any])["QLSupportedContentTypes"] as? [String] == [contentType])
 precondition(Set(previewEntitlements.keys) == ["com.apple.security.app-sandbox", "com.apple.security.network.client", "com.apple.security.application-groups"])
 precondition(previewEntitlements["com.apple.security.app-sandbox"] as? Bool == true)
 precondition(previewEntitlements["com.apple.security.network.client"] as? Bool == true)
-precondition(previewEntitlements["com.apple.security.application-groups"] as? [String] == ["\(team).com.pdparchitect.noodle.applets"])
+precondition(previewEntitlements["com.apple.security.application-groups"] as? [String] == [group])
 print("Quick Look extension type registration, version and three-key sandbox policy verified")
+
+precondition(previewInfo["NoodleAppletGroup"] as? String == group)

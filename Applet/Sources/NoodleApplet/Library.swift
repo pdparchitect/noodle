@@ -1,5 +1,6 @@
 import AppKit
 import AppletCore
+import AppletBridge
 import Foundation
 import UniformTypeIdentifiers
 
@@ -74,7 +75,7 @@ struct LibraryEntry: Identifiable, Equatable {
         for item
           in (try? FileManager.default.contentsOfDirectory(
             at: source, includingPropertiesForKeys: nil)) ?? []
-        where item.pathExtension == "noodlet" {
+        where item.pathExtension == AppletBuildIdentity.current.fileExtension {
           let target = documents.appendingPathComponent(item.lastPathComponent)
           if !FileManager.default.fileExists(atPath: target.path) {
             try FileManager.default.copyItem(at: item, to: target)
@@ -84,8 +85,8 @@ struct LibraryEntry: Identifiable, Equatable {
       }
       if installExamples,
         let source = AppletResources.bundle.url(forResource: "Resources", withExtension: nil)?
-          .appendingPathComponent("Examples/Focus.noodlet"),
-        let current = try? NoodletPackage(url: documents.appendingPathComponent("Focus.noodlet")),
+          .appendingPathComponent("Examples/Focus.\(AppletBuildIdentity.current.fileExtension)"),
+        let current = try? NoodletPackage(url: documents.appendingPathComponent("Focus.\(AppletBuildIdentity.current.fileExtension)")),
         ["fe2f24327c07f9f73b37a4c5d1e8d0e72a87f69d63a43b2d9c14bf965565cf20", "eefb19b06f5a496f30a956a9f1a57dbf30c0dd2ce2c5d4f2176d8f38b6110db2"].contains(current.revision)
       {
         // Upgrade only the unmodified bundled example; keep authored changes and saved data.
@@ -161,7 +162,7 @@ struct LibraryEntry: Identifiable, Equatable {
     var found: [String: LibraryEntry] = [:]
     let thumbnails = root.appendingPathComponent("Thumbnails", isDirectory: true)
     for directory in [documents] + registrations.map(\.url) {
-      if directory.pathExtension == "noodlet" {
+      if directory.pathExtension == AppletBuildIdentity.current.fileExtension {
         if let package = try? NoodletPackage(url: directory) {
           let entry = LibraryEntry(package: package, thumbnails: thumbnails)
           found[entry.id] = entry
@@ -181,7 +182,7 @@ struct LibraryEntry: Identifiable, Equatable {
           walker.skipDescendants()
           continue
         }
-        if url.pathExtension == "noodlet" {
+        if url.pathExtension == AppletBuildIdentity.current.fileExtension {
           walker.skipDescendants()
           if let package = try? NoodletPackage(url: url) {
             let entry = LibraryEntry(package: package, thumbnails: thumbnails)
@@ -250,7 +251,7 @@ struct LibraryEntry: Identifiable, Equatable {
     panel.canChooseFiles = true
     panel.canChooseDirectories = false
     panel.treatsFilePackagesAsDirectories = false
-    panel.allowedContentTypes = [UTType(filenameExtension: "noodlet") ?? .package]
+    panel.allowedContentTypes = [UTType(AppletBuildIdentity.current.contentType) ?? .package]
     panel.prompt = "Open Noodlet"
     panel.begin { [weak self] result in
       Task { @MainActor in

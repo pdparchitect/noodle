@@ -3,19 +3,19 @@ import Foundation
 import Security
 
 public enum AppletConnection {
-    public static let providerID = "com.pdparchitect.noodle.applet"
-    public static let clientIDs = [
-        "com.pdparchitect.noodle", "com.pdparchitect.noodle.local",
-        "com.pdparchitect.noodle.applet.cli",
-    ]
+    public static var providerID: String { AppletBuildIdentity.current.providerID }
+    public static var clientIDs: [String] { AppletBuildIdentity.current.clientIDs }
     public static let maxFrame = 32 * 1_048_576
 
     public static func socketURL(bundle: Bundle = .main) throws -> URL {
-        guard let group = bundle.object(forInfoDictionaryKey: "NoodleAppletGroup") as? String,
-            let root = FileManager.default.containerURL(
-                forSecurityApplicationGroupIdentifier: group)
-        else {
+        guard let identity = AppletBuildIdentity.identify(bundle.bundleIdentifier),
+              let group = bundle.object(forInfoDictionaryKey: "NoodleAppletGroup") as? String else {
             throw AppletError("Applet integration is not configured in this signed build.")
+        }
+        try identity.validateGroup(group, team: signingTeam(bundle: bundle))
+        guard identity == AppletBuildIdentity.processIdentity else { throw AppletError("Applet environment mismatch.") }
+        guard let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) else {
+            throw AppletError("The Applet connection container is unavailable.")
         }
         return root.appendingPathComponent("a.sock")
     }

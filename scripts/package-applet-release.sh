@@ -22,7 +22,7 @@ trap 'rm -rf "$staging"' EXIT
 output="$project_root/dist/applet-$version"
 [[ ! -e "$output" ]] || { print -u2 "Release output already exists: $output"; exit 1; }
 [[ "$(uname -m)" == arm64 ]] || { print -u2 'Public Applet archives require Apple silicon.'; exit 1; }
-export NOODLE_APPLET_CONFIGURATION=release
+export NOODLE_APPLET_CONFIGURATION=release NOODLE_APPLET_DATA_CONTAINER=production
 export NOODLE_REQUIRE_DEVELOPER_ID=1 NOODLE_CODESIGN_TIMESTAMP=1
 app="$(zsh "$project_root/scripts/build-applet.sh")"
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" == com.pdparchitect.noodle.applet ]]

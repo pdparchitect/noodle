@@ -14,7 +14,7 @@ expected_feed='https://github.com/pdparchitect/noodle/releases/latest/download/a
 case "$bundle_identifier" in
     com.pdparchitect.noodle.computer|com.pdparchitect.noodle.computer.tests)
         expected_feed='https://github.com/pdparchitect/noodle/releases/download/computer-latest/appcast.xml' ;;
-    com.pdparchitect.noodle.applet)
+    com.pdparchitect.noodle.applet|com.pdparchitect.noodle.applet.local)
         expected_feed='https://github.com/pdparchitect/noodle/releases/download/applet-latest/appcast.xml' ;;
 esac
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$info")" == "$expected_feed" ]]

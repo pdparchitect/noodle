@@ -12,7 +12,7 @@ final class NoodletPreviewAccess {
               bookmark.count <= 1_048_576 else { throw AppletError("Invalid noodlet preview response.") }
         var stale = false
         url = try URL(resolvingBookmarkData: bookmark, options: [.withoutUI], bookmarkDataIsStale: &stale)
-        guard url.isFileURL, url.pathExtension == "noodlet" else { throw AppletError("Invalid noodlet package location.") }
+        guard url.isFileURL, url.pathExtension == AppletBuildIdentity.current.fileExtension else { throw AppletError("Invalid noodlet package location.") }
         title = response.title ?? url.deletingPathExtension().lastPathComponent
         imageData = response.mediaType == "image/png" && (response.data?.count ?? 0) <= 4 * 1_048_576 ? response.data : nil
         accessing = url.startAccessingSecurityScopedResource()

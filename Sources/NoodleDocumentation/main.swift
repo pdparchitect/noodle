@@ -1,16 +1,17 @@
 import Foundation
 import NoodleCore
+import AppletBridge
 
 // Development utility only; never bundled into the application or run by a bot.
 let arguments = Array(CommandLine.arguments.dropFirst())
-guard arguments.count == 2, ["--write", "--check", "--write-applet-help"].contains(arguments[0]) else {
+guard arguments.count == 2, ["--write", "--check", "--write-applet-help", "--write-applet-local-help"].contains(arguments[0]) else {
     FileHandle.standardError.write(Data("Usage: NoodleDocumentation --write|--check <reference.md>\n".utf8))
     exit(2)
 }
 let url = URL(fileURLWithPath: arguments[1])
-let expected = arguments[0] == "--write-applet-help" ? MessengerDocumentation.appletCLIHelp : MessengerDocumentation.referenceMarkdown
+let expected = arguments[0].hasPrefix("--write-applet-") ? MessengerDocumentation.appletCLIHelp(for: arguments[0] == "--write-applet-local-help" ? .development : .production) : MessengerDocumentation.referenceMarkdown
 do {
-    if arguments[0] == "--write" || arguments[0] == "--write-applet-help" {
+    if arguments[0] == "--write" || arguments[0].hasPrefix("--write-applet-") {
         try expected.write(to: url, atomically: true, encoding: .utf8)
         FileHandle.standardError.write(Data("Generated \(url.path)\n".utf8))
     } else {

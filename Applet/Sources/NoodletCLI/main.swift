@@ -26,6 +26,10 @@ import Foundation
             return
         }
         args.removeFirst()
+        if command == "convert" { try convert(args); return }
+        guard AppletBuildIdentity.processIdentity != nil else {
+            throw AppletError("Use the CLI from a signed Noodle or Applet build for this environment.")
+        }
         var name = command
         if name == "record", let sub = args.first {
             name += "-" + sub
@@ -76,7 +80,8 @@ import Foundation
         }
         var request = AppletRequest(operation, sessionID: try uuid("--session"))
         if let value = flags["--id"] {
-            request.noodletID = UUID(uuidString: value) ?? URL(string: value).flatMap(NoodletLink.id)
+            if let id = UUID(uuidString: value) { request.noodletID = id }
+            else if let url = URL(string: value) { request.noodletID = try NoodletLink.requireID(in: url) }
             guard request.noodletID != nil else { throw AppletError("Invalid noodlet ID or URL.") }
         }
         request.path = flags["--path"].map {
@@ -129,8 +134,7 @@ import Foundation
                 guard
                     let provider = bundle.bundleIdentifier == AppletConnection.providerID
                         ? bundle.bundleURL
-                        : NSWorkspace.shared.urlForApplication(
-                            withBundleIdentifier: AppletConnection.providerID)
+                        : AppletApplication.locate()
                 else { throw AppletError("Install Noodle Applet first.") }
                 try await AppletLaunch.openInBackground(at: provider)
                 for _ in 0..<40 {
@@ -189,6 +193,15 @@ import Foundation
         }
         try emit(response, text: flags["--text-output"] != nil)
     }
+    static func convert(_ args: [String]) throws {
+        guard args.count == 4, args[0] == "--path", args[2] == "--output" else {
+            throw AppletError("Usage: noodlet convert --path SOURCE --output NEW_DOCUMENT")
+        }
+        let copy = try NoodletPackage.convert(from: URL(fileURLWithPath: args[1]), to: URL(fileURLWithPath: args[3]))
+        var response = AppletResponse()
+        response.path = copy.url.path; response.title = copy.manifest.title
+        try emit(response, text: false)
+    }
     static func emit(_ response: AppletResponse, text: Bool) throws {
         if text {
             print(response.text ?? "", terminator: "")
@@ -203,9 +216,7 @@ import Foundation
             if url.pathExtension == "app", let bundle = Bundle(url: url) { return bundle }
             url.deleteLastPathComponent()
         }
-        return NSWorkspace.shared.urlForApplication(
-            withBundleIdentifier: AppletConnection.providerID
-        ).flatMap(Bundle.init(url:))
+        return AppletApplication.locate().flatMap(Bundle.init(url:))
     }
     static func workspaceBridge() throws -> URL? {
         var root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)

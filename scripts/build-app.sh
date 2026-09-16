@@ -116,7 +116,9 @@ cp "$bin_path/NoodleComputerCLI" "$contents/Helpers/computer"
 swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-path "$project_root/.build/applet" -c release --product noodlet >&2
 applet_bin="$(swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-path "$project_root/.build/applet" -c release --show-bin-path)"
 cp "$applet_bin/noodlet" "$contents/Helpers/noodlet"
-"$bin_path/NoodleDocumentation" --write-applet-help "$contents/Resources/NoodletCLIHelp.txt" >&2
+applet_help_option="--write-applet-help"
+if [[ "$data_container" == development ]]; then applet_help_option="--write-applet-local-help"; fi
+"$bin_path/NoodleDocumentation" "$applet_help_option" "$contents/Resources/NoodletCLIHelp.txt" >&2
 cp "$apple_bin/NoodleAppleAgent" "$contents/Helpers/NoodleAppleAgent"
 for resource in mlx-swift_Cmlx swift-transformers_Hub swift-crypto_Crypto; do
     if [[ -d "$apple_bin/$resource.bundle" || "$resource" == mlx-swift_Cmlx && -f "$apple_bin/mlx.metallib" ]]; then
@@ -252,7 +254,9 @@ codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/mcpshim"
 codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/computer"
-codesign --force --options runtime "$timestamp_option" --identifier com.pdparchitect.noodle.applet.cli \
+applet_cli_identifier="com.pdparchitect.noodle.applet.cli"
+if [[ "$data_container" == development ]]; then applet_cli_identifier="com.pdparchitect.noodle.applet.local.cli"; fi
+codesign --force --options runtime "$timestamp_option" --identifier "$applet_cli_identifier" \
     --sign "$signing_identity" "$contents/Helpers/noodlet"
 team_id="$(codesign -dv --verbose=4 "$contents/Helpers/messenger" 2>&1 | awk -F= '/^TeamIdentifier=/ { print $2 }')"
 # Agent Host applies this helper's own Seatbelt policy before exec. No App
@@ -271,6 +275,7 @@ fi
 shared_group="$team_id.$bundle_identifier.sharing"
 computer_group="$team_id.com.pdparchitect.noodle.computers"
 applet_group="$team_id.com.pdparchitect.noodle.applets"
+if [[ "$data_container" == development ]]; then applet_group+=.local; fi
 /usr/libexec/PlistBuddy -c "Add :NoodleAppletGroup string $applet_group" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :NoodleComputerGroup string $computer_group" "$contents/Info.plist"
 for file in "$contents/Info.plist" "$agent_host/Contents/Info.plist"; do

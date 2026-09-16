@@ -59,7 +59,7 @@ import WebKit
       return try JSONSerialization.jsonObject(with: Data((response.value ?? "{}").utf8)) as? [String: Any] ?? [:]
     }
     do {
-    let source = library.documents.appendingPathComponent("Animation.noodlet")
+    let source = library.documents.appendingPathComponent("Animation.\(AppletBuildIdentity.current.fileExtension)")
     _ = try NoodletPackage.install([
       "noodlet.json": try JSONEncoder().encode(NoodletManifest(title: "Animation regression")),
       "index.html": Data("""

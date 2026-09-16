@@ -237,3 +237,13 @@ NOODLE_SIMULATE_NO_HARNESSES=1 '.build/Noodle Local.app/Contents/MacOS/Noodle'
 excluding app-bundled copies. Relaunch without the flag to restore normal detection.
 
 [Releases](releases.md) · [Documentation](README.md)
+
+
+Applet uses the same strict environment pairing: Noodle Local connects only to
+Noodle Applet Local. `scripts/build-and-launch-applet.sh` (Runbar: **Noodle Applet →
+Build & Launch Local**) forces the local identity. Local documents and links use
+`.noodlet-local` and `noodlet-local://`; production retains `.noodlet` and
+`noodlet://`. Each app and its Quick Look extension registers only its own type.
+Use the Applet CLI's explicit `convert --path SOURCE --output NEW_DOCUMENT` to
+copy a package between environments; saved runtime data and live links are not
+transferred. See [Applet development and conversion](../Applet/README.md#local-and-production-builds).

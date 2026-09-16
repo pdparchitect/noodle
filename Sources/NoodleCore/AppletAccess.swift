@@ -3,26 +3,14 @@ import AppletBridge
 import Foundation
 
 public enum AppletAgentSkill {
-    public static var instructions: String { MessengerDocumentation.appletSkill }
+    public static var instructions: String { MessengerDocumentation.appletSkill(for: .current) }
 
     public static func installedApplicationURL() -> URL? {
-        NSWorkspace.shared.urlForApplication(withBundleIdentifier: AppletConnection.providerID)
+        AppletApplication.locate()
     }
 
     public static func isCompanionInstalled(at applicationURL: URL?) -> Bool {
-        guard let applicationURL else { return false }
-        let application = applicationURL.resolvingSymlinksInPath()
-        guard !application.pathComponents.contains(".Trash"),
-              !application.pathComponents.contains(".Trashes"),
-              let data = try? Data(contentsOf: application.appendingPathComponent("Contents/Info.plist")),
-              let info = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any],
-              info["CFBundleIdentifier"] as? String == AppletConnection.providerID,
-              let executable = info["CFBundleExecutable"] as? String,
-              !executable.isEmpty, !executable.contains("/"), executable != ".", executable != ".."
-        else { return false }
-        // Launch Services can retain a registration after an app has been removed.
-        return FileManager.default.isExecutableFile(
-            atPath: application.appendingPathComponent("Contents/MacOS/\(executable)").path)
+        AppletApplication.isInstalled(at: applicationURL)
     }
 
     public static func synchronize(workspace: URL, enabled: Bool, executable: URL?) throws {

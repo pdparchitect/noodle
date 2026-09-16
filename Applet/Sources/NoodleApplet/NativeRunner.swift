@@ -87,7 +87,7 @@ import AppletCore
     let resources = AppletResources.bundle.url(forResource: "Resources", withExtension: nil)!
     let source = resources.appendingPathComponent("NoodletRuntime.swift")
     _ = try NoodletPackage.install(
-      package.files(), to: buildRoot.appendingPathComponent("Package.noodlet"))
+      package.files(), to: buildRoot.appendingPathComponent("Package.\(AppletBuildIdentity.current.fileExtension)"))
     // xcrun deliberately refuses App Sandbox. Invoke the installed compiler
     // and SDK directly; the compiler still inherits the app's containment.
     let toolchains: [(String, String)] = [
@@ -153,7 +153,7 @@ import AppletCore
     }
     // Evaluate in Apple's signed interpreter process. Generated source is
     // data, so App Sandbox never needs to bless a new executable on disk.
-    let snapshot = buildRoot.appendingPathComponent("Package.noodlet")
+    let snapshot = buildRoot.appendingPathComponent("Package.\(AppletBuildIdentity.current.fileExtension)")
     p.executableURL = URL(fileURLWithPath: interpreter)
     p.currentDirectoryURL = snapshot
     p.arguments = [

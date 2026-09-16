@@ -86,8 +86,14 @@ import AppletCore
     do {
       var request = input
       try request.validate()
+      guard AppletBuildIdentity.current.clientIDs.contains(identity) else {
+        throw AppletError("The caller belongs to a different Applet environment.", code: "environment-mismatch")
+      }
+      if let path = request.path, URL(fileURLWithPath: path).pathExtension != AppletBuildIdentity.current.fileExtension {
+        throw AppletError("Use a .\(AppletBuildIdentity.current.fileExtension) package in this environment.", code: "environment-mismatch")
+      }
       let owner =
-        identity == "com.pdparchitect.noodle" || identity == "com.pdparchitect.noodle.local"
+        identity == AppletBuildIdentity.current.noodleID
         ? (request.owner ?? "local") : "local"
       request.owner = owner
       if let id = request.noodletID {
@@ -124,7 +130,7 @@ import AppletCore
           response = status(session)
         }
         if request.includePreview == true {
-          guard owner == "local", identity == "com.pdparchitect.noodle" || identity == "com.pdparchitect.noodle.local" else {
+          guard owner == "local", identity == AppletBuildIdentity.current.noodleID else {
             throw AppletError("Preview access is reserved for the Noodle interface.")
           }
           // A plain bookmark carries an ephemeral scope for cross-process handoff.
@@ -177,7 +183,7 @@ import AppletCore
       }
       if [.open, .build, .validate].contains(request.operation) {
         guard let path = request.path else {
-          throw AppletError("Provide --path to a .noodlet package.")
+          throw AppletError("Provide --path to a .\(AppletBuildIdentity.current.fileExtension) package.")
         }
         let package: NoodletPackage
         let canonical = URL(fileURLWithPath: origins[owner + "\0" + path] ?? path)
@@ -193,7 +199,7 @@ import AppletCore
         } else if let files = request.files {
           let key = NoodletPackage.digest(Data((owner + "\0" + path).utf8))
           let destination = library.documents.appendingPathComponent(
-            "Imports/\(ownerKey(owner))/\(key).noodlet")
+            "Imports/\(ownerKey(owner))/\(key).\(AppletBuildIdentity.current.fileExtension)")
           package = try NoodletPackage.install(files, to: destination)
           origins[owner + "\0" + path] = package.url.path
           defaults.set(origins, forKey: "sourceOrigins")

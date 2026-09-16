@@ -11,7 +11,7 @@ import XCTest
         defer { try? FileManager.default.removeItem(at: root); defaults.removePersistentDomain(forName: suite) }
         let library = AppletLibrary(root: root, defaults: defaults, installExamples: false, watchChanges: false)
         let runtime = AppletRuntime(library: library, defaults: defaults)
-        let identity = "com.pdparchitect.noodle.local"
+        let identity = AppletBuildIdentity.current.noodleID
         var validate = AppletRequest(.validate)
         validate.path = "/author/Archived.noodlet"; validate.owner = "author"
         validate.files = ["noodlet.json": try JSONEncoder().encode(NoodletManifest(title: "Archived")), "index.html": Data("archived".utf8)]
@@ -92,7 +92,7 @@ import XCTest
         let library = AppletLibrary(root: root, defaults: defaults, installExamples: false, watchChanges: false)
         let runtime = AppletRuntime(library: library, defaults: defaults)
         defer { runtime.shutdown(); try? FileManager.default.removeItem(at: root); defaults.removePersistentDomain(forName: suite) }
-        let identity = "com.pdparchitect.noodle.local"
+        let identity = AppletBuildIdentity.current.noodleID
         var request = AppletRequest(.validate)
         request.path = "/author/Game.noodlet"; request.owner = "author"
         request.files = ["noodlet.json": try JSONEncoder().encode(NoodletManifest(title: "Game")), "index.html": Data("game".utf8)]
@@ -148,7 +148,7 @@ import XCTest
         defer { try? FileManager.default.removeItem(at: root); defaults.removePersistentDomain(forName: suite) }
         let library = AppletLibrary(root: root, defaults: defaults, installExamples: false, watchChanges: false)
         let runtime = AppletRuntime(library: library, defaults: defaults)
-        let identity = "com.pdparchitect.noodle.local"
+        let identity = AppletBuildIdentity.current.noodleID
         var validate = AppletRequest(.validate)
         validate.path = "/workspace/Hello.noodlet"
         validate.owner = "author"

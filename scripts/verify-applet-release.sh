@@ -4,7 +4,7 @@ project_root="${0:A:h:h}"
 app="${1:?Pass the Applet app bundle}"
 info="$app/Contents/Info.plist"
 bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info")"
-[[ "$bundle" == com.pdparchitect.noodle.applet ]]
+[[ "$bundle" == com.pdparchitect.noodle.applet || "$bundle" == com.pdparchitect.noodle.applet.local ]]
 codesign --verify --deep --strict "$app"
 zsh "$project_root/scripts/verify-updater.sh" "$app"
 entitlements="$(mktemp /tmp/applet-entitlements.XXXXXX)"

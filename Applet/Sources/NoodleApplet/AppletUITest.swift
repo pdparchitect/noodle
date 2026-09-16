@@ -102,7 +102,7 @@ import AppletCore
         }
         let titles = menu.items.map(\.title)
         print("APPLICATION MENU: \(titles)")
-        guard titles.contains("About Noodle Applet"), titles.contains("Check for Updates…"),
+        guard titles.contains("About \(AppletBuildIdentity.current.appName)"), titles.contains("Check for Updates…"),
             let settings = menu.items.firstIndex(where: {
                 $0.keyEquivalent == "," && $0.keyEquivalentModifierMask.contains(.command)
             })
@@ -113,7 +113,7 @@ import AppletCore
         guard let update = titles.firstIndex(of: "Check for Updates…"), update < settings,
             menu.items[(update + 1)..<settings].allSatisfy({ $0.isSeparatorItem }),
             let help = NSApp.mainMenu?.items.first(where: { $0.title == "Help" })?.submenu,
-            help.items.contains(where: { $0.title == "Noodle Applet Help" })
+            help.items.contains(where: { $0.title == "\(AppletBuildIdentity.current.appName) Help" })
         else {
             throw AppletError("Update menu ordering or repository Help item differs from Computer")
         }

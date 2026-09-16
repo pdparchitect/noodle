@@ -1,6 +1,6 @@
 import AppKit
 
-/// Compile with AppletLaunch.swift and run inside a signed app-sandbox bundle.
+/// Compile with AppletBridge sources and run inside a signed app-sandbox bundle.
 /// The target Applet must be stopped first; the shell runner cleans up its launch.
 @main struct BackgroundLaunchTest {
     @MainActor static func main() async {

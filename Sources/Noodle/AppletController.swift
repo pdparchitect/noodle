@@ -75,14 +75,13 @@ import Observation
     }
     func openLibrary() async throws {
         guard
-            let url = NSWorkspace.shared.urlForApplication(
-                withBundleIdentifier: AppletConnection.providerID)
-        else { throw AppletError("Build or install Noodle Applet first.") }
+            let url = AppletApplication.locate()
+        else { throw AppletError("Build or install \(AppletBuildIdentity.current.appName) first.") }
         _ = try await NSWorkspace.shared.openApplication(
             at: url, configuration: NSWorkspace.OpenConfiguration())
     }
     func resolvePreview(_ url: URL) async throws -> NoodletPreviewAccess {
-        guard let id = NoodletLink.id(in: url) else { throw AppletError("Invalid noodlet link.") }
+        let id = try NoodletLink.requireID(in: url)
         var request = AppletRequest(.info)
         request.noodletID = id
         request.includePreview = true
@@ -91,7 +90,7 @@ import Observation
     }
     @discardableResult
     func openNoodlet(_ url: URL) async throws -> AppletResponse {
-        guard let id = NoodletLink.id(in: url) else { throw AppletError("Invalid noodlet link.") }
+        let id = try NoodletLink.requireID(in: url)
         var request = AppletRequest(.open)
         request.noodletID = id
         request.mode = "foreground"
@@ -111,11 +110,10 @@ import Observation
             } else {
                 let task = Task { @MainActor in
                     guard
-                        let url = NSWorkspace.shared.urlForApplication(
-                            withBundleIdentifier: AppletConnection.providerID)
+                        let url = AppletApplication.locate()
                     else {
                         throw AppletError(
-                            "Install Noodle Applet to run noodlets. See Noodle Settings → Companion Apps."
+                            "Install \(AppletBuildIdentity.current.appName) to run noodlets. See Noodle Settings → Companion Apps."
                         )
                     }
                     try await AppletLaunch.openInBackground(at: url)
@@ -223,7 +221,7 @@ import Observation
                 let messages = try repository.loadMessages(conversationID: conversation)
                 let sent = Set(messages.flatMap(\.attachments))
                 guard try repository.loadAttachments(conversationID: conversation).contains(where: {
-                    sent.contains($0.id) && $0.url.flatMap(NoodletLink.id) == id
+                    sent.contains($0.id) && $0.url.flatMap(NoodletLink.build) == .current && $0.url.flatMap(NoodletLink.id) == id
                 }) else { throw AppletError("This noodlet has not been shared with the conversation.", code: "session-unavailable") }
                 // The signed broker authorizes the specific shared package, with any explicit session constrained to that package by Applet.
                 request.owner = "local"
@@ -247,7 +245,7 @@ import Observation
             sharedArtifacts[artifact] = (agent.id, conversation, request.owner!, Date())
         }
         if request.operation == .present, let conversation = envelope.conversationID {
-            guard let url = response.url, NoodletLink.id(in: url) != nil else {
+            guard let url = response.url, (try? NoodletLink.requireID(in: url)) != nil else {
                 throw AppletError("Update Noodle Applet to share noodlet links.")
             }
             _ = try repository.participantRoster(for: agent.id, conversationID: conversation)
