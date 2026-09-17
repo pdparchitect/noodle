@@ -12,6 +12,7 @@ struct NoodleComputerApp: App {
     Window(ComputerAppIdentity.name, id: "library") {
       ComputerRootView()
         .frame(minWidth: 850, minHeight: 580)
+        .background(ComputerLibraryWindowHost(library: delegate.libraryWindow))
     }
     .defaultLaunchBehavior(CommandLine.arguments.contains("--noodle-background") ? .suppressed : .automatic)
     .restorationBehavior(CommandLine.arguments.contains("--noodle-background") ? .disabled : .automatic)
@@ -62,11 +63,12 @@ extension Notification.Name {
 
 @MainActor final class ComputerAppDelegate: NSObject, NSApplicationDelegate {
   static var store: ComputerStore?
+  let libraryWindow = ComputerLibraryWindow()
   var openLibrary: (() -> Void)? {
     didSet {
-      if needsLibrary, let openLibrary {
+      if needsLibrary, openLibrary != nil {
         needsLibrary = false
-        DispatchQueue.main.async { openLibrary() }
+        DispatchQueue.main.async { [weak self] in self?.presentLibrary() }
       }
     }
   }
@@ -81,9 +83,9 @@ extension Notification.Name {
         let store = try Self.loadLibrary()
         let session = try store.selectComputer(card)
         openedDocument = true
-        if let openLibrary { openLibrary() } else { needsLibrary = true }
         application.unhide(nil)
         application.activate(ignoringOtherApps: true)
+        presentLibrary()
         let request = UUID()
         documentRequest = request
         let start = documentStarts[session.id] ?? Task { [weak self] in
@@ -100,6 +102,16 @@ extension Notification.Name {
         let alert = NSAlert(error: error)
         alert.runModal()
       }
+    }
+  }
+  private func presentLibrary() {
+    if libraryWindow.focus() {
+      needsLibrary = false
+    } else if let openLibrary {
+      needsLibrary = false
+      openLibrary()
+    } else {
+      needsLibrary = true
     }
   }
   func applicationDidBecomeActive(_ notification: Notification) {
