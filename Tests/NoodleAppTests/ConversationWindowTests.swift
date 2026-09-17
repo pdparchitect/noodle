@@ -415,14 +415,28 @@ import NoodleCore
         f.store.refreshTranscripts()
         let root = host(ChatView(conversation: f.directA, attachmentPreview: AttachmentPreviewController())
             .environment(f.store).environment(\.controlActiveState, .inactive))
+        // Render the viewport before delivering native scroll phases, as in
+        // the transcript fixtures. Keep it offscreen, inactive, and probe-free.
+        try XCTUnwrap(root.window).orderFront(nil)
         try await wait { self.elements(root).contains { $0 is ComposerTextView } }
         let scroll = try XCTUnwrap(elements(root).compactMap { $0 as? NSScrollView }
             .first { !($0 is ComposerScrollView) })
+        try await wait {
+            root.layoutSubtreeIfNeeded()
+            return (scroll.documentView?.frame.height ?? 0) > scroll.contentView.bounds.height
+        }
         XCTAssertTrue(f.store.hasUnreadMessages(in: f.directA), "Restoring the scroll position must not mark it read")
-        let event = try XCTUnwrap(CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
-            wheelCount: 1, wheel1: 100, wheel2: 0, wheel3: 0))
-        event.setIntegerValueField(.scrollWheelEventScrollPhase, value: 1)
-        scroll.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: event)))
+        func wheel(delta: Int32, phase: Int64) throws {
+            let event = try XCTUnwrap(CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
+                wheelCount: 1, wheel1: delta, wheel2: 0, wheel3: 0))
+            event.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase)
+            scroll.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: event)))
+        }
+        try wheel(delta: 0, phase: 1)
+        try await Task.sleep(for: .milliseconds(20))
+        try wheel(delta: 100, phase: 2)
+        try await Task.sleep(for: .milliseconds(20))
+        try wheel(delta: 0, phase: 4)
         try await wait { !f.store.hasUnreadMessages(in: f.directA) }
         XCTAssertTrue(try f.repository.loadUnreadConversationIDs().isEmpty)
     }

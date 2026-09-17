@@ -6,6 +6,11 @@ final class WindowRootTests: XCTestCase {
     private func resolve(_ focused: Int, main: Int? = nil, nodes: [Int: Node]) -> LocalMacWindowRoot.Selection<Int>? {
         LocalMacWindowRoot.resolve(focused: focused, pid: 50, mainWindow: main, same: ==) { nodes[$0] }
     }
+    private func families(_ elements: [Int], main: Int? = nil, nodes: [Int: Node],
+                          match: (Int) -> Int? = { $0 }) -> [LocalMacWindowRoot.Selection<Int>] {
+        LocalMacWindowRoot.families(elements: elements, pid: 50, mainWindow: main,
+            same: { $0 == $1 }, read: { nodes[$0] }, match: match, sameWindow: { $0 == $1 })
+    }
     func testUnknownWindowBubbleIsAttachedWithoutBecomingAnotherRoot() {
         let nodes: [Int: Node] = [
             1: .init(pid: 50, role: "AXWindow", subrole: "AXStandardWindow", modal: false),
@@ -13,13 +18,11 @@ final class WindowRootTests: XCTestCase {
             3: .init(pid: 50, role: "AXWindow", subrole: "AXUnknown", modal: false),
             4: .init(pid: 50, role: "AXSheet", subrole: "", modal: true, parent: 2)
         ]
-        let families = LocalMacWindowRoot.families(elements: [3, 1, 2, 4], pid: 50, mainWindow: 1,
-            same: ==, read: { nodes[$0] }, match: { $0 }, sameWindow: ==)
+        let families = families([3, 1, 2, 4], main: 1, nodes: nodes)
         XCTAssertEqual(families.map(\.root), [1, 2])
         XCTAssertEqual(Set(families[0].windows), [1, 3])
         XCTAssertEqual(Set(families[1].windows), [2, 4])
-        let unowned = LocalMacWindowRoot.families(elements: [3], pid: 50, mainWindow: nil,
-            same: ==, read: { nodes[$0] }, match: { $0 }, sameWindow: ==)
+        let unowned = self.families([3], nodes: nodes)
         XCTAssertTrue(unowned.isEmpty)
     }
     func testVisibleInventoryGroupsSheetsAndExcludesUnownedFloatingUI() throws {
@@ -33,13 +36,12 @@ final class WindowRootTests: XCTestCase {
             7: .init(pid: 50, isWindow: false, parent: 9),
             9: .init(pid: 50, isWindow: false)
         ]
-        let families = LocalMacWindowRoot.families(elements: [3, 2, 1, 4, 5, 6, 7, 1], pid: 50,
-            mainWindow: nil, same: ==, read: { nodes[$0] }, match: { $0 == 7 || $0 == 9 ? nil : $0 }, sameWindow: ==)
+        let families = families([3, 2, 1, 4, 5, 6, 7, 1], nodes: nodes,
+            match: { $0 == 7 || $0 == 9 ? nil : $0 })
         XCTAssertEqual(families.map(\.root), [1, 2])
         XCTAssertEqual(Set(families[0].windows), [1, 3, 4])
         XCTAssertEqual(families[1].windows, [2])
-        let closedRoot = LocalMacWindowRoot.families(elements: [3, 4], pid: 50, mainWindow: nil,
-            same: ==, read: { nodes[$0] }, match: { $0 == 1 ? nil : $0 }, sameWindow: ==)
+        let closedRoot = self.families([3, 4], nodes: nodes, match: { $0 == 1 ? nil : $0 })
         XCTAssertTrue(closedRoot.isEmpty, "A sheet cannot become a root when its parent is missing")
     }
     func testInventoryAssociatesAppModalDialogWithoutMergingDocuments() {
@@ -47,8 +49,7 @@ final class WindowRootTests: XCTestCase {
             1: .init(pid: 50, isWindow: true), 2: .init(pid: 50, isWindow: true),
             3: .init(pid: 50, isWindow: true, isTransient: true)
         ]
-        let families = LocalMacWindowRoot.families(elements: [1, 2, 3], pid: 50, mainWindow: 2,
-            same: ==, read: { nodes[$0] }, match: { $0 }, sameWindow: ==)
+        let families = families([1, 2, 3], main: 2, nodes: nodes)
         XCTAssertEqual(families.map(\.root), [1, 2])
         XCTAssertEqual(families[0].windows, [1])
         XCTAssertEqual(Set(families[1].windows), [2, 3])
