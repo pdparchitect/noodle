@@ -55,6 +55,7 @@ assert '/artifacts/' not in rpaths and '/Toolchains/' not in rpaths
 
 resources=app/'Contents/Resources/NoodleBrowser_NoodleBrowser.bundle'
 assert any((resources/path).is_file() for path in ('Resources/Inspect.js','Contents/Resources/Resources/Inspect.js'))
+assert any((resources/path).is_file() for path in ('Resources/WebMCP.js','Contents/Resources/Resources/WebMCP.js'))
 signature=subprocess.run(['codesign','-dv','--verbose=4',str(app)],capture_output=True,text=True,check=True).stderr
 assert 'runtime' in signature
 for line in subprocess.check_output(['otool','-L',str(app/'Contents/MacOS/NoodleBrowser')],text=True).splitlines()[1:]:

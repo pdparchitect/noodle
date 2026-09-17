@@ -15,6 +15,8 @@ import WebKit
     private var replyToDialog: ((Bool, String?) -> Void)?
     private var observations: [NSKeyValueObservation] = []
     private(set) var frames: [String: WKFrameInfo] = [:]
+    var webMCPAllowed = true
+    var webMCPFramePolicies: [String: Bool] = [:]
     private var upload: (id: UUID, urls: [URL], provided: Bool, origin: String, mainFrame: Bool, continuation: CheckedContinuation<Void, Error>)?
     private var operations: [UUID: () -> Void] = [:]
     private var stopped = false
@@ -30,6 +32,7 @@ import WebKit
         self.id = info.id; self.browserID = browserID; self.info = info; self.runtime = runtime
         let config = configuration ?? WKWebViewConfiguration()
         config.userContentController = WKUserContentController()
+        BrowserWebMCP.install(into: config.userContentController)
         config.websiteDataStore = WKWebsiteDataStore(forIdentifier: browserID)
         config.preferences.inactiveSchedulingPolicy = .none
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
@@ -120,6 +123,7 @@ import WebKit
         frames[key] = message.frameInfo
     }
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        webMCPAllowed = false; webMCPFramePolicies.removeAll()
         finishedDocument = false; visitID = nil; visitedURL = nil; visitedTitle = nil
         frames.removeAll(); info.error = nil; update()
         if dialog != nil { answerDialog(accept: false, text: nil) }
@@ -144,6 +148,11 @@ import WebKit
         decisionHandler(navigationAction.shouldPerformDownload ? .download : .allow)
     }
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        let permitted = BrowserWebMCP.permits(navigationResponse.response)
+        if navigationResponse.isForMainFrame { webMCPAllowed = permitted }
+        if let url = navigationResponse.response.url, webMCPFramePolicies.count < 512 {
+            webMCPFramePolicies[url.absoluteString.components(separatedBy: "#")[0]] = permitted
+        }
         let disposition = (navigationResponse.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Disposition") ?? ""
         decisionHandler(!navigationResponse.canShowMIMEType || disposition.lowercased().hasPrefix("attachment") ? .download : .allow)
     }

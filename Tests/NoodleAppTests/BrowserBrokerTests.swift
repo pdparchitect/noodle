@@ -51,6 +51,21 @@ import XCTest
         try f.controller.assign([], to: f.agent)
         XCTAssertFalse(FileManager.default.fileExists(atPath: skill.path))
     }
+    func testWebMCPUsesTheSameSessionAndAssignmentBoundary() async throws {
+        let f = try await fixture()
+        var request = f.envelope(.webMCPCall)
+        request.request.toolID = "document:registration"; request.request.arguments = "{}"
+        _ = try await f.controller.perform(request, agent: f.agent)
+        request.request.browserID = UUID()
+        do { _ = try await f.controller.perform(request, agent: f.agent); XCTFail("Unassigned WebMCP accepted") } catch {}
+        request.request.browserID = f.browser; request.token = "forged"
+        do { _ = try await f.controller.perform(request, agent: f.agent); XCTFail("Forged WebMCP session accepted") } catch {}
+        request.token = f.token
+        try f.controller.assign([], to: f.agent)
+        do { _ = try await f.controller.perform(request, agent: f.agent); XCTFail("Revoked WebMCP call accepted") } catch {}
+        request.request.operation = .webMCPList; request.request.toolID = nil; request.request.arguments = nil
+        do { _ = try await f.controller.perform(request, agent: f.agent); XCTFail("Revoked WebMCP discovery accepted") } catch {}
+    }
     func testTransfersUseBrokerStagingAndPreserveBinaryBytes() async throws {
         let f = try await fixture(), data = Data([0, 255, 128, 4, 10])
         try data.write(to: f.local("source.bin"))

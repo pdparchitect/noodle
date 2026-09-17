@@ -195,6 +195,7 @@ import WebKit
         case .reload: _ = tab.web.reload()
         case .close: try closeTab(browserID: id, tabID: tab.id)
         case .inspect: response.text = try await tab.inspect(frame: request.frame)
+        case .webMCPList, .webMCPCall: response.text = try await tab.webMCP(request)
         case .eval:
             let result = try await tab.evaluate("return JSON.stringify(await (async()=>{\n\(request.text!)\n})());", frame: request.frame)
             let text = result as? String ?? "null"

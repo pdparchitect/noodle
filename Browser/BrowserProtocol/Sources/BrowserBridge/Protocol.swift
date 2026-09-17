@@ -11,6 +11,7 @@ public enum BrowserOperation: String, Codable, CaseIterable, Sendable {
     case list, status, tabs, open, navigate, back, forward, reload, close
     case inspect, eval, click, fill, key, scroll, screenshot, upload, downloads, download, dialog, show, present
     case history, bookmarks
+    case webMCPList = "webmcp-list", webMCPCall = "webmcp-call"
     case bookmarkAdd = "bookmark-add", bookmarkUpdate = "bookmark-update", bookmarkRemove = "bookmark-remove"
     public var timeout: Int { isFileTransfer ? 600 : 60 }
     public var isFileTransfer: Bool { self == .upload || self == .download || self == .screenshot }
@@ -103,10 +104,14 @@ public struct BrowserRequest: Codable, Sendable {
     public var query: String?
     public var limit: Int?
     public var offset: Int?
+    public var toolID: String?
+    /// JSON object encoded as UTF-8 text; never interpreted as JavaScript source.
+    public var arguments: String?
     public init(_ operation: BrowserOperation, browserID: UUID? = nil, tabID: UUID? = nil) {
         self.operation = operation; self.browserID = browserID; self.tabID = tabID
     }
     public func validate() throws {
+        try validateWebMCP()
         guard version == 1 else { throw BrowserError("Update Noodle and Noodle Browser to compatible versions.") }
         guard operation == .list || browserID != nil else { throw BrowserError("Specify --browser UUID.") }
         guard !operation.needsTab || tabID != nil else { throw BrowserError("Specify --tab UUID from tabs or open.") }

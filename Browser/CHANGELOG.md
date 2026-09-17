@@ -22,6 +22,7 @@
 
 ### Added
 
+- Add built-in WebMCP compatibility for JavaScript tools and annotated forms, with CLI discovery/invocation, shared `eval` access, document-scoped tool IDs, validation, cancellation and background human handoffs.
 - Ship a signed, notarized DMG alongside the ZIP, with large app and Applications icons and a drag-to-install layout.
 
 - Use the suite's shared version-driven release pipeline, including signing, notarization, signed updates, an independent download channel and verified-artifact recovery.

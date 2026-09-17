@@ -54,6 +54,7 @@ import NoodleCore
                 process.waitUntilExit()
                 if expectFailure {
                     guard process.terminationStatus != 0 else { throw BrowserError("Revoked CLI access succeeded.") }
+                    if let json = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] { return json }
                     return ["error": String(decoding: failure, as: UTF8.self)]
                 }
                 guard process.terminationStatus == 0 else { throw BrowserError(String(decoding: failure, as: UTF8.self)) }
@@ -75,48 +76,81 @@ import NoodleCore
         guard ready else { throw BrowserError("Browser fixture page did not load.") }
         let auth = try await cli(["eval"] + tab + ["--text", "return (await (await fetch('/auth-state')).json()).authenticated;"])
         guard auth["value"] as? Bool == true else { throw BrowserError("Broker tab did not share the signed-in profile.") }
-        let history = try await cli(["history"] + browser + ["--query", "history-marker", "--limit", "1", "--offset", "0"])
-        guard history["totalCount"] as? Int == 1, (history["history"] as? [[String: Any]])?.count == 1 else { throw BrowserError("CLI history query failed.") }
-        let created = try await cli(["bookmark-add"] + browser + ["--url", "http://127.0.0.1:\(port)/cli-bookmark", "--title", "CLI bookmark"])
-        guard let record = created["bookmark"] as? [String: Any], let bookmarkID = record["id"] as? String else { throw BrowserError("CLI did not create bookmark.") }
-        _ = try await cli(["bookmark-update"] + browser + ["--bookmark", bookmarkID, "--title", "Edited CLI bookmark"])
-        let saved = try await cli(["bookmarks"] + browser + ["--query", "Edited CLI bookmark"])
-        guard saved["totalCount"] as? Int == 1, (saved["bookmarks"] as? [[String: Any]])?.first?["id"] as? String == bookmarkID else { throw BrowserError("CLI bookmark edit/search failed.") }
-        _ = try await cli(["bookmark-remove"] + browser + ["--bookmark", bookmarkID])
-        let removed = try await cli(["bookmarks"] + browser + ["--query", "Edited CLI bookmark"])
-        guard removed["totalCount"] as? Int == 0 else { throw BrowserError("CLI bookmark removal failed.") }
-        let invalid = try await cli(["history"] + browser + ["--limit", "201"], expectFailure: true)
-        guard (invalid["error"] as? String)?.contains("limit") == true else { throw BrowserError("CLI did not validate pagination.") }
-        let data = Data("broker-upload-contents".utf8)
-        try data.write(to: workspace.appendingPathComponent("upload.txt"))
-        _ = try await cli(["upload"] + tab + ["--target", "#file", "--source", "upload.txt"])
-        let uploaded = try await cli(["eval"] + tab + ["--text", "return await document.querySelector('#file').files[0].text();"])
-        guard uploaded["value"] as? String == String(decoding: data, as: UTF8.self) else { throw BrowserError("CLI upload bytes differ.") }
-        _ = try await cli(["screenshot"] + tab + ["--output", "capture.png"])
-        guard NSImage(contentsOf: workspace.appendingPathComponent("capture.png")) != nil else { throw BrowserError("CLI screenshot transfer failed.") }
-        let presented = try await cli(["present"] + tab + ["--conversation", createdAgent.conversation.id.uuidString, "--message", "Browser fixture page"])
-        guard let attachmentID = (presented["attachmentID"] as? String).flatMap(UUID.init(uuidString:)),
-              let attachment = try repository.loadAttachments(conversationID: createdAgent.conversation.id).first(where: { $0.id == attachmentID }),
-              let card = attachment.browser, card.reference.browser.id == browserID,
-              card.reference.tabID.uuidString.lowercased() == tabID.lowercased(),
-              let preview = card.reference.previewImage, NSImage(data: preview) != nil,
-              try BrowserReference.read(repository.attachmentFileURL(attachment)) == card.reference else {
-            throw BrowserError("CLI did not send a valid browser preview attachment.")
+        if !args.contains("--webmcp-only") {
+            let history = try await cli(["history"] + browser + ["--query", "history-marker", "--limit", "1", "--offset", "0"])
+            guard history["totalCount"] as? Int == 1, (history["history"] as? [[String: Any]])?.count == 1 else { throw BrowserError("CLI history query failed.") }
+            let created = try await cli(["bookmark-add"] + browser + ["--url", "http://127.0.0.1:\(port)/cli-bookmark", "--title", "CLI bookmark"])
+            guard let record = created["bookmark"] as? [String: Any], let bookmarkID = record["id"] as? String else { throw BrowserError("CLI did not create bookmark.") }
+            _ = try await cli(["bookmark-update"] + browser + ["--bookmark", bookmarkID, "--title", "Edited CLI bookmark"])
+            let saved = try await cli(["bookmarks"] + browser + ["--query", "Edited CLI bookmark"])
+            guard saved["totalCount"] as? Int == 1, (saved["bookmarks"] as? [[String: Any]])?.first?["id"] as? String == bookmarkID else { throw BrowserError("CLI bookmark edit/search failed.") }
+            _ = try await cli(["bookmark-remove"] + browser + ["--bookmark", bookmarkID])
+            let removed = try await cli(["bookmarks"] + browser + ["--query", "Edited CLI bookmark"])
+            guard removed["totalCount"] as? Int == 0 else { throw BrowserError("CLI bookmark removal failed.") }
+            let invalid = try await cli(["history"] + browser + ["--limit", "201"], expectFailure: true)
+            guard (invalid["error"] as? String)?.contains("limit") == true else { throw BrowserError("CLI did not validate pagination.") }
+            let data = Data("broker-upload-contents".utf8)
+            try data.write(to: workspace.appendingPathComponent("upload.txt"))
+            _ = try await cli(["upload"] + tab + ["--target", "#file", "--source", "upload.txt"])
+            let uploaded = try await cli(["eval"] + tab + ["--text", "return await document.querySelector('#file').files[0].text();"])
+            guard uploaded["value"] as? String == String(decoding: data, as: UTF8.self) else { throw BrowserError("CLI upload bytes differ.") }
+            _ = try await cli(["screenshot"] + tab + ["--output", "capture.png"])
+            guard NSImage(contentsOf: workspace.appendingPathComponent("capture.png")) != nil else { throw BrowserError("CLI screenshot transfer failed.") }
+            let presented = try await cli(["present"] + tab + ["--conversation", createdAgent.conversation.id.uuidString, "--message", "Browser fixture page"])
+            guard let attachmentID = (presented["attachmentID"] as? String).flatMap(UUID.init(uuidString:)),
+                  let attachment = try repository.loadAttachments(conversationID: createdAgent.conversation.id).first(where: { $0.id == attachmentID }),
+                  let card = attachment.browser, card.reference.browser.id == browserID,
+                  card.reference.tabID.uuidString.lowercased() == tabID.lowercased(),
+                  let preview = card.reference.previewImage, NSImage(data: preview) != nil,
+                  try BrowserReference.read(repository.attachmentFileURL(attachment)) == card.reference else {
+                throw BrowserError("CLI did not send a valid browser preview attachment.")
+            }
+            guard try repository.loadMessages(conversationID: createdAgent.conversation.id).last?.attachmentIDs == [attachmentID] else {
+                throw BrowserError("Browser attachment was not linked to its conversation message.")
+            }
+            let downloads = try await cli(["downloads"] + browser)
+            guard let download = (downloads["downloads"] as? [[String: Any]])?.first(where: { $0["state"] as? String == "complete" }), let id = download["id"] as? String else { throw BrowserError("Fixture download unavailable.") }
+            _ = try await cli(["download"] + browser + ["--download", id, "--output", "download.txt"])
+            guard try String(contentsOf: workspace.appendingPathComponent("download.txt"), encoding: .utf8) == "noodle-download-contents" else { throw BrowserError("CLI download bytes differ.") }
         }
-        guard try repository.loadMessages(conversationID: createdAgent.conversation.id).last?.attachmentIDs == [attachmentID] else {
-            throw BrowserError("Browser attachment was not linked to its conversation message.")
+        _ = try await cli(["navigate"] + tab + ["--url", "http://127.0.0.1:\(port)/webmcp"])
+        var webMCPReady = false
+        for _ in 0..<80 {
+            let value = try? await cli(["eval"] + tab + ["--text", "return location.pathname==='/webmcp' && await window.webMCPReady===true;"])
+            if value?["value"] as? Bool == true { webMCPReady = true; break }
+            try await Task.sleep(for: .milliseconds(100))
         }
-        let downloads = try await cli(["downloads"] + browser)
-        guard let download = (downloads["downloads"] as? [[String: Any]])?.first(where: { $0["state"] as? String == "complete" }), let id = download["id"] as? String else { throw BrowserError("Fixture download unavailable.") }
-        _ = try await cli(["download"] + browser + ["--download", id, "--output", "download.txt"])
-        guard try String(contentsOf: workspace.appendingPathComponent("download.txt"), encoding: .utf8) == "noodle-download-contents" else { throw BrowserError("CLI download bytes differ.") }
+        guard webMCPReady else { throw BrowserError("CLI WebMCP fixture did not load.") }
+        let discovered = try await cli(["webmcp", "list"] + tab)
+        guard let webTools = (discovered["value"] as? [String: Any])?["tools"] as? [[String: Any]],
+              let echoID = webTools.first(where: { $0["name"] as? String == "echo" })?["id"] as? String else { throw BrowserError("CLI did not discover WebMCP tools.") }
+        try Data(#"{"text":"CLI file arguments","count":2}"#.utf8).write(to: workspace.appendingPathComponent("arguments.json"))
+        let called = try await cli(["webmcp", "call"] + tab + ["--tool", echoID, "--args-file", "arguments.json"])
+        guard let result = (called["value"] as? [String: Any])?["result"] as? [String: Any],
+              result["authenticated"] as? Bool == true, result["text"] as? String == "CLI file arguments" else { throw BrowserError("CLI WebMCP call lost arguments or authentication.") }
+        try Data("const tools=await document.modelContext.getTools(); return JSON.parse(await document.modelContext.executeTool(tools.find(t=>t.name==='echo'), {text:'script file'}));".utf8).write(to: workspace.appendingPathComponent("workflow.js"))
+        let scripted = try await cli(["eval"] + tab + ["--file", "workflow.js"])
+        guard (scripted["value"] as? [String: Any])?["text"] as? String == "script file" else { throw BrowserError("CLI eval script file did not use the shared WebMCP registry.") }
+        _ = try await cli(["webmcp", "call"] + tab + ["--tool", echoID, "--args", "[]"], expectFailure: true)
+        let invalidSchema = try await cli(["webmcp", "call"] + tab + ["--tool", echoID, "--args", #"{"text":"bad","count":0}"#], expectFailure: true)
+        guard ((invalidSchema["value"] as? [String: Any])?["error"] as? [String: Any])?["code"] as? String == "INVALID_ARGUMENTS" else { throw BrowserError("CLI WebMCP error did not preserve its JSON code.") }
+        let mailboxFiles = try FileManager.default.contentsOfDirectory(atPath: BrowserAgentSkill.bridge(workspace: workspace).path)
+        guard !mailboxFiles.contains(where: { $0.hasSuffix(".request") || $0.hasSuffix(".response") }) else { throw BrowserError("Failed WebMCP CLI call left request files behind.") }
+        _ = try await cli(["webmcp", "call"] + tab + ["--tool", echoID, "--args-file", "../outside.json"], expectFailure: true)
+        print("PASS WebMCP managed CLI discovery, JSON invocation, workspace argument files, structured failure exit and authenticated execution")
         _ = try await cli(["close"] + tab)
         try controller.assign([], to: agent, synchronizeWorkspace: false)
         let denied = try await cli(["tabs"] + browser, expectFailure: true)
         guard (denied["error"] as? String)?.contains("not assigned") == true else { throw BrowserError("Unexpected revocation response.") }
         _ = try await cli(["history"] + browser, expectFailure: true)
         _ = try await cli(["bookmark-add"] + browser + ["--url", "https://example.com"], expectFailure: true)
+        _ = try await cli(["webmcp", "list"] + tab, expectFailure: true)
+        _ = try await cli(["webmcp", "call"] + tab + ["--tool", echoID], expectFailure: true)
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == front else { throw BrowserError("Broker operations stole focus.") }
-        print("BROWSER INTEGRATION PASSED: signed peers, managed CLI, assignments/revocation, authenticated tab, history/bookmarks, uploads/downloads, screenshot, browser preview attachment, close tab, unchanged focus")
+        if args.contains("--webmcp-only") {
+            print("BROWSER WEBMCP INTEGRATION PASSED: signed peers, managed CLI, assignments/revocation, argument files, authenticated execution, close tab, unchanged focus")
+        } else {
+            print("BROWSER INTEGRATION PASSED: signed peers, managed CLI, assignments/revocation, authenticated tab, history/bookmarks, uploads/downloads, screenshot, browser preview attachment, WebMCP, close tab, unchanged focus")
+        }
     }
 }

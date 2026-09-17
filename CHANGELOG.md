@@ -18,6 +18,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Let agents discover and invoke website WebMCP tools through the Browser CLI or JavaScript, with authenticated sessions, JSON arguments and explicit human form handoffs.
 - Ship a signed, notarized DMG alongside the ZIP, with large app and Applications icons and a drag-to-install layout.
 
 - Document Noodle Browser setup and connect its releases to the suite's shared publication and recovery process.
@@ -31,6 +32,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Let Browser scripts and WebMCP argument files be read directly from the bot's workspace while rejecting symlinks, oversized files and paths outside it.
 - Report OpenCode’s structured provider failures accurately while preserving the saved session and unfinished work for Kick recovery.
 - Wait for OpenCode’s online model catalogue refresh so newly available models appear in the picker and can be selected when a bot starts.
 - Align the conversation transition surface with the transcript's coordinate system to prevent vertically mirrored message text, retaining the existing Markdown renderer and text selection.

@@ -3,16 +3,20 @@ import Darwin
 import Foundation
 import NoodleCore
 
+private struct ReportedWebMCPError: Error {}
+
 @main enum BrowserCLI {
     static func main() {
         do {
-            let args = Array(CommandLine.arguments.dropFirst())
+            let args = try BrowserOperation.expandingWebMCPCommand(Array(CommandLine.arguments.dropFirst()))
             guard let command = args.first, command != "--help" else { print(MessengerDocumentation.browserCLIHelp); return }
             guard let operation = BrowserOperation(rawValue: command), args.count % 2 == 1 else { throw BrowserError("Invalid command. Use --help.") }
             let common: Set<String> = operation == .list ? [] : ["--browser"]
             let tab: Set<String> = operation.needsTab || operation == .status ? ["--tab"] : []
             let specific: Set<String>
             switch operation {
+            case .webMCPList: specific = ["--frame"]
+            case .webMCPCall: specific = ["--tool", "--args", "--args-file", "--frame"]
             case .history, .bookmarks: specific = ["--query", "--limit", "--offset"]
             case .bookmarkAdd: specific = ["--url", "--title"]
             case .bookmarkUpdate: specific = ["--bookmark", "--url", "--title"]
@@ -57,10 +61,21 @@ import NoodleCore
             request.fileID = try uuid("--download")
             request.bookmarkID = try uuid("--bookmark"); request.title = flags["--title"]; request.query = flags["--query"]
             request.limit = try integer("--limit"); request.offset = try integer("--offset")
+            request.toolID = flags["--tool"]
+            if operation == .webMCPCall {
+                request.arguments = flags["--args"] ?? "{}"
+                if let file = flags["--args-file"] {
+                    guard flags["--args"] == nil else { throw BrowserError("Use --args or --args-file, not both.") }
+                    let path = try ComputerWorkspaceFiles.relativePath(file, currentDirectory: cwd, workspace: context.workspace)
+                    let data = try ComputerWorkspaceFiles.read(workspace: context.workspace, path: path, limit: 1_048_576)
+                    guard let json = String(data: data, encoding: .utf8) else { throw BrowserError("Arguments must be UTF-8 JSON.") }
+                    request.arguments = json
+                }
+            }
             if let file = flags["--file"] {
                 guard request.text == nil else { throw BrowserError("Use --file or --text, not both.") }
                 let path = try ComputerWorkspaceFiles.relativePath(file, currentDirectory: cwd, workspace: context.workspace)
-                let data = try MCPBridgeFiles.read(context.workspace.appendingPathComponent(path), limit: 1_048_576, workspace: context.workspace)
+                let data = try ComputerWorkspaceFiles.read(workspace: context.workspace, path: path, limit: 1_048_576)
                 guard let source = String(data: data, encoding: .utf8) else { throw BrowserError("Script must be UTF-8.") }
                 request.text = source
             }
@@ -91,16 +106,22 @@ import NoodleCore
                     _ = try JSONDecoder().decode(BrowserResponse.self, from: data).checked()
                     var result = try JSONSerialization.jsonObject(with: data) as! [String: Any]
                     if let path = localPath { result["localPath"] = path }
-                    if [.inspect, .eval].contains(operation), let text = result.removeValue(forKey: "text") as? String {
+                    if [.inspect, .eval, .webMCPList, .webMCPCall].contains(operation), let text = result.removeValue(forKey: "text") as? String {
                         result["value"] = try JSONSerialization.jsonObject(with: Data(text.utf8), options: [.fragmentsAllowed])
                     }
                     try FileHandle.standardOutput.write(contentsOf: JSONSerialization.data(withJSONObject: result, options: [.sortedKeys]))
-                    print(""); return
+                    print("")
+                    if operation == .webMCPCall, (result["value"] as? [String: Any])?["status"] as? String == "error" { throw ReportedWebMCPError() }
+                    return
                 }
                 guard kill(session.processID, 0) == 0 || errno == EPERM else { throw BrowserError("Noodle stopped. Check browser state before retrying.") }
                 Thread.sleep(forTimeInterval: 0.1)
             }
             throw BrowserError("Browser request timed out. Check its state before retrying an action.")
+        } catch is ReportedWebMCPError {
+            // Unwind the request-file cleanup before reporting the failure exit.
+            // Its structured JSON error has already been written to stdout.
+            exit(1)
         } catch {
             try? FileHandle.standardError.write(contentsOf: Data(("browser: " + error.localizedDescription + "\n").utf8)); exit(1)
         }

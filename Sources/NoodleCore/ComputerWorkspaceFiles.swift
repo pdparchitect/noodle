@@ -53,6 +53,25 @@ public enum ComputerWorkspaceFiles {
         defer { Darwin.close(destination) }
         return try ComputerTransferFiles.copy(source: source, destination: destination)
     }
+
+    /// Bounded script/JSON input, including files directly in the workspace.
+    /// Use the same descriptor walk as transfers; never follow parent or leaf links.
+    public static func read(workspace: URL, path: String, limit: Int) throws -> Data {
+        guard limit >= 0, limit < Int.max else { throw ComputerBridgeError("Invalid workspace file size limit.") }
+        let (parent, name) = try parent(workspace: workspace, path: path)
+        defer { Darwin.close(parent) }
+        let source = openat(parent, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        guard source >= 0 else { throw ComputerBridgeError("Cannot read the local file; symlinks are not supported.") }
+        defer { Darwin.close(source) }
+        var info = stat()
+        guard fstat(source, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG,
+              info.st_size >= 0, info.st_size <= limit else {
+            throw ComputerBridgeError("Expected a regular workspace file within the size limit.")
+        }
+        let data = try FileHandle(fileDescriptor: source, closeOnDealloc: false).read(upToCount: limit + 1) ?? Data()
+        guard data.count <= limit else { throw ComputerBridgeError("Workspace file exceeds the size limit.") }
+        return data
+    }
 }
 
 /// Keep the selected parent open until publication. An existing file, symlink,

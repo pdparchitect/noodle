@@ -40,7 +40,8 @@ import SwiftUI
                 for _ in 0..<900 { try await Task.sleep(for: .seconds(1)) }
                 runtime.shutdown(); exit(0)
             }
-            let before = NSWorkspace.shared.frontmostApplication?.processIdentifier
+            let focus = BrowserFocusProbe()
+            defer { focus.stop() }
             let base = "http://127.0.0.1:\(port)"
             if args.contains("--cleanup") {
                 for profile in library.profiles { try await runtime.removeBrowser(profile.id) }
@@ -90,6 +91,12 @@ import SwiftUI
                 try require(try await isolated.evaluate("return !(await (await fetch('/auth-state')).json()).authenticated;") as? Bool == true, "Profile cookie isolation failed")
                 _ = try await tab.evaluate("return await new Promise((resolve,reject)=>{const r=indexedDB.open('noodle-fixture',1);r.onupgradeneeded=()=>r.result.createObjectStore('values');r.onerror=()=>reject(r.error);r.onsuccess=()=>{const db=r.result,tx=db.transaction('values','readwrite');tx.objectStore('values').put('saved','state');tx.oncomplete=()=>{db.close();resolve(true)};tx.onerror=()=>reject(tx.error)}});")
                 print("PASS DOM inspection, iframe, fill, native click, authenticated request, profile isolation, IndexedDB write")
+                try await verifyWebMCP(runtime, browserID: profile.id, otherID: other.id, base: base)
+                if args.contains("--webmcp-demos") { try await verifyPublicWebMCPDemos(runtime, browserID: profile.id) }
+                if args.contains("--webmcp-only") {
+                    runtime.shutdown()
+                    print("BROWSER_WEBMCP_OK"); fflush(stdout); exit(0)
+                }
                 fill.target = "#key"; fill.text = "keys"; _ = try await runtime.perform(fill)
                 try tab.press("Enter")
                 try await eventually("native key") { try await tab.evaluate("return document.querySelector('#key').dataset.key==='Enter';") as? Bool == true }
@@ -140,7 +147,7 @@ import SwiftUI
                 do { _ = try await runtime.perform(fill); throw BrowserError("Paused control accepted fill") }
                 catch let error as BrowserError { try require(error.message.contains("paused"), "Unexpected pause error") }
                 try runtime.setPaused(false, browserID: profile.id)
-                try require(NSWorkspace.shared.frontmostApplication?.processIdentifier == before, "Browser stole application focus")
+                try focus.verify()
                 _ = try await tab.evaluate("window.fixtureAudio=new Audio('/silent.wav');fixtureAudio.loop=true;fixtureAudio.preload='auto';const b=document.createElement('button');b.id='media-test';b.textContent='Play silent fixture';b.onclick=()=>fixtureAudio.play().then(()=>window.fixturePlayed=true).catch(e=>window.fixtureMediaError=e.name);document.body.append(b);return true;")
                 try await eventually("silent audio loaded") { try await tab.evaluate("return fixtureAudio.readyState>=2;") as? Bool == true }
                 try await tab.click(target: "#media-test", x: nil, y: nil, frame: nil)
@@ -150,7 +157,7 @@ import SwiftUI
                 print("MEDIA", mediaState.rawValue, mediaDetails ?? "unknown")
                 try require(mediaState != .playing, "Muted browser played media")
                 try require(try await tab.evaluate("return fixtureAudio.paused;") as? Bool == true, "Muted media advanced")
-                print("PASS popup opener/authentication, dialogs, pause, media silence, unchanged application focus")
+                print("PASS popup opener/authentication, dialogs, pause, media silence, no browser activation")
                 try require(try library.history(profile.id).total > 0, "Navigation did not record history")
                 try require(try library.history(profile.id, query: "/frame").total == 0, "Subframe entered browsing history")
                 _ = try await tab.evaluate("history.pushState({},'', '/history-marker');document.title='History marker';return true;")

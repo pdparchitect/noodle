@@ -1,0 +1,64 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>WebMCP fixture</title>
+<h1>Local WebMCP fixture</h1>
+<form id="booking" toolname="book_table" tooldescription="Book a fake table" toolautosubmit>
+  <label>Name <input name="guest" required minlength="2"></label>
+  <label>Seats <input name="seats" type="number" min="1" max="6" required></label>
+  <label><input type="radio" name="area" value="inside" checked>Inside</label>
+  <label><input type="radio" name="area" value="outside">Outside</label>
+  <button>Book</button>
+</form>
+<form id="manual" toolname="manual_search" tooldescription="Prepare a fake search for human submission">
+  <input name="query" required><button>Search</button>
+</form>
+<form id="navigate" action="/webmcp-result" toolname="navigate_form" tooldescription="Navigate after submission" toolautosubmit>
+  <input name="query"><button>Navigate</button>
+</form>
+<form id="asyncform" toolname="async_form" tooldescription="Return an async form result" toolautosubmit>
+  <input name="text"><button>Run</button>
+</form>
+<iframe src="/webmcp-frame" title="Same-origin tools"></iframe>
+<iframe src="http://localhost:PORT/webmcp-frame" title="Cross-origin tools"></iframe>
+<script>
+  window.calls = 0;
+  window.submissions = 0;
+  window.manualSubmissions = 0;
+  window.registration = new AbortController();
+  document.querySelector('#booking').addEventListener('submit', e => {
+    e.preventDefault();
+    submissions++;
+    e.respondWith(Promise.resolve({ guest: e.target.elements.guest.value, seats: Number(e.target.elements.seats.value), area: e.target.elements.area.value, agentInvoked: e.agentInvoked }));
+  });
+  document.querySelector('#manual').addEventListener('submit', e => {
+    e.preventDefault(); manualSubmissions++;
+    window.manualWasAgentInvoked = e.agentInvoked;
+    if (e.agentInvoked) e.respondWith(Promise.resolve('submitted'));
+  });
+  document.querySelector('#asyncform').addEventListener('submit', e => {
+    e.preventDefault(); e.respondWith(new Promise(resolve => setTimeout(() => resolve({ text: e.target.elements.text.value, needsUserAction: true, navigationStarted: true }), 20)));
+  });
+  window.webMCPReady = (async () => {
+    const mc = document.modelContext;
+    if (!mc) throw Error('Document-start WebMCP installation is missing');
+    await mc.registerTool({ name: 'echo', description: 'Echo arguments in the current fake account',
+      inputSchema: { type: 'object', properties: { text: { type: 'string' }, count: { type: 'integer', minimum: 1 } }, required: ['text'], additionalProperties: false },
+      annotations: { readOnlyHint: false },
+      execute: async args => {
+        calls++;
+        localStorage.setItem('webmcp-marker', args.text);
+        return { ...args, authenticated: (await (await fetch('/auth-state')).json()).authenticated };
+      }
+    }, { signal: registration.signal, exposedTo: ['https://example.com'] });
+    await mc.registerTool({ name: 'fail', description: 'Throw a test error', execute: () => { throw Error('fixture tool failure'); } });
+    await mc.registerTool({ name: 'hang', description: 'Wait until cancelled', execute: (_, { signal }) => new Promise((_, reject) => {
+      signal.addEventListener('abort', () => { window.toolAborted = true; reject(signal.reason); }, { once: true });
+    }) });
+    await mc.registerTool({ name: 'unsupported_schema', description: 'Unsupported schema must fail explicitly', inputSchema: { type: 'object', dependentRequired: { a: ['b'] } }, execute: () => { calls++; } });
+    await mc.registerTool({ name: 'json_schema', description: 'Validate nested schema', inputSchema: {
+      type: 'object', properties: { options: { type: 'array', items: { $ref: '#/$defs/option' }, minItems: 1, uniqueItems: true } },
+      required: ['options'], additionalProperties: false, $defs: { option: { oneOf: [{ const: 'small' }, { const: 'large' }] } }
+    }, execute: args => args });
+    return true;
+  })();
+</script>
