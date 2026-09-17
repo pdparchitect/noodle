@@ -221,7 +221,11 @@ import XCTest
                        CGRect(x: 1440, y: -500, width: 900, height: 1540)]
         for screen in screens {
             for count in 1...LocalMacWindowCaptureLimits.maximumWindows {
-                let sizes = (0..<count).map { CGSize(width: 480 + ($0 % 4) * 180, height: 300 + ($0 % 3) * 200) }
+                let sizes = (0..<count).map { index -> CGSize in
+                    let width = CGFloat(480 + (index % 4) * 180)
+                    let height = CGFloat(300 + (index % 3) * 200)
+                    return CGSize(width: width, height: height)
+                }
                 let frames = LocalMacWindowLayout.frames(sizes: sizes, in: screen)
                 XCTAssertEqual(frames.count, count)
                 for (index, frame) in frames.enumerated() {
