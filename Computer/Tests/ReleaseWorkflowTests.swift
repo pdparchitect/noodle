@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 // Runs publication logic against fake gh/git commands in a disposable tree.
 // No GitHub connection, credentials, tags or real release assets are involved.
@@ -14,8 +15,12 @@ try fm.copyItem(at: source.appendingPathComponent("scripts/publish-computer-rele
                 to: root.appendingPathComponent("scripts/publish-computer-release.sh"))
 try write("1.2.3\n", "Computer/VERSION")
 try write("Fixture release notes\n", "notes.md")
-for file in ["Noodle-Computer-arm64.zip", "Noodle-Computer-arm64.zip.sha256", "appcast.xml"] {
+let fixtureDigest = SHA256.hash(data: Data("fixture".utf8)).map { String(format: "%02x", $0) }.joined()
+for file in ["Noodle-Computer-arm64.zip", "Noodle-Computer-arm64.dmg", "appcast.xml"] {
     try write("fixture", "dist/computer-1.2.3/" + file)
+    if file != "appcast.xml" {
+        try write("\(fixtureDigest)  \(file)\n", "dist/computer-1.2.3/" + file + ".sha256")
+    }
 }
 try write("""
 #!/bin/zsh
@@ -43,6 +48,8 @@ case "$1 $2 $3" in
         if [[ "$COMPUTER_TEST_MODE" == upgrade && "$*" != *'--clobber'* ]]; then exit 1; fi
         if [[ "$4" == *.zip && "$COMPUTER_TEST_MODE" == archive-failure ]]; then exit 1; fi
         if [[ "$5" == *.zip.sha256 && "$COMPUTER_TEST_MODE" == checksum-failure ]]; then exit 1; fi
+        if [[ "$6" == *.dmg && "$COMPUTER_TEST_MODE" == dmg-failure ]]; then exit 1; fi
+        if [[ "$7" == *.dmg.sha256 && "$COMPUTER_TEST_MODE" == dmg-checksum-failure ]]; then exit 1; fi
         if [[ "$4" == */appcast.xml && "$COMPUTER_TEST_MODE" == feed-failure ]]; then exit 1; fi ;;
     *) exit 0 ;;
 esac
@@ -74,6 +81,8 @@ for mode in ["first", "upgrade", "legacy-upgrade"] {
     precondition(writes.first!.contains("computer-v1.2.3") && writes.first!.contains("--draft"))
     precondition(!writes.first!.contains("--clobber"))
     precondition(writes.first!.contains("/Noodle-Computer-arm64.zip "))
+    precondition(writes.first!.contains("/Noodle-Computer-arm64.dmg "))
+    precondition(writes.first!.contains("/Noodle-Computer-arm64.dmg.sha256 "))
     let publication = log.range(of: "release edit computer-v1.2.3")!
     let channel = log.range(of: mode == "first" ? "release create computer-latest" : "release upload computer-latest")!
     precondition(publication.lowerBound < channel.lowerBound, "Channel must follow version publication")
@@ -82,6 +91,8 @@ for mode in ["first", "upgrade", "legacy-upgrade"] {
     }!
     precondition(channelCommand.contains("/Noodle-Computer-arm64.zip "))
     precondition(channelCommand.contains("/Noodle-Computer-arm64.zip.sha256 "))
+    precondition(channelCommand.contains("/Noodle-Computer-arm64.dmg "))
+    precondition(channelCommand.contains("/Noodle-Computer-arm64.dmg.sha256 "))
     if mode == "first" {
         precondition(channelCommand.contains("/appcast.xml "))
     } else {
@@ -110,13 +121,13 @@ for mode in ["rollback", "existing", "private"] {
     precondition(status != 0)
     precondition(!log.contains("release create") && !log.contains("release edit") && !log.contains("release upload"))
 }
-for mode in ["version-failure", "archive-failure", "checksum-failure", "feed-failure"] {
+for mode in ["version-failure", "archive-failure", "checksum-failure", "dmg-failure", "dmg-checksum-failure", "feed-failure"] {
     let (status, log) = try run(mode)
     precondition(status != 0)
     precondition(!log.contains("release edit computer-latest"))
     precondition(!log.contains("release delete-asset"))
     if mode == "version-failure" { precondition(!log.contains("release upload computer-latest")) }
-    if mode == "archive-failure" || mode == "checksum-failure" {
+    if ["archive-failure", "checksum-failure", "dmg-failure", "dmg-checksum-failure"].contains(mode) {
         precondition(!log.split(separator: "\n").contains {
             $0.hasPrefix("release upload computer-latest ") && $0.contains("/appcast.xml ")
         })

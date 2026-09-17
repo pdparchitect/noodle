@@ -39,7 +39,7 @@ Intelligence harness runs on device on supported Macs with macOS 26 or later.
 - **[Noodle Applet](https://github.com/pdparchitect/noodle/releases/tag/applet-latest)**: run tools, websites, experiments, and games created by you and your agents. Requires macOS 15 or later.
 - **[Noodle Browser](Browser/README.md)**: dedicated browsers you sign in to and assign to agents, with persistent profiles, tabs, history, bookmarks, and file transfers. In development; local builds require macOS 26 or later.
 
-Download the app ZIP, unzip it, and move the app to **Applications**.
+Download the DMG, open it, and drag the app to **Applications**. ZIP downloads are also available.
 Noodle Computer, Noodle Applet, and Noodle Browser are optional companions and also work on their own.
 
 ## Get started

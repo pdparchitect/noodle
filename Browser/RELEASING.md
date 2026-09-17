@@ -12,7 +12,7 @@ Browser releases independently from Noodle, using `Browser/VERSION` and
 
 The [shared release pipeline](../docs/releases.md) tests, signs, notarizes, staples,
 and verifies the app before creating `browser-vX.Y.Z`. It publishes the exact
-prepared archive and updates `browser-latest`. PRs and local builds do not publish.
+prepared ZIP and DMG and updates `browser-latest`. PRs and local builds do not publish.
 A new Browser version with only Unreleased notes stays in development until its
 first dated release section is prepared, just like the other companions.
 
@@ -22,9 +22,10 @@ update assets must be public.
 
 ## Downloads and updates
 
-- Versioned release: `browser-vX.Y.Z`, containing `Noodle-Browser-arm64.zip`, its checksum, signed `appcast.xml`, and notes.
+- Versioned release: `browser-vX.Y.Z`, containing `Noodle-Browser-arm64.zip`, `Noodle-Browser-arm64.dmg`, their checksums, signed `appcast.xml`, and notes.
 - [Download channel](https://github.com/pdparchitect/noodle/releases/tag/browser-latest): copies of the current release's assets.
 - [Direct ZIP download](https://github.com/pdparchitect/noodle/releases/download/browser-latest/Noodle-Browser-arm64.zip): available after the first release.
+- [Direct DMG download](https://github.com/pdparchitect/noodle/releases/download/browser-latest/Noodle-Browser-arm64.dmg): available after the first release with disk images.
 - [Update feed](https://github.com/pdparchitect/noodle/releases/download/browser-latest/appcast.xml): points to the immutable versioned archive.
 
 Both releases use `--latest=false`, preserving Noodle as the repository's latest
@@ -45,7 +46,7 @@ Prepared artifacts are retained for seven days. Never rebuild to replace a
 published archive, move a version tag, or overwrite versioned assets.
 
 If the versioned release succeeded but channel promotion failed, inspect and verify
-that release's archive and checksum. Promote those existing assets to
+that release's ZIP, DMG, and checksums. Promote those existing assets to
 `browser-latest`, then its signed feed, title, and notes, in that order. Only the
 channel's copies may be replaced. Preserve all versioned releases and unrelated
 channel attachments.

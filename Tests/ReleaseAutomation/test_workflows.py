@@ -254,7 +254,7 @@ class WorkflowTests(unittest.TestCase):
     def test_noodle_publishes_fixed_name_assets_only_after_checksum_verification(self):
         publish = next(step['run'] for step in self.jobs['publish-noodle']['steps']
                        if 'gh release create' in step.get('run', ''))
-        for scenario in ['valid', 'corrupt', 'existing']:
+        for scenario in ['valid', 'corrupt', 'corrupt-dmg', 'missing-dmg', 'existing']:
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 (root / 'dist').mkdir()
@@ -264,10 +264,17 @@ class WorkflowTests(unittest.TestCase):
                 (root / 'dist' / archive).write_bytes(b'prepared archive')
                 digest = hashlib.sha256(b'prepared archive').hexdigest()
                 (root / 'dist' / (archive + '.sha256')).write_text(f'{digest}  {archive}\n')
+                disk_image = 'Noodle-arm64.dmg'
+                (root / 'dist' / disk_image).write_bytes(b'prepared archive')
+                (root / 'dist' / (disk_image + '.sha256')).write_text(f'{digest}  {disk_image}\n')
                 for name in ['appcast.xml', 'release-notes.md']:
                     (root / 'dist' / name).write_text('fixture')
                 if scenario == 'corrupt':
                     (root / 'dist' / archive).write_bytes(b'modified archive')
+                if scenario == 'corrupt-dmg':
+                    (root / 'dist' / disk_image).write_bytes(b'modified disk image')
+                if scenario == 'missing-dmg':
+                    (root / 'dist' / disk_image).unlink()
                 gh = root / 'bin' / 'gh'
                 gh.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$TEST_GH_LOG"\n'
                               'if [ "$1 $2" = "release view" ]; then exit "$TEST_RELEASE_EXISTS"; fi\n')
@@ -282,6 +289,7 @@ class WorkflowTests(unittest.TestCase):
                 if scenario == 'valid':
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertIn('release create v1.2.3 dist/Noodle-arm64.zip dist/Noodle-arm64.zip.sha256 dist/appcast.xml', commands)
+                    self.assertIn('dist/Noodle-arm64.dmg dist/Noodle-arm64.dmg.sha256', commands)
                     self.assertIn('--draft --verify-tag', commands)
                     self.assertIn('release edit v1.2.3 --draft=false --latest', commands)
                     self.assertNotIn('--clobber', commands)
@@ -386,7 +394,7 @@ class WorkflowTests(unittest.TestCase):
                          'TEST_CURL_STATUS': '0' if available else '22'}, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(output.read_text().strip(), 'ready=' + str(available).lower())
-                self.assertIn('https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.zip',
+                self.assertIn('https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg',
                               (root / 'curl.log').read_text().splitlines())
 
 

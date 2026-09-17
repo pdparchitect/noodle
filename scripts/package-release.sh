@@ -118,4 +118,7 @@ archive_signature="$(xmllint --xpath 'string(//enclosure/@*[local-name()="edSign
 "$project_root/.build/artifacts/sparkle/Sparkle/bin/sign_update" \
     --ed-key-file "$SPARKLE_PRIVATE_KEY_PATH" --verify "$archive" "$archive_signature"
 
+# Build after generate_appcast so Sparkle continues to use only the ZIP.
+zsh "$project_root/scripts/package-dmg.sh" "$app" "$dist/Noodle-arm64.dmg"
+
 print "$archive"

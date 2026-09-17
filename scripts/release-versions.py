@@ -49,6 +49,17 @@ def notes(product):
     return body + "\n"
 
 
+def release_notes(product):
+    body = notes(product)
+    if product == 'images':
+        return body
+    _, tag = version(product)
+    basename = 'Noodle' if product == 'noodle' else f'Noodle-{product.title()}'
+    download = f'https://github.com/pdparchitect/noodle/releases/download/{tag}/{basename}-arm64'
+    return (f'[Download DMG for Apple silicon]({download}.dmg) · [ZIP]({download}.zip)\n\n'
+            + body)
+
+
 def released_versions(product):
     prefix = PRODUCTS[product][2]
     return [tag[len(prefix):] for tag in git("tag", "--list", prefix + "*").splitlines()
@@ -118,7 +129,7 @@ def main():
     else:
         if not args.product:
             parser.error("notes requires a product")
-        print(notes(args.product), end="")
+        print(release_notes(args.product), end="")
 
 
 if __name__ == "__main__":

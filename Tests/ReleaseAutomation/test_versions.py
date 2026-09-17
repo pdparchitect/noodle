@@ -145,6 +145,23 @@ class VersionTests(unittest.TestCase):
         self.assertEqual(outputs['computer'], 'false')
         self.assertEqual(outputs['images'], 'true')
 
+    def test_app_release_notes_lead_with_matching_dmg_and_zip_downloads(self):
+        for product, prefix, tag_prefix in [
+            ('noodle', 'Noodle', 'v'), ('computer', 'Noodle-Computer', 'computer-v'),
+            ('applet', 'Noodle-Applet', 'applet-v'), ('browser', 'Noodle-Browser', 'browser-v'),
+        ]:
+            with self.subTest(product=product):
+                self.write_version(product, '1.2.3', body='### Fixed\n\n- A release change.')
+                result = run('python3', 'scripts/release-versions.py', 'notes', product, cwd=self.root)
+                base = f'https://github.com/pdparchitect/noodle/releases/download/{tag_prefix}1.2.3/{prefix}-arm64'
+                self.assertEqual(result.stdout,
+                    f'[Download DMG for Apple silicon]({base}.dmg) · [ZIP]({base}.zip)\n\n'
+                    '### Fixed\n\n- A release change.\n')
+                self.assertEqual(self.module.notes(product), '### Fixed\n\n- A release change.\n')
+        # Container image releases have no macOS app installer.
+        result = run('python3', 'scripts/release-versions.py', 'notes', 'images', cwd=self.root)
+        self.assertEqual(result.stdout, '- A release change.\n')
+
 
 if __name__ == '__main__':
     unittest.main()

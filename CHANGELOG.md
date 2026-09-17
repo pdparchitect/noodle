@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Make DMGs the primary release-page and website downloads, with ZIPs retained as an alternative.
 - Clarify Browser skill sharing choices, put clickable page previews near the top, and direct agents to current help before claiming a capability is unavailable.
 - Use Computer’s shared assignment picker for bot browsers: Add Browsers, searchable choices, circular custom icons and removable assigned items.
 - Simplify Noodle Browser creation and use independent per-browser backgrounds with the suite’s appearance controls.
@@ -15,6 +16,8 @@ All notable changes to Noodle are documented here, following
 - Align Noodle Browser with Computer and Applet: sidebar-based browser selection, suite appearance, native menus and matching Settings/Update flow.
 
 ### Added
+
+- Ship a signed, notarized DMG alongside the ZIP, with large app and Applications icons and a drag-to-install layout.
 
 - Document Noodle Browser setup and connect its releases to the suite's shared publication and recovery process.
 - Add OpenCode v2 with its official logo, native installation and version checks, model/effort selection, ACP session recovery, and restricted per-bot credential, database, and cache storage.

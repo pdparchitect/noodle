@@ -10,6 +10,31 @@ recovery = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(recovery)
 
 class RecoveryTests(unittest.TestCase):
+    def test_disk_images_are_verified_and_older_runs_can_omit_them(self):
+        for product, prefix in [('noodle', 'Noodle'), ('computer', 'Noodle-Computer'),
+                                ('applet', 'Noodle-Applet'), ('browser', 'Noodle-Browser')]:
+            with self.subTest(product=product), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                self.assertEqual(recovery.disk_image_assets(root, product), [])
+                with self.assertRaises(FileNotFoundError):
+                    recovery.disk_image_assets(root, product, required=True)
+                name = f'{prefix}-arm64.dmg'
+                image = root / name
+                manifest = root / (name + '.sha256')
+                image.write_bytes(b'verified disk image')
+                with self.assertRaises(FileNotFoundError):
+                    recovery.disk_image_assets(root, product)
+                digest = hashlib.sha256(image.read_bytes()).hexdigest()
+                manifest.write_text(f'{digest}  {name}\n')
+                self.assertEqual(recovery.disk_image_assets(root, product, required=True),
+                                 [str(image), str(manifest)])
+                image.write_bytes(b'corrupted')
+                with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+                    recovery.disk_image_assets(root, product)
+                image.unlink()
+                with self.assertRaises(FileNotFoundError):
+                    recovery.disk_image_assets(root, product)
+
     def test_requires_completed_main_gates_and_prepared_artifacts(self):
         run = {'status': 'completed', 'head_branch': 'main', 'head_sha': 'a' * 40,
                'path': '.github/workflows/release.yml'}

@@ -12,7 +12,7 @@ Applet releases independently from Noodle. Use `Applet/VERSION` and
 
 The [shared release pipeline](../docs/releases.md) tests, signs, notarizes, and
 verifies the app before creating `applet-vX.Y.Z`. It publishes the prepared
-archive and updates `applet-latest`. PRs and local builds do
+ZIP and DMG and updates `applet-latest`. PRs and local builds do
 not publish.
 
 Applet uses the same signing secrets and Sparkle key as Noodle. Both apps must
@@ -21,9 +21,10 @@ must be public for unauthenticated downloads and updates.
 
 ## Downloads and updates
 
-- Versioned release: `applet-vX.Y.Z`, containing `Noodle-Applet-arm64.zip`, its checksum, signed `appcast.xml`, and notes.
+- Versioned release: `applet-vX.Y.Z`, containing `Noodle-Applet-arm64.zip`, `Noodle-Applet-arm64.dmg`, their checksums, signed `appcast.xml`, and notes.
 - [Download channel](https://github.com/pdparchitect/noodle/releases/tag/applet-latest): copies of the current release's assets.
 - [Direct ZIP download](https://github.com/pdparchitect/noodle/releases/download/applet-latest/Noodle-Applet-arm64.zip): a fixed URL available after the first release with the new filename.
+- [Direct DMG download](https://github.com/pdparchitect/noodle/releases/download/applet-latest/Noodle-Applet-arm64.dmg): available after the first release with disk images.
 - [Update feed](https://github.com/pdparchitect/noodle/releases/download/applet-latest/appcast.xml): points to the immutable versioned archive.
 
 Both releases must use `--latest=false` so they never replace Noodle's latest
@@ -44,8 +45,8 @@ Never move tags or replace a published archive.
 
 If the versioned release exists but channel promotion failed:
 
-1. Inspect the existing release and verify its ZIP against its checksum.
-2. Copy that existing ZIP and checksum to `applet-latest`, replacing only the channel's fixed-name copies.
+1. Inspect the existing release and verify its ZIP and DMG against their checksums.
+2. Copy those existing ZIP, DMG, and checksum files to `applet-latest`, replacing only the channel's fixed-name copies.
 3. Replace the channel's signed feed, then its title and notes, after the assets exist.
 4. Verify the download/feed. When migrating from versioned filenames, remove only the previous version's ZIP/checksum copies from the channel; keep the new fixed-name assets.
 

@@ -19,7 +19,7 @@ Each product has its own version and changelog:
 3. Run the affected tests and review the changes.
 4. Commit and push to `main`. **Pushing a new version requests publication.**
 5. Watch **Validate and release versions** through completion and verify the public download and update channel.
-6. Verify the website's [latest ZIP download](https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.zip). After the first release with this filename, run **Deploy website** manually if it deferred deployment while the asset was unavailable. Future releases require no website link changes.
+6. Verify the website's [latest DMG download](https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg). After the first release with this filename, run **Deploy website** manually if it deferred deployment while the asset was unavailable. Future releases require no website link changes.
 
 Do not create tags manually or reuse published versions. Unchanged versions skip
 publication. A new product with no release history and only Unreleased notes
@@ -33,12 +33,33 @@ for their separate download channels, and [image releases](../Computer/Images/RE
 
 App ZIPs use fixed filenames: `Noodle-arm64.zip`, `Noodle-Computer-arm64.zip`,
 `Noodle-Applet-arm64.zip`, and `Noodle-Browser-arm64.zip`, each with a matching `.zip.sha256` file.
+Each app also ships a signed, notarized disk image with the same basename and
+`.dmg` extension, plus a `.dmg.sha256` checksum. Open the DMG and drag the app to
+Applications. The installer uses a 660 × 400 Finder window, 160-point icons,
+16-point labels, and a Retina background with a chevron between the icons.
 Versions remain in app metadata, release titles and tags. Signed update feeds
 use immutable tag URLs, such as `releases/download/vX.Y.Z/Noodle-arm64.zip`;
-the website uses `releases/latest/download/Noodle-arm64.zip`.
+the website uses `releases/latest/download/Noodle-arm64.dmg`. Generated app release
+notes lead with a DMG download link and offer ZIP as an alternative; both links
+point to that release's immutable tag. Companion download channels use the same
+DMG-first order.
 
 Keep previously published archives and feed URLs intact. Migration feeds and
-publication recovery accept the old versioned filenames as well as the new names.
+publication recovery accept the old versioned filenames as well as the new names,
+including older prepared runs without disk images.
+
+To preview an installer locally without release credentials, use a signed local
+build (ad-hoc signing is sufficient):
+
+```sh
+zsh scripts/package-dmg.sh --preview ".build/Noodle Dev.app" .build/dmg-preview/Noodle.dmg
+open .build/dmg-preview/Noodle.dmg
+```
+
+The preview image itself is unsigned and is not a release artifact. Packaging
+installs pinned Python build tools into `.build/dmg-tools` and renders the
+background with AppKit. Finder layout is written directly, so CI needs no Finder
+automation or interactive desktop. Existing output is never overwritten.
 
 ## What CI does
 
@@ -49,7 +70,10 @@ scoped by product; Computer, Applet, and Browser releases also run Noodle integr
 
 CI tags the checked commit and publishes the exact prepared artifacts. When
 released together, images publish first, then Computer, then Noodle. Applet and Browser publish independently of images and before Noodle. App releases
-remain drafts until their ZIP, checksum, signed feed, and notes are uploaded.
+remain drafts until their ZIP, DMG, checksums, signed feed, and notes are uploaded.
+DMGs are built from the same stapled apps as the ZIPs, then signed, notarized,
+stapled, and assessed by Gatekeeper before their checksums are generated. They are
+created after Sparkle feed generation so automatic updates continue using ZIPs.
 A successful run requires every selected product to finish publishing.
 Computer, Applet, and Browser releases never replace Noodle's repository-wide latest release.
 

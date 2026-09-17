@@ -322,6 +322,7 @@ jobs:
         run: |
           cd "dist/computer-$COMPUTER_VERSION"
           shasum -a 256 -c Noodle-Computer-arm64.zip.sha256
+          shasum -a 256 -c Noodle-Computer-arm64.dmg.sha256
           cd ../..
           zsh scripts/publish-computer-release.sh "$COMPUTER_VERSION" "dist/computer-$COMPUTER_VERSION/release-notes.md"
 
@@ -349,6 +350,7 @@ jobs:
         run: |
           cd "dist/applet-$APPLET_VERSION"
           shasum -a 256 -c Noodle-Applet-arm64.zip.sha256
+          shasum -a 256 -c Noodle-Applet-arm64.dmg.sha256
           cd ../..
           zsh scripts/publish-applet-release.sh "$APPLET_VERSION" "dist/applet-$APPLET_VERSION/release-notes.md"
 
@@ -376,6 +378,7 @@ jobs:
         run: |
           cd "dist/browser-$BROWSER_VERSION"
           shasum -a 256 -c Noodle-Browser-arm64.zip.sha256
+          shasum -a 256 -c Noodle-Browser-arm64.dmg.sha256
           cd ../..
           zsh scripts/publish-browser-release.sh "$BROWSER_VERSION" "dist/browser-$BROWSER_VERSION/release-notes.md"
 
@@ -406,6 +409,7 @@ jobs:
           tag="v$version"
           cd dist
           sha256sum -c Noodle-arm64.zip.sha256
+          sha256sum -c Noodle-arm64.dmg.sha256
           cd ..
           # Existing releases (including drafts) require recovery, never replacement.
           if gh release view "$tag" >/dev/null 2>&1; then
@@ -414,6 +418,7 @@ jobs:
           fi
           gh release create "$tag" dist/Noodle-arm64.zip \
             dist/Noodle-arm64.zip.sha256 dist/appcast.xml \
+            dist/Noodle-arm64.dmg dist/Noodle-arm64.dmg.sha256 \
             --draft --verify-tag --notes-file dist/release-notes.md --title "Noodle $version"
           gh release edit "$tag" --draft=false --latest
 

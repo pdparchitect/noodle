@@ -48,5 +48,7 @@ sparkle_tools="$project_root/.build/applet/artifacts/sparkle/Sparkle/bin"
 archive_signature="$(xmllint --xpath 'string(//enclosure/@*[local-name()="edSignature"])' "$staging/assets/appcast.xml")"
 [[ -n "$archive_signature" ]]
 "$sparkle_tools/sign_update" --ed-key-file "$SPARKLE_PRIVATE_KEY_PATH" --verify "$staging/assets/$archive" "$archive_signature"
+# Build after generate_appcast so Sparkle continues to use only the ZIP.
+zsh "$project_root/scripts/package-dmg.sh" "$app" "$staging/assets/${archive:r}.dmg"
 mv "$staging/assets" "$output"
 print "$output"

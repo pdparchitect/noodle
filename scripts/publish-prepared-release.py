@@ -90,6 +90,18 @@ def release_archive(directory, product, version):
     return archive
 
 
+def disk_image_assets(directory, product, required=False):
+    prefix = {'noodle': 'Noodle', 'computer': 'Noodle-Computer',
+              'applet': 'Noodle-Applet', 'browser': 'Noodle-Browser'}[product]
+    name = f'{prefix}-arm64.dmg'
+    manifest = name + '.sha256'
+    # Old prepared runs predate DMGs; a partial pair must still fail validation.
+    if not required and not (directory / name).exists() and not (directory / manifest).exists():
+        return []
+    checksum(directory, manifest, expected_archive=name)
+    return [str(directory / name), str(directory / manifest)]
+
+
 def main():
     run_id = sys.argv[1]
     if not run_id.isdigit():
@@ -101,6 +113,7 @@ def main():
     sha = run['head_sha']
     command('git', 'fetch', 'origin', sha, '--tags')
     command('git', 'checkout', '--detach', sha)
+    requires_dmg = (ROOT / 'scripts/package-dmg.sh').exists()
     spec = importlib.util.spec_from_file_location('versions', ROOT / 'scripts/release-versions.py')
     versions = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(versions)
@@ -117,6 +130,8 @@ def main():
             command('gh', 'run', 'download', run_id, '--repo', REPO,
                     '--name', artifact, '--dir', str(destination))
             downloads[product] = destination
+            if product != 'images':
+                disk_image_assets(destination, product, required=requires_dmg)
         if 'images' in downloads:
             directory = downloads['images']
             checksum(directory, 'computer-images.tar.gz.sha256')
@@ -153,6 +168,7 @@ def main():
             archive = release_archive(directory, 'noodle', version)
             command('gh', 'release', 'create', tag, str(directory / archive),
                     str(directory / (archive + '.sha256')), str(directory / 'appcast.xml'),
+                    *disk_image_assets(directory, 'noodle', required=requires_dmg),
                     '--repo', REPO, '--draft', '--verify-tag', '--title', f'Noodle {version}',
                     '--notes-file', str(directory / 'release-notes.md'))
             command('gh', 'release', 'edit', tag, '--repo', REPO, '--draft=false', '--latest')

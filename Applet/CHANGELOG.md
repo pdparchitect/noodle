@@ -4,6 +4,8 @@
 
 ### Added
 
+- Ship a signed, notarized DMG alongside the ZIP, with large app and Applications icons and a drag-to-install layout.
+
 - Add Show in Dock alongside Show in Menu Bar, use the app’s symbol in the menu bar, and make Settings available from its menu. Dock visibility defaults to on and menu bar visibility to off.
 - Add a standalone symbol SVG and automatically compose the full icon SVG, PNG sizes and packaged macOS icon on every build.
 

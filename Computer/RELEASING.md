@@ -12,7 +12,7 @@ Computer releases independently from Noodle. Use `Computer/VERSION` and
 
 The [shared release pipeline](../docs/releases.md) tests, signs, notarizes, and
 verifies the app before creating `computer-vX.Y.Z`. It publishes the prepared
-archive and updates `computer-latest`. If images release in the same push, they
+ZIP and DMG and updates `computer-latest`. If images release in the same push, they
 must publish and pass anonymous registry checks first. PRs and local builds do
 not publish.
 
@@ -22,9 +22,10 @@ must be public for unauthenticated downloads and updates.
 
 ## Downloads and updates
 
-- Versioned release: `computer-vX.Y.Z`, containing `Noodle-Computer-arm64.zip`, its checksum, signed `appcast.xml`, and notes.
+- Versioned release: `computer-vX.Y.Z`, containing `Noodle-Computer-arm64.zip`, `Noodle-Computer-arm64.dmg`, their checksums, signed `appcast.xml`, and notes.
 - [Download channel](https://github.com/pdparchitect/noodle/releases/tag/computer-latest): copies of the current release's assets.
 - [Direct ZIP download](https://github.com/pdparchitect/noodle/releases/download/computer-latest/Noodle-Computer-arm64.zip): a fixed URL available after the first release with the new filename.
+- [Direct DMG download](https://github.com/pdparchitect/noodle/releases/download/computer-latest/Noodle-Computer-arm64.dmg): available after the first release with disk images.
 - [Update feed](https://github.com/pdparchitect/noodle/releases/download/computer-latest/appcast.xml): points to the immutable versioned archive.
 
 Both releases must use `--latest=false` so they never replace Noodle's latest
@@ -45,8 +46,8 @@ Never move tags or replace a published archive.
 
 If the versioned release exists but channel promotion failed:
 
-1. Inspect the existing release and verify its ZIP against its checksum.
-2. Copy that existing ZIP and checksum to `computer-latest`, replacing only the channel's fixed-name copies.
+1. Inspect the existing release and verify its ZIP and DMG against their checksums.
+2. Copy those existing ZIP, DMG, and checksum files to `computer-latest`, replacing only the channel's fixed-name copies.
 3. Replace the channel's signed feed, then its title and notes, after the assets exist.
 4. Verify the download/feed. When migrating from versioned filenames, remove only the previous version's ZIP/checksum copies from the channel; keep the new fixed-name assets.
 

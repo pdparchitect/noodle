@@ -22,6 +22,8 @@
 
 ### Added
 
+- Ship a signed, notarized DMG alongside the ZIP, with large app and Applications icons and a drag-to-install layout.
+
 - Use the suite's shared version-driven release pipeline, including signing, notarization, signed updates, an independent download channel and verified-artifact recovery.
 - Add independent Show in Dock and Show in Menu Bar settings, with a menu for opening the library and saved browsers using the app’s symbol. Dock visibility defaults to on and menu bar visibility to off.
 - Add browser page reference files and the agent `present` command, with a saved screenshot in Noodle and opening in the original profile and tab when available.
