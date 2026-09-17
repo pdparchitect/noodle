@@ -1,0 +1,137 @@
+name: Assemble Noodle Suite
+
+on:
+  workflow_run:
+    workflows: [Validate and release versions, Publish verified release artifacts]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: noodle-suite
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    # Use trusted main source and public release assets, never PR artifacts or code.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')))
+    runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.plan.outputs.action }}
+      source: ${{ steps.plan.outputs.source }}
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+      - id: plan
+        name: Resolve published versions and reuse an unchanged Suite
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/suite-release.py plan
+      - uses: actions/upload-artifact@v6
+        if: steps.plan.outputs.action != 'none'
+        with:
+          name: suite-plan
+          path: dist/suite-plan.json
+          if-no-files-found: error
+          retention-days: 7
+
+  assemble:
+    needs: plan
+    if: needs.plan.outputs.action != 'none'
+    runs-on: macos-26
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.plan.outputs.source }}
+      - uses: actions/download-artifact@v7
+        with:
+          name: suite-plan
+          path: dist
+      - name: Restore published app archive cache
+        if: needs.plan.outputs.action == 'build'
+        id: archives
+        uses: actions/cache/restore@v5
+        with:
+          path: .build/suite-archives
+          key: suite-archives-v1-${{ needs.plan.outputs.tag }}
+          restore-keys: suite-archives-v1-
+      - name: Fetch verified app bundles or the existing Suite snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/suite-release.py fetch --cache .build/suite-archives
+      - name: Save verified published archives
+        if: needs.plan.outputs.action == 'build' && steps.archives.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: .build/suite-archives
+          key: suite-archives-v1-${{ needs.plan.outputs.tag }}
+
+      - name: Prepare signing credentials for a new disk image
+        if: needs.plan.outputs.action == 'build'
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          : "${MACOS_CERTIFICATE_P12:?Missing certificate}"
+          : "${MACOS_CERTIFICATE_PASSWORD:?Missing certificate password}"
+          : "${APP_STORE_CONNECT_API_KEY_P8:?Missing notarization key}"
+          : "${APP_STORE_CONNECT_KEY_ID:?Missing notarization key ID}"
+          : "${APP_STORE_CONNECT_ISSUER_ID:?Missing notarization issuer}"
+          umask 077
+          keychain="$RUNNER_TEMP/suite-signing.keychain-db"
+          password="$(openssl rand -base64 32)"
+          print -rn -- "$MACOS_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/suite-signing.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/suite-signing.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security list-keychains -d user -s "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+          identity="$(security find-identity -v -p codesigning "$keychain" | awk -F '"' '/Developer ID Application:/ { print $2; exit }')"
+          [[ -n "$identity" ]]
+          print -rn -- "$APP_STORE_CONNECT_API_KEY_P8" > "$RUNNER_TEMP/suite-notary.p8"
+          print "NOODLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+          print "APPLE_API_KEY_PATH=$RUNNER_TEMP/suite-notary.p8" >> "$GITHUB_ENV"
+          print "APPLE_API_KEY_ID=$APP_STORE_CONNECT_KEY_ID" >> "$GITHUB_ENV"
+          print "APPLE_API_ISSUER_ID=$APP_STORE_CONNECT_ISSUER_ID" >> "$GITHUB_ENV"
+
+      - name: Package and notarize the Suite without rebuilding apps
+        if: needs.plan.outputs.action == 'build'
+        run: zsh scripts/package-dmg.sh --suite dist/suite/apps dist/suite/assets/Noodle-Suite-arm64.dmg
+      - name: Retain verified Suite assets for recovery
+        uses: actions/upload-artifact@v6
+        with:
+          name: suite-release-assets
+          path: dist/suite/assets/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Publish the immutable snapshot and promote its Suite channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/suite-release.py publish
+      - name: Remove ephemeral signing credentials
+        if: always()
+        shell: zsh {0}
+        run: |
+          rm -f "$RUNNER_TEMP/suite-signing.p12" "$RUNNER_TEMP/suite-notary.p8"
+          if [[ -f "$RUNNER_TEMP/suite-signing.keychain-db" ]]; then
+            security delete-keychain "$RUNNER_TEMP/suite-signing.keychain-db"
+          fi

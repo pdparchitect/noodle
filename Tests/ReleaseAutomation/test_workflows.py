@@ -373,29 +373,87 @@ class WorkflowTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(matches_paths(['website/README.md', path], patterns))
 
-    def test_website_waits_for_its_direct_download_before_deploying(self):
+    def test_website_waits_for_both_direct_downloads_before_deploying(self):
         steps = workflow('website.yml')['jobs']['deploy']['steps']
         index = next(i for i, step in enumerate(steps) if step.get('id') == 'download')
         for step in steps[index + 1:]:
             self.assertEqual(step.get('if'), "steps.download.outputs.ready == 'true'")
-        for available in [True, False]:
-            with self.subTest(available=available), tempfile.TemporaryDirectory() as temporary:
+        urls = ['https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg',
+                'https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Suite-arm64.dmg']
+        for missing in ['', *urls]:
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 (root / 'website').mkdir()
                 (root / 'website/index.html').write_text((ROOT / 'website/index.html').read_text())
                 (root / 'bin').mkdir()
                 curl = root / 'bin/curl'
-                curl.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$TEST_CURL_LOG"\nexit "$TEST_CURL_STATUS"\n')
+                curl.write_text('#!/bin/sh\nprintf "%s\\n" "$@" >> "$TEST_CURL_LOG"\n'
+                                'for arg in "$@"; do if [ "$arg" = "$TEST_MISSING_URL" ]; then exit 22; fi; done\n')
                 curl.chmod(0o700)
                 output = root / 'outputs'
                 result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', steps[index]['run']], cwd=root,
                     env={**os.environ, 'PATH': str(root / 'bin') + os.pathsep + os.environ['PATH'],
                          'GITHUB_OUTPUT': str(output), 'TEST_CURL_LOG': str(root / 'curl.log'),
-                         'TEST_CURL_STATUS': '0' if available else '22'}, capture_output=True, text=True)
+                         'TEST_MISSING_URL': missing}, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(output.read_text().strip(), 'ready=' + str(available).lower())
-                self.assertIn('https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg',
-                              (root / 'curl.log').read_text().splitlines())
+                self.assertEqual(output.read_text().strip(), 'ready=' + str(not missing).lower())
+                calls = (root / 'curl.log').read_text().splitlines()
+                self.assertIn(urls[0], calls)
+                if missing != urls[0]:
+                    self.assertIn(urls[1], calls)
+
+    def test_suite_only_runs_for_successful_trusted_main_releases(self):
+        flow = workflow('suite-release.yml')
+        triggers = flow.get('on', flow.get('true'))
+        self.assertEqual(triggers['workflow_run']['workflows'],
+                         ['Validate and release versions', 'Publish verified release artifacts'])
+        values = {'github.ref': 'refs/heads/main', 'github.event_name': 'workflow_run',
+                  'github.repository': 'pdparchitect/noodle',
+                  'github.event.workflow_run.conclusion': 'success',
+                  'github.event.workflow_run.head_branch': 'main',
+                  'github.event.workflow_run.head_repository.full_name': 'pdparchitect/noodle',
+                  'github.event.workflow_run.event': 'push'}
+        gate = flow['jobs']['plan']['if']
+        self.assertTrue(condition(gate, values))
+        self.assertTrue(condition(gate, {**values, 'github.event_name': 'workflow_dispatch'}))
+        for changes in [
+            {'github.ref': 'refs/heads/feature'},
+            {'github.event.workflow_run.conclusion': 'failure'},
+            {'github.event.workflow_run.head_branch': 'feature'},
+            {'github.event.workflow_run.head_repository.full_name': 'someone/noodle'},
+            {'github.event.workflow_run.event': 'pull_request'},
+        ]:
+            self.assertFalse(condition(gate, {**values, **changes}))
+        self.assertFalse(flow['concurrency']['cancel-in-progress'])
+
+    def test_suite_noop_skips_macos_and_reuse_skips_signing_and_packaging(self):
+        flow = workflow('suite-release.yml')
+        assemble = flow['jobs']['assemble']
+        steps = assemble['steps']
+        for action in ['none', 'reuse', 'build']:
+            values = {'needs.plan.outputs.action': action}
+            self.assertEqual(condition(assemble['if'], values), action != 'none')
+            for step in steps:
+                if 'MACOS_CERTIFICATE_P12' in step.get('env', {}) or 'package-dmg.sh' in step.get('run', ''):
+                    self.assertEqual(condition(step['if'], values), action == 'build')
+        rendered = json.dumps(flow)
+        for compiler in ['swift build', 'build-app.sh', 'package-release.sh']:
+            self.assertNotIn(compiler, rendered)
+        self.assertIn('actions/cache/restore@v5', rendered)
+        self.assertIn('actions/cache/save@v5', rendered)
+        retained = next(i for i, step in enumerate(steps) if step.get('with', {}).get('name') == 'suite-release-assets')
+        published = next(i for i, step in enumerate(steps) if 'suite-release.py publish' in step.get('run', ''))
+        self.assertLess(retained, published)
+
+    def test_suite_completion_retries_website_deployment(self):
+        flow = workflow('website.yml')
+        triggers = flow.get('on', flow.get('true'))
+        self.assertEqual(triggers['workflow_run']['workflows'], ['Assemble Noodle Suite'])
+        values = {'github.ref': 'refs/heads/main', 'github.event_name': 'workflow_run',
+                  'github.event.workflow_run.conclusion': 'success', 'github.event.workflow_run.head_branch': 'main'}
+        self.assertTrue(condition(flow['jobs']['deploy']['if'], values))
+        self.assertFalse(condition(flow['jobs']['deploy']['if'], {
+            **values, 'github.event.workflow_run.conclusion': 'failure'}))
 
 
 if __name__ == '__main__':

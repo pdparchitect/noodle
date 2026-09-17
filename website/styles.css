@@ -50,6 +50,8 @@ h1 { font: 600 48px/1.0834933333 var(--display); letter-spacing: -.003em; }
 .button { display: inline-block; min-width: 112px; margin-top: 28px; padding: 12px 23px; border-radius: 980px; background: #0071e3; color: #fff; font-size: 17px; line-height: 20px; letter-spacing: -.022em; text-decoration: none; transition: background .2s; }
 .button:hover { background: #0077ed; }
 .button:active { background: #006edb; }
+.button-secondary { margin-left: 12px; background: #333336; }
+.button-secondary:hover { background: #424245; }
 .hero-macbook { position: relative; width: min(1260px, 100%); margin: 36px auto 0; user-select: none; -webkit-user-select: none; }
 .hero-hardware { width: 100%; height: auto; }
 .hero-screen { position: absolute; left: 21.484375%; top: 6.73828125%; width: 57.03125%; height: 52.9296875%; object-fit: cover; object-position: center; clip-path: url(#hero-display); }

@@ -8,6 +8,9 @@ on:
       - '.github/workflows/website.yml'
       - '!**.md'
   workflow_dispatch:
+  workflow_run:
+    workflows: [Assemble Noodle Suite]
+    types: [completed]
 
 permissions:
   contents: read
@@ -18,7 +21,10 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -33,27 +39,29 @@ jobs:
         uses: actions/checkout@v6
         with:
           sparse-checkout: website
-      - name: Check that the direct download is published
+      - name: Check that both direct downloads are published
         id: download
         run: |
-          download_url="$(python3 - <<'PY'
+          download_urls="$(python3 - <<'PY'
           from html.parser import HTMLParser
           from pathlib import Path
           class Download(HTMLParser):
               def handle_starttag(self, tag, attrs):
                   attrs = dict(attrs)
-                  if tag == 'a' and attrs.get('class') == 'button':
+                  if tag == 'a' and 'button' in attrs.get('class', '').split():
                       print(attrs['href'])
           Download().feed(Path('website/index.html').read_text())
           PY
           )"
-          test -n "$download_url"
-          if curl --fail --silent --show-error --head --location --connect-timeout 10 --max-time 30 --retry 3 "$download_url" >/dev/null; then
-            echo 'ready=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-            echo '::notice::Download unavailable; keeping the existing website. Run Deploy website after the release is published.'
-          fi
+          test -n "$download_urls"
+          while IFS= read -r download_url; do
+            if ! curl --fail --silent --show-error --head --location --connect-timeout 10 --max-time 30 --retry 3 "$download_url" >/dev/null; then
+              echo 'ready=false' >> "$GITHUB_OUTPUT"
+              echo '::notice::Download unavailable; keeping the existing website until the app and Suite releases are published.'
+              exit 0
+            fi
+          done <<< "$download_urls"
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
       - name: Fetch website images from Git LFS
         if: steps.download.outputs.ready == 'true'
         run: git lfs pull --include="website/**" --exclude=""

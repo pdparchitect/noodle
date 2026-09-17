@@ -7,15 +7,28 @@ import subprocess
 import tempfile
 
 
-def settings(app, background):
+SUITE_NAMES = ['Noodle.app', 'Noodle Computer.app', 'Noodle Applet.app', 'Noodle Browser.app']
+
+
+def layout(apps, suite=False):
+    if not suite:
+        return (660, 400), {apps[0].name: (165, 200), 'Applications': (495, 200)}
+    positions = [(165, 160), (405, 160), (165, 380), (405, 380)]
+    if len(apps) == 3:
+        positions[2] = (285, 380)
+    return (900, 560), {**dict(zip((app.name for app in apps), positions)), 'Applications': (745, 270)}
+
+
+def settings(apps, background, suite=False):
+    size, locations = layout(apps, suite)
     return {
         'format': 'UDZO',
         'filesystem': 'HFS+',
-        'files': [str(app)],
+        'files': [str(app) for app in apps],
         'symlinks': {'Applications': '/Applications'},
         'background': str(background),
-        'window_rect': ((200, 200), (660, 400)),
-        'icon_locations': {app.name: (165, 200), 'Applications': (495, 200)},
+        'window_rect': ((200, 200), size),
+        'icon_locations': locations,
         'icon_size': 160,
         'text_size': 16,
         'show_icon_preview': True,
@@ -35,11 +48,11 @@ def settings(app, background):
 def prepare_volume(mount, options):
     # dmgbuild uses ditto to preserve the app. Fail before publication if the
     # copy is incomplete or its code signature is no longer valid.
-    app = Path(options['files'][0])
-    subprocess.run(['codesign', '--verify', '--deep', '--strict', str(Path(mount) / app.name)], check=True)
+    for source in options['files']:
+        subprocess.run(['codesign', '--verify', '--deep', '--strict', str(Path(mount) / Path(source).name)], check=True)
 
 
-def verify_image(image, app):
+def verify_image(image, apps, suite=False):
     from ds_store import DSStore
     from mac_alias import Alias
 
@@ -52,21 +65,22 @@ def verify_image(image, app):
         ]))
         device = next(entry['dev-entry'] for entry in attached['system-entities'] if 'mount-point' in entry)
         try:
-            copied_app = mount / app.name
-            subprocess.run(['codesign', '--verify', '--deep', '--strict', str(copied_app)], check=True)
-            if (copied_app / 'Contents/Info.plist').read_bytes() != (app / 'Contents/Info.plist').read_bytes():
-                raise ValueError('DMG app metadata differs from the source app')
+            for app in apps:
+                copied_app = mount / app.name
+                subprocess.run(['codesign', '--verify', '--deep', '--strict', str(copied_app)], check=True)
+                if (copied_app / 'Contents/Info.plist').read_bytes() != (app / 'Contents/Info.plist').read_bytes():
+                    raise ValueError('DMG app metadata differs from the source app')
             if not (mount / 'Applications').is_symlink() or (mount / 'Applications').readlink() != Path('/Applications'):
                 raise ValueError('DMG must link to /Applications')
             with DSStore.open(str(mount / '.DS_Store'), 'r') as store:
                 window = store['.']['bwsp']
                 icons = store['.']['icvp']
-                if (window['WindowBounds'] != '{{200, 200}, {660, 400}}'
+                (width, height), locations = layout(apps, suite)
+                if (window['WindowBounds'] != f'{{{{200, 200}}, {{{width}, {height}}}}}'
                         or any(window[key] for key in ['ShowToolbar', 'ShowSidebar', 'ShowStatusBar', 'ShowTabView', 'ShowPathbar'])
                         or icons['iconSize'] != 160 or icons['textSize'] != 16
                         or icons['backgroundType'] != 2 or icons['arrangeBy'] != 'none'
-                        or store[app.name]['Iloc'] != (165, 200)
-                        or store['Applications']['Iloc'] != (495, 200)):
+                        or any(store[name]['Iloc'] != position for name, position in locations.items())):
                     raise ValueError('DMG Finder layout does not match the installer design')
                 alias = Alias.from_bytes(icons['backgroundImageAlias'])
                 if alias.target.filename != '.background.tiff' or not (mount / '.background.tiff').is_file():
@@ -79,19 +93,29 @@ def main():
     import dmgbuild
 
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--suite', action='store_true', help='Package a directory of released Suite apps')
     parser.add_argument('app', type=Path)
     parser.add_argument('background', type=Path)
     parser.add_argument('output', type=Path)
     args = parser.parse_args()
     # Preserve the bundle name even when the source is a development symlink.
-    app = args.app.absolute()
-    if app.suffix != '.app' or not (app / 'Contents/Info.plist').is_file():
-        parser.error('Expected an application bundle')
+    source = args.app.absolute()
+    if args.suite:
+        names = {path.name for path in source.glob('*.app')}
+        if names not in [set(SUITE_NAMES[:3]), set(SUITE_NAMES)]:
+            parser.error('Suite requires Noodle, Computer, and Applet; Browser is optional until its first release')
+        apps = [source / name for name in SUITE_NAMES if name in names]
+    else:
+        apps = [source]
+    if any(app.suffix != '.app' or not (app / 'Contents/Info.plist').is_file() for app in apps):
+        parser.error('Expected application bundles')
     if args.output.exists():
         parser.error('Refusing to overwrite an existing disk image')
-    subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
-    dmgbuild.build_dmg(str(args.output), app.stem + ' Installer', settings=settings(app, args.background))
-    verify_image(args.output, app)
+    for app in apps:
+        subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
+    title = 'Noodle Suite Installer' if args.suite else apps[0].stem + ' Installer'
+    dmgbuild.build_dmg(str(args.output), title, settings=settings(apps, args.background, args.suite))
+    verify_image(args.output, apps, args.suite)
 
 
 if __name__ == '__main__':

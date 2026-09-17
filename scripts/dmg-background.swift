@@ -2,11 +2,13 @@ import AppKit
 
 // Build-only renderer: no application, window, or Dock entry.
 // A two-resolution TIFF keeps the chevron sharp on Retina displays.
-guard CommandLine.arguments.count == 2 else {
-    fputs("Usage: dmg-background.swift OUTPUT.tiff\n", stderr)
+guard CommandLine.arguments.count == 2 || (CommandLine.arguments.count == 3 && CommandLine.arguments[2] == "--suite") else {
+    fputs("Usage: dmg-background.swift OUTPUT.tiff [--suite]\n", stderr)
     exit(1)
 }
-let size = NSSize(width: 660, height: 400)
+let suite = CommandLine.arguments.count == 3
+let size = suite ? NSSize(width: 900, height: 560) : NSSize(width: 660, height: 400)
+let arrow = suite ? NSPoint(x: 570, y: 290) : NSPoint(x: 330, y: 200)
 let representations: [NSBitmapImageRep] = [1, 2].map { scale in
     let bitmap = NSBitmapImageRep(
         bitmapDataPlanes: nil, pixelsWide: Int(size.width) * scale,
@@ -22,9 +24,9 @@ let representations: [NSBitmapImageRep] = [1, 2].map { scale in
     NSColor(srgbRed: 240 / 255, green: 240 / 255, blue: 245 / 255, alpha: 1).setFill()
     NSBezierPath(rect: NSRect(origin: .zero, size: size)).fill()
     let chevron = NSBezierPath()
-    chevron.move(to: NSPoint(x: 322, y: 217))
-    chevron.line(to: NSPoint(x: 339, y: 200))
-    chevron.line(to: NSPoint(x: 322, y: 183))
+    chevron.move(to: NSPoint(x: arrow.x - 8, y: arrow.y + 17))
+    chevron.line(to: NSPoint(x: arrow.x + 9, y: arrow.y))
+    chevron.line(to: NSPoint(x: arrow.x - 8, y: arrow.y - 17))
     chevron.lineWidth = 6
     chevron.lineCapStyle = .round
     chevron.lineJoinStyle = .round

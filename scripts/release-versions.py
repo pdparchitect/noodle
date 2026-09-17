@@ -56,8 +56,11 @@ def release_notes(product):
     _, tag = version(product)
     basename = 'Noodle' if product == 'noodle' else f'Noodle-{product.title()}'
     download = f'https://github.com/pdparchitect/noodle/releases/download/{tag}/{basename}-arm64'
-    return (f'[Download DMG for Apple silicon]({download}.dmg) · [ZIP]({download}.zip)\n\n'
-            + body)
+    links = f'[Download DMG for Apple silicon]({download}.dmg) · [ZIP]({download}.zip)\n\n'
+    if product == 'noodle':
+        links += ('[Download Suite (macOS 26+)](https://github.com/pdparchitect/noodle/releases/download/'
+                  'suite-latest/Noodle-Suite-arm64.dmg)\n\n')
+    return links + body
 
 
 def released_versions(product):

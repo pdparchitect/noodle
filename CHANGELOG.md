@@ -18,6 +18,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Add a Noodle Suite installer assembled from published app releases, with checksum-verified archive caching and reuse of unchanged Suite snapshots.
 - Let agents discover and invoke website WebMCP tools through the Browser CLI or JavaScript, with authenticated sessions, JSON arguments and explicit human form handoffs.
 - Ship a signed, notarized DMG alongside the ZIP, with large app and Applications icons and a drag-to-install layout.
 

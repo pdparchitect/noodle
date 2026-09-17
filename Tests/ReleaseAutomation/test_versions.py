@@ -154,8 +154,10 @@ class VersionTests(unittest.TestCase):
                 self.write_version(product, '1.2.3', body='### Fixed\n\n- A release change.')
                 result = run('python3', 'scripts/release-versions.py', 'notes', product, cwd=self.root)
                 base = f'https://github.com/pdparchitect/noodle/releases/download/{tag_prefix}1.2.3/{prefix}-arm64'
+                suite_link = ('[Download Suite (macOS 26+)](https://github.com/pdparchitect/noodle/releases/download/'
+                              'suite-latest/Noodle-Suite-arm64.dmg)\n\n') if product == 'noodle' else ''
                 self.assertEqual(result.stdout,
-                    f'[Download DMG for Apple silicon]({base}.dmg) · [ZIP]({base}.zip)\n\n'
+                    f'[Download DMG for Apple silicon]({base}.dmg) · [ZIP]({base}.zip)\n\n' + suite_link +
                     '### Fixed\n\n- A release change.\n')
                 self.assertEqual(self.module.notes(product), '### Fixed\n\n- A release change.\n')
         # Container image releases have no macOS app installer.

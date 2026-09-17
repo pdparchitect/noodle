@@ -19,7 +19,7 @@ Each product has its own version and changelog:
 3. Run the affected tests and review the changes.
 4. Commit and push to `main`. **Pushing a new version requests publication.**
 5. Watch **Validate and release versions** through completion and verify the public download and update channel.
-6. Verify the website's [latest DMG download](https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg). After the first release with this filename, run **Deploy website** manually if it deferred deployment while the asset was unavailable. Future releases require no website link changes.
+6. Verify the website's [Noodle download](https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg) and [Suite download](https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Suite-arm64.dmg). Suite completion triggers website deployment; the website waits until both downloads exist. **Deploy website** can also be run manually.
 
 Do not create tags manually or reuse published versions. Unchanged versions skip
 publication. A new product with no release history and only Unreleased notes
@@ -92,6 +92,55 @@ that also edit documentation. Manual runs remain available. Website content uses
 its separate deployment workflow; README-only edits also skip that workflow and
 the image build workflow. These are native
 [GitHub path filters](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore).
+
+## Noodle Suite
+
+**Assemble Noodle Suite** runs after a successful main release workflow or verified
+artifact recovery. It can also be run manually on `main`. It packages the latest
+published stable Noodle, Computer, and Applet releases; Browser joins after its
+first stable release. Drafts, prereleases, and unreleased working-tree versions
+are excluded. Suite requires macOS 26 and Apple silicon.
+
+App release builds remain version-driven: a Computer patch builds Computer, while
+Suite reuses the other published app bundles. Suite never invokes an app compiler,
+changes app versions, or re-signs app bundles. Existing regression tests still run
+for source changes, including shared integration coverage.
+
+The planner downloads only small checksum and manifest files. Its fingerprint
+includes the component tags, archive checksums, and DMG packaging recipe. Unchanged
+inputs skip the macOS packaging job entirely. A previous complete Suite snapshot
+is reused when channel promotion needs retrying. Published app ZIPs are cached by
+SHA-256 and checked before reuse; a corrupt cache entry is downloaded again.
+Only the current component archives are retained in each cache snapshot.
+
+New Suites reuse the notarized apps after checking their checksums, production
+identities, versions, architecture, updater feeds, and common signing team. The
+outer DMG is signed and notarized separately. Packaging does not substitute for
+the component release tests or establish compatibility across breaking protocol
+changes; maintain the apps' integration contracts when releasing companions.
+
+Each immutable `suite-<fingerprint>` release contains `Noodle-Suite-arm64.dmg`, its
+checksum, and `suite-manifest.json` recording the exact inputs. The mutable
+`suite-latest` channel copies the latest verified snapshot. Every Suite release
+uses `--latest=false`, preserving Noodle's repository-wide latest release and
+updater feed. Installed apps continue updating through their own feeds.
+
+If a newer app releases during assembly, the older combination does not promote
+over it; the queued Suite run resolves the newer releases. A failed Suite does
+not roll back a successful app release. Rerun **Assemble Noodle Suite** to retry.
+Incomplete immutable drafts require restoring the missing files from the saved
+`suite-release-assets` workflow artifact before retrying; never rebuild an image
+to overwrite an existing snapshot. Artifacts are retained for seven days.
+
+For a local layout preview, put the signed production-named bundles into one
+directory and run:
+
+```sh
+zsh scripts/package-dmg.sh --preview --suite .build/suite-apps .build/Noodle-Suite-preview.dmg
+```
+
+Suite uses a 900 × 560 window with the same 160-point icons as individual installers.
+Select the apps and drag them to Applications. No installation helper is needed.
 
 ## Recover a failed release
 
