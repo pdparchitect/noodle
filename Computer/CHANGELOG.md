@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Include the desktop helper's Apple Events entitlement and usage description so Local Mac commands can request approval to automate apps.
 - Close Focus Window automatically when its source popup or window closes, and ignore late replies from the ended preview.
 - Keep Local Mac Setup out of the Dock and app switcher, including during background registration checks.
 - Recover idle Local Mac helpers after signed app replacement without depending on an authenticated request reaching the old executable.

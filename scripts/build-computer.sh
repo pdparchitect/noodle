@@ -210,7 +210,9 @@ cat > "$daemon" <<EOF
 EOF
 codesign --force --options runtime "$timestamp_option" --identifier "$bundle_identifier.localmac" --sign "$signing_identity" "$setup_app/Contents/Library/LaunchServices/LocalMacService"
 codesign --force --options runtime "$timestamp_option" --sign "$signing_identity" "$setup_app"
-codesign --force --options runtime "$timestamp_option" --sign "$signing_identity" "$desktop"
+# The account helper owns its terminal children's Automation consent identity.
+# This entitlement permits consent requests; each target app still needs approval.
+codesign --force --options runtime "$timestamp_option" --entitlements "$package/Support/LocalMacDesktop.entitlements" --sign "$signing_identity" "$desktop"
 resolved_entitlements="$staging_root/Computer.entitlements"
 cp "$package/Support/Computer.entitlements" "$resolved_entitlements"
 /usr/libexec/PlistBuddy -c 'Add :com.apple.security.application-groups array' "$resolved_entitlements"

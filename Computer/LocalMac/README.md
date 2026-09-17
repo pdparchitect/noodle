@@ -185,6 +185,16 @@ Noodle does not receive the live desktop stream. Direct desktop input is not yet
 an agent CLI operation. Linux-specific browser/Puppeteer instructions do not
 apply to this account.
 
+AppleScript commands in the account terminal use the standalone desktop helper's
+Automation consent identity. The helper carries the Apple Events entitlement and
+usage description so it can request approval for target apps. Approval remains
+per target app in the managed account; the entitlement does not grant access or
+reset an earlier denial. Neither the main Computer app nor the privileged service
+receives this entitlement. The signed-bundle checks require it on the desktop
+helper and reject additional helper entitlements. Background-account consent
+prompts may still require the user to interact with that account; a terminal error
+alone does not distinguish a denied request from a prompt that could not complete.
+
 ## Compatibility and updates
 
 The creation form and startup check the registrar's actual status. An unregistered

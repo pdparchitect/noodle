@@ -12,6 +12,7 @@
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSScreenCaptureUsageDescription</key><string>Show the separate Local Mac account’s desktop in Noodle Computer.</string>
+    <key>NSAppleEventsUsageDescription</key><string>Allow commands in this Local Mac account to control apps you approve.</string>
     <key>NSDesktopFolderUsageDescription</key><string>Browse and transfer files in this Local Mac account’s Desktop folder.</string>
     <key>NSDocumentsFolderUsageDescription</key><string>Browse and transfer files in this Local Mac account’s Documents folder.</string>
     <key>NSDownloadsFolderUsageDescription</key><string>Browse and transfer files in this Local Mac account’s Downloads folder.</string>
