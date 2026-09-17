@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Give the website’s reusable MacBook image a blank black display while retaining the separate screen overlay.
 - Make DMGs the primary release-page and website downloads, with ZIPs retained as an alternative.
 - Clarify Browser skill sharing choices, put clickable page previews near the top, and direct agents to current help before claiming a capability is unavailable.
 - Use Computer’s shared assignment picker for bot browsers: Add Browsers, searchable choices, circular custom icons and removable assigned items.
