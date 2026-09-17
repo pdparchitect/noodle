@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Clear unread indicators immediately when interacting with a conversation, including clicking, scrolling, typing, gestures, and dropping attachments in the main window or a popped-out chat.
+
 ## [0.18.0] - 2026-09-17
 
 ### Added

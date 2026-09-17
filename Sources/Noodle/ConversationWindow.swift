@@ -44,6 +44,7 @@ struct ConversationWindowView: View {
             }))
         .onDrop(of: AttachmentTransfer.dropContentTypes, isTargeted: $isFileDropTargeted) { providers in
             guard conversation != nil, !providers.isEmpty else { return false }
+            store.markConversationRead(conversationID)
             store.importAttachments(from: providers, into: conversationID)
             return true
         }
@@ -201,6 +202,7 @@ struct ConversationErrorAlert: ViewModifier {
         guard let host = matches.first(where: { !$0.isMainWindow }) ?? matches.first,
               let window = host.window else { return false }
         show(window)
+        host.markRead?(conversationID)
         return true
     }
 
@@ -243,20 +245,32 @@ struct ConversationWindowHost: NSViewRepresentable {
         fileprivate var restoredConversationID: UUID?
         fileprivate var isRestoringFrame = false
         fileprivate var isClosed = false
+        private var interactionMonitor: Any?
+        private static let interactionEvents: NSEvent.EventTypeMask = [
+            .leftMouseDown, .rightMouseDown, .otherMouseDown,
+            .leftMouseDragged, .rightMouseDragged, .otherMouseDragged,
+            .keyDown, .scrollWheel, .magnify, .smartMagnify, .rotate, .swipe, .pressure
+        ]
 
         init(registry: ConversationWindowRegistry) {
             self.registry = registry
             super.init(frame: .zero)
         }
         required init?(coder: NSCoder) { nil }
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            stopMonitoringInteractions()
             NotificationCenter.default.removeObserver(self)
             registry.hosts.remove(self)
             guard let window else { return }
             isClosed = false
             restoredConversationID = nil
             registry.hosts.add(self)
+            interactionMonitor = NSEvent.addLocalMonitorForEvents(matching: Self.interactionEvents) { [weak self] event in
+                self?.handleInteraction(event)
+                return event
+            }
             for name in [NSWindow.didBecomeKeyNotification, NSWindow.didChangeOcclusionStateNotification] {
                 NotificationCenter.default.addObserver(self, selector: #selector(markVisibleRead), name: name, object: window)
             }
@@ -268,6 +282,19 @@ struct ConversationWindowHost: NSViewRepresentable {
             }
             DispatchQueue.main.async { [weak self] in self?.updateWindow() }
         }
+        func handleInteraction(_ event: NSEvent) {
+            guard !isClosed, let window, let conversationID,
+                  event.window === window,
+                  Self.interactionEvents.contains(NSEvent.EventTypeMask(rawValue: 1 << event.type.rawValue)) else { return }
+            // Input in this window is direct evidence of reading. Activation and
+            // occlusion notifications can still describe the previous app state.
+            markRead?(conversationID)
+        }
+        private func stopMonitoringInteractions() {
+            if let interactionMonitor { NSEvent.removeMonitor(interactionMonitor) }
+            interactionMonitor = nil
+        }
+        deinit { if let interactionMonitor { NSEvent.removeMonitor(interactionMonitor) } }
         func updateWindow() {
             guard !isClosed else { return }
             window?.title = title
@@ -284,6 +311,7 @@ struct ConversationWindowHost: NSViewRepresentable {
         }
         @objc private func closed() {
             isClosed = true
+            stopMonitoringInteractions()
             registry.closed(self)
         }
     }

@@ -292,6 +292,7 @@ struct RootView: View {
             isTargeted: $isFileDropTargeted
         ) { providers in
             guard store.selectedConversation != nil, !providers.isEmpty else { return false }
+            store.markConversationRead(store.selectedConversationID)
             store.importAttachments(from: providers)
             return true
         }

@@ -1,5 +1,6 @@
 import Foundation
 import NoodleCore
+import Observation
 import XCTest
 @testable import Noodle
 
@@ -134,5 +135,15 @@ import XCTest
         XCTAssertEqual(try f.repository.loadUnreadConversationIDs(), [f.directA.id])
         f.store.markConversationRead(nil)
         XCTAssertTrue(f.store.hasUnreadMessages(in: f.directA))
+    }
+
+    func testInteractingWithAnAlreadyReadConversationDoesNotInvalidateUnreadObservers() throws {
+        let f = try fixture()
+        withObservationTracking {
+            _ = f.store.unreadConversationIDs
+        } onChange: {
+            XCTFail("Repeated input in a read conversation must not refresh unread indicators")
+        }
+        for _ in 0..<10 { f.store.markConversationRead(f.directA.id) }
     }
 }

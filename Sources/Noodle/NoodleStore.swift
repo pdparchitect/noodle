@@ -580,7 +580,8 @@ final class NoodleStore {
 
     func markConversationRead(_ conversationID: UUID?) {
         guard let conversationID,
-              unreadConversationIDs.remove(conversationID) != nil else { return }
+              unreadConversationIDs.contains(conversationID) else { return }
+        unreadConversationIDs.remove(conversationID)
         persistUnreadConversationIDs()
     }
 

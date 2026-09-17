@@ -180,6 +180,93 @@ import NoodleCore
         XCTAssertFalse(registry.focus(nextID))
     }
 
+    func testConversationInteractionClearsAndPersistsUnreadWithoutChangingSelection() throws {
+        let (store, direct, group) = try fixture()
+        store.selectedConversationID = direct.id
+        let main = mount(direct.id, in: store.conversationWindows, isMain: true)
+        let separate = mount(group.id, in: store.conversationWindows)
+        defer { main.close(); separate.close() }
+        let interactions: [NSEvent.EventType] = [
+            .leftMouseDown, .rightMouseDown, .otherMouseDown,
+            .leftMouseDragged, .rightMouseDragged, .otherMouseDragged,
+            .keyDown, .scrollWheel, .magnify, .smartMagnify, .rotate, .swipe, .pressure
+        ]
+        for window in [main, separate] {
+            let host = try XCTUnwrap(window.contentView as? ConversationWindowHost.Probe)
+            host.markRead = store.markConversationRead
+            let conversationID = try XCTUnwrap(host.conversationID)
+            let otherID = conversationID == direct.id ? group.id : direct.id
+            for type in interactions {
+                for conversation in [direct, group] {
+                    try store.repository.append(ChatMessage(conversationID: conversation.id,
+                        author: .agent(direct.participantIDs[0]), body: "Unread reply", delivery: .delivered))
+                }
+                store.refreshTranscripts()
+                XCTAssertEqual(store.unreadConversationIDs, [direct.id, group.id])
+                host.handleInteraction(ConversationInteractionEvent(type: type, window: window))
+                XCTAssertEqual(store.unreadConversationIDs, [otherID], "\(type)")
+                XCTAssertEqual(try store.repository.loadUnreadConversationIDs(), [otherID])
+                XCTAssertEqual(NSApplication.shared.dockTile.badgeLabel, "1")
+                XCTAssertEqual(store.selectedConversationID, direct.id)
+                store.refreshTranscripts()
+                XCTAssertEqual(store.unreadConversationIDs, [otherID], "Refreshing must preserve read state")
+            }
+        }
+    }
+
+    func testInteractionIgnoresOtherWindowsPassiveEventsAndClosedOrDetachedHosts() throws {
+        let registry = ConversationWindowRegistry(fileURL: sessionURL())
+        let window = mount(UUID(), in: registry)
+        let other = mount(UUID(), in: registry)
+        defer { window.close(); other.close() }
+        let host = try XCTUnwrap(window.contentView as? ConversationWindowHost.Probe)
+        var read: [UUID?] = []
+        host.markRead = { read.append($0) }
+        host.handleInteraction(ConversationInteractionEvent(type: .keyDown, window: other))
+        for type: NSEvent.EventType in [.mouseMoved, .mouseEntered, .mouseExited, .flagsChanged, .applicationDefined] {
+            host.handleInteraction(ConversationInteractionEvent(type: type, window: window))
+        }
+        XCTAssertTrue(read.isEmpty)
+        let nextID = UUID()
+        host.conversationID = nextID
+        host.handleInteraction(ConversationInteractionEvent(type: .leftMouseDown, window: window))
+        XCTAssertEqual(read, [nextID], "Input must follow the currently displayed conversation")
+        read.removeAll()
+        window.close()
+        host.handleInteraction(ConversationInteractionEvent(type: .keyDown, window: window))
+        XCTAssertTrue(read.isEmpty)
+        window.contentView = nil
+        host.handleInteraction(ConversationInteractionEvent(type: .scrollWheel, window: window))
+        XCTAssertTrue(read.isEmpty)
+    }
+
+    func testLocalInteractionMonitorPreservesKeyboardDeliveryAndDetachesWithHost() throws {
+        let registry = ConversationWindowRegistry(fileURL: sessionURL())
+        let id = UUID()
+        let window = ConversationInputWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 500),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let host = ConversationWindowHost.Probe(registry: registry)
+        host.conversationID = id
+        host.isMainWindow = true
+        window.contentView = host
+        XCTAssertTrue(registry.focus(id))
+        var read: [UUID?] = []
+        host.markRead = { read.append($0) }
+        let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero,
+            modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+            context: nil, characters: "a", charactersIgnoringModifiers: "a", isARepeat: false, keyCode: 0))
+        NSApplication.shared.sendEvent(event)
+        XCTAssertEqual(read, [id])
+        XCTAssertEqual(window.receivedEvent?.type, .keyDown, "Reading must not consume the input")
+        XCTAssertEqual(window.receivedEvent?.characters, "a")
+        read.removeAll()
+        window.contentView = nil
+        NSApplication.shared.sendEvent(event)
+        XCTAssertTrue(read.isEmpty)
+    }
+
     private func sessionURL() -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-window-session-\(UUID())")
         addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
@@ -286,6 +373,24 @@ import NoodleCore
         defer { window.close() }
         XCTAssertEqual(Set(ConversationWindowSession(fileURL: file).frames.keys), [valid])
     }
+}
+
+private final class ConversationInteractionEvent: NSEvent {
+    private let interactionType: NSEvent.EventType
+    private let interactionWindow: NSWindow
+    override var type: NSEvent.EventType { interactionType }
+    override var window: NSWindow? { interactionWindow }
+    init(type: NSEvent.EventType, window: NSWindow) {
+        interactionType = type
+        interactionWindow = window
+        super.init()
+    }
+    required init?(coder: NSCoder) { nil }
+}
+
+@MainActor private final class ConversationInputWindow: NSWindow {
+    var receivedEvent: NSEvent?
+    override func sendEvent(_ event: NSEvent) { receivedEvent = event }
 }
 
 private struct SwitchingChatFixture: View {
