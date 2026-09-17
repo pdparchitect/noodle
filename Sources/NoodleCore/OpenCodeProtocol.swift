@@ -10,6 +10,28 @@ public enum OpenCodeProtocol {
     /// The native catalogue fetch has a ten-second timeout, followed by provider reload.
     public static let catalogueRefreshWindow: TimeInterval = 12
 
+    /// Classify only the native ACP error envelope; never expose arbitrary
+    /// provider text, which can contain request or account details.
+    public static func turnFailureDescription(_ error: [String: Any]) -> String {
+        let recovery = "Use Kick in Settings → Harness to resume. Your unfinished work is preserved."
+        guard error["code"] as? Int == -32603,
+              let data = error["data"] as? [String: Any], data["service"] as? String == "session" else {
+            return "OpenCode could not complete the turn. \(recovery)"
+        }
+        switch data["errorName"] as? String {
+        case "provider.invalid-output":
+            return "OpenCode's provider returned an incomplete or invalid response. \(recovery)"
+        case "provider.timeout":
+            return "OpenCode's model request timed out. \(recovery)"
+        case "provider.transport":
+            return "OpenCode's model connection failed. \(recovery)"
+        case "provider.rate-limit":
+            return "OpenCode's model provider is rate limiting requests. Wait before retrying. \(recovery)"
+        default:
+            return "OpenCode could not complete the turn. \(recovery)"
+        }
+    }
+
     public static func supportsVersion(_ value: String) -> Bool {
         guard let version = HarnessVersion(value) else { return false }
         return version >= HarnessVersion("2.0.0")! && version < HarnessVersion("3.0.0")!

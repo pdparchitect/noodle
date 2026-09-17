@@ -297,7 +297,14 @@ final class ACPAgentProcess: AgentRuntimeProcess {
                 interruptRequested = false
                 turnIsActive = false
                 trace.finish(.turnFailed)
-                update(.failed, provider == .apple ? (error["message"] as? String ?? "Apple could not finish this turn. Choose Kick in Settings → Harness to continue.") : (provider == .fx ? FxProtocol.turnFailureDescription(error) : "\(name) could not complete the turn. Check its account and model, then use Kick in Settings → Harness. Unfinished work is preserved."))
+                let detail: String
+                switch provider {
+                case .apple: detail = error["message"] as? String ?? "Apple could not finish this turn. Choose Kick in Settings → Harness to continue."
+                case .fx: detail = FxProtocol.turnFailureDescription(error)
+                case .openCode: detail = OpenCodeProtocol.turnFailureDescription(error)
+                default: detail = "\(name) could not complete the turn. Check its account and model, then use Kick in Settings → Harness. Unfinished work is preserved."
+                }
+                update(.failed, detail)
             } else { terminated(provider == .apple ? (error["message"] as? String ?? "Apple session setup failed. Check Apple Intelligence in System Settings.") : "\(name) session setup failed. Check its sign-in and selected model in Settings.") }
             return
         }

@@ -27,6 +27,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Report OpenCode’s structured provider failures accurately while preserving the saved session and unfinished work for Kick recovery.
 - Wait for OpenCode’s online model catalogue refresh so newly available models appear in the picker and can be selected when a bot starts.
 - Align the conversation transition surface with the transcript's coordinate system to prevent vertically mirrored message text, retaining the existing Markdown renderer and text selection.
 

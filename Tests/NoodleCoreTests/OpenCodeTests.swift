@@ -4,6 +4,27 @@ import XCTest
 @testable import NoodleCore
 
 final class OpenCodeTests: XCTestCase {
+    func testProviderFailuresUseNativeCodesWithoutExposingPayloads() {
+        for (name, description) in [("provider.invalid-output", "incomplete or invalid"),
+                                    ("provider.timeout", "timed out"),
+                                    ("provider.transport", "connection failed"),
+                                    ("provider.rate-limit", "rate limiting")] {
+            let detail = OpenCodeProtocol.turnFailureDescription(["code": -32603, "message": "private payload",
+                "data": ["service": "session", "errorName": name]])
+            XCTAssertTrue(detail.contains(description))
+            XCTAssertTrue(detail.contains("Kick"))
+            XCTAssertFalse(detail.contains("private payload"))
+        }
+        for error: [String: Any] in [
+            ["code": -32602, "data": ["service": "session", "errorName": "provider.invalid-output"]],
+            ["code": -32603, "data": ["service": "other", "errorName": "provider.invalid-output"]],
+            ["code": -32603, "message": "provider.invalid-output"],
+            ["code": -32603, "data": ["service": "session", "errorName": "private payload"]]
+        ] {
+            XCTAssertTrue(OpenCodeProtocol.turnFailureDescription(error).hasPrefix("OpenCode could not complete the turn."))
+        }
+    }
+
     func testDiscoveryAndTrustRejectWrappersAndRedirects() throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
         let binary = root.appendingPathComponent(".opencode/bin/opencode")
