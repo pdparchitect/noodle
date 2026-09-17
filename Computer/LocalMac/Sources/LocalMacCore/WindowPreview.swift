@@ -1,5 +1,15 @@
 import Foundation
 
+public enum LocalMacWindowCaptureLimits {
+    public static let maximumWindows = 32
+    public static func scale(bounds: CGRect, nativeScale: CGFloat, count: Int) -> CGFloat {
+        guard bounds.width > 0, bounds.height > 0 else { return 1 }
+        let pixels = 16_777_216 / CGFloat(max(1, count))
+        return min(max(1, nativeScale), 8192 / max(bounds.width, bounds.height),
+                   sqrt(pixels / (bounds.width * bounds.height)))
+    }
+}
+
 public struct LocalMacWindow: Codable, Equatable, Sendable {
     public var id: UInt32
     public var pid: Int32
@@ -9,6 +19,7 @@ public struct LocalMacWindow: Codable, Equatable, Sendable {
         self.id = id; self.pid = pid; self.title = title; self.application = application
     }
     public var label: String { title.isEmpty ? application : title }
+    public func hasSameIdentity(as other: Self) -> Bool { id == other.id && pid == other.pid }
 }
 
 /// Geometry travels with the pixels, never in a separately polled status reply.

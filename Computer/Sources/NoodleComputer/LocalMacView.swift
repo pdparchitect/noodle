@@ -92,7 +92,7 @@ struct LocalMacDesktopView: View {
     }
     var body: some View {
         VStack(spacing: 0) {
-            LocalMacSurface(runtime: runtime, active: active && runtime.windowPreview == nil).background(.black)
+            LocalMacSurface(runtime: runtime, active: active).background(.black)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay {
                     if runtime.image == nil {
@@ -113,9 +113,6 @@ struct LocalMacDesktopView: View {
                 }.padding(8)
             }
         }
-        .background(LocalMacWindowPreviewPresenter(runtime: runtime, active: active))
-        .onChange(of: active) { _, active in if !active { runtime.closeWindowPreview() } }
-        .onDisappear { runtime.closeWindowPreview() }
         .task {
             while !Task.isCancelled {
                 await runtime.refreshStatus()
@@ -166,15 +163,15 @@ struct LocalMacPermissionsSettings: View {
 struct LocalMacSurface: NSViewRepresentable {
     @ObservedObject var runtime: LocalMacComputer
     var active: Bool
-    var preview = false
+    var previewID: UUID?
     func makeNSView(context: Context) -> LocalMacImageView {
-        let view = LocalMacImageView(); view.runtime = runtime; view.preview = preview
+        let view = LocalMacImageView(); view.runtime = runtime; view.previewID = previewID
         view.setAccessibilityElement(true); view.setAccessibilityRole(.image)
-        view.setAccessibilityLabel(preview ? "Focused window" : "Local Mac desktop")
+        view.setAccessibilityLabel(previewID != nil ? "Application window" : "Local Mac desktop")
         return view
     }
     func updateNSView(_ view: LocalMacImageView, context: Context) {
-        view.runtime = runtime; view.preview = preview; view.active = active; view.needsDisplay = true
+        view.runtime = runtime; view.previewID = previewID; view.active = active; view.needsDisplay = true
     }
 }
 
@@ -197,7 +194,7 @@ enum LocalMacPointerEvent {
 
 final class LocalMacImageView: NSView {
     weak var runtime: LocalMacComputer?
-    var preview = false
+    var previewID: UUID?
     private var displayedImage: NSImage?
     private var displayedGeometry: LocalMacWindowFrame?
     var active = true { didSet { if !active && oldValue { releaseInput() } } }
@@ -227,7 +224,9 @@ final class LocalMacImageView: NSView {
     private func releaseInput() {
         heldButtons.removeAll()
         guard interacting else { return }
-        interacting = false; runtime?.send(LocalMacInput(.reset))
+        interacting = false
+        var reset = LocalMacInput(.reset); reset.previewID = previewID
+        runtime?.send(reset)
     }
     override func resignFirstResponder() -> Bool { releaseInput(); return super.resignFirstResponder() }
     deinit {
@@ -245,9 +244,9 @@ final class LocalMacImageView: NSView {
         return CGRect(x: (bounds.width - width) / 2, y: (bounds.height - height) / 2, width: width, height: height)
     }
     override func draw(_ dirtyRect: NSRect) {
-        let frame = runtime?.windowPreview
-        displayedImage = preview ? frame?.image : runtime?.image
-        displayedGeometry = preview ? frame?.geometry : nil
+        let frame = previewID.flatMap { runtime?.windowPreviews[$0] }
+        displayedImage = previewID != nil ? frame?.image : runtime?.image
+        displayedGeometry = frame?.geometry
         NSColor.black.setFill(); bounds.fill()
         displayedImage?.draw(in: imageRect, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: nil)
     }
@@ -284,11 +283,22 @@ final class LocalMacImageView: NSView {
     }
     private func send(_ input: LocalMacInput) {
         var input = input
-        if preview {
-            guard let geometry = displayedGeometry, runtime?.windowPreview?.id == geometry.previewID else { return }
+        if let previewID {
+            guard let geometry = displayedGeometry, geometry.previewID == previewID,
+                  runtime?.windowPreviews[previewID] != nil else { return }
             input.previewID = geometry.previewID; input.geometryID = geometry.geometryID
         }
         runtime?.send(input)
+    }
+    func activateWindow() {
+        guard active, previewID != nil, window?.isKeyWindow == true else { return }
+        interacting = true
+        send(LocalMacInput(.activate))
+    }
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted { activateWindow() }
+        return accepted
     }
     override func keyDown(with event: NSEvent) { key(event, kind: .keyDown) }
     override func keyUp(with event: NSEvent) { key(event, kind: .keyUp) }

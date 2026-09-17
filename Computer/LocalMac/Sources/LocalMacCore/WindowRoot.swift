@@ -1,4 +1,5 @@
 import Foundation
+import ApplicationServices
 
 /// Resolve only explicit accessibility ownership. Main-window fallback is for
 /// transient dialogs/panels; a normal document must never jump to another one.
@@ -14,10 +15,42 @@ public enum LocalMacWindowRoot {
             self.pid = pid; self.isWindow = isWindow; self.isTransient = isTransient
             self.parent = parent; self.window = window
         }
+        public init(pid: Int32, role: String, subrole: String, modal: Bool,
+                    parent: Element? = nil, window: Element? = nil) {
+            let isWindow = [kAXWindowRole, kAXSheetRole, kAXDrawerRole, kAXPopoverRole].contains(role)
+            // An AXWindow with an unknown subrole can be an app's floating
+            // bubble. Only standard windows qualify as independent roots.
+            self.init(pid: pid, isWindow: isWindow,
+                      isTransient: isWindow && (role != kAXWindowRole || subrole != kAXStandardWindowSubrole || modal),
+                      parent: parent, window: window)
+        }
     }
     public struct Selection<Element> {
         public var root: Element
         public var windows: [Element]
+    }
+    /// Inventory only verified, non-transient roots. Sheets and floating UI
+    /// enrich their owner's family, never become additional inventory entries.
+    public static func families<Element, Window>(elements: [Element], pid: Int32, mainWindow: Element?,
+                                                  same: (Element, Element) -> Bool,
+                                                  read: (Element) -> Node<Element>?,
+                                                  match: (Element) -> Window?,
+                                                  sameWindow: (Window, Window) -> Bool) -> [Selection<Window>] {
+        var families: [Selection<Window>] = []
+        for element in elements {
+            guard let selection = resolve(focused: element, pid: pid, mainWindow: mainWindow, same: same, read: read),
+                  let node = read(selection.root), node.isWindow, !node.isTransient, node.pid == pid,
+                  let root = match(selection.root) else { continue }
+            let members = selection.windows.compactMap(match)
+            if let index = families.firstIndex(where: { sameWindow($0.root, root) }) {
+                for member in members where !families[index].windows.contains(where: { sameWindow($0, member) }) {
+                    families[index].windows.append(member)
+                }
+            } else {
+                families.append(.init(root: root, windows: [root] + members.filter { !sameWindow($0, root) }))
+            }
+        }
+        return families
     }
     /// Hierarchy lookup enriches an independently verified focused window. An
     /// unreadable ancestor or an unmatched root must not remove that fallback.

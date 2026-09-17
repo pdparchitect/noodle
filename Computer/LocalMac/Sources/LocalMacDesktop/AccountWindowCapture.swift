@@ -12,8 +12,10 @@ import ScreenCaptureKit
     let desktop: AccountCapture
     let output: Output
     private(set) var previewID: UUID?
-    private var target: LocalMacWindow?
+    private(set) var target: LocalMacWindow?
     private var stream: SCStream?
+    private var configuration: SCStreamConfiguration?
+    private var nativeScale: CGFloat = 1
     private var displayBounds = CGRect.zero
     private var geometries: [LocalMacWindowFrame] = []
     private var includedWindowIDs: Set<UInt32> = []
@@ -24,7 +26,7 @@ import ScreenCaptureKit
     init(session: LocalMacSession, desktop: AccountCapture, output: Output) {
         self.session = session; self.desktop = desktop; self.output = output
     }
-    func start(id: UUID, focus: AccountWindowFocus.Focus) async throws {
+    func start(id: UUID, focus: AccountWindowFocus.Focus, count: Int) async throws {
         let window = focus.window
         let previous = stream
         stream = nil; geometries = []; displayBounds = .zero
@@ -52,9 +54,8 @@ import ScreenCaptureKit
             let configuration = SCStreamConfiguration()
             // Native detail up to a bounded 16-megapixel surface; this does not
             // alter the account display or the remote window's size.
-            let nativeScale = max(1, CGFloat(filter.pointPixelScale))
-            let scale = min(nativeScale, 8192 / max(display.frame.width, display.frame.height),
-                            sqrt(16_777_216 / (display.frame.width * display.frame.height)))
+            nativeScale = max(1, CGFloat(filter.pointPixelScale))
+            let scale = LocalMacWindowCaptureLimits.scale(bounds: display.frame, nativeScale: nativeScale, count: count)
             configuration.width = max(2, Int(display.frame.width * scale))
             configuration.height = max(2, Int(display.frame.height * scale))
             configuration.pixelFormat = kCVPixelFormatType_32BGRA
@@ -68,6 +69,7 @@ import ScreenCaptureKit
             configuration.capturesAudio = false
             configuration.minimumFrameInterval = CMTime(value: 1, timescale: 12)
             configuration.queueDepth = 3
+            self.configuration = configuration
             displayBounds = display.frame
             let created = SCStream(filter: filter, configuration: configuration, delegate: self)
             try created.addStreamOutput(self, type: .screen, sampleHandlerQueue: .main)
@@ -83,9 +85,17 @@ import ScreenCaptureKit
     func stop(id: UUID? = nil) async {
         if let id, previewID != id { return }
         let previous = stream
-        stream = nil; previewID = nil; target = nil; geometries = []; displayBounds = .zero
+        stream = nil; configuration = nil; previewID = nil; target = nil; geometries = []; displayBounds = .zero
         includedWindowIDs = []; filterUpdateID = nil
         if let previous { try? await previous.stopCapture() }
+    }
+    func resizeBudget(count: Int) async {
+        guard let stream, let configuration else { return }
+        let scale = LocalMacWindowCaptureLimits.scale(bounds: displayBounds, nativeScale: nativeScale, count: count)
+        configuration.width = max(2, Int(displayBounds.width * scale))
+        configuration.height = max(2, Int(displayBounds.height * scale))
+        do { try await stream.updateConfiguration(configuration) }
+        catch { if self.stream === stream { end(error.localizedDescription) } }
     }
     func geometry(for input: LocalMacInput) throws -> LocalMacWindowFrame {
         _ = try desktop.verifiedDisplayID()
@@ -93,9 +103,6 @@ import ScreenCaptureKit
               NLMPIDBelongsToUser(target.pid, session.account.uid),
               let geometry = geometries.last(where: { $0.geometryID == input.geometryID }) else {
             throw LocalMacError("The window preview changed. Try again.")
-        }
-        guard AccountWindowFocus.isFrontmost(target.pid, session: session) else {
-            throw LocalMacError("Return to the desktop to focus this window.")
         }
         return geometry
     }

@@ -639,6 +639,9 @@ struct ComputerDetailView: View {
         ToolbarItem(id: "computer-focus-window", placement: .primaryAction) {
           LocalMacFocusWindowButton(runtime: local, enabled: session.phase == .running)
         }
+        ToolbarItem(id: "computer-all-windows", placement: .primaryAction) {
+          LocalMacFocusWindowButton(runtime: local, enabled: session.phase == .running, all: true)
+        }
       }
     }
     .sheet(isPresented: $editing) {

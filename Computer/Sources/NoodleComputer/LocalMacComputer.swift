@@ -158,7 +158,9 @@ private final class Once<T>: @unchecked Sendable {
     @Published var image: NSImage?
     @Published var status: LocalMacStatus?
     @Published var error: String?
-    @Published var windowPreview: LocalMacWindowPreview?
+    @Published var windowPreviews: [UUID: LocalMacWindowPreview] = [:]
+    @Published private(set) var openingAllWindows = false
+    lazy var windowPresenter = LocalMacWindowPreviewPresenter(runtime: self)
     var latestFrame: Data?
     var onDisconnect: ((String) -> Void)?
     private var input: FileHandle?
@@ -176,8 +178,9 @@ private final class Once<T>: @unchecked Sendable {
     var isConnected: Bool { !closed && input != nil && output != nil }
     private var mainDisplays: Set<CGDirectDisplayID> = []
     private let displayIDs: () -> Set<CGDirectDisplayID>
-    init(displayIDs: @escaping () -> Set<CGDirectDisplayID> = LocalMacComputer.currentDisplayIDs) {
-        self.displayIDs = displayIDs
+    private let presentsWindows: Bool
+    init(displayIDs: @escaping () -> Set<CGDirectDisplayID> = LocalMacComputer.currentDisplayIDs, presentsWindows: Bool = true) {
+        self.displayIDs = displayIDs; self.presentsWindows = presentsWindows
     }
     nonisolated static func currentDisplayIDs() -> Set<CGDirectDisplayID> {
         var ids = [CGDirectDisplayID](repeating: 0, count: 32), count: UInt32 = 0
@@ -238,11 +241,9 @@ private final class Once<T>: @unchecked Sendable {
     private func receive(_ reply: LocalMacReply) {
         guard !closed else { return }
         if let id = reply.previewID {
-            if windowPreview?.id == id {
-                // The source stream ended, so its focus panel must go with it.
-                // Clearing the preview also rejects queued input and late frames.
-                closeWindowPreview()
-            }
+            // Only the ended root is removed; sibling previews and the desktop
+            // keep running. Unknown IDs are late messages from closed streams.
+            if windowPreviews[id] != nil { closeWindowPreview(id) }
             return
         }
         if reply.id == nil, let error = reply.error { disconnect(error); return }
@@ -254,8 +255,10 @@ private final class Once<T>: @unchecked Sendable {
         if reply.frame, let data = reply.data, status?.displayID != nil {
             guard verifyCaptureDisplay() else { return }
             if let geometry = reply.windowFrame {
-                if windowPreview?.id == geometry.previewID, let image = NSImage(data: data) {
-                    windowPreview?.image = image; windowPreview?.geometry = geometry
+                if windowPreviews[geometry.previewID] != nil, let image = NSImage(data: data) {
+                    windowPreviews[geometry.previewID]?.image = image
+                    windowPreviews[geometry.previewID]?.geometry = geometry
+                    windowPresenter.sync(geometry.previewID)
                 }
             } else if let image = NSImage(data: data) { latestFrame = data; self.image = image }
         }
@@ -303,15 +306,23 @@ private final class Once<T>: @unchecked Sendable {
         inputPump = Task {
             defer { inputPump = nil }
             while !Task.isCancelled, let event = inputQueue.next() {
-                if let id = event.previewID, windowPreview?.id != id { continue }
+                if let id = event.previewID, windowPreviews[id] == nil, event.kind != .reset { continue }
                 var request = LocalMacRequest(.input); request.input = event
-                do { _ = try await call(request); clearInputFailure() }
+                do {
+                    _ = try await call(request)
+                    if let id = event.previewID { windowPreviews[id]?.error = nil }
+                    else { clearInputFailure() }
+                }
                 catch {
-                    if !closed, event.previewID == nil || windowPreview?.id == event.previewID {
-                        recordInputFailure(error.localizedDescription)
-                        if event.previewID != nil { windowPreview?.error = error.localizedDescription }
+                    if !closed {
+                        if let id = event.previewID { windowPreviews[id]?.error = error.localizedDescription }
+                        else { recordInputFailure(error.localizedDescription) }
                     }
-                    inputQueue.removeAll(); break
+                    if let id = event.previewID {
+                        inputQueue.remove(previewID: id)
+                    } else {
+                        inputQueue.removeAll(); break
+                    }
                 }
             }
         }
@@ -321,7 +332,6 @@ private final class Once<T>: @unchecked Sendable {
         // A successful input or restored grant must not dismiss an unrelated
         // transport/capture failure that arrived in the meantime.
         if let inputFailure, error == inputFailure { error = nil }
-        if let inputFailure, windowPreview?.error == inputFailure { windowPreview?.error = nil }
         inputFailure = nil
     }
     func refreshStatus() async {
@@ -332,20 +342,50 @@ private final class Once<T>: @unchecked Sendable {
         do { try await startCaptureIfPermitted() }
         catch { self.error = error.localizedDescription }
     }
-    func openWindowPreview() async {
-        guard windowPreview == nil, isConnected, !disconnectExpected, status?.canControl == true,
-              let window = status?.focusedWindow else { return }
+    func openWindowPreview(window selected: LocalMacWindow? = nil, bringToFront: Bool = true) async {
+        guard isConnected, !disconnectExpected, status?.canControl == true,
+              let window = selected ?? status?.focusedWindow else { return }
+        if let existing = windowPreviews.values.first(where: { $0.window.hasSameIdentity(as: window) }) {
+            if presentsWindows { windowPresenter.show(existing.id, bringToFront: bringToFront) }
+            return
+        }
+        guard windowPreviews.count < LocalMacWindowCaptureLimits.maximumWindows else {
+            error = "Close an unused window before opening another (32 windows maximum)."; return
+        }
         let preview = LocalMacWindowPreview(window: window)
-        windowPreview = preview
+        windowPreviews[preview.id] = preview
+        if presentsWindows { windowPresenter.show(preview.id, bringToFront: bringToFront) }
         var request = LocalMacRequest(.windowPreview)
         request.previewID = preview.id; request.window = window; request.enabled = true
         do { _ = try await call(request) }
-        catch { if windowPreview?.id == preview.id { windowPreview?.error = error.localizedDescription } }
+        catch { windowPreviews[preview.id]?.error = error.localizedDescription }
     }
-    func closeWindowPreview() {
-        guard let id = windowPreview?.id else { return }
-        windowPreview = nil
-        send(LocalMacInput(.reset))
+    func openAllWindowPreviews() async {
+        guard !openingAllWindows, isConnected, !disconnectExpected, status?.canControl == true else { return }
+        openingAllWindows = true
+        defer { openingAllWindows = false }
+        do {
+            let reply = try await call(.init(.windowList))
+            guard let windows = reply.windows else { throw ComputerError("The desktop did not return its visible windows.") }
+            if windows.isEmpty { error = "No visible application windows."; return }
+            // Back to front preserves the account's stacking order. Repeated
+            // clicks reuse existing windows rather than creating duplicate streams.
+            for window in windows.reversed() {
+                guard isConnected, !disconnectExpected else { return }
+                await openWindowPreview(window: window, bringToFront: false)
+            }
+            if presentsWindows { windowPresenter.arrange(restoreMinimized: true) }
+            if let first = windows.first,
+               let preview = windowPreviews.values.first(where: { $0.window.hasSameIdentity(as: first) }) {
+                if presentsWindows { windowPresenter.show(preview.id) }
+            }
+        } catch { if isConnected { self.error = error.localizedDescription } }
+    }
+    func closeWindowPreview(_ id: UUID) {
+        guard windowPreviews.removeValue(forKey: id) != nil else { return }
+        windowPresenter.dismiss(id)
+        var reset = LocalMacInput(.reset); reset.previewID = id
+        send(reset)
         guard isConnected else { return }
         Task {
             var request = LocalMacRequest(.windowPreview); request.previewID = id; request.enabled = false
@@ -357,7 +397,7 @@ private final class Once<T>: @unchecked Sendable {
     func expectDisconnect(_ expected: Bool) { disconnectExpected = expected }
     private func disconnect(_ message: String) {
         let notify = !closed && !disconnectExpected; closed = true
-        windowPreview = nil
+        windowPreviews.removeAll(); windowPresenter.dismissAll()
         inputPump?.cancel(); inputPump = nil; inputQueue.removeAll()
         try? output?.close(); output = nil; try? input?.close(); input = nil
         for continuation in pending.values { continuation.resume(throwing: ComputerError(message)) }; pending.removeAll()

@@ -55,7 +55,37 @@ final class WindowPreviewTests: XCTestCase {
         try sent.validate(); XCTAssertEqual(sent.input?.geometryID, frame.geometryID)
         XCTAssertEqual(sent.input?.previewID, frame.previewID)
     }
+    func testWindowInventoryAndScopedInputRoundTrip() throws {
+        let first = LocalMacWindow(id: 42, pid: 100, title: "One", application: "Editor")
+        let second = LocalMacWindow(id: 43, pid: 100, title: "Two", application: "Editor")
+        var renamed = first; renamed.title = "Renamed"
+        XCTAssertTrue(first.hasSameIdentity(as: renamed))
+        XCTAssertFalse(first.hasSameIdentity(as: second))
+        var otherProcess = first; otherProcess.pid = 101
+        XCTAssertFalse(first.hasSameIdentity(as: otherProcess))
+        let request = LocalMacRequest(.windowList)
+        try LocalMacWire.decode(LocalMacRequest.self, from: JSONEncoder().encode(request)).validate()
+        var reply = LocalMacReply(); reply.windows = [first, second]
+        XCTAssertEqual(try LocalMacWire.decode(LocalMacReply.self, from: JSONEncoder().encode(reply)).windows, [first, second])
+        var reset = LocalMacInput(.reset); reset.previewID = UUID()
+        try reset.validate()
+        reset.geometryID = UUID()
+        XCTAssertThrowsError(try reset.validate())
+        var activate = LocalMacInput(.activate)
+        XCTAssertThrowsError(try activate.validate())
+        activate.previewID = UUID(); activate.geometryID = UUID()
+        try activate.validate()
+    }
+    func testMultipleCapturesShareThePixelBudget() {
+        let bounds = CGRect(x: 0, y: 0, width: 6000, height: 4000)
+        for count in [1, 2, 8, LocalMacWindowCaptureLimits.maximumWindows] {
+            let scale = LocalMacWindowCaptureLimits.scale(bounds: bounds, nativeScale: 2, count: count)
+            XCTAssertLessThanOrEqual(bounds.width * bounds.height * scale * scale * CGFloat(count), 16_777_217)
+            XCTAssertGreaterThan(scale, 0)
+        }
+    }
     func testPreviousHelperFailsCompatibilityHandshake() {
         XCTAssertThrowsError(try LocalMacWire.checkVersion(1))
+        XCTAssertThrowsError(try LocalMacWire.checkVersion(2))
     }
 }

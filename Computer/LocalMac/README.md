@@ -91,27 +91,48 @@ the account display still reports 3440 × 1440. Independent smaller geometry and
 dynamic resolution remain future work; they should be separate from capture.
 
 The desktop toolbar's **Focus Window** button opens the account's focused window
-in a resizable interactive panel. Focus is read inside the managed session using
-Accessibility and matched to the session's window list; ambiguous matches disable
-the button. Clicking the host toolbar does not change the account's focus. The
-helper rechecks the selected identity when opening so a stale selection cannot
-silently open a different window.
+in an independent, resizable interactive window. It can be used repeatedly for
+different windows; opening the same window again brings its existing view forward.
+**Open All Windows** opens the currently visible root application windows, including
+separate documents in the same app. It is a snapshot action, not an automatic
+subscription to future windows. Hidden and minimized guest windows are excluded.
+New views tile alongside existing previews on their host monitor, leaving the
+menu bar and Dock clear. Open All Windows also restores minimized host previews
+and re-tiles them. Views moved to another monitor stay there. Manual moves and
+resizes are preserved until another view is added or Open All Windows is used;
+incoming capture frames never undo the layout.
 
-The panel owns a second display-bound ScreenCaptureKit stream with child windows
-enabled. It captures at native scale, capped at 16 megapixels and 8192 pixels on
-either axis, then crops transparent margins before encoding. Child content that
-extends beyond the parent is included in that crop. The desktop's 1280 × 800
-stream and saved screenshots are unchanged. Window capture may display macOS
-sharing controls on the selected window while the panel is open.
+Root discovery combines the account's Accessibility window hierarchy with its
+visible window list and verified display. Sheets, drawers, popovers and floating
+UI enrich their owning root's capture instead of becoming separate views. Child
+content extending beyond its parent remains in the crop. Unmatched or ambiguous
+roots are omitted. Focus Window retains its independently verified focused-window
+fallback when optional ancestry is unavailable. Clicking the host toolbar does
+not change the account's focus, and the helper rechecks each requested identity.
 
-Each panel frame carries its crop geometry and preview identity. Input uses the
-geometry of the displayed frame, including aspect-fit padding; held input is
-released on focus loss, close, and capture failure. Closing the window, minimizing
-it, changing Computer views, or losing the desktop connection ends the preview.
-Separate top-level windows and system-owned dialogs may require returning to the
-desktop. Content outside the account display cannot be interacted with through
-this panel. The private desktop wire protocol is now version 2; stop and start
-retained connections after updating both app and helper.
+Each opened window owns a display-bound ScreenCaptureKit stream with child windows
+enabled. The streams share a 16-megapixel capture budget, capped at native scale
+and 8192 pixels on either axis, with up to 32 open views. Transparent margins are
+cropped before encoding. Frame backpressure is independent per window. The
+desktop's 1280 × 800 stream and saved screenshots are unchanged. Window capture
+may display macOS sharing controls on the selected guest windows.
+
+Each frame carries its crop geometry and preview identity. Input uses the geometry
+of the displayed frame, including aspect-fit padding. Selecting a host window
+activates its exact guest root before forwarding input, including when several
+windows belong to the same app. Hover events do not activate another window.
+Held input is released when focus changes; closing an inactive view does not
+release another view's input. Late frames and errors cannot replace a sibling
+window or the desktop.
+
+Opened windows stay available when switching computers, Terminal or Files in the
+main library window. Closing a host view leaves the guest application running.
+Closing or minimizing the guest root, or losing its desktop connection, ends the
+corresponding view. New sheets and dialogs remain with their root as they open
+and close. System-owned dialogs may require returning to the desktop; content
+outside the account display cannot be interacted with through these views.
+The private desktop wire protocol is version 3; stop and start retained connections
+after updating both app and helper.
 
 ## Account preparation and permission identity
 

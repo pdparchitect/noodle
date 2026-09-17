@@ -94,7 +94,7 @@ public struct LocalMacSession: Codable, Equatable, Sendable {
 }
 
 public enum LocalMacOperation: String, Codable, Sendable {
-    case status, screenshot, stream, windowPreview, input, terminalOpen, terminalRead, terminalWrite, terminalResize, terminalClose
+    case status, screenshot, stream, windowList, windowPreview, input, terminalOpen, terminalRead, terminalWrite, terminalResize, terminalClose
     case fileHome, fileList, fileStat, fileRead, fileWrite, fileMkdir, fileRemove, fileRename, fileCopy
     case fileUploadOpen, fileUploadCommit, fileUploadCancel
 }
@@ -142,7 +142,7 @@ public struct LocalMacRequest: Codable, Sendable {
     }
 }
 public struct LocalMacInput: Codable, Sendable {
-    public enum Kind: String, Codable, Sendable { case move, down, up, scroll, keyDown, keyUp, flagsChanged, text, reset }
+    public enum Kind: String, Codable, Sendable { case move, down, up, scroll, keyDown, keyUp, flagsChanged, text, reset, activate }
     public var kind: Kind
     public var x: Double = 0
     public var y: Double = 0
@@ -158,7 +158,13 @@ public struct LocalMacInput: Codable, Sendable {
     public func validate() throws {
         guard x.isFinite, y.isFinite, scroll.isFinite, abs(scroll) <= 10_000, (0...2).contains(button), key < 256,
               (text?.utf16.count ?? 0) <= 4096, (0...10).contains(clickCount) else { throw LocalMacError("Invalid input event.") }
-        guard (previewID == nil) == (geometryID == nil) else { throw LocalMacError("Invalid window input geometry.") }
+        if kind == .reset {
+            guard geometryID == nil else { throw LocalMacError("Invalid input reset.") }
+        } else {
+            guard (previewID == nil) == (geometryID == nil), kind != .activate || previewID != nil else {
+                throw LocalMacError("Invalid window input geometry.")
+            }
+        }
     }
 }
 public struct LocalMacFile: Codable, Identifiable, Sendable {
@@ -184,6 +190,7 @@ public struct LocalMacReply: Codable, Sendable {
     public var status: LocalMacStatus?
     public var frame = false
     public var windowFrame: LocalMacWindowFrame?
+    public var windows: [LocalMacWindow]?
     /// A preview-scoped end/error must never disconnect the desktop or terminals.
     public var previewID: UUID?
     public init(id: UUID? = nil, error: String? = nil) { self.id = id; self.error = error }
@@ -210,7 +217,7 @@ public struct LocalMacStatus: Codable, Sendable {
 
 /// Bounded binary framing. Video is disposable; never write a recording to disk.
 public enum LocalMacWire {
-    public static let version = 2
+    public static let version = 3
     public static let maximum = 12 * 1_048_576
     public static func checkVersion(_ version: Int?) throws {
         guard version == Self.version else {
