@@ -146,4 +146,34 @@ import XCTest
         }
         for _ in 0..<10 { f.store.markConversationRead(f.directA.id) }
     }
+
+    func testDraftEditsAndAllSendPathsClearUnreadWithoutAWindowEvent() throws {
+        let actions: [(String, (StoreFixture) throws -> Void)] = [
+            ("Edit", { $0.store.setDraft("Edited reply", for: $0.directA.id) }),
+            ("Send", { $0.store.sendDraft(to: $0.directA.id) }),
+            ("Command", { _ = try $0.store.sendCommand("/status", to: $0.directA.id) }),
+            ("Voice", { f in
+                let audio = f.runtime.root.appendingPathComponent("reply.caf")
+                try Data([0, 1, 2, 3]).write(to: audio)
+                try f.store.sendVoiceMessage(from: audio,
+                    voice: VoiceMessage(transcript: "Reply", duration: 1, waveform: [], localeIdentifier: nil),
+                    to: f.directA.id)
+            })
+        ]
+        for (name, action) in actions {
+            let f = try fixture()
+            f.store.selectedConversationID = f.directB.id
+            f.store.setDraft("Reply", for: f.directA.id)
+            for conversation in [f.directA, f.directB] {
+                try f.repository.append(ChatMessage(conversationID: conversation.id, author: .agent(f.a.id),
+                    body: "Unread reply", delivery: .delivered))
+            }
+            f.store.refreshTranscripts()
+            XCTAssertEqual(f.store.unreadConversationIDs, [f.directA.id, f.directB.id])
+            try action(f)
+            XCTAssertEqual(f.store.unreadConversationIDs, [f.directB.id], name)
+            XCTAssertEqual(try f.repository.loadUnreadConversationIDs(), [f.directB.id], name)
+            XCTAssertEqual(f.store.selectedConversationID, f.directB.id, name)
+        }
+    }
 }

@@ -375,6 +375,84 @@ import NoodleCore
     }
 }
 
+@MainActor final class ConversationReadIntegrationTests: HiddenViewTests {
+    func testActiveChatClearsUnreadRepliesAndFollowsConversationChangesWithoutAWindowProbe() async throws {
+        let f = try fixture()
+        let preview = AttachmentPreviewController()
+        func chat(_ conversation: BotConversation, state: ControlActiveState) -> some View {
+            ChatView(conversation: conversation, attachmentPreview: preview)
+                .environment(f.store).environment(\.controlActiveState, state)
+        }
+        for conversation in [f.directA, f.directB] {
+            try f.repository.append(ChatMessage(conversationID: conversation.id, author: .agent(f.a.id),
+                body: "Unread reply", delivery: .delivered))
+        }
+        f.store.refreshTranscripts()
+        let root = host(chat(f.directA, state: .inactive))
+        try await wait { self.elements(root).contains { $0 is ComposerTextView } }
+        XCTAssertEqual(f.store.unreadConversationIDs, [f.directA.id, f.directB.id], "Inactive chats remain unread")
+
+        root.rootView = chat(f.directA, state: .key)
+        try await wait { !f.store.hasUnreadMessages(in: f.directA) }
+        XCTAssertEqual(f.store.unreadConversationIDs, [f.directB.id])
+        try f.repository.append(ChatMessage(conversationID: f.directA.id, author: .agent(f.a.id),
+            body: "Another reply while reading", delivery: .delivered))
+        f.store.refreshTranscripts()
+        try await wait { !f.store.hasUnreadMessages(in: f.directA) }
+        XCTAssertEqual(try f.repository.loadUnreadConversationIDs(), [f.directB.id])
+
+        root.rootView = chat(f.directB, state: .key)
+        try await wait { f.store.unreadConversationIDs.isEmpty }
+        XCTAssertTrue(try f.repository.loadUnreadConversationIDs().isEmpty)
+    }
+
+    func testScrollingTheTranscriptClearsUnreadWithoutAWindowProbe() async throws {
+        let f = try fixture()
+        for index in 0..<40 {
+            try f.repository.append(ChatMessage(conversationID: f.directA.id, author: .agent(f.a.id),
+                body: "Reply \(index)", delivery: .delivered))
+        }
+        f.store.refreshTranscripts()
+        let root = host(ChatView(conversation: f.directA, attachmentPreview: AttachmentPreviewController())
+            .environment(f.store).environment(\.controlActiveState, .inactive))
+        try await wait { self.elements(root).contains { $0 is ComposerTextView } }
+        let scroll = try XCTUnwrap(elements(root).compactMap { $0 as? NSScrollView }
+            .first { !($0 is ComposerScrollView) })
+        XCTAssertTrue(f.store.hasUnreadMessages(in: f.directA), "Restoring the scroll position must not mark it read")
+        let event = try XCTUnwrap(CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
+            wheelCount: 1, wheel1: 100, wheel2: 0, wheel3: 0))
+        event.setIntegerValueField(.scrollWheelEventScrollPhase, value: 1)
+        scroll.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: event)))
+        try await wait { !f.store.hasUnreadMessages(in: f.directA) }
+        XCTAssertTrue(try f.repository.loadUnreadConversationIDs().isEmpty)
+    }
+
+    func testMainWindowMountsReadTrackingAndClearsUnreadOnInput() async throws {
+        let f = try fixture()
+        f.store.selectedConversationID = f.directA.id
+        let root = host(RootView().environment(f.store))
+        try await wait { self.elements(root).contains { $0 is ComposerTextView } }
+        let probes = elements(root).compactMap { $0 as? ConversationWindowHost.Probe }
+        XCTAssertEqual(probes.count, 1, "The actual split-view window must mount its read-state observer")
+        let probe = try XCTUnwrap(probes.first)
+        XCTAssertEqual(probe.conversationID, f.directA.id)
+        XCTAssertTrue(probe.window === root.window)
+        for conversation in [f.directA, f.directB] {
+            try f.repository.append(ChatMessage(conversationID: conversation.id, author: .agent(f.a.id),
+                body: "Incoming reply", delivery: .delivered))
+        }
+        f.store.refreshTranscripts()
+        XCTAssertEqual(f.store.unreadConversationIDs, [f.directA.id, f.directB.id])
+        let window = try XCTUnwrap(root.window)
+        let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+            timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: "a",
+            charactersIgnoringModifiers: "a", isARepeat: false, keyCode: 0))
+        NSApplication.shared.sendEvent(event)
+        XCTAssertEqual(f.store.unreadConversationIDs, [f.directB.id])
+        XCTAssertEqual(try f.repository.loadUnreadConversationIDs(), [f.directB.id])
+    }
+}
+
 private final class ConversationInteractionEvent: NSEvent {
     private let interactionType: NSEvent.EventType
     private let interactionWindow: NSWindow

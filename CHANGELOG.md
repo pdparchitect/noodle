@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Clear unread state from the displayed chat's focus, clicks, scrolling, draft edits, and sends, including incoming replies while that chat is active.
 - Shorten the conversation's top shadow and content fade to keep the header avatar clearer while preserving the soft toolbar transition.
 - Keep helper processes and standalone UI test fixtures out of the Dock and app switcher by default.
 - Clear unread indicators immediately when interacting with a conversation, including clicking, scrolling, typing, gestures, and dropping attachments in the main window or a popped-out chat.

@@ -34,6 +34,7 @@ struct TranscriptScrollView<Content: View>: View {
     let lastMessageIsFromUser: Bool
     let bottomOverlayHeight: CGFloat
     let saveViewport: (TranscriptViewport) -> Void
+    let onInteraction: () -> Void
     private let content: Content
     @State private var position: ScrollPosition
     @State private var viewportRecorder: TranscriptViewportRecorder
@@ -44,12 +45,14 @@ struct TranscriptScrollView<Content: View>: View {
 
     init(initialViewport: TranscriptViewport, lastMessageID: UUID?, lastMessageIsFromUser: Bool,
          bottomOverlayHeight: CGFloat, saveViewport: @escaping (TranscriptViewport) -> Void,
+         onInteraction: @escaping () -> Void = {},
          @ViewBuilder content: () -> Content) {
         self.initialViewport = initialViewport
         self.lastMessageID = lastMessageID
         self.lastMessageIsFromUser = lastMessageIsFromUser
         self.bottomOverlayHeight = bottomOverlayHeight
         self.saveViewport = saveViewport
+        self.onInteraction = onInteraction
         self.content = content()
         let target = initialViewport.isAtBottom ? TranscriptScrollTarget.bottom
             : initialViewport.messageID.map(TranscriptScrollTarget.message) ?? .start
@@ -126,6 +129,7 @@ struct TranscriptScrollView<Content: View>: View {
         .onScrollPhaseChange { oldPhase, newPhase in
             let wasUserScrolling = oldPhase != .idle && oldPhase != .animating
             let isUserScrolling = newPhase != .idle && newPhase != .animating
+            if isUserScrolling && !wasUserScrolling { onInteraction() }
             userIsScrolling = isUserScrolling
             if isUserScrolling {
                 userHasScrolled = true

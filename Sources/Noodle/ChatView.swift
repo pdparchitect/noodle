@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 
 struct ChatView: View {
     @Environment(NoodleStore.self) private var store
+    @Environment(\.controlActiveState) private var activeState
     let conversation: BotConversation
     let attachmentPreview: AttachmentPreviewController
     var composerFocusRequest: UUID? = nil
@@ -36,6 +37,16 @@ struct ChatView: View {
 
     var body: some View {
         chatContent
+            .simultaneousGesture(TapGesture().onEnded { store.markConversationRead(conversation.id) })
+            .onChange(of: activeState, initial: true) { _, state in
+                if state == .key { store.markConversationRead(conversation.id) }
+            }
+            .onChange(of: store.hasUnreadMessages(in: conversation)) { _, unread in
+                if unread, activeState == .key { store.markConversationRead(conversation.id) }
+            }
+            .onChange(of: composerFocused) { _, focused in
+                if focused { store.markConversationRead(conversation.id) }
+            }
             .environment(\.conversationAnnotations, conversationAnnotations)
             .background(ConversationAnnotationHost(controller: conversationAnnotations,
                 conversationID: conversation.id, title: store.title(for: conversation),
@@ -117,6 +128,7 @@ struct ChatView: View {
                 store.importAttachments(from: providers, into: conversation.id, context: .paste)
             }
             .onChange(of: conversation.id) { _, _ in
+                if activeState == .key { store.markConversationRead(conversation.id) }
                 attachmentOpenTask?.cancel()
                 conversationAnnotations.cancel()
                 selectedAttachmentID = nil
@@ -467,7 +479,8 @@ private struct ConversationTranscript: View {
             lastMessageID: messages.last?.id,
             lastMessageIsFromUser: messages.last?.author == .user,
             bottomOverlayHeight: bottomOverlayHeight,
-            saveViewport: saveViewport
+            saveViewport: saveViewport,
+            onInteraction: { store.markConversationRead(conversation.id) }
         ) {
             ConversationStartView(conversation: conversation, showAgentProfile: showAgentProfile)
                 .padding(.bottom, 14)

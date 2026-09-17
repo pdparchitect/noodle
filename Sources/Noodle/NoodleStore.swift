@@ -60,7 +60,7 @@ final class NoodleStore {
         get { selectedConversationID.map { drafts[$0].text } ?? "" }
         set {
             guard let selectedConversationID else { return }
-            drafts[selectedConversationID].text = newValue
+            setDraft(newValue, for: selectedConversationID)
         }
     }
 
@@ -70,6 +70,7 @@ final class NoodleStore {
 
     func setDraft(_ text: String, for conversationID: UUID) {
         drafts[conversationID].text = text
+        markConversationRead(conversationID)
     }
     var creationSheet: CreationSheet?
     var selectedSettingsTab: NoodleSettingsTab = .general
@@ -494,6 +495,7 @@ final class NoodleStore {
         attachmentsByConversation[conversationID, default: []].append(attachment)
         let message = try repository.sendUserMessage(conversationID: conversationID,
             body: VoiceMessage.messageBody, attachmentIDs: [attachment.id])
+        markConversationRead(conversationID)
         messagesByConversation[conversationID, default: []].append(message)
         if let index = conversations.firstIndex(where: { $0.id == conversationID }) {
             conversations[index].updatedAt = message.createdAt
@@ -521,6 +523,7 @@ final class NoodleStore {
                 body: messageBody,
                 attachmentIDs: pendingAttachments.map(\.id)
             )
+            markConversationRead(conversation.id)
             messagesByConversation[conversation.id, default: []].append(message)
 
             if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
@@ -544,6 +547,7 @@ final class NoodleStore {
             conversationID: conversation.id,
             body: command
         )
+        markConversationRead(conversation.id)
         messagesByConversation[conversation.id, default: []].append(message)
         if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
             conversations[index].updatedAt = message.createdAt
