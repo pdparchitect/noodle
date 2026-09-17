@@ -36,10 +36,20 @@ final class ProcessInputWriterTests: XCTestCase {
         try? pipe.fileHandleForReading.close()
     }
 
+    func testClosedReaderReportsFailureWithoutTerminatingProcess() async throws {
+        let pipe = Pipe()
+        let writer = ProcessInputWriter(handle: pipe.fileHandleForWriting)
+        try pipe.fileHandleForReading.close()
+        let failed = expectation(description: "Exited child error reported")
+        writer.write(Data("request".utf8)) { _ in failed.fulfill() }
+        await fulfillment(of: [failed], timeout: 3)
+        try pipe.fileHandleForWriting.close()
+    }
+
     func testWriteFailureIsReported() async throws {
         let pipe = Pipe()
-        try pipe.fileHandleForWriting.close()
         let writer = ProcessInputWriter(handle: pipe.fileHandleForWriting)
+        try pipe.fileHandleForWriting.close()
         let failed = expectation(description: "Closed pipe error reported")
         writer.write(Data("request".utf8)) { _ in failed.fulfill() }
         await fulfillment(of: [failed], timeout: 3)

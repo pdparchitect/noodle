@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-17
+
 ### Changed
 
 - Place the optional Focus Window action after the Desktop, Terminal and Files controls.

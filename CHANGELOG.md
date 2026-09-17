@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-09-17
+
 ### Added
 
 - Add JavaScript workflows to `mcpshim` with macOS JavaScriptCore, synchronous MCP calls, JSON output, console diagnostics and error traces, workspace file support, and bounded execution without an additional runtime.
@@ -16,16 +18,15 @@ All notable changes to Noodle are documented here, following
 ### Changed
 
 - Use Dev names for development apps, sharing links and Runbar entries, and export development Computer attachments as `.noodlecomputer-dev`.
-
 - Rename Security settings to Sandbox, make the Unrestricted heading open its explanation, and add a matching clickable Heartbeat heading above the bot switches.
 - Consolidate MCP connection, catalogue and Google Workspace documentation into one guide.
 - Keep documentation public-facing, consolidate gateway guidance, and remove internal review and debugging narratives from user guides.
 
 ### Fixed
 
+- Prevent an exiting harness from terminating Noodle when the app writes to its input pipe.
 - Restore cached link preview titles and images immediately when conversation rows reappear, without replaying the loading animation.
 - Pair Noodle Dev only with Applet Dev, preserve applet link environments in conversations, and generate local document and CLI guidance for local bots.
-
 - Pair Noodle Dev exclusively with Noodle Computer Dev for discovery, document opens and authenticated connections, keeping development computers separate from the installed apps.
 - Restrict development launchers and the local installer to isolated app identities; remove the production-data launch option.
 - Reduce idle CPU usage by scanning bot mailboxes when their directories change, with periodic recovery checks instead of repeated idle directory walks.

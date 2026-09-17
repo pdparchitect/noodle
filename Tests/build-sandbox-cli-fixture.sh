@@ -21,7 +21,13 @@ cp "$bin_path/NoodleMCPCLI" "$helpers/mcpshim"
 cp "$bin_path/NoodleComputerCLI" "$helpers/computer"
 cp "$applet_bin/noodlet" "$helpers/noodlet"
 for helper in messenger mcpshim computer noodlet; do
-    /usr/bin/codesign --force --sign - --options runtime --timestamp=none "$helpers/$helper" >&2
+    signing_options=()
+    # Applet derives its environment from the executable's signing identifier,
+    # including when the managed CLI runs outside its app bundle.
+    if [[ "$helper" == noodlet ]]; then
+        signing_options=(--identifier com.pdparchitect.noodle.applet.local.cli)
+    fi
+    /usr/bin/codesign --force --sign - --options runtime --timestamp=none "${signing_options[@]}" "$helpers/$helper" >&2
     /usr/bin/codesign --verify --strict "$helpers/$helper" >&2
 done
 print "$application"

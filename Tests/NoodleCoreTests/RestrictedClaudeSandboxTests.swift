@@ -17,6 +17,10 @@ final class RestrictedClaudeSandboxTests: XCTestCase {
         let repository = WorkspaceRepository(rootURL: root.appendingPathComponent("Noodle"), launcherExecutableURL: messenger)
         let agent = try repository.createAgent(named: "Claude sandbox fixture", harnessIdentifier: "claude-code").agent
         let workspace = repository.directory(for: agent)
+        // Skill discovery must use the fixture CLI, independently of whether a
+        // matching companion app is installed on the machine running the test.
+        try AppletAgentSkill.synchronize(workspace: workspace, enabled: true,
+            executable: application.appendingPathComponent("Contents/Helpers/noodlet"))
         let temporary = workspace.appendingPathComponent(".noodle/tmp")
         let oauth: [String: Any] = ["accessToken": "offline-fixture", "refreshToken": "offline-refresh",
             "expiresAt": Date().addingTimeInterval(3600).timeIntervalSince1970 * 1000,

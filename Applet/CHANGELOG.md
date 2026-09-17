@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-17
+
 ### Changed
 
 - Rename development apps, documents and links to Dev while keeping existing development packages and saved links readable.
@@ -14,7 +16,6 @@
 ### Fixed
 
 - Default development builds and Runbar launches to Applet Dev; reject cross-environment connections and links, and keep production file associations exclusive to production.
-
 - Reduce idle library CPU usage by looking up known package paths before resolving bookmarks, caching library entry identifiers, and redrawing only when library details or previews change.
 
 ## [0.2.1] - 2026-09-16
