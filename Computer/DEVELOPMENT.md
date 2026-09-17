@@ -23,7 +23,11 @@ subsequent installs will not recreate them. Internal IDs and existing account da
 locations stay unchanged.
 
 Installation validates the development identity and signatures, publishes atomically,
-and never replaces `/Applications/Noodle Computer.app`. It pairs exclusively
+and never replaces `/Applications/Noodle Computer.app`. After staging and verification,
+it asks the running Dev app to quit and waits for shutdown before replacing its
+signed executable. A failed quit leaves the installation unchanged. The launcher
+then starts the new copy; start any previously running computers again.
+It pairs exclusively
 with `.build/Noodle Dev.app`, using its own sandbox container, computer library,
 App Group connection, Local Mac service, account records and credentials. The
 installed production apps continue to use each other. Both pairs can run at once.

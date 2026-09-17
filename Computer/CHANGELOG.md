@@ -5,6 +5,9 @@
 ### Fixed
 
 - Keep Local Mac Setup out of the Dock and app switcher, including during background registration checks.
+- Recover idle Local Mac helpers after signed app replacement without depending on an authenticated request reaching the old executable.
+- Add Repair Local Mac in Setup to reload a stuck registered helper, wait for macOS registration to settle, and retain accounts and files.
+- Quit Computer Dev before installing a replacement so the running app cannot keep serving requests from a removed executable.
 
 ## [0.8.0] - 2026-09-17
 

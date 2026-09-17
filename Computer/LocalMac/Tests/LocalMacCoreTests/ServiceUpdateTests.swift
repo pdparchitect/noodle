@@ -4,6 +4,44 @@ import XCTest
 
 final class ServiceUpdateTests: XCTestCase {
     let current = Data("current".utf8), previous = Data("previous".utf8)
+    func testIdleHelperRetiresWithoutAnyAuthenticatedRequest() throws {
+        var retirement = LocalMacServiceRetirement(running: previous)
+        XCTAssertFalse(try retirement.check(activeDesktop: false, installed: { previous }))
+        XCTAssertTrue(try retirement.check(activeDesktop: false, installed: { current }))
+        XCTAssertTrue(retirement.restarting)
+        XCTAssertFalse(try retirement.check(activeDesktop: false, installed: { XCTFail("Retire only once"); return current }))
+    }
+    func testUpdateWaitsForActiveDesktopToFinish() throws {
+        var retirement = LocalMacServiceRetirement(running: previous)
+        XCTAssertFalse(try retirement.check(activeDesktop: true, installed: { current }))
+        XCTAssertFalse(retirement.restarting)
+        XCTAssertTrue(try retirement.check(activeDesktop: false, installed: { current }))
+    }
+    func testInvalidOrIncompleteReplacementNeverRetiresService() throws {
+        var retirement = LocalMacServiceRetirement(running: previous)
+        XCTAssertThrowsError(try retirement.check(activeDesktop: false, installed: { throw LocalMacError("invalid signature") }))
+        XCTAssertFalse(retirement.restarting)
+        XCTAssertTrue(try retirement.check(activeDesktop: false, installed: { current }))
+    }
+    func testIdenticalReinstallStillRetiresTheUnlinkedImage() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let executable = root.appendingPathComponent("service")
+        try current.write(to: executable)
+        let loadedFile = try LocalMacSignedCode.fileIdentity(at: executable)
+        var retirement = LocalMacServiceRetirement(running: current)
+        try current.write(to: executable, options: .atomic)
+        let newFile = try LocalMacSignedCode.fileIdentity(at: executable)
+        XCTAssertNotEqual(loadedFile, newFile)
+        XCTAssertTrue(try retirement.check(activeDesktop: false, executableReplaced: newFile != loadedFile, installed: { current }))
+    }
+    func testReplacedFileStillRequiresAValidSignature() {
+        var retirement = LocalMacServiceRetirement(running: current)
+        XCTAssertThrowsError(try retirement.check(activeDesktop: false, executableReplaced: true,
+            installed: { throw LocalMacError("invalid signature") }))
+        XCTAssertFalse(retirement.restarting)
+    }
     func testVersionAndImageIdentityMustMatch() throws {
         let encoded = try JSONEncoder().encode(LocalMacServiceInfo(fingerprint: current))
         let info = try JSONDecoder().decode(LocalMacServiceInfo.self, from: encoded)

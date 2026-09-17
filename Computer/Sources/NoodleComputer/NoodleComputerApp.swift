@@ -560,7 +560,7 @@ struct ComputerDetailView: View {
           }
         } actions: {
           if session.localMacSetupRequired {
-            Button("Open Local Mac Setup…") {
+            Button(session.localMacSetupStatus == .enabled ? "Repair Local Mac…" : "Open Local Mac Setup…") {
               do { try LocalMacSetup.enable() } catch { store.error = error.localizedDescription }
             }
           }

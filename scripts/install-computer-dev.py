@@ -22,6 +22,10 @@ def verify_signature(app):
     subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
 
 
+def stop_running():
+    subprocess.run(['/usr/bin/swift', str(Path(__file__).with_name('stop-computer-dev.swift'))], check=True)
+
+
 def publish(staging, destination, replacing):
     if not replacing:
         os.rename(staging, destination)
@@ -33,7 +37,7 @@ def publish(staging, destination, replacing):
         raise OSError(error, os.strerror(error), str(destination))
 
 
-def install_local(source, destination, verify=verify_signature, exchange=publish, legacy_paths=()):
+def install_local(source, destination, verify=verify_signature, exchange=publish, legacy_paths=(), stop=None):
     if destination.is_symlink() or destination.parent.resolve() != destination.parent:
         raise ValueError('The Dev Computer installation path must not be a symbolic link.')
     require_local(source)
@@ -60,6 +64,9 @@ def install_local(source, destination, verify=verify_signature, exchange=publish
         subprocess.run(['/usr/bin/ditto', str(source), str(staging)], check=True)
         require_local(staging)
         verify(staging)
+        # Complete staging first, then wait for a graceful quit before removing
+        # the loaded image. Opening an already-running app does not restart it.
+        (stop or stop_running)()
         replacing = destination.exists()
         exchange(staging, destination, replacing)
         published_aliases = []

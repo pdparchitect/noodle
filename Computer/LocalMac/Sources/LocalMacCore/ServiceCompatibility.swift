@@ -1,7 +1,18 @@
 import Foundation
 import Security
+import Darwin
 
 public enum LocalMacSignedCode {
+    /// A byte-identical reinstall can unlink the loaded image without changing
+    /// its signing fingerprint. Track the file as well as the signed contents.
+    public static func fileIdentity(at url: URL) throws -> String {
+        var info = stat()
+        guard lstat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFREG else {
+            throw LocalMacError("The installed Local Mac service is unavailable during its update.")
+        }
+        return "\(info.st_dev):\(info.st_ino)"
+    }
+
     public static func fingerprint(at url: URL, requirement text: String) throws -> Data {
         var code: SecStaticCode?, requirement: SecRequirement?
         guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess, let code,
@@ -73,6 +84,25 @@ public enum LocalMacServiceUpdate {
             if try info.isReady(expected: expected) { return }
         }
         throw LocalMacServiceUnavailable()
+    }
+}
+
+/// Used on the lifecycle queue, including by an independent timer. Recovery
+/// must not depend on an XPC request reaching an obsolete signed executable.
+public struct LocalMacServiceRetirement {
+    public let running: Data
+    public private(set) var restarting = false
+    public init(running: Data) { self.running = running }
+
+    /// The reader must verify the replacement's signature before returning its
+    /// fingerprint. Never retire during a desktop session or on a failed check.
+    public mutating func check(activeDesktop: Bool, executableReplaced: Bool = false,
+                               installed: () throws -> Data) throws -> Bool {
+        guard !restarting, !activeDesktop else { return false }
+        let fingerprint = try installed()
+        guard fingerprint != running || executableReplaced else { return false }
+        restarting = true
+        return true
     }
 }
 

@@ -42,10 +42,11 @@ enum ComputerDisplayMode: String {
     nonisolated let id: UUID
     @Published var computer: Computer
     @Published var phase = ComputerPhase.stopped {
-        didSet { if case .failed = phase {} else { startupRecovery = nil; localMacSetupRequired = false } }
+        didSet { if case .failed = phase {} else { startupRecovery = nil; localMacSetupStatus = nil } }
     }
     @Published var startupRecovery: ComputerStartupRecovery?
-    @Published var localMacSetupRequired = false
+    @Published var localMacSetupStatus: LocalMacRegistrationStatus?
+    var localMacSetupRequired: Bool { localMacSetupStatus != nil }
     @Published var console = ""
     @Published var commandRunning = false
     @Published var updateResult: String?
@@ -115,7 +116,7 @@ enum ComputerDisplayMode: String {
         }
         phase = .failed(error.localizedDescription)
         startupRecovery = error as? ComputerStartupRecovery
-        localMacSetupRequired = error is LocalMacSetupRequired
+        localMacSetupStatus = (error as? LocalMacSetupRequired)?.registration
         append("\n\(error.localizedDescription)\n")
     }
 }
@@ -716,7 +717,8 @@ enum ComputerDisplayMode: String {
             setup.retryAction = "Delete"
             error = setup.localizedDescription
             switch setup.registration {
-            case .enabled, .requiresApproval: errorRecovery = .loginItems
+            case .requiresApproval: errorRecovery = .loginItems
+            case .enabled: errorRecovery = .repair
             case .notRegistered, .unknown: errorRecovery = .setup
             case .helperMissing: break
             }

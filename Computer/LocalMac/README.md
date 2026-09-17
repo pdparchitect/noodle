@@ -237,12 +237,22 @@ Keep the installed app path, signing identity, account and permission identity
 stable. Build and verify before replacing the app. Close the app's active
 connections before updating and start them again afterward so the client and
 signed desktop copy use the same protocol. Do not automatically unregister the
-lifecycle service during ordinary startup: that can discard its approval and
-interrupt desktops. Explicit registration repair is available in Local Mac Setup
-when an update leaves the service unable to launch. The service checks its fixed
-installed executable against its exact signing identity.
-When it finds a replacement and has no active desktop children, it drains the XPC
-reply and exits; launchd loads the replacement through the same approved job.
+lifecycle service during ordinary startup: that can interrupt desktops and require
+approval again. **Repair Local Mac** in Setup verifies the installed app and helper,
+waits for macOS to unregister the old service completely, then registers the
+current one. A bounded retry handles macOS briefly retaining a disabled registration
+after shutdown; explicit approval and signature failures are not retried.
+Repair disconnects active Local Mac desktops while retaining accounts,
+files, credentials and privacy grants. If macOS requires approval, Setup opens Login
+Items. Return to Computer and retry the operation after approval. Repair never
+repeats account creation or deletion. The service checks its fixed installed
+executable against its exact signing identity.
+An independent timer checks the signed contents and executable file identity for
+a verified replacement, including an identical reinstall, without needing an XPC
+request to reach the old executable. When it finds one and has no active desktop
+children or account operation, the helper exits; launchd loads the replacement
+through the same approved job. A version query can also trigger this check, draining
+its reply before exit. Missing or invalid replacement code never triggers retirement.
 Lifecycle operations are refused once that restart begins. The client retries
 only this read-only handshake, with a bounded wait. It sends `serviceInfo`
 directly, without a separate `check` gate: after an atomic app replacement,
@@ -256,9 +266,9 @@ replacement until they close; account operations are never blindly replayed.
 taught to restart by an updated app. A normal Mac restart can replace that process,
 but it cannot repair launch constraints saved for a different signing category.
 The client runs a bounded version handshake before account operations and offers
-Login Items recovery if an enabled helper cannot be reached or verified. Setup opens Login
-Items and explains how to turn LocalMacSetup off and back on, refreshing the
-installed helper's launch constraints without deleting its registration. macOS
+Repair Local Mac if an enabled helper cannot be reached or verified. Setup refreshes
+the installed helper's registration using the asynchronous ServiceManagement API,
+including helpers that predate independent update detection. macOS
 may require authentication; account records,
 credentials, homes and desktop privacy grants are not removed by this operation.
 Restart/reconnect after an actual signed app replacement still requires live

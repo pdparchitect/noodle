@@ -4,11 +4,11 @@ import LocalMacCore
 import ServiceManagement
 
 enum LocalMacErrorRecovery: Equatable {
-    case fullDiskAccess, loginItems, setup
+    case fullDiskAccess, loginItems, setup, repair
     var title: String {
         switch self {
         case .fullDiskAccess: "Full Disk Access Required"
-        case .loginItems, .setup: "Local Mac Helper Unavailable"
+        case .loginItems, .setup, .repair: "Local Mac Helper Unavailable"
         }
     }
     var actionTitle: String {
@@ -16,13 +16,14 @@ enum LocalMacErrorRecovery: Equatable {
         case .fullDiskAccess: "Open Full Disk Access…"
         case .loginItems: "Open Login Items…"
         case .setup: "Open Local Mac Setup…"
+        case .repair: "Repair Local Mac…"
         }
     }
     @MainActor func open() throws {
         switch self {
         case .fullDiskAccess: NSWorkspace.shared.open(LocalMacRemovalFailure.privacySettingsURL)
         case .loginItems: SMAppService.openSystemSettingsLoginItems()
-        case .setup: try LocalMacSetup.enable()
+        case .setup, .repair: try LocalMacSetup.enable()
         }
     }
 }

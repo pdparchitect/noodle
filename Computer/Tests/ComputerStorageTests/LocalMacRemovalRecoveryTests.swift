@@ -21,15 +21,15 @@ import XCTest
         store.recordRemovalFailure(NSError(domain: NSPOSIXErrorDomain, code: Int(EIO)))
         XCTAssertNil(store.errorRecovery)
     }
-    func testUnreachableHelperOffersLoginItemsAndNamesDelete() throws {
+    func testUnreachableHelperOffersRepairAndNamesDelete() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let store = try ComputerStore(root: root)
         store.recordRemovalFailure(LocalMacSetupRequired(registration: .enabled))
-        XCTAssertEqual(store.errorRecovery, .loginItems)
+        XCTAssertEqual(store.errorRecovery, .repair)
         XCTAssertTrue(store.error?.contains("retry Delete") == true)
         XCTAssertFalse(store.error?.contains("retry Start") == true)
-        XCTAssertEqual(store.errorRecovery?.actionTitle, "Open Login Items…")
+        XCTAssertEqual(store.errorRecovery?.actionTitle, "Repair Local Mac…")
         store.error = nil
         XCTAssertNil(store.errorRecovery)
     }

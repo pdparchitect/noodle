@@ -4,6 +4,7 @@ from pathlib import Path
 import plistlib
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('install_computer_local', ROOT / 'scripts/install-computer-dev.py')
@@ -13,6 +14,9 @@ spec.loader.exec_module(installer)
 
 class LocalComputerInstallationTests(unittest.TestCase):
     def setUp(self):
+        stop_patch = patch.object(installer, 'stop_running')
+        self.stop = stop_patch.start()
+        self.addCleanup(stop_patch.stop)
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
@@ -46,6 +50,38 @@ class LocalComputerInstallationTests(unittest.TestCase):
         self.assertEqual((self.destination / 'Contents/version').read_text(), 'new')
         self.assertEqual((production / 'Contents/version').read_text(), 'production')
         self.assertEqual(self.source.resolve(), self.destination)
+
+    def test_waits_for_quit_before_replacing_the_loaded_bundle(self):
+        self.bundle(self.destination, 'old')
+
+        def stop():
+            self.assertEqual((self.destination / 'Contents/version').read_text(), 'old')
+
+        def exchange(staging, destination, replacing):
+            self.stop.assert_called_once()
+            installer.publish(staging, destination, replacing)
+
+        self.stop.side_effect = stop
+        installer.install_local(self.source, self.destination, verify=self.verify, exchange=exchange)
+        self.assertEqual((self.destination / 'Contents/version').read_text(), 'new')
+
+    def test_failed_quit_retains_installed_bundle_and_build(self):
+        self.bundle(self.destination, 'old')
+        self.stop.side_effect = RuntimeError('still running')
+        with self.assertRaises(RuntimeError):
+            installer.install_local(self.source, self.destination, verify=self.verify)
+        self.assertEqual((self.destination / 'Contents/version').read_text(), 'old')
+        self.assertFalse(self.source.is_symlink())
+        self.assertEqual((self.source / 'Contents/version').read_text(), 'new')
+
+    def test_invalid_staging_does_not_stop_the_app(self):
+        def verify(path):
+            if path != self.source:
+                raise ValueError('invalid staged signature')
+
+        with self.assertRaises(ValueError):
+            installer.install_local(self.source, self.destination, verify=verify)
+        self.stop.assert_not_called()
 
     def test_refuses_a_production_bundle_at_the_destination(self):
         self.bundle(self.destination, 'production', 'com.pdparchitect.noodle.computer')

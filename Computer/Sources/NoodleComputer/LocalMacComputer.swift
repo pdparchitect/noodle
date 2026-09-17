@@ -13,7 +13,7 @@ struct LocalMacSetupRequired: LocalizedError {
         case .notRegistered: "Enable Local Mac to create and start a separate account on this Mac."
         case .requiresApproval: "Allow \(setupName) in System Settings → General → Login Items & Extensions."
         case .helperMissing: "The Local Mac helper could not be found. Rebuild or reinstall this Computer app."
-        case .enabled: "Local Mac is enabled, but its helper could not be reached or verified. In System Settings → General → Login Items & Extensions, turn \(setupName) off and back on, then retry \(retryAction)."
+        case .enabled: "Local Mac’s registered helper did not respond. Choose Repair Local Mac in \(setupName), then retry \(retryAction). Accounts and files are retained."
         case .unknown: "The Local Mac helper did not respond and its approval status could not be checked. Open \(setupName) to check its status."
         }
     }

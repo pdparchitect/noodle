@@ -234,21 +234,54 @@ private final class Service: NSObject, NSXPCListenerDelegate {
     let queue = DispatchQueue(label: "NoodleLocalMac.lifecycle")
     var children: [UUID: Process] = [:]
     let fingerprint: Data
-    var restarting = false
+    let executableFileID: String
+    var retirement: LocalMacServiceRetirement
+    private var updateMonitor: DispatchSourceTimer?
+    var restarting: Bool { retirement.restarting }
     var consoleMetadata: ConsoleMetadata?
     init(accounts: Accounts) throws {
         self.accounts = accounts
         fingerprint = try LocalMacSignedCode.runningFingerprint()
+        executableFileID = try LocalMacSignedCode.fileIdentity(at: executable)
+        retirement = LocalMacServiceRetirement(running: fingerprint)
+    }
+    func monitorUpdates() {
+        let monitor = DispatchSource.makeTimerSource(queue: queue)
+        monitor.schedule(deadline: .now() + 2, repeating: 2, leeway: .milliseconds(500))
+        monitor.setEventHandler { [weak self] in
+            guard let self else { return }
+            // This runs without an incoming XPC connection. Once the old code
+            // is unlinked, macOS may reject that connection before serviceInfo.
+            // The queue serializes this with all account operations.
+            // Also finish a retirement whose reply barrier never ran because
+            // XPC rejected the obsolete executable's response.
+            if self.restarting || (try? self.retireIfUpdated()) == true {
+                log.notice("Verified Local Mac service update; retiring the idle helper.")
+                Darwin.exit(0)
+            }
+        }
+        updateMonitor = monitor
+        monitor.resume()
+    }
+    private func retireIfUpdated() throws -> Bool {
+        let requirement = "anchor apple generic and identifier \"\(serviceID)\" and certificate leaf[subject.OU] = \"\(team)\""
+        let fileID = try LocalMacSignedCode.fileIdentity(at: executable)
+        return try retirement.check(activeDesktop: children.values.contains(where: { $0.isRunning }),
+                                    executableReplaced: fileID != executableFileID) {
+            let installed = try LocalMacSignedCode.fingerprint(at: executable, requirement: requirement)
+            guard fileID == (try LocalMacSignedCode.fileIdentity(at: executable)) else {
+                throw LocalMacError("The Local Mac service changed during verification. Retry after the update finishes.")
+            }
+            return installed
+        }
     }
     func requireAvailable() throws {
         guard !restarting else { throw LocalMacError("The Local Mac service is finishing an update. Retry the operation; the account has been retained.") }
     }
     func serviceInfo() throws -> LocalMacServiceInfo {
-        let requirement = "anchor apple generic and identifier \"\(serviceID)\" and certificate leaf[subject.OU] = \"\(team)\""
-        let installed = try LocalMacSignedCode.fingerprint(at: executable, requirement: requirement)
         // All lifecycle work uses this queue. Never exit during account mutation
         // or while any tracked desktop is running, including another owner's.
-        if installed != fingerprint && !children.values.contains(where: { $0.isRunning }) { restarting = true }
+        _ = try retireIfUpdated()
         return LocalMacServiceInfo(fingerprint: fingerprint, restarting: restarting)
     }
     func rememberConsole(_ original: [String: Any]) throws {
@@ -539,6 +572,7 @@ do {
     listener.delegate = service
     listener.setConnectionCodeSigningRequirement("anchor apple generic and identifier \"\(providerID)\" and certificate leaf[subject.OU] = \"\(team)\"")
     listener.resume()
+    service.monitorUpdates()
     log.notice("Local Mac lifecycle service is ready.")
     RunLoop.current.run()
 } catch { log.error("Local Mac service startup failed: \(error.localizedDescription, privacy: .public)"); exit(1) }
