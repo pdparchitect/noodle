@@ -2,14 +2,18 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Rename development apps, documents and links to Dev while keeping existing development packages and saved links readable.
+
 ### Added
 
-- Add an isolated Noodle Applet Local build with its own library, saved data, connection group, CLI and preview extension, using only `.noodlet-local` documents and `noodlet-local://` links.
+- Add an isolated Noodle Applet Dev build with its own library, saved data, connection group, CLI and preview extension, using only `.noodlet-dev` documents and `noodlet-dev://` links.
 - Add `noodlet convert --path SOURCE --output NEW_DOCUMENT` to copy documents explicitly between environments without overwriting existing files.
 
 ### Fixed
 
-- Default development builds and Runbar launches to Applet Local; reject cross-environment connections and links, and keep production file associations exclusive to production.
+- Default development builds and Runbar launches to Applet Dev; reject cross-environment connections and links, and keep production file associations exclusive to production.
 
 - Reduce idle library CPU usage by looking up known package paths before resolving bookmarks, caching library entry identifiers, and redrawing only when library details or previews change.
 

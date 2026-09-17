@@ -11,6 +11,24 @@
 #include <mach-o/dyld.h>
 #include <crt_externs.h>
 
+CGRect NLMVisiblePixelBounds(const uint8_t *pixels, size_t width, size_t height, size_t bytesPerRow) {
+    if (!width || !height || width > SIZE_MAX / 4 || bytesPerRow < width * 4 || height > SIZE_MAX / bytesPerRow) return CGRectNull;
+    size_t left = width, top = height, right = 0, bottom = 0;
+    for (size_t y = 0; y < height; y++) {
+        const uint8_t *row = pixels + y * bytesPerRow;
+        size_t x = 0;
+        while (x < width && row[x * 4 + 3] == 0) x++;
+        if (x == width) continue;
+        if (x < left) left = x;
+        if (y < top) top = y;
+        bottom = y + 1;
+        size_t end = width;
+        while (end > x && row[(end - 1) * 4 + 3] == 0) end--;
+        if (end > right) right = end;
+    }
+    return left == width ? CGRectNull : CGRectMake(left, top, right - left, bottom - top);
+}
+
 static void *library(void) {
     static void *handle; static dispatch_once_t once;
     dispatch_once(&once, ^{ handle = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LOCAL | RTLD_NOW); });
@@ -86,37 +104,103 @@ pid_t NLMSpawnTerminal(NSString *home, int *masterFD) {
     if (result) { close(master); return -1; }
     *masterFD = master; return pid;
 }
-static int removeContents(int fd, dev_t device, int depth) {
-    if (depth > 128) return ELOOP;
-    DIR *directory = fdopendir(dup(fd));
-    if (!directory) return errno;
-    int result = 0; struct dirent *entry;
-    while ((entry = readdir(directory))) {
+static BOOL removalFailure(NSError **error, int code, NSString *path, NSString *operation, BOOL preflight) {
+    if (error) *error = [NSError errorWithDomain:NSPOSIXErrorDomain code:code userInfo:@{
+        @"LocalMacRemovalPath": path, @"LocalMacRemovalOperation": operation,
+        @"LocalMacRemovalPreflight": @(preflight)
+    }];
+    return NO;
+}
+static BOOL sameEntry(int parent, const char *name, const struct stat *expected, NSString *path,
+                      BOOL preflight, NSError **error) {
+    struct stat current;
+    if (fstatat(parent, name, &current, AT_SYMLINK_NOFOLLOW))
+        return removalFailure(error, errno, path, @"inspect", preflight);
+    if (current.st_dev != expected->st_dev || current.st_ino != expected->st_ino ||
+        (current.st_mode & S_IFMT) != (expected->st_mode & S_IFMT))
+        return removalFailure(error, ESTALE, path, @"identity", preflight);
+    return YES;
+}
+static BOOL walkHome(int fd, dev_t device, int depth, NSString *path, BOOL preflight, NSError **error) {
+    if (depth > 128) return removalFailure(error, ELOOP, path, @"depth", preflight);
+    // A fresh open file description is required: dup() shares the directory
+    // offset, which would make the deletion pass skip the preflight's entries.
+    int iterator = openat(fd, ".", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (iterator < 0) return removalFailure(error, errno, path, @"open", preflight);
+    DIR *directory = fdopendir(iterator);
+    if (!directory) { int code = errno; close(iterator); return removalFailure(error, code, path, @"read", preflight); }
+    BOOL result = YES;
+    for (;;) {
+        errno = 0;
+        struct dirent *entry = readdir(directory);
+        if (!entry) {
+            if (errno) result = removalFailure(error, errno, path, @"read", preflight);
+            break;
+        }
         if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
+        NSString *name = [[NSFileManager defaultManager] stringWithFileSystemRepresentation:entry->d_name length:strlen(entry->d_name)];
+        NSString *childPath = [path stringByAppendingPathComponent:name];
         struct stat info;
-        if (fstatat(fd, entry->d_name, &info, AT_SYMLINK_NOFOLLOW)) { if (errno == ENOENT) continue; result = errno; break; }
+        if (fstatat(fd, entry->d_name, &info, AT_SYMLINK_NOFOLLOW)) {
+            if (errno == ENOENT) continue;
+            result = removalFailure(error, errno, childPath, @"inspect", preflight); break;
+        }
+        if (info.st_dev != device) { result = removalFailure(error, EXDEV, childPath, @"boundary", preflight); break; }
+        if (info.st_flags & (UF_IMMUTABLE | SF_IMMUTABLE | UF_APPEND | SF_APPEND)) {
+            result = removalFailure(error, EPERM, childPath, @"locked", preflight); break;
+        }
         if (S_ISDIR(info.st_mode)) {
             int child = openat(fd, entry->d_name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-            if (child < 0) { result = errno; break; }
-            struct stat opened; fstat(child, &opened);
-            if (opened.st_dev != device || opened.st_ino != info.st_ino) result = EXDEV;
-            else result = removeContents(child, device, depth + 1);
+            if (child < 0) { result = removalFailure(error, errno, childPath, @"open", preflight); break; }
+            struct stat opened;
+            if (fstat(child, &opened)) result = removalFailure(error, errno, childPath, @"inspect", preflight);
+            else if (opened.st_dev != device || opened.st_ino != info.st_ino)
+                result = removalFailure(error, ESTALE, childPath, @"identity", preflight);
+            else result = walkHome(child, device, depth + 1, childPath, preflight, error);
             close(child);
-            if (result) break;
-            if (unlinkat(fd, entry->d_name, AT_REMOVEDIR)) { result = errno; break; }
-        } else if (unlinkat(fd, entry->d_name, 0)) { result = errno; break; }
+            if (!result) break;
+        }
+        if (!preflight) {
+            if (!sameEntry(fd, entry->d_name, &info, childPath, NO, error)) { result = NO; break; }
+            if (unlinkat(fd, entry->d_name, S_ISDIR(info.st_mode) ? AT_REMOVEDIR : 0)) {
+                result = removalFailure(error, errno, childPath, @"remove", NO); break;
+            }
+        }
     }
     closedir(directory); return result;
 }
-int NLMRemoveHome(NSString *name, uid_t uid) {
-    if (geteuid() != 0 || uid < 501 || ![name hasPrefix:@"noodle_"] || [name containsString:@"/"] || [name containsString:@".."] || name.length != 27) return EINVAL;
+BOOL NLMRemoveManagedHomeAt(int parent, NSString *name, uid_t uid, NSError **error) {
+    NSCharacterSet *hex = [NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdef"];
+    if (uid < 501 || name.length != 27 || ![name hasPrefix:@"noodle_"] ||
+        [[name substringFromIndex:7] rangeOfCharacterFromSet:hex.invertedSet].location != NSNotFound)
+        return removalFailure(error, EINVAL, @"", @"identity", YES);
+    int home = openat(parent, name.fileSystemRepresentation, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (home < 0) {
+        if (errno == ENOENT) return YES;
+        return removalFailure(error, errno, @"", @"open", YES);
+    }
+    struct stat info, parentInfo;
+    BOOL result;
+    if (fstat(home, &info)) result = removalFailure(error, errno, @"", @"inspect", YES);
+    else if (fstat(parent, &parentInfo)) result = removalFailure(error, errno, @"", @"inspect", YES);
+    else if (info.st_dev != parentInfo.st_dev) result = removalFailure(error, EXDEV, @"", @"boundary", YES);
+    else if (info.st_uid != uid) result = removalFailure(error, EPERM, @"", @"identity", YES);
+    else if (info.st_flags & (UF_IMMUTABLE | SF_IMMUTABLE | UF_APPEND | SF_APPEND))
+        result = removalFailure(error, EPERM, @"", @"locked", YES);
+    // Discover protected folders before unlinking anything. This cannot promise
+    // atomic deletion: permissions/content can change between the two passes.
+    else result = walkHome(home, info.st_dev, 0, @"", YES, error) &&
+                  sameEntry(parent, name.fileSystemRepresentation, &info, @"", YES, error) &&
+                  walkHome(home, info.st_dev, 0, @"", NO, error);
+    if (result) result = sameEntry(parent, name.fileSystemRepresentation, &info, @"", NO, error);
+    if (result && unlinkat(parent, name.fileSystemRepresentation, AT_REMOVEDIR))
+        result = removalFailure(error, errno, @"", @"remove", NO);
+    close(home); return result;
+}
+BOOL NLMRemoveHome(NSString *name, uid_t uid, NSError **error) {
+    if (geteuid() != 0) return removalFailure(error, EPERM, @"", @"identity", YES);
     int users = open("/Users", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-    if (users < 0) return errno;
-    int home = openat(users, name.fileSystemRepresentation, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-    if (home < 0) { int result = errno == ENOENT ? 0 : errno; close(users); return result; }
-    struct stat info;
-    int result = fstat(home, &info) ? errno : info.st_uid != uid ? EPERM : removeContents(home, info.st_dev, 0);
-    close(home);
-    if (!result && unlinkat(users, name.fileSystemRepresentation, AT_REMOVEDIR)) result = errno;
+    if (users < 0) return removalFailure(error, errno, @"", @"open", YES);
+    BOOL result = NLMRemoveManagedHomeAt(users, name, uid, error);
     close(users); return result;
 }

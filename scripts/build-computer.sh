@@ -3,15 +3,28 @@ set -euo pipefail
 command -v go >/dev/null || { print -u2 'Building Computer requires Go for its Linux guest file helper.'; exit 1; }
 project_root="${0:A:h:h}"
 configuration="${NOODLE_COMPUTER_CONFIGURATION:-release}"
+data_container="${NOODLE_COMPUTER_DATA_CONTAINER:-${NOODLE_DATA_CONTAINER:-development}}"
 package="$project_root/Computer"
 build_root="$project_root/.build/computer"
-destination_app="$project_root/.build/Noodle Computer.app"
-bundle_identifier="com.pdparchitect.noodle.computer"
-app_name="Noodle Computer"
-menu_name="Computer"
+case "$data_container" in
+    development)
+        bundle_identifier="com.pdparchitect.noodle.computer.local"
+        computer_group_suffix="com.pdparchitect.noodle.computers.local"
+        app_name="Noodle Computer Dev"
+        menu_name="Computer Dev"
+        document_suffix="-dev" ;;
+    production)
+        bundle_identifier="com.pdparchitect.noodle.computer"
+        computer_group_suffix="com.pdparchitect.noodle.computers"
+        app_name="Noodle Computer"
+        menu_name="Computer"
+        document_suffix="" ;;
+    *) print -u2 'NOODLE_COMPUTER_DATA_CONTAINER must be development or production.'; exit 1 ;;
+esac
+destination_app="$project_root/.build/$app_name.app"
 version="$(tr -d '[:space:]' < "$package/VERSION")"
 [[ "$version" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' ]] || { print -u2 'Invalid Computer/VERSION'; exit 1; }
-if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == 1 && ( "${NOODLE_COMPUTER_TEST_BUILD:-0}" == 1 || "$configuration" != release ) ]]; then
+if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == 1 && ( "${NOODLE_COMPUTER_TEST_BUILD:-0}" == 1 || "$configuration" != release || "$data_container" != production ) ]]; then
     print -u2 'Public releases require the optimized production Computer identity.'; exit 1
 fi
 if [[ "${NOODLE_COMPUTER_TEST_BUILD:-0}" == 1 ]]; then
@@ -19,7 +32,11 @@ if [[ "${NOODLE_COMPUTER_TEST_BUILD:-0}" == 1 ]]; then
     menu_name="Computer Tests"
     destination_app="$project_root/.build/$app_name.app"
     bundle_identifier="com.pdparchitect.noodle.computer.tests"
+    computer_group_suffix="com.pdparchitect.noodle.computers.tests"
+    document_suffix="-tests"
 fi
+document_extension="noodlecomputer$document_suffix"
+content_type="com.pdparchitect.noodle.computer-reference$document_suffix"
 kernel="$package/Resources/Runtime/vmlinux-arm64"
 if [[ "$(uname -m)" != arm64 ]]; then
     print -u2 "Noodle Computer currently requires Apple silicon."
@@ -61,6 +78,12 @@ cp "$package/Support/Info.plist" "$app/Contents/Info.plist"
 # Keep the menu's short name separate from the app's Finder/display name.
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $menu_name" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $app_name" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleDocumentTypes:0:LSItemContentTypes:0 $content_type" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleDocumentTypes:0:CFBundleTypeName $app_name Reference" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :UTExportedTypeDeclarations:0:UTTypeIdentifier $content_type" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :UTExportedTypeDeclarations:0:UTTypeDescription $app_name Reference" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :UTExportedTypeDeclarations:0:UTTypeTagSpecification:public.filename-extension:0 $document_extension" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :UTExportedTypeDeclarations:0:UTTypeTagSpecification:public.mime-type:0 application/vnd.noodle.computer$document_suffix+json" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$app/Contents/Info.plist"
 for kind in Preview Thumbnail; do
@@ -69,6 +92,8 @@ for kind in Preview Thumbnail; do
     cp "$bin_path/Computer${kind}Extension" "$extension/Contents/MacOS/Computer${kind}Extension"
     cp "$package/Support/$kind-Info.plist" "$extension/Contents/Info.plist"
     /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.${kind:l}" "$extension/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleName $app_name $kind" "$extension/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :NSExtension:NSExtensionAttributes:QLSupportedContentTypes:0 $content_type" "$extension/Contents/Info.plist"
     /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$extension/Contents/Info.plist"
     /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$extension/Contents/Info.plist"
 done
@@ -96,7 +121,7 @@ done
 toolchain="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain"
 otool -l "$app/Contents/MacOS/NoodleComputer" | awk '/cmd LC_RPATH/ { found=1; next } found && /path / { print $2; found=0 }' |
     while IFS= read -r rpath; do
-        if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain/"* || "$rpath" == /*/Metal.xctoolchain/* ]]; then
+        if [[ "$rpath" == "$bin_path" || "$rpath" == "$bin_path/PackageFrameworks" || "$rpath" == "$toolchain/"* || "$rpath" == /*/Metal.xctoolchain/* ]]; then
             install_name_tool -delete_rpath "$rpath" "$app/Contents/MacOS/NoodleComputer"
         fi
     done
@@ -123,13 +148,13 @@ if [[ ! "$team_id" =~ '^[A-Z0-9]{10}$' ]]; then
     print -u2 "The Computer signing identity has no valid team identifier."
     exit 1
 fi
-computer_group="$team_id.com.pdparchitect.noodle.computers"
+computer_group="$team_id.$computer_group_suffix"
 /usr/libexec/PlistBuddy -c "Add :NoodleSigningTeam string $team_id" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :NoodleComputerGroup string $computer_group" "$app/Contents/Info.plist"
 # Registered only when the user enables Local Mac. The UI retains App Sandbox;
 # separate signed setup, service and desktop components implement its account boundary.
 setup_app="$app/Contents/Helpers/LocalMacSetup.app"
-mkdir -p "$setup_app/Contents/MacOS" "$setup_app/Contents/Library/LaunchServices" "$setup_app/Contents/Library/LaunchDaemons"
+mkdir -p "$setup_app/Contents/MacOS" "$setup_app/Contents/Library/LaunchServices" "$setup_app/Contents/Library/LaunchDaemons" "$setup_app/Contents/Resources/en.lproj"
 cp "$local_bin/LocalMacSetup" "$setup_app/Contents/MacOS/LocalMacSetup"
 cp "$local_bin/LocalMacService" "$setup_app/Contents/Library/LaunchServices/LocalMacService"
 cat > "$setup_app/Contents/Info.plist" <<EOF
@@ -137,8 +162,9 @@ cat > "$setup_app/Contents/Info.plist" <<EOF
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
     <key>CFBundleIdentifier</key><string>$bundle_identifier.localmacsetup</string>
-    <key>CFBundleName</key><string>Local Mac Setup</string>
-    <key>CFBundleDisplayName</key><string>Noodle Local Mac Setup</string>
+    <key>CFBundleName</key><string>LocalMacSetup</string>
+    <key>CFBundleDisplayName</key><string>LocalMacSetup</string>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
     <key>CFBundleExecutable</key><string>LocalMacSetup</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleVersion</key><string>$version</string>
@@ -146,15 +172,30 @@ cat > "$setup_app/Contents/Info.plist" <<EOF
     <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 EOF
+# macOS uses the localized name only when the base display name matches the
+# bundle filename. Preserve the registered service path and localize its label.
+cat > "$setup_app/Contents/Resources/en.lproj/InfoPlist.strings" <<EOF
+"CFBundleName" = "$app_name Setup";
+"CFBundleDisplayName" = "$app_name Setup";
+EOF
 desktop="$app/Contents/Helpers/LocalMacDesktop.app"
-mkdir -p "$desktop/Contents/MacOS" "$desktop/Contents/Resources"
+mkdir -p "$desktop/Contents/MacOS" "$desktop/Contents/Resources/en.lproj"
 cp "$local_bin/LocalMacDesktop" "$desktop/Contents/MacOS/LocalMacDesktop"
 cp "$package/Images/shared/noodle-welcome" "$desktop/Contents/Resources/noodle-welcome"
 cp "$package/Support/LocalMacDesktop-Info.plist" "$desktop/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.desktop" "$desktop/Contents/Info.plist"
+desktop_name='Noodle Local Mac Desktop'
+if [[ "$bundle_identifier" == com.pdparchitect.noodle.computer.local ]]; then desktop_name+=' Dev'; fi
+/usr/libexec/PlistBuddy -c 'Set :CFBundleName LocalMacDesktop' "$desktop/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName LocalMacDesktop' "$desktop/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c 'Add :CFBundleDevelopmentRegion string en' "$desktop/Contents/Info.plist"
+cat > "$desktop/Contents/Resources/en.lproj/InfoPlist.strings" <<EOF
+"CFBundleName" = "$desktop_name";
+"CFBundleDisplayName" = "$desktop_name";
+EOF
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$desktop/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$desktop/Contents/Info.plist"
-daemon="$setup_app/Contents/Library/LaunchDaemons/com.pdparchitect.noodle.computer.localmac.plist"
+daemon="$setup_app/Contents/Library/LaunchDaemons/$bundle_identifier.localmac.plist"
 cat > "$daemon" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -166,7 +207,7 @@ cat > "$daemon" <<EOF
     <key>ProcessType</key><string>Interactive</string>
 </dict></plist>
 EOF
-codesign --force --options runtime "$timestamp_option" --identifier com.pdparchitect.noodle.computer.localmac --sign "$signing_identity" "$setup_app/Contents/Library/LaunchServices/LocalMacService"
+codesign --force --options runtime "$timestamp_option" --identifier "$bundle_identifier.localmac" --sign "$signing_identity" "$setup_app/Contents/Library/LaunchServices/LocalMacService"
 codesign --force --options runtime "$timestamp_option" --sign "$signing_identity" "$setup_app"
 codesign --force --options runtime "$timestamp_option" --sign "$signing_identity" "$desktop"
 resolved_entitlements="$staging_root/Computer.entitlements"

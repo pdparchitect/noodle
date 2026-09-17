@@ -32,7 +32,8 @@ import OSLog
             try session.verifyCurrent()
             try LocalMacCapturePolicy.validateProtectedDisplays(protectedDisplayIDs)
             guard CGPreflightScreenCaptureAccess() else {
-                throw LocalMacError("Allow Screen Recording for Noodle Local Mac Desktop, then reconnect.")
+                let name = LocalMacIdentity.desktop(Bundle.main.bundleIdentifier)?.desktopAppName ?? "Noodle Local Mac Desktop"
+                throw LocalMacError("Allow Screen Recording for \(name), then reconnect.")
             }
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
             guard starting == attempt else { return }
@@ -79,6 +80,14 @@ import OSLog
             throw LocalMacError(error ?? "Waiting for the first desktop frame.")
         }
         return lastImage
+    }
+
+    func verifiedDisplayID() throws -> UInt32 {
+        try session.verifyCurrent()
+        guard stream != nil, let displayID else { throw LocalMacError("The desktop is not being captured.") }
+        try LocalMacCapturePolicy.validate(displayID: displayID,
+            isBuiltin: CGDisplayIsBuiltin(displayID) != 0, protectedIDs: protectedIDs)
+        return displayID
     }
 
     nonisolated func stream(_ stream: SCStream, didOutputSampleBuffer buffer: CMSampleBuffer, of type: SCStreamOutputType) {

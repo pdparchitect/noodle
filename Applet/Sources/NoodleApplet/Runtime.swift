@@ -89,7 +89,7 @@ import AppletCore
       guard AppletBuildIdentity.current.clientIDs.contains(identity) else {
         throw AppletError("The caller belongs to a different Applet environment.", code: "environment-mismatch")
       }
-      if let path = request.path, URL(fileURLWithPath: path).pathExtension != AppletBuildIdentity.current.fileExtension {
+      if let path = request.path, AppletBuildIdentity.document(URL(fileURLWithPath: path)) != .current {
         throw AppletError("Use a .\(AppletBuildIdentity.current.fileExtension) package in this environment.", code: "environment-mismatch")
       }
       let owner =

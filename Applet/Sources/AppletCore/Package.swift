@@ -61,7 +61,7 @@ public struct NoodletPackage: Sendable {
   }
   public init(url: URL, build: AppletBuildIdentity = .current) throws {
     self.url = url.resolvingSymlinksInPath().standardizedFileURL
-    guard self.url.pathExtension == build.fileExtension,
+    guard AppletBuildIdentity.document(self.url) == build,
       try self.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
     else {
       throw AppletError("Open a .\(build.fileExtension) document package.")
@@ -86,7 +86,7 @@ public struct NoodletPackage: Sendable {
     guard let sourceBuild = AppletBuildIdentity.document(source),
           let destinationBuild = AppletBuildIdentity.document(destination),
           !FileManager.default.fileExists(atPath: destination.path) else {
-      throw AppletError("Choose a new .noodlet or .noodlet-local destination for the copy.")
+      throw AppletError("Choose a new .noodlet or .noodlet-dev destination for the copy.")
     }
     let package = try Self(url: source, build: sourceBuild)
     return try install(package.files(), to: destination, build: destinationBuild, replaceExisting: false)

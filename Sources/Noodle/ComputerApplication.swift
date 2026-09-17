@@ -5,16 +5,36 @@ import ComputerBridge
 /// the running computer library. Keep document opens on that same provider.
 @MainActor enum ComputerApplication {
     static func locate() -> URL? {
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: ComputerConnection.providerID)
-            .filter { !$0.isTerminated }.compactMap(\.bundleURL)
-        let sibling = Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent("Noodle Computer.app")
-        let development = Bundle.main.bundleIdentifier == "com.pdparchitect.noodle.local"
-            && Bundle(url: sibling)?.bundleIdentifier == ComputerConnection.providerID ? sibling : nil
+        let identity = ComputerBuildIdentity.current
+        let applications = NSRunningApplication.runningApplications(withBundleIdentifier: identity.providerID)
+            .filter { !$0.isTerminated && $0.bundleIdentifier == identity.providerID }
+        let running = applications.compactMap(\.bundleURL)
+        let registered = NSWorkspace.shared.urlForApplication(withBundleIdentifier: identity.providerID)
+        // App Sandbox may deny reading another app's Info.plist in a checkout.
+        // Use the identities returned by AppKit for its exact-ID queries; the
+        // connection separately authenticates the provider's signing identity.
+        var known: [String: String] = [:]
+        for url in running { known[url.standardizedFileURL.path] = identity.providerID }
+        if let registered { known[registered.standardizedFileURL.path] = identity.providerID }
+        let sibling = Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent(identity.appName + ".app")
+        if Bundle(url: sibling)?.bundleIdentifier == identity.providerID {
+            known[sibling.standardizedFileURL.path] = identity.providerID
+        }
+        let development = identity == .development
+            && known[sibling.standardizedFileURL.path] == identity.providerID ? sibling : nil
         return select(running: running, development: development,
-            registered: NSWorkspace.shared.urlForApplication(withBundleIdentifier: ComputerConnection.providerID))
+            registered: registered, providerID: identity.providerID,
+            identify: { known[$0.standardizedFileURL.path] })
     }
 
-    static func select(running: [URL], development: URL?, registered: URL?) -> URL? {
+    static func select(running: [URL], development: URL?, registered: URL?,
+                       providerID: String = ComputerConnection.providerID,
+                       identify: (URL) -> String? = { Bundle(url: $0)?.bundleIdentifier }) -> URL? {
+        // Check every candidate's reported identity, including registered results.
+        // A missing local build must never silently open the production app.
+        let running = running.filter { identify($0) == providerID }
+        let development = development.flatMap { identify($0) == providerID ? $0 : nil }
+        let registered = registered.flatMap { identify($0) == providerID ? $0 : nil }
         if let development, running.contains(where: { $0.standardizedFileURL == development.standardizedFileURL }) {
             return development
         }

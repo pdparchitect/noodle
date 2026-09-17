@@ -76,7 +76,7 @@ struct FileExportPlan: Sendable {
             try Task.checkCancellation()
             var attributes = URLResourceValues()
             attributes.quarantineProperties = [kLSQuarantineTypeKey as String: kLSQuarantineTypeOtherDownload as String,
-                                                kLSQuarantineAgentNameKey as String: "Noodle Computer"]
+                                                kLSQuarantineAgentNameKey as String: ComputerAppIdentity.name]
             try url.setResourceValues(attributes)
             state.completedItems += 1
             progress(state)

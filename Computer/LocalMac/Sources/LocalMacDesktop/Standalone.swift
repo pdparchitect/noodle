@@ -7,10 +7,13 @@ import Darwin
 /// Keep a signed runtime copy in the managed account, outside any enclosing app.
 /// This code runs only after the standard-user/session checks in main.swift.
 func standaloneDesktop(session: LocalMacSession, reexecuted: Bool) throws -> URL {
+    guard let identity = LocalMacIdentity.desktop(Bundle.main.bundleIdentifier), identity.permitsAccountService else {
+        throw LocalMacError("The desktop helper has an unsupported build identity.")
+    }
     let manager = FileManager.default
     let home = URL(fileURLWithPath: session.account.home, isDirectory: true)
     let directory = home.appendingPathComponent("Applications", isDirectory: true)
-    let destination = directory.appendingPathComponent("Noodle Local Mac Desktop.app", isDirectory: true)
+    let destination = directory.appendingPathComponent(identity.desktopAppName + ".app", isDirectory: true)
     let source = Bundle.main.bundleURL.standardizedFileURL
     let executablePath = "Contents/MacOS/LocalMacDesktop"
 
@@ -39,7 +42,7 @@ func standaloneDesktop(session: LocalMacSession, reexecuted: Bool) throws -> URL
         _ = try checkedCode(source)
         return destination.appendingPathComponent(executablePath)
     }
-    guard source != destination, Bundle.main.bundleIdentifier == "com.pdparchitect.noodle.computer.desktop" else {
+    guard source != destination else {
         throw LocalMacError("The desktop helper must start from its installed signed launcher.")
     }
     let sourceCode = try checkedCode(source)

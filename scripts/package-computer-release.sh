@@ -21,7 +21,7 @@ staging="$(mktemp -d "$project_root/.release/computer.XXXXXX")"
 trap 'rm -rf "$staging"' EXIT
 output="$project_root/dist/computer-$version"
 [[ ! -e "$output" ]] || { print -u2 "Release output already exists: $output"; exit 1; }
-export NOODLE_COMPUTER_CONFIGURATION=release NOODLE_COMPUTER_TEST_BUILD=0
+export NOODLE_COMPUTER_CONFIGURATION=release NOODLE_COMPUTER_TEST_BUILD=0 NOODLE_COMPUTER_DATA_CONTAINER=production
 export NOODLE_REQUIRE_DEVELOPER_ID=1 NOODLE_CODESIGN_TIMESTAMP=1
 app="$(zsh "$project_root/scripts/build-computer.sh")"
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" == com.pdparchitect.noodle.computer ]]

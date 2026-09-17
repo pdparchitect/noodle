@@ -3,7 +3,7 @@ import ComputerBridge
 import ImageIO
 
 public enum ComputerReferenceDocument {
-    public static let typeIdentifier = "com.pdparchitect.noodle.computer-reference"
+    public static var typeIdentifier: String { ComputerBuildIdentity.current.contentType }
     public static let maximumBytes = 900_000
 
     public static func decode(_ data: Data) throws -> ComputerReference {
@@ -18,8 +18,11 @@ public enum ComputerReferenceDocument {
         return card
     }
 
-    public static func read(_ url: URL) throws -> ComputerReference {
+    public static func read(_ url: URL, build: ComputerBuildIdentity = .current) throws -> ComputerReference {
         guard url.isFileURL else { throw ComputerBridgeError("Open a computer reference file.") }
+        guard url.pathExtension.lowercased() == build.fileExtension else {
+            throw ComputerBridgeError("Open a .\(build.fileExtension) reference in \(build.appName).")
+        }
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }
         let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])

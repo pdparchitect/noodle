@@ -17,9 +17,9 @@ scripts/build-and-launch.sh
 Tests/smoke-test.sh
 ```
 
-The build creates `.build/Noodle Local.app` with separate development data. The
+The build creates `.build/Noodle Dev.app` with separate development data. The
 smoke suite runs tests and verifies the signed app and helpers. To install the
-local app in Applications and register its Shortcuts action:
+Dev app in Applications and register its Shortcuts action:
 
 ```sh
 scripts/install-app.sh
@@ -28,16 +28,20 @@ scripts/install-app.sh
 The build uses an installed Apple Development identity. Override it with
 `NOODLE_SIGNING_IDENTITY`; `-` selects ad-hoc signing.
 
-## Test with production data
+## Development companion apps
 
-Quit the installed Noodle app first, then run:
+Noodle Dev connects only to Noodle Computer Dev; production Noodle connects
+only to production Computer. Build and launch the matching Computer app with:
 
 ```sh
-scripts/build-and-launch.sh --production-data
+scripts/build-and-launch-computer.sh
 ```
 
-This creates `.build/Noodle.app` using the released app's data. Never run both
-copies together: they would manage the same bots and conversations.
+Both launch scripts force separate development containers and reject arguments,
+including the former `--production-data` option. Runbar's Noodle and Computer
+entries use only these development launchers. Production identity selection remains in
+release packaging, which does not launch the app. See
+[Computer development](../Computer/DEVELOPMENT.md) for Local Mac setup.
 
 ## Documentation changes
 
@@ -230,7 +234,7 @@ For a debug build with harness detection disabled at startup:
 
 ```sh
 NOODLE_BUILD_CONFIGURATION=debug scripts/build-app.sh
-NOODLE_SIMULATE_NO_HARNESSES=1 '.build/Noodle Local.app/Contents/MacOS/Noodle'
+NOODLE_SIMULATE_NO_HARNESSES=1 '.build/Noodle Dev.app/Contents/MacOS/Noodle'
 ```
 
 **Check Installation** then discovers external CLI installs for that session,
@@ -239,11 +243,11 @@ excluding app-bundled copies. Relaunch without the flag to restore normal detect
 [Releases](releases.md) · [Documentation](README.md)
 
 
-Applet uses the same strict environment pairing: Noodle Local connects only to
-Noodle Applet Local. `scripts/build-and-launch-applet.sh` (Runbar: **Noodle Applet →
-Build & Launch Local**) forces the local identity. Local documents and links use
-`.noodlet-local` and `noodlet-local://`; production retains `.noodlet` and
+Applet uses the same strict environment pairing: Noodle Dev connects only to
+Noodle Applet Dev. `scripts/build-and-launch-applet.sh` (Runbar: **Noodle Applet →
+Build & Launch Dev**) forces the development identity. Development documents and links use
+`.noodlet-dev` and `noodlet-dev://`; production retains `.noodlet` and
 `noodlet://`. Each app and its Quick Look extension registers only its own type.
 Use the Applet CLI's explicit `convert --path SOURCE --output NEW_DOCUMENT` to
 copy a package between environments; saved runtime data and live links are not
-transferred. See [Applet development and conversion](../Applet/README.md#local-and-production-builds).
+transferred. See [Applet development and conversion](../Applet/README.md#dev-and-production-builds).

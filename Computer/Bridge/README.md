@@ -4,6 +4,11 @@ Noodle discovers and starts the separately installed Computer app as needed.
 The provider keeps running when its window closes; quitting Computer stops its
 guests. Both apps must be signed by the same team.
 
+Production Noodle discovers and authenticates only production Computer. Noodle
+Local uses only Noodle Computer Dev, with a separate App Group and socket; a
+missing local provider never falls back to the production app. Document opens
+follow the same pairing. Signed test fixtures use a third, isolated group.
+
 ## Requests and access
 
 ```text
@@ -114,7 +119,8 @@ swift test --disable-sandbox --filter ComputerBrokerTransferTests
 swift test --disable-sandbox --filter ComputerAgentFilesTests
 ```
 
-For guest integration, launch the signed Computer executable with
+For guest integration, use the matching Noodle Computer Dev and Noodle Dev
+builds. Launch the signed Computer executable with
 `--noodle-background --provider-integration-test`. After `PROVIDER TEST READY`,
 launch the signed Noodle executable with `--computer-integration-test`.
 These use temporary libraries and test assignment, binary and empty-file CLI

@@ -7,7 +7,7 @@ enum ComputerStartupRecovery: Error, LocalizedError, Equatable {
 
     var title: String { "Allow Local Network access" }
     private var instructions: String {
-        "macOS is blocking the connection to this computer’s desktop. In System Settings → Privacy & Security → Local Network, enable Noodle Computer, then choose Try Again."
+        "macOS is blocking the connection to this computer’s desktop. In System Settings → Privacy & Security → Local Network, enable \(ComputerAppIdentity.name), then choose Try Again."
     }
     var errorDescription: String? { instructions }
     var explanation: String {

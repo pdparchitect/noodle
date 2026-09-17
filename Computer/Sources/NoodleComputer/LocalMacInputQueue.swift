@@ -5,7 +5,8 @@ struct LocalMacInputQueue {
     private var events: [LocalMacInput] = []
     mutating func append(_ event: LocalMacInput) -> Bool {
         if event.kind == .reset { events = [event]; return true }
-        if event.kind == .move, events.last?.kind == .move {
+        if event.kind == .move, events.last?.kind == .move,
+           events.last?.previewID == event.previewID, events.last?.geometryID == event.geometryID {
             events[events.count - 1] = event; return true
         }
         guard events.count < 512 else {

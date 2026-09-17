@@ -25,7 +25,10 @@ func prepareOnboarding(_ account: LocalMacAccount) throws {
             throw LocalMacError("Cannot disable the managed account's idle screen saver.")
         }
     }
-    try LocalMacShellWelcome.prepare(home: account.home)
+    guard let identity = LocalMacIdentity.desktop(Bundle.main.bundleIdentifier) else {
+        throw LocalMacError("Cannot identify this account's desktop helper for shell setup.")
+    }
+    try LocalMacShellWelcome.prepare(home: account.home, identity: identity)
     let marker = account.home + "/.skipbuddy"
     let fd = Darwin.open(marker, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
     if fd >= 0 { Darwin.close(fd) }

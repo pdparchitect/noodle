@@ -9,9 +9,9 @@ build_number="${NOODLE_BUILD_NUMBER:-$version}"
 build_root="$project_root/.build"
 case "$data_container" in
     development)
-        app_name="Noodle Local"
+        app_name="Noodle Dev"
         bundle_identifier="com.pdparchitect.noodle.local"
-        url_scheme="noodle-local"
+        url_scheme="noodle-dev"
         google_callback_scheme="com.googleusercontent.apps.183234845746-9homesnd85b490uj2ak37rpk0svtveap"
         ;;
     production)
@@ -99,6 +99,7 @@ cp "$project_root/Support/ShareExtension-Info.plist" "$share_extension/Contents/
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.share" "$share_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Send to $app_name" "$share_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName Send to $app_name" "$share_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :NoodleSharingScheme string $url_scheme" "$share_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$share_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$share_extension/Contents/Info.plist"
 cp "$bin_path/Noodle" "$contents/MacOS/Noodle"
@@ -117,7 +118,7 @@ swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-pa
 applet_bin="$(swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-path "$project_root/.build/applet" -c release --show-bin-path)"
 cp "$applet_bin/noodlet" "$contents/Helpers/noodlet"
 applet_help_option="--write-applet-help"
-if [[ "$data_container" == development ]]; then applet_help_option="--write-applet-local-help"; fi
+if [[ "$data_container" == development ]]; then applet_help_option="--write-applet-dev-help"; fi
 "$bin_path/NoodleDocumentation" "$applet_help_option" "$contents/Resources/NoodletCLIHelp.txt" >&2
 cp "$apple_bin/NoodleAppleAgent" "$contents/Helpers/NoodleAppleAgent"
 for resource in mlx-swift_Cmlx swift-transformers_Hub swift-crypto_Crypto; do
@@ -274,6 +275,7 @@ if [[ ! "$team_id" =~ '^[A-Z0-9]{10}$' ]]; then
 fi
 shared_group="$team_id.$bundle_identifier.sharing"
 computer_group="$team_id.com.pdparchitect.noodle.computers"
+if [[ "$data_container" == development ]]; then computer_group+=.local; fi
 applet_group="$team_id.com.pdparchitect.noodle.applets"
 if [[ "$data_container" == development ]]; then applet_group+=.local; fi
 /usr/libexec/PlistBuddy -c "Add :NoodleAppletGroup string $applet_group" "$contents/Info.plist"

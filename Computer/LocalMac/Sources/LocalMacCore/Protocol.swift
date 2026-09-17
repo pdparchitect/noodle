@@ -88,10 +88,13 @@ public struct LocalMacSession: Codable, Equatable, Sendable {
     func connect(_ id: UUID, reply: @escaping (Data?, FileHandle?, FileHandle?, String?) -> Void)
     func stop(_ id: UUID, reply: @escaping (String?) -> Void)
     func remove(_ id: UUID, reply: @escaping (String?) -> Void)
+    /// Optional encoded LocalMacRemovalFailure plus a readable error fallback.
+    /// Nil/nil is success. Never automatically replay a deletion request.
+    func removeAccount(_ id: UUID, reply: @escaping (Data?, String?) -> Void)
 }
 
 public enum LocalMacOperation: String, Codable, Sendable {
-    case status, screenshot, stream, input, terminalOpen, terminalRead, terminalWrite, terminalResize, terminalClose
+    case status, screenshot, stream, windowPreview, input, terminalOpen, terminalRead, terminalWrite, terminalResize, terminalClose
     case fileHome, fileList, fileStat, fileRead, fileWrite, fileMkdir, fileRemove, fileRename, fileCopy
     case fileUploadOpen, fileUploadCommit, fileUploadCancel
 }
@@ -112,6 +115,8 @@ public struct LocalMacRequest: Codable, Sendable {
     public var enabled: Bool?
     public var input: LocalMacInput?
     public var protectedDisplayIDs: [UInt32]?
+    public var previewID: UUID?
+    public var window: LocalMacWindow?
     public init(_ operation: LocalMacOperation) { self.operation = operation }
     public func validate() throws {
         try LocalMacWire.checkVersion(protocolVersion)
@@ -128,6 +133,12 @@ public struct LocalMacRequest: Codable, Sendable {
         if operation == .stream, enabled == true {
             try LocalMacCapturePolicy.validateProtectedDisplays(protectedDisplayIDs ?? [])
         }
+        if operation == .windowPreview {
+            guard previewID != nil, enabled != nil else { throw LocalMacError("Missing window preview identity.") }
+            if enabled == true {
+                guard let window, window.id != 0, window.pid > 0 else { throw LocalMacError("No focused window.") }
+            }
+        }
     }
 }
 public struct LocalMacInput: Codable, Sendable {
@@ -141,10 +152,13 @@ public struct LocalMacInput: Codable, Sendable {
     public var text: String?
     public var scroll: Double = 0
     public var clickCount: Int = 1
+    public var previewID: UUID?
+    public var geometryID: UUID?
     public init(_ kind: Kind) { self.kind = kind }
     public func validate() throws {
         guard x.isFinite, y.isFinite, scroll.isFinite, abs(scroll) <= 10_000, (0...2).contains(button), key < 256,
               (text?.utf16.count ?? 0) <= 4096, (0...10).contains(clickCount) else { throw LocalMacError("Invalid input event.") }
+        guard (previewID == nil) == (geometryID == nil) else { throw LocalMacError("Invalid window input geometry.") }
     }
 }
 public struct LocalMacFile: Codable, Identifiable, Sendable {
@@ -169,11 +183,13 @@ public struct LocalMacReply: Codable, Sendable {
     public var transferID: UUID?
     public var status: LocalMacStatus?
     public var frame = false
+    public var windowFrame: LocalMacWindowFrame?
+    /// A preview-scoped end/error must never disconnect the desktop or terminals.
+    public var previewID: UUID?
     public init(id: UUID? = nil, error: String? = nil) { self.id = id; self.error = error }
 }
 public struct LocalMacStatus: Codable, Sendable {
-    // Keep the existing wire error recognizable by clients talking to a retained
-    // 0.7.0 helper; no new reply fields or protocol version are required.
+    // Keep input-permission errors distinguishable from capture failures.
     public static let inputPermissionError = "Allow Accessibility for the desktop helper to control this account."
     public var screenCapture: Bool
     public var accessibility: Bool
@@ -182,6 +198,7 @@ public struct LocalMacStatus: Codable, Sendable {
     public var displayID: UInt32?
     public var setupRunning: Bool
     public var detail: String?
+    public var focusedWindow: LocalMacWindow?
     public var canControl: Bool { accessibility && postEvents }
     public init(screenCapture: Bool, accessibility: Bool, postEvents: Bool, display: LocalMacDisplay,
                 setupRunning: Bool = false, detail: String? = nil) {
@@ -193,7 +210,7 @@ public struct LocalMacStatus: Codable, Sendable {
 
 /// Bounded binary framing. Video is disposable; never write a recording to disk.
 public enum LocalMacWire {
-    public static let version = 1
+    public static let version = 2
     public static let maximum = 12 * 1_048_576
     public static func checkVersion(_ version: Int?) throws {
         guard version == Self.version else {

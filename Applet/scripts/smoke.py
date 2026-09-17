@@ -12,10 +12,10 @@ import tempfile
 import time
 
 root = pathlib.Path(__file__).resolve().parents[2]
-app = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else root / '.build/Noodle Applet Local.app'
+app = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else root / '.build/Noodle Applet Dev.app'
 bundle_id = plistlib.loads((app / 'Contents/Info.plist').read_bytes())['CFBundleIdentifier']
 assert bundle_id in ['com.pdparchitect.noodle.applet', 'com.pdparchitect.noodle.applet.local']
-extension = '.noodlet-local' if bundle_id.endswith('.local') else '.noodlet'
+extension = '.noodlet-dev' if bundle_id.endswith('.local') else '.noodlet'
 cli = app / 'Contents/Helpers/noodlet'
 output = root / '.build/applet/smoke'
 output.mkdir(parents=True, exist_ok=True)

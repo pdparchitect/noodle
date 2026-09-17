@@ -162,7 +162,7 @@ struct LibraryEntry: Identifiable, Equatable {
     var found: [String: LibraryEntry] = [:]
     let thumbnails = root.appendingPathComponent("Thumbnails", isDirectory: true)
     for directory in [documents] + registrations.map(\.url) {
-      if directory.pathExtension == AppletBuildIdentity.current.fileExtension {
+      if AppletBuildIdentity.document(directory) == .current {
         if let package = try? NoodletPackage(url: directory) {
           let entry = LibraryEntry(package: package, thumbnails: thumbnails)
           found[entry.id] = entry
@@ -182,7 +182,7 @@ struct LibraryEntry: Identifiable, Equatable {
           walker.skipDescendants()
           continue
         }
-        if url.pathExtension == AppletBuildIdentity.current.fileExtension {
+        if AppletBuildIdentity.document(url) == .current {
           walker.skipDescendants()
           if let package = try? NoodletPackage(url: url) {
             let entry = LibraryEntry(package: package, thumbnails: thumbnails)

@@ -16,9 +16,10 @@ extension ComputerIntegrationTest {
             terminalPreview: "Saved preview from Noodle Computer\nRepeated opens must keep this view connected.", view: "terminal")
         let data = try JSONEncoder().encode(reference)
         var attachments: [(ConversationAttachment, URL)] = []
-        for name in ["Reference.noodlecomputer", "Text.txt", "Unknown.noodle-preview-fixture"] {
+        let referenceName = "Reference." + ComputerBuildIdentity.current.fileExtension
+        for name in [referenceName, "Text.txt", "Unknown.noodle-preview-fixture"] {
             let url = root.appendingPathComponent(name)
-            try (name.hasSuffix("noodlecomputer") ? data : Data("Preview lifecycle fixture".utf8)).write(to: url)
+            try (name == referenceName ? data : Data("Preview lifecycle fixture".utf8)).write(to: url)
             attachments.append((.init(conversationID: UUID(), originalFilename: name, storedFilename: name,
                 mediaType: "application/octet-stream", byteCount: Int64(data.count)), url))
         }

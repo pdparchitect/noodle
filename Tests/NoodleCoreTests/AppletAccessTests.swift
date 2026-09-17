@@ -6,9 +6,9 @@ import XCTest
 final class AppletAccessTests: XCTestCase {
     func testLocalInstructionsAndAttachmentsKeepTheirEnvironment() throws {
         let skill = MessengerDocumentation.appletSkill(for: .development)
-        XCTAssertTrue(skill.contains("Name.noodlet-local"))
-        XCTAssertTrue(skill.contains("noodlet-local://UUID"))
-        XCTAssertTrue(skill.contains("Noodle Applet Local"))
+        XCTAssertTrue(skill.contains("Name.noodlet-dev"))
+        XCTAssertTrue(skill.contains("noodlet-dev://UUID"))
+        XCTAssertTrue(skill.contains("Noodle Applet Dev"))
         XCTAssertTrue(skill.contains("`noodlet.json`"))
         XCTAssertFalse(skill.contains("Name.noodlet`"))
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

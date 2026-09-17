@@ -15,12 +15,17 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Use Dev names for development apps, sharing links and Runbar entries, and export development Computer attachments as `.noodlecomputer-dev`.
+
 - Consolidate MCP connection, catalogue and Google Workspace documentation into one guide.
 
 ### Fixed
 
-- Pair Noodle Local only with Applet Local, preserve applet link environments in conversations, and generate local document and CLI guidance for local bots.
 - Restore cached link preview titles and images immediately when conversation rows reappear, without replaying the loading animation.
+- Pair Noodle Dev only with Applet Dev, preserve applet link environments in conversations, and generate local document and CLI guidance for local bots.
+
+- Pair Noodle Dev exclusively with Noodle Computer Dev for discovery, document opens and authenticated connections, keeping development computers separate from the installed apps.
+- Restrict development launchers and the local installer to isolated app identities; remove the production-data launch option.
 - Reduce idle CPU usage by scanning bot mailboxes when their directories change, with periodic recovery checks instead of repeated idle directory walks.
 - Show MCP HTTP failures and actionable access errors instead of directing failed connections back to the same Settings screen.
 

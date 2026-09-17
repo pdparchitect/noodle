@@ -77,9 +77,9 @@ import WebKit
         }
         guard session.phase == .running, let runtime = session.container else {
             if request.operation == .display {
-                throw ComputerBridgeError("Computer is stopped. Start it in Noodle Computer.")
+                throw ComputerBridgeError("Computer is stopped. Start it in \(ComputerAppIdentity.name).")
             }
-            throw ComputerBridgeError("Computer is stopped. Start it in Noodle Computer or with computer start --computer \(session.id.uuidString).")
+            throw ComputerBridgeError("Computer is stopped. Start it in \(ComputerAppIdentity.name) or with computer start --computer \(session.id.uuidString).")
         }
         if request.operation.isFileTransfer {
             guard let id = request.transferID, let path = request.path else {
@@ -188,7 +188,7 @@ import WebKit
             guard session.phase == .running else { throw ComputerBridgeError(session.phase.startFailureDescription) }
             return .init()
         }
-        guard session.phase == .running, let runtime = session.localMac else { throw ComputerBridgeError("Start this Local Mac in Noodle Computer.") }
+        guard session.phase == .running, let runtime = session.localMac else { throw ComputerBridgeError("Start this Local Mac in \(ComputerAppIdentity.name).") }
         func terminal(_ id: UUID?) throws -> UUID {
             guard let id, let value = localTerminals[id], value.owner == owner, value.computer == session.id, value.runtime === runtime else {
                 throw ComputerBridgeError("Terminal session is unavailable or belongs to another agent.")
@@ -212,7 +212,7 @@ import WebKit
             localTerminals[id] = (session.id, owner, runtime)
             return .init(terminalID: id, offset: 0, exited: false)
         }
-        if request.operation == .display { throw ComputerBridgeError("Open this computer’s reference file in Noodle Computer to use its native desktop.") }
+        if request.operation == .display { throw ComputerBridgeError("Open this computer’s reference file in \(ComputerAppIdentity.name) to use its native desktop.") }
         if request.operation == .preview {
             if let id = request.terminalID { _ = try terminal(id) }
             let view = request.view ?? (request.terminalID == nil ? "web" : "terminal")

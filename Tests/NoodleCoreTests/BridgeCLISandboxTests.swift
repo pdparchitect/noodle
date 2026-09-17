@@ -213,7 +213,7 @@ final class BridgeCLISandboxTests: XCTestCase {
         let project = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let environment = ProcessInfo.processInfo.environment
         let configured = environment["NOODLE_TEST_CLI_APPLICATION"]
-        let application = configured.map { URL(fileURLWithPath: $0) } ?? project.appendingPathComponent(".build/Noodle Local.app")
+        let application = configured.map { URL(fileURLWithPath: $0) } ?? project.appendingPathComponent(".build/Noodle Dev.app")
         let executable = application.appendingPathComponent("Contents/Helpers/" + helper)
         guard FileManager.default.isExecutableFile(atPath: executable.path) else {
             let reason = "Missing sandbox CLI fixture: \(executable.path). Run zsh Tests/build-sandbox-cli-fixture.sh and set NOODLE_TEST_CLI_APPLICATION to its output."

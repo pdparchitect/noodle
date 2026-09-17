@@ -43,6 +43,23 @@ final class ComputerReferenceDocumentTests: XCTestCase {
         XCTAssertThrowsError(try ComputerReferenceDocument.read(directory))
         XCTAssertThrowsError(try ComputerReferenceDocument.read(URL(string: "https://example.invalid/reference")!))
     }
+    func testDocumentTypesCannotOpenAcrossBuilds() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for owner in ComputerBuildIdentity.allCases {
+            let url = directory.appendingPathComponent("fixture." + owner.fileExtension)
+            let original = card()
+            try JSONEncoder().encode(original).write(to: url)
+            for reader in ComputerBuildIdentity.allCases {
+                if owner == reader {
+                    XCTAssertEqual(try ComputerReferenceDocument.read(url, build: reader), original)
+                } else {
+                    XCTAssertThrowsError(try ComputerReferenceDocument.read(url, build: reader))
+                }
+            }
+        }
+    }
     @MainActor func testSavedPreviewRendersWithoutLaunchingOrConnectingToComputer() throws {
         _ = NSApplication.shared
         let view = ComputerDocumentView(card: card())

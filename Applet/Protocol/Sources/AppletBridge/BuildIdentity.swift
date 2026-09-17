@@ -11,8 +11,8 @@ public enum AppletBuildIdentity: String, CaseIterable, Sendable {
     public var previewID: String { providerID + ".preview" }
     public var clientIDs: [String] { [noodleID, cliID] }
     public var groupSuffix: String { "com.pdparchitect.noodle.applets" + suffix }
-    public var appName: String { "Noodle Applet" + (self == .development ? " Local" : "") }
-    public var fileExtension: String { self == .development ? "noodlet-local" : "noodlet" }
+    public var appName: String { "Noodle Applet" + (self == .development ? " Dev" : "") }
+    public var fileExtension: String { self == .development ? "noodlet-dev" : "noodlet" }
     public var urlScheme: String { fileExtension }
     public var contentType: String { "com.pdparchitect.noodle." + fileExtension }
     private var suffix: String { self == .development ? ".local" : "" }
@@ -22,6 +22,8 @@ public enum AppletBuildIdentity: String, CaseIterable, Sendable {
     }
     public static func document(_ url: URL) -> Self? {
         guard url.isFileURL else { return nil }
+        // Existing development packages remain readable; all new documents use Dev.
+        if url.pathExtension == "noodlet-local" { return .development }
         return allCases.first { $0.fileExtension == url.pathExtension }
     }
     public static let processIdentity: Self? = {

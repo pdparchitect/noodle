@@ -4,6 +4,25 @@ Local Mac runs a retained standard account's off-console desktop on the host Mac
 The account shares the host kernel, resources and network. Filesystem access from
 its shell follows macOS permissions; it is not virtual-machine isolation.
 
+## Development alongside the installed app
+
+Use `scripts/build-and-launch-computer.sh` for Noodle Computer Dev, paired with
+Noodle Dev. It has a separate library and a separately approved Local Mac
+service. The launcher installs it in `/Applications/Noodle Computer Dev.app`;
+managed standard accounts cannot execute a helper inside the owner's private
+Documents folder. A symlink at the former build location preserves existing
+development service references. The service checks helper access as the managed
+user before attempting background login. Its setup, lifecycle and desktop helpers use
+`com.pdparchitect.noodle.computer.local.*` identities, its App Group ends in
+`.computers.local`, and its root-owned records live under
+`/Library/Application Support/Noodle Computer Local/Local Mac`. Its System
+keychain service is `com.pdparchitect.noodle.computer.local.localmac`.
+
+Production identities and retained accounts are unchanged. Create new computers
+in the Dev library; do not copy production account records. The managed local
+account uses `Noodle Local Mac Desktop Dev.app` with separate capture/control
+permission identity. Test fixtures cannot register an account service.
+
 ## Components and boundaries
 
 Local Mac is available beside New Container and New from Container Image in
@@ -13,7 +32,12 @@ or virtual hardware settings. The sidebar and normal start/stop controls use the
 name Local Mac; compatibility limitations are documented here.
 
 - `LocalMacSetup` registers only its bundled lifecycle service with SMAppService.
-  It accepts no maintenance commands, account IDs, credentials or executable paths.
+  Its macOS display name is Noodle Computer Setup for production and Noodle
+  Computer Dev Setup for development. Localized bundle names keep these labels
+  distinct without moving the registered helper or changing its service identity.
+  Its read-only `--registration-status` query reports that service's SMAppService
+  state without creating a window, registering or requesting approval. It accepts
+  no maintenance commands, account IDs, credentials or executable paths.
 - `LocalMacService` owns account creation/resume, background login, connection,
   stop and explicit deletion. XPC checks the exact client signing identity and
   binds each request to the caller UID. Ownership records are root-private;
@@ -66,6 +90,29 @@ Capture does not attempt display creation or mode changes. On the development Ma
 the account display still reports 3440 × 1440. Independent smaller geometry and
 dynamic resolution remain future work; they should be separate from capture.
 
+The desktop toolbar's **Focus Window** button opens the account's focused window
+in a resizable interactive panel. Focus is read inside the managed session using
+Accessibility and matched to the session's window list; ambiguous matches disable
+the button. Clicking the host toolbar does not change the account's focus. The
+helper rechecks the selected identity when opening so a stale selection cannot
+silently open a different window.
+
+The panel owns a second display-bound ScreenCaptureKit stream with child windows
+enabled. It captures at native scale, capped at 16 megapixels and 8192 pixels on
+either axis, then crops transparent margins before encoding. Child content that
+extends beyond the parent is included in that crop. The desktop's 1280 × 800
+stream and saved screenshots are unchanged. Window capture may display macOS
+sharing controls on the selected window while the panel is open.
+
+Each panel frame carries its crop geometry and preview identity. Input uses the
+geometry of the displayed frame, including aspect-fit padding; held input is
+released on focus loss, close, and capture failure. Closing the window, minimizing
+it, changing Computer views, or losing the desktop connection ends the preview.
+Separate top-level windows and system-owned dialogs may require returning to the
+desktop. Content outside the account display cannot be interacted with through
+this panel. The private desktop wire protocol is now version 2; stop and start
+retained connections after updating both app and helper.
+
 ## Account preparation and permission identity
 
 Before first login, the service invokes the signed desktop helper as the managed
@@ -81,7 +128,9 @@ This preserves existing shell customization and changes neither the main user's
 preferences nor system power/password policy. Manual locking remains available.
 
 The welcome uses the same bundled ASCII banner as the container images, in both
-Noodle's terminal and Terminal.app inside the managed desktop. It prints once per
+Noodle's terminal and Terminal.app inside the managed desktop. New account shell
+hooks select the runtime helper name from the build identity, including the Dev
+suffix; they never depend on a production helper being installed. It prints once per
 interactive shell with a terminal attached; non-interactive commands stay silent.
 Set `NOODLE_BANNER=0` before the hook to disable it. Custom linked or read-only
 shell configuration is left alone.
@@ -92,6 +141,16 @@ at `~/Applications/Noodle Local Mac Desktop.app`, then re-execs with disclaimed
 spawn responsibility. It retains the account, PID, audit session and inherited
 pipes. macOS still requires that helper's own capture/control grants; none are
 automatically granted or reset.
+
+The computer's permission settings reveal a verified standalone copy under the
+owner app's sandbox Application Support/Local Mac Permissions folder. It has the
+same bundle identifier, signing requirement and CDHash as the bundled desktop
+helper used to prepare the managed runtime. Selecting a nested helper in System
+Settings can resolve to the enclosing Computer app; the standalone copy avoids
+that ambiguity without opening another user's private home. Preparing/revealing
+this copy does not execute it, register a service, or request/change a grant.
+The desktop handshake remains connected while capture/control permission is
+missing, and starts capture only after the helper reports those grants.
 
 ## Files and agent access
 
@@ -114,7 +173,7 @@ enumeration errors are not treated as an empty folder.
 Desktop, Documents and Downloads remain subject to macOS Files & Folders privacy
 permissions, even for the account that owns them. The standalone helper includes
 usage descriptions for those folders. Access must be allowed for **Noodle Local
-Mac Desktop in the managed account**, not for the main user's terminal. Existing
+Mac Desktop Dev in the managed account**, not for the main user's terminal. Existing
 denials can require changing that account's Files & Folders settings; adding a
 description does not grant permission or reset a denial. Library has additional
 macOS protections and is not universally readable. Do not use chmod, global Full
@@ -127,6 +186,44 @@ an agent CLI operation. Linux-specific browser/Puppeteer instructions do not
 apply to this account.
 
 ## Compatibility and updates
+
+The creation form and startup check the registrar's actual status. An unregistered
+service shows Enable Local Mac; pending or revoked approval shows Open System
+Settings. These are setup states, not failed computers. ServiceManagement may
+report `notFound` before a service has ever registered; the query first checks the
+bundled plist and executable so this first-use case still offers setup, while an
+incomplete bundle reports a missing helper. Returning to Computer refreshes the
+state without starting an account or clearing an unresolved helper failure. An enabled but unresponsive
+helper still offers registration recovery. If the read-only status query fails
+or times out, the app reports that the status is unknown rather than claiming a
+permission denial. Desktop capture/control permissions are checked separately by
+the helper inside the managed account once it can start.
+
+Deletion is available for a running or failed Local Mac as well as a stopped
+one, except during a lifecycle operation. After explicit confirmation, the root
+service stops the owned background session and verifies logout before removing
+anything. A failed desktop pipe is not needed for this lifecycle operation. Stop
+failure or cleanup failure retains the library/account records for recovery.
+
+Deletion checks the exact managed home and walks its directories without changing
+files before cleanup begins. A privacy denial while opening or enumerating a
+folder offers Full Disk Access for the matching Computer app in the owner's
+System Settings. The root lifecycle service still needs macOS privacy approval;
+Login Items approval and the managed desktop's capture permissions are separate.
+This access is only requested after a failed explicit deletion, never granted or
+changed automatically. The UI opens Settings only on click and never retries
+deletion on return. On macOS 27 the denial is attributed to the containing
+Computer app, so development recovery names **Noodle Computer Dev**.
+
+The preflight catches inaccessible directories and locked items before removal;
+it cannot make recursive deletion atomic if contents or permissions change during
+cleanup. Errors report the failed relative path and whether removal had begun.
+Account/credential/ownership records remain until the whole home is removed.
+Traversal never follows symlinks or crosses filesystems and rechecks entry
+identity before unlinking. The XPC `removeAccount` selector adds a structured
+deletion failure alongside the readable fallback; the old `remove` selector
+remains available. The client verifies the installed service before sending
+deletion once. Tests use temporary synthetic homes, never real managed accounts.
 
 `LocalMacWire.version` versions the private app-to-desktop protocol. Both sides
 check the version before decoding operations. The client checks status before
@@ -147,14 +244,19 @@ installed executable against its exact signing identity.
 When it finds a replacement and has no active desktop children, it drains the XPC
 reply and exits; launchd loads the replacement through the same approved job.
 Lifecycle operations are refused once that restart begins. The client retries
-only this read-only handshake, with a bounded wait. Active desktops defer service
+only this read-only handshake, with a bounded wait. It sends `serviceInfo`
+directly, without a separate `check` gate: after an atomic app replacement,
+macOS can reject replies from the old executable before its restart response is
+delivered. Transport failures are retried within the same bounded handshake;
+protocol, fingerprint and explicit service errors are not accepted as readiness.
+XPC signing requirements remain in force on every connection. Active desktops defer service
 replacement until they close; account operations are never blindly replayed.
 
 **First upgrade from the prototype:** a daemon without `serviceInfo` cannot be
 taught to restart by an updated app. A normal Mac restart can replace that process,
 but it cannot repair launch constraints saved for a different signing category.
-The client probes service availability for five seconds before account operations
-and offers Local Mac Setup when the helper does not respond. Setup opens Login
+The client runs a bounded version handshake before account operations and offers
+Login Items recovery if an enabled helper cannot be reached or verified. Setup opens Login
 Items and explains how to turn LocalMacSetup off and back on, refreshing the
 installed helper's launch constraints without deleting its registration. macOS
 may require authentication; account records,
@@ -275,3 +377,12 @@ the workspace became readable again after they ended. The concurrent-read fix
 passes 29 helper tests, including a blocked-folder/available-workspace regression,
 but has not replaced the installed release. Restoring the managed account's
 Files & Folders approvals remains a separate live recovery step.
+
+Focus Window resolves the selected accessibility element through AXWindow and
+AXParent to the owning root window, with bounded traversal and process checks.
+Ancestry is optional: the focused window is independently matched first, and
+remains available if an ancestor is unreadable, times out, or cannot be matched.
+Only transient dialogs/panels may fall back to the application's declared main
+window; ordinary documents remain separate. Capture includes that root and its
+related popup windows, follows popup changes, and retains the root when a dialog
+closes. Invalid/cyclic ownership cannot select another process's windows.

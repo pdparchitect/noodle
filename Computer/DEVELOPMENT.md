@@ -5,18 +5,43 @@ Go 1.26 or later, and Git LFS. Go builds the file helper that runs inside guests
 
 ```sh
 git lfs pull
-zsh scripts/build-computer.sh
-open '.build/Noodle Computer.app'
+zsh scripts/build-and-launch-computer.sh
 ```
 
 The kernel is tracked with Git LFS; its provenance is in
 [the kernel notice](Support/KERNEL-NOTICE.txt). Builds use release optimization.
 Set `NOODLE_COMPUTER_CONFIGURATION=debug` for debugging.
 
-Noodle Local opens attachments with the running Computer app. When Computer is
-closed, it prefers `Noodle Computer.app` beside its own bundle, before the release
-registered with macOS. Launch the intended Computer build before testing if both
-development and release copies are installed; only one process can own a library.
+The build is packaged at `.build/Noodle Computer Dev.app`; the launcher installs
+it as `/Applications/Noodle Computer Dev.app`. Local Mac accounts must be able
+to read the desktop helper, so a private source folder is not a runnable install
+location for that backend. The launcher leaves the build path as a symlink to the
+installed app so existing development service registrations can resolve it.
+Existing Local app paths are preserved as compatibility aliases during migration.
+Once service registration uses the Dev installation, obsolete aliases can be retired;
+subsequent installs will not recreate them. Internal IDs and existing account data
+locations stay unchanged. See the [registration audit](../docs/development-registration-audit.md).
+
+Installation validates the development identity and signatures, publishes atomically,
+and never replaces `/Applications/Noodle Computer.app`. It pairs exclusively
+with `.build/Noodle Dev.app`, using its own sandbox container, computer library,
+App Group connection, Local Mac service, account records and credentials. The
+installed production apps continue to use each other. Both pairs can run at once.
+Existing production computers are not copied or adopted by the Dev build.
+Local Mac requires its own initial helper approval and new managed accounts.
+Development references use `.noodlecomputer-dev`; production uses `.noodlecomputer`.
+The app and both Quick Look extensions register only their own document type.
+
+Build Noodle Dev with `scripts/build-and-launch.sh`. It finds Computer Dev
+beside its own bundle or by its registered development identity. It never falls back to
+the production app. Both launch scripts force development identities, verify the
+resulting bundle ID, and reject arguments; shell environment overrides cannot
+make them launch production. Runbar uses these scripts and has no production-data
+launcher.
+
+Release packaging explicitly sets `NOODLE_COMPUTER_DATA_CONTAINER=production`.
+This is a packaging option, not a development launch mode. The isolated test
+bundle has a third connection group and cannot register Local Mac services.
 
 ## Tests
 
@@ -52,7 +77,7 @@ on the development machine while the modern API rendered the extension correctly
 To exercise Noodle's real Quick Look panel after building both apps:
 
 ```sh
-'.build/Noodle Local.app/Contents/MacOS/Noodle' --computer-document-preview-test
+'.build/Noodle Dev.app/Contents/MacOS/Noodle' --computer-document-preview-test
 ```
 
 This opt-in fixture runs before Noodle opens its workspace. It generates temporary

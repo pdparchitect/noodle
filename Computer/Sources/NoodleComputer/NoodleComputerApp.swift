@@ -9,7 +9,7 @@ import Virtualization
 struct NoodleComputerApp: App {
   @NSApplicationDelegateAdaptor(ComputerAppDelegate.self) private var delegate
   var body: some Scene {
-    Window("Noodle Computer", id: "library") {
+    Window(ComputerAppIdentity.name, id: "library") {
       ComputerRootView()
         .frame(minWidth: 850, minHeight: 580)
     }
@@ -20,12 +20,12 @@ struct NoodleComputerApp: App {
     .commands {
       CommandGroup(after: .appSettings) { ComputerCheckForUpdatesButton() }
       CommandGroup(replacing: .appInfo) {
-        Button("About Noodle Computer") {
-          NSApplication.shared.orderFrontStandardAboutPanel(options: [.applicationName: "Noodle Computer"])
+        Button("About \(ComputerAppIdentity.name)") {
+          NSApplication.shared.orderFrontStandardAboutPanel(options: [.applicationName: ComputerAppIdentity.name])
         }
       }
       CommandGroup(replacing: .help) {
-        Button("Noodle Computer Help") {
+        Button("\(ComputerAppIdentity.name) Help") {
           NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle")!)
         }
       }
@@ -341,8 +341,6 @@ struct ComputerLibraryView: View {
           Label("Your own computers.", systemImage: "desktopcomputer")
         } description: {
           Text("Create a computer to get started.")
-        } actions: {
-          Button("Create a Container…") { showingNew = true }
         }
       }
     }
@@ -377,10 +375,18 @@ struct ComputerLibraryView: View {
       UserDefaults.standard.set(id?.uuidString, forKey: "SelectedComputer")
     }
     .alert(
-      "Noodle Computer",
+      store.errorRecovery?.title ?? ComputerAppIdentity.name,
       isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })
     ) {
-      Button("OK") { store.error = nil }
+      if let recovery = store.errorRecovery {
+        Button(recovery.actionTitle) {
+          store.error = nil
+          do { try recovery.open() } catch { store.error = error.localizedDescription }
+        }
+        Button("Cancel", role: .cancel) { store.error = nil }
+      } else {
+        Button("OK") { store.error = nil }
+      }
     } message: {
       Text(store.error ?? "")
     }
@@ -431,7 +437,7 @@ struct ComputerRow: View {
       }.disabled(session.phase.busy)
       Divider()
       Button("Delete Computer…", systemImage: "trash", role: .destructive) { deleting = true }
-        .disabled(session.phase != .stopped || session.virtual != nil || session.container != nil || session.localMac != nil)
+        .disabled(!session.canDelete)
     }
     .computerImageUpdateConfirmation(store: store, session: session, isPresented: $updating)
     .sheet(isPresented: $editing) { EditComputerView(store: store, session: session) }
@@ -454,7 +460,7 @@ struct ComputerRow: View {
   private var statusColor: Color {
     switch session.phase {
     case .running: .green
-    case .starting, .stopping, .updating: .orange
+    case .starting, .stopping, .updating, .setupRequired: .orange
     case .failed: .red
     case .stopped: .gray
     }
@@ -476,6 +482,16 @@ struct ComputerDetailView: View {
           Text(session.updateStatus ?? "Updating the computer image…")
           Button("Cancel") { store.cancelImageUpdate(session) }
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else if case .setupRequired(let registration) = session.phase {
+        ContentUnavailableView {
+          Label(registration.setupTitle, systemImage: "lock.shield")
+        } description: {
+          Text(LocalMacSetupRequired(registration: registration).localizedDescription)
+        } actions: {
+          Button(registration.setupActionTitle) {
+            do { try LocalMacSetup.resolve(registration) } catch { store.error = error.localizedDescription }
+          }
+        }
       } else if let local = session.localMac {
         ZStack {
           LocalMacDesktopView(runtime: local, active: session.displayMode == .desktop, openSettings: { editing = true })
@@ -520,7 +536,7 @@ struct ComputerDetailView: View {
         } actions: {
           Button("Open Settings") {
             if !recovery.openSettings() {
-              store.error = "Open System Settings → Privacy & Security → Local Network and enable Noodle Computer."
+              store.error = "Open System Settings → Privacy & Security → Local Network and enable \(ComputerAppIdentity.name)."
             }
           }.buttonStyle(.borderedProminent)
           Button("Try Again") { Task { await store.start(session) } }
@@ -552,6 +568,10 @@ struct ComputerDetailView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .task(id: session.id) { await session.refreshLocalMacSetup() }
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      Task { await session.refreshLocalMacSetup() }
+    }
     // Native sidebar glass paints inside a one-point edge. Match that visible
     // edge without changing the shared terminal/WebKit layout or hit area.
     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous).inset(by: 1))
@@ -600,6 +620,12 @@ struct ComputerDetailView: View {
           .pickerStyle(.segmented).labelsHidden().fixedSize()
           .disabled(session.phase != .running || session.openingTerminal)
           .accessibilityValue(session.displayMode.rawValue)
+        }
+      }
+      if let local = session.localMac, session.displayMode == .desktop {
+        ToolbarSpacer(.fixed, placement: .primaryAction)
+        ToolbarItem(id: "computer-focus-window", placement: .primaryAction) {
+          LocalMacFocusWindowButton(runtime: local, enabled: session.phase == .running)
         }
       }
     }
@@ -696,7 +722,7 @@ struct EditComputerView: View {
         Divider()
         HStack {
           DestructiveActionButton(title: "Delete Computer") { deleting = true }
-            .disabled(session.phase != .stopped || session.virtual != nil || session.container != nil || session.localMac != nil)
+            .disabled(!session.canDelete)
           Spacer()
           if session.computer.kind == .container {
             ComputerImageUpdateButton(session: session) { updating = true }

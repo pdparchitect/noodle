@@ -1,9 +1,9 @@
 # Noodle Applet
 
-## Local and production builds
+## Dev and production builds
 
-The default build and Runbar's **Noodle Applet → Build & Launch Local** use
-Noodle Applet Local. It connects only to Noodle Local. Production Noodle connects
+The default build and Runbar's **Noodle Applet → Build & Launch Dev** use
+Noodle Applet Dev. It connects only to Noodle Dev. Production Noodle connects
 only to production Applet; neither falls back to the other when its companion is
 missing. Their app containers, libraries, bookmarks, settings, saved runtime data,
 WebKit stores, compiler caches, socket groups and preview caches are separate.
@@ -11,9 +11,13 @@ WebKit stores, compiler caches, socket groups and preview caches are separate.
 | Channel | App ID | Document | Link |
 | --- | --- | --- | --- |
 | Production | `com.pdparchitect.noodle.applet` | `.noodlet` | `noodlet://UUID` |
-| Local | `com.pdparchitect.noodle.applet.local` | `.noodlet-local` | `noodlet-local://UUID` |
+| Dev | `com.pdparchitect.noodle.applet.local` | `.noodlet-dev` | `noodlet-dev://UUID` |
 
-The local app and Quick Look extension register only the local document type;
+Existing `.noodlet-local` packages and saved `noodlet-local://` links remain readable
+only in Dev. New documents and links use Dev names. Internal `.local` IDs stay
+stable to preserve data and permissions. See the [registration audit](../docs/development-registration-audit.md).
+
+The Dev app and Quick Look extension register only the development document type;
 they never claim the production type or URL scheme. Conversation links keep their
 original environment. A foreign link shows an environment mismatch rather than
 opening the other app or resolving its UUID in the wrong library.
@@ -22,24 +26,24 @@ Package contents use the same `noodlet.json` manifest and source formats. There 
 no automatic migration or sharing. To transfer a creation, explicitly make a copy:
 
 ```sh
-'.build/Noodle Applet Local.app/Contents/Helpers/noodlet' convert \
-  --path /path/Example.noodlet --output /path/Example.noodlet-local
+'.build/Noodle Applet Dev.app/Contents/Helpers/noodlet' convert \
+  --path /path/Example.noodlet --output /path/Example.noodlet-dev
 ```
 
 Reverse the extensions to export a production copy. Conversion never overwrites
 an existing destination, creates a live link, or opens either app. Open or validate
 the copy in its matching environment to register a new link. Existing production
 files and links retain their current meaning. The examples below use production
-names; use `.noodlet-local` and `noodlet-local://` when following them locally.
+names; use `.noodlet-dev` and `noodlet-dev://` when following them locally.
 
 Explicit production packaging uses `NOODLE_APPLET_DATA_CONTAINER=production`;
-public release scripts set it themselves. Production updates are disabled in local
+public release scripts set it themselves. Production updates are disabled in Dev
 builds. The guarded Runbar launcher always forces development and verifies the
 resulting app identity before opening it.
 
 
 A separate macOS companion for little tools, websites, experiments, and games.
-Noodlets are ordinary folders ending in `.noodlet` (production) or `.noodlet-local` (local), displayed as document packages
+Noodlets are ordinary folders ending in `.noodlet` (production) or `.noodlet-dev` (development), displayed as document packages
 in Finder. The app provides an interactive viewer and a visual library; agents
 write the source files using their usual tools.
 
@@ -50,11 +54,11 @@ identity. From the repository root:
 
 ```sh
 scripts/build-applet.sh
-open '.build/Noodle Applet Local.app'
+open '.build/Noodle Applet Dev.app'
 swift test --disable-sandbox --package-path Applet --scratch-path .build/applet
 ```
 
-The default signed application is `.build/Noodle Applet Local.app`. Its CLI is
+The default signed application is `.build/Noodle Applet Dev.app`. Its CLI is
 `Contents/Helpers/noodlet`. Set `NOODLE_SIGNING_IDENTITY` to choose an identity and
 `NOODLE_APPLET_CONFIGURATION=debug` for a debug build. The default is optimized, matching Computer. This is a local
 development build; the script does not publish or notarize it.
@@ -64,7 +68,7 @@ through its shipped CLI. It checks interaction, persistence, captures, compiler
 diagnostics, native sandbox containment, and termination of blocked JavaScript.
 Temporary creations are removed; captures are saved under `.build/applet/smoke`.
 
-Run `'.build/Noodle Applet Local.app/Contents/MacOS/NoodleApplet' --rendering-test` for
+Run `'.build/Noodle Applet Dev.app/Contents/MacOS/NoodleApplet' --rendering-test` for
 an isolated signed CLI fixture covering historical session selection, hidden
 visibility, synthetic frame stepping, Canvas/WebGL capture pixels, and test-data
 isolation. It uses its own runtime and socket without touching existing sessions.
@@ -85,7 +89,7 @@ launch Applet until a bot requests it or the user opens the companion.
 The application uses the same native window, sidebar, toolbar, Settings tabs,
 and Sparkle update setup as Noodle Computer. **Applet → Check for Updates…**
 and **Settings → Update** control updates; **Help → Noodle Applet Help** opens
-the repository. Local builds disable update checks, matching Computer.
+the repository. Development builds disable update checks, matching Computer.
 
 [Release preparation](RELEASING.md) uses the shared CI pipeline, signing secrets,
 notarization, and signed feeds, with independent `applet-vX.Y.Z` releases and an
@@ -278,7 +282,7 @@ registered creation in Applet without showing the library. Opening the applicati
 directly, or choosing File → Open Library, shows the collection.
 
 The signed integration fixture can be run with
-`'.build/Noodle Local.app/Contents/MacOS/Noodle' --applet-link-test` after building
+`'.build/Noodle Dev.app/Contents/MacOS/Noodle' --applet-link-test` after building
 both apps. It creates temporary agents and a package, exercises the shipped CLI,
 sharing, captures, sandbox bookmark handoff, opening the live creation, window
 reuse, interaction, and saved data, then cleans up.

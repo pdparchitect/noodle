@@ -4,7 +4,7 @@ project_root="${0:A:h:h}"
 app="${1:?Pass the Computer app bundle}"
 info="$app/Contents/Info.plist"
 bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info")"
-[[ "$bundle" == com.pdparchitect.noodle.computer || "$bundle" == com.pdparchitect.noodle.computer.tests ]]
+[[ "$bundle" == com.pdparchitect.noodle.computer || "$bundle" == com.pdparchitect.noodle.computer.local || "$bundle" == com.pdparchitect.noodle.computer.tests ]]
 codesign --verify --deep --strict "$app"
 zsh "$project_root/scripts/verify-updater.sh" "$app"
 entitlements="$(mktemp /tmp/computer-entitlements.XXXXXX)"

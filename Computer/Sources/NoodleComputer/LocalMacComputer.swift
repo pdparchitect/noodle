@@ -2,15 +2,49 @@ import AppKit
 import ComputerCore
 import Foundation
 import LocalMacCore
+import ServiceManagement
 
 struct LocalMacSetupRequired: LocalizedError {
-    var errorDescription: String? { "The Local Mac account helper could not start. Open Local Mac Setup to enable or repair it, then try Start again. Your account and files are retained." }
+    var registration: LocalMacRegistrationStatus = .unknown
+    var retryAction = "Start"
+    private var setupName: String { LocalMacIdentity(providerID: Bundle.main.bundleIdentifier)?.setupAppName ?? "Noodle Computer Setup" }
+    var errorDescription: String? {
+        switch registration {
+        case .notRegistered: "Enable Local Mac to create and start a separate account on this Mac."
+        case .requiresApproval: "Allow \(setupName) in System Settings → General → Login Items & Extensions."
+        case .helperMissing: "The Local Mac helper could not be found. Rebuild or reinstall this Computer app."
+        case .enabled: "Local Mac is enabled, but its helper could not be reached or verified. In System Settings → General → Login Items & Extensions, turn \(setupName) off and back on, then retry \(retryAction)."
+        case .unknown: "The Local Mac helper did not respond and its approval status could not be checked. Open \(setupName) to check its status."
+        }
+    }
 }
 
 @MainActor enum LocalMacSetup {
     static var desktopApp: URL { Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/LocalMacDesktop.app") }
+    static var controlPermissionName: String {
+        if #available(macOS 27, *) { return "Device Control and Data Access" }
+        return "Accessibility"
+    }
+    static var desktopName: String { LocalMacIdentity(providerID: Bundle.main.bundleIdentifier)?.desktopAppName ?? "Noodle Local Mac Desktop" }
+    static func desktopForPermissions() throws -> URL {
+        guard let providerID = Bundle.main.bundleIdentifier,
+              let team = Bundle.main.object(forInfoDictionaryKey: "NoodleSigningTeam") as? String else {
+            throw ComputerError("Cannot identify the signed desktop helper.")
+        }
+        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Local Mac Permissions", isDirectory: true)
+        return try LocalMacPermissionHelper.prepare(source: desktopApp, directory: directory,
+                                                    providerID: providerID, team: team)
+    }
+    static func registrationStatus() async -> LocalMacRegistrationStatus {
+        await LocalMacRegistrationProbe.read(executable: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/LocalMacSetup.app/Contents/MacOS/LocalMacSetup"))
+    }
+    static func resolve(_ status: LocalMacRegistrationStatus) throws {
+        if status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
+        else { try enable() }
+    }
     static func enable() throws {
-        guard Bundle.main.bundleIdentifier == "com.pdparchitect.noodle.computer" else {
+        guard let identity = LocalMacIdentity(providerID: Bundle.main.bundleIdentifier), identity.permitsAccountService else {
             throw ComputerError("Use the installed Noodle Computer app to enable Local Mac. Test builds cannot register the account service.")
         }
         let setup = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/LocalMacSetup.app")
@@ -19,31 +53,39 @@ struct LocalMacSetupRequired: LocalizedError {
     static func connection() throws -> NSXPCConnection {
         guard let group = Bundle.main.object(forInfoDictionaryKey: "NoodleComputerGroup") as? String,
               let team = Bundle.main.object(forInfoDictionaryKey: "NoodleSigningTeam") as? String else { throw ComputerError("Local Mac requires a signed Computer build.") }
+        guard let identity = LocalMacIdentity(providerID: Bundle.main.bundleIdentifier), identity.permitsAccountService,
+              group == identity.group(team: team) else { throw ComputerError("The Local Mac service identity does not match this build.") }
         let connection = NSXPCConnection(machServiceName: group + ".localmac", options: .privileged)
         connection.remoteObjectInterface = NSXPCInterface(with: LocalMacLifecycle.self)
-        connection.setCodeSigningRequirement("anchor apple generic and identifier \"com.pdparchitect.noodle.computer.localmac\" and certificate leaf[subject.OU] = \"\(team)\"")
+        connection.setCodeSigningRequirement("anchor apple generic and identifier \"\(identity.serviceID)\" and certificate leaf[subject.OU] = \"\(team)\"")
         connection.resume()
         return connection
     }
-    static func check() async throws {
-        let connection = try connection(); defer { connection.invalidate() }
-        guard await LocalMacServiceProbe.responds(connection) else { throw LocalMacSetupRequired() }
+    static func check(retryAction: String = "Start") async throws {
+        let registration = await registrationStatus()
+        try Task.checkCancellation()
+        if registration.needsSetup || registration == .helperMissing {
+            throw LocalMacSetupRequired(registration: registration, retryAction: retryAction)
+        }
         guard let team = Bundle.main.object(forInfoDictionaryKey: "NoodleSigningTeam") as? String else { throw ComputerError("Cannot identify the Local Mac service.") }
+        guard let identity = LocalMacIdentity(providerID: Bundle.main.bundleIdentifier) else { throw ComputerError("Cannot identify the Local Mac service.") }
         let executable = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/LocalMacSetup.app/Contents/Library/LaunchServices/LocalMacService")
-        let requirement = "anchor apple generic and identifier \"com.pdparchitect.noodle.computer.localmac\" and certificate leaf[subject.OU] = \"\(team)\""
+        let requirement = "anchor apple generic and identifier \"\(identity.serviceID)\" and certificate leaf[subject.OU] = \"\(team)\""
         let expected = try LocalMacSignedCode.fingerprint(at: executable, requirement: requirement)
-        try await LocalMacServiceUpdate.waitUntilReady(expected: expected) { try await serviceInfo() }
+        // Do not gate this on check(): an old image's reply can fail macOS code
+        // validation after replacement, preventing it from reaching serviceInfo
+        // and its normal restart path. No lifecycle mutation is sent here.
+        do { try await LocalMacServiceUpdate.waitUntilReady(expected: expected) { try await serviceInfo() } }
+        catch is LocalMacServiceUnavailable {
+            throw LocalMacSetupRequired(registration: registration, retryAction: retryAction)
+        }
     }
     private static func serviceInfo() async throws -> LocalMacServiceInfo {
         let connection = try connection(); defer { connection.invalidate() }
         let data: Data = try await withCheckedThrowingContinuation { continuation in
-            let reply = Once(continuation, timeout: 5,
-                timeoutMessage: "The Local Mac service did not answer its version check. It may still be starting another desktop; retry Start. After an update from the prototype, restart your Mac. Accounts and approvals are retained.")
+            let reply = Once(continuation, timeout: 3, timeoutError: LocalMacServiceUnavailable())
             let service = connection.remoteObjectProxyWithErrorHandler { _ in
-                // check() already established that a service is registered. An
-                // older service without this selector needs a normal restart,
-                // not registration or another administrator approval.
-                reply.finish(.failure(ComputerError(LocalMacServiceInfo.restartMessage)))
+                reply.finish(.failure(LocalMacServiceUnavailable()))
             } as! LocalMacLifecycle
             service.serviceInfo { data, error in
                 if let error { reply.finish(.failure(ComputerError(error))) }
@@ -67,6 +109,9 @@ struct LocalMacSetupRequired: LocalizedError {
         }
     }
     static func stop(_ id: UUID, deleting: Bool = false) async throws {
+        // Resolve helper replacement before sending the new deletion selector.
+        // Only the read-only handshake may retry; deletion itself is sent once.
+        if deleting { try await check(retryAction: "Delete") }
         let connection = try connection(); defer { connection.invalidate() }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             let reply = Once(continuation)
@@ -74,7 +119,18 @@ struct LocalMacSetupRequired: LocalizedError {
             let finish: (String?) -> Void = { error in
                 if let error { reply.finish(.failure(ComputerError(error))) } else { reply.finish(.success(())) }
             }
-            if deleting { service.remove(id, reply: finish) } else { service.stop(id, reply: finish) }
+            if deleting {
+                service.removeAccount(id) { data, error in
+                    if let data {
+                        guard data.count < 65_536,
+                              let failure = try? JSONDecoder().decode(LocalMacRemovalFailure.self, from: data) else {
+                            reply.finish(.failure(ComputerError(error ?? "The helper returned an invalid deletion response. Check this computer before retrying.")))
+                            return
+                        }
+                        reply.finish(.failure(failure))
+                    } else { finish(error) }
+                }
+            } else { service.stop(id, reply: finish) }
         }
     }
 }
@@ -83,10 +139,13 @@ private final class Once<T>: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<T, Error>?
     init(_ continuation: CheckedContinuation<T, Error>, timeout: TimeInterval = 120,
-         timeoutMessage: String = "Local Mac did not reply. Setup was retained; check its status before retrying.") {
+         timeoutMessage: String = "Local Mac did not reply. Setup was retained; check its status before retrying.",
+         timeoutError: Error? = nil) {
         self.continuation = continuation
-        DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [weak self] in
-            self?.finish(.failure(ComputerError(timeoutMessage)))
+        // XPC may discard both callbacks on an invalidated connection. Keep
+        // the continuation alive until its deadline even in that case.
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [self] in
+            finish(.failure(timeoutError ?? ComputerError(timeoutMessage)))
         }
     }
     func finish(_ result: Result<T, Error>) {
@@ -99,6 +158,7 @@ private final class Once<T>: @unchecked Sendable {
     @Published var image: NSImage?
     @Published var status: LocalMacStatus?
     @Published var error: String?
+    @Published var windowPreview: LocalMacWindowPreview?
     var latestFrame: Data?
     var onDisconnect: ((String) -> Void)?
     private var input: FileHandle?
@@ -111,6 +171,7 @@ private final class Once<T>: @unchecked Sendable {
     private var inputFailure: String?
     private var closed = true
     private var connectedOnce = false
+    private var streamRequested = false
     private var disconnectExpected = false
     var isConnected: Bool { !closed && input != nil && output != nil }
     private var mainDisplays: Set<CGDirectDisplayID> = []
@@ -158,17 +219,32 @@ private final class Once<T>: @unchecked Sendable {
         do {
             // Establish protocol compatibility before sending capture or input.
             _ = try await call(.init(.status))
-            let current = displayIDs()
-            guard !current.isEmpty else { throw ComputerError("Cannot verify the main desktop's displays before capture.") }
-            mainDisplays.formUnion(current)
-            var stream = LocalMacRequest(.stream); stream.enabled = true
-            stream.protectedDisplayIDs = Array(mainDisplays).sorted()
-            _ = try await call(stream)
+            try await startCaptureIfPermitted()
             guard isConnected else { throw ComputerError("The desktop connection closed during startup.") }
         } catch { close(); throw error }
     }
+    private func startCaptureIfPermitted() async throws {
+        // Keep the connection (and Stop/Delete) usable while consent is missing.
+        // Entering ScreenCaptureKit here can wait on an unseen background prompt.
+        guard !streamRequested, let status, status.screenCapture, status.canControl else { return }
+        let current = displayIDs()
+        guard !current.isEmpty else { throw ComputerError("Cannot verify the main desktop's displays before capture.") }
+        mainDisplays.formUnion(current)
+        var stream = LocalMacRequest(.stream); stream.enabled = true
+        stream.protectedDisplayIDs = Array(mainDisplays).sorted()
+        streamRequested = true
+        _ = try await call(stream)
+    }
     private func receive(_ reply: LocalMacReply) {
         guard !closed else { return }
+        if let id = reply.previewID {
+            if windowPreview?.id == id {
+                windowPreview?.image = nil; windowPreview?.geometry = nil
+                windowPreview?.error = reply.error ?? "This window is no longer available."
+                send(LocalMacInput(.reset))
+            }
+            return
+        }
         if reply.id == nil, let error = reply.error { disconnect(error); return }
         if let status = reply.status {
             self.status = status
@@ -177,7 +253,11 @@ private final class Once<T>: @unchecked Sendable {
         }
         if reply.frame, let data = reply.data, status?.displayID != nil {
             guard verifyCaptureDisplay() else { return }
-            if let image = NSImage(data: data) { latestFrame = data; self.image = image }
+            if let geometry = reply.windowFrame {
+                if windowPreview?.id == geometry.previewID, let image = NSImage(data: data) {
+                    windowPreview?.image = image; windowPreview?.geometry = geometry
+                }
+            } else if let image = NSImage(data: data) { latestFrame = data; self.image = image }
         }
         if let id = reply.id, let continuation = pending.removeValue(forKey: id) {
             timeouts.removeValue(forKey: id)?.cancel()
@@ -204,7 +284,10 @@ private final class Once<T>: @unchecked Sendable {
             timeouts[request.id] = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(30))
                 guard !Task.isCancelled, let self else { return }
-                self.pending.removeValue(forKey: request.id)?.resume(throwing: ComputerError("Desktop request timed out. Its result is uncertain; it was not repeated."))
+                let message = request.operation == .stream
+                    ? "The desktop did not finish starting. Stop this computer and try Start again, or delete it."
+                    : "Desktop request timed out. Its result is uncertain; it was not repeated."
+                self.pending.removeValue(forKey: request.id)?.resume(throwing: ComputerError(message))
                 self.timeouts.removeValue(forKey: request.id)
             }
             writer.async { [weak self] in
@@ -220,9 +303,16 @@ private final class Once<T>: @unchecked Sendable {
         inputPump = Task {
             defer { inputPump = nil }
             while !Task.isCancelled, let event = inputQueue.next() {
+                if let id = event.previewID, windowPreview?.id != id { continue }
                 var request = LocalMacRequest(.input); request.input = event
                 do { _ = try await call(request); clearInputFailure() }
-                catch { if !closed { recordInputFailure(error.localizedDescription) }; inputQueue.removeAll(); break }
+                catch {
+                    if !closed, event.previewID == nil || windowPreview?.id == event.previewID {
+                        recordInputFailure(error.localizedDescription)
+                        if event.previewID != nil { windowPreview?.error = error.localizedDescription }
+                    }
+                    inputQueue.removeAll(); break
+                }
             }
         }
     }
@@ -231,17 +321,43 @@ private final class Once<T>: @unchecked Sendable {
         // A successful input or restored grant must not dismiss an unrelated
         // transport/capture failure that arrived in the meantime.
         if let inputFailure, error == inputFailure { error = nil }
+        if let inputFailure, windowPreview?.error == inputFailure { windowPreview?.error = nil }
         inputFailure = nil
     }
     func refreshStatus() async {
         guard isConnected else { return }
         // receive() applies the same display guard to polled and pushed status.
         _ = try? await call(.init(.status))
+        guard isConnected else { return }
+        do { try await startCaptureIfPermitted() }
+        catch { self.error = error.localizedDescription }
+    }
+    func openWindowPreview() async {
+        guard windowPreview == nil, isConnected, !disconnectExpected, status?.canControl == true,
+              let window = status?.focusedWindow else { return }
+        let preview = LocalMacWindowPreview(window: window)
+        windowPreview = preview
+        var request = LocalMacRequest(.windowPreview)
+        request.previewID = preview.id; request.window = window; request.enabled = true
+        do { _ = try await call(request) }
+        catch { if windowPreview?.id == preview.id { windowPreview?.error = error.localizedDescription } }
+    }
+    func closeWindowPreview() {
+        guard let id = windowPreview?.id else { return }
+        windowPreview = nil
+        send(LocalMacInput(.reset))
+        guard isConnected else { return }
+        Task {
+            var request = LocalMacRequest(.windowPreview); request.previewID = id; request.enabled = false
+            do { _ = try await call(request) }
+            catch { if isConnected { self.error = error.localizedDescription } }
+        }
     }
     func close() { closed = true; disconnect("Desktop disconnected.") }
     func expectDisconnect(_ expected: Bool) { disconnectExpected = expected }
     private func disconnect(_ message: String) {
         let notify = !closed && !disconnectExpected; closed = true
+        windowPreview = nil
         inputPump?.cancel(); inputPump = nil; inputQueue.removeAll()
         try? output?.close(); output = nil; try? input?.close(); input = nil
         for continuation in pending.values { continuation.resume(throwing: ComputerError(message)) }; pending.removeAll()

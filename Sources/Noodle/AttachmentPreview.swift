@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 extension ConversationAttachment {
     var isComputerDocument: Bool {
         annotation == nil && (computer != nil || mediaType == ComputerCard.mediaType
-            || (originalFilename as NSString).pathExtension.lowercased() == "noodlecomputer")
+            || ComputerBuildIdentity.allCases.contains { $0.fileExtension == (originalFilename as NSString).pathExtension.lowercased() })
     }
 
     var previewSymbolName: String {

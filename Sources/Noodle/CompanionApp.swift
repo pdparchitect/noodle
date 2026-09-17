@@ -11,7 +11,7 @@ enum CompanionApp: String, CaseIterable, Identifiable {
 
     var name: String {
         switch self {
-        case .computer: "Noodle Computer"
+        case .computer: ComputerBuildIdentity.current.appName
         case .applet: AppletBuildIdentity.current.appName
         }
     }
@@ -54,7 +54,7 @@ enum CompanionApp: String, CaseIterable, Identifiable {
     @MainActor static func installedApps() -> [Self: CompanionAppInstallation] {
         var result: [Self: CompanionAppInstallation] = [:]
         for app in allCases {
-            let url = app == .applet ? AppletApplication.locate() : NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleIdentifier)
+            let url = app == .computer ? ComputerApplication.locate() : AppletApplication.locate()
             if let url {
                 result[app] = CompanionAppInstallation(applicationURL: url)
             }

@@ -15,7 +15,7 @@ class AgentHostVerificationTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
-        self.app = root / 'Noodle Local.app'
+        self.app = root / 'Noodle Dev.app'
         host = self.app / 'Contents/XPCServices/NoodleAgentHost.xpc'
         identifier = 'com.example.noodle.local'
         shared = {

@@ -119,7 +119,7 @@ private final class FixtureProtocol: URLProtocol {
 
 final class MCPServiceTests: XCTestCase {
     private let endpoint = URL(string: "https://service.example/mcp")!
-    private let redirect = URL(string: "noodle-local://mcp/oauth/callback")!
+    private let redirect = URL(string: "noodle-dev://mcp/oauth/callback")!
     override func setUp() { FixtureProtocol.state = FixtureState() }
     private func configuration() -> URLSessionConfiguration {
         let config = URLSessionConfiguration.ephemeral
@@ -243,7 +243,7 @@ final class MCPServiceTests: XCTestCase {
         let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
         do {
             try await service(vault: vault).signIn(record, redirectURI: redirect) { _ in
-                URL(string: "noodle-local://mcp/oauth/callback?code=stolen&state=wrong")!
+                URL(string: "noodle-dev://mcp/oauth/callback?code=stolen&state=wrong")!
             }
             XCTFail("Unverified callback accepted")
         } catch { XCTAssertTrue(error is MCPServiceError) }

@@ -1,7 +1,7 @@
 #!/bin/zsh
 set -euo pipefail
 project_root="${0:A:h:h:h}"
-provider="$project_root/.build/Noodle Applet Local.app"
+provider="$project_root/.build/Noodle Applet Dev.app"
 provider_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$provider/Contents/Info.plist")
 staging=$(mktemp -d "$project_root/.build/BackgroundLaunch.XXXXXX")
 trap 'rm -rf "$staging"' EXIT

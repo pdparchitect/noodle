@@ -58,7 +58,7 @@ struct StorageView: View {
                         Spacer()
                         if model.storageBusy {
                             ProgressView().controlSize(.small)
-                                .accessibilityLabel("Inspecting Noodle Computer storage")
+                                .accessibilityLabel("Inspecting \(ComputerAppIdentity.name) storage")
                         }
                         Button("Refresh") { model.inspectStorage() }
                             .disabled(unavailable)
@@ -73,7 +73,7 @@ struct StorageView: View {
                     Spacer()
                     if model.storageBusy {
                         ProgressView().controlSize(.small)
-                            .accessibilityLabel("Inspecting Noodle Computer storage")
+                            .accessibilityLabel("Inspecting \(ComputerAppIdentity.name) storage")
                     }
                     Button("Refresh") { model.inspectStorage() }
                         .disabled(unavailable)

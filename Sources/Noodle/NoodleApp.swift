@@ -60,7 +60,7 @@ struct NoodleApp: App {
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
             CommandGroup(replacing: .help) {
-                Button("Noodle Help") {
+                Button("\(NoodleAppIdentity.name) Help") {
                     NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle")!)
                 }
             }
@@ -152,7 +152,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        guard urls.contains(where: { $0.scheme == "noodle" && $0.host == "shared" }) else { return }
+        let types = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]]
+        let scheme = (types?.first?["CFBundleURLSchemes"] as? [String])?.first ?? "noodle"
+        guard urls.contains(where: { $0.scheme == scheme && $0.host == "shared" }) else { return }
         Task { await NoodleStore.active?.processSharedInbox() }
     }
 }
@@ -213,7 +215,7 @@ private struct WindowConfiguration: NSViewRepresentable {
 
     private func configure(_ window: NSWindow?) {
         guard let window else { return }
-        window.title = "Noodle"
+        window.title = NoodleAppIdentity.name
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.backgroundColor = .windowBackgroundColor

@@ -10,6 +10,8 @@ import Darwin
     let session: LocalMacSession
     let output: Output
     let capture: AccountCapture
+    let windowCapture: AccountWindowCapture
+    private var focusedWindow: LocalMacWindow?
     var terminals: [UUID: Terminal] = [:]
     let files: LocalMacFileWorker
     private var shuttingDown = false
@@ -19,7 +21,9 @@ import Darwin
         self.session = session; self.output = output
         files = LocalMacFileWorker(home: session.account.home) { try session.verifyCurrent() }
         capture = AccountCapture(session: session, output: output)
+        windowCapture = AccountWindowCapture(session: session, desktop: capture, output: output)
         capture.onChange = { [weak self] in self?.sendStatus() }
+        windowCapture.onEnd = { [weak self] in try? self?.post(LocalMacInput(.reset)) }
     }
     func sendStatus() {
         var ready = LocalMacReply(); ready.status = status(); output.send(ready)
@@ -30,13 +34,19 @@ import Darwin
             postEvents: CGPreflightPostEventAccess(), display: session.account.display,
             setupRunning: apps.contains { $0.bundleIdentifier == "com.apple.SetupAssistant" }, detail: capture.error)
         value.displayID = capture.displayID
+        value.focusedWindow = focusedWindow
         return value
     }
     func begin() {
-        guardTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        guardTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                do { try self.session.verifyCurrent() }
+                do {
+                    try self.session.verifyCurrent()
+                    let focused = AccountWindowFocus.read(session: self.session, displayBounds: self.capture.bounds)
+                    if focused?.window != self.focusedWindow { self.focusedWindow = focused?.window; self.sendStatus() }
+                    self.windowCapture.check(focus: focused)
+                }
                 catch { self.shutdown() }
             }
         }
@@ -54,8 +64,20 @@ import Darwin
             case .stream:
                 if request.enabled == true {
                     await capture.start(protectedDisplayIDs: request.protectedDisplayIDs ?? [])
-                } else { await capture.stop() }
+                } else { await windowCapture.stop(); await capture.stop() }
                 response.status = status()
+            case .windowPreview:
+                if request.enabled == true {
+                    guard let focused = AccountWindowFocus.read(session: session, displayBounds: capture.bounds),
+                          focused.window.id == request.window?.id, focused.window.pid == request.window?.pid else {
+                        throw LocalMacError("The focused window changed. Select it and try again.")
+                    }
+                    try post(LocalMacInput(.reset))
+                    try await windowCapture.start(id: request.previewID!, focus: focused)
+                } else if windowCapture.previewID == request.previewID {
+                    try? post(LocalMacInput(.reset))
+                    await windowCapture.stop(id: request.previewID)
+                }
             case .input: try post(request.input!)
             case .terminalOpen:
                 guard terminals.count < 16 else { throw LocalMacError("Close an unused terminal before opening another.") }
@@ -79,7 +101,19 @@ import Darwin
     }
     func post(_ input: LocalMacInput) throws {
         if controls == nil { controls = AccountInput(session: session) }
-        try controls?.post(input, bounds: capture.bounds)
+        if input.kind == .reset {
+            try controls?.post(input, bounds: capture.bounds)
+        } else if input.previewID != nil {
+            do {
+                let geometry = try windowCapture.geometry(for: input)
+                try controls?.post(input, bounds: geometry.bounds, display: geometry.display)
+            } catch {
+                try? controls?.post(LocalMacInput(.reset), bounds: capture.bounds)
+                throw error
+            }
+        } else {
+            try controls?.post(input, bounds: capture.bounds)
+        }
     }
     func shutdown() {
         guard !shuttingDown else { return }; shuttingDown = true

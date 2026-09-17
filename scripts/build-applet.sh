@@ -6,7 +6,7 @@ build_root="$project_root/.build/applet"
 configuration="${NOODLE_APPLET_CONFIGURATION:-release}"
 data_container="${NOODLE_APPLET_DATA_CONTAINER:-${NOODLE_DATA_CONTAINER:-development}}"
 case "$data_container" in
-    development) bundle_identifier="com.pdparchitect.noodle.applet.local"; app_name="Noodle Applet Local"; group_suffix="com.pdparchitect.noodle.applets.local"; document_extension="noodlet-local"; help_option="--write-applet-local-help" ;;
+    development) bundle_identifier="com.pdparchitect.noodle.applet.local"; app_name="Noodle Applet Dev"; group_suffix="com.pdparchitect.noodle.applets.local"; document_extension="noodlet-dev"; help_option="--write-applet-dev-help" ;;
     production) bundle_identifier="com.pdparchitect.noodle.applet"; app_name="Noodle Applet"; group_suffix="com.pdparchitect.noodle.applets"; document_extension="noodlet"; help_option="--write-applet-help" ;;
     *) print -u2 'NOODLE_APPLET_DATA_CONTAINER must be development or production.'; exit 1 ;;
 esac
@@ -61,10 +61,10 @@ cp "$package/Support/Info.plist" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :UTExportedTypeDeclarations:0:UTTypeTagSpecification:public.filename-extension:0 $document_extension" "$app/Contents/Info.plist"
 # Only bundled examples are renamed. Never migrate or open a user's production documents.
 if [[ "$data_container" == development ]]; then
-    /usr/libexec/PlistBuddy -c 'Set :CFBundleDocumentTypes:0:CFBundleTypeName Noodlet Local' "$app/Contents/Info.plist"
-    /usr/libexec/PlistBuddy -c 'Set :UTExportedTypeDeclarations:0:UTTypeDescription Noodlet Local' "$app/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c 'Set :CFBundleDocumentTypes:0:CFBundleTypeName Noodlet Dev' "$app/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c 'Set :UTExportedTypeDeclarations:0:UTTypeDescription Noodlet Dev' "$app/Contents/Info.plist"
     for example in "$app/Contents/Resources/NoodleApplet_NoodleApplet.bundle"/**/Examples/*.noodlet(N); do
-        mv "$example" "${example%.noodlet}.noodlet-local"
+        mv "$example" "${example%.noodlet}.noodlet-dev"
     done
 fi
 swift run --disable-sandbox --package-path "$project_root" NoodleDocumentation "$help_option" "$app/Contents/Resources/NoodletCLIHelp.txt" >&2

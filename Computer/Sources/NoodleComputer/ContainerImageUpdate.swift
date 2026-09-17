@@ -128,7 +128,7 @@ extension ContainerComputer {
                 let advice: String
                 switch response.code {
                 case 401, 403:
-                    advice = "The registry denied access. Check the image name and choose an image that allows public downloads; Noodle Computer does not currently support registry sign-in."
+                    advice = "The registry denied access. Check the image name and choose an image that allows public downloads; \(ComputerAppIdentity.name) does not currently support registry sign-in."
                 case 404 where URL(string: url)?.path.contains("/manifests/") == true:
                     advice = "The image or tag could not be found. Check the repository name and tag on the registry’s image page, and confirm the image is public."
                 case 404:

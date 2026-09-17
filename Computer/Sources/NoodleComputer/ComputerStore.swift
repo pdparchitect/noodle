@@ -7,6 +7,7 @@ import Virtualization
 
 enum ComputerPhase: Equatable {
     case stopped, starting, running, stopping, updating
+    case setupRequired(LocalMacRegistrationStatus)
     case failed(String)
     var label: String {
         switch self {
@@ -15,15 +16,17 @@ enum ComputerPhase: Equatable {
         case .running: "Running"
         case .stopping: "Stopping…"
         case .updating: "Updating…"
+        case .setupRequired(let status): status == .requiresApproval ? "Approval required" : "Setup required"
         case .failed: "Needs attention"
         }
     }
     var busy: Bool { self == .starting || self == .stopping || self == .updating }
     var canStart: Bool {
-        switch self { case .stopped, .failed: true; default: false }
+        switch self { case .stopped, .failed, .setupRequired: true; default: false }
     }
     var startFailureDescription: String {
         if case .failed(let reason) = self { return "Computer did not start: \(reason)" }
+        if case .setupRequired(let status) = self { return LocalMacSetupRequired(registration: status).localizedDescription }
         return "Computer did not start: \(label)"
     }
 }
@@ -63,6 +66,12 @@ enum ComputerDisplayMode: String {
     var availableDisplayModes: [ComputerDisplayMode] {
         computer.hasDisplay ? [.desktop, .terminal, .files] : [.terminal, .files]
     }
+    var canDelete: Bool {
+        // A failed Local Mac connection does not prove that its account logged
+        // out. The lifecycle service stops and verifies it before removal.
+        if computer.kind == .localMac { return !phase.busy }
+        return phase == .stopped && virtual == nil && container == nil && localMac == nil
+    }
     var virtual: VirtualComputer?
     @Published var localMac: LocalMacComputer? {
         didSet {
@@ -100,8 +109,13 @@ enum ComputerDisplayMode: String {
     }
     func append(_ text: String) { console = String((console + text).suffix(262_144)) }
     func recordStartupFailure(_ error: Error) {
+        if let setup = error as? LocalMacSetupRequired, setup.registration.needsSetup {
+            phase = .setupRequired(setup.registration)
+            return
+        }
         phase = .failed(error.localizedDescription)
         startupRecovery = error as? ComputerStartupRecovery
+        localMacSetupRequired = error is LocalMacSetupRequired
         append("\n\(error.localizedDescription)\n")
     }
 }
@@ -128,12 +142,19 @@ enum ComputerDisplayMode: String {
     @Published var storageCleaning = false
     @Published var storageError: String?
     var storageTask: Task<Void, Never>?
-    @Published var error: String?
+    @Published var error: String? {
+        didSet { errorRecovery = nil }
+    }
+    @Published private(set) var errorRecovery: LocalMacErrorRecovery?
     let library: ComputerLibrary
     let cache: URL
+    private let removeLocalMacAccount: (UUID) async throws -> Void
     private var lease: Int32 = -1
 
-    init(root: URL? = nil) throws {
+    init(root: URL? = nil, removeLocalMacAccount: @escaping (UUID) async throws -> Void = {
+        try await LocalMacSetup.stop($0, deleting: true)
+    }) throws {
+        self.removeLocalMacAccount = removeLocalMacAccount
         // Guest I/O closure must report an error, not terminate the Mac app.
         signal(SIGPIPE, SIG_IGN)
         let location =
@@ -147,7 +168,7 @@ enum ComputerDisplayMode: String {
         guard fd >= 0 else { throw ComputerError("Cannot open the computer library lock.") }
         guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
             close(fd)
-            throw ComputerError("This computer library is already open in another Noodle Computer process.")
+            throw ComputerError("This computer library is already open in another \(ComputerAppIdentity.name) process.")
         }
         lease = fd
         try? FileExportStaging.prepare()
@@ -245,7 +266,7 @@ enum ComputerDisplayMode: String {
             } else if computer.kind == .container {
                 guard FileManager.default.fileExists(atPath: kernel.path) else {
                     throw ComputerError(
-                        "The bundled Linux kernel is missing. Rebuild Noodle Computer with its runtime resources.")
+                        "The bundled Linux kernel is missing. Rebuild \(ComputerAppIdentity.name) with its runtime resources.")
                 }
                 try await ContainerComputer.prepare(computer: computer, directory: directory, cache: cache) {
                     [weak self] text, update in
@@ -493,7 +514,6 @@ enum ComputerDisplayMode: String {
             }
             if session.virtual?.machine.state == .stopped { session.virtual = nil }
             session.recordStartupFailure(error)
-            session.localMacSetupRequired = error is LocalMacSetupRequired
         }
     }
 
@@ -658,16 +678,24 @@ enum ComputerDisplayMode: String {
     }
 
     func remove(_ session: ComputerSession) {
-        guard !storageCleaning, session.phase == .stopped, session.virtual == nil, session.container == nil, session.localMac == nil else { return }
+        guard !storageCleaning, session.canDelete else { return }
         if session.computer.kind == .localMac {
+            let previousPhase = session.phase
             session.phase = .stopping
+            session.localMac?.expectDisconnect(true)
             Task {
                 do {
-                    if session.computer.localMacSetupRequested == true { try await LocalMacSetup.stop(session.id, deleting: true) }
+                    if session.computer.localMacSetupRequested == true { try await removeLocalMacAccount(session.id) }
+                    session.localMac?.close(); session.localMac = nil
                     try FileManager.default.trashItem(at: library.directory(for: session.id), resultingItemURL: nil)
                     sessions.removeAll { $0.id == session.id }
                     if selection == session.id { selection = sessions.first?.id }
-                } catch { session.phase = .stopped; self.error = error.localizedDescription }
+                } catch {
+                    session.localMac?.expectDisconnect(false)
+                    session.phase = previousPhase == .running && session.localMac?.isConnected != true
+                        ? .failed(error.localizedDescription) : previousPhase
+                    recordRemovalFailure(error)
+                }
             }
             return
         }
@@ -677,6 +705,22 @@ enum ComputerDisplayMode: String {
             sessions.removeAll { $0.id == session.id }
             if selection == session.id { selection = sessions.first?.id }
         } catch { self.error = error.localizedDescription }
+    }
+
+    func recordRemovalFailure(_ failure: Error) {
+        if let removal = failure as? LocalMacRemovalFailure {
+            let name = LocalMacIdentity(providerID: Bundle.main.bundleIdentifier)?.build.appName ?? "Noodle Computer"
+            error = removal.message(appName: name)
+            if removal.offersPrivacySettings { errorRecovery = .fullDiskAccess }
+        } else if var setup = failure as? LocalMacSetupRequired {
+            setup.retryAction = "Delete"
+            error = setup.localizedDescription
+            switch setup.registration {
+            case .enabled, .requiresApproval: errorRecovery = .loginItems
+            case .notRegistered, .unknown: errorRecovery = .setup
+            case .helperMissing: break
+            }
+        } else { error = failure.localizedDescription }
     }
 
     func shutdown() async {

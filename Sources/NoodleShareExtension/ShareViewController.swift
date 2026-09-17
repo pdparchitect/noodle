@@ -43,7 +43,8 @@ final class ShareViewController: NSViewController {
         do {
             try composer?.send()
             // Only an opaque wake-up signal leaves the shared container; no text or file paths in URLs.
-            NSWorkspace.shared.open(URL(string: "noodle://shared")!)
+            let scheme = Bundle.main.object(forInfoDictionaryKey: "NoodleSharingScheme") as? String ?? "noodle"
+            NSWorkspace.shared.open(URL(string: scheme + "://shared")!)
             extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
         } catch { composer?.error = error.localizedDescription }
     }

@@ -219,7 +219,7 @@ struct ConversationWindowHost: NSViewRepresentable {
     let registry: ConversationWindowRegistry
     let conversationID: UUID?
     var isMainWindow = false
-    var title = "Noodle"
+    var title = NoodleAppIdentity.name
     let markRead: (UUID?) -> Void
     var openConversation: ((UUID) -> Void)? = nil
 
@@ -237,7 +237,7 @@ struct ConversationWindowHost: NSViewRepresentable {
         let registry: ConversationWindowRegistry
         var conversationID: UUID?
         var isMainWindow = false
-        var title = "Noodle"
+        var title = NoodleAppIdentity.name
         var markRead: ((UUID?) -> Void)?
         var openConversation: ((UUID) -> Void)?
         fileprivate var restoredConversationID: UUID?

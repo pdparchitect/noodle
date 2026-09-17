@@ -47,7 +47,7 @@ public struct LocalMacServiceInfo: Codable, Sendable {
         if restarting { return false }
         guard protocolVersion == Self.version else { throw LocalMacError(Self.restartMessage) }
         guard fingerprint == expected else {
-            throw LocalMacError("The Local Mac service update is waiting for active desktops to close. Quit Noodle Computer and reopen it to finish updating; accounts and files are retained.")
+            throw LocalMacError("The running Local Mac service belongs to a different build. Close this build’s active desktops and reopen it after updating. Use Noodle Computer Dev for development alongside the installed app; accounts and files are retained.")
         }
         return true
     }
@@ -55,24 +55,29 @@ public struct LocalMacServiceInfo: Codable, Sendable {
 }
 
 public enum LocalMacServiceUpdate {
-    /// Retry only read-only handshake calls after the daemon has explicitly
-    /// announced a restart. Account creation/removal is never replayed.
+    /// Retry only the read-only handshake. An updated app can receive a
+    /// transport/authentication failure before it can read the old daemon's
+    /// restart reply: its previous executable may already have been unlinked.
+    /// Keep signature checks in force and wait for a verified replacement.
+    /// Account creation/removal is never replayed.
     public static func waitUntilReady(expected: Data, read: () async throws -> LocalMacServiceInfo,
                                      pause: () async throws -> Void = { try await Task.sleep(for: .seconds(1)) }) async throws {
-        var restarting = false
+        let deadline = ContinuousClock.now.advanced(by: .seconds(15))
         for attempt in 0..<12 {
             if attempt > 0 { try await pause() }
             try Task.checkCancellation()
+            if ContinuousClock.now >= deadline { break }
             let info: LocalMacServiceInfo
             do { info = try await read() }
-            catch {
-                if error is CancellationError { throw error }
-                guard restarting else { throw error }
-                continue
-            }
+            catch is LocalMacServiceUnavailable { continue }
             if try info.isReady(expected: expected) { return }
-            restarting = true
         }
-        throw LocalMacError("The Local Mac service has not finished restarting. Retry Start; accounts and approval are retained. If this persists, restart your Mac.")
+        throw LocalMacServiceUnavailable()
     }
+}
+
+/// No trusted handshake response arrived. This is distinct from an explicit
+/// service failure, incompatible protocol, or verified but different image.
+public struct LocalMacServiceUnavailable: Error, Sendable {
+    public init() {}
 }

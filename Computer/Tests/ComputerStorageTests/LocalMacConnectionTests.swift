@@ -48,6 +48,29 @@ import XCTest
         XCTAssertEqual(requests[1].protectedDisplayIDs, [2])
         runtime.close()
     }
+    func testMissingPermissionKeepsConnectionUsableAndDefersCaptureUntilGranted() async throws {
+        let input = Pipe(), output = Pipe()
+        var granted = false
+        let helper = peer(input, output, count: 4) { request in
+            var reply = Self.reply(request)
+            reply.status?.accessibility = granted
+            reply.status?.postEvents = granted
+            return reply
+        }
+        let runtime = LocalMacComputer(displayIDs: { [2] })
+        try await runtime.connect(input: output.fileHandleForReading, output: input.fileHandleForWriting, protectedDisplays: [2])
+        XCTAssertTrue(runtime.isConnected)
+        XCTAssertFalse(runtime.status?.canControl ?? true)
+        await runtime.refreshStatus()
+        XCTAssertTrue(runtime.isConnected)
+        granted = true
+        await runtime.refreshStatus()
+        let requests = try await helper.value
+        XCTAssertEqual(requests.map(\.operation), [.status, .status, .status, .stream])
+        XCTAssertEqual(requests.last?.protectedDisplayIDs, [2])
+        runtime.close()
+    }
+
     func testOldHelperProducesActionableStartupFailure() async throws {
         let input = Pipe(), output = Pipe()
         let helper = peer(input, output, count: 1) { request in
@@ -96,8 +119,8 @@ import XCTest
         let helper = peer(input, output, count: 5) { request in
             replyNumber += 1
             var reply = Self.reply(request, displayID: 99)
-            reply.status?.accessibility = replyNumber >= 4
-            reply.status?.postEvents = replyNumber >= 5
+            reply.status?.accessibility = replyNumber >= 3
+            reply.status?.postEvents = replyNumber >= 4
             if request.operation == .input { reply.status = nil; reply.error = LocalMacStatus.inputPermissionError }
             return reply
         }

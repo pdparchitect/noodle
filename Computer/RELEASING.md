@@ -65,8 +65,8 @@ swift test --disable-sandbox --package-path Computer/Bridge
 swift test --disable-sandbox
 swift Computer/Tests/ReleaseWorkflowTests.swift "$PWD"
 zsh scripts/build-computer.sh
-zsh scripts/verify-computer-release.sh '.build/Noodle Computer.app'
-'.build/Noodle Computer.app/Contents/MacOS/NoodleComputer' --updater-ui-test
+zsh scripts/verify-computer-release.sh '.build/Noodle Computer Dev.app'
+'.build/Noodle Computer Dev.app/Contents/MacOS/NoodleComputer' --updater-ui-test
 ```
 
 For isolated updater UI checks, build with `NOODLE_COMPUTER_TEST_BUILD=1` and

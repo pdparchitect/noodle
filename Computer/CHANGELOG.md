@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Place the optional Focus Window action after the Desktop, Terminal and Files controls.
+- Rename the development app and setup helper to Dev, preserve existing accounts and registered helper paths, and separate development and test document types from production.
+
+### Added
+
+- Pop the focused Local Mac window into an interactive, resizable preview from the toolbar, with a sharper capture that includes child windows while retaining the normal desktop view.
+
+### Fixed
+
+- Keep Focus Window available when optional accessibility ancestry is unavailable or its root cannot be matched to a captured window.
+- Disable Focus Window during shutdown and reject queued preview requests once stopping begins.
+- Focus the owning root window when a sheet or popup is selected, include its dialogs, and keep the preview anchored to the document as dialogs open and close.
+- Initialize new Dev accounts with a shell banner hook pointing to their own Dev desktop helper instead of the production filename.
+- Avoid a dangling background-color pointer when starting Focus Window capture, which could crash the desktop helper.
+- Allow Local Mac deletion after a failed start or while waiting for desktop permissions; stop the owned background session before removing its account.
+- Reveal a verified standalone desktop helper for macOS permission approval, label it correctly in Finder, and keep missing permissions from starting a capture request that can time out.
+- Stop recreating retired Local app aliases during subsequent Dev installations.
+- Recover the Local Mac helper after an app update even when macOS rejects the old executable's reply, and offer operation-specific recovery when deletion cannot reach the helper.
+- Check Local Mac home access before deleting files, explain macOS privacy denials with an action to open Full Disk Access, and retain the account when cleanup cannot finish.
+- Install development builds in /Applications so separate Local Mac accounts can launch their helper, and report inaccessible app locations before account login.
+- Distinguish Noodle Computer Setup and Noodle Computer Dev Setup in macOS background items and approval messages.
+- Detect Local Mac registration and approval before startup, show first-time setup as an expected state, and refresh it after returning from System Settings instead of reporting a broken computer.
+- Remove the empty library's container-only creation button; use the toolbar's plus menu for all computer types.
+- Isolate Noodle Computer Dev's library, connection group, Local Mac services and account credentials from the installed release, and pair it only with Noodle Dev.
+- Remove SwiftPM's generated package-framework search path from packaged apps.
+
 ## [0.7.2] - 2026-09-16
 
 ### Fixed

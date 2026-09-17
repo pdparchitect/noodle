@@ -3,6 +3,7 @@ import XCTest
 @testable import LocalMacCore
 
 final class ShellWelcomeTests: XCTestCase {
+    private let production = LocalMacIdentity(providerID: "com.pdparchitect.noodle.computer")!
     private func fixture(_ body: (URL) throws -> Void) throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent("Noodle Shell \(UUID().uuidString)")
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: false)
@@ -15,11 +16,11 @@ final class ShellWelcomeTests: XCTestCase {
             let rc = home.appendingPathComponent(".zshrc")
             let original = "PROMPT='custom > '\nNOODLE_BANNER=0\nalias example='echo preserved'"
             try original.write(to: rc, atomically: true, encoding: .utf8)
-            try LocalMacShellWelcome.prepare(home: home.path)
+            try LocalMacShellWelcome.prepare(home: home.path, identity: production)
             let installed = try String(contentsOf: rc, encoding: .utf8)
             XCTAssertTrue(installed.hasPrefix(original + "\n"))
             XCTAssertFalse(installed.contains("PROMPT='%1~ %# '"))
-            try LocalMacShellWelcome.prepare(home: home.path)
+            try LocalMacShellWelcome.prepare(home: home.path, identity: production)
             XCTAssertEqual(try String(contentsOf: rc, encoding: .utf8), installed)
         }
     }
@@ -30,19 +31,27 @@ final class ShellWelcomeTests: XCTestCase {
             let original = Data("PROMPT='linked > '\n".utf8)
             try original.write(to: custom)
             try FileManager.default.createSymbolicLink(at: home.appendingPathComponent(".zshrc"), withDestinationURL: custom)
-            try LocalMacShellWelcome.prepare(home: home.path)
+            try LocalMacShellWelcome.prepare(home: home.path, identity: production)
             XCTAssertEqual(try Data(contentsOf: custom), original)
         }
     }
 
     func testRealShellWelcomeUsesImageBannerAndHonoursInteractiveStartup() throws {
+        try verifyFreshShell(identity: production)
+    }
+
+    func testFreshDevShellUsesDevBannerWithoutProductionHelper() throws {
+        try verifyFreshShell(identity: XCTUnwrap(LocalMacIdentity(providerID: "com.pdparchitect.noodle.computer.local")))
+    }
+
+    private func verifyFreshShell(identity: LocalMacIdentity) throws {
         try fixture { home in
-            let resources = home.appendingPathComponent("Applications/Noodle Local Mac Desktop.app/Contents/Resources")
+            let resources = home.appendingPathComponent("Applications/\(identity.desktopAppName).app/Contents/Resources")
             try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
             let computer = (0..<4).reduce(URL(fileURLWithPath: #filePath)) { url, _ in url.deletingLastPathComponent() }
             try FileManager.default.copyItem(at: computer.appendingPathComponent("Images/shared/noodle-welcome"),
                                             to: resources.appendingPathComponent("noodle-welcome"))
-            try LocalMacShellWelcome.prepare(home: home.path)
+            try LocalMacShellWelcome.prepare(home: home.path, identity: identity)
             let rc = home.appendingPathComponent(".zshrc")
             XCTAssertTrue(try String(contentsOf: rc, encoding: .utf8).contains("PROMPT='%1~ %# '"))
 

@@ -17,7 +17,7 @@ import WebKit
         menu.update()
         let titles = menu.items.map(\.title)
         print("APPLICATION MENU: \(titles)")
-        guard titles.contains("About Noodle Computer"), titles.contains("Check for Updates…"),
+        guard titles.contains("About \(ComputerAppIdentity.name)"), titles.contains("Check for Updates…"),
               let settings = menu.items.firstIndex(where: { $0.keyEquivalent == "," && $0.keyEquivalentModifierMask.contains(.command) }) else {
             throw ComputerError("Application menu must expose About, Settings (⌘,) and Check for Updates")
         }
@@ -416,16 +416,15 @@ import WebKit
     }
 
     private static func checkApplicationNaming() throws {
-        let testBundle = Bundle.main.bundleIdentifier?.hasSuffix(".tests") == true
-        let menuName = testBundle ? "Computer Tests" : "Computer"
-        let displayName = testBundle ? "Noodle Computer Tests" : "Noodle Computer"
+        let displayName = ComputerAppIdentity.name
+        let menuName = String(displayName.dropFirst("Noodle ".count))
         guard Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String == menuName,
               Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String == displayName,
               Bundle.main.bundleURL.lastPathComponent == "\(displayName).app" else {
             throw ComputerError("Short menu name must not replace the full application name.")
         }
         guard let appMenu = NSApp.mainMenu?.items.first?.submenu,
-              appMenu.items.contains(where: { $0.title == "About Noodle Computer" }) else {
+              appMenu.items.contains(where: { $0.title == "About \(ComputerAppIdentity.name)" }) else {
             throw ComputerError("Application menu must retain the full About name.")
         }
         print("APPLICATION NAME TEST PASSED: menu=\(menuName), app=\(displayName), About retains full name")

@@ -4,7 +4,7 @@ import AppletBridge
 public enum AttachmentSource {
     public struct InvalidSource: LocalizedError {
         public var errorDescription: String? {
-            "Attach a local file path, file:/// URL, public HTTP/HTTPS URL, or noodlet:// / noodlet-local:// UUID link."
+            "Attach a local file path, file:/// URL, public HTTP/HTTPS URL, or noodlet:// / noodlet-dev:// UUID link."
         }
     }
 
@@ -12,7 +12,7 @@ public enum AttachmentSource {
         guard !value.isEmpty else { throw InvalidSource() }
         if let components = URLComponents(string: value), let scheme = components.scheme?.lowercased() {
             switch scheme {
-            case "noodlet", "noodlet-local":
+            case "noodlet", "noodlet-dev", "noodlet-local":
                 guard let url = components.url, let canonical = NoodletLink.canonical(url) else { throw InvalidSource() }
                 return canonical
             case "http", "https":

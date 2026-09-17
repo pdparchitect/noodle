@@ -18,7 +18,7 @@ final class ServiceUpdateTests: XCTestCase {
             calls += 1
             switch calls {
             case 1: return LocalMacServiceInfo(fingerprint: self.previous, restarting: true)
-            case 2: throw LocalMacError("XPC disconnected")
+            case 2: throw LocalMacServiceUnavailable()
             default: return LocalMacServiceInfo(fingerprint: self.current)
             }
         }, pause: {})
@@ -46,5 +46,56 @@ final class ServiceUpdateTests: XCTestCase {
             }, pause: {})
             XCTFail("Must time out")
         } catch { XCTAssertEqual(calls, 12) }
+    }
+    func testReplacementCanRecoverWhenTheOldRestartReplyFailsAuthentication() async throws {
+        var calls = 0
+        try await LocalMacServiceUpdate.waitUntilReady(expected: current, read: {
+            calls += 1
+            // A signed request reaches the old helper, which exits, but macOS
+            // rejects its reply because its old executable has been removed.
+            if calls < 3 { throw LocalMacServiceUnavailable() }
+            return LocalMacServiceInfo(fingerprint: self.current)
+        }, pause: {})
+        XCTAssertEqual(calls, 3)
+    }
+    func testUnavailableServiceIsBoundedAndNeverTreatedAsReady() async {
+        var calls = 0
+        do {
+            try await LocalMacServiceUpdate.waitUntilReady(expected: current, read: {
+                calls += 1
+                throw LocalMacServiceUnavailable()
+            }, pause: {})
+            XCTFail("No verified reply must never mean ready")
+        } catch {
+            XCTAssertTrue(error is LocalMacServiceUnavailable)
+            XCTAssertEqual(calls, 12)
+        }
+    }
+    func testTransportRecoveryStillRefusesTheWrongVerifiedImage() async {
+        var calls = 0
+        do {
+            try await LocalMacServiceUpdate.waitUntilReady(expected: current, read: {
+                calls += 1
+                if calls == 1 { throw LocalMacServiceUnavailable() }
+                return LocalMacServiceInfo(fingerprint: self.previous)
+            }, pause: {})
+            XCTFail("The verified image must also match the installed build")
+        } catch {
+            XCTAssertFalse(error is LocalMacServiceUnavailable)
+            XCTAssertEqual(calls, 2)
+        }
+    }
+    func testCancellationIsNotRetried() async {
+        var calls = 0
+        do {
+            try await LocalMacServiceUpdate.waitUntilReady(expected: current, read: {
+                calls += 1
+                throw CancellationError()
+            }, pause: {})
+            XCTFail("Cancellation must propagate")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+            XCTAssertEqual(calls, 1)
+        }
     }
 }

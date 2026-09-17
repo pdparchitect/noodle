@@ -125,7 +125,7 @@ import SwiftUI
         if let launch { try await launch.value; return }
         let task = Task { @MainActor in
             guard let url = self.applicationLookup() else {
-                throw ComputerBridgeError("Install Noodle Computer to use computers with your bots.")
+                throw ComputerBridgeError("Install \(ComputerBuildIdentity.current.appName) to use computers with your bots.")
             }
             let configuration = NSWorkspace.OpenConfiguration()
             configuration.activates = false; configuration.hides = true
@@ -141,7 +141,7 @@ import SwiftUI
     func openLibrary() async throws {
         if let launch { try await launch.value }
         guard let url = applicationLookup() else {
-            throw ComputerBridgeError("Install Noodle Computer to create a computer.")
+            throw ComputerBridgeError("Install \(ComputerBuildIdentity.current.appName) to create a computer.")
         }
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
@@ -158,11 +158,14 @@ import SwiftUI
         if let launch { try await launch.value }
         try Task.checkCancellation()
         guard let application = applicationLookup() else {
-            throw ComputerBridgeError("Install Noodle Computer to open this computer attachment.")
+            throw ComputerBridgeError("Install \(ComputerBuildIdentity.current.appName) to open this computer attachment.")
         }
         try await documentOpener(fileURL, application)
     }
     func openDownload() async throws {
+        guard ComputerBuildIdentity.current != .development else {
+            throw ComputerBridgeError("Build Noodle Computer Dev with scripts/build-computer.sh to use computers in Noodle Dev.")
+        }
         // Do not send users to a broken download before the first public release.
         var request = URLRequest(url: ComputerDistribution.releaseAPI)
         request.timeoutInterval = 15
@@ -309,7 +312,7 @@ import SwiftUI
             guard view == "web" || terminal != nil else { throw ComputerBridgeError("The provider did not return a terminal session. Update Noodle Computer.") }
             let card = ComputerCard(computer: computer, agentID: agent.id, terminalID: terminal, terminalPreview: text,
                 view: view, previewImage: view == "web" ? response.previewImage : nil)
-            let attachment = try repository.importAttachment(data: JSONEncoder().encode(card.reference), originalFilename: computer.name + ".noodlecomputer",
+            let attachment = try repository.importAttachment(data: JSONEncoder().encode(card.reference), originalFilename: computer.name + "." + ComputerBuildIdentity.current.fileExtension,
                 into: conversation, mediaType: ComputerCard.mediaType, computer: card)
             do {
                 _ = try repository.sendAgentMessage(agentID: agent.id, conversationID: conversation,

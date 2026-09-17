@@ -8,15 +8,16 @@ public enum NoodletLink {
     /// Recognition preserves both channels so a foreign link can be displayed with
     /// an unavailable message. Opening/access must additionally call requireID.
     public static func build(in url: URL) -> AppletBuildIdentity? {
-        AppletBuildIdentity.allCases.first { $0.urlScheme == url.scheme?.lowercased() }
+        if url.scheme?.lowercased() == "noodlet-local" { return .development }
+        return AppletBuildIdentity.allCases.first { $0.urlScheme == url.scheme?.lowercased() }
     }
     public static func id(in url: URL) -> UUID? {
-        guard let build = build(in: url),
+        guard build(in: url) != nil,
               let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
               parts.user == nil, parts.password == nil, parts.port == nil,
               parts.path.isEmpty, parts.query == nil, parts.fragment == nil,
               let host = parts.host, let id = UUID(uuidString: host),
-              url.absoluteString.lowercased() == self.url(for: id, build: build).absoluteString
+              url.absoluteString.lowercased() == url.scheme!.lowercased() + "://" + id.uuidString.lowercased()
         else { return nil }
         return id
     }

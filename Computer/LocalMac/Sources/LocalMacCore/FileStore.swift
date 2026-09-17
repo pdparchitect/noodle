@@ -70,7 +70,8 @@ public final class LocalMacFileStore {
         case EPERM:
             let top = path.split(separator: "/").first.map(String.init)
             if let top, ["Desktop", "Documents", "Downloads"].contains(top) {
-                return LocalMacError("macOS denied access to “\(path)”. In this Local Mac account’s desktop, allow \(top) access for Noodle Local Mac Desktop in System Settings → Privacy & Security → Files & Folders, then retry.")
+                let name = LocalMacIdentity.desktop(Bundle.main.bundleIdentifier)?.desktopAppName ?? "Noodle Local Mac Desktop"
+                return LocalMacError("macOS denied access to “\(path)”. In this Local Mac account’s desktop, allow \(top) access for \(name) in System Settings → Privacy & Security → Files & Folders, then retry.")
             }
             return LocalMacError("macOS denied access to “\(path)” (Operation not permitted). This item may be protected by the account’s privacy settings.")
         case EACCES:

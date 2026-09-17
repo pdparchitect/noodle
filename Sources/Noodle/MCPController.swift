@@ -146,7 +146,7 @@ final class MCPController {
             defer { signingIn = nil; loginTask = nil; signInStage = "" }
             do {
                 let types = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]]
-                let scheme = (types?.first?["CFBundleURLSchemes"] as? [String])?.first ?? "noodle-local"
+                let scheme = (types?.first?["CFBundleURLSchemes"] as? [String])?.first ?? "noodle-dev"
                 let redirect = MCPService.configuredRedirectURI(for: record.endpoint)
                     ?? URL(string: "\(scheme)://mcp/oauth/callback")!
                 try await service.signIn(record, redirectURI: redirect, progress: { [weak self] stage in

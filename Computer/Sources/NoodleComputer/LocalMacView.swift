@@ -10,6 +10,7 @@ struct NewLocalMacView: View {
     @State private var name = "My Local Mac"
     @State private var appearance = ComputerAppearance()
     @State private var failure: String?
+    @State private var registration: LocalMacRegistrationStatus?
     private var creating: Bool { store.creationStatus != nil }
     private var draft: Computer {
         var computer = Computer(name: name, kind: .localMac)
@@ -51,13 +52,27 @@ struct NewLocalMacView: View {
                 }.padding(12).background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 12))
                 Text("A separate account on this Mac, with its own desktop and files. It shares this Mac’s operating system, storage and network.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                Text("Administrator approval and desktop permissions are required on first use. Stopping keeps the account and its files.")
-                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                if let registration {
+                    HStack {
+                        Label(registration.setupTitle, systemImage: registration == .enabled ? "checkmark.circle" : "lock.shield")
+                            .foregroundStyle(registration == .enabled ? Color.secondary : .orange)
+                        Spacer()
+                        if registration != .enabled {
+                            Button(registration.setupActionTitle) {
+                                do { try LocalMacSetup.resolve(registration) } catch { failure = error.localizedDescription }
+                            }
+                        }
+                    }.font(.callout)
+                } else { ProgressView("Checking Local Mac setup…").controlSize(.small) }
                 ComputerAppearanceRow(appearance: $appearance)
                 if let failure { Text(failure).foregroundStyle(.red).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
             }.padding(20).disabled(creating)
         }.frame(width: 520).noodleSheetSizing(animated: true)
             .interactiveDismissDisabled(creating)
+            .task { registration = await LocalMacSetup.registrationStatus() }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                Task { registration = await LocalMacSetup.registrationStatus() }
+            }
     }
 }
 
@@ -68,7 +83,7 @@ struct LocalMacDesktopView: View {
     private var issue: (message: String, settings: Bool, dismissible: Bool)? {
         if let status = runtime.status {
             if !status.screenCapture { return ("Screen Recording access is required to show this desktop.", true, false) }
-            if !status.accessibility { return ("Accessibility access is required for mouse and keyboard control.", true, false) }
+            if !status.accessibility { return ("\(LocalMacSetup.controlPermissionName) is required for mouse and keyboard control.", true, false) }
             if !status.postEvents { return ("Restart this computer to enable mouse and keyboard control.", false, false) }
             if status.setupRunning { return ("Restart this computer to finish account setup.", false, false) }
             if let detail = status.detail { return (detail, false, false) }
@@ -77,7 +92,7 @@ struct LocalMacDesktopView: View {
     }
     var body: some View {
         VStack(spacing: 0) {
-            LocalMacSurface(runtime: runtime, active: active).background(.black)
+            LocalMacSurface(runtime: runtime, active: active && runtime.windowPreview == nil).background(.black)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay {
                     if runtime.image == nil {
@@ -97,7 +112,11 @@ struct LocalMacDesktopView: View {
                     else if issue.dismissible { Button("Dismiss") { runtime.error = nil } }
                 }.padding(8)
             }
-        }.task {
+        }
+        .background(LocalMacWindowPreviewPresenter(runtime: runtime, active: active))
+        .onChange(of: active) { _, active in if !active { runtime.closeWindowPreview() } }
+        .onDisappear { runtime.closeWindowPreview() }
+        .task {
             while !Task.isCancelled {
                 await runtime.refreshStatus()
                 try? await Task.sleep(for: .seconds(3))
@@ -110,19 +129,33 @@ struct LocalMacDesktopView: View {
 /// below the desktop at the same time. Only offer the permission still missing.
 struct LocalMacPermissionsSettings: View {
     @ObservedObject var runtime: LocalMacComputer
+    @State private var preparing = false
+    @State private var failure: String?
     var body: some View {
         if let status = runtime.status, !status.screenCapture || !status.accessibility {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Allow \(!status.screenCapture ? "Screen Recording" : "Accessibility") for Noodle Local Mac Desktop.")
-                Text("In System Settings, use + to add the desktop helper. Restart this computer after granting access.")
+                Text("Allow \(!status.screenCapture ? "Screen Recording" : LocalMacSetup.controlPermissionName) for \(LocalMacSetup.desktopName).")
+                Text("Add the helper shown in Finder using + in System Settings, then enable it. Restart this computer after granting access.")
                     .font(.callout).foregroundStyle(.secondary)
                 HStack {
                     Button("Open System Settings…") {
-                        openPrivacy(!status.screenCapture ? "Privacy_ScreenCapture" : "Privacy_Accessibility")
-                    }
-                    Button("Show Desktop Helper") { NSWorkspace.shared.activateFileViewerSelecting([LocalMacSetup.desktopApp]) }
+                        showHelper(pane: !status.screenCapture ? "Privacy_ScreenCapture" : "Privacy_Accessibility")
+                    }.disabled(preparing)
+                    Button("Show Desktop Helper") { showHelper() }.disabled(preparing)
                 }
+                if let failure { Text(failure).font(.callout).foregroundStyle(.red) }
             }
+        }
+    }
+    private func showHelper(pane: String? = nil) {
+        preparing = true; failure = nil
+        Task {
+            defer { preparing = false }
+            do {
+                let helper = try LocalMacSetup.desktopForPermissions()
+                NSWorkspace.shared.activateFileViewerSelecting([helper])
+                if let pane { openPrivacy(pane) }
+            } catch { failure = error.localizedDescription }
         }
     }
     private func openPrivacy(_ pane: String) {
@@ -130,17 +163,18 @@ struct LocalMacPermissionsSettings: View {
     }
 }
 
-private struct LocalMacSurface: NSViewRepresentable {
+struct LocalMacSurface: NSViewRepresentable {
     @ObservedObject var runtime: LocalMacComputer
     var active: Bool
+    var preview = false
     func makeNSView(context: Context) -> LocalMacImageView {
-        let view = LocalMacImageView(); view.runtime = runtime
+        let view = LocalMacImageView(); view.runtime = runtime; view.preview = preview
         view.setAccessibilityElement(true); view.setAccessibilityRole(.image)
-        view.setAccessibilityLabel("Local Mac desktop")
+        view.setAccessibilityLabel(preview ? "Focused window" : "Local Mac desktop")
         return view
     }
     func updateNSView(_ view: LocalMacImageView, context: Context) {
-        view.runtime = runtime; view.active = active; view.needsDisplay = true
+        view.runtime = runtime; view.preview = preview; view.active = active; view.needsDisplay = true
     }
 }
 
@@ -161,8 +195,11 @@ enum LocalMacPointerEvent {
     }
 }
 
-private final class LocalMacImageView: NSView {
+final class LocalMacImageView: NSView {
     weak var runtime: LocalMacComputer?
+    var preview = false
+    private var displayedImage: NSImage?
+    private var displayedGeometry: LocalMacWindowFrame?
     var active = true { didSet { if !active && oldValue { releaseInput() } } }
     private var heldButtons: Set<Int> = []
     private var interacting = false
@@ -202,14 +239,17 @@ private final class LocalMacImageView: NSView {
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     private var imageRect: CGRect {
-        let size = runtime?.image?.size ?? NSSize(width: 1280, height: 800)
+        let size = displayedImage?.size ?? NSSize(width: 1280, height: 800)
         let scale = min(bounds.width / max(1, size.width), bounds.height / max(1, size.height))
         let width = size.width * scale, height = size.height * scale
         return CGRect(x: (bounds.width - width) / 2, y: (bounds.height - height) / 2, width: width, height: height)
     }
     override func draw(_ dirtyRect: NSRect) {
+        let frame = runtime?.windowPreview
+        displayedImage = preview ? frame?.image : runtime?.image
+        displayedGeometry = preview ? frame?.geometry : nil
         NSColor.black.setFill(); bounds.fill()
-        runtime?.image?.draw(in: imageRect, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: nil)
+        displayedImage?.draw(in: imageRect, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: nil)
     }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -223,7 +263,7 @@ private final class LocalMacImageView: NSView {
         if kind == .down { heldButtons.insert(input.button) }
         else if kind == .up { heldButtons.remove(input.button) }
         interacting = true
-        runtime?.send(input)
+        send(input)
     }
     override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); pointer(event, kind: .down) }
     override func mouseUp(with event: NSEvent) { pointer(event, kind: .up) }
@@ -240,6 +280,14 @@ private final class LocalMacImageView: NSView {
         guard active else { return }
         interacting = true
         var input = LocalMacInput(kind); input.key = event.keyCode; input.flags = event.cgEvent?.flags.rawValue ?? 0
+        send(input)
+    }
+    private func send(_ input: LocalMacInput) {
+        var input = input
+        if preview {
+            guard let geometry = displayedGeometry, runtime?.windowPreview?.id == geometry.previewID else { return }
+            input.previewID = geometry.previewID; input.geometryID = geometry.geometryID
+        }
         runtime?.send(input)
     }
     override func keyDown(with event: NSEvent) { key(event, kind: .keyDown) }

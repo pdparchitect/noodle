@@ -157,7 +157,7 @@ actor GuestFiles: ComputerFileService {
         let task = Task { () throws -> String in
             guard let url = Bundle.main.resourceURL?.appendingPathComponent("Runtime/noodle-files"),
                   let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize else {
-                throw ComputerError("The file helper is missing. Rebuild Noodle Computer.")
+                throw ComputerError("The file helper is missing. Rebuild \(ComputerAppIdentity.name).")
             }
             let input = try FileInput(url: url, limit: Int64(size))
             // A prior root-owned helper survives image updates in the writable

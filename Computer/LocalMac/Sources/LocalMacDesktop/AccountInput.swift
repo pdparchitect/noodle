@@ -16,7 +16,7 @@ final class AccountInput {
         try session.verifyCurrent()
         event.post(tap: .cgSessionEventTap)
     }
-    func post(_ input: LocalMacInput, bounds: CGRect) throws {
+    func post(_ input: LocalMacInput, bounds: CGRect, display: LocalMacDisplay? = nil) throws {
         try session.verifyCurrent()
         guard AXIsProcessTrusted(), CGPreflightPostEventAccess() else {
             throw LocalMacError(LocalMacStatus.inputPermissionError)
@@ -55,7 +55,7 @@ final class AccountInput {
             }
             return
         }
-        guard let point = session.account.display.desktopPoint(x: input.x, y: input.y, bounds: bounds,
+        guard let point = (display ?? session.account.display).desktopPoint(x: input.x, y: input.y, bounds: bounds,
                                                                clamp: !buttons.isEmpty) else { return }
         let delta = CGPoint(x: point.x - lastPoint.x, y: point.y - lastPoint.y)
         lastPoint = point

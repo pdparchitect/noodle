@@ -7,7 +7,7 @@ struct MainWindowScene<Content: View>: Scene {
     var onOpenURL: (URL) -> Void
 
     var body: some Scene {
-        Window("Noodle", id: "main") {
+        Window(NoodleAppIdentity.name, id: "main") {
             content()
                 .onOpenURL(perform: onOpenURL)
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])

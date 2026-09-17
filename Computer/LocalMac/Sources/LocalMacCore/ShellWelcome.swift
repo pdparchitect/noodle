@@ -5,17 +5,18 @@ import Darwin
 /// Existing settings are retained; linked or otherwise unusual rc files are left alone.
 public enum LocalMacShellWelcome {
     private static let marker = "# Noodle Computer interactive welcome."
-    private static let hook = #"""
+    private static func hook(identity: LocalMacIdentity) -> String { #"""
         # Noodle Computer interactive welcome.
         if [[ -o interactive && -t 1 && ${_NOODLE_WELCOME_PID:-} != $$ ]]; then
           _NOODLE_WELCOME_PID=$$
-          if [[ -r "$HOME/Applications/Noodle Local Mac Desktop.app/Contents/Resources/noodle-welcome" ]]; then
-            NOODLE_BANNER="${NOODLE_BANNER:-1}" /bin/sh "$HOME/Applications/Noodle Local Mac Desktop.app/Contents/Resources/noodle-welcome"
+          if [[ -r "$HOME/Applications/\#(identity.desktopAppName).app/Contents/Resources/noodle-welcome" ]]; then
+            NOODLE_BANNER="${NOODLE_BANNER:-1}" /bin/sh "$HOME/Applications/\#(identity.desktopAppName).app/Contents/Resources/noodle-welcome"
           fi
         fi
-        """#
+        """# }
 
-    public static func prepare(home: String) throws {
+    public static func prepare(home: String, identity: LocalMacIdentity) throws {
+        guard identity.permitsAccountService else { throw LocalMacError("This build cannot prepare a managed account shell.") }
         let path = home + "/.zshrc"
         var fd = open(path, O_RDWR | O_APPEND | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
         let created = fd >= 0
@@ -34,6 +35,6 @@ public enum LocalMacShellWelcome {
         let existing = try file.read(upToCount: 1_048_577) ?? Data()
         guard existing.count <= 1_048_576, existing.range(of: Data(marker.utf8)) == nil else { return }
         let prompt = created ? "# Noodle Local Mac default prompt. Customize this file as needed.\nPROMPT='%1~ %# '\n" : ""
-        try file.write(contentsOf: Data((prompt + "\n" + hook + "\n").utf8))
+        try file.write(contentsOf: Data((prompt + "\n" + hook(identity: identity) + "\n").utf8))
     }
 }

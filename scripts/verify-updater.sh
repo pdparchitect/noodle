@@ -12,7 +12,7 @@ team="$(codesign -dv --verbose=4 "$app" 2>&1 | awk -F= '/^TeamIdentifier=/ { pri
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUVerifyUpdateBeforeExtraction' "$info")" == true ]]
 expected_feed='https://github.com/pdparchitect/noodle/releases/latest/download/appcast.xml'
 case "$bundle_identifier" in
-    com.pdparchitect.noodle.computer|com.pdparchitect.noodle.computer.tests)
+    com.pdparchitect.noodle.computer|com.pdparchitect.noodle.computer.local|com.pdparchitect.noodle.computer.tests)
         expected_feed='https://github.com/pdparchitect/noodle/releases/download/computer-latest/appcast.xml' ;;
     com.pdparchitect.noodle.applet|com.pdparchitect.noodle.applet.local)
         expected_feed='https://github.com/pdparchitect/noodle/releases/download/applet-latest/appcast.xml' ;;

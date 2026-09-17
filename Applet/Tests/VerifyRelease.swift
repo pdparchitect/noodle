@@ -16,7 +16,7 @@ let team = info["NoodleSigningTeam"] as! String, bundle = info["CFBundleIdentifi
 let local = bundle == "com.pdparchitect.noodle.applet.local"
 precondition(local || bundle == "com.pdparchitect.noodle.applet")
 let group = "\(team).com.pdparchitect.noodle.applets" + (local ? ".local" : "")
-let documentExtension = local ? "noodlet-local" : "noodlet"
+let documentExtension = local ? "noodlet-dev" : "noodlet"
 let contentType = "com.pdparchitect.noodle." + documentExtension
 precondition(info["NoodleAppletGroup"] as? String == group)
 precondition(entitlements["com.apple.security.application-groups"] as? [String] == [group])

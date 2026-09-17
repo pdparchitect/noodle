@@ -3,11 +3,17 @@ import Foundation
 import Security
 
 public enum ComputerConnection {
-    public static let providerID = "com.pdparchitect.noodle.computer"
-    public static let clientIDs = ["com.pdparchitect.noodle", "com.pdparchitect.noodle.local"]
+    public static var providerID: String { ComputerBuildIdentity.current.providerID }
+    public static var clientIDs: [String] { ComputerBuildIdentity.current.clientIDs }
     public static let maxFrame = 4 * 1_048_576
 
     public static func socketURL(bundle: Bundle = .main) throws -> URL {
+        if let identity = ComputerBuildIdentity.identify(bundle.bundleIdentifier) {
+            let expected = try signingTeam(bundle: bundle) + "." + identity.groupSuffix
+            guard bundle.object(forInfoDictionaryKey: "NoodleComputerGroup") as? String == expected else {
+                throw ComputerBridgeError("The Computer connection group does not match this app's build identity. Rebuild the matching app pair.")
+            }
+        }
         guard let group = bundle.object(forInfoDictionaryKey: "NoodleComputerGroup") as? String,
               let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) else {
             throw ComputerBridgeError("Computer integration is not configured in this signed build.")

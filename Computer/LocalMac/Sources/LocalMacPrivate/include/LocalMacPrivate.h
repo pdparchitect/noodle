@@ -12,5 +12,10 @@ BOOL NLMPIDBelongsToUser(pid_t pid, uid_t uid);
 int NLMClaimDesktopResponsibility(NSString *executable, NSString *sessionPayload, BOOL reexecuted);
 pid_t NLMSpawnTerminal(NSString *home, int *masterFD);
 /// Remove the exact managed home through no-follow, directory-relative I/O.
-int NLMRemoveHome(NSString *name, uid_t uid);
+BOOL NLMRemoveHome(NSString *name, uid_t uid, NSError * _Nullable * _Nullable error);
+/// Descriptor-based implementation, also used by unprivileged temporary-home tests.
+/// The lifecycle service supplies only /Users; this is not exposed over XPC.
+BOOL NLMRemoveManagedHomeAt(int parent, NSString *name, uid_t uid, NSError * _Nullable * _Nullable error);
+/// Bounds of nontransparent pixels in a top-left-origin BGRA buffer, or CGRectNull.
+CGRect NLMVisiblePixelBounds(const uint8_t *pixels, size_t width, size_t height, size_t bytesPerRow);
 NS_ASSUME_NONNULL_END

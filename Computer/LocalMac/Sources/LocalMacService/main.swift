@@ -7,8 +7,6 @@ import Darwin
 import MachO
 import OSLog
 
-private let serviceID = "com.pdparchitect.noodle.computer.localmac"
-private let log = Logger(subsystem: serviceID, category: "lifecycle")
 private let executable: URL = {
     // launchd may provide a bundle-relative argv[0]. Resolve the running Mach-O
     // image instead of interpreting its command name relative to the daemon's cwd.
@@ -23,6 +21,12 @@ private let appURL = setupAppURL.deletingLastPathComponent().deletingLastPathCom
 private let app = Bundle(url: appURL)
 private let team = app?.object(forInfoDictionaryKey: "NoodleSigningTeam") as? String ?? ""
 private let providerID = app?.bundleIdentifier ?? ""
+private let identity: LocalMacIdentity = {
+    guard let identity = LocalMacIdentity(providerID: providerID) else { exit(1) }
+    return identity
+}()
+private let serviceID = identity.serviceID
+private let log = Logger(subsystem: serviceID, category: "lifecycle")
 private let machName = (app?.object(forInfoDictionaryKey: "NoodleComputerGroup") as? String ?? "") + ".localmac"
 
 private func sessions() -> [[String: Any]] { NLMCopySessions() as! [[String: Any]] }
@@ -50,7 +54,7 @@ private enum Passwords {
         var value: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &value)
         if status == errSecInteractionNotAllowed {
-            throw LocalMacError("macOS blocked access to the saved account password. In Keychain Access → System, allow the installed LocalMacService to access com.pdparchitect.noodle.computer.localmac, then retry Start. Keep the existing password and account.")
+            throw LocalMacError("macOS blocked access to the saved account password. In Keychain Access → System, allow the installed LocalMacService to access \(serviceID), then retry Start. Keep the existing password and account.")
         }
         guard status == errSecSuccess, let data = value as? Data, let password = String(data: data, encoding: .utf8) else {
             throw LocalMacError("The Local Mac credential is unavailable (\(status)). Its account has been retained.")
@@ -73,11 +77,11 @@ private enum Passwords {
 }
 
 private final class Accounts {
-    let root = URL(fileURLWithPath: "/Library/Application Support/Noodle Computer/Local Mac", isDirectory: true)
+    let root = identity.storageDirectory
     let node: ODNode
     init() throws {
         node = try ODNode(session: ODSession.default(), type: UInt32(kODNodeTypeLocalNodes))
-        for path in ["/Library", "/Library/Application Support", "/Library/Application Support/Noodle Computer", root.path] {
+        for path in ["/Library", "/Library/Application Support", root.deletingLastPathComponent().path, root.path] {
             var info = stat()
             if lstat(path, &info) != 0 {
                 guard errno == ENOENT, mkdir(path, 0o700) == 0, lstat(path, &info) == 0 else { throw LocalMacError("Cannot prepare Local Mac service storage.") }
@@ -200,12 +204,12 @@ private final class Accounts {
         }
         // Deletion is an explicit operation. Guard the exact home against path
         // substitution; never follow a symlink supplied by the managed user.
-        var info = stat()
-        let exists = lstat(account.home, &info) == 0
-        guard !exists || (info.st_mode & S_IFMT == S_IFDIR && info.st_uid == account.uid) else { throw LocalMacError("The managed home directory changed; deletion was refused.") }
-        if exists {
-            let result = NLMRemoveHome(account.name, account.uid)
-            guard result == 0 else { throw LocalMacError("Cannot remove the managed home (\(result)). The account record was retained.") }
+        // The descriptor-based remover verifies ownership and distinguishes an
+        // absent home from permission failures. Preflight must finish before
+        // deleting any files, the directory record, credentials or owner record.
+        var removalError: NSError?
+        guard NLMRemoveHome(account.name, account.uid, &removalError) else {
+            throw LocalMacRemovalFailure(removalError ?? NSError(domain: NSPOSIXErrorDomain, code: Int(EIO)))
         }
         try user?.delete()
         try Passwords.remove(account.computerID)
@@ -237,7 +241,7 @@ private final class Service: NSObject, NSXPCListenerDelegate {
         fingerprint = try LocalMacSignedCode.runningFingerprint()
     }
     func requireAvailable() throws {
-        guard !restarting else { throw LocalMacError("The Local Mac service is finishing an update. Retry Start; the account has been retained.") }
+        guard !restarting else { throw LocalMacError("The Local Mac service is finishing an update. Retry the operation; the account has been retained.") }
     }
     func serviceInfo() throws -> LocalMacServiceInfo {
         let requirement = "anchor apple generic and identifier \"\(serviceID)\" and certificate leaf[subject.OU] = \"\(team)\""
@@ -332,7 +336,9 @@ private final class Service: NSObject, NSXPCListenerDelegate {
         }
     }
     func verifiedDesktop() throws -> URL {
-        let desktop = appURL.appendingPathComponent("Contents/Helpers/LocalMacDesktop.app/Contents/MacOS/LocalMacDesktop")
+        // Installation may have replaced the old development location with an
+        // alias after this service started. Launch from the current real path.
+        let desktop = appURL.appendingPathComponent("Contents/Helpers/LocalMacDesktop.app/Contents/MacOS/LocalMacDesktop").resolvingSymlinksInPath()
         var staticCode: SecStaticCode?
         guard SecStaticCodeCreateWithPath(desktop as CFURL, [], &staticCode) == errSecSuccess, let staticCode else { throw LocalMacError("The desktop helper is missing.") }
         var requirement: SecRequirement?
@@ -341,12 +347,20 @@ private final class Service: NSObject, NSXPCListenerDelegate {
               SecStaticCodeCheckValidity(staticCode, [], requirement) == errSecSuccess else { throw LocalMacError("The desktop helper signature is invalid.") }
         return desktop
     }
-    func prepareOnboarding(_ account: LocalMacAccount, desktop: URL) throws {
+    func checkDesktopAccess(_ account: LocalMacAccount, desktop: URL) throws {
+        // Root can verify a bundle that the managed standard account cannot
+        // traverse (for example, a dev build under the owner's Documents).
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
-        process.arguments = ["-n", "-u", account.name, "--", "/usr/bin/env", "HOME=" + account.home,
-            "USER=" + account.name, "LOGNAME=" + account.name, desktop.path, "--prepare-onboarding",
-            try JSONEncoder().encode(account).base64EncodedString()]
+        process.arguments = ["-n", "-u", account.name, "--", "/bin/test",
+            "-r", desktop.path, "-a", "-x", desktop.path]
+        let result = try runPreparation(process, timeoutMessage: "Checking the desktop helper's access timed out. Retry Start.")
+        guard result == 0 else {
+            throw LocalMacError("This account cannot access the desktop helper at the app’s current location. Install \(identity.build.appName) in /Applications, reopen it, then retry Start. The account has been retained.")
+        }
+    }
+    private func runPreparation(_ process: Process, timeoutMessage: String) throws -> Int32 {
+        process.currentDirectoryURL = URL(fileURLWithPath: "/")
         process.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin"]
         process.standardInput = FileHandle.nullDevice; process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
@@ -357,15 +371,25 @@ private final class Service: NSObject, NSXPCListenerDelegate {
         }
         guard !process.isRunning else {
             process.terminate()
-            throw LocalMacError("Account preparation timed out; background login was deferred.")
+            throw LocalMacError(timeoutMessage)
         }
-        guard process.terminationStatus == 0 else { throw LocalMacError("Cannot prepare this account's optional onboarding.") }
+        return process.terminationStatus
+    }
+    func prepareOnboarding(_ account: LocalMacAccount, desktop: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
+        process.arguments = ["-n", "-u", account.name, "--", "/usr/bin/env", "HOME=" + account.home,
+            "USER=" + account.name, "LOGNAME=" + account.name, desktop.path, "--prepare-onboarding",
+            try JSONEncoder().encode(account).base64EncodedString()]
+        let result = try runPreparation(process, timeoutMessage: "Account preparation timed out; background login was deferred.")
+        guard result == 0 else { throw LocalMacError("The Local Mac desktop helper could not prepare this account (exit code \(result)). Its account and files have been retained.") }
     }
     func connect(_ account: LocalMacAccount) throws -> (LocalMacSession, FileHandle, FileHandle) {
         let user = try accounts.record(account)
         let desktop = try verifiedDesktop()
         let original = try console()
         guard uid(original) == account.ownerUID else { throw LocalMacError("Start this computer from its owner's active desktop.") }
+        try checkDesktopAccess(account, desktop: desktop)
         try rememberConsole(original)
         defer { try? restoreConsole(original) }
         var current = sessions().first { uid($0) == account.uid }
@@ -467,20 +491,32 @@ private final class Client: NSObject, LocalMacLifecycle {
         }
     }
     func remove(_ id: UUID, reply: @escaping (String?) -> Void) {
+        removeAccount(id) { _, error in reply(error) }
+    }
+    func removeAccount(_ id: UUID, reply: @escaping (Data?, String?) -> Void) {
         service.queue.async {
             do {
                 try self.service.requireAvailable()
-                if let account = try self.service.accounts.existing(id, owner: self.owner) { try self.service.accounts.remove(account) }
-                reply(nil)
+                if let account = try self.service.accounts.existing(id, owner: self.owner) {
+                    // A failed desktop transport can leave a background login
+                    // alive. Explicit deletion owns the stop as well; it never
+                    // depends on a reply from the desktop's capture/input pipe.
+                    try self.service.stop(account)
+                    try self.service.accounts.remove(account)
+                }
+                reply(nil, nil)
             }
-            catch { reply(error.localizedDescription) }
+            catch let failure as LocalMacRemovalFailure {
+                reply(try? JSONEncoder().encode(failure), failure.message(appName: identity.build.appName))
+            }
+            catch { reply(nil, error.localizedDescription) }
         }
     }
 }
 
 let validLayout = team.count == 10 &&
-    ["com.pdparchitect.noodle.computer", "com.pdparchitect.noodle.computer.tests"].contains(providerID) &&
-    machName.hasPrefix(team + ".")
+    machName == identity.group(team: team) + ".localmac" &&
+    Bundle(url: setupAppURL)?.bundleIdentifier == identity.setupID
 if CommandLine.arguments.dropFirst().elementsEqual(["--check-layout"]) {
     guard validLayout else { fputs("Invalid Local Mac service bundle layout.\n", stderr); exit(1) }
     do {
@@ -493,7 +529,7 @@ if CommandLine.arguments.dropFirst().elementsEqual(["--check-layout"]) {
         exit(0)
     } catch { fputs(error.localizedDescription + "\n", stderr); exit(1) }
 }
-guard geteuid() == 0, validLayout else {
+guard geteuid() == 0, validLayout, identity.permitsAccountService else {
     log.error("Service startup refused: uid=\(geteuid()), layout=\(validLayout), executable=\(executable.path, privacy: .public)")
     exit(1)
 }
