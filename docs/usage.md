@@ -71,7 +71,8 @@ a Linux workspace. Several agents can share a computer to work on the same files
 
 Heartbeats let idle bots check for useful follow-ups on existing work. They are on
 by default after 30 minutes. Change the interval or disable them for individual
-bots in **Settings → Heartbeat**.
+bots in **Settings → Heartbeat**. Click the **Heartbeat** heading above the bot
+switches for an explanation.
 
 They run only while Noodle is open and the Mac is awake. A heartbeat can use model
 tokens even when the bot has nothing to say; it does not authorize new work.

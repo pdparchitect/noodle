@@ -6,8 +6,9 @@
 | --- | --- |
 | Codex, Claude Code, FX, Grok Build, Muse Code, Apple Intelligence | Restricted by default; unrestricted access is optional |
 
-Change any bot's access in **Settings → Security**. Click its **restricted** or
-**unrestricted** label to see what that mode allows. All harnesses use the bot's
+Change any bot's access in **Settings → Sandbox**. Click the **Unrestricted**
+heading or a bot's **restricted** or **unrestricted** label to see what that mode
+allows. All harnesses use the bot's
 saved access preference. Previous required Claude/FX/Grok/Muse grants do not
 override that preference. Editing `agent.json` alone never grants unrestricted access.
 
@@ -163,7 +164,7 @@ Revoke those separately in System Settings.
 
 ## Account apps
 
-The **Apps** switch in **Settings → Security** lets a Codex bot use apps connected
+The **Apps** switch in **Settings → Sandbox** lets a Codex bot use apps connected
 to its ChatGPT account, or a Claude Code bot use connectors from Claude.ai. Click
 the **Apps** heading or a bot's **apps** status to see the explanation.
 

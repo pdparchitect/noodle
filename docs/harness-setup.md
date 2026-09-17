@@ -22,11 +22,11 @@ For an external harness:
 
 Once a harness is detected, create a bot and select its model and, where available,
 reasoning effort. All harnesses support restricted access, with optional
-[unrestricted access](security.md) in Settings → Security. Restricted Claude uses
+[unrestricted access](security.md) in Settings → Sandbox. Restricted Claude uses
 the Claude.ai sign-in from its standard native installation.
 
 Apps connected to ChatGPT or Claude.ai are off by default for Noodle bots. Enable
-**Apps** beside that bot in **Settings → Security** to allow them. This preference
+**Apps** beside that bot in **Settings → Sandbox** to allow them. This preference
 is separate for each bot and harness; [account apps](security.md#account-apps)
 explains the scope and how it differs from Noodle's assigned tools.
 

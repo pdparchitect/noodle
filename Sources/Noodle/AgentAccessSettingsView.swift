@@ -3,6 +3,7 @@ import NoodleCore
 
 struct AgentAccessSettingsView: View {
     @Environment(NoodleStore.self) private var store
+    @State private var showsAccessInfo = false
     @State private var showsAppsInfo = false
     private let accessColumnWidth: CGFloat = 100
     private let appsColumnWidth: CGFloat = 64
@@ -75,7 +76,12 @@ struct AgentAccessSettingsView: View {
                 if !store.agents.isEmpty {
                     HStack(spacing: 12) {
                         Spacer(minLength: 0)
-                        Text("Unrestricted").frame(width: accessColumnWidth)
+                        Button("Unrestricted") { showsAccessInfo.toggle() }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("About unrestricted access")
+                            .help("About unrestricted access")
+                            .frame(width: accessColumnWidth)
+                            .popover(isPresented: $showsAccessInfo) { AgentAccessInfo(isExtended: true) }
                         Button("Apps") { showsAppsInfo.toggle() }
                             .buttonStyle(.plain)
                             .accessibilityLabel("About account apps")
@@ -100,14 +106,6 @@ private struct AgentAccessStatusLabel: View {
 
     private var title: String { isExtended ? "unrestricted" : "restricted" }
 
-    private var explanation: String {
-        if isExtended {
-            "This bot can read and change files and use services beyond its private workspace, with the access available to your Mac account. macOS and tool permissions still apply. Noodle approves supported tool requests automatically."
-        } else {
-            "This bot runs in a macOS filesystem sandbox. It can work in its private workspace and use allowed harness storage, while unrelated personal files are blocked. Assigned tools and computers use their own permissions."
-        }
-    }
-
     var body: some View {
         if isChanging {
             Text("Restarting runtime…")
@@ -120,23 +118,37 @@ private struct AgentAccessStatusLabel: View {
                 .help("About \(title.lowercased()) access")
                 .accessibilityHint("Show what \(title.lowercased()) access allows")
                 .popover(isPresented: $showsAccessInfo) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(title.capitalized)
-                            .font(.headline)
-                        Text(explanation)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if let requiredProvider {
-                            Text("\(requiredProvider.displayName) requires unrestricted access. Selecting it in the bot editor authorizes this access.")
-                                .fixedSize(horizontal: false, vertical: true)
-                        } else if isExtended {
-                            Text("Turning this off restarts the bot in Restricted mode. It does not undo completed actions or revoke macOS permissions.")
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    .padding(20)
-                    .frame(width: 360, alignment: .leading)
+                    AgentAccessInfo(isExtended: isExtended, requiredProvider: requiredProvider)
                 }
         }
+    }
+}
+
+private struct AgentAccessInfo: View {
+    let isExtended: Bool
+    var requiredProvider: HarnessProvider? = nil
+
+    private var explanation: String {
+        if isExtended {
+            "This bot can read and change files and use services beyond its private workspace, with the access available to your Mac account. macOS and tool permissions still apply. Noodle approves supported tool requests automatically."
+        } else {
+            "This bot runs in a macOS filesystem sandbox. It can work in its private workspace and use allowed harness storage, while unrelated personal files are blocked. Assigned tools and computers use their own permissions."
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(isExtended ? "Unrestricted" : "Restricted").font(.headline)
+            Text(explanation)
+            if let requiredProvider {
+                Text("\(requiredProvider.displayName) requires unrestricted access. Selecting it in the bot editor authorizes this access.")
+            } else if isExtended {
+                Text("Off by default. Changing this restarts the bot. Turning it off restores Restricted mode; it does not undo completed actions or revoke macOS permissions.")
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(20)
+        .frame(width: 360, alignment: .leading)
     }
 }
 

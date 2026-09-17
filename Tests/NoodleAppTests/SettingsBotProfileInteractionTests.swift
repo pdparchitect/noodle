@@ -17,10 +17,29 @@ import NoodleCore
             let window = try XCTUnwrap(settings.window)
             window.orderFront(nil)
 
+            if heartbeat {
+                let heading = try await control("About heartbeats", in: settings)
+                press(heading)
+                var info: NSView?
+                try await wait {
+                    info = NSApp.windows.filter { $0.isVisible && $0 !== window && $0.sheetParent == nil }
+                        .compactMap(\.contentView).first {
+                            self.elements($0).contains { self.labels($0).contains { $0.contains("Heartbeats run only while the bot is idle") } }
+                        }
+                    return info != nil
+                }
+                let explanation = try XCTUnwrap(info)
+                if let directory = ProcessInfo.processInfo.environment["NOODLE_SETTINGS_PROFILE_SCREENSHOT_DIRECTORY"] {
+                    try snapshot(explanation, to: directory, name: "heartbeat-explanation")
+                }
+                press(heading)
+                try await wait { explanation.window?.isVisible != true }
+            }
+
             let profile = try await openProfile("Ada", in: settings)
             _ = try await control(description, in: profile)
             if let directory = ProcessInfo.processInfo.environment["NOODLE_SETTINGS_PROFILE_SCREENSHOT_DIRECTORY"] {
-                try snapshot(settings, to: directory, name: heartbeat ? "heartbeat" : "security")
+                try snapshot(settings, to: directory, name: heartbeat ? "heartbeat" : "sandbox")
                 try snapshot(profile, to: directory, name: "profile")
             }
             let message = try await control("Direct Message", in: profile)

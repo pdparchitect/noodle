@@ -4,7 +4,7 @@ import NoodleCore
 import NoodleSettingsUI
 
 enum NoodleSettingsTab: Hashable {
-    case general, chat, harnesses, mcps, heartbeats, security, keybindings, companions, updates
+    case general, chat, harnesses, mcps, heartbeats, sandbox, keybindings, companions, updates
 }
 
 struct NoodleSettingsView: View {
@@ -40,8 +40,8 @@ struct NoodleSettingsView: View {
                 .tag(NoodleSettingsTab.heartbeats)
             AgentAccessSettingsView()
                 .settingsContentSize()
-                .tabItem { Label("Security", systemImage: "lock.shield") }
-                .tag(NoodleSettingsTab.security)
+                .tabItem { Label("Sandbox", systemImage: "lock.shield") }
+                .tag(NoodleSettingsTab.sandbox)
             MCPSettingsView()
                 .settingsContentSize()
                 .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
@@ -188,6 +188,8 @@ private extension View {
 
 struct HeartbeatsSettingsView: View {
     @Environment(NoodleStore.self) private var store
+    @State private var showsHeartbeatInfo = false
+    private let heartbeatColumnWidth: CGFloat = 64
 
     private static let suggestedIntervals = [5, 10, 15, 30, 45, 60, 120, 240, 480, 720, 1_440]
 
@@ -242,8 +244,30 @@ struct HeartbeatsSettingsView: View {
                             .labelsHidden()
                             .controlSize(.mini)
                             .disabled(!store.runtime.heartbeatConfiguration.isEnabled)
+                            .frame(width: heartbeatColumnWidth)
                         }
                     }
+                } header: {
+                    HStack {
+                        Spacer(minLength: 0)
+                        Button("Heartbeat") { showsHeartbeatInfo.toggle() }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("About heartbeats")
+                            .help("About heartbeats")
+                            .frame(width: heartbeatColumnWidth)
+                            .popover(isPresented: $showsHeartbeatInfo) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Heartbeat").font(.headline)
+                                    Text("Allows this bot to wake after the selected period of inactivity to check for work. Heartbeats run only while the bot is idle.")
+                                    Text("Wake idle agents must also be on. Turning this bot's switch off stops its automatic heartbeats; it can still respond to messages.")
+                                }
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(20)
+                                .frame(width: 360, alignment: .leading)
+                            }
+                    }
+                    .font(.caption)
+                    .textCase(nil)
                 }
             }
         }

@@ -9,8 +9,8 @@ The Noodle app is sandboxed, but agents with unrestricted access run outside tha
 sandbox as your Mac user. They can access files and signed-in services beyond
 their workspace. Noodle accepts supported tool approvals automatically.
 
-Configure each bot’s access in **Settings → Security**. Click its Restricted or
-Unrestricted label for an explanation of the selected mode.
+Configure each bot’s access in **Settings → Sandbox**. Click the **Unrestricted**
+heading or a bot's **restricted** or **unrestricted** label for an explanation.
 
 ## Data and credentials
 

@@ -9,7 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - Add JavaScript workflows to `mcpshim` with macOS JavaScriptCore, synchronous MCP calls, JSON output, console diagnostics and error traces, workspace file support, and bounded execution without an additional runtime.
-- Add an Apps switch beside Unrestricted in Security settings for Codex and Claude Code. Account apps default to off, are remembered separately for each bot and harness, and have a clickable explanation and lowercase access status.
+- Add an Apps switch beside Unrestricted in Sandbox settings for Codex and Claude Code. Account apps default to off, are remembered separately for each bot and harness, and have a clickable explanation and lowercase access status.
 - Add Gmail MCP connections for reading mail, creating drafts and managing labels, with native Google sign-in and separate accounts. Mark experimental integrations and list them last in the catalogue.
 - Add separate experimental Google Docs, Drive and Calendar MCP connections for document editing, file access and creation, and calendar event management.
 
@@ -17,6 +17,7 @@ All notable changes to Noodle are documented here, following
 
 - Use Dev names for development apps, sharing links and Runbar entries, and export development Computer attachments as `.noodlecomputer-dev`.
 
+- Rename Security settings to Sandbox, make the Unrestricted heading open its explanation, and add a matching clickable Heartbeat heading above the bot switches.
 - Consolidate MCP connection, catalogue and Google Workspace documentation into one guide.
 
 ### Fixed

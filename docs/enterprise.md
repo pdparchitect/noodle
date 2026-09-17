@@ -17,7 +17,7 @@ The same integration carries through to security: Noodle runs in App Sandbox,
 macOS enforces restricted agents' file access, and Keychain holds connected-tool
 OAuth credentials. Microphone and screen capture follow macOS privacy
 permissions. Unrestricted access is an explicit per-agent choice in
-**Settings → Security**. [Explore the security model](security.md).
+**Settings → Sandbox**. [Explore the security model](security.md).
 
 ## Deploy through familiar IT tools
 

@@ -16,7 +16,7 @@ import NoodleCore
         XCTAssertEqual(attribute(apps, .value) as? Int, 0)
         XCTAssertEqual(attribute(access, .value) as? Int, 0)
         _ = try await control("restricted", in: settings)
-        try snapshot(settings, name: "security-defaults")
+        try snapshot(settings, name: "sandbox-defaults")
 
         try await flip("Ada, account apps", in: settings)
         try await wait { f.runtime.runtime.accessConfiguration.appsEnabled(for: f.a) && !f.runtime.runtime.changingAccess.contains(f.a.id) }
@@ -24,29 +24,36 @@ import NoodleCore
         XCTAssertTrue(try XCTUnwrap(f.runtime.factory.processes.last).launch.appsEnabled)
         _ = try await control("apps", in: settings)
         _ = try await control("·", in: settings)
-        try snapshot(settings, name: "security-restricted-apps")
+        try snapshot(settings, name: "sandbox-restricted-apps")
 
         try await flip("Ada, unrestricted access", in: settings)
         try await wait { f.runtime.runtime.accessConfiguration.isExtended(for: f.a) && !f.runtime.runtime.changingAccess.contains(f.a.id) }
         _ = try await control("unrestricted", in: settings)
         XCTAssertTrue(f.runtime.runtime.accessConfiguration.appsEnabled(for: f.a))
-        try snapshot(settings, name: "security-apps")
+        try snapshot(settings, name: "sandbox-apps")
 
-        let heading = try XCTUnwrap(elements(settings).first {
-            attribute($0, .description) as? String == "About account apps"
-        })
-        press(heading)
-        var popover: NSView?
-        try await wait {
-            popover = NSApp.windows.filter { $0.isVisible && $0 !== window && $0.sheetParent == nil }
-                .compactMap(\.contentView).first {
-                    self.elements($0).contains { self.labels($0).contains { $0.contains("ChatGPT or Claude.ai") } }
-                }
-            return popover != nil
+        for (label, content, name) in [
+            ("About unrestricted access", "macOS and tool permissions still apply", "unrestricted-explanation"),
+            ("About account apps", "ChatGPT or Claude.ai", "apps-explanation")
+        ] {
+            let heading = try XCTUnwrap(elements(settings).first {
+                attribute($0, .description) as? String == label
+            })
+            press(heading)
+            var popover: NSView?
+            try await wait {
+                popover = NSApp.windows.filter { $0.isVisible && $0 !== window && $0.sheetParent == nil }
+                    .compactMap(\.contentView).first {
+                        self.elements($0).contains { self.labels($0).contains { $0.contains(content) } }
+                    }
+                return popover != nil
+            }
+            let explanation = try XCTUnwrap(popover)
+            XCTAssertTrue(elements(explanation).contains { labels($0).contains { $0.contains("Off by default") } })
+            try snapshot(explanation, name: name)
+            press(heading)
+            try await wait { explanation.window?.isVisible != true }
         }
-        let explanation = try XCTUnwrap(popover)
-        XCTAssertTrue(elements(explanation).contains { labels($0).contains { $0.contains("Off by default") } })
-        try snapshot(explanation, name: "apps-explanation")
         window.close()
     }
 
