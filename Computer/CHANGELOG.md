@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Focus inactive windows on the first content click before allowing controls or computer input to respond, using the suite's shared behavior.
+
 ### Added
 
 - Ship a signed, notarized DMG alongside the ZIP, with large app and Applications icons and a drag-to-install layout.

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Require a focus click before interacting with inactive library and noodlet windows, sharing the same behavior for HTML and native Swift noodlets.
+
 ### Added
 
 - Ship a signed, notarized DMG alongside the ZIP, with large app and Applications icons and a drag-to-install layout.

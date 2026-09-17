@@ -33,6 +33,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Require a focus click before interacting with an inactive window's content, preventing accidental link and attachment opens in conversations.
 - Let Browser scripts and WebMCP argument files be read directly from the bot's workspace while rejecting symlinks, oversized files and paths outside it.
 - Report OpenCode’s structured provider failures accurately while preserving the saved session and unfinished work for Kick recovery.
 - Wait for OpenCode’s online model catalogue refresh so newly available models appear in the picker and can be selected when a bot starts.

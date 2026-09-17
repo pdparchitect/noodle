@@ -26,6 +26,7 @@ public enum NoodletContext {
     let prefix = ProcessInfo.processInfo.environment["NOODLET_PROTOCOL"]!
     func applicationShouldTerminateAfterLastWindowClosed(_ sender:NSApplication)->Bool {true}
     func applicationDidFinishLaunching(_ notification: Notification) {
+        WindowFocusGuard.shared.start()
         let env = ProcessInfo.processInfo.environment
         let size = NSSize(width: Double(env["NOODLET_WIDTH"] ?? "900") ?? 900, height: Double(env["NOODLET_HEIGHT"] ?? "620") ?? 620)
         let options = (env["NOODLET_WINDOW"].flatMap { $0.data(using: .utf8) }.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String:Any]) ?? [:]

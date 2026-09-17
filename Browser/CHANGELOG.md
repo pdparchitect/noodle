@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Focus inactive windows on the first content click before allowing page links and controls to respond, without affecting background agent input.
+
 ### Changed
 
 - Support isolated build directories and remove development framework search paths from packaged debug builds.

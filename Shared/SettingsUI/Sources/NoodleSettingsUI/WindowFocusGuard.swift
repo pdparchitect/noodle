@@ -1,0 +1,1 @@
+../../../../Applet/Sources/NoodleApplet/Resources/WindowFocusGuard.swift

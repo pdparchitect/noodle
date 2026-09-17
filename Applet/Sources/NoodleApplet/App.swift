@@ -108,6 +108,7 @@ private struct AppletMenu: View {
     AppletUpdater.shared.start()
   }
   func applicationDidFinishLaunching(_ notification: Notification) {
+    WindowFocusGuard.shared.start()
     CompanionAppVisibility.shared.start(permitsDock: !CommandLine.arguments.contains { $0.hasSuffix("-test") })
     let defaultLaunch = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true
     launchLog.notice("Provider launched; default app launch: \(defaultLaunch)")

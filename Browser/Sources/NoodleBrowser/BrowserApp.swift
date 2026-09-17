@@ -84,6 +84,7 @@ import NoodleSettingsUI
     private var needsLibrary = false
     private var externalLaunch = false
     func applicationDidFinishLaunching(_ notification: Notification) {
+        WindowFocusGuard.shared.start()
         CompanionAppVisibility.shared.start(permitsDock: !CommandLine.arguments.contains { $0.hasSuffix("-test") })
         runtime.showBrowser = { [weak self] id in self?.showBrowser(id) }
         runtime.willRemoveBrowser = { [weak self] id in

@@ -127,6 +127,7 @@ import AppletCore
         "#sourceLocation(file: \(quoted), line: 1)\n"
         + (try String(contentsOf: file, encoding: .utf8)) + "\n#sourceLocation()\n"
     }
+    combined += try String(contentsOf: resources.appendingPathComponent("WindowFocusGuard.swift"), encoding: .utf8) + "\n"
     combined += try String(contentsOf: source, encoding: .utf8).replacingOccurrences(
       of: "@main struct NoodletRuntime", with: "struct NoodletRuntime")
     combined += "\nMainActor.assumeIsolated { NoodletRuntime.main() }\n"

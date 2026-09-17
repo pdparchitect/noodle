@@ -140,6 +140,7 @@ extension Notification.Name {
     ComputerUpdater.shared.start()
   }
   func applicationDidFinishLaunching(_ notification: Notification) {
+    WindowFocusGuard.shared.start()
     CompanionAppVisibility.shared.start(permitsDock: !CommandLine.arguments.contains {
       $0.hasSuffix("-test") || $0.hasSuffix("-preview")
     })

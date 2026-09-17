@@ -2,6 +2,7 @@ import AppKit
 import Darwin
 import SwiftUI
 import NoodleCore
+import NoodleSettingsUI
 import UserNotifications
 
 @main
@@ -132,6 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let services = NoodleServices()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        WindowFocusGuard.shared.start()
         NSApp.setActivationPolicy(.regular)
         NoodleStore.active?.updateDockBadge()
         NSApp.servicesProvider = services

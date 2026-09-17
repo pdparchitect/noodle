@@ -19,6 +19,7 @@ fi
 swift build --disable-sandbox --package-path "$package" --scratch-path "$build_root" -c "$configuration" >&2
 bin_path="$(swift build --disable-sandbox --package-path "$package" --scratch-path "$build_root" -c "$configuration" --show-bin-path)"
 swiftc -typecheck -parse-as-library -swift-version 5 -module-cache-path "$build_root/RuntimeCheckCache" \
+    "$package/Sources/NoodleApplet/Resources/WindowFocusGuard.swift" \
     "$package/Sources/NoodleApplet/Resources/NoodletRuntime.swift" \
     "$package/Sources/NoodleApplet/Resources/Examples/Orbit.noodlet/Orbit.swift"
 staging="$(mktemp -d "$build_root/App.XXXXXX")"
