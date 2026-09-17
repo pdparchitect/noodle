@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Add standalone symbol SVGs and automatically compose the full icon SVG, PNG sizes and packaged macOS icon on every build.
+
 ## [0.18.1] - 2026-09-17
 
 ### Fixed

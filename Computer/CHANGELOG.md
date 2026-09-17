@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add a standalone symbol SVG and automatically compose the full icon SVG, PNG sizes and packaged macOS icon on every build.
+
 ## [0.8.1] - 2026-09-17
 
 ### Added

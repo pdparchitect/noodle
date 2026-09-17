@@ -201,6 +201,7 @@ if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == "1" ]]; then
     updates_enabled=true
 fi
 /usr/libexec/PlistBuddy -c "Add :NoodleUpdatesEnabled bool $updates_enabled" "$contents/Info.plist"
+zsh "$project_root/scripts/generate-icon.sh" >&2
 xcrun actool "$asset_catalog" \
     --compile "$contents/Resources" \
     --platform macosx \

@@ -111,8 +111,8 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o "$b
 cp "$build_root/guest-tools/noodle-files" "$app/Contents/Resources/Runtime/noodle-files"
 cp "$package/Support/KERNEL-NOTICE.txt" "$app/Contents/Resources/KERNEL-NOTICE.txt"
 cp "$package/Support/STUDIO-NOTICE.txt" "$app/Contents/Resources/STUDIO-NOTICE.txt"
-swift "$package/Support/MakeIcon.swift" "$build_root/Computer.iconset" "$package/Support/AppIcon.png"
-iconutil -c icns "$build_root/Computer.iconset" -o "$app/Contents/Resources/Computer.icns"
+zsh "$project_root/scripts/generate-icon.sh" "$package/Support/AppSymbol.svg" "$staging_root/Computer.iconset" >&2
+iconutil -c icns "$staging_root/Computer.iconset" -o "$app/Contents/Resources/Computer.icns"
 for dependency in "$build_root"/checkouts/*; do
     for license in "$dependency"/LICENSE(N) "$dependency"/LICENSE.txt(N) "$dependency"/COPYING(N); do
         cp "$license" "$app/Contents/Resources/${dependency:t}-${license:t}.txt"

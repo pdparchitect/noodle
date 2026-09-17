@@ -73,7 +73,7 @@ if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == 1 ]]; then updates_enabled=true; fi
 /usr/libexec/PlistBuddy -c "Add :NoodleUpdatesEnabled bool $updates_enabled" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$app/Contents/Info.plist"
-swift "$package/Support/MakeIcon.swift" "$staging/Applet.iconset" "$package/Support/AppIcon.png"
+zsh "$project_root/scripts/generate-icon.sh" "$package/Support/AppSymbol.svg" "$staging/Applet.iconset" >&2
 iconutil -c icns "$staging/Applet.iconset" -o "$app/Contents/Resources/Applet.icns"
 identity="${NOODLE_SIGNING_IDENTITY:-}"
 if [[ -z "$identity" ]]; then identity="$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)"; fi
