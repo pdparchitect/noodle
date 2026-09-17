@@ -20,7 +20,7 @@ installed app so existing development service registrations can resolve it.
 Existing Local app paths are preserved as compatibility aliases during migration.
 Once service registration uses the Dev installation, obsolete aliases can be retired;
 subsequent installs will not recreate them. Internal IDs and existing account data
-locations stay unchanged. See the [registration audit](../docs/development-registration-audit.md).
+locations stay unchanged.
 
 Installation validates the development identity and signatures, publishes atomically,
 and never replaces `/Applications/Noodle Computer.app`. It pairs exclusively

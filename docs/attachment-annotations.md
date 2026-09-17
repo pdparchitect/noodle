@@ -1,55 +1,63 @@
 # Conversation and attachment annotations
 
-Select text in a conversation and press **⌘⇧A** to comment on that excerpt. The annotation keeps the exact quote, the original message ID, and a saved copy of the message. With the conversation active, **⌘⇧R** freezes the content inside the existing Noodle window so you can mark a visible region and add a comment. Both actions are also available as **Conversation → Add Annotation…** and **Conversation → Annotate Region…**, with your configured shortcuts shown in the menu. The toolbar and window controls stay in place. A hint follows the pointer until selection begins, then disappears; Escape still cancels. Saving adds an annotation to that conversation's draft; **⌘Return** saves and **Escape** cancels. Neither action sends a message. Switching conversations cancels unfinished annotations, and cancelled selections do not save source files.
+Add a comment to selected text or a captured region, then send it with your
+conversation. Saving an annotation adds it to the draft; it does not send it.
 
-These shortcuts follow the active window. A focused attachment preview keeps its existing annotation behavior below. Conversation text selection uses the rendered message and preserves the clipboard. Region capture includes only the current Noodle window and uses the existing app sandbox permissions.
+## Annotate a conversation
 
-Open an attachment in a Noodle conversation to use the system Quick Look preview.
+1. Select text and press **⌘⇧A**, or choose **Conversation → Add Annotation…**.
+   To mark a region instead, press **⌘⇧R** or choose
+   **Conversation → Annotate Region…**, then drag a rectangle or click a point.
+2. Enter your comment. Check that the quote or captured region is correct.
+3. Click **Save** or press **⌘Return**. Press **Escape** to cancel.
 
-Shortcuts below are defaults. Discover or change them in **Settings → Keybindings**; menus and annotation hints show your current bindings. See [keyboard shortcuts](keyboard-shortcuts.md).
+Text annotations retain the selected quote and its source message. Region
+annotations capture the content inside the current Noodle window. Switching
+conversations cancels an unfinished annotation.
 
-- Select text and press **⌘⇧A**, or choose **Preview → Add Annotation**. For an image, this starts region selection. If the preview does not supply selected text, the editor clearly labels the comment as applying to the whole attachment.
-- Press **⌘⇧R** for a visual region in any preview. The frozen preview preserves its size and rounded corners. A hint follows the pointer until you start selecting, then disappears. Drag a rectangle or click to place a small marker. Check that the snapshot shows the intended content before saving; Escape returns to the live preview.
-- Enter a comment and click **Save** or press **⌘Return**. **Escape** or the close button cancels. Both return keyboard focus to the same attachment in Quick Look after the popup closes. Holding Escape dismisses only the annotation; release it and press again to close the preview.
+## Annotate an attachment
 
-Controls appear only while adding an annotation. Quick Look continues to render the original attachment; Noodle does not change its contents or add controls to its private view hierarchy.
+Open an attachment in Noodle's Quick Look preview, then:
 
-The comment bubble points at the cursor when invoked in the preview. Choosing the menu command retains the last click or text-selection point inside that preview; a visual region anchors at the end of its drag. The preview controller and its native responder host belong to the chat window, outside the changing conversation detail, so returning to a conversation keeps both ordinary attachment and annotation previews available.
+1. Select text and press **⌘⇧A**, or choose **Preview → Add Annotation**.
+   For images, this starts region selection. If text selection is unavailable,
+   the editor labels the comment as applying to the whole attachment.
+2. To capture a region of any preview, press **⌘⇧R**. Drag a rectangle or click
+   to place a marker, then check the captured image before saving.
+3. Enter your comment and click **Save** or press **⌘Return**. **Escape** or the
+   close button cancels and returns focus to the preview.
 
-Each saved annotation becomes a clickable attachment in the originating conversation's draft. Its chip shows the source filename and comment. Clicking the chip or its card in the transcript opens Noodle's annotation viewer with selectable comment and quoted text, or the marked image. It uses a compact, draggable Quick Look-style header and translucent frame, with the comment in a separate strip below the preview. Long comments scroll within that strip. Escape, ⌘W or the header's close button dismisses the viewer. Original files remain ordinary attachments in the chat and continue to use Quick Look. Remove an unsent annotation with its attachment remove button. Saved annotation drafts survive relaunch; sent annotations remain available in the transcript and are not restored as drafts.
+Hold Escape to dismiss the annotation, then release and press it again to close
+Quick Look. These actions apply to Noodle's preview, not external Preview.app
+windows. The original attachment is unchanged.
 
-New annotations use version 2 metadata. Text annotations store a UTF-8 `.txt` companion containing the comment and quoted text; visual annotations store a `.png` snapshot with the selected region outlined in orange. The full comment, quote (when present), source attachment ID, source filename, and region coordinates live in the attachment's existing JSON metadata. There is no generated PDF and no comment burned into the image. Previously saved version 1 PDF annotations remain readable in the annotation viewer without rewriting their stored files.
+Shortcuts follow the active conversation or preview. Change them in
+**Settings → Keybindings**; menus show your current bindings. See
+[keyboard shortcuts](keyboard-shortcuts.md).
 
-Use the conversation's usual Send button when the collected feedback is ready. Saving an annotation alone does not notify agents. The existing message delivery policy applies to sending, and every participant in the direct or group conversation receives the attachment. Agent deliveries and CLI message history include the full structured `annotation` metadata and an `absolutePath` to the text or PNG file. `messenger --get-latest --inline-images` includes visual annotations through the ordinary image path; see the generated [message reference](message-reference.md). Comments are the sender's feedback; quoted document and snapshot contents retain their status as source material.
+## Review, edit, and send
 
-Visual capture is limited to Noodle's own Quick Look window using ScreenCaptureKit. It needs no added app entitlements, Accessibility access, or Screen Recording grant. Region coordinates describe the captured window, including its visible chrome, with a bottom-left origin. They are not original-image pixels or PDF page coordinates. Quick Look has no public render-ready notification: the implementation waits through the initial transition, checks the current preview identity and frame, rejects stale asynchronous results, and shows the captured frame for review. It does not claim a persistent anchor after scrolling or zooming the source.
+Click a saved annotation in the draft to review its comment and quote or marked
+image. Choose **Edit Comment** to change an unsent comment; **Save** updates it
+and **Cancel** discards the edit. Remove unwanted feedback with the draft
+attachment's remove button. Saved drafts survive relaunch.
 
-The menu and shortcuts operate only while Noodle's attachment preview is focused. This does not extend external Preview.app or other applications' context menus.
+Use the conversation's **Send** button when the feedback is ready. Every
+participant receives the annotation through normal message delivery. Submitted
+annotations are read-only, including messages waiting for delivery.
 
-Native Quick Look close notifications only release the Noodle preview session; they never issue a second hide or reopen request. Explicit chat navigation can hide its preview once. A close command also cancels any queued annotation focus return before the native animation starts. Lifecycle diagnostics use the `com.pdparchitect.noodle` logging subsystem and `AttachmentPreview` category and contain only event names and state flags, not filenames, quotes or comments.
+## Saved content and privacy
 
-Choose **Edit Comment** inside an unsent draft's viewer to change feedback. **Save** updates that draft annotation in place. Submitted annotations are read-only, including messages waiting for delivery: they have no edit action and cannot be saved as revised drafts. Submitting a draft also removes editing controls from an already-open viewer; stale save attempts are rejected by storage. Quoted text, the source reference and the marked image are preserved. Older PDF drafts retain their file format when edited. Cancel or Escape in the editor discards the edit.
+Text annotations store the comment and quote in a text attachment. Region
+annotations store a PNG snapshot with an orange marker. Older PDF annotations
+remain readable, and editing an older unsent annotation preserves its format.
 
-## Validation
+Capture is limited to the selected Noodle conversation or attachment-preview
+window. It does not require additional Accessibility or Screen Recording
+permission. A region is a saved snapshot; it does not track content after
+scrolling or zooming.
 
-`Tests/conversation-annotations.sh` checks native SwiftUI selection, identical quotes in different messages, clipboard preservation, own-window capture, comment focus, Save/Cancel, custom bindings, preview routing and navigation cancellation in an isolated sandboxed app. It uses synthetic messages and does not start agents or send messages. `ConversationAnnotationTests` checks source snapshots, draft recovery, edits, delivery metadata, legacy decoding, and rollback of invalid message references.
+Bots receive the comment, source reference, and saved content. For metadata and
+CLI access, see the generated [message reference](message-reference.md).
 
-`Tests/attachment-annotations.sh --headless` checks text/PNG encoding, marker position, image orientation, long/Unicode feedback, legacy edits, preview-host remounting, and the production window scope across repeated `NavigationSplitView` conversation changes. It verifies retained callbacks still reach the mounted responder, navigation clears pending annotation state, and pointer/menu/region anchors use the expected coordinates. A deferred test popover exercises Escape repeats, immediate/delayed close completion, anchor retention during the animation, navigation during dismissal, and stale callbacks; its content routes through the same preview owner. It does not open or focus windows; actual Quick Look presentation still needs the foreground fixture or a manual check. Add `--render-previews` to render the actual annotation frame offscreen for inspection. Use this mode while the desktop is in use.
-
-`Tests/attachment-annotations.sh` builds a sandboxed native fixture from the production preview, popover, content export and annotation viewer sources. It uses synthetic files and a disposable repository and never starts an agent or sends a message. Checks cover actual Quick Look text copying, clipboard restoration, native popup focus, Save/Cancel, repeated selection → annotation → Escape on a diff attachment, region capture, marked PNG encoding, long text, custom preview routing, legacy reports, closing and switching previews, and routing between two SwiftUI host windows. The diff checks wait beyond the close animation and assert that the same source item, data source and keyboard focus survive.
-
-Headless checks also exercise real close notifications on hidden native windows: native close must not request another hide, explicit close is idempotent, and a detached owner ignores old notifications. The foreground diff sequence additionally closes Quick Look with a separate Escape and waits beyond delayed callbacks to confirm it stays closed.
-
-The full native fixture takes desktop focus to simulate input and requires an idle desktop. `--preview` leaves a synthetic annotation open after those checks for visual inspection.
-
-`Tests/attachment-annotations.sh --cursor-check` checks the crosshair in a native PDF preview after ⌘⇧R, while stationary, after a delayed preview cursor update, and during movement and dragging. It also checks overlapping windows, Escape, reopening selection, and comment-editor cursor restoration. This foreground check temporarily moves the pointer and requires an idle desktop. The printed `CURSOR_IMAGE` paths contain captures of only the fixture's selection window, including the actual cursor.
-
-`Tests/attachment-annotations.sh --visual-cancellation` is a focused foreground regression. It posts ⌘⇧A, Escape and ⌘Return through the real AppKit event queue against a native diff preview. It records only the fixture's own windows at 60 fps and logs lifecycle/state changes, waits through each close animation, and checks that the source item and focus survive four cancellations and two saves without refocusing the preview from the test. A separate Escape and ⌘W must close it permanently. The printed `VISUAL_EVIDENCE` directory contains the MP4 and `lifecycle.jsonl` even when an assertion fails. Run this only when desktop focus is available; `--build-only` prepares the signed fixture without launching it. Its build objects are isolated from concurrent application and coverage builds.
-
-The hidden checks exercise the exact weak-owner callback installed as the AppKit event monitor, in addition to the controller's event handler. A consumed event must stay nil through that boundary, including held Escape and its release; unrelated input and events after owner deallocation must pass through. A nil-coalescing fallback at this boundary previously reintroduced consumed Escape into AppKit despite passing the inner handler checks.
-
-The hidden typing regression sends native key events through that callback and the real comment text view for image and USDA region annotations. It checks spaces, repeated spaces, selection replacement, deletion, cancellation and unrelated-window passthrough. The attachment card's Space action ignores preview windows so a retained SwiftUI focus cannot reopen the source while a comment is being typed. The foreground fixture also types complete comments through the application event queue instead of filling the field directly; running that full presentation path still requires desktop focus.
-
-The hidden fixture also renders the production annotation viewer before and after submission without recreating it. Native text recognition verifies that Edit Comment disappears while the saved feedback and selected source remain readable. Core tests cover draft edits, rejected saves from stale previews, submitted text and image immutability, queued messages, and the absence of newly created revision files or deliveries.
-
-`swift test --disable-sandbox --filter 'AttachmentAnnotationTests|MessengerDocumentationTests|ConversationDraftsTests'` covers persistence, recovery, removal, direct/group delivery metadata, compatibility, validation, and generated documentation coverage.
+[Documentation](README.md)

@@ -135,8 +135,7 @@ Revoke those separately in System Settings.
   Code are not limited to a list of model-provider domains. Readable data can be
   sent to remote services, and the policy does not block outbound LAN access.
   Connections to localhost are allowed. The current profiles deny starting
-  listening sockets, including localhost servers; that is a pre-existing
-  development limitation, unchanged by the Applet authorization fix.
+  listening sockets, including localhost servers.
   Restricted Apple denies direct outbound networking and runs its default
   model on device. Separately assigned tools and computers have their own
   permissions; the local filesystem policy does not restrict actions they
@@ -154,13 +153,10 @@ Revoke those separately in System Settings.
   system or set CPU, memory, disk-use, or model-spending quotas. It relies on the
   macOS sandbox and Noodle's trusted launch and tool brokers. Signature checks
   identify code; they do not establish that its behavior is harmless.
-- **Process arguments are not a proven confidentiality boundary.** A marker-only
-  probe on the reviewed macOS 27 system read another same-user process's command
-  arguments through numeric `KERN_PROCARGS2` under the restricted cloud and Apple
-  profiles. The policy denials tested did not close that path. This remains
-  unresolved; the Applet broker fix does not address it. Keep credentials out of
-  command arguments rather than relying on workspace filesystem isolation to
-  hide them.
+- **Process arguments are not confidential.** Restricted cloud and Apple
+  profiles do not reliably prevent reading another same-user process's command
+  arguments on macOS 27. Keep credentials out of command arguments; workspace
+  filesystem isolation does not protect them.
 
 ## Account apps
 
@@ -274,32 +270,5 @@ tests, offline initialization checks, opt-in live Messenger/resume checks, and
 signed-bundle verification. Those checks exercise specific allowed and denied
 operations; they are not an exhaustive security audit. See
 [architecture](architecture.md) for the surrounding process boundaries.
-
-### Applet authorization regression checks
-
-`AppletBrokerTests` reproduces three authorization gaps found during the September
-2026 sandbox review: a queued request surviving a session restart, a result
-surviving that restart, and a shared result surviving removal from a conversation.
-All three tests failed against the original broker. They now exercise revocation
-at a controlled suspension point, including success payloads, error payloads, and
-thrown provider errors. Existing tests cover current-session requests, shared
-noodlets, captures, presentation, owner isolation, and build diagnostics.
-
-Run these with `swift test --disable-sandbox --filter AppletBrokerTests`.
-`RestrictedAgentSandboxTests`, `RestrictedClaudeSandboxTests`,
-`RestrictedMuseSandboxTests`, `AppleSandboxTests`,
-and `BridgeCLISandboxTests` exercise real sandboxed processes, offline harness
-startup/resume, and the signed workspace CLIs. The localhost client test exercises
-all five cloud policies against a disposable local server. These are compatibility
-checks for the tested paths, not proof that every tool or live model turn works.
-`RestrictedClaudeSandboxTests` launches the installed Anthropic-signed CLI against
-a synthetic local API using production launch arguments, storage, and policy. It
-checks private OAuth-file discovery, workspace Read/Write and Bash tools, Messenger,
-managed skill discovery, rejected outside reads/configuration writes, and session
-resume. It does not validate provider-side token refresh or every native tool.
-Build `Tests/build-sandbox-cli-fixture.sh`, set `NOODLE_TEST_CLI_APPLICATION` to the
-resulting app, and run `swift test --disable-sandbox --filter RestrictedClaudeSandboxTests`.
-The Applet authorization fix changes no Seatbelt policy, networking permission,
-filesystem grant, or entitlement.
 
 [Documentation](README.md)

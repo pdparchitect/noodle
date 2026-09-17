@@ -24,7 +24,14 @@ needed. Check timed-out writes before retrying: the operation may have completed
 Public HTTPS MCP servers using Streamable HTTP, browser OAuth, native app callbacks
 and S256 PKCE. Clients use dynamic registration or catalogue-supplied configuration.
 Local stdio, API-key entry, manual client secrets and legacy SSE are unsupported.
-Providers may restrict accounts or plans; see [gateway notes](mcp-gateways.md).
+Providers may restrict accounts or plans.
+
+Gateway connections can expose several services. Assigning one to a bot grants
+access to the connection as a whole; check the intended service and account
+before acting. For Pipedream, choose its catalogue entry, which uses the
+end-user endpoint at `https://mcp.pipedream.net/v2`, and complete any additional
+account-connection steps in your browser. Zapier is not in the catalogue;
+its manual-token setup is unsupported.
 
 ### Google Workspace (Experimental)
 
@@ -55,8 +62,8 @@ and registration. Configuration is matched by exact endpoint; the OAuth engine s
 Google's shared native clients live in
 [`ToolOAuthConfigurations.swift`](../Sources/NoodleCore/ToolOAuthConfigurations.swift).
 Keep their reversed-ID callback schemes in `Support/Info.plist` and `scripts/build-app.sh`
-in sync. Project `noodle-508811` needs each product and MCP API enabled and the consent
-scopes declared. Follow Google's setup guides for [Gmail](https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server),
+in sync. In the Google Cloud project that owns the clients, enable each product
+and MCP API and declare the consent scopes. Follow Google's setup guides for [Gmail](https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server),
 [Docs](https://developers.google.com/workspace/docs/api/guides/configure-mcp-server),
 [Drive](https://developers.google.com/workspace/drive/api/guides/configure-mcp-server) and
 [Calendar](https://developers.google.com/workspace/calendar/api/guides/configure-mcp-server).

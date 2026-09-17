@@ -21,6 +21,4 @@ These are shortcuts within Noodle. Standard controls retain their native behavio
 
 In the screen and window capture picker, use Left/Right to move across a row and Up/Down to move between rows. The highlighted source stays visible as you browse. Press Return to open its live preview, Delete to choose another source, or Escape to close the preview.
 
-## Validation
-
-`swift test --disable-sandbox --filter KeyboardShortcutsTests` checks defaults, conflicts, reserved commands, disabled bindings, persistence and reset behavior. `Tests/attachment-annotations.sh --headless` also exercises native event normalization, shared menu/preview bindings, recorder save/cancel/clear/conflict handling, inactive-window passthrough and an offscreen render of the actual Settings view. It verifies that changing a binding updates the existing control without reopening the tab. No foreground input or app activation is used by the hidden checks.
+[Documentation](README.md)

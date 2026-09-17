@@ -43,6 +43,15 @@ entries use only these development launchers. Production identity selection rema
 release packaging, which does not launch the app. See
 [Computer development](../Computer/DEVELOPMENT.md) for Local Mac setup.
 
+Applet uses the same strict environment pairing: Noodle Dev connects only to
+Noodle Applet Dev. `scripts/build-and-launch-applet.sh` (Runbar: **Noodle Applet →
+Build & Launch Dev**) forces the development identity. Development documents and links use
+`.noodlet-dev` and `noodlet-dev://`; production retains `.noodlet` and
+`noodlet://`. Each app and its Quick Look extension registers only its own type.
+Use the Applet CLI's explicit `convert --path SOURCE --output NEW_DOCUMENT` to
+copy a package between environments; saved runtime data and live links are not
+transferred. See [Applet development and conversion](../Applet/README.md#dev-and-production-builds).
+
 ## Documentation changes
 
 Message/event guidance, the Messenger skill, and CLI help come from
@@ -82,9 +91,11 @@ JSON export. To compare against a saved report, pass
 `--baseline /path/to/previous/summary.json`; changes are percentage points.
 
 The `Validate and release versions` workflow runs the Noodle, Computer, Applet,
-and shared bridge suites on every pull request, push to `main`, and manual run,
-even when no version changes. Its macOS 26 runners execute real Seatbelt sandbox
-processes; `--disable-sandbox` disables SwiftPM's build sandbox, not the sandbox
+and shared bridge suites for code changes on pull requests and pushes to `main`,
+and on manual runs, even when no version changes. Documentation and website
+changes follow the [CI path filters](releases.md#what-ci-does). Its macOS 26
+runners execute real Seatbelt sandbox processes; `--disable-sandbox` disables
+SwiftPM's build sandbox, not the sandbox
 profiles exercised by the tests. Version selection still controls release jobs.
 
 Each Noodle CI test job publishes the summary and a
@@ -94,92 +105,43 @@ tests, and excludes test code and dependencies. Separate native fixtures do not
 contribute to that report.
 Reporting does not impose a minimum percentage; test failures still fail CI.
 
-Grok and Muse inspection regression tests run in the default Swift suite using
-temporary local stdio fixtures and isolated home directories. They exercise
-handshakes, invalid replies, timeouts, and process cleanup without installed
-harnesses, authentication, or network requests. Live harness probes remain
-explicitly opt-in and are not required by release CI.
+The default suites use temporary repositories, synthetic model folders, fake
+runtimes, intercepted HTTP, and disposable sandbox processes. They cover storage,
+message delivery, runtime recovery, access controls, and offline audio handling.
+They do not require provider accounts or perform live model requests. Native
+harness initialization checks skip when their harness is not installed.
 
-MCP lifecycle tests likewise use intercepted HTTP requests and an in-memory
-credential store. Controlled response gates exercise disconnect, cancellation,
-and timeout races without browser sign-in, Keychain access, or external services.
+`BridgeCLISandboxTests` requires signed Messenger, MCP, Computer, and Applet
+helpers. Use the fixture and environment variable above to require those checks;
+without them, a local run may skip the tests if no development app is available.
+The fixture does not launch the GUI or contact remote services. The smoke suite
+separately verifies the packaged app and helper signatures.
 
-`NoodleAppTests` covers message-delivery routing with fake runtimes and
-classifiers, temporary repositories, and isolated preferences. Controlled
-callbacks and a monotonic test clock exercise cancellation, deadlines, and
-stale decisions without installed harnesses or Apple Intelligence. These tests
-run in the default Swift suite; native presentation fixtures remain separate.
+For focused access checks, use `swift test --disable-sandbox --filter` with
+`AppletBrokerTests`, `RestrictedAgentSandboxTests`, `RestrictedClaudeSandboxTests`,
+`RestrictedMuseSandboxTests`, or `AppleSandboxTests`. Restricted Claude tests use
+the signed CLI and a synthetic local API; prepare the CLI fixture first.
 
-Storage migration tests interrupt each move and verify resumption, user-folder
-collisions, hard-link separation, copied packages, and invalid layouts.
-`AgentBackstoryMigrationTests` covers legacy Backstory formats, empty completion
-flags, atomic commit failures and retries, damaged or redirected source files,
-and regeneration after a committed migration. Repository and store tests verify
-that public records omit Backstory and settings saves or rollbacks preserve its
-private configuration independently of generated workspace instructions.
-`RestrictedAgentSandboxTests` runs real sandboxed processes against disposable
-data: workspace writes and Messenger replies must succeed while configuration
-and runtime writes, replacements, and links are denied. Other bots’ contents and
-raw conversation files must be unreadable, and the broker must reject nonmember
-conversation requests. Private provider stores cannot expose the shared login
-Keychain or standalone account history. FX/Grok/Muse checks also deny
-personal-file access, other account access, and installation replacement. When
-Codex, FX, or Grok Build is installed, initialization-only checks use empty account
-directories; they make no model requests and read no real account credentials.
-FX/Grok initialization fixtures additionally deny all network access. The FX
-fixture verifies workspace skill discovery through its native directory walk.
-`RestrictedMuseSandboxTests` starts the installed native Muse with an empty
-account directory and networking denied, then creates and resumes an echo-provider
-session after restarting the process. Its session store must stay inside the
-workspace; no account credentials or model requests are used.
-`NOODLE_TEST_RESTRICTED_ACP=1 swift test --disable-sandbox --filter RestrictedACPLiveTests`
-opts into two small model turns per installed harness to check Messenger replies
-and session resume using the real accounts, inside disposable repositories.
-`NOODLE_TEST_MUSE_RESTRICTED=1 zsh Tests/muse-live.sh` does the same through the
-real Muse adapter and production sandbox profile. `NOODLE_TEST_MUSE_MODEL` can
-select a model; otherwise Muse uses its default. The unrestricted comparison is
-available with `NOODLE_TEST_MUSE_LIVE=1`.
-`MessengerBridgeTests`, `WorkspaceMailboxTests`, and `RestrictedHarnessStorageTests`
-exercise forged/expired/replayed tokens, cross-bot token substitution, membership
-revocation, attachment copies, credential seeding and refresh preservation,
-symlink/hardlink redirection, path traversal, size limits, and special-file rejection.
-Computer broker tests exercise concurrent requests and revocation during transfers.
-`BridgeCLISandboxTests` runs the production Messenger, MCP, Computer, and Applet
-CLIs through real workspace mailboxes under the Apple profile, with networking
-and cross-sandbox signaling denied. CI builds and ad-hoc signs these four helpers
-first, then checks their signatures and exact JSON responses. A missing helper
-fails the suite when `CI=true` or `NOODLE_TEST_CLI_APPLICATION` is set. A plain local
-`swift test` uses the signed development app if present and otherwise skips these
-four tests; use the commands above for required coverage without a certificate.
-CI also runs the deterministic message-delivery fixture, including recovery of an
-old Codex thread missing from private storage.
+### Live checks
 
-The account-free CI suite verifies containment and broker behavior. Installed
-native harness initialization tests skip when the relevant harness is absent;
-live provider requests and Apple Intelligence generation require the opt-ins
-above and are not CI guarantees. The CLI fixture does not launch the GUI, test
-Team ID authenticated XPC, or contact real MCP/Computer/Applet services. Release
-packaging separately verifies the signed app and helper identities. Passing these
-regressions is not an exhaustive security audit or proof against every escape.
-Release automation tests verify
-that signed update-feed entries retain the required migration chain.
+These opt-in checks use installed harnesses and real provider accounts. They can
+consume model usage. Run them separately from the account-free suite.
 
-Voice capture regressions also run in `NoodleAppTests`. Offline audio engines
-exercise stale microphone formats, native tap exceptions, stop/restart cleanup,
-buffer conversion after format changes, and cancellation before startup. They
-do not open a microphone or load speech models.
+| Check | Command |
+| --- | --- |
+| Restricted ACP Messenger and resume | `NOODLE_TEST_RESTRICTED_ACP=1 swift test --disable-sandbox --filter RestrictedACPLiveTests` |
+| Restricted Muse | `NOODLE_TEST_MUSE_RESTRICTED=1 zsh Tests/muse-live.sh` |
+| Unrestricted Muse | `NOODLE_TEST_MUSE_LIVE=1 zsh Tests/muse-live.sh` |
 
-`VoiceCaptureRecoveryTests` covers asynchronous configuration changes, transient
-start failures, slow or stalled input, bounded retries, and cancellation during
-recovery with a controlled clock and synthetic capture state.
+Set `NOODLE_TEST_MUSE_MODEL` to select a Muse model; otherwise its default is used.
+See [local model checks](#build-and-test-local-models) for Apple and MLX.
+Real provider sign-in, token refresh, and remote tool calls need separate checks.
 
-To check real microphone startup with consent, run
-`zsh Tests/voice-startup.sh --live --device-name 'Microphone name'` using the exact
-device name from Sound settings. The signed sandboxed fixture starts and stops
-that input ten times, verifies continued buffer delivery, and counts automatic
-restarts. It inspects buffer lengths only; no audio is saved or transcribed.
-macOS may request microphone access. Without `--live`, the command only builds
-the fixture.
+For microphone startup, run
+`zsh Tests/voice-startup.sh --live --device-name 'Microphone name'` with the exact
+name from Sound settings. It repeatedly starts and stops the selected input and
+checks buffer delivery without saving or transcribing audio. macOS may request
+microphone access. Without `--live`, the command only builds the fixture.
 
 ## Focused checks
 
@@ -217,6 +179,55 @@ Use `zsh Tests/scrollable-composer.sh --benchmark` for repeatable edit and heigh
 measurement timings on short and long drafts. These timings exclude display
 latency and are informational rather than pass/fail thresholds.
 
+For annotation checks without taking desktop focus, use
+`zsh Tests/attachment-annotations.sh --headless`; add `--render-previews` for
+saved preview images. The foreground fixture moves the pointer and takes focus.
+Use `--cursor-check` for selection cursors, `--visual-cancellation` for recorded
+save/cancel behavior, or `--preview` to leave an annotation open for inspection.
+`--build-only` prepares the fixture without launching it.
+
+Use `swift test --disable-sandbox --filter KeyboardShortcutsTests` for shortcut
+configuration. For annotation storage and delivery:
+
+```sh
+swift test --disable-sandbox --filter 'AttachmentAnnotationTests|MessengerDocumentationTests|ConversationDraftsTests'
+```
+
+## Build and test local models
+
+The MLX Foundation Models adapter is pinned to an upstream revision because its
+macOS 27 integration is not yet tagged. See `Package.swift` and `Package.resolved`.
+The new APIs are guarded by the Foundation Models module version and runtime OS
+availability, preserving builds with the older SDK. Use Xcode 27 and install its
+Metal Toolchain component for a build with local model support. Model resources
+and their licenses are supplied by the person importing them; weights are not
+distributed with Noodle. `scripts/build-app.sh` uses `scripts/swift-apple.sh`,
+which can select the installed macOS 27 Command Line Tools when Xcode's SDK is
+older. It does not change `xcode-select`. Use the same wrapper for `build`, `test`,
+and `run`, or override `NOODLE_SWIFT` and `NOODLE_MACOS_SDK` explicitly.
+With mixed installations, the wrapper builds and tests the Apple helper and core
+targets; app packaging separately builds SwiftUI with the matching full Xcode SDK.
+The newer helper uses `.build/apple27` so ordinary app builds cannot replace it.
+For local-model tests against an unbundled helper, run
+`zsh scripts/build-mlx-metal.sh "$(zsh scripts/swift-apple.sh build --show-bin-path)"`
+first. App packaging builds and includes these shaders automatically.
+
+Ordinary tests use synthetic model folders. Set `NOODLE_TEST_APPLE_MODEL=1` to
+run the live Apple tests. Set `NOODLE_TEST_MLX_MODEL` to an existing model folder
+to run the sandboxed local-model test. `NOODLE_APPLE_TEST_HELPER` selects a bundled
+helper for testing its packaged resources. These tests use disposable bot storage.
+
+CI keeps the normal suites on `macos-26` and probes `macos-latest` for optional
+macOS 27 harness tests. `scripts/detect-apple27.py` checks the OS, Apple Silicon,
+and an installed SDK/compiler with full Xcode's XCTest support. When prerequisites
+are missing, the job summary reports a skip before any model build or Metal
+download. When they are present, CI builds the isolated helper and Metal shaders,
+asserts that local-model support was compiled in, and runs the regression suite.
+Build or test failures block Noodle release preparation; missing prerequisites do
+not. Live inference remains opt-in because hosted runners need not have Apple
+Intelligence enabled or model weights installed. This optional test job does not
+change the SDK used to package releases.
+
 ## Runtime logs
 
 In Console, filter by `com.pdparchitect.noodle.runtime`, or run:
@@ -241,13 +252,3 @@ NOODLE_SIMULATE_NO_HARNESSES=1 '.build/Noodle Dev.app/Contents/MacOS/Noodle'
 excluding app-bundled copies. Relaunch without the flag to restore normal detection.
 
 [Releases](releases.md) · [Documentation](README.md)
-
-
-Applet uses the same strict environment pairing: Noodle Dev connects only to
-Noodle Applet Dev. `scripts/build-and-launch-applet.sh` (Runbar: **Noodle Applet →
-Build & Launch Dev**) forces the development identity. Development documents and links use
-`.noodlet-dev` and `noodlet-dev://`; production retains `.noodlet` and
-`noodlet://`. Each app and its Quick Look extension registers only its own type.
-Use the Applet CLI's explicit `convert --path SOURCE --output NEW_DOCUMENT` to
-copy a package between environments; saved runtime data and live links are not
-transferred. See [Applet development and conversion](../Applet/README.md#dev-and-production-builds).

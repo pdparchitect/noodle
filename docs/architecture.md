@@ -68,9 +68,8 @@ At app startup, the one-time `AgentBackstoryMigration` runs after the directory
 migration and before bots load. It imports legacy marked Backstory, custom
 `AGENTS.md`, or older `instructions.md` into `agent.json` atomically before any
 regeneration. A present string, including an empty one, marks completion. Missing
-or damaged legacy sources stop migration with their files intact. The parser is
-isolated for retirement after the 0.14.0 update milestone; the configuration check
-must remain. Backstory migration does not grant legacy unrestricted access.
+or damaged legacy sources stop migration with their files intact. Backstory
+migration does not grant legacy unrestricted access.
 
 The signed Agent Host applies a dedicated filesystem sandbox before starting
 restricted Codex, FX, Grok Build, Muse Code, or Apple. Each can read only its own

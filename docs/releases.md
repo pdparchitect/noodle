@@ -111,7 +111,7 @@ Noodle releases as the repository's latest release.
 ## Storage migration milestones
 
 The **0.13.0** release introduced the agent-package storage layout.
-The **0.14.0** release moves Backstory into `agent.json` and is the next migration
+The **0.14.0** release moved Backstory into `agent.json` and is also a migration
 milestone. Keep published versions intact.
 `Support/update-milestones.json` declares releases that users must run before
 installing their successors. The first milestone contains the flat-workspace
@@ -128,10 +128,7 @@ releases can still be skipped. Noodle enables update checks only after storage
 loads successfully, so the migration release runs its migration before offering
 the next update. Keep milestone assets publicly available.
 
-The migrations can be retired in later releases after verifying this upgrade
-chain: the directory migration has a `TODO(0.14.0)` removal note, and Backstory
-import has `TODO(0.15.0)`. Those notes are conditional on the corresponding
-milestone being published and the enforced update chain being verified.
+Before retiring a migration, verify that the enforced upgrade chain runs it.
 Retain the layout-version check, the required Backstory field check, and clear
 errors directing older packages to the appropriate migration release. Manual app downloads and clients predating
 Sparkle 2.9 can bypass feed prerequisites. Add future milestones in ascending

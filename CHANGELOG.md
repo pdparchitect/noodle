@@ -19,6 +19,7 @@ All notable changes to Noodle are documented here, following
 
 - Rename Security settings to Sandbox, make the Unrestricted heading open its explanation, and add a matching clickable Heartbeat heading above the bot switches.
 - Consolidate MCP connection, catalogue and Google Workspace documentation into one guide.
+- Keep documentation public-facing, consolidate gateway guidance, and remove internal review and debugging narratives from user guides.
 
 ### Fixed
 
@@ -29,6 +30,10 @@ All notable changes to Noodle are documented here, following
 - Restrict development launchers and the local installer to isolated app identities; remove the production-data launch option.
 - Reduce idle CPU usage by scanning bot mailboxes when their directories change, with periodic recovery checks instead of repeated idle directory walks.
 - Show MCP HTTP failures and actionable access errors instead of directing failed connections back to the same Settings screen.
+
+### Removed
+
+- Remove the development registration audit and dated MCP gateway notes, repairing their documentation links.
 
 ## [0.17.0] - 2026-09-16
 

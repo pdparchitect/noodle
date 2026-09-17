@@ -129,42 +129,9 @@ When a tool sequence fills the budget, the next generation finishes from its
 existing results with further tool calls disabled, using the same session.
 Older messages remain accessible through the Messenger CLI.
 
-Private Cloud Compute is not enabled. Apple's managed entitlement and supported
-distribution requirements need to be resolved before it can be shipped here.
+Private Cloud Compute is not available in Noodle.
 
-### Building and testing
-
-The MLX Foundation Models adapter is pinned to an upstream revision because its
-macOS 27 integration is not yet tagged. See `Package.swift` and `Package.resolved`.
-The new APIs are guarded by the Foundation Models module version and runtime OS
-availability, preserving builds with the older SDK. Use Xcode 27 and install its
-Metal Toolchain component for a build with local model support. Model resources
-and their licenses are supplied by the person importing them; weights are not
-distributed with Noodle. `scripts/build-app.sh` uses `scripts/swift-apple.sh`,
-which can select the installed macOS 27 Command Line Tools when Xcode's SDK is
-older. It does not change `xcode-select`. Use the same wrapper for `build`, `test`,
-and `run`, or override `NOODLE_SWIFT` and `NOODLE_MACOS_SDK` explicitly.
-With mixed installations, the wrapper builds and tests the Apple helper and core
-targets; app packaging separately builds SwiftUI with the matching full Xcode SDK.
-The newer helper uses `.build/apple27` so ordinary app builds cannot replace it.
-For local-model tests against an unbundled helper, run
-`zsh scripts/build-mlx-metal.sh "$(zsh scripts/swift-apple.sh build --show-bin-path)"`
-first. App packaging builds and includes these shaders automatically.
-
-Ordinary tests use synthetic model folders. Set `NOODLE_TEST_APPLE_MODEL=1` to
-run the live Apple tests. Set `NOODLE_TEST_MLX_MODEL` to an existing model folder
-to run the sandboxed local-model test. `NOODLE_APPLE_TEST_HELPER` selects a bundled
-helper for testing its packaged resources. These tests use disposable bot storage.
-
-CI keeps the normal suites on `macos-26` and probes `macos-latest` for optional
-macOS 27 harness tests. `scripts/detect-apple27.py` checks the OS, Apple Silicon,
-and an installed SDK/compiler with full Xcode's XCTest support. When prerequisites
-are missing, the job summary reports a skip before any model build or Metal
-download. When they are present, CI builds the isolated helper and Metal shaders,
-asserts that local-model support was compiled in, and runs the regression suite.
-Build or test failures block Noodle release preparation; missing prerequisites do
-not. Live inference remains opt-in because hosted runners need not have Apple
-Intelligence enabled or model weights installed. This optional test job does not
-change the SDK used to package releases.
+For SDK requirements, packaging, and model test commands, see
+[Build and test local models](development.md#build-and-test-local-models).
 
 [Documentation](README.md)

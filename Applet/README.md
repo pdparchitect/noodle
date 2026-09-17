@@ -15,7 +15,7 @@ WebKit stores, compiler caches, socket groups and preview caches are separate.
 
 Existing `.noodlet-local` packages and saved `noodlet-local://` links remain readable
 only in Dev. New documents and links use Dev names. Internal `.local` IDs stay
-stable to preserve data and permissions. See the [registration audit](../docs/development-registration-audit.md).
+stable to preserve data and permissions.
 
 The Dev app and Quick Look extension register only the development document type;
 they never claim the production type or URL scheme. Conversation links keep their
