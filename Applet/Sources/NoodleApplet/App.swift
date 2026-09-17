@@ -3,15 +3,17 @@ import AppletBridge
 import AppletCore
 import NoodleWallpaper
 import SwiftUI
+import NoodleSettingsUI
 import OSLog
 
 @main struct NoodleAppletApp: App {
   @NSApplicationDelegateAdaptor(AppletDelegate.self) private var delegate
-  @AppStorage("showMenuBar") private var showMenuBar = false
+  @ObservedObject private var visibility = CompanionAppVisibility.shared
 
   var body: some Scene {
     Window(AppletBuildIdentity.current.appName, id: "library") {
       LibraryView(library: delegate.library, runtime: delegate.runtime, background: delegate.background)
+        .companionSettingsAccess()
         .handlesExternalEvents(preferring: [], allowing: [])
         .frame(minWidth: 850, minHeight: 580)
         .preferredColorScheme(.dark)
@@ -50,8 +52,10 @@ import OSLog
     }
     .windowResizability(.contentSize)
     .handlesExternalEvents(matching: [])
-    MenuBarExtra(AppletBuildIdentity.current.appName, systemImage: "square.grid.2x2.fill", isInserted: $showMenuBar) {
-      AppletMenu(library: delegate.library, runtime: delegate.runtime)
+    MenuBarExtra(isInserted: $visibility.showMenuBar) {
+      AppletMenu(library: delegate.library, runtime: delegate.runtime, openLibrary: delegate.reopenLibrary)
+    } label: {
+      CompanionMenuBarLabel(AppletBuildIdentity.current.appName)
     }
     .handlesExternalEvents(matching: [])
   }
@@ -64,13 +68,10 @@ enum AppletLinks {
 private struct AppletMenu: View {
   @ObservedObject var library: AppletLibrary
   @ObservedObject var runtime: AppletRuntime
-  @Environment(\.openWindow) private var openWindow
+  let openLibrary: () -> Void
 
   var body: some View {
-    Button("Open Library") {
-      openWindow(id: "library")
-      NSApp.activate(ignoringOtherApps: true)
-    }
+    Button("Open Library", action: openLibrary)
     Divider()
     ForEach(library.pinned, id: \.self) { key in
       if let entry = library.entries.first(where: { $0.id == key }) {
@@ -89,6 +90,7 @@ private struct AppletMenu: View {
       }
     }
     Divider()
+    CompanionMenuSettingsButton()
     Button("Quit \(AppletBuildIdentity.current.appName)") { NSApp.terminate(nil) }.keyboardShortcut("q")
   }
 }
@@ -106,6 +108,7 @@ private struct AppletMenu: View {
     AppletUpdater.shared.start()
   }
   func applicationDidFinishLaunching(_ notification: Notification) {
+    CompanionAppVisibility.shared.start(permitsDock: !CommandLine.arguments.contains { $0.hasSuffix("-test") })
     let defaultLaunch = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true
     launchLog.notice("Provider launched; default app launch: \(defaultLaunch)")
     if CommandLine.arguments.contains("--rendering-test") {

@@ -2,15 +2,18 @@ import AppKit
 import ComputerCore
 import ComputerDocument
 import SwiftUI
+import NoodleSettingsUI
 import UniformTypeIdentifiers
 import Virtualization
 
 @main
 struct NoodleComputerApp: App {
   @NSApplicationDelegateAdaptor(ComputerAppDelegate.self) private var delegate
+  @ObservedObject private var visibility = CompanionAppVisibility.shared
   var body: some Scene {
     Window(ComputerAppIdentity.name, id: "library") {
       ComputerRootView()
+        .companionSettingsAccess()
         .frame(minWidth: 850, minHeight: 580)
         .background(ComputerLibraryWindowHost(library: delegate.libraryWindow))
     }
@@ -37,6 +40,11 @@ struct NoodleComputerApp: App {
         .preferredColorScheme(.dark)
     }
     .windowResizability(.contentSize)
+    MenuBarExtra(isInserted: $visibility.showMenuBar) {
+      ComputerMenu(delegate: delegate)
+    } label: {
+      CompanionMenuBarLabel(ComputerAppIdentity.name)
+    }
   }
 }
 
@@ -62,7 +70,10 @@ extension Notification.Name {
 }
 
 @MainActor final class ComputerAppDelegate: NSObject, NSApplicationDelegate {
-  static var store: ComputerStore?
+  static var store: ComputerStore? {
+    get { ComputerLibraryState.shared.store }
+    set { ComputerLibraryState.shared.store = newValue }
+  }
   let libraryWindow = ComputerLibraryWindow()
   var openLibrary: (() -> Void)? {
     didSet {
@@ -104,6 +115,15 @@ extension Notification.Name {
       }
     }
   }
+  func reopenLibrary() {
+    presentLibrary()
+    NSApp.unhide(nil)
+    NSApp.activate(ignoringOtherApps: true)
+  }
+  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    reopenLibrary()
+    return true
+  }
   private func presentLibrary() {
     if libraryWindow.focus() {
       needsLibrary = false
@@ -119,6 +139,9 @@ extension Notification.Name {
     ComputerUpdater.shared.start()
   }
   func applicationDidFinishLaunching(_ notification: Notification) {
+    CompanionAppVisibility.shared.start(permitsDock: !CommandLine.arguments.contains {
+      $0.hasSuffix("-test") || $0.hasSuffix("-preview")
+    })
     guard CommandLine.arguments.contains("--noodle-background") else { return }
     // Also cover Launch Services reopening a previously registered single-window
     // app. This affects only this process; an explicit later open unhides it.

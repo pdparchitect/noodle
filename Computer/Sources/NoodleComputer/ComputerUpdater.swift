@@ -70,6 +70,7 @@ struct ComputerGeneralSettingsView: View {
 
     var body: some View {
         Form {
+            CompanionVisibilitySettings()
             Section {
                 Toggle("Start new computers automatically", isOn: $startNewComputersAutomatically)
             }

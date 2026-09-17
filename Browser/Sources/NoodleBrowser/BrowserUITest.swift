@@ -1,0 +1,254 @@
+import AppKit
+import BrowserBridge
+import BrowserCore
+import SwiftUI
+import ScreenCaptureKit
+
+/// Opt-in signed fixture. Never loads user profiles or starts the provider.
+@MainActor enum BrowserUITest {
+    static func runAndExit(delegate: BrowserAppDelegate) async {
+        setbuf(stdout, nil)
+        NSApp.accessibilitySetValue(true, forAttribute: .init(rawValue: "AXEnhancedUserInterface"))
+        do {
+            let library = delegate.library, presentation = delegate.presentation
+            print("BROWSER_UI_ARTIFACTS: \(library.root.path)")
+            if CommandLine.arguments.contains("--cleanup-ui") {
+                for profile in library.profiles { try await delegate.runtime.removeBrowser(profile.id) }
+                try FileManager.default.removeItem(at: library.root)
+                print("BROWSER_UI_CLEANED"); exit(0)
+            }
+            var work = try library.create(name: "Work"), research = try library.create(name: "Research")
+            work.symbol = "briefcase.fill"; work.backgroundPreset = "ocean"
+            research.symbol = "sparkles"; research.colour = 1; research.paused = true; research.backgroundPreset = "forest"
+            try library.update(work); try library.update(research)
+            try library.addBookmark(work.id, url: "https://developer.apple.com/documentation/", title: "Documentation")
+            try library.addBookmark(work.id, url: "https://github.com/", title: "GitHub")
+            _ = try library.recordVisit(work.id, url: "https://developer.apple.com/documentation/", title: "Apple Developer Documentation")
+            presentation.selection = work.id
+            for _ in 0..<30 {
+                if delegate.openLibrary != nil { break }
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            delegate.openLibrary?()
+            try await Task.sleep(for: .milliseconds(900))
+            guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "library" }), window.toolbar != nil else {
+                throw BrowserError("Browser must use the suite's native single-window toolbar.")
+            }
+            window.setContentSize(.init(width: 1180, height: 760))
+            try await Task.sleep(for: .milliseconds(300))
+            try await snapshot(window, to: library.root.appendingPathComponent("browser.png"))
+            guard !window.isOpaque, let content = window.contentView,
+                  containsNativeSidebar(in: content) else {
+                throw BrowserError("Browser must use Computer's native glass sidebar and transparent window compositing.")
+            }
+            try await snapshot(window, to: library.root.appendingPathComponent("browser.png"))
+            try await verifyWebSurface(presentation, window: window, root: library.root)
+            try await verifyTabTargets(presentation, window: window)
+            if let sidebar = window.toolbar?.items.first(where: { $0.label == "Hide Sidebar" })?.view,
+               let toggle = elements(sidebar).first(where: { $0 is NSButton || attribute($0, .role) as? String == "AXButton" }) {
+                press(toggle)
+                try await Task.sleep(for: .milliseconds(400))
+                try await snapshot(window, to: library.root.appendingPathComponent("browser-collapsed.png"))
+                press(toggle)
+                try await Task.sleep(for: .milliseconds(400))
+            } else { throw BrowserError("Missing native sidebar toggle.") }
+            presentation.mode = .history
+            try await Task.sleep(for: .milliseconds(350))
+            try await snapshot(window, to: library.root.appendingPathComponent("history.png"))
+            presentation.mode = .bookmarks
+            try await Task.sleep(for: .milliseconds(350))
+            try await snapshot(window, to: library.root.appendingPathComponent("bookmarks.png"))
+            presentation.selection = research.id
+            try await Task.sleep(for: .milliseconds(800))
+            try await snapshot(window, to: library.root.appendingPathComponent("research.png"))
+            guard library.profiles.count == 2, NSApp.windows.filter({ $0.identifier?.rawValue == "library" }).count == 1 else {
+                throw BrowserError("Selecting a browser created a separate browser window.")
+            }
+            presentation.selection = work.id
+            presentation.backgroundEditing = try library.profile(work.id)
+            try await Task.sleep(for: .milliseconds(800))
+            guard let backgroundSheet = window.attachedSheet else { throw BrowserError("Background did not open its native sheet.") }
+            try await snapshot(backgroundSheet, to: library.root.appendingPathComponent("background.png"))
+            presentation.backgroundEditing = nil
+            try await Task.sleep(for: .milliseconds(300))
+            presentation.showingNew = true
+            try await Task.sleep(for: .milliseconds(600))
+            guard let newSheet = window.attachedSheet, let newContent = newSheet.contentView,
+                  containsTextField("Browser", in: newContent) else { throw BrowserError("New Browser must prefill a name.") }
+            try await snapshot(newSheet, to: library.root.appendingPathComponent("new-browser.png"))
+            guard let iconButton = elements(newContent).first(where: { attribute($0, .description) as? String == "Change Browser Icon" }) else {
+                throw BrowserError("Missing browser icon button.")
+            }
+            press(iconButton)
+            try await Task.sleep(for: .milliseconds(600))
+            guard let iconSheet = newSheet.attachedSheet, let iconContent = iconSheet.contentView,
+                  let done = elements(iconContent).first(where: { attribute($0, .title) as? String == "Done" || attribute($0, .description) as? String == "Done" }) else {
+                throw BrowserError("The browser icon must open the suite's full native sheet.")
+            }
+            try await snapshot(iconSheet, to: library.root.appendingPathComponent("browser-icon.png"))
+            press(done)
+            try await Task.sleep(for: .milliseconds(250))
+            presentation.showingNew = false
+            try await Task.sleep(for: .milliseconds(300))
+            presentation.editing = try library.profile(work.id)
+            try await Task.sleep(for: .milliseconds(900))
+            guard let sheet = window.attachedSheet else { throw BrowserError("Edit Browser did not open its native sheet.") }
+            try await snapshot(sheet, to: library.root.appendingPathComponent("edit-browser.png"))
+            presentation.editing = nil
+            try await Task.sleep(for: .milliseconds(300))
+            guard let appMenu = NSApp.mainMenu?.items.first?.submenu else { throw BrowserError("Missing application menu.") }
+            appMenu.update()
+            guard appMenu.items.contains(where: { $0.title == "Check for Updates…" }),
+                  let settings = appMenu.items.firstIndex(where: { $0.keyEquivalent == "," }) else { throw BrowserError("Missing suite Settings or Check for Updates commands.") }
+            guard NSApp.mainMenu?.items.contains(where: { $0.title == "Browser" }) == true,
+                  NSApp.mainMenu?.items.contains(where: { $0.title == "Window" }) == true,
+                  NSApp.mainMenu?.items.contains(where: { $0.title == "Help" }) == true else { throw BrowserError("Missing standard browser/window/help menus.") }
+            appMenu.performActionForItem(at: settings)
+            try await Task.sleep(for: .milliseconds(650))
+            guard let settingsWindow = NSApp.windows.first(where: { $0.isVisible && ($0.identifier?.rawValue.contains("Settings") == true || $0.title == "Settings" || $0.title == "General") }) else {
+                throw BrowserError("Command-comma did not open the suite Settings scene.")
+            }
+            try await snapshot(settingsWindow, to: library.root.appendingPathComponent("settings.png"))
+            let generalHeight = settingsWindow.frame.height
+            guard let updates = settingsWindow.toolbar?.items.first(where: { $0.label == "Update" }), let action = updates.action else {
+                throw BrowserError("Missing native Update settings tab.")
+            }
+            NSApp.sendAction(action, to: updates.target, from: updates)
+            try await Task.sleep(for: .milliseconds(650))
+            // General now has four controls too; Update need not be taller.
+            try await snapshot(settingsWindow, to: library.root.appendingPathComponent("updates.png"))
+            guard let general = settingsWindow.toolbar?.items.first(where: { $0.label == "General" }), let generalAction = general.action else {
+                throw BrowserError("Missing native General settings tab.")
+            }
+            NSApp.sendAction(generalAction, to: general.target, from: general)
+            try await Task.sleep(for: .milliseconds(650))
+            guard abs(settingsWindow.frame.height - generalHeight) < 2 else {
+                throw BrowserError("Settings did not shrink back to its General content.")
+            }
+            settingsWindow.close()
+            // Delete the currently displayed profile while its window is mounted.
+            // This catches retained WKWebViews that prevent data-store removal.
+            for profile in library.profiles { try await delegate.runtime.removeBrowser(profile.id) }
+            try await Task.sleep(for: .milliseconds(600))
+            try await snapshot(window, to: library.root.appendingPathComponent("empty-library.png"))
+            window.close()
+            delegate.runtime.shutdown()
+            print("BROWSER_UI_PASSED: native sidebar, toolbar, tab padding input, independent tab closing, collapsed content, icon/edit sheets, Settings, Update and standard menus")
+            print("BROWSER_UI_ARTIFACTS: \(library.root.path)")
+            exit(0)
+        } catch { fputs("BROWSER_UI_FAILED: \(error.localizedDescription)\n", stderr); exit(1) }
+    }
+    private static func containsNativeSidebar(in view: NSView) -> Bool {
+        view is NSGlassEffectView || view.subviews.contains(where: containsNativeSidebar)
+    }
+    private static func attribute(_ node: NSObject, _ key: NSAccessibility.Attribute) -> Any? {
+        if let value = node.accessibilityAttributeValue(key) { return value }
+        let names: [NSAccessibility.Attribute: String] = [.children: "accessibilityChildren", .title: "accessibilityTitle",
+            .description: "accessibilityLabel", .identifier: "accessibilityIdentifier", .role: "accessibilityRole",
+            .init(rawValue: "AXChildrenInNavigationOrder"): "accessibilityChildrenInNavigationOrder"]
+        guard let name = names[key], node.responds(to: NSSelectorFromString(name)) else { return nil }
+        return node.value(forKey: name)
+    }
+    private static func elements(_ root: NSObject) -> [NSObject] {
+        var pending = [root], visited = Set<ObjectIdentifier>(), result: [NSObject] = []
+        while let node = pending.popLast() {
+            guard visited.insert(ObjectIdentifier(node)).inserted else { continue }
+            result.append(node)
+            pending.append(contentsOf: attribute(node, .children) as? [NSObject] ?? [])
+            pending.append(contentsOf: attribute(node, .init(rawValue: "AXChildrenInNavigationOrder")) as? [NSObject] ?? [])
+            if let view = node as? NSView { pending.append(contentsOf: view.subviews) }
+        }
+        return result
+    }
+    private static func press(_ node: NSObject) {
+        let selector = NSSelectorFromString("accessibilityPerformPress")
+        if node.responds(to: selector) {
+            typealias Press = @convention(c) (AnyObject, Selector) -> Bool
+            _ = unsafeBitCast(node.method(for: selector), to: Press.self)(node, selector)
+        } else { node.accessibilityPerformAction(.press) }
+    }
+    private static func verifyTabTargets(_ presentation: BrowserPresentation, window: NSWindow) async throws {
+        guard let original = presentation.currentTab, let content = window.contentView else { throw BrowserError("Missing tab fixture.") }
+        let other = try presentation.runtime.makeTab(browserID: original.browserID)
+        try await Task.sleep(for: .milliseconds(250))
+        let identifier = "browser.tab.\(original.id)"
+        guard let button = elements(content).first(where: { attribute($0, .identifier) as? String == identifier }),
+              button.responds(to: NSSelectorFromString("accessibilityFrame")),
+              let frame = (button.value(forKey: "accessibilityFrame") as? NSValue)?.rectValue else {
+            throw BrowserError("Missing accessible tab selection button.")
+        }
+        // Click inside the leading padding, outside the icon and text. Events
+        // stay in this process and target only the isolated fixture window.
+        let point = window.convertPoint(fromScreen: .init(x: frame.minX + 3, y: frame.midY))
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            guard let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0) else {
+                throw BrowserError("Could not create fixture tab input.")
+            }
+            NSApp.postEvent(event, atStart: false)
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        guard presentation.profile?.selectedTabID == original.id else { throw BrowserError("Clicking tab padding did not select the tab.") }
+        guard let close = elements(content).first(where: { attribute($0, .identifier) as? String == "browser.tab.close.\(other.id)" }) else {
+            throw BrowserError("Missing independent tab close button.")
+        }
+        press(close)
+        try await Task.sleep(for: .milliseconds(250))
+        guard presentation.profile?.selectedTabID == original.id,
+              presentation.profile?.tabs.contains(where: { $0.id == other.id }) == false else {
+            throw BrowserError("Closing another tab changed the selected tab.")
+        }
+    }
+    private static func containsTextField(_ value: String, in view: NSView) -> Bool {
+        (view as? NSTextField)?.stringValue == value || view.subviews.contains { containsTextField(value, in: $0) }
+    }
+    private static func snapshot(_ window: NSWindow, to url: URL) async throws {
+        // Capture only this process, as Noodle's native conversation capture does.
+        // AppKit cacheDisplay omits the GPU-composited sidebar glass.
+        let content = try await SCShareableContent.currentProcess
+        guard let target = content.windows.first(where: { $0.windowID == CGWindowID(window.windowNumber) }) else {
+            throw BrowserError("Fixture window is unavailable for capture.")
+        }
+        let config = SCStreamConfiguration()
+        config.width = max(1, Int(target.frame.width * window.backingScaleFactor))
+        config.height = max(1, Int(target.frame.height * window.backingScaleFactor))
+        config.showsCursor = false; config.ignoreShadowsSingleWindow = true; config.scalesToFit = true
+        config.includeChildWindows = false; config.captureResolution = .best
+        let capture = try await SCScreenshotManager.captureImage(
+            contentFilter: SCContentFilter(desktopIndependentWindow: target), configuration: config)
+        guard let data = NSBitmapImageRep(cgImage: capture).representation(using: .png, properties: [:]) else {
+            throw BrowserError("Snapshot encoding failed.")
+        }
+        try data.write(to: url)
+    }
+    private static func verifyWebSurface(_ presentation: BrowserPresentation, window: NSWindow, root: URL) async throws {
+        guard let tab = presentation.currentTab else { throw BrowserError("Missing selected tab.") }
+        tab.web.loadHTMLString("""
+        <!doctype html><meta name="viewport" content="width=device-width"><title>Workspace</title>
+        <style>body{background:#f5f6f8;color:#202630;font:16px -apple-system;margin:0;padding:56px}h1{font-size:30px}section{background:white;border:1px solid #e1e5ea;border-radius:12px;padding:24px;max-width:580px}button{background:#1673e7;color:white;border:0;border-radius:7px;padding:10px 18px;font:inherit}input{font:inherit;padding:10px;border:1px solid #ccd1d9;border-radius:7px}p{color:#657080;line-height:1.6}</style>
+        <h1>Workspace</h1><section><h2>Project notes</h2><p>Quarterly review</p>
+        <input id="title" value="Draft report"><button id="save" onclick="this.textContent='Saved'">Save</button></section>
+        """, baseURL: URL(string: "https://browser-fixture.invalid/"))
+        for _ in 0..<50 {
+            if (try? await tab.evaluate("return !!document.querySelector('#save') && document.readyState==='complete';")) as? Bool == true { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        guard tab.web.window === window else { throw BrowserError("The selected webpage is not mounted in the library window.") }
+        try await snapshot(window, to: root.appendingPathComponent("browser-page.png"))
+        try await tab.click(target: "#save", x: nil, y: nil, frame: nil)
+        try await BrowserSmokeTest.eventually("native input in the library window") {
+            try await tab.evaluate("return document.querySelector('#save').textContent;") as? String == "Saved"
+        }
+        try await snapshot(window, to: root.appendingPathComponent("browser-page.png"))
+        presentation.mode = .history
+        try await Task.sleep(for: .milliseconds(200))
+        guard tab.web.window !== window else { throw BrowserError("Leaving Browser view did not restore its background surface.") }
+        let capture = try await tab.snapshot()
+        guard NSImage(data: capture) != nil else { throw BrowserError("Background screenshot failed after changing detail view.") }
+        presentation.mode = .browser
+        try await Task.sleep(for: .milliseconds(200))
+        guard tab.web.window === window else { throw BrowserError("Returning to Browser view lost its live tab.") }
+    }
+}

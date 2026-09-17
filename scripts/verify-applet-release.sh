@@ -6,6 +6,7 @@ info="$app/Contents/Info.plist"
 bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info")"
 [[ "$bundle" == com.pdparchitect.noodle.applet || "$bundle" == com.pdparchitect.noodle.applet.local ]]
 codesign --verify --deep --strict "$app"
+cmp "$project_root/Applet/Support/AppSymbol.svg" "$app/Contents/Resources/AppSymbol.svg"
 zsh "$project_root/scripts/verify-updater.sh" "$app"
 entitlements="$(mktemp /tmp/applet-entitlements.XXXXXX)"
 preview_entitlements="$(mktemp /tmp/applet-preview-entitlements.XXXXXX)"

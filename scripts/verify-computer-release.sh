@@ -6,6 +6,7 @@ info="$app/Contents/Info.plist"
 bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info")"
 [[ "$bundle" == com.pdparchitect.noodle.computer || "$bundle" == com.pdparchitect.noodle.computer.local || "$bundle" == com.pdparchitect.noodle.computer.tests ]]
 codesign --verify --deep --strict "$app"
+cmp "$project_root/Computer/Support/AppSymbol.svg" "$app/Contents/Resources/AppSymbol.svg"
 zsh "$project_root/scripts/verify-updater.sh" "$app"
 entitlements="$(mktemp /tmp/computer-entitlements.XXXXXX)"
 trap 'rm -f "$entitlements"' EXIT

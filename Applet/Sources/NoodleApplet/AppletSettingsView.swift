@@ -28,14 +28,11 @@ struct AppletSettingsView: View {
 
 private struct AppletGeneralSettingsView: View {
     @ObservedObject var background: AppletBackgroundStore
-    @AppStorage("showMenuBar") private var showMenuBar = false
     @State private var changingBackground = false
 
     var body: some View {
         Form {
-            Section {
-                Toggle("Show recent noodlets in the menu bar", isOn: $showMenuBar)
-            }
+            CompanionVisibilitySettings()
             Section {
                 LabeledContent("Library background") {
                     Button("Change Background…") { changingBackground = true }
