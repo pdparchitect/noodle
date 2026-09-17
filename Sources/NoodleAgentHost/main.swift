@@ -29,6 +29,7 @@ private enum HostPaths {
         case .fx: return try FxExecutableTrust.executable(at: path, home: home)
         case .grokBuild: return try GrokExecutableTrust.executable(at: path, home: home)
         case .muse: return try MuseExecutableTrust.executable(at: path, home: home)
+        case .openCode: return try OpenCodeExecutableTrust.executable(at: path, home: home)
         }
     }
 
@@ -104,6 +105,11 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
             strings = [executable.path, "serve", "--disable-sandbox", "--trust-workspace"]
         case .codex:
             strings = [executable.path] + CodexLaunch.appServerArguments(appsEnabled: appsEnabled)
+        case .openCode:
+            guard model.map(OpenCodeProtocol.validModel) ?? true,
+                  effort.map(FxProtocol.validIdentifier) ?? true else { throw HostError("Unsupported OpenCode model or effort.") }
+            strings = [executable.path, "acp"]
+            setenv("OPENCODE_DISABLE_AUTOUPDATE", "true", 1)
         case .fx:
             guard effort == nil, model.map(FxProtocol.validIdentifier) ?? true else { throw HostError("Unsupported FX model or effort.") }
             strings = [executable.path, "acp"]
@@ -141,18 +147,26 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
                 profile = RestrictedAgentSandbox.profile(workspace: workspace, repository: repository,
                     codexHome: codexHome, executableDirectory: executable.deletingLastPathComponent().deletingLastPathComponent(),
                     application: HostPaths.application, temporary: temporary)
-            case .claudeCode, .fx, .grokBuild, .muse:
+            case .claudeCode, .fx, .grokBuild, .muse, .openCode:
                 profile = try RestrictedAgentSandbox.profile(provider: provider, workspace: workspace, repository: repository,
                     home: HostPaths.home, executable: executable, application: HostPaths.application, temporary: temporary)
             }
             setenv("TMPDIR", temporary.path, 1)
             setenv("TMPPREFIX", temporary.appendingPathComponent("zsh").path, 1)
             setenv("CODEX_HOME", codexHome.path, 1)
-            if provider == .claudeCode || provider == .fx || provider == .grokBuild || provider == .muse {
+            if provider == .claudeCode || provider == .fx || provider == .grokBuild || provider == .muse || provider == .openCode {
                 for (key, value) in try RestrictedAgentSandbox.environment(provider: provider, home: HostPaths.home, workspace: workspace) {
                     setenv(key, value, 1)
                 }
             } else { setenv("HOME", privateHome.path, 1) }
+            if provider == .openCode {
+                _ = try OpenCodeStorage.seed(workspace: workspace, loginHome: HostPaths.home, executable: executable,
+                    environment: ProcessInfo.processInfo.environment, profile: profile)
+                // ACP v2 keeps the first catalogue it sees for its process lifetime.
+                // Refresh this bot's private cache before it opens a session.
+                try OpenCodeInspection.prepareCatalogue(executable: executable, workspace: workspace,
+                    environment: ProcessInfo.processInfo.environment, profile: profile)
+            }
             strings = ["/usr/bin/sandbox-exec", "-p", profile] + strings
         }
         var arguments: [UnsafeMutablePointer<CChar>?] = strings.map { value in value.withCString { strdup($0) } }
@@ -223,7 +237,7 @@ private final class HostSession: NSObject, AgentHostService {
     func startRestrictedACP(harnessIdentifier: String, agentID: String, executablePath: String,
                             modelIdentifier: String?, effortIdentifier: String?,
                             withReply reply: @escaping (Int32, String?) -> Void) {
-        guard let provider = HarnessProvider(rawValue: harnessIdentifier), provider == .fx || provider == .grokBuild else {
+        guard let provider = HarnessProvider(rawValue: harnessIdentifier), provider == .fx || provider == .grokBuild || provider == .openCode else {
             reply(0, "Unsupported restricted ACP harness.")
             return
         }
@@ -382,6 +396,15 @@ private final class HostSession: NSObject, AgentHostService {
         queue.async {
             do {
                 let result = try GrokInspection.inspect(home: HostPaths.home, environment: self.accountEnvironment)
+                reply(try JSONEncoder().encode(result), nil)
+            } catch { reply(nil, error.localizedDescription) }
+        }
+    }
+
+    func inspectOpenCode(withReply reply: @escaping (Data?, String?) -> Void) {
+        queue.async {
+            do {
+                let result = try OpenCodeInspection.inspect(home: HostPaths.home, application: HostPaths.application)
                 reply(try JSONEncoder().encode(result), nil)
             } catch { reply(nil, error.localizedDescription) }
         }

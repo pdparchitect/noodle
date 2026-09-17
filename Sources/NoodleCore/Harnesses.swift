@@ -6,6 +6,7 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
     case fx
     case grokBuild = "grok-build"
     case muse
+    case openCode = "opencode"
     case apple
 
     public var id: String { rawValue }
@@ -17,7 +18,7 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
     /// Whether the Agent Host can apply a separate restricted runtime policy.
     public var supportsRestrictedAccess: Bool {
         switch self {
-        case .apple, .codex, .claudeCode, .fx, .grokBuild, .muse: return true
+        case .apple, .codex, .claudeCode, .fx, .grokBuild, .muse, .openCode: return true
         }
     }
 
@@ -29,6 +30,7 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
         case .fx: return "FX"
         case .grokBuild: return "Grok Build"
         case .muse: return "Muse Code"
+        case .openCode: return "OpenCode"
         }
     }
 
@@ -138,6 +140,7 @@ public struct HarnessDiscovery: Sendable {
     private let standaloneClaudeURL: URL
     private let standaloneFxURL: URL
     private let standaloneGrokURL: URL
+    private let standaloneOpenCodeURL: URL
     private let standaloneMuseURL: URL
     #if DEBUG
     private let simulateNoHarnesses: Bool
@@ -160,6 +163,7 @@ public struct HarnessDiscovery: Sendable {
         self.standaloneClaudeURL = homeDirectory.appendingPathComponent(".local/bin/claude")
         self.standaloneFxURL = homeDirectory.appendingPathComponent(".local/bin/fx")
         self.standaloneGrokURL = homeDirectory.appendingPathComponent(".grok/bin/grok")
+        self.standaloneOpenCodeURL = homeDirectory.appendingPathComponent(".opencode/bin/opencode")
         self.standaloneMuseURL = homeDirectory.appendingPathComponent(".local/bin/muse")
         self.executableSearchDirectories = executableSearchDirectories ?? [
             homeDirectory.appendingPathComponent(".local/bin", isDirectory: true),
@@ -208,7 +212,7 @@ public struct HarnessDiscovery: Sendable {
                 applicationsDirectory.appendingPathComponent("ChatGPT.app/Contents/Resources/codex"),
                 applicationsDirectory.appendingPathComponent("Codex.app/Contents/Resources/codex")
             ]
-        case .claudeCode, .fx, .grokBuild, .muse:
+        case .claudeCode, .fx, .grokBuild, .muse, .openCode:
             return standaloneCandidates(for: provider)
         }
     }
@@ -226,6 +230,7 @@ public struct HarnessDiscovery: Sendable {
         case .fx: return [standaloneFxURL]
         case .grokBuild: return [standaloneGrokURL]
         case .muse: return [standaloneMuseURL]
+        case .openCode: return [standaloneOpenCodeURL]
         }
     }
 

@@ -84,7 +84,7 @@ import XCTest
         processes.append(p); return p
     }
     private func agent(_ provider: HarnessProvider) -> AgentRecord {
-        .init(displayName: "Fixture bot", harnessIdentifier: provider.rawValue, modelIdentifier: "fixture-model", reasoningEffort: "high")
+        .init(displayName: "Fixture bot", harnessIdentifier: provider.rawValue, modelIdentifier: provider == .openCode ? "test/fixture-model" : "fixture-model", reasoningEffort: "high")
     }
     func wait(_ predicate: () -> Bool) async throws { try await clock.waitUntil(predicate) }
     func drain() async { for _ in 0..<20 { await Task.yield() } }
@@ -100,13 +100,21 @@ import XCTest
     }
     func openACP(_ wire: HarnessWire, provider: HarnessProvider = .fx, resuming: Bool = false) async throws {
         try await wait { wire.count("initialize") > 0 }
-        try wire.reply("initialize", result: ["protocolVersion": 1])
+        try wire.reply("initialize", result: ["protocolVersion": 1, "agentInfo": ["version": "2.0.7"]])
         if provider == .grokBuild {
             try await wait { wire.count("authenticate") > 0 }; try wire.reply("authenticate")
         }
         let method = resuming ? "session/load" : "session/new"
         try await wait { wire.count(method) > 0 }
         try wire.reply(method, result: ["sessionId": "fixture-session"])
+        if provider == .openCode {
+            try await wait { wire.count("session/set_config_option") == 1 }
+            XCTAssertEqual((try wire.last("session/set_config_option")["params"] as? [String: Any])?["configId"] as? String, "model")
+            try wire.reply("session/set_config_option")
+            try await wait { wire.count("session/set_config_option") == 2 }
+            XCTAssertEqual((try wire.last("session/set_config_option")["params"] as? [String: Any])?["configId"] as? String, "effort")
+            try wire.reply("session/set_config_option")
+        }
         if provider == .grokBuild || provider == .apple {
             try await wait { wire.count("session/set_model") > 0 }; try wire.reply("session/set_model")
         }

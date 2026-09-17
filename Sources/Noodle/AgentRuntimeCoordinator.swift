@@ -48,7 +48,7 @@ struct AgentRuntimeLaunch {
                 extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
                 onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) }, onActivity: onActivity)
-        case .apple, .fx, .grokBuild:
+        case .apple, .fx, .grokBuild, .openCode:
             return ACPAgentProcess(provider: provider, agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
                 extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
@@ -149,6 +149,8 @@ final class AgentRuntimeCoordinator {
     private var fxCapabilityTask: Task<Void, Never>?
     private var grokCapabilityTask: Task<Void, Never>?
     private var hostGrokInstallation: HarnessInstallation?
+    private var openCodeCapabilityTask: Task<Void, Never>?
+    private var hostOpenCodeInstallation: HarnessInstallation?
     private var hostMuseInstallation: HarnessInstallation?
     private var museCapabilityTask: Task<Void, Never>?
     private var appleCapabilityTask: Task<Void, Never>?
@@ -172,7 +174,8 @@ final class AgentRuntimeCoordinator {
 
     private func discoveredInstallations() -> [HarnessInstallation] {
         discovery.discover().map { installation in
-            installation.provider == .grokBuild ? (hostGrokInstallation ?? installation) :
+            installation.provider == .openCode ? (hostOpenCodeInstallation ?? installation) :
+                installation.provider == .grokBuild ? (hostGrokInstallation ?? installation) :
                 (installation.provider == .muse ? (hostMuseInstallation ?? installation) : installation)
         }
     }
@@ -192,6 +195,24 @@ final class AgentRuntimeCoordinator {
             guard !Task.isCancelled else { return }
             installationErrors[.grokBuild] = error.localizedDescription
             capabilityErrors[.grokBuild] = error.localizedDescription
+        }
+    }
+
+    private func refreshOpenCodeCapabilities() async {
+        guard discovery.allowsHostDiscovery(for: .openCode) else { return }
+        do {
+            let result = try await OpenCodeHostProbe().load()
+            guard !Task.isCancelled else { return }
+            let installation = HarnessInstallation(provider: .openCode, executablePath: result.executablePath)
+            hostOpenCodeInstallation = installation
+            installationErrors[.openCode] = nil
+            installations = installations.map { $0.provider == .openCode ? installation : $0 }
+            modelsByProvider[.openCode] = result.models
+            capabilityErrors[.openCode] = result.executablePath == nil ? "OpenCode is not installed" : (result.authenticated || !result.models.isEmpty ? nil : "Run opencode auth login in Terminal, then check again.")
+        } catch {
+            guard !Task.isCancelled else { return }
+            installationErrors[.openCode] = error.localizedDescription
+            capabilityErrors[.openCode] = error.localizedDescription
         }
     }
 
@@ -415,12 +436,14 @@ final class AgentRuntimeCoordinator {
             discovery.discover()
         }.value
         guard !Task.isCancelled else { return }
+        await refreshOpenCodeCapabilities()
         await refreshGrokCapabilities()
         await refreshMuseCapabilities()
         await refreshAppleCapabilities()
         guard !Task.isCancelled else { return }
         let complete = detected.map { installation in
-            installation.provider == .grokBuild ? (hostGrokInstallation ?? installation) :
+            installation.provider == .openCode ? (hostOpenCodeInstallation ?? installation) :
+                installation.provider == .grokBuild ? (hostGrokInstallation ?? installation) :
                 (installation.provider == .muse ? (hostMuseInstallation ?? installation) : installation)
         }
         if installations != complete { installations = complete }
@@ -508,6 +531,8 @@ final class AgentRuntimeCoordinator {
         installations = discoveredInstallations()
         appleCapabilityTask?.cancel()
         appleCapabilityTask = Task { [weak self] in await self?.refreshAppleCapabilities() }
+        openCodeCapabilityTask?.cancel()
+        openCodeCapabilityTask = Task { [weak self] in await self?.refreshOpenCodeCapabilities() }
         grokCapabilityTask?.cancel()
         grokCapabilityTask = Task { [weak self] in await self?.refreshGrokCapabilities() }
         museCapabilityTask?.cancel()
@@ -712,11 +737,12 @@ final class AgentRuntimeCoordinator {
                     do {
                         let storage = repository.storage(for: agent.id)
                         try storage.validate()
-                        let state = storage.sessionState(provider: .grokBuild,
-                            extendedAccess: self.accessConfiguration.isExtended(for: agent))
-                        guard agent.harnessIdentifier == HarnessProvider.grokBuild.rawValue else {
+                        guard let provider = agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:)),
+                              provider == .grokBuild || provider == .openCode else {
                             throw HarnessSetupError("This harness does not support session recovery through Kick.")
                         }
+                        let state = storage.sessionState(provider: provider,
+                            extendedAccess: self.accessConfiguration.isExtended(for: agent))
                         switch sessionRecovery {
                         case .replace(let sessionID): try ACPSessionState.prepareRecovery(at: state, replacing: sessionID)
                         case .retry: try ACPSessionState.allowRecoveryRetry(at: state)
@@ -775,6 +801,7 @@ final class AgentRuntimeCoordinator {
     func stopAll() {
         messageDelivery.cancelAll()
         fxCapabilityTask?.cancel()
+        openCodeCapabilityTask?.cancel()
         grokCapabilityTask?.cancel()
         isStoppingAll = true
         lifecycleID = UUID()

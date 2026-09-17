@@ -14,6 +14,7 @@ public enum RestrictedAgentSandbox {
         case .fx: name = ".fx"
         case .grokBuild: name = ".grok"
         case .muse: name = ".config/muse"
+        case .openCode: name = ".local/share/opencode"
         default: throw HarnessSetupError("Unsupported restricted harness account.")
         }
         let directory = home.appendingPathComponent(name, isDirectory: true)
@@ -28,13 +29,26 @@ public enum RestrictedAgentSandbox {
         let privateHome = RestrictedHarnessStorage.home(workspace: workspace)
         let account = try accountDirectory(provider: provider, home: privateHome)
         var readFiles = [String]()
-        if provider == .fx {
+        if provider == .fx || provider == .openCode {
             readFiles += ancestorDirectories(of: workspace) + ancestorDirectories(of: account)
-            readFiles.append("/Library/Keychains/System.keychain")
         }
-        return profile(workspace: workspace,
+        if provider == .fx { readFiles.append("/Library/Keychains/System.keychain") }
+        let base = profile(workspace: workspace,
             executablePaths: [executable.path], application: application,
             readFiles: Array(Set(readFiles)).sorted())
+        guard provider == .openCode else { return base }
+        // V2's native ACP implementation starts a password-authenticated server
+        // on 127.0.0.1. Only that verified executable can listen; tools cannot.
+        // Seatbelt's "localhost" token also matches this machine's LAN addresses,
+        // so it must not be described as an OS-enforced loopback-only boundary.
+        return base + """
+
+        (allow network-bind network-inbound
+          (require-all
+            (process-path \(quoted(sandboxPath(executable.path))))
+            (local ip "localhost:*")))
+        """
+
     }
 
     public static func environment(provider: HarnessProvider, home: URL, workspace: URL? = nil) throws -> [String: String] {
@@ -57,6 +71,8 @@ public enum RestrictedAgentSandbox {
             return environment
         case .grokBuild:
             return ["HOME": privateHome.path, "GROK_SANDBOX": "off"]
+        case .openCode:
+            return OpenCodeStorage.environment(workspace: workspace)
         case .muse:
             let storage = workspace.appendingPathComponent(".noodle/muse")
             return ["HOME": privateHome.path, "XDG_CONFIG_HOME": privateHome.appendingPathComponent(".config").path,

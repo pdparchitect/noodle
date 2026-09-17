@@ -14,11 +14,11 @@ final class HarnessVersionInspectionTests: XCTestCase {
 
     func testEachProviderUsesReadOnlyVersionAndHelpCommandsWithUpdatesDisabled() throws {
         let executable = try fixture(#"""
-        [ "$DISABLE_AUTOUPDATER" = 1 ] && [ "$NO_COLOR" = 1 ] || exit 41
+        [ "$DISABLE_AUTOUPDATER" = 1 ] && [ "$NO_COLOR" = 1 ] && [ "$OPENCODE_DISABLE_AUTOUPDATE" = true ] || exit 41
         if read -r input; then exit 42; fi
         printf '%s\n' "$*" >> "$PROBE_LOG"
         case "$*" in
-          --version) printf '%s\n' 'tool 1.2.3' ;;
+          --version) printf '%s\n' 'tool 2.0.7' ;;
           "$HELP_ARGUMENTS") printf '%s\n' "$HELP_TEXT" ;;
           *) exit 43 ;;
         esac
@@ -28,7 +28,8 @@ final class HarnessVersionInspectionTests: XCTestCase {
             (.claudeCode, "--help", "Usage: claude --input-format --output-format --permission-mode --permission-prompts --session-id"),
             (.fx, "--help", "Usage: fx acp"),
             (.grokBuild, "agent --help", "Usage: grok agent stdio --no-leader"),
-            (.muse, "--help", "Usage: muse serve schema")
+            (.muse, "--help", "Usage: muse serve schema"),
+            (.openCode, "--help", "USAGE\nopencode acp api auth --standalone")
         ]
         for (provider, arguments, help) in cases {
             let log = root.appendingPathComponent(provider.rawValue + ".log")
@@ -36,7 +37,7 @@ final class HarnessVersionInspectionTests: XCTestCase {
                 "DISABLE_AUTOUPDATER": "0", "NO_COLOR": "0", "PROBE_LOG": log.path,
                 "HELP_ARGUMENTS": arguments, "HELP_TEXT": help
             ])
-            XCTAssertEqual(report.installedVersion, "1.2.3", provider.rawValue)
+            XCTAssertEqual(report.installedVersion, "2.0.7", provider.rawValue)
             XCTAssertNil(report.checkError, provider.rawValue)
             XCTAssertNil(report.compatibilityIssue, provider.rawValue)
             XCTAssertEqual(try String(contentsOf: log, encoding: .utf8), "--version\n\(arguments)\n")

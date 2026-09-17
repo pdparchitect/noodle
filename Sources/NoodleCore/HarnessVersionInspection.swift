@@ -14,11 +14,14 @@ public enum HarnessVersionInspection {
         let help = try run(executable, arguments: HarnessVersionPolicy.helpArguments(for: provider), environment: environment)
         if help.truncated {
             report.checkError = "Could not verify command compatibility because the help output was too large."
-        } else if help.exitCode == 0, help.text.lowercased().contains("usage:") {
+        } else if help.exitCode == 0, HarnessVersionPolicy.hasUsage(provider: provider, help: help.text) {
             report.compatibilityIssue = HarnessVersionPolicy.compatibilityIssue(provider: provider, help: help.text)
         } else {
             report.compatibilityIssue = HarnessVersionPolicy.startupIssue(provider: provider, text: help.text)
             if report.compatibilityIssue == nil { report.checkError = "Could not verify command compatibility." }
+        }
+        if provider == .openCode, let text = report.installedVersion, !OpenCodeProtocol.supportsVersion(text) {
+            report.compatibilityIssue = "Noodle requires OpenCode v2. Run the v2 installer in Terminal, then check again."
         }
         return report
     }
@@ -36,7 +39,7 @@ public enum HarnessVersionInspection {
         let child = Process(), finished = DispatchSemaphore(value: 0)
         child.executableURL = executable
         child.arguments = arguments
-        child.environment = environment.merging(["DISABLE_AUTOUPDATER": "1", "NO_COLOR": "1"]) { _, value in value }
+        child.environment = environment.merging(["DISABLE_AUTOUPDATER": "1", "OPENCODE_DISABLE_AUTOUPDATE": "true", "NO_COLOR": "1"]) { _, value in value }
         child.currentDirectoryURL = FileManager.default.temporaryDirectory
         child.standardInput = FileHandle.nullDevice
         child.standardOutput = output

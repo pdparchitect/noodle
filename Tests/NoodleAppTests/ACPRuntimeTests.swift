@@ -9,7 +9,7 @@ import XCTest
     }
 
     func testProvidersConfigureAccessModelEffortAndResumeSavedSessions() async throws {
-        for provider in [HarnessProvider.apple, .fx, .grokBuild] {
+        for provider in [HarnessProvider.apple, .fx, .grokBuild, .openCode] {
             for extended in [false, true] {
                 let f = try fixture(), wire = HarnessWire(), p = f.acp(wire, provider: provider, extended: extended)
                 p.start(); try await f.openACP(wire, provider: provider)
@@ -111,7 +111,7 @@ import XCTest
             wire.emit(["id": id, "method": "session/request_permission", "params": ["sessionId": session,
                 "options": [["kind": "allow_always", "optionId": "forever"], ["kind": "allow_once", "optionId": "once"]]]])
         }
-        await f.drain()
+        try await f.wait { wire.writes.contains { $0["id"] as? String == "allowed" && $0["result"] != nil } }
         func outcome(_ id: String) throws -> [String: String] {
             let reply = try XCTUnwrap(wire.writes.last { $0["id"] as? String == id })
             return try XCTUnwrap((reply["result"] as? [String: Any])?["outcome"] as? [String: String])
@@ -122,7 +122,7 @@ import XCTest
         wire.emit(["id": "cancelled", "method": "session/request_permission", "params": ["sessionId": "fixture-session",
             "options": [["kind": "allow_once", "optionId": "once"]]]])
         wire.emit(["id": "unsupported", "method": "fs/read_text_file", "params": [:]])
-        await f.drain()
+        try await f.wait { wire.writes.contains { $0["id"] as? String == "unsupported" && $0["error"] != nil } }
         XCTAssertEqual(try outcome("cancelled")["outcome"], "cancelled")
         XCTAssertEqual((wire.writes.last { $0["id"] as? String == "unsupported" }?["error"] as? [String: Any])?["code"] as? Int, -32601)
     }

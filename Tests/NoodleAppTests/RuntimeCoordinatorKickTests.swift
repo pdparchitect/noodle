@@ -10,9 +10,9 @@ import XCTest
         return f
     }
 
-    private func missingSession(_ f: RuntimeCoordinatorFixture) throws -> (AgentRecord, RuntimeProcessFixture, URL, String) {
-        let agent = try f.agent(harness: .grokBuild), process = try f.start(agent)
-        let url = f.repository.storage(for: agent.id).sessionState(provider: .grokBuild, extendedAccess: false)
+    private func missingSession(_ f: RuntimeCoordinatorFixture, provider: HarnessProvider = .grokBuild) throws -> (AgentRecord, RuntimeProcessFixture, URL, String) {
+        let agent = try f.agent(harness: provider), process = try f.start(agent)
+        let url = f.repository.storage(for: agent.id).sessionState(provider: provider, extendedAccess: false)
         let id = UUID().uuidString
         try ACPSessionState(sessionID: id).save(to: url)
         process.transition(.failed, failure: .missingSession(id))
@@ -78,32 +78,34 @@ import XCTest
     }
 
     func testMissingSessionDoesNothingUntilConfirmedThenPreservesWorkAndOtherAccessMode() throws {
-        let f = try fixture(), (agent, process, url, id) = try missingSession(f)
-        let original = try Data(contentsOf: url)
-        let otherMode = f.repository.storage(for: agent.id).sessionState(provider: .grokBuild, extendedAccess: true)
-        try original.write(to: otherMode)
-        var work = AgentTurnRecovery(sessionStateURL: url)
-        try work.begin()
-        let marker = try Data(contentsOf: url.appendingPathExtension("unfinished"))
-        let request = try XCTUnwrap(f.runtime.kick(agent: agent, repository: f.repository))
-        XCTAssertEqual(request.failure, .missingSession(id))
-        XCTAssertTrue(request.message.contains("may be lost"))
-        XCTAssertEqual(process.stops, 0, "Opening or cancelling the confirmation must leave the bot alone")
-        XCTAssertEqual(try Data(contentsOf: url), original)
+        for provider in [HarnessProvider.grokBuild, .openCode] {
+            let f = try fixture(), (agent, process, url, id) = try missingSession(f, provider: provider)
+            let original = try Data(contentsOf: url)
+            let otherMode = f.repository.storage(for: agent.id).sessionState(provider: provider, extendedAccess: true)
+            try original.write(to: otherMode)
+            var work = AgentTurnRecovery(sessionStateURL: url)
+            try work.begin()
+            let marker = try Data(contentsOf: url.appendingPathExtension("unfinished"))
+            let request = try XCTUnwrap(f.runtime.kick(agent: agent, repository: f.repository))
+            XCTAssertEqual(request.failure, .missingSession(id))
+            XCTAssertTrue(request.message.contains("may be lost"))
+            XCTAssertEqual(process.stops, 0, "Opening or cancelling the confirmation must leave the bot alone")
+            XCTAssertEqual(try Data(contentsOf: url), original)
 
-        process.automaticallyStops = false
-        f.runtime.confirmKick(request, repository: f.repository)
-        XCTAssertEqual(try Data(contentsOf: url), original, "Wait for the exact runtime to stop before changing state")
-        process.finishStop(true)
-        let state = try JSONDecoder().decode(ACPSessionState.self, from: Data(contentsOf: url))
-        XCTAssertNil(state.sessionID)
-        XCTAssertEqual(state.previousSessionIDs, [id])
-        XCTAssertTrue(state.needsHistoryRecovery)
-        XCTAssertEqual(try Data(contentsOf: url.appendingPathExtension("unfinished")), marker)
-        XCTAssertEqual(try Data(contentsOf: otherMode), original)
-        XCTAssertEqual(f.factory.processes.count, 2)
-        f.runtime.confirmKick(request, repository: f.repository)
-        XCTAssertEqual(f.factory.processes.count, 2, "Confirmation cannot be replayed")
+            process.automaticallyStops = false
+            f.runtime.confirmKick(request, repository: f.repository)
+            XCTAssertEqual(try Data(contentsOf: url), original, "Wait for the exact runtime to stop before changing state")
+            process.finishStop(true)
+            let state = try JSONDecoder().decode(ACPSessionState.self, from: Data(contentsOf: url))
+            XCTAssertNil(state.sessionID)
+            XCTAssertEqual(state.previousSessionIDs, [id])
+            XCTAssertTrue(state.needsHistoryRecovery)
+            XCTAssertEqual(try Data(contentsOf: url.appendingPathExtension("unfinished")), marker)
+            XCTAssertEqual(try Data(contentsOf: otherMode), original)
+            XCTAssertEqual(f.factory.processes.count, 2)
+            f.runtime.confirmKick(request, repository: f.repository)
+            XCTAssertEqual(f.factory.processes.count, 2, "Confirmation cannot be replayed")
+        }
     }
 
     func testOldConfirmationCannotResetReplacementOrRemovedBot() throws {

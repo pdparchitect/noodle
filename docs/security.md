@@ -4,7 +4,7 @@
 
 | Harness | Access in Noodle |
 | --- | --- |
-| Codex, Claude Code, FX, Grok Build, Muse Code, Apple Intelligence | Restricted by default; unrestricted access is optional |
+| Codex, Claude Code, FX, Grok Build, Muse Code, OpenCode v2, Apple Intelligence | Restricted by default; unrestricted access is optional |
 
 Change any bot's access in **Settings → Sandbox**. Click the **Unrestricted**
 heading or a bot's **restricted** or **unrestricted** label to see what that mode
@@ -43,7 +43,7 @@ has no direct conversation-file fallback. Attachment reads return copies under
 regular files from the caller's workspace, without following symlinks.
 
 Cloud harnesses have a private home at `workspace/.noodle/home`. Codex, Claude, FX, Grok,
-and Muse store their own configuration, sessions, and caches there; Muse's data,
+Muse, and OpenCode store their own configuration, sessions, and caches there; Muse's data,
 state, and runtime directories remain under `workspace/.noodle/muse`. The trusted
 Agent Host seeds only login material from the existing provider sign-in. It does
 not copy standalone conversations, global skills, hooks, or MCP configuration.
@@ -75,6 +75,26 @@ offered allow-once action for the current session. Grok uses a dedicated
 `--no-leader` process with its inner sandbox disabled because Agent Host has
 already applied the mandatory outer policy. These tool approvals cannot widen
 the OS sandbox. Cancelled turns and stale-session requests are denied.
+
+OpenCode v2 uses a private ACP process and its own authenticated loopback server.
+The listener permission applies only to the verified OpenCode executable; shell
+tools cannot listen on network ports. The native v2 server binds `127.0.0.1`.
+Seatbelt cannot enforce the IP address for incoming connections, so this binding
+relies on the verified native implementation. The app gains no new entitlements,
+and server descendants inherit the same workspace restrictions. ACP permissions accept only the offered
+allow-once choice for the current session. Client filesystem and terminal services
+remain disabled. Automatic updates and filesystem watchers are disabled.
+Project discovery outside the workspace is disabled; the bot's managed `AGENTS.md`
+and skills are linked into its private OpenCode configuration. Optional provider
+settings come only from its private config and the workspace's `opencode.json`.
+
+The host reads only saved API-key and OAuth credential rows from OpenCode’s standard
+v2 database. It never copies that database or its conversations. Database creation
+and credential writes run under the bot’s restricted OS policy, including during
+account/model inspection in a temporary workspace. Refreshed private credentials
+are preserved until the source login changes. A changed source login replaces the
+private credential rows without touching sessions. Unsupported credential schemas
+fail closed. Global executable configuration and MCP credentials are not imported.
 
 Muse starts its verified native binary directly, without the self-updating shell
 launcher. Agent Host applies the outer sandbox before running `serve`; Muse's

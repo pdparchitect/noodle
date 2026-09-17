@@ -44,7 +44,7 @@ final class RestrictedAgentSandboxTests: XCTestCase {
           worker.kill
         end
         """#
-        for provider: HarnessProvider in [.codex, .claudeCode, .fx, .grokBuild, .muse] {
+        for provider: HarnessProvider in [.codex, .claudeCode, .fx, .grokBuild, .muse, .openCode] {
             let policy = provider == .codex
                 ? RestrictedAgentSandbox.profile(workspace: workspace, repository: root, codexHome: workspace,
                     executableDirectory: URL(fileURLWithPath: "/usr/bin"), application: workspace, temporary: workspace)
@@ -142,6 +142,8 @@ final class RestrictedAgentSandboxTests: XCTestCase {
     func testRestrictedMuseCanWorkAndMessageWithoutAccessToOtherAccounts() throws {
         try checkBoundary(provider: .muse)
     }
+
+    func testOpenCodeBoundary() throws { try checkBoundary(provider: .openCode) }
 
     func testClaudeBoundary() throws { try checkBoundary(provider: .claudeCode) }
 
@@ -286,7 +288,7 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let home = root.appendingPathComponent("Home"), outside = root.appendingPathComponent("Private")
         for directory in [home, outside] { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
-        for provider in [HarnessProvider.claudeCode, .fx, .grokBuild, .muse] {
+        for provider in [HarnessProvider.claudeCode, .fx, .grokBuild, .muse, .openCode] {
             let account = try RestrictedAgentSandbox.accountDirectory(provider: provider, home: home)
             try FileManager.default.createDirectory(at: account.deletingLastPathComponent(), withIntermediateDirectories: true)
             try FileManager.default.createSymbolicLink(at: account, withDestinationURL: outside)
@@ -303,7 +305,7 @@ final class RestrictedAgentSandboxTests: XCTestCase {
     }
 
     func testProfilesNeverGrantSharedAccountOrKeychainContent() throws {
-        for provider in [HarnessProvider.claudeCode, .fx, .grokBuild, .muse] {
+        for provider in [HarnessProvider.claudeCode, .fx, .grokBuild, .muse, .openCode] {
             let profile = try RestrictedAgentSandbox.profile(provider: provider,
                 workspace: URL(fileURLWithPath: "/fixture/bot/workspace"), repository: URL(fileURLWithPath: "/fixture"),
                 home: URL(fileURLWithPath: "/private-login"), executable: URL(fileURLWithPath: "/native/harness"),

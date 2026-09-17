@@ -26,6 +26,8 @@ struct HarnessProviderIcon: View {
             "GrokHarness"
         case .muse:
             "MuseHarness"
+        case .openCode:
+            "OpenCodeHarness"
         }
     }
 }

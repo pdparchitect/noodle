@@ -13,6 +13,7 @@ public enum RestrictedHarnessStorage {
         _ = try WorkspaceMailbox(workspace: workspace, path: ".noodle/home", create: true)
         _ = try WorkspaceMailbox(workspace: workspace, path: ".noodle/tmp", create: true)
         guard provider != .apple else { return }
+        if provider == .openCode { try OpenCodeStorage.prepareDirectories(workspace: workspace); return }
         let accountPath: String
         switch provider {
         case .codex: accountPath = ".codex"

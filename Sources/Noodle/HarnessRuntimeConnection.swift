@@ -34,7 +34,7 @@ extension ExtendedAgentConnection: HarnessRuntimeConnection {
                     effortIdentifier: effortIdentifier, appsEnabled: appsEnabled, reply: reply)
             case .apple:
                 startRestrictedApple(agentID: agentID, modelIdentifier: modelIdentifier, reply: reply)
-            case .fx, .grokBuild:
+            case .fx, .grokBuild, .openCode:
                 startRestrictedACP(provider: provider, agentID: agentID, executablePath: executablePath,
                                    modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier, reply: reply)
             default:

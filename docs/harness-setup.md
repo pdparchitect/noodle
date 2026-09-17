@@ -1,7 +1,7 @@
 # Harness setup
 
 A harness is the agent program Noodle runs for each bot. Noodle supports Codex,
-Claude Code, Vercel FX, Grok Build, and Muse Code, using your existing account,
+Claude Code, Vercel FX, Grok Build, Muse Code, and OpenCode v2, using your existing account,
 plus the experimental bundled Apple Intelligence harness running on device.
 
 For an external harness:
@@ -18,6 +18,7 @@ For an external harness:
 | FX | **Sign In…** in Noodle, or `fx login` in Terminal |
 | Grok Build | `grok login` in Terminal |
 | Muse Code | `muse login` in Terminal |
+| OpenCode v2 | `opencode auth login` in Terminal |
 | Apple Intelligence | Bundled with Noodle; enable Apple Intelligence in System Settings on a supported Mac running macOS 26 or later. No separate install or sign-in. |
 
 Once a harness is detected, create a bot and select its model and, where available,
@@ -29,6 +30,28 @@ Apps connected to ChatGPT or Claude.ai are off by default for Noodle bots. Enabl
 **Apps** beside that bot in **Settings → Sandbox** to allow them. This preference
 is separate for each bot and harness; [account apps](security.md#account-apps)
 explains the scope and how it differs from Noodle's assigned tools.
+
+## OpenCode v2
+
+Install the native CLI using [OpenCode’s v2 installer](https://opencode.ai/v2/docs):
+
+```sh
+curl -fsSL https://opencode.ai/v2/install | bash
+opencode auth login
+```
+
+Noodle verifies the vendor-signed binary at `~/.opencode/bin/opencode`. Version 1,
+package-manager wrappers, and redirected installations are unsupported. Use
+**Check Again** after installing or signing in. Models and reasoning variants
+come from the v2 model catalogue. Select a model as `provider/model`.
+
+Restricted bots use their own OpenCode database, configuration, cache, and temporary
+files. Noodle imports saved API-key and OAuth credentials from the standard v2
+credential database. Global provider configuration, plugins, MCP servers, and
+standalone conversations are not imported. Custom provider definitions can be
+configured in the bot workspace's `opencode.json`. Environment-only credentials and custom global
+storage paths are not used for restricted bots. Models that do not require a
+provider login can also be used.
 
 ## If setup fails
 

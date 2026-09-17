@@ -35,7 +35,7 @@ Drivers share a `start`, `stop`, and `notify` interface:
 | --- | --- |
 | Codex | App Server |
 | Claude Code | stream-json |
-| FX, Grok Build | ACP |
+| FX, Grok Build, OpenCode v2 | ACP |
 | Muse Code | MSP |
 | Apple Intelligence | ACP through the bundled `NoodleAppleAgent` helper |
 
@@ -72,7 +72,7 @@ or damaged legacy sources stop migration with their files intact. Backstory
 migration does not grant legacy unrestricted access.
 
 The signed Agent Host applies a dedicated filesystem sandbox before starting
-restricted Codex, FX, Grok Build, Muse Code, or Apple. Each can read only its own
+restricted Codex, FX, Grok Build, Muse Code, OpenCode, or Apple. Each can read only its own
 bot package alongside required system/application files, and write its workspace;
 parent configuration and runtime state stay read-only. Cloud harness homes and
 session stores are private to the bot, seeded only with provider login material.

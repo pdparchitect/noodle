@@ -25,6 +25,7 @@ typealias ClaudeCodeSetupProvider = FixtureSetupProvider
 typealias FxSetupProvider = FixtureSetupProvider
 typealias GrokSetupProvider = FixtureSetupProvider
 typealias MuseSetupProvider = FixtureSetupProvider
+typealias OpenCodeSetupProvider = FixtureSetupProvider
 typealias AppleSetupProvider = FixtureSetupProvider
 
 @MainActor final class FixtureVersionChecker: HarnessVersionChecking {

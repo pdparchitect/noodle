@@ -70,6 +70,7 @@ public enum AgentHostIdentity {
     )
     func fxModels(executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
     func inspectGrok(withReply reply: @escaping (Data?, String?) -> Void)
+    func inspectOpenCode(withReply reply: @escaping (Data?, String?) -> Void)
     func inspectMuse(withReply reply: @escaping (Data?, String?) -> Void)
     func inspectHarnessVersion(harnessIdentifier: String, executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
 }

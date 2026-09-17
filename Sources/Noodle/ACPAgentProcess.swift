@@ -55,7 +55,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
          onActivity: @escaping @MainActor ([String: Any]) -> Void = { _ in },
         makeConnection: @escaping @MainActor () throws -> any HarnessRuntimeConnection = { try ExtendedAgentConnection() },
         sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
-        precondition(provider == .apple || provider == .fx || provider == .grokBuild)
+        precondition(provider == .apple || provider == .fx || provider == .grokBuild || provider == .openCode)
         self.provider = provider
         self.makeConnection = makeConnection
         self.sleep = sleep
@@ -240,7 +240,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
                     let response: [String: Any] = interruptRequested
                         ? ["outcome": ["outcome": "cancelled"]]
                         : FxProtocol.permissionResponse(params: params, sessionID: sessionID,
-                                                        extendedAccess: extendedAccess, restrictedAccess: provider == .fx || provider == .grokBuild)
+                                                        extendedAccess: extendedAccess, restrictedAccess: provider == .fx || provider == .grokBuild || provider == .openCode)
                     send(["jsonrpc": "2.0", "id": id.json, "result": response])
                 } else {
                     send(["jsonrpc": "2.0", "id": id.json, "error": ["code": -32601, "message": "Unsupported client request"]])
@@ -259,6 +259,15 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         }
         guard let id = object["id"] as? Int, let purpose = requests.removeValue(forKey: id) else { return }
         if let error = object["error"] as? [String: Any] {
+            if provider == .openCode, error["code"] as? Int == -32000 {
+                pause("OpenCode needs you to sign in. Run opencode auth login in Terminal, then retry.", failure: .authenticationRequired)
+                return
+            }
+            if provider == .openCode, case .load = purpose, let sessionID,
+               OpenCodeProtocol.missingSession(error, sessionID: sessionID) {
+                pause("The saved OpenCode session is unavailable. Choose Kick to recover from conversation history.", failure: .missingSession(sessionID))
+                return
+            }
             if provider == .grokBuild, let detail = GrokProtocol.authenticationFailureDescription(error) {
                 pause(detail, failure: .authenticationRequired)
                 return
@@ -273,7 +282,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
                 return
             }
             // Only an explicit missing session permits discarding its pointer.
-            if case .load = purpose, error["message"] as? String == "Session not found" {
+            if provider != .openCode, case .load = purpose, error["message"] as? String == "Session not found" {
                 do { try FileManager.default.removeItem(at: stateURL) }
                 catch { terminated("Could not clear \(name)'s missing session"); return }
                 sessionID = nil
@@ -288,7 +297,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
                 interruptRequested = false
                 turnIsActive = false
                 trace.finish(.turnFailed)
-                update(.failed, provider == .apple ? (error["message"] as? String ?? "Apple could not finish this turn. Choose Kick in Settings → Harness to continue.") : (provider == .fx ? FxProtocol.turnFailureDescription(error) : "Grok Build could not complete the turn. Check its account and model, then use Kick in Settings → Harness. Unfinished work is preserved."))
+                update(.failed, provider == .apple ? (error["message"] as? String ?? "Apple could not finish this turn. Choose Kick in Settings → Harness to continue.") : (provider == .fx ? FxProtocol.turnFailureDescription(error) : "\(name) could not complete the turn. Check its account and model, then use Kick in Settings → Harness. Unfinished work is preserved."))
             } else { terminated(provider == .apple ? (error["message"] as? String ?? "Apple session setup failed. Check Apple Intelligence in System Settings.") : "\(name) session setup failed. Check its sign-in and selected model in Settings.") }
             return
         }
@@ -296,6 +305,13 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         switch purpose {
         case .initialize:
             guard result["protocolVersion"] as? Int == 1 else { terminated("\(name) uses an unsupported ACP version"); return }
+            if provider == .openCode {
+                guard let info = result["agentInfo"] as? [String: Any],
+                      let version = info["version"] as? String, OpenCodeProtocol.supportsVersion(version) else {
+                    terminated("Noodle requires OpenCode v2. Run the v2 installer in Terminal, then check again.")
+                    return
+                }
+            }
             if provider == .grokBuild {
                 request(.authenticate, method: "authenticate", params: ["methodId": "cached_token"])
             } else { openSession() }
@@ -308,7 +324,9 @@ final class ACPAgentProcess: AgentRuntimeProcess {
                 try FileManager.default.createDirectory(at: stateURL.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try state.save(to: stateURL)
             } catch { terminated("Could not save the \(name) session"); return }
-            if provider == .grokBuild || provider == .apple, let model = configuration.modelIdentifier {
+            if provider == .openCode, let model = configuration.modelIdentifier {
+                request(.model, method: "session/set_config_option", params: ["sessionId": sessionID, "configId": "model", "value": model])
+            } else if provider == .grokBuild || provider == .apple, let model = configuration.modelIdentifier {
                 request(.model, method: "session/set_model", params: ["sessionId": sessionID, "modelId": model])
             } else { configureEffort() }
         case .model:
@@ -354,7 +372,9 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         }
     }
     private func configureEffort() {
-        if provider == .grokBuild, let sessionID, let effort = configuration.reasoningEffort {
+        if provider == .openCode, let sessionID, let effort = configuration.reasoningEffort {
+            request(.effort, method: "session/set_config_option", params: ["sessionId": sessionID, "configId": "effort", "value": effort])
+        } else if provider == .grokBuild, let sessionID, let effort = configuration.reasoningEffort {
             request(.effort, method: "session/set_mode", params: ["sessionId": sessionID, "modeId": effort])
         } else { sessionReady() }
     }

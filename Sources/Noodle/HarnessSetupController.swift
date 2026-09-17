@@ -31,7 +31,8 @@ final class HarnessSetupController {
             .claudeCode: ClaudeCodeSetupProvider(),
             .fx: FxSetupProvider(),
             .grokBuild: GrokSetupProvider(),
-            .muse: MuseSetupProvider()
+            .muse: MuseSetupProvider(),
+            .openCode: OpenCodeSetupProvider()
         ]
     }
 

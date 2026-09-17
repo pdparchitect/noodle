@@ -81,11 +81,16 @@ public enum HarnessVersionPolicy {
         case .fx: return ["acp"]
         case .grokBuild: return ["stdio", "--no-leader"]
         case .muse: return ["serve", "schema"]
+        case .openCode: return ["acp", "api", "auth", "--standalone"]
         }
     }
 
+    public static func hasUsage(provider: HarnessProvider, help: String) -> Bool {
+        help.lowercased().contains("usage:") || (provider == .openCode && help.contains("USAGE"))
+    }
+
     public static func compatibilityIssue(provider: HarnessProvider, help: String) -> String? {
-        guard help.lowercased().contains("usage:") else { return nil }
+        guard hasUsage(provider: provider, help: help) else { return nil }
         let missing = requiredOptions(for: provider).filter { option in
             help.range(of: "(?<![a-zA-Z0-9-])" + NSRegularExpression.escapedPattern(for: option) + "(?![a-zA-Z0-9-])",
                        options: .regularExpression) == nil
@@ -121,6 +126,7 @@ public enum HarnessVersionPolicy {
         case .fx: address = "https://releases.fx.sh/latest.txt"
         case .grokBuild: address = "https://x.ai/cli/stable"
         case .muse: address = "https://api.meta.ai/muse-code/channels/muse-stable"
+        case .openCode: address = "https://opencode.ai/update/api/latest/cli/npm"
         }
         return URL(string: address)
     }
@@ -132,6 +138,12 @@ public enum HarnessVersionPolicy {
                   object["prerelease"] as? Bool != true, object["draft"] as? Bool != true,
                   let tag = object["tag_name"] as? String else { return nil }
             value = tag.hasPrefix("rust-v") ? String(tag.dropFirst(6)) : tag
+        } else if provider == .openCode {
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  object["channel"] as? String == "latest", object["name"] as? String == "cli",
+                  object["distribution"] as? String == "npm", object["active"] as? Bool == true,
+                  let version = object["version"] as? String else { return nil }
+            value = version
         } else if provider == .muse {
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   object["channel"] as? String == "muse-stable", object["state"] as? String == "public",
@@ -163,6 +175,9 @@ public enum HarnessVersionPolicy {
         case .grokBuild:
             command = "grok update"
             link = "https://grok.com/build"
+        case .openCode:
+            command = "curl -fsSL https://opencode.ai/v2/install | bash"
+            link = "https://opencode.ai/v2/docs"
         case .muse:
             command = "curl -fsSL https://dev.meta.ai/install.sh | bash"
             link = "https://dev.meta.ai/"

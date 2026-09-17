@@ -122,6 +122,21 @@ For focused access checks, use `swift test --disable-sandbox --filter` with
 `RestrictedMuseSandboxTests`, or `AppleSandboxTests`. Restricted Claude tests use
 the signed CLI and a synthetic local API; prepare the CLI fixture first.
 
+To check the native OpenCode v2 protocol without an account or model request, run:
+
+```sh
+NOODLE_TEST_OPENCODE_EXECUTABLE="$HOME/.opencode/bin/opencode" \
+  swift test --disable-sandbox --filter OpenCodeTests
+```
+
+The fixture verifies the vendor signature, uses synthetic credentials and a local
+model definition, checks isolated configuration and tools, and creates/resumes an
+ACP session. It does not read the installed account or send a prompt.
+
+Also set `NOODLE_TEST_OPENCODE_PUBLIC_MODEL=opencode/union-alpha` to check the
+online catalogue and select that model in a fresh isolated ACP session. This
+optional check fetches public model metadata but does not send a model prompt.
+
 ### Live checks
 
 These opt-in checks use installed harnesses and real provider accounts. They can

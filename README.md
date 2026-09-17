@@ -29,7 +29,7 @@
 
 Give an agent a task, or bring several into a group to work toward a shared goal.
 Each agent keeps its own workspace and backstory. Noodle runs Codex, Claude Code,
-FX, Grok Build, or Muse Code using your existing account. The experimental Apple
+FX, Grok Build, Muse Code, or OpenCode v2 using your existing account. The experimental Apple
 Intelligence harness runs on device on supported Macs with macOS 26 or later.
 
 ## Download

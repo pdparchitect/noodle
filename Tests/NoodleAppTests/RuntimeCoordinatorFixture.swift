@@ -79,7 +79,7 @@ import XCTest
         try repository.prepare()
         let bin = root.appendingPathComponent("bin")
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-        for path in ["bin/codex", "bin/claude", ".grok/bin/grok"] {
+        for path in ["bin/codex", "bin/claude", ".grok/bin/grok", ".opencode/bin/opencode"] {
             let url = root.appendingPathComponent(path)
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Data("#!/bin/sh\nexit 99\n".utf8).write(to: url)

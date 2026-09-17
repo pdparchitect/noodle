@@ -8,7 +8,13 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Add OpenCode v2 with its official logo, native installation and version checks, model/effort selection, ACP session recovery, and restricted per-bot credential, database, and cache storage.
+
 - Add standalone symbol SVGs and automatically compose the full icon SVG, PNG sizes and packaged macOS icon on every build.
+
+### Fixed
+
+- Wait for OpenCode’s online model catalogue refresh so newly available models appear in the picker and can be selected when a bot starts.
 
 ## [0.18.1] - 2026-09-17
 

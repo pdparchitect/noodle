@@ -9,7 +9,7 @@ enum AgentActivityParser {
         case .codex: return items(message)
         case .muse: return muse(message)
         case .claudeCode: return claude(message)
-        case .fx, .grokBuild, .apple: return acp(message, provider: provider)
+        case .fx, .grokBuild, .apple, .openCode: return acp(message, provider: provider)
         }
     }
 
