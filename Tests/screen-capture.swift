@@ -272,7 +272,7 @@ private struct CaptureFixtureSource: View {
 @main struct CaptureFixtureMain {
     @MainActor static func main() {
         let app = NSApplication.shared
-        app.setActivationPolicy(.regular)
+        app.setActivationPolicy(.accessory)
         let fixture = CaptureFixture(); app.delegate = fixture; app.run()
     }
 }

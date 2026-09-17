@@ -5,4 +5,5 @@
 <key>CFBundleName</key><string>Chat Feature Tests</string>
 <key>CFBundleExecutable</key><string>ChatFeaturesTest</string>
 <key>CFBundlePackageType</key><string>APPL</string>
+<key>LSUIElement</key><true/>
 </dict></plist>

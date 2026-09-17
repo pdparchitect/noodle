@@ -8,5 +8,7 @@
     <string>NoodleAppleAgent</string>
     <key>CFBundlePackageType</key>
     <string>TOOL</string>
+    <key>LSBackgroundOnly</key>
+    <true/>
 </dict>
 </plist>

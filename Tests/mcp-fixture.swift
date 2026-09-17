@@ -100,7 +100,7 @@ struct MCPFixtureView: View {
             return
         }
         let app = NSApplication.shared
-        app.setActivationPolicy(.regular)
+        app.setActivationPolicy(.accessory)
         let checking = CommandLine.arguments.contains("--check")
         let live = CommandLine.arguments.contains("--check-live")
         let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("MCPChecks-" + UUID().uuidString)

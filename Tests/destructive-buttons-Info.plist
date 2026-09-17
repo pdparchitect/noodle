@@ -5,5 +5,6 @@
 <key>CFBundleName</key><string>Destructive Button Tests</string>
 <key>CFBundleExecutable</key><string>DestructiveButtons</string>
 <key>CFBundlePackageType</key><string>APPL</string>
+<key>LSUIElement</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict></plist>

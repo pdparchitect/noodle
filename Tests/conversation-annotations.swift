@@ -238,7 +238,7 @@ import NoodleCore
 @main private struct ConversationAnnotationMain {
     @MainActor static func main() {
         let app = NSApplication.shared
-        app.setActivationPolicy(.regular)
+        app.setActivationPolicy(.accessory)
         let menu = NSMenu()
         let appItem = NSMenuItem(); appItem.submenu = NSMenu()
         appItem.submenu!.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")

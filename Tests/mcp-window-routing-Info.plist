@@ -5,6 +5,7 @@
 <key>CFBundleName</key><string>Noodle MCP Window Tests</string>
 <key>CFBundleExecutable</key><string>MCPWindowFixture</string>
 <key>CFBundlePackageType</key><string>APPL</string>
+<key>LSUIElement</key><true/>
 <key>CFBundleVersion</key><string>1</string>
 <key>CFBundleShortVersionString</key><string>1.0</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>

@@ -19,6 +19,7 @@ for role in server client rejected; do
     /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string com.pdparchitect.noodle.bridgeproof.$role" "$plist"
     /usr/libexec/PlistBuddy -c 'Add :CFBundleExecutable string Probe' "$plist"
     /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$plist"
+    /usr/libexec/PlistBuddy -c 'Add :LSBackgroundOnly bool true' "$plist"
     /usr/libexec/PlistBuddy -c "Add :NoodleSigningTeam string $team" "$plist"
     /usr/libexec/PlistBuddy -c "Add :NoodleComputerGroup string $group" "$plist"
     entitlement="$proof_root/$role.entitlements"

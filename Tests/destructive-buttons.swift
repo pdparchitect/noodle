@@ -43,7 +43,7 @@ private struct ButtonFixture: View {
 @main private enum DestructiveButtonChecks {
     @MainActor static func main() {
         let app = NSApplication.shared
-        app.setActivationPolicy(.regular)
+        app.setActivationPolicy(.accessory)
         let window = NSWindow(contentViewController: NSHostingController(rootView: ButtonFixture().preferredColorScheme(.dark)))
         window.title = "Destructive Button Tests"
         window.center()

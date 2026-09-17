@@ -236,7 +236,7 @@ private struct VoiceShortcutApp: App {
     @MainActor static func main() {
         setbuf(stdout, nil)
         guard #available(macOS 26.0, *) else { print("SKIP: voice recording requires macOS 26"); return }
-        NSApplication.shared.setActivationPolicy(.regular)
+        NSApplication.shared.setActivationPolicy(.accessory)
         Task { @MainActor in
             try await Task.sleep(for: .seconds(30))
             print("FAIL: voice shortcut fixture did not finish within 30 seconds")

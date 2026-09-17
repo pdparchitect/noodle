@@ -321,7 +321,7 @@ import NoodleCore
             } catch { fixtureFailure(error.localizedDescription) }
             return
         }
-        app.setActivationPolicy(.regular)
+        app.setActivationPolicy(.accessory)
         let menu = NSMenu()
         let appItem = NSMenuItem(); let appMenu = NSMenu()
         appMenu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")

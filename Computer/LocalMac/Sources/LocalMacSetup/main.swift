@@ -96,5 +96,5 @@ guard CommandLine.arguments.count == 1 else {
 let application = NSApplication.shared
 let setup = Setup()
 application.delegate = setup
-application.setActivationPolicy(.regular)
+application.setActivationPolicy(.accessory)
 application.run()

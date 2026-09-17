@@ -43,6 +43,7 @@ if [[ "${1:-}" == "--classify" ]]; then
 <key>CFBundleIdentifier</key><string>com.pdparchitect.noodle.delivery-tests</string>
 <key>CFBundleExecutable</key><string>MessageDeliveryChecks</string>
 <key>CFBundlePackageType</key><string>APPL</string>
+<key>LSUIElement</key><true/>
 </dict></plist>
 PLIST
     cat > "$project_root/.build/delivery-test.entitlements" <<'PLIST'

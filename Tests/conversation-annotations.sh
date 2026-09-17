@@ -37,6 +37,7 @@ cat > "$fixture_app/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>Noodle Conversation Annotation Tests</string>
 <key>CFBundleExecutable</key><string>ConversationAnnotationTests</string>
 <key>CFBundlePackageType</key><string>APPL</string>
+<key>LSUIElement</key><true/>
 <key>CFBundleVersion</key><string>1</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict></plist>

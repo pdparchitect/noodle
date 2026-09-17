@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Keep helper processes and standalone UI test fixtures out of the Dock and app switcher by default.
 - Clear unread indicators immediately when interacting with a conversation, including clicking, scrolling, typing, gestures, and dropping attachments in the main window or a popped-out chat.
 
 ## [0.18.0] - 2026-09-17

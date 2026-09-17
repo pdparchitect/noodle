@@ -167,6 +167,7 @@ cat > "$setup_app/Contents/Info.plist" <<EOF
     <key>CFBundleDevelopmentRegion</key><string>en</string>
     <key>CFBundleExecutable</key><string>LocalMacSetup</string>
     <key>CFBundlePackageType</key><string>APPL</string>
+    <key>LSUIElement</key><true/>
     <key>CFBundleVersion</key><string>$version</string>
     <key>LSMinimumSystemVersion</key><string>26.0</string>
     <key>NSHighResolutionCapable</key><true/>

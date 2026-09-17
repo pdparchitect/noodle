@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep Local Mac Setup out of the Dock and app switcher, including during background registration checks.
+
 ## [0.8.0] - 2026-09-17
 
 ### Changed

@@ -6,6 +6,14 @@ Keep visible copy focused on functional labels and necessary status or error mes
 Do not add persistent instructional hints, shortcut legends, or explanatory footer
 text unless explicitly requested. Put optional guidance in tooltips or documentation.
 
+## Helper visibility
+
+Helpers and standalone development/test fixtures must stay out of the Dock and
+app switcher by default. Set `LSUIElement` for helper app bundles and use AppKit's
+`.accessory` activation policy when they need windows; use `LSBackgroundOnly` for
+background-only executable metadata. Do not promote helpers to `.regular`.
+The main Noodle, Noodle Computer, and Noodle Applet apps retain their Dock entries.
+
 ## Apple history utilities
 
 When changing Apple context management or upgrading the Apple SDK/toolchain, read
