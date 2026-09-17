@@ -10,22 +10,24 @@ import NoodleCore
     let save: (AttachmentAnnotation, Data, ConversationAttachment, Data) throws -> Void
     @FocusState private var composerFocused: Bool
     var body: some View {
-        VStack(alignment: .leading, spacing: 35) {
-            ForEach(messages) { message in
-                Text(MessageMarkdownCache.shared.render(message))
-                    .font(.system(size: 18)).textSelection(.enabled)
-                    .background(ConversationAnnotationText(message: message))
+        ConversationTransition(conversationID: messages[0].conversationID) {
+            VStack(alignment: .leading, spacing: 35) {
+                ForEach(messages) { message in
+                    Text(MessageMarkdownCache.shared.render(message))
+                        .font(.system(size: 18)).textSelection(.enabled)
+                        .background(ConversationAnnotationText(message: message))
+                }
+                TextField("Message", text: .constant("Composer text"))
+                    .focused($composerFocused)
+                Spacer()
             }
-            TextField("Message", text: .constant("Composer text"))
-                .focused($composerFocused)
-            Spacer()
+            .padding(40).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .environment(\.conversationAnnotations, controller)
+            .background(ConversationAnnotationHost(controller: controller, conversationID: messages[0].conversationID,
+                title: "Annotation test", save: save,
+                focusComposer: { composerFocused = true }).frame(width: 0, height: 0))
+            .background(AttachmentPreviewHost(controller: preview))
         }
-        .padding(40).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .environment(\.conversationAnnotations, controller)
-        .background(ConversationAnnotationHost(controller: controller, conversationID: messages[0].conversationID,
-            title: "Annotation test", save: save,
-            focusComposer: { composerFocused = true }).frame(width: 0, height: 0))
-        .background(AttachmentPreviewHost(controller: preview))
     }
 }
 

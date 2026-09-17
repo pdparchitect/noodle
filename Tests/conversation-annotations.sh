@@ -23,6 +23,7 @@ swiftc -parse-as-library -target "$(uname -m)-apple-macosx15.0" -I "$bin_path/Mo
     "$project_root/Sources/Noodle/CaptureAttachment.swift" \
     "${preview_support[@]}" \
     "$project_root/Sources/Noodle/MessageMarkdownCache.swift" \
+    "$project_root/Sources/Noodle/ConversationTransition.swift" \
     "$project_root/Sources/Noodle/ConversationAnnotation.swift" \
     "$project_root/Sources/Noodle/ConversationAnnotationContent.swift" \
     "$project_root/Tests/NativeFixtureChecks.swift" \

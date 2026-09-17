@@ -28,6 +28,7 @@ All notable changes to Noodle are documented here, following
 ### Fixed
 
 - Wait for OpenCode’s online model catalogue refresh so newly available models appear in the picker and can be selected when a bot starts.
+- Align the conversation transition surface with the transcript's coordinate system to prevent vertically mirrored message text, retaining the existing Markdown renderer and text selection.
 
 ## [0.18.1] - 2026-09-17
 

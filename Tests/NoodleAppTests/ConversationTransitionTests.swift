@@ -14,6 +14,9 @@ import XCTest
         defer { window.close(); window.contentView = nil }
         window.contentView = surface
         surface.layoutSubtreeIfNeeded()
+        XCTAssertEqual(surface.isFlipped, surface.subviews.first?.isFlipped,
+            "The transition and SwiftUI transcript must share a top-left coordinate system")
+        XCTAssertTrue(surface.isFlipped)
         XCTAssertNil(surface.layer?.animationKeys())
 
         surface.update(content: AnyView(Text("New message")), conversationID: id, reduceMotion: false)

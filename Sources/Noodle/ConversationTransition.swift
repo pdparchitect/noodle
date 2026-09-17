@@ -27,6 +27,11 @@ struct ConversationTransition<Content: View>: NSViewRepresentable {
 }
 
 @MainActor final class ConversationTransitionSurface: NSView {
+    // Match NSHostingView's top-left origin. A bottom-left native wrapper adds
+    // a coordinate flip around the masked transcript and its selectable text
+    // backing layers, including layers created for incoming or virtualized rows.
+    override var isFlipped: Bool { true }
+
     // Core Animation stores CATransition under this reserved key even when a
     // different key is supplied. Use it for replacement and cancellation too.
     static let animationKey = "transition"
