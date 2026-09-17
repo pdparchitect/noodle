@@ -239,9 +239,9 @@ private final class Once<T>: @unchecked Sendable {
         guard !closed else { return }
         if let id = reply.previewID {
             if windowPreview?.id == id {
-                windowPreview?.image = nil; windowPreview?.geometry = nil
-                windowPreview?.error = reply.error ?? "This window is no longer available."
-                send(LocalMacInput(.reset))
+                // The source stream ended, so its focus panel must go with it.
+                // Clearing the preview also rejects queued input and late frames.
+                closeWindowPreview()
             }
             return
         }

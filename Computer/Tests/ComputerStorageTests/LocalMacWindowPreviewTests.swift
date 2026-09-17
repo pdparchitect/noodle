@@ -35,12 +35,20 @@ import XCTest
                     try send(frame)
                 }
                 if request.operation == .windowPreview, request.enabled == true {
+                    let previousPreview = activePreview
                     activePreview = request.previewID
                     var frame = LocalMacReply(); frame.frame = true; frame.data = focused
                     frame.windowFrame = .init(previewID: request.previewID!, bounds: CGRect(x: 800, y: 300, width: 1000, height: 500), width: 2000, height: 1000)
                     try send(frame)
                     frame.windowFrame?.previewID = UUID(); frame.data = old
                     try send(frame)
+                    if let previousPreview {
+                        // An ended stream must not replace or close a newer preview.
+                        frame.windowFrame?.previewID = previousPreview
+                        try send(frame)
+                        var ended = LocalMacReply(error: "Old stream ended"); ended.previewID = previousPreview
+                        try send(ended)
+                    }
                 }
                 if request.operation == .input, request.input?.previewID != nil { inputReceived.fulfill() }
                 if request.operation == .terminalRead {
@@ -79,17 +87,22 @@ import XCTest
             timestamp: 1, windowNumber: 0, context: nil, characters: "a", charactersIgnoringModifiers: "a", isARepeat: false, keyCode: 0)))
         await fulfillment(of: [inputReceived], timeout: 5)
         _ = try await runtime.call(.init(.terminalRead))
-        XCTAssertEqual(runtime.windowPreview?.error, "Window closed")
-        XCTAssertNil(runtime.windowPreview?.geometry)
+        XCTAssertNil(runtime.windowPreview)
         XCTAssertTrue(runtime.isConnected); XCTAssertEqual(runtime.latestFrame, desktop)
-        runtime.closeWindowPreview()
         await fulfillment(of: [previewClosed], timeout: 5)
         _ = try await runtime.call(.init(.status)) // drain preceding frame/error messages
         XCTAssertNil(runtime.windowPreview); XCTAssertEqual(runtime.latestFrame, desktop)
         XCTAssertTrue(runtime.isConnected); XCTAssertNil(runtime.error)
+        await runtime.openWindowPreview()
+        XCTAssertNotEqual(runtime.windowPreview?.id, geometry.previewID)
+        XCTAssertEqual(runtime.windowPreview?.image?.tiffRepresentation, NSImage(data: focused)?.tiffRepresentation)
+        XCTAssertNotNil(runtime.windowPreview?.geometry)
+        XCTAssertNil(runtime.windowPreview?.error)
+        XCTAssertNil(runtime.error)
+        XCTAssertEqual(runtime.latestFrame, desktop)
         runtime.close()
         let requests = try await helper.value
-        XCTAssertEqual(requests.filter { $0.operation == .windowPreview }.map(\.enabled), [true, false])
+        XCTAssertEqual(requests.filter { $0.operation == .windowPreview }.map(\.enabled), [true, false, true])
         XCTAssertEqual(requests.first { $0.input?.previewID != nil }?.input?.geometryID, geometry.geometryID)
         XCTAssertTrue(requests.contains { $0.operation == .input && $0.input?.kind == .reset })
     }
@@ -130,6 +143,7 @@ import XCTest
     }
     func testPanelTracksItsViewerAndClosesWithoutChangingDesktopImage() throws {
         _ = NSApplication.shared
+        NSApp.setActivationPolicy(.accessory)
         let runtime = LocalMacComputer()
         let desktop = NSImage(data: try png(.blue))
         runtime.image = desktop
@@ -149,6 +163,15 @@ import XCTest
         panel.close()
         XCTAssertNil(runtime.windowPreview)
         XCTAssertNil(coordinator.panel)
+        XCTAssertTrue(runtime.image === desktop)
+        runtime.windowPreview = .init(window: Self.window)
+        coordinator.sync(parent: parent, active: true)
+        let endedPanel = try XCTUnwrap(coordinator.panel)
+        runtime.windowPreview = nil
+        coordinator.sync(parent: parent, active: true)
+        XCTAssertNil(coordinator.panel)
+        XCTAssertNil(endedPanel.parent)
+        XCTAssertFalse(endedPanel.isVisible)
         XCTAssertTrue(runtime.image === desktop)
         runtime.windowPreview = .init(window: Self.window)
         coordinator.sync(parent: parent, active: true)
