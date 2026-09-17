@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 import NoodleCore
 
 enum BotEditorTab: String, CaseIterable {
-    case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers"
+    case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers", browsers = "Browsers"
 }
 
 private struct BotEditorTabPicker: View {
@@ -50,6 +50,7 @@ struct NewBotSheet: View {
     @State private var editingAvatar = false
     @State private var mcpConnectionIDs: Set<UUID> = []
     @State private var computerIDs: Set<UUID> = []
+    @State private var browserIDs: Set<UUID> = []
     @State private var selectedTab = BotEditorTab.general
     @FocusState private var nameFocused: Bool
 
@@ -131,6 +132,8 @@ struct NewBotSheet: View {
                     )
                 case .mcp:
                     MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs)
+                case .browsers:
+                    BrowserAssignmentPicker(controller: store.browsers, selectedIDs: $browserIDs)
                 case .computers:
                     ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
                 }
@@ -195,7 +198,7 @@ struct NewBotSheet: View {
             publicDescription: publicDescription,
             backstory: backstory,
             mcpConnectionIDs: mcpConnectionIDs,
-            computerIDs: computerIDs
+            computerIDs: computerIDs, browserIDs: browserIDs
         )
     }
 
@@ -242,6 +245,7 @@ struct EditBotSheet: View {
     @State private var editingAvatar = false
     @State private var mcpConnectionIDs: Set<UUID> = []
     @State private var computerIDs: Set<UUID> = []
+    @State private var browserIDs: Set<UUID> = []
     @State private var confirmingDeletion = false
     @State private var selectedTab = BotEditorTab.general
     @State private var backgroundDraft: ConversationBackgroundDraft?
@@ -330,6 +334,8 @@ struct EditBotSheet: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .mcp:
                     MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs)
+                case .browsers:
+                    BrowserAssignmentPicker(controller: store.browsers, selectedIDs: $browserIDs)
                 case .computers:
                     ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
                 }
@@ -342,6 +348,7 @@ struct EditBotSheet: View {
             backstory = store.backstory(for: agent)
             mcpConnectionIDs = store.mcp.selectedIDs(for: agent)
             computerIDs = store.computers.selectedIDs(for: agent)
+            browserIDs = store.browsers.selectedIDs(for: agent)
             if selectedHarnessIdentifier.isEmpty {
                 selectedHarnessIdentifier = store.runtime.availableInstallations.first?.provider.rawValue ?? ""
             }
@@ -410,7 +417,7 @@ struct EditBotSheet: View {
                 publicDescription: publicDescription,
                 backstory: backstory,
                 mcpConnectionIDs: mcpConnectionIDs,
-                computerIDs: computerIDs
+                computerIDs: computerIDs, browserIDs: browserIDs
             )
         }) {
             dismiss()

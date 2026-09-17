@@ -127,6 +127,16 @@ class VersionTests(unittest.TestCase):
         self.assertEqual(self.module.plan(), ['applet'])
         self.assertEqual(self.module.version('applet')[1], 'applet-v1.0.0')
 
+    def test_first_browser_release_requires_dated_notes(self):
+        self.git('tag', '-d', 'browser-v1.0.0')
+        (self.root / 'Browser/CHANGELOG.md').write_text('## [Unreleased]\n\n- Initial work.\n')
+        self.assertEqual(self.module.plan(), [])
+        with self.assertRaisesRegex(ValueError, 'dated section'):
+            self.module.notes('browser')
+        self.write_version('browser', '1.0.0')
+        self.assertEqual(self.module.plan(), ['browser'])
+        self.assertEqual(self.module.version('browser')[1], 'browser-v1.0.0')
+
     def test_ci_outputs_are_derived_from_version_files(self):
         self.write_version('images', '1.0.1')
         result = run('python3', 'scripts/release-versions.py', 'plan', cwd=self.root)

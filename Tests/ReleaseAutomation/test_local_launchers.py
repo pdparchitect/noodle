@@ -23,7 +23,7 @@ class LocalLauncherTests(unittest.TestCase):
             with (app / 'Contents/Info.plist').open('wb') as output:
                 plistlib.dump({'CFBundleIdentifier': produced_id}, output)
             (scripts / builder).write_text('''#!/bin/zsh
-print -r -- "$NOODLE_DATA_CONTAINER/$NOODLE_COMPUTER_DATA_CONTAINER/${NOODLE_COMPUTER_TEST_BUILD:-0}/$NOODLE_APPLET_DATA_CONTAINER" > "$FIXTURE_BUILD_LOG"
+print -r -- "$NOODLE_DATA_CONTAINER/$NOODLE_COMPUTER_DATA_CONTAINER/${NOODLE_COMPUTER_TEST_BUILD:-0}/$NOODLE_APPLET_DATA_CONTAINER/$NOODLE_BROWSER_DATA_CONTAINER/${NOODLE_BROWSER_APP_DESTINATION:-}" > "$FIXTURE_BUILD_LOG"
 print -r -- "$FIXTURE_APP"
 ''')
             (scripts / builder).chmod(0o700)
@@ -38,7 +38,8 @@ print(os.environ['FIXTURE_INSTALLED_APP'])
             result = subprocess.run(['/bin/zsh', str(scripts / launcher), *arguments],
                 env=dict(os.environ, PATH=f'{tools}:/usr/bin:/bin',
                          NOODLE_DATA_CONTAINER='production', NOODLE_COMPUTER_DATA_CONTAINER='production',
-                         NOODLE_COMPUTER_TEST_BUILD='1', NOODLE_APPLET_DATA_CONTAINER='production', FIXTURE_APP=str(app),
+                         NOODLE_COMPUTER_TEST_BUILD='1', NOODLE_APPLET_DATA_CONTAINER='production',
+                         NOODLE_BROWSER_DATA_CONTAINER='production', NOODLE_BROWSER_APP_DESTINATION='ambient-override', FIXTURE_APP=str(app),
                          FIXTURE_INSTALLED_APP=str(installed), FIXTURE_INSTALL_LOG=str(install_log),
                          FIXTURE_BUILD_LOG=str(build_log), FIXTURE_OPEN_LOG=str(open_log)),
                 capture_output=True, text=True)
@@ -51,8 +52,10 @@ print(os.environ['FIXTURE_INSTALLED_APP'])
                     self.assertEqual(fields[0], 'development')
                 elif launcher == 'build-and-launch-computer.sh':
                     self.assertEqual(fields[1:3], ['development', '0'])
-                else:
+                elif launcher == 'build-and-launch-applet.sh':
                     self.assertEqual(fields[3], 'development')
+                else:
+                    self.assertEqual(fields[4:], ['development', ''])
                 self.assertEqual(result.returncode, 0 if expected_id == produced_id else 1, result.stderr)
             self.assertEqual(open_log.exists(), not arguments and expected_id == produced_id)
             installs = launcher == 'build-and-launch-computer.sh' and not arguments and expected_id == produced_id
@@ -66,7 +69,9 @@ print(os.environ['FIXTURE_INSTALLED_APP'])
             ('build-and-launch-computer.sh', 'build-computer.sh', 'com.pdparchitect.noodle.computer.local',
              'com.pdparchitect.noodle.computer'),
             ('build-and-launch-applet.sh', 'build-applet.sh', 'com.pdparchitect.noodle.applet.local',
-             'com.pdparchitect.noodle.applet')]:
+             'com.pdparchitect.noodle.applet'),
+            ('build-and-launch-browser.sh', 'build-browser.sh', 'com.pdparchitect.noodle.browser.local',
+             'com.pdparchitect.noodle.browser')]:
             with self.subTest(launcher=launcher):
                 self.run_fixture(launcher, builder, local, local)
                 self.run_fixture(launcher, builder, local, production)

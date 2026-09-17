@@ -418,16 +418,4 @@ private struct ComputerBackgroundPhoto: Transferable {
     }
 }
 
-/// SwiftTerm needs a compositing host window for its translucent background.
-struct ComputerWindowCompositing: NSViewRepresentable {
-    final class View: NSView {
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            window?.isOpaque = false
-            window?.backgroundColor = .clear
-        }
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-    }
-    func makeNSView(context: Context) -> View { View() }
-    func updateNSView(_ view: View, context: Context) {}
-}
+typealias ComputerWindowCompositing = ConversationWindowCompositing

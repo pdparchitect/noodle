@@ -1,6 +1,7 @@
 import AppKit
 import ComputerCore
 import ComputerDocument
+import NoodleWallpaper
 import SwiftUI
 import NoodleSettingsUI
 import UniformTypeIdentifiers
@@ -607,17 +608,7 @@ struct ComputerDetailView: View {
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       Task { await session.refreshLocalMacSetup() }
     }
-    // Native sidebar glass paints inside a one-point edge. Match that visible
-    // edge without changing the shared terminal/WebKit layout or hit area.
-    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous).inset(by: 1))
-    // Keep the inter-panel gap when expanded; match the outer inset when collapsed.
-    .padding(.leading, sidebarCollapsed ? 8 : 12)
-    // Match the native sidebar's outer window inset.
-    .padding(.trailing, 8)
-    // The native toolbar already leaves 8 points below its controls.
-    .padding(.top, 4)
-    // The clip adds one point, placing the visible bottom at the sidebar's 8-point inset.
-    .padding(.bottom, 7)
+    .companionContentPanel(sidebarCollapsed: sidebarCollapsed)
     .toolbar {
       ToolbarItem(id: "computer-edit", placement: .primaryAction) {
         Button {

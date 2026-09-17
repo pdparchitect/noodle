@@ -25,7 +25,7 @@ case "$data_container" in
         exit 1
         ;;
 esac
-app="$build_root/$app_name.app"
+app="${NOODLE_APP_DESTINATION:-$build_root/$app_name.app}"
 contents="$app/Contents"
 module_cache="$build_root/module-cache"
 entitlements="$project_root/Support/Noodle.entitlements"
@@ -113,6 +113,7 @@ otool -l "$contents/MacOS/Noodle" \
     done
 cp "$bin_path/NoodleMessenger" "$contents/Helpers/messenger"
 cp "$bin_path/NoodleMCPCLI" "$contents/Helpers/mcpshim"
+cp "$bin_path/NoodleBrowserCLI" "$contents/Helpers/browser"
 cp "$bin_path/NoodleComputerCLI" "$contents/Helpers/computer"
 swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-path "$project_root/.build/applet" -c release --product noodlet >&2
 applet_bin="$(swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-path "$project_root/.build/applet" -c release --show-bin-path)"
@@ -256,6 +257,8 @@ codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/mcpshim"
 codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/computer"
+codesign --force --options runtime "$timestamp_option" \
+    --sign "$signing_identity" "$contents/Helpers/browser"
 applet_cli_identifier="com.pdparchitect.noodle.applet.cli"
 if [[ "$data_container" == development ]]; then applet_cli_identifier="com.pdparchitect.noodle.applet.local.cli"; fi
 codesign --force --options runtime "$timestamp_option" --identifier "$applet_cli_identifier" \
@@ -277,6 +280,9 @@ fi
 shared_group="$team_id.$bundle_identifier.sharing"
 computer_group="$team_id.com.pdparchitect.noodle.computers"
 if [[ "$data_container" == development ]]; then computer_group+=.local; fi
+browser_group="$team_id.com.pdparchitect.noodle.browsers"
+if [[ "$data_container" == development ]]; then browser_group+=.local; fi
+/usr/libexec/PlistBuddy -c "Add :NoodleBrowserGroup string $browser_group" "$contents/Info.plist"
 applet_group="$team_id.com.pdparchitect.noodle.applets"
 if [[ "$data_container" == development ]]; then applet_group+=.local; fi
 /usr/libexec/PlistBuddy -c "Add :NoodleAppletGroup string $applet_group" "$contents/Info.plist"
@@ -301,6 +307,7 @@ done
 # extension do not receive this group or the provider's socket.
 /usr/libexec/PlistBuddy -c "Add :com.apple.security.application-groups:1 string $computer_group" "$resolved_entitlements"
 /usr/libexec/PlistBuddy -c "Add :com.apple.security.application-groups:2 string $applet_group" "$resolved_entitlements"
+/usr/libexec/PlistBuddy -c "Add :com.apple.security.application-groups:3 string $browser_group" "$resolved_entitlements"
 /usr/libexec/PlistBuddy -c "Set :com.apple.security.temporary-exception.mach-lookup.global-name:0 $bundle_identifier-spks" "$resolved_entitlements"
 /usr/libexec/PlistBuddy -c "Set :com.apple.security.temporary-exception.mach-lookup.global-name:1 $bundle_identifier-spki" "$resolved_entitlements"
 for file in "$contents/Info.plist" "$share_extension/Contents/Info.plist"; do

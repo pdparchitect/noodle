@@ -3,6 +3,7 @@ set -euo pipefail
 project_root="${0:A:h:h}"
 app="${1:?Pass the Browser app bundle}"
 codesign --verify --deep --strict "$app"
+zsh "$project_root/scripts/verify-updater.sh" "$app"
 cmp "$project_root/Browser/Support/AppSymbol.svg" "$app/Contents/Resources/AppSymbol.svg"
 entitlements="$(mktemp /tmp/noodle-browser-entitlements.XXXXXX)"
 trap 'rm -f "$entitlements"' EXIT

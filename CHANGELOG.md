@@ -6,11 +6,24 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- Clarify Browser skill sharing choices, put clickable page previews near the top, and direct agents to current help before claiming a capability is unavailable.
+- Use Computer’s shared assignment picker for bot browsers: Add Browsers, searchable choices, circular custom icons and removable assigned items.
+- Simplify Noodle Browser creation and use independent per-browser backgrounds with the suite’s appearance controls.
+
+- Align Noodle Browser with Computer and Applet: sidebar-based browser selection, suite appearance, native menus and matching Settings/Update flow.
+
 ### Added
 
+- Document Noodle Browser setup and connect its releases to the suite's shared publication and recovery process.
 - Add OpenCode v2 with its official logo, native installation and version checks, model/effort selection, ACP session recovery, and restricted per-bot credential, database, and cache storage.
 
+- Let agents present browser pages as preview attachments that open the saved page in its assigned Noodle Browser profile, with separate Dev/normal reference files.
 - Add standalone symbol SVGs and automatically compose the full icon SVG, PNG sizes and packaged macOS icon on every build.
+- Add Noodle Browser’s Build & Launch Dev Runbar entry, matching Computer and Applet.
+- Add Noodle Browser: create persistent WebKit browsers, sign in and assign them to bots, with background scripting, screenshots and workspace file transfers.
+- Let bots search their assigned browsers’ persistent history and manage bookmarks through Noodle Browser, with separate Dev and normal app packaging.
 
 ### Fixed
 

@@ -37,9 +37,10 @@ Intelligence harness runs on device on supported Macs with macOS 26 or later.
 - **[Noodle](https://github.com/pdparchitect/noodle/releases/latest)**: work with agents individually or as a team. Requires macOS 15 or later.
 - **[Noodle Computer](https://github.com/pdparchitect/noodle/releases/tag/computer-latest)**: Linux computers for you and your agents. Requires macOS 26 or later.
 - **[Noodle Applet](https://github.com/pdparchitect/noodle/releases/tag/applet-latest)**: run tools, websites, experiments, and games created by you and your agents. Requires macOS 15 or later.
+- **[Noodle Browser](Browser/README.md)**: dedicated browsers you sign in to and assign to agents, with persistent profiles, tabs, history, bookmarks, and file transfers. In development; local builds require macOS 26 or later.
 
 Download the app ZIP, unzip it, and move the app to **Applications**.
-Noodle Computer and Noodle Applet are optional and also work on their own.
+Noodle Computer, Noodle Applet, and Noodle Browser are optional companions and also work on their own.
 
 ## Get started
 
@@ -54,6 +55,11 @@ unrestricted access can reach files and services beyond the bot's workspace. See
 To give a bot a computer, create a Shell or Desktop in Noodle Computer, then add it
 in the bot's **Computers** tab. Several bots can share the same computer.
 
+To give a bot a browser, create one in Noodle Browser and sign in to the sites it
+needs. Add it in the bot's **Browsers** tab. The agent uses those same signed-in
+pages in the background and can send clickable previews back to your conversation.
+Each browser keeps its own sign-ins and browsing data.
+
 ## Documentation
 
 - [Working with agents](docs/usage.md)
@@ -61,6 +67,7 @@ in the bot's **Computers** tab. Several bots can share the same computer.
 - [Noodle in the enterprise](docs/enterprise.md)
 - [Noodle Computer](Computer/README.md)
 - [Noodle Applet](Applet/README.md)
+- [Noodle Browser](Browser/README.md)
 - [Architecture](docs/architecture.md)
 - [Security and privacy](docs/security.md)
 - [Development and testing](docs/development.md)

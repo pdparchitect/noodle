@@ -37,6 +37,7 @@ def validate(run, jobs, artifacts):
         ('images', 'computer-image-builds', 'prepare-images / build'),
         ('computer', 'computer-release-assets', 'prepare-computer / release'),
         ('applet', 'applet-release-assets', 'prepare-applet / release'),
+        ('browser', 'browser-release-assets', 'prepare-browser / release'),
         ('noodle', 'noodle-release-assets', 'prepare-noodle / release'),
     ]:
         matches = [a for a in artifacts if a['name'] == artifact and not a['expired']]
@@ -77,6 +78,7 @@ def release_archive(directory, product, version):
         'noodle': ('Noodle', 'macOS'),
         'computer': ('Noodle-Computer', 'arm64'),
         'applet': ('Noodle-Applet', 'arm64'),
+        'browser': ('Noodle-Browser', 'arm64'),
     }[product]
     candidates = [f'{prefix}-arm64.zip', f'{prefix}-{version}-{legacy_platform}.zip']
     present = [name for name in candidates if (directory / name).exists()
@@ -137,6 +139,14 @@ def main():
             destination.parent.mkdir(exist_ok=True)
             shutil.copytree(directory, destination)
             command('zsh', 'scripts/publish-applet-release.sh', version, str(destination / 'release-notes.md'))
+        if 'browser' in downloads:
+            version, _ = versions.version('browser')
+            directory = downloads['browser']
+            release_archive(directory, 'browser', version)
+            destination = ROOT / 'dist' / f'browser-{version}'
+            destination.parent.mkdir(exist_ok=True)
+            shutil.copytree(directory, destination)
+            command('zsh', 'scripts/publish-browser-release.sh', version, str(destination / 'release-notes.md'))
         if 'noodle' in downloads:
             version, tag = versions.version('noodle')
             directory = downloads['noodle']

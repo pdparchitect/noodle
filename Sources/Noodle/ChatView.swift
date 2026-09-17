@@ -398,6 +398,15 @@ struct ChatView: View {
     private func showPreview(_ attachment: ConversationAttachment) {
         attachmentOpenTask?.cancel()
         selectedAttachmentID = attachment.id
+        if attachment.isBrowserDocument {
+            attachmentPreview.close(); screenCapturePreview.close()
+            let fileURL = store.attachmentFileURL(attachment)
+            attachmentOpenTask = Task { @MainActor in
+                do { try await store.browsers.openDocument(at: fileURL) }
+                catch { if !Task.isCancelled { store.errorMessage = error.localizedDescription } }
+            }
+            return
+        }
         if attachment.isComputerDocument {
             attachmentPreview.close()
             screenCapturePreview.close()

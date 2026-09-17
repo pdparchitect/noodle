@@ -11,6 +11,7 @@ Each product has its own version and changelog:
 | Noodle | `VERSION` | `CHANGELOG.md` | `vX.Y.Z` |
 | Computer | `Computer/VERSION` | `Computer/CHANGELOG.md` | `computer-vX.Y.Z` |
 | Applet | `Applet/VERSION` | `Applet/CHANGELOG.md` | `applet-vX.Y.Z` |
+| Browser | `Browser/VERSION` | `Browser/CHANGELOG.md` | `browser-vX.Y.Z` |
 | Images | `Computer/Images/VERSION` | `Computer/Images/CHANGELOG.md` | `computer-images-vX.Y.Z` |
 
 1. Set the product's version to an unused, higher `X.Y.Z`.
@@ -25,13 +26,13 @@ publication. A new product with no release history and only Unreleased notes
 remains in development until its first dated version section is prepared. PRs validate and test without publishing. A manual workflow run on
 `main` reads the same version files.
 
-See [Computer releases](../Computer/RELEASING.md) and [Applet releases](../Applet/RELEASING.md)
+See [Computer releases](../Computer/RELEASING.md), [Applet releases](../Applet/RELEASING.md), and [Browser releases](../Browser/RELEASING.md)
 for their separate download channels, and [image releases](../Computer/Images/README.md#publish) for registry checks.
 
 ## Download filenames
 
 App ZIPs use fixed filenames: `Noodle-arm64.zip`, `Noodle-Computer-arm64.zip`,
-and `Noodle-Applet-arm64.zip`, each with a matching `.zip.sha256` file.
+`Noodle-Applet-arm64.zip`, and `Noodle-Browser-arm64.zip`, each with a matching `.zip.sha256` file.
 Versions remain in app metadata, release titles and tags. Signed update feeds
 use immutable tag URLs, such as `releases/download/vX.Y.Z/Noodle-arm64.zip`;
 the website uses `releases/latest/download/Noodle-arm64.zip`.
@@ -44,13 +45,13 @@ publication recovery accept the old versioned filenames as well as the new names
 All selected products must pass tests and preparation before any tag is created.
 App preparation includes signing, notarization, stapling, Gatekeeper, and Sparkle
 verification. Image preparation builds and tests both ARM64 images. Tests are
-scoped by product; Computer and Applet releases also run Noodle integration coverage.
+scoped by product; Computer, Applet, and Browser releases also run Noodle integration coverage.
 
 CI tags the checked commit and publishes the exact prepared artifacts. When
-released together, images publish first, then Computer, then Noodle. Applet publishes independently of images and before Noodle. App releases
+released together, images publish first, then Computer, then Noodle. Applet and Browser publish independently of images and before Noodle. App releases
 remain drafts until their ZIP, checksum, signed feed, and notes are uploaded.
 A successful run requires every selected product to finish publishing.
-Computer and Applet releases never replace Noodle's repository-wide latest release.
+Computer, Applet, and Browser releases never replace Noodle's repository-wide latest release.
 
 Noodle preparation uses GitHub's official [`xcode-27` image](https://github.com/actions/runner-images/issues/14404)
 and requires SDK 27 so the downloaded app includes the newer Apple and MLX features.

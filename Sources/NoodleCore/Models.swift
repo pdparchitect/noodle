@@ -1,6 +1,7 @@
 import Darwin
 import AppletBridge
 import ComputerBridge
+import BrowserBridge
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
@@ -166,6 +167,7 @@ public struct MessengerReactionChange: Codable, Hashable, Sendable {
 public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable {
     public let annotation: AttachmentAnnotation?
     public let computer: ComputerCard?
+    public let browser: BrowserCard?
     public let id: UUID
     public let conversationID: UUID
     public let originalFilename: String
@@ -188,6 +190,7 @@ public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable 
         url: URL? = nil,
         voice: VoiceMessage? = nil,
         computer: ComputerCard? = nil,
+        browser: BrowserCard? = nil,
         annotation: AttachmentAnnotation? = nil
     ) {
         self.id = id
@@ -200,6 +203,7 @@ public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable 
         self.url = url
         self.voice = voice
         self.computer = computer
+        self.browser = browser
         self.annotation = annotation
     }
 }
@@ -235,6 +239,7 @@ public struct MessengerIdentity: Codable, Hashable, Sendable {
 public struct MessengerAttachment: Codable, Hashable, Sendable {
     public let annotation: AttachmentAnnotation?
     public let computer: ComputerCard?
+    public let browser: BrowserCard?
     public let id: UUID
     public let conversationID: UUID
     public let originalFilename: String
@@ -258,6 +263,7 @@ public struct MessengerAttachment: Codable, Hashable, Sendable {
         url = attachment.url
         voice = attachment.voice
         computer = attachment.computer
+        browser = attachment.browser
         annotation = attachment.annotation
     }
 }
@@ -778,18 +784,23 @@ public struct WorkspaceRepository: Sendable {
             try workspaceFiles.writeData(Data(Self.initialAgentPreferences.utf8), named: "preferences.md", replaceExisting: false)
         }
         let mcpRegistry = try MCPRegistry.load(root: rootURL)
+        let browserAssigned = !(try BrowserAssignments.load(root: rootURL)).assigned(to: agent.id).isEmpty
+        let browserInstructions = browserAssigned ? "\n" + MessengerDocumentation.browserBootstrapInstructions + "\n" : ""
         let computerAssigned = !(try ComputerAssignments.load(root: rootURL)).assigned(to: agent.id).isEmpty
         let appletExecutable = appletExecutableURL
         let appletEnabled = appletExecutable != nil
         let appletInstructions = appletEnabled ? "\n## Creative applets\n\nRead `.agents/skills/applet/SKILL.md` to build and run HTML and native Swift noodlets in Noodle Applet.\n" : ""
         let computerInstructions = computerAssigned ? "\n## Assigned computers\n\nRead `.agents/skills/computer/SKILL.md` to access your assigned computers through Noodle.\n" : ""
         try workspaceFiles.writeData(Data((Self.renderedAgentInstructions(backstory: backstory,
-            mcpConnections: mcpRegistry.assigned(to: agent.id)) + computerInstructions + appletInstructions).utf8), named: "AGENTS.md")
+            mcpConnections: mcpRegistry.assigned(to: agent.id)) + computerInstructions + browserInstructions + appletInstructions).utf8), named: "AGENTS.md")
         workspaceFiles.remove("instructions.md")
         try workspaceFiles.symlink("CLAUDE.md", destination: "AGENTS.md")
         let mcpExecutable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("mcpshim")
         try MCPSkillWriter.synchronize(workspace: directory, connections: mcpRegistry.assigned(to: agent.id),
             executable: mcpExecutable.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil })
+        let browserExecutable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("browser")
+        try BrowserAgentSkill.synchronize(workspace: directory, enabled: browserAssigned,
+            executable: browserExecutable.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil })
         let computerExecutable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("computer")
         try ComputerAgentSkill.synchronize(workspace: directory, enabled: computerAssigned,
             executable: computerExecutable.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil })
@@ -808,7 +819,7 @@ public struct WorkspaceRepository: Sendable {
                 "CLAUDE.md",
                 ".agents/skills/messenger/SKILL.md",
                 ".agents/skills/messenger/messenger"
-            ] + (computerAssigned ? [".agents/skills/computer/SKILL.md", ".agents/skills/computer/computer", ".agents/skills/computer/.noodle-managed"] : []) + (appletEnabled ? [".agents/skills/applet/SKILL.md", ".agents/skills/applet/noodlet", ".agents/skills/applet/.noodle-managed"] : []) + claudeSkillPaths
+            ] + (browserAssigned ? [".agents/skills/browser/SKILL.md", ".agents/skills/browser/browser", ".agents/skills/browser/.noodle-managed"] : []) + (computerAssigned ? [".agents/skills/computer/SKILL.md", ".agents/skills/computer/computer", ".agents/skills/computer/.noodle-managed"] : []) + (appletEnabled ? [".agents/skills/applet/SKILL.md", ".agents/skills/applet/noodlet", ".agents/skills/applet/.noodle-managed"] : []) + claudeSkillPaths
         )
         try agentsFiles.write(manifest, named: "managed-skills.json")
     }
@@ -882,10 +893,11 @@ public struct WorkspaceRepository: Sendable {
         now: Date = Date(),
         linkURL: URL? = nil,
         computer: ComputerCard? = nil,
+        browser: BrowserCard? = nil,
         annotation: AttachmentAnnotation? = nil
     ) throws -> ConversationAttachment {
         if let annotation {
-            guard annotation.isValid, computer == nil, linkURL == nil, mediaType == annotation.mediaType,
+            guard annotation.isValid, computer == nil, browser == nil, linkURL == nil, mediaType == annotation.mediaType,
                   let source = try loadAttachments(conversationID: conversationID).first(where: { $0.id == annotation.sourceAttachmentID }),
                   source.originalFilename == annotation.sourceFilename else { throw WorkspaceError.invalidAttachment }
             if let messageID = annotation.sourceMessageID {
@@ -904,10 +916,14 @@ public struct WorkspaceRepository: Sendable {
             }
         }
         if let computer {
-            guard computer.version == 1, mediaType == ComputerCard.mediaType, linkURL == nil,
+            guard computer.version == 1, mediaType == ComputerCard.mediaType, linkURL == nil, browser == nil,
                   data.count <= 900_000, (try? JSONDecoder().decode(ComputerReference.self, from: data)) == computer.reference else {
                 throw WorkspaceError.invalidAttachment
             }
+        }
+        if let browser {
+            guard computer == nil, annotation == nil, linkURL == nil, mediaType == BrowserReference.mediaType,
+                  (try? BrowserReference.decode(data)) == browser.reference else { throw WorkspaceError.invalidAttachment }
         }
         if let linkURL {
             guard MessageLink.publicWebURL(from: linkURL, preservingFragment: true) == linkURL || NoodletLink.id(in: linkURL) != nil,
@@ -935,6 +951,7 @@ public struct WorkspaceRepository: Sendable {
             createdAt: now,
             url: linkURL,
             computer: computer,
+            browser: browser,
             annotation: annotation
         )
         let directory = attachmentsDirectory(conversationID: conversationID)
@@ -1024,6 +1041,7 @@ public struct WorkspaceRepository: Sendable {
                 createdAt: attachment.createdAt,
                 voice: attachment.voice,
                 computer: attachment.computer,
+                browser: attachment.browser,
                 annotation: attachment.annotation
             )
             try? write(repaired, to: metadataURL)

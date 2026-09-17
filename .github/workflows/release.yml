@@ -12,6 +12,7 @@ on:
       - 'CHANGELOG.md'
       - 'Computer/CHANGELOG.md'
       - 'Applet/CHANGELOG.md'
+      - 'Browser/CHANGELOG.md'
       - 'Computer/Images/CHANGELOG.md'
       # Keep the generated catalogue's drift check on direct reference edits.
       - 'docs/message-reference.md'
@@ -24,6 +25,7 @@ on:
       - 'CHANGELOG.md'
       - 'Computer/CHANGELOG.md'
       - 'Applet/CHANGELOG.md'
+      - 'Browser/CHANGELOG.md'
       - 'Computer/Images/CHANGELOG.md'
       - 'docs/message-reference.md'
   workflow_dispatch:
@@ -50,6 +52,7 @@ jobs:
       noodle: ${{ steps.versions.outputs.noodle }}
       computer: ${{ steps.versions.outputs.computer }}
       applet: ${{ steps.versions.outputs.applet }}
+      browser: ${{ steps.versions.outputs.browser }}
       images: ${{ steps.versions.outputs.images }}
       any: ${{ steps.versions.outputs.any }}
       products: ${{ steps.versions.outputs.products }}
@@ -79,6 +82,7 @@ jobs:
           python3 -m unittest discover -s Tests/CoverageReporting -v
           swift Computer/Tests/ReleaseWorkflowTests.swift "$PWD"
           swift Applet/Tests/ReleaseWorkflowTests.swift "$PWD"
+          swift Browser/Tests/ReleaseWorkflowTests.swift "$PWD"
 
   test-noodle:
     needs: [versions, checks]
@@ -186,6 +190,17 @@ jobs:
       - name: Test the shared protocol
         run: swift test --disable-sandbox --package-path Computer/Bridge
 
+  test-browser:
+    needs: [versions, checks]
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - name: Test Browser
+        run: swift test --disable-sandbox --package-path Browser --scratch-path .build/browser
+
   prepare-noodle:
     needs: [versions, checks, test-noodle, test-noodle-apple27, test-bridge]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.noodle == 'true'
@@ -209,22 +224,30 @@ jobs:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.images == 'true'
     uses: ./.github/workflows/computer-images.yml
 
+  prepare-browser:
+    needs: [versions, checks, test-noodle, test-browser, test-bridge]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.browser == 'true'
+    uses: ./.github/workflows/browser-release.yml
+    secrets: inherit
+
   tag:
-    needs: [versions, workflow-lint, checks, test-noodle, test-noodle-apple27, test-computer, test-applet, test-bridge, prepare-noodle, prepare-computer, prepare-applet, prepare-images]
+    needs: [versions, workflow-lint, checks, test-noodle, test-noodle-apple27, test-computer, test-applet, test-browser, test-bridge, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-images]
     # Explicitly accept unselected/skipped products, never a failed/cancelled build.
     if: >-
       always() && !cancelled() && github.event_name != 'pull_request' &&
       github.ref == 'refs/heads/main' && needs.versions.outputs.any == 'true' &&
       needs.workflow-lint.result == 'success' &&
       needs.checks.result == 'success' &&
-      ((needs.versions.outputs.noodle != 'true' && needs.versions.outputs.computer != 'true' && needs.versions.outputs.applet != 'true') ||
+      ((needs.versions.outputs.noodle != 'true' && needs.versions.outputs.computer != 'true' && needs.versions.outputs.applet != 'true' && needs.versions.outputs.browser != 'true') ||
        (needs.test-noodle.result == 'success' && needs.test-bridge.result == 'success')) &&
       (needs.versions.outputs.computer != 'true' || needs.test-computer.result == 'success') &&
       (needs.versions.outputs.applet != 'true' || needs.test-applet.result == 'success') &&
+      (needs.versions.outputs.browser != 'true' || needs.test-browser.result == 'success') &&
       (needs.versions.outputs.noodle != 'true' || needs.test-noodle-apple27.result == 'success') &&
       (needs.versions.outputs.noodle != 'true' || needs.prepare-noodle.result == 'success') &&
       (needs.versions.outputs.computer != 'true' || needs.prepare-computer.result == 'success') &&
       (needs.versions.outputs.applet != 'true' || needs.prepare-applet.result == 'success') &&
+      (needs.versions.outputs.browser != 'true' || needs.prepare-browser.result == 'success') &&
       (needs.versions.outputs.images != 'true' || needs.prepare-images.result == 'success')
     runs-on: ubuntu-latest
     permissions:
@@ -329,14 +352,42 @@ jobs:
           cd ../..
           zsh scripts/publish-applet-release.sh "$APPLET_VERSION" "dist/applet-$APPLET_VERSION/release-notes.md"
 
+  publish-browser:
+    needs: [versions, tag]
+    if: >-
+      always() && !cancelled() && needs.tag.result == 'success' &&
+      needs.versions.outputs.browser == 'true'
+    runs-on: macos-26
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Read Browser version
+        run: echo "BROWSER_VERSION=$(cat Browser/VERSION)" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v7
+        with:
+          name: browser-release-assets
+          path: dist/browser-${{ env.BROWSER_VERSION }}
+      - name: Publish the verified Browser archive and update channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "dist/browser-$BROWSER_VERSION"
+          shasum -a 256 -c Noodle-Browser-arm64.zip.sha256
+          cd ../..
+          zsh scripts/publish-browser-release.sh "$BROWSER_VERSION" "dist/browser-$BROWSER_VERSION/release-notes.md"
+
   publish-noodle:
-    needs: [versions, tag, publish-images, publish-computer, publish-applet]
+    needs: [versions, tag, publish-images, publish-computer, publish-applet, publish-browser]
     if: >-
       always() && !cancelled() && needs.tag.result == 'success' &&
       needs.versions.outputs.noodle == 'true' &&
       (needs.versions.outputs.images != 'true' || needs.publish-images.result == 'success') &&
       (needs.versions.outputs.computer != 'true' || needs.publish-computer.result == 'success') &&
-      (needs.versions.outputs.applet != 'true' || needs.publish-applet.result == 'success')
+      (needs.versions.outputs.applet != 'true' || needs.publish-applet.result == 'success') &&
+      (needs.versions.outputs.browser != 'true' || needs.publish-browser.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -367,7 +418,7 @@ jobs:
           gh release edit "$tag" --draft=false --latest
 
   complete:
-    needs: [versions, tag, publish-images, publish-computer, publish-applet, publish-noodle]
+    needs: [versions, tag, publish-images, publish-computer, publish-applet, publish-browser, publish-noodle]
     if: always() && github.event_name != 'pull_request' && needs.versions.outputs.any == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -377,6 +428,7 @@ jobs:
           IMAGES_RESULT: ${{ needs.publish-images.result }}
           COMPUTER_RESULT: ${{ needs.publish-computer.result }}
           APPLET_RESULT: ${{ needs.publish-applet.result }}
+          BROWSER_RESULT: ${{ needs.publish-browser.result }}
           NOODLE_RESULT: ${{ needs.publish-noodle.result }}
         run: |
           python3 - <<'PY'

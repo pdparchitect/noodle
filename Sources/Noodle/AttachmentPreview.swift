@@ -1,12 +1,17 @@
 import QuickLookThumbnailing
 import AppletBridge
 import ComputerBridge
+import BrowserBridge
 import ImageIO
 import SwiftUI
 import NoodleCore
 import UniformTypeIdentifiers
 
 extension ConversationAttachment {
+    var isBrowserDocument: Bool {
+        annotation == nil && (browser != nil || mediaType == BrowserReference.mediaType
+            || BrowserBuildIdentity.allCases.contains { $0.fileExtension == (originalFilename as NSString).pathExtension.lowercased() })
+    }
     var isComputerDocument: Bool {
         annotation == nil && (computer != nil || mediaType == ComputerCard.mediaType
             || ComputerBuildIdentity.allCases.contains { $0.fileExtension == (originalFilename as NSString).pathExtension.lowercased() })
@@ -15,6 +20,7 @@ extension ConversationAttachment {
     var previewSymbolName: String {
         if annotation != nil { return "text.bubble.fill" }
         if let computer { return computer.computer.symbol }
+        if let browser { return browser.reference.browser.symbol }
         if mediaType.hasPrefix("image/") { return "photo.fill" }
         if mediaType == "application/pdf" { return "doc.richtext.fill" }
         if mediaType.hasPrefix("audio/") { return "waveform" }
@@ -115,6 +121,7 @@ struct AttachmentInlinePreview: View {
     }
 
     private var openHint: String {
+        if attachment.isBrowserDocument { return "Click or press Space to open in Noodle Browser" }
         if attachment.isComputerDocument { return "Click or press Space to open in Noodle Computer" }
         if attachment.url.flatMap(NoodletLink.id) != nil { return "Click or press Space to open in \(AppletBuildIdentity.current.appName)" }
         return "Click or press Space to preview"
@@ -199,13 +206,11 @@ struct AttachmentInlinePreview: View {
                     .font(.system(size: 16, weight: .medium))
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(attachment.originalFilename)
+                    Text(attachment.browser?.reference.title ?? attachment.originalFilename)
                         .font(.system(size: 11.5, weight: .semibold))
                         .lineLimit(1)
-                    Text(ByteCountFormatter.string(
-                        fromByteCount: attachment.byteCount,
-                        countStyle: .file
-                    ))
+                    Text(attachment.browser.map { $0.reference.browser.name + " · " + (URL(string: $0.reference.url)?.host ?? "") }
+                        ?? ByteCountFormatter.string(fromByteCount: attachment.byteCount, countStyle: .file))
                     .font(.system(size: 9.5))
                     .opacity(0.72)
                 }
@@ -223,6 +228,20 @@ struct AttachmentInlinePreview: View {
         let key = fileURL as NSURL
         if let cached = AttachmentThumbnailCache.shared.object(forKey: key) {
             thumbnail = cached
+            return
+        }
+        if attachment.isBrowserDocument {
+            let reference = attachment.browser?.reference ?? (try? BrowserReference.read(fileURL))
+            if let data = reference?.previewImage,
+               let source = CGImageSourceCreateWithData(data as CFData, nil),
+               let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceThumbnailMaxPixelSize: 1040,
+                kCGImageSourceCreateThumbnailWithTransform: true
+               ] as CFDictionary) {
+                let result = NSImage(cgImage: image, size: .zero)
+                AttachmentThumbnailCache.shared.setObject(result, forKey: key); thumbnail = result
+            } else { thumbnailUnavailable = true }
             return
         }
 

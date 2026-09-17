@@ -365,136 +365,18 @@ import SwiftUI
 struct ComputerAssignmentPicker: View {
     let controller: ComputerController
     @Binding var selectedIDs: Set<UUID>
-    @State private var showingAdd = false
-    @State private var search = ""
     @State private var openingLibrary = false
     @State private var openError: String?
 
-    private var selected: [RemoteComputer] {
-        let known = controller.registry.computers.filter { selectedIDs.contains($0.id) }
-        let missing = selectedIDs.subtracting(controller.registry.computers.map(\.id))
-            .sorted { $0.uuidString < $1.uuidString }
-            .map { RemoteComputer(id: $0, name: "Unavailable computer", kind: "", state: "Unavailable",
-                                  symbol: "questionmark", colour: 0) }
-        return known + missing
-    }
-    private var available: [RemoteComputer] {
-        controller.registry.computers.filter {
-            !selectedIDs.contains($0.id) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search))
-        }
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Computers").font(.caption.weight(.semibold))
-                Spacer()
-                Button { search = ""; showingAdd = true } label: {
-                    Label("Add Computers", systemImage: "plus")
-                }
-                .popover(isPresented: $showingAdd, arrowEdge: .bottom) {
-                    VStack(spacing: 12) {
-                        TextField("Search computers", text: $search).textFieldStyle(.roundedBorder)
-                        ScrollView {
-                            LazyVStack(spacing: 4) {
-                                ForEach(available) { computer in
-                                    Button { selectedIDs.insert(computer.id) } label: {
-                                        HStack(spacing: 12) {
-                                            avatar(computer, size: 32)
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(computer.name).foregroundStyle(.primary)
-                                                Text(controller.available ? computer.state : "Unavailable")
-                                                    .font(.caption).foregroundStyle(.secondary)
-                                            }
-                                            Spacer()
-                                            Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
-                                        }
-                                        .padding(8).contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel("Add \(computer.name) to bot")
-                                }
-                                if controller.registry.computers.isEmpty {
-                                    createPrompt
-                                } else if available.isEmpty {
-                                    Text(search.isEmpty ? "All computers added" : "No matching computers")
-                                        .foregroundStyle(.secondary).padding()
-                                }
-                            }
-                        }
-                        HStack {
-                            if !controller.registry.computers.isEmpty { openLibraryButton }
-                            Spacer()
-                            Button("Done") { showingAdd = false }
-                        }
-                    }
-                    .padding(16).frame(width: 300, height: 280)
-                }
-            }
-            if controller.needsFileTransferUpdate || controller.needsDocumentPreviewUpdate {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label(controller.needsDocumentPreviewUpdate ? "Update Noodle Computer to enable native attachment previews." : "Update Noodle Computer to enable file transfers.", systemImage: "arrow.down.circle")
-                        .font(.callout.weight(.medium))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("In Noodle Computer, choose Check for Updates… from the app menu.")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    openLibraryButton
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("ComputerUpdateNotice")
-            }
-            ScrollView {
-                if selected.isEmpty {
-                    if controller.registry.computers.isEmpty {
-                        createPrompt.padding(.vertical, 24)
-                    } else {
-                        Button { search = ""; showingAdd = true } label: {
-                            VStack(spacing: 10) {
-                                Image(systemName: "desktopcomputer").font(.largeTitle)
-                                Text("Add computers to this bot")
-                            }
-                            .foregroundStyle(.secondary).frame(maxWidth: .infinity)
-                            .padding(.vertical, 32).contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain).accessibilityLabel("Add computers to this bot")
-                    }
-                } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 12)], spacing: 16) {
-                        ForEach(selected) { computer in
-                            VStack(spacing: 8) {
-                                avatar(computer, size: 48)
-                                    .overlay(alignment: .topTrailing) {
-                                        Button { selectedIDs.remove(computer.id) } label: {
-                                            Image(systemName: "xmark.circle.fill")
-                                                .font(.system(size: 17)).symbolRenderingMode(.palette)
-                                                .foregroundStyle(.white, Color(nsColor: .darkGray))
-                                                .padding(4).contentShape(Circle())
-                                        }
-                                        .buttonStyle(.plain).offset(x: 10, y: -8)
-                                        .help("Remove \(computer.name) from bot")
-                                        .accessibilityLabel("Remove \(computer.name) from bot")
-                                    }
-                                Text(computer.name).font(.caption).lineLimit(2).multilineTextAlignment(.center)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .top)
-                            .help("\(computer.name) · \(controller.available ? computer.state : "Unavailable")")
-                        }
-                    }.padding(12)
-                }
-            }
-            .frame(minHeight: 140, maxHeight: 280)
-            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
-            Text("Computers can be shared with multiple bots. Their files and services are shared; terminal sessions are separate.")
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            if let failure = controller.failure {
-                Text(failure).font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
+        CompanionAssignmentPicker(title: "Computers", noun: "computer", symbol: "desktopcomputer",
+            items: controller.registry.computers.map {
+                CompanionAssignmentItem(id: $0.id, name: $0.name, state: controller.available ? $0.state : "Unavailable",
+                    symbol: $0.symbol, colour: $0.colour, icon: $0.icon)
+            }, selectedIDs: $selectedIDs, createPrompt: createPrompt, openLibraryButton: openLibraryButton,
+            notice: updateNotice,
+            footer: "Computers can be shared with multiple bots. Their files and services are shared; terminal sessions are separate.",
+            failure: controller.failure)
         .task { await controller.refresh(launchIfNeeded: true) }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didActivateApplicationNotification)) { notification in
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
@@ -507,6 +389,25 @@ struct ComputerAssignmentPicker: View {
             }
             Button("OK") { openError = nil }
         } message: { Text(openError ?? "") }
+    }
+
+    @ViewBuilder private var updateNotice: some View {
+        if controller.needsFileTransferUpdate || controller.needsDocumentPreviewUpdate {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(controller.needsDocumentPreviewUpdate ? "Update Noodle Computer to enable native attachment previews." : "Update Noodle Computer to enable file transfers.", systemImage: "arrow.down.circle")
+                    .font(.callout.weight(.medium))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("In Noodle Computer, choose Check for Updates… from the app menu.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                openLibraryButton
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("ComputerUpdateNotice")
+        }
     }
 
     private var createPrompt: some View {
@@ -541,13 +442,5 @@ struct ComputerAssignmentPicker: View {
                 catch { openError = error.localizedDescription }
             }
         }.disabled(openingLibrary)
-    }
-
-    private func avatar(_ computer: RemoteComputer, size: CGFloat) -> some View {
-        var agent = AgentRecord(displayName: computer.name, accentSeed: 0)
-        agent.avatarSymbolName = computer.symbol
-        agent.avatarColorIndex = abs(computer.colour % BotAvatarPalette.gradients.count)
-        agent.avatarImageData = computer.icon
-        return BotAvatar(agent: agent, size: size)
     }
 }

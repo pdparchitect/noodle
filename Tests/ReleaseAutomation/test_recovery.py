@@ -38,6 +38,16 @@ class RecoveryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             recovery.validate(run, jobs, [{'name': 'applet-release-assets', 'expired': True}])
 
+    def test_browser_recovery_requires_its_verified_artifact(self):
+        run = {'status': 'completed', 'head_branch': 'main', 'head_sha': 'a' * 40,
+               'path': '.github/workflows/release.yml'}
+        jobs = [{'name': name, 'conclusion': 'success'} for name in
+                ['workflow-lint', 'versions', 'checks', 'tag', 'prepare-browser / release']]
+        artifacts = [{'name': 'browser-release-assets', 'expired': False}]
+        self.assertEqual(recovery.validate(run, jobs, artifacts), [('browser', 'browser-release-assets')])
+        with self.assertRaises(ValueError):
+            recovery.validate(run, jobs, [{'name': 'browser-release-assets', 'expired': True}])
+
     def test_checksum_mismatch_and_path_escape_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -55,7 +65,8 @@ class RecoveryTests(unittest.TestCase):
     def test_recovers_fixed_and_legacy_download_names_for_each_app(self):
         for product, prefix, platform in [('noodle', 'Noodle', 'macOS'),
                                           ('computer', 'Noodle-Computer', 'arm64'),
-                                          ('applet', 'Noodle-Applet', 'arm64')]:
+                                          ('applet', 'Noodle-Applet', 'arm64'),
+                                          ('browser', 'Noodle-Browser', 'arm64')]:
             for name in [f'{prefix}-arm64.zip', f'{prefix}-1.2.3-{platform}.zip']:
                 with self.subTest(product=product, archive=name), tempfile.TemporaryDirectory() as directory:
                     root = Path(directory)

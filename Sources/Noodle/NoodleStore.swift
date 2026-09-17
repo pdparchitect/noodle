@@ -108,6 +108,7 @@ final class NoodleStore {
     let messenger: MessengerBroker
     let mcp: MCPController
     let computers: ComputerController
+    let browsers: BrowserController
     let applets: AppletController
     let runtime: AgentRuntimeCoordinator
     private let connectsServices: Bool
@@ -143,6 +144,7 @@ final class NoodleStore {
         messenger = MessengerBroker(repository: self.repository)
         mcp = MCPController(repository: self.repository)
         computers = ComputerController(repository: self.repository)
+        browsers = BrowserController(repository: self.repository)
         applets = AppletController(repository: self.repository)
         reload()
         Self.active = self
@@ -196,6 +198,7 @@ final class NoodleStore {
                 try messenger.start(agents: agents)
                 mcp.start(agents: agents)
                 computers.start(agents: agents)
+                browsers.start(agents: agents)
                 applets.start(agents: agents)
             }
             conversations = try repository.loadConversations()
@@ -253,7 +256,8 @@ final class NoodleStore {
         publicDescription: String,
         backstory: String,
         mcpConnectionIDs: Set<UUID> = [],
-        computerIDs: Set<UUID> = []
+        computerIDs: Set<UUID> = [],
+        browserIDs: Set<UUID> = []
     ) -> Bool {
         guard runtime.availableInstallations.contains(where: { $0.provider.rawValue == harnessIdentifier }) else {
             errorMessage = "Set up a supported harness in Settings before creating a bot."
@@ -264,6 +268,7 @@ final class NoodleStore {
         do {
             try mcp.validateAssignment(mcpConnectionIDs)
             try computers.validate(computerIDs)
+            try browsers.validate(browserIDs)
             checkpoint = try AgentSettingsCheckpoint(repository: repository)
             let result = try repository.createAgent(
                 named: name, harnessIdentifier: harnessIdentifier,
@@ -274,12 +279,13 @@ final class NoodleStore {
             created = result
             try mcp.assign(mcpConnectionIDs, to: result.agent, synchronizeWorkspace: false)
             try computers.assign(computerIDs, to: result.agent, synchronizeWorkspace: false)
+            try browsers.assign(browserIDs, to: result.agent, synchronizeWorkspace: false)
             try repository.synchronizeAgentWorkspace(result.agent)
         } catch {
             var detail = error.localizedDescription
             do {
                 try checkpoint?.restore()
-                try mcp.reloadAssignments(); try computers.reloadAssignments()
+                try mcp.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments()
                 if let created {
                     try repository.deleteConversation(id: created.conversation.id)
                     try FileManager.default.removeItem(at: repository.storage(for: created.agent.id).package)
@@ -316,7 +322,8 @@ final class NoodleStore {
         publicDescription: String,
         backstory: String,
         mcpConnectionIDs: Set<UUID>? = nil,
-        computerIDs: Set<UUID>? = nil
+        computerIDs: Set<UUID>? = nil,
+        browserIDs: Set<UUID>? = nil
     ) -> Bool {
         var checkpoint: AgentSettingsCheckpoint?
         let updated: AgentRecord
@@ -325,6 +332,7 @@ final class NoodleStore {
         do {
             if let mcpConnectionIDs { try mcp.validateAssignment(mcpConnectionIDs) }
             if let computerIDs { try computers.validate(computerIDs) }
+            if let browserIDs { try browsers.validate(browserIDs) }
             previousBackstory = try repository.loadAgentBackstory(agent)
             checkpoint = try AgentSettingsCheckpoint(repository: repository, agent: agent, conversations: conversations)
             updated = try repository.updateAgent(
@@ -342,13 +350,14 @@ final class NoodleStore {
             try repository.updateAgentBackstory(updated, backstory: backstory)
             if let mcpConnectionIDs { try mcp.assign(mcpConnectionIDs, to: updated, synchronizeWorkspace: false) }
             if let computerIDs { try computers.assign(computerIDs, to: updated, synchronizeWorkspace: false) }
+            if let browserIDs { try browsers.assign(browserIDs, to: updated, synchronizeWorkspace: false) }
             try repository.synchronizeAgentWorkspace(updated)
         } catch {
             var detail = error.localizedDescription
             if let checkpoint {
                 do {
                     try checkpoint.restore()
-                    try mcp.reloadAssignments(); try computers.reloadAssignments()
+                    try mcp.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments()
                     // Generated skills derive from the restored settings. A damaged
                     // workspace may still need repair before it can be synchronized.
                     try repository.synchronizeAgentWorkspace(agent)
@@ -372,6 +381,7 @@ final class NoodleStore {
         errorMessage = nil
         guard connectsServices else { return }
         computers.start(agents: agents)
+        browsers.start(agents: agents)
         applets.start(agents: agents)
         mcp.start(agents: agents)
         do { try messenger.start(agents: agents) }

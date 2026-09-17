@@ -1,5 +1,6 @@
 import XCTest
 import ComputerBridge
+import BrowserBridge
 @testable import NoodleCore
 
 final class MessengerDocumentationTests: XCTestCase {
@@ -68,6 +69,8 @@ final class MessengerDocumentationTests: XCTestCase {
             voice: VoiceMessage(transcript: "Encoding coverage", duration: 1, waveform: [0.5], localeIdentifier: "en-GB"),
             computer: ComputerCard(computer: .init(id: UUID(), name: "Shell", kind: "Shell", state: "Running", symbol: "terminal"),
                 agentID: botID, terminalID: UUID(), terminalPreview: "$"),
+            browser: BrowserCard(reference: .init(browser: .init(id: UUID(), name: "Browser"), tabID: UUID(),
+                url: "https://example.com", title: "Example"), agentID: botID),
             annotation: AttachmentAnnotation(source: ConversationAttachment(conversationID: conversation.id,
                 originalFilename: "source.pdf", storedFilename: "source.pdf", mediaType: "application/pdf", byteCount: 10),
                 quote: "Source text", comment: "Feedback"))
@@ -124,6 +127,14 @@ final class MessengerDocumentationTests: XCTestCase {
         let custom = workspace.appendingPathComponent(".agents/skills/custom", isDirectory: true)
         try FileManager.default.createDirectory(at: custom, withIntermediateDirectories: true)
         try "My custom skill".write(to: custom.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        var browsers = BrowserAssignments()
+        let browserID = UUID()
+        browsers.browsers = [RemoteBrowser(id: browserID, name: "Work")]
+        browsers.agents[bot.agent.id.uuidString] = [browserID]
+        try browsers.save(root: root)
+        try repository.synchronizeAgentWorkspace(bot.agent)
+        let browserSkill = workspace.appendingPathComponent(".agents/skills/browser/SKILL.md")
+        try "Obsolete screenshot-only instructions".write(to: browserSkill, atomically: true, encoding: .utf8)
         try repository.synchronizeAgentWorkspace(bot.agent)
         let refreshed = try String(contentsOf: guide, encoding: .utf8)
         let skill = try String(contentsOf: workspace.appendingPathComponent(".agents/skills/messenger/SKILL.md"), encoding: .utf8)
@@ -132,6 +143,8 @@ final class MessengerDocumentationTests: XCTestCase {
         XCTAssertFalse(refreshed.contains("noodle:managed:"))
         XCTAssertFalse(refreshed.contains("Obsolete runtime guidance"))
         XCTAssertTrue(refreshed.contains(MessengerDocumentation.bootstrapInstructions))
+        XCTAssertTrue(refreshed.contains(MessengerDocumentation.browserBootstrapInstructions))
+        XCTAssertEqual(try String(contentsOf: browserSkill, encoding: .utf8), MessengerDocumentation.browserSkill)
         XCTAssertFalse(refreshed.contains(MessengerDocumentation.skillInstructions))
         XCTAssertFalse(refreshed.contains(MessengerDocumentation.transportInstructions))
         XCTAssertTrue(skill.contains(MessengerDocumentation.skillInstructions))

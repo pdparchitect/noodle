@@ -10,6 +10,20 @@ struct NoodleApp: App {
     @State private var store: NoodleStore
 
     init() {
+        if CommandLine.arguments.contains("--browser-integration-test") || CommandLine.arguments.contains("--browser-discovery-test") || CommandLine.arguments.contains("--browser-picker-test") {
+            NSApplication.shared.setActivationPolicy(.accessory)
+            Task { @MainActor in
+                do {
+                    if CommandLine.arguments.contains("--browser-picker-test") { try await BrowserPickerIntegrationTest.run() }
+                    else if CommandLine.arguments.contains("--browser-discovery-test") { try await BrowserIntegrationTest.checkDiscovery() }
+                    else { try await BrowserIntegrationTest.run() }
+                    Darwin.exit(0)
+                }
+                catch { print("BROWSER INTEGRATION FAILED: \(error.localizedDescription)"); Darwin.exit(1) }
+            }
+            NSApplication.shared.run()
+            Darwin.exit(1)
+        }
         if CommandLine.arguments.contains("--applet-link-test") {
             NSApplication.shared.setActivationPolicy(.regular)
             Task { @MainActor in

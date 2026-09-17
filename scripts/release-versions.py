@@ -13,6 +13,7 @@ PRODUCTS = {
     "noodle": ("VERSION", "CHANGELOG.md", "v"),
     "computer": ("Computer/VERSION", "Computer/CHANGELOG.md", "computer-v"),
     "applet": ("Applet/VERSION", "Applet/CHANGELOG.md", "applet-v"),
+    "browser": ("Browser/VERSION", "Browser/CHANGELOG.md", "browser-v"),
     "images": ("Computer/Images/VERSION", "Computer/Images/CHANGELOG.md", "computer-images-v"),
 }
 SEMVER = r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"

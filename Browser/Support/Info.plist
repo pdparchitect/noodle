@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.pdparchitect.noodle.browser</string>
+	<key>CFBundleExecutable</key>
+	<string>NoodleBrowser</string>
+	<key>CFBundleName</key>
+	<string>Noodle Browser</string>
+	<key>CFBundleDisplayName</key>
+	<string>Noodle Browser</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>0.1.0</string>
+	<key>CFBundleIconFile</key>
+	<string>Browser</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>CFBundleDocumentTypes</key>
+	<array><dict>
+		<key>CFBundleTypeName</key><string>Noodle Browser Page</string>
+		<key>CFBundleTypeRole</key><string>Viewer</string>
+		<key>LSHandlerRank</key><string>Owner</string>
+		<key>LSItemContentTypes</key><array><string>com.pdparchitect.noodle.browser-reference</string></array>
+	</dict></array>
+	<key>UTExportedTypeDeclarations</key>
+	<array><dict>
+		<key>UTTypeIdentifier</key><string>com.pdparchitect.noodle.browser-reference</string>
+		<key>UTTypeDescription</key><string>Noodle Browser Page</string>
+		<key>UTTypeConformsTo</key><array><string>public.data</string></array>
+		<key>UTTypeTagSpecification</key><dict>
+			<key>public.filename-extension</key><array><string>noodlebrowser</string></array>
+		</dict>
+	</dict></array>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.pdparchitect.noodle.browser.link</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>noodlebrowser</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
+	<key>SUFeedURL</key>
+	<string>https://github.com/pdparchitect/noodle/releases/download/browser-latest/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>1ZT5NrPiDPaQ54iHGSI1a9JIn6kTrmjQvzZRBA9f/sk=</string>
+	<key>SURequireSignedFeed</key>
+	<true/>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUAllowsAutomaticUpdates</key>
+	<true/>
+	<key>SUSendProfileInfo</key>
+	<false/>
+</dict>
+</plist>

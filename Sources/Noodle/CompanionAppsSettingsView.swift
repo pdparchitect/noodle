@@ -109,6 +109,9 @@ struct CompanionAppsSettingsView: View {
             defer { opening = nil; refresh() }
             do {
                 switch app {
+                case .browser:
+                    if installed { try await store.browsers.openLibrary() }
+                    else { NSWorkspace.shared.open(app.documentationURL) }
                 case .computer:
                     if installed { try await store.computers.openLibrary() }
                     else { try await store.computers.openDownload() }
