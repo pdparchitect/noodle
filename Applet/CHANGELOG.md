@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Shorten the library's top shadow and content fade to keep items near the toolbar clearer.
+
 ## [0.3.0] - 2026-09-17
 
 ### Changed

@@ -1,5 +1,7 @@
 import SwiftUI
 
+private let conversationTopFadeHeight: CGFloat = 64
+
 /// Fade scrolling content beneath the toolbar to reveal the shaded wallpaper.
 /// Apply this mask to the detail scroll view, leaving the sidebar untouched.
 public struct ConversationContentTopFade: View {
@@ -12,7 +14,7 @@ public struct ConversationContentTopFade: View {
                 .init(color: .white.opacity(0.12), location: 0.45),
                 .init(color: .white, location: 1)
             ], startPoint: .top, endPoint: .bottom)
-            .frame(height: 88)
+            .frame(height: conversationTopFadeHeight)
             Color.white
         }
         .ignoresSafeArea(edges: .top)
@@ -41,7 +43,7 @@ public struct ConversationWindowHeaderShade: View {
                     .init(color: .clear, location: 1)
                 ], startPoint: .top, endPoint: .bottom)
             }
-            .frame(height: 88)
+            .frame(height: conversationTopFadeHeight)
             .shadow(color: .black.opacity(0.24), radius: 14, y: 5)
             .ignoresSafeArea(edges: .top)
             .allowsHitTesting(false)

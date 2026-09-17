@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Use the same compact toolbar shadow as Noodle and Applet, keeping desktop and terminal content clear.
 - Focus the existing library window when opening computer attachments, selecting their computer without presenting the window again.
 - Include the desktop helper's Apple Events entitlement and usage description so Local Mac commands can request approval to automate apps.
 - Close Focus Window automatically when its source popup or window closes, and ignore late replies from the ended preview.

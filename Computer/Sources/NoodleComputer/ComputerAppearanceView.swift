@@ -178,6 +178,9 @@ struct ComputerWindowWallpaper: View {
         ConversationWallpaper(background: selection.appearance.background,
             imageURL: selection.appearance.backgroundURL(in: selection.directory),
             imageData: selection.appearance.backgroundImage)
+            .overlay(alignment: .top) {
+                ConversationWindowHeaderShade()
+            }
             .onReceive(appearancePublisher) { if selection != $0 { selection = $0 } }
     }
 
