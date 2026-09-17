@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-17
+
 ### Added
 
 - Open multiple Local Mac windows individually or use Open All Windows to pop out visible root windows with their sheets and dialogs. New windows tile automatically on each monitor; Open All Windows also restores and re-tiles existing previews. Opened windows remain available across Computer views, and input activates the selected guest window.

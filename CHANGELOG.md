@@ -6,12 +6,13 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-09-17
+
 ### Fixed
 
-- Clear unread state from the displayed chat's focus, clicks, scrolling, draft edits, and sends, including incoming replies while that chat is active.
+- Clear unread indicators immediately when focusing or interacting with a conversation in the main window or a popped-out chat, including clicks, scrolling, typing, gestures, attachment drops, sends, and incoming replies while that chat is active.
 - Shorten the conversation's top shadow and content fade to keep the header avatar clearer while preserving the soft toolbar transition.
 - Keep helper processes and standalone UI test fixtures out of the Dock and app switcher by default.
-- Clear unread indicators immediately when interacting with a conversation, including clicking, scrolling, typing, gestures, and dropping attachments in the main window or a popped-out chat.
 
 ## [0.18.0] - 2026-09-17
 
@@ -711,7 +712,8 @@ All notable changes to Noodle are documented here, following
 - Signed and notarized macOS packaging with a dedicated Developer ID identity.
 - Sandboxed messaging and explicit attachment paths for agent file access.
 
-[Unreleased]: https://github.com/pdparchitect/noodle/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/pdparchitect/noodle/compare/v0.18.1...HEAD
+[0.18.1]: https://github.com/pdparchitect/noodle/compare/v0.18.0...v0.18.1
 [0.15.0]: https://github.com/pdparchitect/noodle/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/pdparchitect/noodle/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/pdparchitect/noodle/compare/v0.12.1...v0.13.0
