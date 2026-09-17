@@ -188,4 +188,30 @@ final class BrowserLibraryTests: XCTestCase {
             XCTAssertFalse(safe.contains("\0")); XCTAssertNotEqual(safe, ".."); XCTAssertFalse(safe.isEmpty)
         }
     }
+    func testPointerProtocolValidationAndRoundTrip() throws {
+        for operation in [BrowserOperation.move, .click] {
+            var request = BrowserRequest(operation, browserID: UUID(), tabID: UUID())
+            request.target = "#menu"
+            XCTAssertNoThrow(try request.validate())
+            request.x = 4; XCTAssertThrowsError(try request.validate())
+            request.target = nil; XCTAssertThrowsError(try request.validate())
+            request.y = 8; XCTAssertNoThrow(try request.validate())
+            request.frame = "child"; XCTAssertThrowsError(try request.validate())
+            request.frame = nil
+            let decoded = try JSONDecoder().decode(BrowserRequest.self, from: JSONEncoder().encode(request))
+            XCTAssertEqual(decoded.operation, operation); XCTAssertEqual(decoded.x, 4); XCTAssertEqual(decoded.y, 8)
+        }
+        var click = BrowserRequest(.click, browserID: UUID(), tabID: UUID()); click.target = "#menu"
+        for count in [0, 3] { click.clickCount = count; XCTAssertThrowsError(try click.validate()) }
+        click.clickCount = 2; XCTAssertNoThrow(try click.validate())
+        XCTAssertEqual(try JSONDecoder().decode(BrowserRequest.self, from: JSONEncoder().encode(click)).clickCount, 2)
+        click.operation = .move; XCTAssertThrowsError(try click.validate())
+        let move = BrowserRequest(.move, browserID: UUID(), tabID: UUID()); XCTAssertThrowsError(try move.validate())
+        for operation in [BrowserOperation.mouseReset] {
+            XCTAssertNoThrow(try BrowserRequest(operation, browserID: UUID(), tabID: UUID()).validate())
+            XCTAssertThrowsError(try BrowserRequest(operation, browserID: UUID()).validate())
+        }
+        var response = BrowserResponse(); response.pointer = .init(x: 42, y: 80, visible: true, pressed: true)
+        XCTAssertEqual(try JSONDecoder().decode(BrowserResponse.self, from: JSONEncoder().encode(response)).pointer, response.pointer)
+    }
 }

@@ -23,6 +23,33 @@ with wave.open(silent, 'wb') as audio:
     audio.writeframes(bytes(16000))
 SILENT_AUDIO = silent.getvalue()
 
+POINTER_PAGE = b'''<!doctype html><meta charset="utf-8"><title>Virtual pointer fixture</title>
+<style>
+body{font:18px system-ui;margin:40px;color:#153247;background:#eff5f7}
+button{font:inherit;padding:14px;border:1px solid #638997;border-radius:10px;background:white}
+#menu{display:inline-block;padding:20px;background:#d1e7eb;border-radius:16px}
+#menu-button{display:none}#menu:hover #menu-button{display:block}
+#menu:hover{background:#9fd8e5}
+#drag{margin-top:25px;width:360px;height:90px;background:#184e64;color:white;border-radius:14px;touch-action:none;padding:20px}
+#covered{position:absolute;left:650px;top:300px}#cover{position:absolute;left:640px;top:290px;width:180px;height:100px;background:#999}
+iframe{display:block;width:500px;height:100px;margin-top:25px;border:2px solid #184e64}
+</style>
+<h1>Agent pointer</h1><div id="menu">Hover to reveal<button id="menu-button">Revealed action</button></div>
+<button id="click">Click / double click</button><button id="away">Move away</button>
+<div id="drag">The cyan marker shows where the agent is pointing.</div><button id="covered">Covered target</button><div id="cover"></div>
+<iframe id="same" src="/pointer-frame"></iframe>
+<script>
+window.events=[];window.clicks=0;window.doubles=0;window.menuClicks=0;
+for(const type of ['pointerover','pointerenter','pointermove','pointerout','pointerleave','pointerdown','pointerup','mousemove','mousedown','mouseup','click','dblclick'])
+document.addEventListener(type,e=>events.push({type,target:e.target.id,trusted:e.isTrusted,x:e.clientX,y:e.clientY,buttons:e.buttons}),true);
+document.querySelector('#click').onclick=()=>clicks++;
+document.querySelector('#click').ondblclick=()=>doubles++;
+document.querySelector('#menu-button').onclick=()=>menuClicks++;
+const cross=document.createElement('iframe');cross.id='cross';cross.src=location.origin.replace('127.0.0.1','localhost')+'/pointer-frame';document.body.append(cross);
+</script>'''
+POINTER_FRAME = b'''<!doctype html><meta charset="utf-8"><style>body{margin:8px}button{padding:15px}button:hover{background:rgb(0, 200, 100)}</style>
+<button id="frame-button">Frame hover and click</button><script>window.clicks=0;document.querySelector('button').onclick=()=>clicks++;</script>'''
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args): pass
     def do_POST(self):
@@ -38,6 +65,8 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path.startswith('/webmcp-result'):
             data = b'<title>WebMCP result</title><p id="webmcp-result">Form navigated</p>'; mime = 'text/html'
         elif self.path == '/silent.wav': data = SILENT_AUDIO; mime = 'audio/wav'
+        elif self.path == '/pointer': data = POINTER_PAGE; mime = 'text/html'
+        elif self.path == '/pointer-frame': data = POINTER_FRAME; mime = 'text/html'
         elif self.path == '/auth-state':
             data = json.dumps({'authenticated': 'fixture_login=authenticated' in self.headers.get('Cookie','')}).encode()
             mime = 'application/json'

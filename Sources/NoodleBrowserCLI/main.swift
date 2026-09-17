@@ -24,7 +24,8 @@ private struct ReportedWebMCPError: Error {}
             case .open, .navigate: specific = ["--url"]
             case .inspect: specific = ["--frame"]
             case .eval: specific = ["--text", "--file", "--frame"]
-            case .click, .scroll: specific = ["--target", "--x", "--y", "--frame"]
+            case .click: specific = ["--target", "--x", "--y", "--frame", "--count"]
+            case .move, .scroll: specific = ["--target", "--x", "--y", "--frame"]
             case .fill: specific = ["--target", "--text", "--frame"]
             case .key: specific = ["--text"]
             case .screenshot: specific = ["--output"]
@@ -58,6 +59,7 @@ private struct ReportedWebMCPError: Error {}
             var request = try BrowserRequest(operation, browserID: uuid("--browser"), tabID: uuid("--tab"))
             request.url = flags["--url"]; request.target = flags["--target"]; request.frame = flags["--frame"]
             request.text = flags["--text"]; request.x = try number("--x"); request.y = try number("--y")
+            request.clickCount = try integer("--count")
             request.fileID = try uuid("--download")
             request.bookmarkID = try uuid("--bookmark"); request.title = flags["--title"]; request.query = flags["--query"]
             request.limit = try integer("--limit"); request.offset = try integer("--offset")

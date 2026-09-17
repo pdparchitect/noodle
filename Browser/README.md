@@ -72,6 +72,19 @@ browser screenshot --browser BROWSER_UUID --tab TAB_UUID --output screenshot.png
 
 Use the full managed command path unless your shell already resolves `browser`. Navigation returns immediately; inspect the page or read status to determine readiness. `inspect` returns CSS selectors and frame IDs. JavaScript is an async function body; use `return` for a result. Frame IDs expire on navigation. `show` opens the human window for an explicit handoff.
 
+Each tab has a virtual agent pointer, drawn as a cyan target with a diamond. It appears in the browser, screenshots and page cards. Moving it triggers native WebKit hover and mouse/pointer events while leaving the desktop cursor and application focus alone. Use `move` to reveal hover menus, then inspect or capture the page before selecting the revealed action.
+
+```sh
+browser move --browser BROWSER_UUID --tab TAB_UUID --target '#menu'
+browser click --browser BROWSER_UUID --tab TAB_UUID --target '#menu-action'
+browser click --browser BROWSER_UUID --tab TAB_UUID --x 320 --y 180 --count 2
+browser mouse-reset --browser BROWSER_UUID --tab TAB_UUID
+```
+
+Only primary clicks are supported; dragging and independent button holds are not supported. Coordinates are points from the top-left of the main page viewport; scale Retina screenshot pixels to viewport points. Selectors scroll into view and reject covered targets. Same-origin frame selectors accept `--frame`; cross-origin or transformed frames require main-viewport coordinates. Pointer commands and `status --tab` return `pointer` with `x`, `y`, `visible` and `pressed`.
+
+Human input, navigation, pausing agents and closing the tab reset the pointer. `mouse-reset` clears hover and hides it. Agents sharing a tab also share its pointer.
+
 Uploads and downloads pass directly through app storage, without Finder dialogs for the agent. Transfers support regular files up to 8 GiB. Local paths must remain inside that bot's workspace, parent directories must exist, and symlinks and overwrites are refused. Downloads stay in the browser; `download` copies a completed file to the workspace. Human file selection and exporting use standard macOS file panels. Interrupted downloads must be retried.
 
 ## WebMCP

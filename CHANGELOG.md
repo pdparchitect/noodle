@@ -21,6 +21,7 @@ All notable changes to Noodle are documented here, following
 - Let agents discover and invoke website WebMCP tools through the Browser CLI or JavaScript, with authenticated sessions, JSON arguments and explicit human form handoffs.
 - Ship a signed, notarized DMG alongside the ZIP, with large app and Applications icons and a drag-to-install layout.
 
+- Give browser agents virtual mouse commands for element hovering and clicks, with pointer state in CLI responses and guidance in the managed Browser skill.
 - Document Noodle Browser setup and connect its releases to the suite's shared publication and recovery process.
 - Add OpenCode v2 with its official logo, native installation and version checks, model/effort selection, ACP session recovery, and restricted per-bot credential, database, and cache storage.
 

@@ -87,6 +87,7 @@ import WebKit
     }
     func setPaused(_ value: Bool, browserID: UUID) throws {
         var profile = try library.profile(browserID); profile.paused = value; try library.update(profile)
+        if value { for tab in tabs.values where tab.browserID == browserID { tab.resetPointer() } }
     }
     func removeBrowser(_ id: UUID) async throws {
         guard !busy.contains(id) else { throw BrowserError("Wait for the current browser operation to finish.") }
@@ -155,6 +156,7 @@ import WebKit
         if [.status, .tabs, .downloads].contains(request.operation) {
             response.browser = profile.remote; response.tabs = profile.tabs; response.downloads = profile.downloads
             response.dialog = request.tabID.flatMap { tabs[$0]?.browserID == id ? tabs[$0]?.dialog : nil }
+            response.pointer = request.tabID.flatMap { tabs[$0]?.browserID == id ? tabs[$0]?.pointer.state : nil }
             return response
         }
         guard !profile.paused else { throw BrowserError("Agent control is paused for this browser. Wait for the user to resume it.") }
@@ -201,7 +203,14 @@ import WebKit
             let text = result as? String ?? "null"
             guard text.utf8.count <= 2 * 1_048_576 else { throw BrowserError("JavaScript result exceeds 2 MiB. Return less data.") }
             response.text = text
-        case .click: try await tab.click(target: request.target, x: request.x, y: request.y, frame: request.frame)
+        case .click:
+            try await tab.click(target: request.target, x: request.x, y: request.y, frame: request.frame, count: request.clickCount ?? 1)
+            response.pointer = tab.pointer.state
+        case .move:
+            try await tab.move(target: request.target, x: request.x, y: request.y, frame: request.frame)
+            response.pointer = tab.pointer.state
+        case .mouseReset:
+            tab.resetPointer(); response.pointer = tab.pointer.state
         case .fill:
             _ = try await tab.evaluate("const e=document.querySelector(target); if(!e) throw Error('Element not found'); if(e.type==='file') throw Error('Use upload for file inputs'); e.focus(); if(e.isContentEditable){e.textContent=text;} else {const p=e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:e.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(p,'value').set.call(e,text);} e.dispatchEvent(new Event('input',{bubbles:true})); e.dispatchEvent(new Event('change',{bubbles:true})); return true;", arguments: ["target": request.target!, "text": request.text!], frame: request.frame)
         case .key: try tab.press(request.text!)

@@ -8,6 +8,7 @@ import WebKit
     let id: UUID
     let browserID: UUID
     let web: WKWebView
+    let pointer: BrowserPointer
     let surface: NSPanel
     weak var runtime: BrowserRuntime?
     @Published var info: BrowserTabInfo
@@ -26,6 +27,7 @@ import WebKit
     private var visitedTitle: String?
     private var humanInput = false
     private var inputMonitor: Any?
+    private var inputGeneration = 0
     static let controlWorld = WKContentWorld.world(name: "NoodleBrowserControl")
 
     init(browserID: UUID, info: BrowserTabInfo, runtime: BrowserRuntime, configuration: WKWebViewConfiguration? = nil) {
@@ -37,6 +39,7 @@ import WebKit
         config.preferences.inactiveSchedulingPolicy = .none
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
         web = WKWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800), configuration: config)
+        pointer = BrowserPointer(web: web)
         surface = NSPanel(contentRect: web.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         super.init()
         surface.isReleasedWhenClosed = false
@@ -44,11 +47,15 @@ import WebKit
         surface.contentView = web
         web.navigationDelegate = self; web.uiDelegate = self
         web.setAllMediaPlaybackSuspended((try? runtime.library.profile(browserID).muted) ?? true, completionHandler: nil)
-        inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .keyDown]) { [weak self] event in
+        inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .mouseMoved, .scrollWheel, .keyDown]) { [weak self] event in
             guard let self, event.window === self.web.window, event.window?.isVisible == true else { return event }
-            if event.type == .leftMouseDown {
-                if self.web.bounds.contains(self.web.convert(event.locationInWindow, from: nil)) { self.humanInput = true }
+            if event.type != .keyDown {
+                if self.web.bounds.contains(self.web.convert(event.locationInWindow, from: nil)) {
+                    self.resetPointer()
+                    if event.type == .leftMouseDown { self.humanInput = true }
+                }
             } else if let view = event.window?.firstResponder as? NSView, view === self.web || view.isDescendant(of: self.web) {
+                self.resetPointer()
                 self.humanInput = true
             }
             return event
@@ -84,6 +91,7 @@ import WebKit
         } catch { runtime.failure = error.localizedDescription }
     }
     func beginAgentInteraction() { humanInput = false }
+    func resetPointer() { inputGeneration += 1; pointer.reset() }
     func mute(_ muted: Bool) async { await web.setAllMediaPlaybackSuspended(muted) }
     func restoreSurface() {
         if !stopped && web.window == nil {
@@ -108,6 +116,7 @@ import WebKit
         web.load(URLRequest(url: url))
     }
     func stop() {
+        resetPointer()
         stopped = true
         if let inputMonitor { NSEvent.removeMonitor(inputMonitor); self.inputMonitor = nil }
         let pending = operations.values; operations.removeAll(); pending.forEach { $0() }
@@ -124,6 +133,7 @@ import WebKit
     }
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         webMCPAllowed = false; webMCPFramePolicies.removeAll()
+        resetPointer()
         finishedDocument = false; visitID = nil; visitedURL = nil; visitedTitle = nil
         frames.removeAll(); info.error = nil; update()
         if dialog != nil { answerDialog(accept: false, text: nil) }
@@ -136,6 +146,7 @@ import WebKit
         info.error = error.localizedDescription; info.loading = false; runtime?.saveTab(self)
     }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        resetPointer()
         failed(BrowserError("Page process stopped. Reload this tab to continue."))
         let pending = operations.values; operations.removeAll(); pending.forEach { $0() }
     }
@@ -255,24 +266,27 @@ import WebKit
         result["frames"] = frames.map { ["id": $0.key, "url": $0.value.request.url?.absoluteString ?? "", "main": $0.value.isMainFrame] as [String: Any] }
         return String(decoding: try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys]), as: UTF8.self)
     }
-    func click(target: String?, x: Double?, y: Double?, frame: String?) async throws {
-        if let frame, frame != "main" {
-            _ = try await evaluate("const e=document.querySelector(target); if(!e) throw Error('Element not found'); e.click(); return true;", arguments: ["target": target ?? ""], frame: frame)
-            return
-        }
-        var point = CGPoint(x: x ?? 0, y: y ?? 0)
+    func move(target: String?, x: Double?, y: Double?, frame: String?) async throws {
+        let generation = inputGeneration
+        var point: CGPoint
         if let target {
-            guard let result = try await evaluate("const e=document.querySelector(target); if(!e) throw Error('Element not found'); e.scrollIntoView({block:'center',inline:'center'}); const r=e.getBoundingClientRect(); const x=r.x+r.width/2,y=r.y+r.height/2; const top=document.elementFromPoint(x,y); if(!r.width||!r.height||!(top===e||e.contains(top))) throw Error('Element hidden or covered'); return {x,y};", arguments: ["target": target], world: Self.controlWorld) as? [String: Double], let px = result["x"], let py = result["y"] else { throw BrowserError("Could not resolve the click target.") }
-            point = CGPoint(x: px, y: py)
-        }
-        guard web.bounds.contains(point), let window = web.window else { throw BrowserError("Click is outside the browser viewport.") }
-        let local = web.isFlipped ? point : CGPoint(x: point.x, y: web.bounds.height - point.y)
-        let location = web.convert(local, to: nil)
-        let hit = web.hitTest(local) ?? web
-        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-            guard let event = NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0) else { throw BrowserError("Could not create browser input.") }
-            if type == .leftMouseDown { hit.mouseDown(with: event) } else { hit.mouseUp(with: event) }
-        }
+            let url = Bundle.module.url(forResource: "Resources", withExtension: nil)!.appendingPathComponent("PointerTarget.js")
+            let source = try String(contentsOf: url, encoding: .utf8)
+            guard let result = try await evaluate(source, arguments: ["target": target], frame: frame, world: Self.controlWorld) as? [String: Double],
+                  let px = result["x"], let py = result["y"] else { throw BrowserError("Could not resolve the mouse target.") }
+            point = CGPoint(x: px * web.pageZoom, y: py * web.pageZoom)
+        } else if let x, let y { point = CGPoint(x: x, y: y) }
+        else if let current = pointer.position { point = current }
+        else { throw BrowserError("Specify --target or --x and --y, or move the mouse first.") }
+        guard !stopped, generation == inputGeneration else { throw BrowserError("Page or pointer control changed. Inspect the page before retrying.") }
+        guard (try runtime?.library.profile(browserID).paused) == false else { throw BrowserError("Agent control is paused for this browser.") }
+        if dialog != nil { throw BrowserError("A page dialog is pending. Use dialog before continuing.") }
+        try pointer.move(to: point)
+    }
+    func click(target: String?, x: Double?, y: Double?, frame: String?, count: Int = 1) async throws {
+        guard !pointer.pressed else { throw BrowserError("Mouse is already pressed.") }
+        try await move(target: target, x: x, y: y, frame: frame)
+        for number in 1...count { try pointer.down(count: number); try pointer.up(count: number) }
     }
     func press(_ key: String) throws {
         let keys: [String: (String, UInt16)] = ["Enter": ("\r",36), "Tab": ("\t",48), "Escape": ("\u{1b}",53), "Backspace": ("\u{7f}",51), "Space": (" ",49), "ArrowLeft": ("\u{f702}",123), "ArrowRight": ("\u{f703}",124), "ArrowDown": ("\u{f701}",125), "ArrowUp": ("\u{f700}",126)]
@@ -289,13 +303,15 @@ import WebKit
         }
     }
     func snapshot() async throws -> Data {
+        let pointerState = pointer.state
         let config = WKSnapshotConfiguration(); config.rect = web.bounds; config.afterScreenUpdates = false
+        let viewport = config.rect.size
         let image: NSImage = try await bounded { finish in
             self.web.takeSnapshot(with: config) { image, error in
                 if let image { finish(.success(image)) } else { finish(.failure(error ?? BrowserError("Screenshot unavailable."))) }
             }
         }
-        guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff), let png = bitmap.representation(using: .png, properties: [:]) else { throw BrowserError("Could not encode screenshot.") }
+        guard let tiff = pointer.annotate(image, state: pointerState, viewport: viewport).tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff), let png = bitmap.representation(using: .png, properties: [:]) else { throw BrowserError("Could not encode screenshot.") }
         return png
     }
     private func bounded<T>(_ start: (@escaping @MainActor @Sendable (Result<T, Error>) -> Void) -> Void) async throws -> T {

@@ -10,12 +10,23 @@ public struct BrowserError: LocalizedError, Sendable {
 public enum BrowserOperation: String, Codable, CaseIterable, Sendable {
     case list, status, tabs, open, navigate, back, forward, reload, close
     case inspect, eval, click, fill, key, scroll, screenshot, upload, downloads, download, dialog, show, present
+    case move, mouseReset = "mouse-reset"
     case history, bookmarks
     case webMCPList = "webmcp-list", webMCPCall = "webmcp-call"
     case bookmarkAdd = "bookmark-add", bookmarkUpdate = "bookmark-update", bookmarkRemove = "bookmark-remove"
     public var timeout: Int { isFileTransfer ? 600 : 60 }
     public var isFileTransfer: Bool { self == .upload || self == .download || self == .screenshot }
     public var needsTab: Bool { ![.list, .status, .tabs, .open, .downloads, .download, .show, .history, .bookmarks, .bookmarkAdd, .bookmarkUpdate, .bookmarkRemove].contains(self) }
+}
+
+public struct BrowserPointerState: Codable, Equatable, Sendable {
+    public var x: Double
+    public var y: Double
+    public var visible: Bool
+    public var pressed: Bool
+    public init(x: Double, y: Double, visible: Bool, pressed: Bool) {
+        self.x = x; self.y = y; self.visible = visible; self.pressed = pressed
+    }
 }
 
 public struct BrowserHistoryEntry: Codable, Identifiable, Equatable, Sendable {
@@ -95,6 +106,7 @@ public struct BrowserRequest: Codable, Sendable {
     public var text: String?
     public var x: Double?
     public var y: Double?
+    public var clickCount: Int?
     public var fileID: UUID?
     public var transferID: UUID?
     public var filename: String?
@@ -121,6 +133,14 @@ public struct BrowserRequest: Codable, Sendable {
         if operation == .navigate || (operation == .open && url != nil) { _ = try Self.navigationURL(url ?? "") }
         if [.fill, .upload].contains(operation), target?.isEmpty != false { throw BrowserError("Specify --target CSS_SELECTOR.") }
         if operation == .click, target?.isEmpty != false, x == nil || y == nil { throw BrowserError("Specify --target or --x and --y.") }
+        if [.move, .click].contains(operation) {
+            if target != nil && (x != nil || y != nil) { throw BrowserError("Use --target or --x and --y, not both.") }
+            if (x == nil) != (y == nil) { throw BrowserError("Specify both --x and --y.") }
+            if let target, target.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw BrowserError("Specify a nonempty --target.") }
+            if operation == .move && target == nil && x == nil { throw BrowserError("Specify --target or --x and --y.") }
+            if frame != nil && target == nil { throw BrowserError("--frame requires --target; coordinates use the main viewport.") }
+        }
+        if let clickCount, operation != .click || !(1...2).contains(clickCount) { throw BrowserError("Use --count 1 or 2 with click.") }
         if [.eval, .fill, .key].contains(operation), text == nil { throw BrowserError("Specify --text or --file.") }
         if operation == .download, fileID == nil { throw BrowserError("Specify --download UUID from downloads.") }
         if operation == .dialog, accept == nil { throw BrowserError("Specify --accept true or false.") }
@@ -149,6 +169,7 @@ public struct BrowserResponse: Codable, Sendable {
     public var reference: BrowserReference?
     public var attachmentID: UUID?
     public var dialog: BrowserDialog?
+    public var pointer: BrowserPointerState?
     public var text: String?
     public var byteCount: Int64?
     public var filename: String?

@@ -77,6 +77,17 @@ import NoodleCore
         let auth = try await cli(["eval"] + tab + ["--text", "return (await (await fetch('/auth-state')).json()).authenticated;"])
         guard auth["value"] as? Bool == true else { throw BrowserError("Broker tab did not share the signed-in profile.") }
         if !args.contains("--webmcp-only") {
+            let moved = try await cli(["move"] + tab + ["--target", "#click"])
+            guard (moved["pointer"] as? [String: Any])?["visible"] as? Bool == true else { throw BrowserError("CLI pointer state missing.") }
+            let hovered = try await cli(["eval"] + tab + ["--text", "return document.querySelector('#click').matches(':hover');"])
+            guard hovered["value"] as? Bool == true else { throw BrowserError("CLI hover did not reach the page.") }
+            _ = try await cli(["click"] + tab + ["--target", "#click", "--count", "2"])
+            let clicked = try await cli(["eval"] + tab + ["--text", "return document.querySelector('#click').dataset.count;"])
+            guard clicked["value"] as? String == "2" else { throw BrowserError("CLI double click did not reach the page.") }
+            _ = try await cli(["mouse-reset"] + tab)
+            let pointerStatus = try await cli(["status"] + tab)
+            guard (pointerStatus["pointer"] as? [String: Any])?["visible"] as? Bool == false else { throw BrowserError("CLI pointer reset failed.") }
+            print("PASS managed CLI pointer move, native hover, double click and reset")
             let history = try await cli(["history"] + browser + ["--query", "history-marker", "--limit", "1", "--offset", "0"])
             guard history["totalCount"] as? Int == 1, (history["history"] as? [[String: Any]])?.count == 1 else { throw BrowserError("CLI history query failed.") }
             let created = try await cli(["bookmark-add"] + browser + ["--url", "http://127.0.0.1:\(port)/cli-bookmark", "--title", "CLI bookmark"])

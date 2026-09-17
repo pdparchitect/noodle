@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Support isolated build directories and remove development framework search paths from packaged debug builds.
 - Preserve a tab's page size while it is in the background, avoiding unnecessary layout changes when switching tabs.
 - Include custom browser icons in the companion catalogue so Noodle displays the same avatar when assigning browsers to bots.
 - Make the entire tab clickable, including its icon and padding, with a separate close-button target.
@@ -25,6 +26,7 @@
 - Add built-in WebMCP compatibility for JavaScript tools and annotated forms, with CLI discovery/invocation, shared `eval` access, document-scoped tool IDs, validation, cancellation and background human handoffs.
 - Ship a signed, notarized DMG alongside the ZIP, with large app and Applications icons and a drag-to-install layout.
 
+- Add a visible per-tab agent pointer with native hover, primary clicks and double clicks, included in screenshots and page cards while leaving the desktop cursor and application focus alone.
 - Use the suite's shared version-driven release pipeline, including signing, notarization, signed updates, an independent download channel and verified-artifact recovery.
 - Add independent Show in Dock and Show in Menu Bar settings, with a menu for opening the library and saved browsers using the app’s symbol. Dock visibility defaults to on and menu bar visibility to off.
 - Add browser page reference files and the agent `present` command, with a saved screenshot in Noodle and opening in the original profile and tab when available.

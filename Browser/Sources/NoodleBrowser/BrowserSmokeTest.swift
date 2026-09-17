@@ -70,6 +70,11 @@ import SwiftUI
             } else {
                 try require(library.profiles.isEmpty, "Use a fresh smoke UUID")
                 let profile = try library.create(name: "Smoke authenticated"), other = try library.create(name: "Smoke isolated")
+                if args.contains("--pointer-only") {
+                    try await BrowserPointerSmokeTest.run(runtime: runtime, browserID: profile.id, base: base, root: root)
+                    runtime.shutdown()
+                    print("BROWSER_POINTER_OK"); fflush(stdout); exit(0)
+                }
                 func open(_ id: UUID) async throws -> BrowserTab {
                     var request = BrowserRequest(.open, browserID: id); request.url = base
                     let response = try await runtime.perform(request)
@@ -97,6 +102,7 @@ import SwiftUI
                     runtime.shutdown()
                     print("BROWSER_WEBMCP_OK"); fflush(stdout); exit(0)
                 }
+                try await BrowserPointerSmokeTest.run(runtime: runtime, browserID: profile.id, base: base, root: root)
                 fill.target = "#key"; fill.text = "keys"; _ = try await runtime.perform(fill)
                 try tab.press("Enter")
                 try await eventually("native key") { try await tab.evaluate("return document.querySelector('#key').dataset.key==='Enter';") as? Bool == true }
@@ -241,7 +247,7 @@ import SwiftUI
         try await Task.sleep(for: .milliseconds(300))
         let token = UUID().uuidString
         _ = try await tab.evaluate("""
-            window.tabSwitchProbe={token,origin:performance.timeOrigin,resizes:[]};
+            window.tabSwitchProbe={token,document,resizes:[]};
             window.addEventListener('resize',()=>tabSwitchProbe.resizes.push([innerWidth,innerHeight]));
             document.querySelector('#username').value=token;
             document.documentElement.style.minHeight='3000px';
@@ -261,7 +267,7 @@ import SwiftUI
             try await Task.sleep(for: .milliseconds(100))
         }
         let state = try await tab.evaluate("""
-            return {sameDocument:window.tabSwitchProbe?.token===token && tabSwitchProbe.origin===performance.timeOrigin,
+            return {sameDocument:window.tabSwitchProbe?.token===token && tabSwitchProbe.document===document,
                 form:document.querySelector('#username').value===token,scroll:scrollY, resizes:window.tabSwitchProbe?.resizes};
             """, arguments: ["token": token]) as? [String: Any] ?? [:]
         print("TAB_SWITCH_STATE", state, "resizedWhileHidden:", resizedWhileHidden)

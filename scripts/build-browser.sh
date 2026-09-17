@@ -9,7 +9,7 @@ if [[ "${1:-}" == --both && $# == 1 ]]; then
 fi
 [[ $# == 0 ]] || { print -u2 'Usage: build-browser.sh [--both]'; exit 1; }
 package="$project_root/Browser"
-build_root="$project_root/.build/browser"
+build_root="${NOODLE_BROWSER_BUILD_ROOT:-$project_root/.build/browser}"
 configuration="${NOODLE_BROWSER_CONFIGURATION:-release}"
 data_container="${NOODLE_BROWSER_DATA_CONTAINER:-${NOODLE_DATA_CONTAINER:-development}}"
 case "$data_container" in
@@ -59,7 +59,7 @@ cp "$package/Support/AppSymbol.svg" "$app/Contents/Resources/AppSymbol.svg"
 toolchain="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain"
 otool -l "$app/Contents/MacOS/NoodleBrowser" | awk '/cmd LC_RPATH/ {found=1;next} found && /path / {print $2;found=0}' |
     while IFS= read -r rpath; do
-        if [[ "$rpath" == "$bin_path" || "$rpath" == "$build_root/artifacts/"* || "$rpath" == "$toolchain/"* || "$rpath" == /*/Metal.xctoolchain/* ]]; then
+        if [[ "$rpath" == "$bin_path" || "$rpath" == "$build_root/"* || "$rpath" == "$toolchain/"* || "$rpath" == /*/Metal.xctoolchain/* ]]; then
             install_name_tool -delete_rpath "$rpath" "$app/Contents/MacOS/NoodleBrowser"
         fi
     done

@@ -33,6 +33,7 @@ if [[ "${NOODLE_BROWSER_TEST_WEBMCP_DEMOS:-0}" == 1 ]]; then fixture_args+=(--we
 cat "$artifacts/browser.log"
 profile_root="$HOME/Library/Containers/$identity/Data/Library/Application Support/BrowserSmoke/$smoke_id"
 cp "$profile_root/screenshot.png" "$artifacts/screenshot.png"
+cp "$profile_root/pointer.png" "$artifacts/pointer.png"
 cp "$profile_root/library.png" "$artifacts/library.png"
 cp "$profile_root/history.png" "$artifacts/history.png"
 cp "$profile_root/bookmarks.png" "$artifacts/bookmarks.png"
