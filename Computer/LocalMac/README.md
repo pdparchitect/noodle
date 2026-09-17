@@ -97,10 +97,13 @@ different windows; opening the same window again brings its existing view forwar
 separate documents in the same app. It is a snapshot action, not an automatic
 subscription to future windows. Hidden and minimized guest windows are excluded.
 New views tile alongside existing previews on their host monitor, leaving the
-menu bar and Dock clear. Open All Windows also restores minimized host previews
+menu bar and Dock clear. Individual and bulk pop-outs use the same preferred
+size for each captured window. The layout never enlarges them to fill space;
+it shrinks the group only when the preferred sizes cannot fit. Provisional sizes
+settle as the first capture frames arrive. Open All Windows also restores minimized host previews
 and re-tiles them. Views moved to another monitor stay there. Manual moves and
 resizes are preserved until another view is added or Open All Windows is used;
-incoming capture frames never undo the layout.
+incoming capture frames never undo manual placement.
 
 Root discovery combines the account's Accessibility window hierarchy with its
 visible window list and verified display. Sheets, drawers, popovers and floating

@@ -221,44 +221,72 @@ import XCTest
                        CGRect(x: 1440, y: -500, width: 900, height: 1540)]
         for screen in screens {
             for count in 1...LocalMacWindowCaptureLimits.maximumWindows {
-                let frames = LocalMacWindowLayout.frames(count: count, in: screen)
+                let sizes = (0..<count).map { CGSize(width: 480 + ($0 % 4) * 180, height: 300 + ($0 % 3) * 200) }
+                let frames = LocalMacWindowLayout.frames(sizes: sizes, in: screen)
                 XCTAssertEqual(frames.count, count)
                 for (index, frame) in frames.enumerated() {
                     XCTAssertTrue(screen.contains(frame), "\(count) tiles: \(frame) outside \(screen)")
                     XCTAssertGreaterThan(frame.width, 0)
                     XCTAssertGreaterThan(frame.height, 0)
+                    XCTAssertLessThanOrEqual(frame.width, sizes[index].width)
+                    XCTAssertLessThanOrEqual(frame.height, sizes[index].height)
+                    XCTAssertEqual(frame.width / frame.height, sizes[index].width / sizes[index].height, accuracy: 0.000001)
                     for other in frames.dropFirst(index + 1) { XCTAssertFalse(frame.intersects(other)) }
                 }
             }
         }
-        XCTAssertTrue(LocalMacWindowLayout.frames(count: 0, in: screens[0]).isEmpty)
+        XCTAssertTrue(LocalMacWindowLayout.frames(sizes: [], in: screens[0]).isEmpty)
     }
-    func testNativeTilesSurviveDelayedFramesAndCanBeArrangedAgain() throws {
+    func testPackingPreservesIndividualSizesWhenTheyFit() {
+        let sizes = [CGSize(width: 764, height: 681), CGSize(width: 1100, height: 1120)]
+        let frames = LocalMacWindowLayout.frames(sizes: sizes, in: CGRect(x: 0, y: 0, width: 3440, height: 1370))
+        XCTAssertEqual(frames.map(\.size), sizes)
+        XCTAssertFalse(frames[0].intersects(frames[1]))
+        let smaller = LocalMacWindowLayout.frames(sizes: sizes, in: CGRect(x: 0, y: 0, width: 1024, height: 700))
+        XCTAssertLessThan(smaller[0].width, sizes[0].width)
+        XCTAssertLessThan(smaller[1].height, sizes[1].height)
+    }
+    func testBulkWindowsUseIndividualSizesAfterDelayedFramesAndCanBeArrangedAgain() throws {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.accessory)
         let runtime = LocalMacComputer()
         defer { runtime.close() }
-        let first = LocalMacWindowPreview(window: Self.window)
-        let second = LocalMacWindowPreview(window: Self.second)
-        runtime.windowPreviews = [first.id: first, second.id: second]
+        var first = LocalMacWindowPreview(window: Self.window)
+        var second = LocalMacWindowPreview(window: Self.second)
+        let firstGeometry = LocalMacWindowFrame(previewID: first.id,
+            bounds: CGRect(x: 0, y: 0, width: 480, height: 300), width: 960, height: 600)
+        let secondGeometry = LocalMacWindowFrame(previewID: second.id,
+            bounds: CGRect(x: 0, y: 0, width: 500, height: 340), width: 1000, height: 680)
         let presenter = runtime.windowPresenter
+        // Record the real sizes produced by popping each source individually.
+        first.geometry = firstGeometry; runtime.windowPreviews[first.id] = first
+        presenter.show(first.id, bringToFront: false)
+        let firstSize = try XCTUnwrap(presenter.windows[first.id]).frame.size
+        runtime.closeWindowPreview(first.id)
+        second.geometry = secondGeometry; runtime.windowPreviews[second.id] = second
+        presenter.show(second.id, bringToFront: false)
+        let secondSize = try XCTUnwrap(presenter.windows[second.id]).frame.size
+        runtime.closeWindowPreview(second.id)
+        first.geometry = nil; second.geometry = nil
+        runtime.windowPreviews = [first.id: first, second.id: second]
         presenter.show(first.id, bringToFront: false)
         presenter.show(second.id, bringToFront: false)
         let firstWindow = try XCTUnwrap(presenter.windows[first.id])
         let secondWindow = try XCTUnwrap(presenter.windows[second.id])
-        let firstFrame = firstWindow.frame, secondFrame = secondWindow.frame
-        XCTAssertFalse(firstFrame.intersects(secondFrame))
+        XCTAssertFalse(firstWindow.frame.intersects(secondWindow.frame))
         let screen = try XCTUnwrap(firstWindow.screen?.visibleFrame)
-        XCTAssertTrue(screen.contains(firstFrame)); XCTAssertTrue(screen.contains(secondFrame))
         // Both first frames can arrive after the entire batch has been opened.
-        for id in [second.id, first.id] {
-            runtime.windowPreviews[id]?.geometry = .init(previewID: id,
-                bounds: CGRect(x: 0, y: 0, width: 2400, height: 1600), width: 2400, height: 1600)
-            presenter.sync(id)
+        for geometry in [secondGeometry, firstGeometry] {
+            runtime.windowPreviews[geometry.previewID]?.geometry = geometry
+            presenter.sync(geometry.previewID)
+            XCTAssertFalse(firstWindow.frame.intersects(secondWindow.frame))
         }
-        XCTAssertEqual(firstWindow.frame, firstFrame); XCTAssertEqual(secondWindow.frame, secondFrame)
+        XCTAssertEqual(firstWindow.frame.size, firstSize); XCTAssertEqual(secondWindow.frame.size, secondSize)
+        let firstFrame = firstWindow.frame, secondFrame = secondWindow.frame
+        XCTAssertTrue(screen.contains(firstFrame)); XCTAssertTrue(screen.contains(secondFrame))
         // A repeat individual open preserves a manual arrangement; bulk open restores tiles.
         firstWindow.setFrame(secondFrame, display: false)
+        presenter.sync(first.id); presenter.sync(second.id)
         presenter.show(first.id, bringToFront: false)
         XCTAssertEqual(firstWindow.frame, secondFrame)
         presenter.arrange(restoreMinimized: true)
