@@ -94,7 +94,7 @@ import ScreenCaptureKit
               let geometry = geometries.last(where: { $0.geometryID == input.geometryID }) else {
             throw LocalMacError("The window preview changed. Try again.")
         }
-        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == target.pid else {
+        guard AccountWindowFocus.isFrontmost(target.pid, session: session) else {
             throw LocalMacError("Return to the desktop to focus this window.")
         }
         return geometry

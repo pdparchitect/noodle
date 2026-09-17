@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Recover Focus Window and its input after a Local Mac restart when macOS omits the frontmost app, using verified accessibility focus within the assigned account.
 - Use the same compact toolbar shadow as Noodle and Applet, keeping desktop and terminal content clear.
 - Focus the existing library window when opening computer attachments, selecting their computer without presenting the window again.
 - Include the desktop helper's Apple Events entitlement and usage description so Local Mac commands can request approval to automate apps.
