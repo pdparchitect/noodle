@@ -36,7 +36,7 @@ final class Apple27LiveTests: XCTestCase {
         let session = backend.session(tools: [LargeResult(calls: calls)],
             instructions: "Read the report once, then answer with its final status. Do not request it again.", requireTool: true)
         let response = try await session.respond(to: "Read the report and give me its final status.",
-            options: .init(sampling: .greedy, maximumResponseTokens: 128))
+            options: .init(samplingMode: .greedy, maximumResponseTokens: 128))
         XCTAssertTrue(response.content.lowercased().contains("saffron"), response.content)
         let count = await calls.count
         XCTAssertEqual(count, 1)

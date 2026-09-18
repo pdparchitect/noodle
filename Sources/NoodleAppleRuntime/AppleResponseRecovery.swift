@@ -35,7 +35,7 @@ enum AppleResponseRecovery {
             onActivity()
             await onEvent(.status("Generating response"))
             let response = try await session.streamResponse(to: next,
-                options: GenerationOptions(sampling: .greedy, maximumResponseTokens: responseTokens)).collect()
+                options: GenerationOptions(samplingMode: .greedy, maximumResponseTokens: responseTokens)).collect()
             try Task.checkCancellation()
             let incomplete = isIncomplete(response.transcriptEntries)
             let empty = response.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
