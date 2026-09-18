@@ -65,6 +65,25 @@ import XCTest
         XCTAssertEqual(policies, [.accessory, .accessory, .accessory])
     }
 
+    func testHiddenDockChoiceIsRestoredAfterLaunchServicesResetsThePolicy() throws {
+        var current = NSApplication.ActivationPolicy.regular
+        var policies: [NSApplication.ActivationPolicy] = []
+        let settings = CompanionAppVisibility(defaults: try isolatedDefaults(),
+            setPolicy: { policies.append($0); current = $0 }, currentPolicy: { current })
+        settings.restoreDockVisibility()
+        XCTAssertTrue(policies.isEmpty, "Visibility must not change before launch")
+        settings.start()
+        settings.showInDock = false
+        XCTAssertEqual(policies, [.regular, .accessory])
+        settings.restoreDockVisibility()
+        XCTAssertEqual(policies.count, 2, "A matching policy must not be applied again")
+
+        current = .regular // An open or reopen request restored the bundle's type.
+        settings.restoreDockVisibility()
+        XCTAssertEqual(policies, [.regular, .accessory, .accessory])
+        XCTAssertEqual(current, .accessory)
+    }
+
     private func isolatedDefaults() throws -> UserDefaults {
         let name = "NoodleVisibilityTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: name))

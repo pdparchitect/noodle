@@ -32,13 +32,17 @@ import SwiftUI
 
     private let defaults: UserDefaults
     private let setPolicy: @MainActor (NSApplication.ActivationPolicy) -> Void
+    private let currentPolicy: @MainActor () -> NSApplication.ActivationPolicy
     private var started = false
     private var permitsDock = true
+    private var updateObserver: NSObjectProtocol?
 
     public init(defaults: UserDefaults = .standard,
-                setPolicy: @escaping @MainActor (NSApplication.ActivationPolicy) -> Void = CompanionAppVisibility.setApplicationPolicy) {
+                setPolicy: @escaping @MainActor (NSApplication.ActivationPolicy) -> Void = CompanionAppVisibility.setApplicationPolicy,
+                currentPolicy: @escaping @MainActor () -> NSApplication.ActivationPolicy = { NSApplication.shared.activationPolicy() }) {
         self.defaults = defaults
         self.setPolicy = setPolicy
+        self.currentPolicy = currentPolicy
         dockVisible = defaults.object(forKey: Self.dockKey) as? Bool ?? true
         menuBarVisible = defaults.object(forKey: Self.menuBarKey) as? Bool ?? false
     }
@@ -48,10 +52,22 @@ import SwiftUI
         self.permitsDock = permitsDock
         started = true
         applyDockVisibility()
+        // Launch Services resets a running app to its Info.plist type whenever it
+        // delivers an open or reopen request, including background provider starts.
+        if updateObserver == nil {
+            updateObserver = NotificationCenter.default.addObserver(
+                forName: NSApplication.didUpdateNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.restoreDockVisibility() }
+            }
+        }
     }
 
-    private func applyDockVisibility() {
-        setPolicy(showInDock && permitsDock ? .regular : .accessory)
+    private var policy: NSApplication.ActivationPolicy { showInDock && permitsDock ? .regular : .accessory }
+
+    private func applyDockVisibility() { setPolicy(policy) }
+
+    func restoreDockVisibility() {
+        if started, currentPolicy() != policy { applyDockVisibility() }
     }
 
     public static func setApplicationPolicy(_ policy: NSApplication.ActivationPolicy) {

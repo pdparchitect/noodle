@@ -27,6 +27,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Keep Noodle Browser, Noodle Computer and Noodle Applet out of the Dock and app switcher when Show in Dock is off; opening one of their windows or a request from Noodle no longer brings the Dock icon back.
 - Keep the Read more reader open after saving an annotation so more annotations can be added.
 - Keep Noodle Browser's Downloads title at the same height as the History and Bookmarks titles so it no longer shifts when switching views.
 - Build Noodle Applet with the selected Xcode SDK recorded in the app, so builds made with Xcode 27 keep the current macOS appearance instead of falling back to the legacy one.
