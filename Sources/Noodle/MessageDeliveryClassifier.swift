@@ -27,6 +27,12 @@ struct MessageDeliveryClassifier: MessageDeliveryClassifying {
         if #available(macOS 26.0, *), isAvailable {
             // Use a fresh session so one conversation cannot influence another.
             let session = LanguageModelSession()
+            // The macOS 26 SDK used by CI predates the samplingMode label.
+            #if canImport(FoundationModels, _version: 2)
+            let options = GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 16)
+            #else
+            let options = GenerationOptions(sampling: .greedy, maximumResponseTokens: 16)
+            #endif
             let response = try await session.respond(to: """
                 A coding assistant is currently working on a task. Classify the intent of the user's new message into one category:
                 stop: stop or pause the current work
@@ -39,7 +45,7 @@ struct MessageDeliveryClassifier: MessageDeliveryClassifying {
                 \(context.prompt)
                 Classify the new message.
                 """, generating: MessageDeliveryIntent.self,
-                options: GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 16))
+                options: options)
             switch response.content {
             case .stop, .correction, .emergency: return true
             case .additionalTask, .acknowledgement, .question, .unclear: return false

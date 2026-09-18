@@ -29,13 +29,19 @@ enum AppleResponseRecovery {
             }
         }
         defer { activity.cancel() }
+        // The macOS 26 SDK used by CI predates the samplingMode label.
+        #if canImport(FoundationModels, _version: 2)
+        let options = GenerationOptions(samplingMode: .greedy, maximumResponseTokens: responseTokens)
+        #else
+        let options = GenerationOptions(sampling: .greedy, maximumResponseTokens: responseTokens)
+        #endif
         var next = prompt
         for attempt in 0...2 {
             try Task.checkCancellation()
             onActivity()
             await onEvent(.status("Generating response"))
             let response = try await session.streamResponse(to: next,
-                options: GenerationOptions(samplingMode: .greedy, maximumResponseTokens: responseTokens)).collect()
+                options: options).collect()
             try Task.checkCancellation()
             let incomplete = isIncomplete(response.transcriptEntries)
             let empty = response.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
