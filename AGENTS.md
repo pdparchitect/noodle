@@ -1,3 +1,7 @@
+# Concurrent edits
+
+Assume that multiple ai agents are editing this project. Don't get surprised.
+
 # Project instructions
 
 ## UI copy
