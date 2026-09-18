@@ -2,9 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Choose a macOS system wallpaper as the background. Choose Background lists the wallpapers already on this Mac, including dynamic ones; wallpapers that System Settings has not downloaded are left out. Reading downloaded wallpapers adds a read-only sandbox exception for macOS's downloaded-wallpaper folder.
+
 ### Changed
 
 - Move the Open Noodlet button into the sidebar's toolbar, after the sidebar toggle, on macOS 26 and later; it returns to the main toolbar while the sidebar is hidden. It now uses the suite's plus icon.
+- Start Create Image from the still image being previewed, however it was chosen, instead of only from Photos and generated images.
+- Explain that an iCloud photo may need downloading when Photos cannot provide the chosen background.
 
 ### Fixed
 

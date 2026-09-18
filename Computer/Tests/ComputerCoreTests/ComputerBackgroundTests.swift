@@ -22,6 +22,32 @@ final class ComputerBackgroundTests: XCTestCase {
         return try library.commit(computer)
     }
 
+    func testChoosingABackgroundReplacesCommittedAndLegacyMedia() async throws {
+        var appearance = ComputerAppearance()
+        appearance.backgroundImage = Data([1])
+        appearance.backgroundFilename = "\(UUID().uuidString).jpg"
+        appearance.backgroundMediaKind = .image
+        appearance.terminalOpacity = 0.5
+
+        appearance.chooseBackground(preset: .ocean, file: nil)
+        XCTAssertEqual(appearance.background, ConversationBackground(preset: .ocean))
+        XCTAssertNil(appearance.backgroundImage)
+        XCTAssertNoThrow(try appearance.validate())
+
+        let source = root.appendingPathComponent("chosen.png")
+        try imageFixture(source, type: .png, count: 1)
+        let file = try await PreparedBackgroundFile.prepare(source)
+        appearance.chooseBackground(preset: .ocean, file: file)
+        XCTAssertEqual(appearance.backgroundFile, file)
+        XCTAssertNil(appearance.backgroundPreset)
+        XCTAssertEqual(appearance.background.mediaKind, .image)
+        XCTAssertNotEqual(appearance.background, ConversationBackground())
+
+        appearance.chooseBackground(preset: nil, file: nil)
+        XCTAssertEqual(appearance.background, ConversationBackground())
+        XCTAssertEqual(appearance.terminalOpacity, 0.5)
+    }
+
     func testLegacyEmbeddedImageAndPresetStillDecode() throws {
         var computer = try commit()
         let url = root.appendingPathComponent("legacy.png")

@@ -25,7 +25,9 @@ assert sdk and int(sdk.group(1))>=26, 'Legacy SDK metadata disables the suite na
 expected={'com.apple.security.app-sandbox':True, 'com.apple.security.network.client':True,
  'com.apple.security.files.user-selected.read-write':True,
  'com.apple.security.application-groups':[info['NoodleBrowserGroup']],
- 'com.apple.security.temporary-exception.mach-lookup.global-name':[identifier+'-spks',identifier+'-spki']}
+ 'com.apple.security.temporary-exception.mach-lookup.global-name':[identifier+'-spks',identifier+'-spki'],
+ # Read-only, and only the folder holding system wallpapers the user has downloaded.
+ 'com.apple.security.temporary-exception.files.home-relative-path.read-only':['/Library/Application Support/com.apple.mobileAssetDesktop/']}
 assert entitlements==expected, 'Unexpected Browser entitlements'
 suffix='.local' if identifier.endswith('.local') else ''
 assert info['NoodleBrowserGroup']==info['NoodleSigningTeam']+'.com.pdparchitect.noodle.browsers'+suffix

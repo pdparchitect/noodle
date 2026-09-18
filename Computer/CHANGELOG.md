@@ -2,10 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- Choose a macOS system wallpaper as the background. Choose Background lists the wallpapers already on this Mac, including dynamic ones; wallpapers that System Settings has not downloaded are left out. Reading downloaded wallpapers adds a read-only sandbox exception for macOS's downloaded-wallpaper folder.
+
 ### Changed
 
 - Tighten the content panel's corner radius so the screen's corners sit evenly inside the window's.
 - Move the Create button into the sidebar's toolbar, after the sidebar toggle; it returns to the window toolbar while the sidebar is hidden.
+- Start Create Image from the still image being previewed, however it was chosen, instead of only from Photos and generated images.
+- Explain that an iCloud photo may need downloading when Photos cannot provide the chosen background.
 
 ## [0.9.0] - 2026-09-18
 

@@ -21,6 +21,7 @@ All notable changes to Noodle are documented here, following
 - Keep Noodle Browser's bookmark Add button enabled on a blank tab, where it starts an empty bookmark.
 - Open Local Models with the installed models and the last known support check already in place instead of a brief checking state, and animate the sheet when its height changes.
 - Remove the sharing note below the bot editor's Computers list.
+- Start Create Image from the still conversation background being previewed, however it was chosen, instead of only from Photos and generated images.
 
 ### Added
 

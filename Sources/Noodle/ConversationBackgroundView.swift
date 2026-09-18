@@ -1,31 +1,17 @@
-import AppKit
-import CoreTransferable
-import PhotosUI
 import SwiftUI
 import NoodleCore
-import UniformTypeIdentifiers
 
 struct ConversationBackgroundSheet: View {
     @Environment(NoodleStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let conversation: BotConversation
-    var draft: Binding<ConversationBackgroundDraft?>? = nil
-    @State private var selected = ConversationBackground()
-    @State private var imageData: Data?
-    @State private var image: NSImage?
-    @State private var preparedFile: PreparedBackgroundFile?
-    @State private var choosingImage = false
-    @State private var choosingPhoto = false
-    @State private var photoSelection: PhotosPickerItem?
+    /// The enclosing editor owns imported media until Save or Cancel.
+    var draft: Binding<BackgroundSelection?>? = nil
+    @State private var selection = BackgroundSelection()
     @State private var busy = false
     @State private var failure: String?
-    @State private var importTask: Task<Void, Never>?
     @State private var loaded = false
-    @State private var originalDraft: ConversationBackgroundDraft?
-
-    private var selection: ConversationBackgroundDraft {
-        ConversationBackgroundDraft(background: selected, imageData: imageData, file: preparedFile)
-    }
+    @State private var original: BackgroundSelection?
 
     var body: some View {
         VStack(spacing: 20) {
@@ -46,53 +32,28 @@ struct ConversationBackgroundSheet: View {
                     busy = true
                     Task {
                         do {
-                            try await store.setBackground(selected, imageData: imageData, file: preparedFile, for: conversation)
+                            try await store.setBackground(selection.background, imageData: nil, file: selection.file, for: conversation)
                             dismiss()
                         } catch { failure = error.localizedDescription; busy = false }
                     }
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.blue)
-                .disabled(busy || selection == originalDraft)
+                .disabled(busy || selection == original)
                 .keyboardShortcut(.defaultAction)
             }
             Text(store.title(for: conversation)).foregroundStyle(.secondary)
             ZStack {
-                ConversationBackgroundView(background: selected,
-                    imageURL: preparedFile?.url ?? store.repository.backgroundImageURL(selected, conversationID: conversation.id), previewImage: image)
+                ConversationBackgroundView(background: selection.background,
+                    imageURL: selection.file?.url ?? store.repository.backgroundImageURL(selection.background, conversationID: conversation.id))
                 VStack(alignment: .leading, spacing: 14) {
                     Text("Make this space your own.").padding(10).background(.regularMaterial, in: Capsule())
                     HStack { Spacer(); Text("Looks good!").padding(10).background(.regularMaterial, in: Capsule()) }
                 }.padding(24)
             }
             .frame(height: 210).clipShape(RoundedRectangle(cornerRadius: 16))
-            .backgroundDropTarget(isBusy: $busy, failure: $failure, onLoad: useFile)
-            HStack(spacing: 12) {
-                choice("Default", background: ConversationBackground())
-                ForEach(ConversationBackgroundPreset.allCases, id: \.self) { preset in
-                    choice(preset.rawValue.capitalized, background: ConversationBackground(preset: preset))
-                }
-            }
-            HStack(spacing: 8) {
-                ImageSourceMenu(
-                    title: "Choose Background…",
-                    chooseFile: { choosingImage = true },
-                    choosePhoto: {
-                        photoSelection = nil
-                        choosingPhoto = true
-                    },
-                    chooseWallpaper: importFile
-                )
-                .frame(minWidth: 0, maxWidth: .infinity)
-
-                if #available(macOS 15.1, *) {
-                    NoodleImagePlaygroundButton(sourceImageData: imageData) { url in
-                        Task { await loadGeneratedImage(at: url) }
-                    }
-                    .frame(minWidth: 0, maxWidth: .infinity)
-                }
-            }
-            .disabled(busy)
+            .backgroundDropTarget(isBusy: $busy, failure: $failure) { selection = .imported($0); failure = nil }
+            BackgroundPicker(selection: $selection, busy: $busy, failure: $failure)
             if busy { ProgressView().controlSize(.small) }
             if let failure { Text(failure).font(.caption).foregroundStyle(.red) }
         }
@@ -100,118 +61,19 @@ struct ConversationBackgroundSheet: View {
         .onAppear {
             guard !loaded else { return }
             loaded = true
-            let initial = draft?.wrappedValue ?? ConversationBackgroundDraft(background: store.background(for: conversation))
-            originalDraft = initial
-            selected = initial.background
-            imageData = initial.imageData
-            image = initial.imageData.flatMap(NSImage.init(data:))
-            preparedFile = initial.file
+            let initial = draft?.wrappedValue ?? BackgroundSelection(background: store.background(for: conversation))
+            original = initial
+            selection = initial
         }
-        .onDisappear { importTask?.cancel(); importTask = nil; preparedFile = nil }
+        .onDisappear { selection.file = nil }
         .interactiveDismissDisabled(busy)
-        .fileImporter(isPresented: $choosingImage, allowedContentTypes: BackgroundMedia.allowedContentTypes) { result in
-            switch result {
-            case .success(let url): importFile(url)
-            case .failure(let error): failure = error.localizedDescription
-            }
-        }
-        .photosPicker(isPresented: $choosingPhoto, selection: $photoSelection,
-            matching: .images, preferredItemEncoding: .current)
-        .task(id: photoSelection) {
-            guard let photoSelection else { return }
-            busy = true
-            failure = nil
-            defer { busy = false }
-            do {
-                guard let photo = try await photoSelection.loadTransferable(type: BackgroundPhoto.self) else {
-                    throw ConversationBackgroundError.invalidImage
-                }
-                guard !Task.isCancelled else { return }
-                try useImage(photo.data)
-            } catch {
-                guard !Task.isCancelled else { return }
-                if let imageError = error as? ConversationBackgroundError {
-                    failure = imageError.localizedDescription
-                } else {
-                    failure = "Photos couldn’t provide this image. If it’s in iCloud, open it in Photos and let it download, then try again. You can also use Choose Background → Choose File."
-                }
-            }
-        }
-    }
-
-    private func importFile(_ url: URL) {
-        busy = true
-        importTask = Task {
-            do {
-                let file = try await Task.detached { try await PreparedBackgroundFile.prepare(url) }.value
-                guard !Task.isCancelled else { return }
-                useFile(file)
-            } catch { if !Task.isCancelled { failure = error.localizedDescription } }
-            busy = false
-        }
-    }
-
-    private func useFile(_ file: PreparedBackgroundFile) {
-        preparedFile = file
-        imageData = nil; image = nil
-        selected = ConversationBackground(imageFilename: "preview", mediaKind: file.kind)
-        failure = nil
-    }
-
-    private func useImage(_ data: Data) throws {
-        guard data.count <= 50 * 1024 * 1024, let preview = NSImage(data: data) else {
-            throw ConversationBackgroundError.invalidImage
-        }
-        imageData = data
-        preparedFile = nil
-        image = preview
-        selected = ConversationBackground(imageFilename: "preview")
-        failure = nil
-    }
-
-    @MainActor
-    private func loadGeneratedImage(at url: URL) async {
-        busy = true
-        failure = nil
-        defer { busy = false }
-
-        do {
-            let data = try await Task.detached(priority: .userInitiated) {
-                try Data(contentsOf: url)
-            }.value
-            try useImage(data)
-        } catch {
-            failure = error.localizedDescription
-        }
-    }
-
-    private func choice(_ title: String, background: ConversationBackground) -> some View {
-        Button {
-            selected = background; imageData = nil; image = nil; preparedFile = nil; failure = nil
-        } label: {
-            VStack(spacing: 6) {
-                ConversationBackgroundView(background: background)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48).clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected == background ? Color.accentColor : .clear, lineWidth: 2))
-                Text(title).font(.caption)
-            }
-            // The wallpaper artwork intentionally ignores input. Give the
-            // enclosing label its own hit area, including the swatch and gaps.
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .frame(minWidth: 0, maxWidth: .infinity)
-        .accessibilityLabel(title)
-        .accessibilityValue(selected == background ? "Selected" : "Not selected")
-        .disabled(busy)
     }
 }
 
 struct ConversationBackgroundSettingsRow: View {
     @Environment(NoodleStore.self) private var store
     let conversation: BotConversation
-    @Binding var draft: ConversationBackgroundDraft?
+    @Binding var draft: BackgroundSelection?
     @State private var editing = false
 
     var body: some View {

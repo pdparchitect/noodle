@@ -10,6 +10,12 @@ public struct SystemWallpaper: Equatable, Sendable {
     public let url: URL
     public let thumbnailURL: URL?
 
+    public init(name: String, url: URL, thumbnailURL: URL?) {
+        self.name = name
+        self.url = url
+        self.thumbnailURL = thumbnailURL
+    }
+
     public static let catalogue = URL(fileURLWithPath: "/System/Library/Desktop Pictures", isDirectory: true)
 
     /// Sandboxed apps see a container as their home, so resolve the real one.

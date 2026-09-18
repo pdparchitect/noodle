@@ -30,6 +30,14 @@ public struct ComputerAppearance: Codable, Equatable, Sendable {
             mediaKind: backgroundFile?.kind ?? backgroundMediaKind)
     }
 
+    /// Choosing a preset or an imported file replaces the committed media and
+    /// any legacy inline image.
+    public mutating func chooseBackground(preset: ConversationBackgroundPreset?, file: PreparedBackgroundFile?) {
+        backgroundFile = file
+        backgroundPreset = file == nil ? preset?.rawValue : nil
+        backgroundImage = nil; backgroundFilename = nil; backgroundMediaKind = nil
+    }
+
     public func backgroundURL(in directory: URL?) -> URL? {
         if let backgroundFile { return backgroundFile.url }
         guard let name = backgroundFilename, Self.validBackgroundFilename(name) else { return nil }

@@ -214,12 +214,8 @@ struct ComputerAppearanceSheet: View {
     let directory: URL?
     @Environment(\.dismiss) private var dismiss
     @State private var draft: ComputerAppearance
-    @State private var imageData: Data?
     @State private var failure: String?
     @State private var busy = false
-    @State private var choosingFile = false
-    @State private var choosingPhoto = false
-    @State private var photoSelection: PhotosPickerItem?
     init(appearance: Binding<ComputerAppearance>, directory: URL? = nil) {
         self.directory = directory
         _appearance = appearance; _draft = State(initialValue: appearance.wrappedValue)
@@ -240,26 +236,8 @@ struct ComputerAppearanceSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .padding(16)
             }.frame(height: 150).clipShape(RoundedRectangle(cornerRadius: 16))
-            .backgroundDropTarget(isBusy: $busy, failure: $failure, onLoad: useBackground)
-            HStack(spacing: 12) {
-                choice(nil)
-                ForEach(ConversationBackgroundPreset.allCases, id: \.self) { choice($0.rawValue) }
-            }
-            HStack(spacing: 8) {
-                ImageSourceMenu(
-                    title: "Choose Background…",
-                    chooseFile: { choosingFile = true },
-                    choosePhoto: {
-                        photoSelection = nil; choosingPhoto = true
-                    },
-                    chooseWallpaper: importFile
-                ).frame(minWidth: 0, maxWidth: .infinity)
-                NoodleImagePlaygroundButton(sourceImageData: imageData) { url in
-                    busy = true
-                    Task { await loadGeneratedImage(url) }
-                }.frame(minWidth: 0, maxWidth: .infinity)
-            }
-            .disabled(busy)
+            .backgroundDropTarget(isBusy: $busy, failure: $failure) { selection.wrappedValue = .imported($0); failure = nil }
+            BackgroundPicker(selection: selection, busy: $busy, failure: $failure)
             GroupBox("Terminal") {
                 VStack(alignment: .leading, spacing: 12) {
                     colourRow("Text colour", key: \.terminalForeground)
@@ -281,59 +259,11 @@ struct ComputerAppearanceSheet: View {
             if let failure { Text(failure).font(.caption).foregroundStyle(.red) }
         }.padding(24).frame(width: 520).controlSize(.regular).noodleSheetSizing()
             .interactiveDismissDisabled(busy)
-            .fileImporter(isPresented: $choosingFile, allowedContentTypes: BackgroundMedia.allowedContentTypes) { result in
-                switch result {
-                case .success(let url): importFile(url)
-                case .failure(let error): failure = error.localizedDescription
-                }
-            }
-            .photosPicker(isPresented: $choosingPhoto, selection: $photoSelection, matching: .images, preferredItemEncoding: .current)
-            .task(id: photoSelection) {
-                guard let photoSelection else { return }
-                busy = true; failure = nil
-                defer { busy = false }
-                do {
-                    guard let photo = try await photoSelection.loadTransferable(type: BackgroundPhoto.self) else {
-                        throw ConversationBackgroundError.invalidImage
-                    }
-                    guard !Task.isCancelled else { return }
-                    let file = try await Task.detached { try PreparedBackgroundFile.prepare(imageData: photo.data) }.value
-                    guard !Task.isCancelled else { return }
-                    useBackground(file)
-                    imageData = photo.data
-                } catch { if !Task.isCancelled { failure = error.localizedDescription } }
-            }
     }
-    private func importFile(_ url: URL) {
-        busy = true
-        Task {
-            defer { busy = false }
-            do { useBackground(try await Task.detached { try await PreparedBackgroundFile.prepare(url) }.value) }
-            catch { failure = error.localizedDescription }
-        }
-    }
-    private func useBackground(_ file: PreparedBackgroundFile) {
-        imageData = nil
-        draft.backgroundFile = file
-        draft.backgroundImage = nil; draft.backgroundPreset = nil
-        draft.backgroundFilename = nil; draft.backgroundMediaKind = nil
-        failure = nil
-    }
-    private func loadGeneratedImage(_ url: URL) async {
-        defer { busy = false }
-        do {
-            let (file, data) = try await Task.detached {
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                guard (try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0) <= 50 * 1024 * 1024 else {
-                    throw ConversationBackgroundError.invalidImage
-                }
-                let data = try Data(contentsOf: url)
-                return (try PreparedBackgroundFile.prepare(imageData: data), data)
-            }.value
-            useBackground(file)
-            imageData = data
-        } catch { failure = error.localizedDescription }
+    /// The picker's selection, stored in the draft.
+    private var selection: Binding<BackgroundSelection> {
+        Binding(get: { BackgroundSelection(background: draft.background, file: draft.backgroundFile) },
+                set: { draft.chooseBackground(preset: $0.background.preset, file: $0.file) })
     }
     private func colourRow(_ title: String, key: WritableKeyPath<ComputerAppearance, String>) -> some View {
         HStack {
@@ -349,26 +279,6 @@ struct ComputerAppearanceSheet: View {
             draft[keyPath: key] = String(format: "%02X%02X%02X", Int(round(rgb.redComponent * 255)),
                 Int(round(rgb.greenComponent * 255)), Int(round(rgb.blueComponent * 255)))
         })
-    }
-    private func choice(_ preset: String?) -> some View {
-        var sample = ComputerAppearance()
-        sample.backgroundPreset = preset
-        return Button {
-            draft.backgroundPreset = preset; draft.backgroundImage = nil
-            draft.backgroundFilename = nil; draft.backgroundMediaKind = nil; draft.backgroundFile = nil
-            imageData = nil
-            failure = nil
-        } label: {
-            VStack(spacing: 6) {
-                ComputerWallpaper(appearance: sample).frame(maxWidth: .infinity).frame(height: 48)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(
-                        draft.background.imageFilename == nil && draft.backgroundPreset == preset ? Color.accentColor : .clear, lineWidth: 2))
-                Text(preset?.capitalized ?? "Default").font(.caption)
-            }.contentShape(Rectangle())
-        }.buttonStyle(.plain).frame(minWidth: 0, maxWidth: .infinity).disabled(busy)
-            .accessibilityLabel(preset?.capitalized ?? "Default")
-            .accessibilityValue(draft.background.imageFilename == nil && draft.backgroundPreset == preset ? "Selected" : "Not selected")
     }
 }
 

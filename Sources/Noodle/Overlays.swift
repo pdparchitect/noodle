@@ -248,7 +248,7 @@ struct EditBotSheet: View {
     @State private var browserIDs: Set<UUID> = []
     @State private var confirmingDeletion = false
     @State private var selectedTab = BotEditorTab.general
-    @State private var backgroundDraft: ConversationBackgroundDraft?
+    @State private var backgroundDraft: BackgroundSelection?
     @FocusState private var nameFocused: Bool
 
     init(agent: AgentRecord, initialTab: BotEditorTab = .general) {
@@ -795,7 +795,7 @@ struct GroupInfoSheet: View {
     @State private var name: String
     @State private var publicDescription: String
     @State private var selectedIDs: Set<UUID>
-    @State private var backgroundDraft: ConversationBackgroundDraft?
+    @State private var backgroundDraft: BackgroundSelection?
     @State private var confirmingDeletion = false
     @FocusState private var nameFocused: Bool
 

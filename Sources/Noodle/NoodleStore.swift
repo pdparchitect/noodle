@@ -1030,7 +1030,7 @@ final class NoodleStore {
 
     /// Save the background and enclosing settings together. A failed settings
     /// save restores the previous wallpaper without deleting its media.
-    func saveSettings(background draft: ConversationBackgroundDraft?, for conversation: BotConversation?,
+    func saveSettings(background draft: BackgroundSelection?, for conversation: BotConversation?,
                       saving settings: () -> Bool) -> Bool {
         guard let draft, let conversation else { return settings() }
         struct SettingsSaveFailed: Error {}
@@ -1039,8 +1039,6 @@ final class NoodleStore {
             let saved: ConversationBackground
             if let file = draft.file {
                 saved = try repository.setBackground(conversationID: conversation.id, file: file, commit: commit)
-            } else if let data = draft.imageData {
-                saved = try repository.setBackground(conversationID: conversation.id, imageData: data, commit: commit)
             } else {
                 saved = try repository.setBackground(conversationID: conversation.id, preset: draft.background.preset, commit: commit)
             }

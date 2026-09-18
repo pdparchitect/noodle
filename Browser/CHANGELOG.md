@@ -6,6 +6,7 @@
 
 - Add an optional description of up to 500 characters to each browser in its editor. Assigned bots see it alongside the name when choosing a browser, the sidebar search matches it, and page-preview cards leave it out.
 - Open a new tab by double-clicking the empty space in the tab bar; double-clicking a tab still only selects it.
+- Choose a macOS system wallpaper as the background. Choose Background lists the wallpapers already on this Mac, including dynamic ones; wallpapers that System Settings has not downloaded are left out. Reading downloaded wallpapers adds a read-only sandbox exception for macOS's downloaded-wallpaper folder.
 
 ### Changed
 
@@ -18,6 +19,8 @@
 - Delete single history entries and downloads from their right-click menus, alongside the bookmark Edit and Delete items; every delete asks for confirmation, and deleting a download also removes its stored file. Clicking a completed download saves it.
 - Make the address bar wider and slightly taller.
 - Keep the bookmark Add button enabled on a blank tab, where it starts an empty bookmark.
+- Start Create Image from the still image being previewed, however it was chosen, instead of only from Photos and generated images.
+- Explain that an iCloud photo may need downloading when Photos cannot provide the chosen background.
 
 ### Fixed
 
