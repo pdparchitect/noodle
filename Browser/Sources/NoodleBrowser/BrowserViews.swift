@@ -5,7 +5,7 @@ import NoodleWallpaper
 import SwiftUI
 import WebKit
 
-private let browserTabCornerRadius: CGFloat = 12
+private let browserTabCornerRadius: CGFloat = 7
 private let browserTabInset: CGFloat = 8
 
 struct BrowserProfileIcon: View {
