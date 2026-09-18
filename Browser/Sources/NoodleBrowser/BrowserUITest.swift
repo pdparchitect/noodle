@@ -36,24 +36,30 @@ import ScreenCaptureKit
             }
             window.setContentSize(.init(width: 1180, height: 760))
             try await Task.sleep(for: .milliseconds(300))
+            // An aborted run can leave a collapsed sidebar persisted; start expanded.
+            if let show = sidebarToggle(window, "Show Sidebar") {
+                press(show)
+                try await Task.sleep(for: .milliseconds(600))
+            }
             try await snapshot(window, to: library.root.appendingPathComponent("browser.png"))
             guard !window.isOpaque, let content = window.contentView,
                   containsNativeSidebar(in: content) else {
                 throw BrowserError("Browser must use Computer's native glass sidebar and transparent window compositing.")
             }
             try await snapshot(window, to: library.root.appendingPathComponent("browser.png"))
-            try verifyCreatePlacement(window, toggle: "Hide Sidebar")
+            try verifyCreatePlacement(window, collapsed: false)
             try await verifyWebSurface(presentation, window: window, root: library.root)
             try await verifyTabTargets(presentation, window: window)
-            if let sidebar = window.toolbar?.items.first(where: { $0.label == "Hide Sidebar" })?.view,
-               let toggle = elements(sidebar).first(where: { $0 is NSButton || attribute($0, .role) as? String == "AXButton" }) {
-                press(toggle)
-                try await Task.sleep(for: .milliseconds(400))
-                try await snapshot(window, to: library.root.appendingPathComponent("browser-collapsed.png"))
-                try verifyCreatePlacement(window, toggle: "Show Sidebar")
-                press(toggle)
-                try await Task.sleep(for: .milliseconds(400))
-            } else { throw BrowserError("Missing native sidebar toggle.") }
+            guard let hide = sidebarToggle(window, "Hide Sidebar") else { throw BrowserError("Missing native sidebar toggle.") }
+            press(hide)
+            try await Task.sleep(for: .milliseconds(400))
+            try await snapshot(window, to: library.root.appendingPathComponent("browser-collapsed.png"))
+            try verifyCreatePlacement(window, collapsed: true)
+            // The expanded sidebar's own toggle is hidden with it; the collapsed one must remain.
+            guard let show = sidebarToggle(window, "Show Sidebar") else { throw BrowserError("Missing sidebar toggle while collapsed.") }
+            press(show)
+            try await Task.sleep(for: .milliseconds(600))
+            try verifyCreatePlacement(window, collapsed: false)
             presentation.mode = .history
             try await Task.sleep(for: .milliseconds(350))
             try await snapshot(window, to: library.root.appendingPathComponent("history.png"))
@@ -140,14 +146,21 @@ import ScreenCaptureKit
             exit(0)
         } catch { fputs("BROWSER_UI_FAILED: \(error.localizedDescription)\n", stderr); exit(1) }
     }
-    /// Create Browser belongs to the sidebar's toolbar section: the sidebar toggle
-    /// stays between it and Back, so it never joins the navigation buttons.
-    private static func verifyCreatePlacement(_ window: NSWindow, toggle: String) throws {
-        let frames = ["Create", toggle, "Back"].compactMap { label in
-            window.toolbar?.items.first(where: { $0.label == label })?.view.map { $0.convert($0.bounds, to: nil) }
+    /// Create Browser follows the sidebar toggle inside the sidebar's toolbar section and
+    /// leaves with the sidebar, so it never joins Back and Forward.
+    private static func verifyCreatePlacement(_ window: NSWindow, collapsed: Bool) throws {
+        let items = (window.toolbar?.items ?? []).filter(\.isVisible)
+        let labels = collapsed ? ["Show Sidebar", "Back"] : ["Hide Sidebar", "Create", "Back"]
+        let frames = labels.compactMap { label in items.first(where: { $0.label == label })?.view.map { $0.convert($0.bounds, to: nil) } }
+        print("BROWSER_UI_CREATE_PLACEMENT: \(labels)=\(frames)")
+        guard frames.count == labels.count, items.contains(where: { $0.label == "Create" }) != collapsed,
+              zip(frames, frames.dropFirst()).allSatisfy({ $0.maxX < $1.minX }) else {
+            throw BrowserError("Create Browser must follow the sidebar toggle, apart from Back and Forward: \(labels)=\(frames).")
         }
-        guard frames.count == 3, frames[0].maxX < frames[1].minX, frames[1].maxX < frames[2].minX else {
-            throw BrowserError("Create Browser must sit beside the sidebar toggle, apart from Back and Forward: \(frames).")
+    }
+    private static func sidebarToggle(_ window: NSWindow, _ label: String) -> NSObject? {
+        (window.toolbar?.items.first(where: { $0.label == label && $0.isVisible })?.view).flatMap { view in
+            elements(view).first(where: { $0 is NSButton || attribute($0, .role) as? String == "AXButton" })
         }
     }
     private static func containsNativeSidebar(in view: NSView) -> Bool {

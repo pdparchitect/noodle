@@ -62,11 +62,22 @@ struct BrowserLibraryView: View {
             .overlay {
                 if !library.profiles.isEmpty && filtered.isEmpty { ContentUnavailableView.search(text: search) }
             }
-            // Declared on the sidebar column so it sits beside the sidebar toggle,
-            // apart from the detail view's Back and Forward buttons.
+            // SwiftUI places its own sidebar toggle last in the sidebar's toolbar
+            // section, so while the sidebar is open the column declares the toggle
+            // itself to let Create follow it, apart from Back and Forward. Column
+            // items are hidden with the sidebar; the system toggle returns then.
+            .toolbar(removing: columnVisibility == .detailOnly ? nil : .sidebarToggle)
             .toolbar {
-                ToolbarItem {
-                    Button { presentation.showingNew = true } label: { Label("Create", systemImage: "plus") }.help("Create Browser")
+                if columnVisibility != .detailOnly {
+                    ToolbarSpacer(.flexible)
+                    ToolbarItem {
+                        Button { withAnimation { columnVisibility = .detailOnly } } label: { Label("Hide Sidebar", systemImage: "sidebar.leading") }
+                            .help("Hide Sidebar")
+                    }
+                    ToolbarSpacer(.fixed)
+                    ToolbarItem {
+                        Button { presentation.showingNew = true } label: { Label("Create", systemImage: "plus") }.help("Create Browser")
+                    }
                 }
             }
         } detail: {
