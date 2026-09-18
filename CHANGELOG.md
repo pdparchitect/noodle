@@ -6,9 +6,14 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- Move Noodle Browser's Create button into the sidebar's toolbar beside the sidebar toggle, apart from Back and Forward.
+
 ### Added
 
 - Give each Noodle Browser an optional description of what it is for. Assigned bots receive it with the browser's name from `browser list` so they choose the right browser; the bot editor's browser picker shows and searches it. Page-preview cards never include it.
+- Open a new tab by double-clicking the empty space in Noodle Browser's tab bar; double-clicking a tab still only selects it.
 
 ### Fixed
 

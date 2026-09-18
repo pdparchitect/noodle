@@ -62,6 +62,13 @@ struct BrowserLibraryView: View {
             .overlay {
                 if !library.profiles.isEmpty && filtered.isEmpty { ContentUnavailableView.search(text: search) }
             }
+            // Declared on the sidebar column so it sits beside the sidebar toggle,
+            // apart from the detail view's Back and Forward buttons.
+            .toolbar {
+                ToolbarItem {
+                    Button { presentation.showingNew = true } label: { Label("Create", systemImage: "plus") }.help("Create Browser")
+                }
+            }
         } detail: {
             if let profile = presentation.profile {
                 BrowserDetailView(presentation: presentation, profile: profile, sidebarCollapsed: columnVisibility == .detailOnly)
@@ -81,11 +88,6 @@ struct BrowserLibraryView: View {
         }
         .background(ConversationWindowCompositing())
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button { presentation.showingNew = true } label: { Label("Create", systemImage: "plus") }.help("Create Browser")
-            }
-        }
         .onAppear { columnVisibility = sidebarVisible ? .all : .detailOnly }
         .onChange(of: columnVisibility) { _, value in sidebarVisible = value != .detailOnly }
         .onChange(of: library.profiles.map(\.id)) { _, ids in
@@ -149,6 +151,7 @@ private struct BrowserDetailView: View {
     @ObservedObject var presentation: BrowserPresentation
     let profile: BrowserProfile
     let sidebarCollapsed: Bool
+    @State private var tabStripWidth: CGFloat = 0
     private var selected: BrowserTab? { presentation.currentTab }
 
     var body: some View {
@@ -240,10 +243,17 @@ private struct BrowserDetailView: View {
                         }.buttonStyle(.plain)
                             .background(profile.selectedTabID == tab.id ? Color.primary.opacity(0.10) : Color.clear,
                                 in: RoundedRectangle(cornerRadius: browserContentCornerRadius - browserTabInset, style: .continuous))
+                            .fixedSize()
                     }
-                }
-            }
+                    // Only the space after the last tab opens a tab; the tabs are
+                    // siblings, so double-clicking one never reaches this gesture.
+                    Color.clear.frame(height: 32).contentShape(Rectangle())
+                        .onTapGesture(count: 2) { presentation.newTab() }
+                        .accessibilityHidden(true)
+                }.frame(minWidth: tabStripWidth, alignment: .leading)
+            }.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { tabStripWidth = $0 }
             Button { presentation.newTab() } label: { Image(systemName: "plus") }.buttonStyle(.borderless).help("New Tab").padding(.horizontal, 8)
+                .accessibilityIdentifier("browser.tab.new")
         }.padding(browserTabInset)
     }
 }

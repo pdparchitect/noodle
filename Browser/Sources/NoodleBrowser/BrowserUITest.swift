@@ -42,6 +42,7 @@ import ScreenCaptureKit
                 throw BrowserError("Browser must use Computer's native glass sidebar and transparent window compositing.")
             }
             try await snapshot(window, to: library.root.appendingPathComponent("browser.png"))
+            try verifyCreatePlacement(window, toggle: "Hide Sidebar")
             try await verifyWebSurface(presentation, window: window, root: library.root)
             try await verifyTabTargets(presentation, window: window)
             if let sidebar = window.toolbar?.items.first(where: { $0.label == "Hide Sidebar" })?.view,
@@ -49,6 +50,7 @@ import ScreenCaptureKit
                 press(toggle)
                 try await Task.sleep(for: .milliseconds(400))
                 try await snapshot(window, to: library.root.appendingPathComponent("browser-collapsed.png"))
+                try verifyCreatePlacement(window, toggle: "Show Sidebar")
                 press(toggle)
                 try await Task.sleep(for: .milliseconds(400))
             } else { throw BrowserError("Missing native sidebar toggle.") }
@@ -133,10 +135,20 @@ import ScreenCaptureKit
             try await snapshot(window, to: library.root.appendingPathComponent("empty-library.png"))
             window.close()
             delegate.runtime.shutdown()
-            print("BROWSER_UI_PASSED: native sidebar, toolbar, tab padding input, independent tab closing, collapsed content, icon/edit sheets, Settings, Update and standard menus")
+            print("BROWSER_UI_PASSED: native sidebar, toolbar, tab padding input, empty tab strip double-click, independent tab closing, collapsed content, icon/edit sheets, Settings, Update and standard menus")
             print("BROWSER_UI_ARTIFACTS: \(library.root.path)")
             exit(0)
         } catch { fputs("BROWSER_UI_FAILED: \(error.localizedDescription)\n", stderr); exit(1) }
+    }
+    /// Create Browser belongs to the sidebar's toolbar section: the sidebar toggle
+    /// stays between it and Back, so it never joins the navigation buttons.
+    private static func verifyCreatePlacement(_ window: NSWindow, toggle: String) throws {
+        let frames = ["Create", toggle, "Back"].compactMap { label in
+            window.toolbar?.items.first(where: { $0.label == label })?.view.map { $0.convert($0.bounds, to: nil) }
+        }
+        guard frames.count == 3, frames[0].maxX < frames[1].minX, frames[1].maxX < frames[2].minX else {
+            throw BrowserError("Create Browser must sit beside the sidebar toggle, apart from Back and Forward: \(frames).")
+        }
     }
     private static func containsNativeSidebar(in view: NSView) -> Bool {
         view is NSGlassEffectView || view.subviews.contains(where: containsNativeSidebar)
@@ -196,18 +208,38 @@ import ScreenCaptureKit
             throw BrowserError("Tab padding is outside the fixture content: frame=\(frame), point=\(point).")
         }
         print("BROWSER_UI_TAB_INPUT: active=\(NSApp.isActive) key=\(window.isKeyWindow) frame=\(frame) point=\(point) selected=\(String(describing: presentation.profile?.selectedTabID))")
-        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-            guard let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
-                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-                context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0) else {
-                throw BrowserError("Could not create fixture tab input.")
-            }
-            NSApp.postEvent(event, atStart: false)
-        }
+        try click(point, in: window)
         try await BrowserSmokeTest.eventually("clicking tab padding selects the tab") {
             presentation.profile?.selectedTabID == original.id
         }
         print("BROWSER_UI_TAB_RESULT: active=\(NSApp.isActive) key=\(window.isKeyWindow) selected=\(String(describing: presentation.profile?.selectedTabID))")
+        // Double-clicking opens a tab only from the empty strip, never from a tab.
+        try click(point, in: window, count: 2)
+        try await Task.sleep(for: .milliseconds(500))
+        guard presentation.profile?.tabs.map(\.id) == [original.id, other.id] else {
+            throw BrowserError("Double-clicking a tab opened another tab.")
+        }
+        let frames = ["browser.tab.close.\(other.id)", "browser.tab.new"].compactMap { identifier in
+            elements(content).first(where: { attribute($0, .identifier) as? String == identifier })
+                .flatMap { ($0.value(forKey: "accessibilityFrame") as? NSValue)?.rectValue }
+        }
+        guard frames.count == 2, frames[1].minX - frames[0].maxX > 40 else { throw BrowserError("Missing empty tab strip space.") }
+        let (closeFrame, addFrame) = (frames[0], frames[1])
+        let empty = window.convertPoint(fromScreen: .init(x: (closeFrame.maxX + addFrame.minX) / 2, y: frame.midY))
+        print("BROWSER_UI_TAB_STRIP_INPUT: close=\(closeFrame) add=\(addFrame) point=\(empty)")
+        try click(empty, in: window)
+        try await Task.sleep(for: .milliseconds(500))
+        guard presentation.profile?.tabs.count == 2 else { throw BrowserError("A single click on the empty tab strip opened a tab.") }
+        try click(empty, in: window, count: 2)
+        try await BrowserSmokeTest.eventually("double-clicking the empty tab strip opens a tab") {
+            presentation.profile?.tabs.count == 3
+        }
+        guard let opened = presentation.profile?.tabs.last?.id, presentation.profile?.selectedTabID == opened else {
+            throw BrowserError("The tab opened from the empty tab strip was not selected.")
+        }
+        try presentation.runtime.closeTab(browserID: original.browserID, tabID: opened)
+        presentation.selectTab(original.id)
+        try await Task.sleep(for: .milliseconds(300))
         guard let close = elements(content).first(where: { attribute($0, .identifier) as? String == "browser.tab.close.\(other.id)" }) else {
             throw BrowserError("Missing independent tab close button.")
         }
@@ -216,6 +248,19 @@ import ScreenCaptureKit
             presentation.profile?.tabs.contains(where: { $0.id == other.id }) == false
         }
         guard presentation.profile?.selectedTabID == original.id else { throw BrowserError("Closing another tab changed the selected tab.") }
+    }
+    /// Posts `count` consecutive clicks; events stay in this process.
+    private static func click(_ point: NSPoint, in window: NSWindow, count: Int = 1) throws {
+        for clickCount in 1...count {
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                guard let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                    context: nil, eventNumber: 0, clickCount: clickCount, pressure: type == .leftMouseDown ? 1 : 0) else {
+                    throw BrowserError("Could not create fixture tab input.")
+                }
+                NSApp.postEvent(event, atStart: false)
+            }
+        }
     }
     private static func containsTextField(_ value: String, in view: NSView) -> Bool {
         (view as? NSTextField)?.stringValue == value || view.subviews.contains { containsTextField(value, in: $0) }
