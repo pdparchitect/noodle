@@ -259,12 +259,56 @@ struct RootView: View {
         }
     }
 
+    /// SwiftUI places its own sidebar toggle last in the sidebar's toolbar section, so
+    /// while the sidebar is open it declares the toggle itself to let Create follow it.
+    /// Column items are hidden with the sidebar; the system toggle and the window
+    /// toolbar's Create return then. Toolbar spacers need macOS 26.
+    private var sidebarOwnsToolbar: Bool {
+        if #available(macOS 26.0, *) { return columnVisibility != .detailOnly }
+        return false
+    }
+
+    private var createMenu: some View {
+        Menu {
+            Button("New Bot", systemImage: "person.crop.circle.badge.plus") {
+                store.showNewBot()
+            }
+            .appShortcut(.newBot)
+            .disabled(!store.canCreateBot)
+
+            Button("New Group", systemImage: "person.3.fill") {
+                store.creationSheet = .group
+            }
+            .appShortcut(.newGroup)
+            .disabled(store.agents.isEmpty)
+        } label: {
+            Label("Create", systemImage: "plus")
+        }
+        .help("Create Bot or Group")
+    }
+
+    @ToolbarContentBuilder private var sidebarToolbar: some ToolbarContent {
+        if #available(macOS 26.0, *), sidebarOwnsToolbar {
+            ToolbarSpacer(.flexible)
+            ToolbarItem {
+                Button { withAnimation { columnVisibility = .detailOnly } } label: {
+                    Label("Hide Sidebar", systemImage: "sidebar.leading")
+                }
+                .help("Hide Sidebar")
+            }
+            ToolbarSpacer(.fixed)
+            ToolbarItem { createMenu }
+        }
+    }
+
     private func content(attachmentPreview: AttachmentPreviewController) -> some View {
         @Bindable var store = store
 
         return NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(focusComposer: { composerFocusRequest = UUID() }, focusRequest: sidebarFocusRequest)
                 .navigationSplitViewColumnWidth(min: 280, ideal: 326, max: 380)
+                .toolbar(removing: sidebarOwnsToolbar ? .sidebarToggle : nil)
+                .toolbar { sidebarToolbar }
         } detail: {
             if let conversation = store.selectedConversation {
                 ChatView(conversation: conversation, attachmentPreview: attachmentPreview, composerFocusRequest: composerFocusRequest, focusSidebar: {
@@ -323,23 +367,8 @@ struct RootView: View {
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Menu {
-                    Button("New Bot", systemImage: "person.crop.circle.badge.plus") {
-                        store.showNewBot()
-                    }
-                    .appShortcut(.newBot)
-                    .disabled(!store.canCreateBot)
-
-                    Button("New Group", systemImage: "person.3.fill") {
-                        store.creationSheet = .group
-                    }
-                    .appShortcut(.newGroup)
-                    .disabled(store.agents.isEmpty)
-                } label: {
-                    Label("Create", systemImage: "plus")
-                }
-                .help("Create Bot or Group")
+            if !sidebarOwnsToolbar {
+                ToolbarItem(placement: .navigation) { createMenu }
             }
 
             ToolbarItem(placement: .primaryAction) {
