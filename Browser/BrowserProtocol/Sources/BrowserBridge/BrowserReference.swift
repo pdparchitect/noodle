@@ -14,6 +14,8 @@ public struct BrowserReference: Codable, Hashable, Sendable {
     public init(browser: RemoteBrowser, tabID: UUID, url: String, title: String,
                 capturedAt: Date = Date(), previewImage: Data? = nil) {
         self.browser = browser; self.tabID = tabID; self.url = url; self.title = title
+        // Every conversation member can read a card; the description is for assigned agents.
+        self.browser.description = nil
         // Conversation metadata stores ISO-8601 dates at whole-second precision.
         // Keep its reference identical to the separately encoded document.
         self.capturedAt = Date(timeIntervalSince1970: capturedAt.timeIntervalSince1970.rounded(.down))
@@ -21,6 +23,7 @@ public struct BrowserReference: Codable, Hashable, Sendable {
     }
     public func validate() throws {
         guard version == 1, browser.name.count <= 120, title.utf8.count <= 2048,
+              (browser.description?.count ?? 0) <= RemoteBrowser.maximumDescriptionLength,
               (browser.icon?.count ?? 0) <= 65_536, (previewImage?.count ?? 0) <= 550_000 else {
             throw BrowserError("This browser reference is unsupported or too large.")
         }

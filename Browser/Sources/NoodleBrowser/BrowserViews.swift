@@ -30,7 +30,9 @@ struct BrowserLibraryView: View {
         self.presentation = presentation; library = presentation.library; runtime = presentation.runtime
     }
     private var filtered: [BrowserProfile] {
-        library.profiles.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
+        library.profiles.filter {
+            search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.description?.localizedCaseInsensitiveContains(search) == true
+        }
     }
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -134,7 +136,7 @@ private struct BrowserSidebarRow: View {
                 Text(profile.name).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
                 Text(profile.paused ? "Agents paused" : (profile.tabs.count == 1 ? "1 tab" : "\(profile.tabs.count) tabs"))
                     .font(.system(size: 12.5)).foregroundStyle(.secondary).lineLimit(1)
-            }.frame(maxWidth: .infinity, alignment: .leading)
+            }.frame(maxWidth: .infinity, alignment: .leading).help(profile.description ?? "")
         }.frame(height: 66).contentShape(Rectangle())
             .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10))
             .listRowSeparator(.visible, edges: .bottom).listRowSeparatorTint(Color.primary.opacity(0.12))

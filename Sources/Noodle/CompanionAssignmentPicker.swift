@@ -9,6 +9,8 @@ struct CompanionAssignmentItem: Identifiable {
     let symbol: String
     let colour: Int
     var icon: Data?
+    var detail: String?
+    var tooltip: String { ["\(name) · \(state)", detail].compactMap { $0 }.joined(separator: "\n") }
 }
 
 /// The same assignment controls for Computer and Browser in the bot editor.
@@ -77,7 +79,7 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
                                     }
                                 Text(item.name).font(.caption).lineLimit(2).multilineTextAlignment(.center)
                             }.frame(maxWidth: .infinity, alignment: .top)
-                                .help("\(item.name) · \(item.state)")
+                                .help(item.tooltip)
                         }
                     }.padding(12)
                 }
@@ -103,7 +105,10 @@ struct CompanionAssignmentChooser<Prompt: View, LibraryButton: View>: View {
     let openLibraryButton: LibraryButton
     let onDone: () -> Void
     private var available: [CompanionAssignmentItem] {
-        items.filter { !selectedIDs.contains($0.id) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search)) }
+        items.filter {
+            !selectedIDs.contains($0.id) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search)
+                || $0.detail?.localizedCaseInsensitiveContains(search) == true)
+        }
     }
     var body: some View {
         VStack(spacing: 12) {
@@ -122,7 +127,7 @@ struct CompanionAssignmentChooser<Prompt: View, LibraryButton: View>: View {
                                 Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
                             }.padding(8).contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain).accessibilityLabel("Add \(item.name) to bot")
+                        .buttonStyle(.plain).help(item.tooltip).accessibilityLabel("Add \(item.name) to bot")
                     }
                     if items.isEmpty { createPrompt }
                     else if available.isEmpty {

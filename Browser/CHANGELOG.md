@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add an optional description of up to 500 characters to each browser in its editor. Assigned bots see it alongside the name when choosing a browser, the sidebar search matches it, and page-preview cards leave it out.
+
 ## [0.1.0] - 2026-09-18
 
 ### Fixed

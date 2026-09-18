@@ -194,7 +194,7 @@ Share a clickable page-preview card in chat:
 This captures the page and sends the attachment in one command. Clicking the
 card opens that page in its Noodle Browser profile; no window opens on send.
 
-list: List only browsers assigned to this bot.
+list: List only browsers assigned to this bot, with each ID, name and optional description of what it is for.
 status: Read browser state, tabs, downloads, and pointer state and any dialog for --tab.
 tabs: List durable tab IDs, titles, URLs, loading and error state.
 open: Create a background tab, optionally with --url HTTP[S]_URL.
@@ -228,7 +228,10 @@ bookmark-remove: Delete --bookmark UUID from this browser.
 
 Commands return JSON; errors exit 1. list needs no browser ID. Tab operations
 require the ID returned by open or tabs. Keep the browser and tab IDs together.
-Browser metadata may include icon, a base64 PNG thumbnail for display only.
+Browser metadata may include description, the user's note on what that
+browser is for, and icon, a base64 PNG thumbnail for display only. When
+several browsers are assigned, choose by name and description; ask the
+user when neither identifies the right one.
 present --browser UUID --tab UUID --conversation UUID [--message TEXT]
 sends a browser reference attachment with a saved screenshot to a conversation
 you participate in. Use it when returning a page the user should open in the

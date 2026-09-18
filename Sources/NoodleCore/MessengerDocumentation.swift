@@ -16,7 +16,10 @@ extension MessengerDocumentation {
 
         Commands return JSON; errors exit 1. list needs no browser ID. Tab operations
         require the ID returned by open or tabs. Keep the browser and tab IDs together.
-        Browser metadata may include icon, a base64 PNG thumbnail for display only.
+        Browser metadata may include description, the user's note on what that
+        browser is for, and icon, a base64 PNG thumbnail for display only. When
+        several browsers are assigned, choose by name and description; ask the
+        user when neither identifies the right one.
         present --browser UUID --tab UUID --conversation UUID [--message TEXT]
         sends a browser reference attachment with a saved screenshot to a conversation
         you participate in. Use it when returning a page the user should open in the
@@ -101,7 +104,7 @@ extension MessengerDocumentation {
     }
     public static func browserGuidance(_ operation: BrowserOperation) -> String {
         switch operation {
-        case .list: "List only browsers assigned to this bot."
+        case .list: "List only browsers assigned to this bot, with each ID, name and optional description of what it is for."
         case .status: "Read browser state, tabs, downloads, and pointer state and any dialog for --tab."
         case .tabs: "List durable tab IDs, titles, URLs, loading and error state."
         case .open: "Create a background tab, optionally with --url HTTP[S]_URL."
@@ -154,6 +157,8 @@ extension MessengerDocumentation {
         Run `./.agents/skills/browser/browser` in this bot's workspace. Noodle must
         be running and the matching Noodle Browser companion installed. It starts
         quietly on demand. Start with list and select an assigned browser by ID.
+        Each entry has a name and may have a description written by the user; use
+        them to pick the browser that fits the task, such as the right account.
 
         ## Returning results to the user
 

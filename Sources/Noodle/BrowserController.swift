@@ -197,8 +197,10 @@ import SwiftUI
         try checkAccess()
         if let conversation = envelope.conversationID {
             _ = try repository.participantRoster(for: agent.id, conversationID: conversation)
-            guard let reference = response.reference, reference.browser.id == request.browserID,
+            guard var reference = response.reference, reference.browser.id == request.browserID,
                   reference.tabID == request.tabID else { throw BrowserError("The browser returned a different page reference.") }
+            // A decoded reference bypasses the initializer that omits the description from cards.
+            reference.browser.description = nil
             try reference.validate()
             let card = BrowserCard(reference: reference, agentID: agent.id)
             let filename = String(reference.title.prefix(120)).replacingOccurrences(of: "/", with: "-")
@@ -229,7 +231,7 @@ struct BrowserAssignmentPicker: View {
             items: controller.registry.browsers.map {
                 CompanionAssignmentItem(id: $0.id, name: $0.name,
                     state: controller.available ? ($0.paused ? "Paused" : "Ready") : "Unavailable",
-                    symbol: $0.symbol, colour: $0.colour, icon: $0.icon)
+                    symbol: $0.symbol, colour: $0.colour, icon: $0.icon, detail: $0.description)
             }, selectedIDs: $selectedIDs, createPrompt: createPrompt, openLibraryButton: openLibraryButton,
             notice: EmptyView(), failure: controller.failure)
         .task { await controller.refresh(launchIfNeeded: true) }

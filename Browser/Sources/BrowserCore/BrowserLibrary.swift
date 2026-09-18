@@ -8,6 +8,8 @@ import ImageIO
 public struct BrowserProfile: Codable, Identifiable, Equatable, Sendable {
     public var id: UUID
     public var name: String
+    /// Optional; archives written before descriptions existed decode without it.
+    public var description: String?
     public var symbol: String
     public var colour: Int
     public var iconImage: Data?
@@ -27,7 +29,7 @@ public struct BrowserProfile: Codable, Identifiable, Equatable, Sendable {
         self.id = id; self.name = name; self.colour = colour; symbol = "globe"
         muted = true; paused = false; tabs = []; downloads = []
     }
-    public var remote: RemoteBrowser { .init(id: id, name: name, symbol: symbol, colour: colour, icon: catalogueIcon, muted: muted, paused: paused, tabCount: tabs.count) }
+    public var remote: RemoteBrowser { .init(id: id, name: name, description: description, symbol: symbol, colour: colour, icon: catalogueIcon, muted: muted, paused: paused, tabCount: tabs.count) }
     private var catalogueIcon: Data? {
         guard let iconImage, let source = CGImageSourceCreateWithData(iconImage as CFData, nil),
               let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
@@ -84,11 +86,12 @@ public struct BrowserProfile: Codable, Identifiable, Equatable, Sendable {
         while names.contains("browser \(index)") { index += 1 }
         return "Browser \(index)"
     }
-    @discardableResult public func create(name: String, symbol: String = "globe", colour: Int? = nil, iconImage: Data? = nil,
+    @discardableResult public func create(name: String, description: String? = nil, symbol: String = "globe", colour: Int? = nil, iconImage: Data? = nil,
         background: ConversationBackground = .init(), backgroundFile: PreparedBackgroundFile? = nil) throws -> BrowserProfile {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, name.count <= 120, profiles.count < 1000 else { throw BrowserError("Enter a browser name of 1–120 characters.") }
         var profile = BrowserProfile(name: name, colour: colour ?? profiles.count % 6)
+        profile.description = description
         profile.symbol = symbol; profile.iconImage = iconImage; profile.background = background
         return try save(profile, new: true, backgroundFile: backgroundFile)
     }
@@ -98,9 +101,14 @@ public struct BrowserProfile: Codable, Identifiable, Equatable, Sendable {
     private func save(_ profile: BrowserProfile, new: Bool, backgroundFile: PreparedBackgroundFile?) throws -> BrowserProfile {
         guard !profile.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, profile.name.count <= 120 else { throw BrowserError("Enter a browser name of 1–120 characters.") }
         guard (profile.iconImage?.count ?? 0) <= 2 * 1024 * 1024 else { throw BrowserError("The browser icon is too large.") }
+        let description = profile.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (description?.count ?? 0) <= RemoteBrowser.maximumDescriptionLength else {
+            throw BrowserError("Enter a browser description of at most \(RemoteBrowser.maximumDescriptionLength) characters.")
+        }
         let previous = profiles.first { $0.id == profile.id }
         guard new ? previous == nil : previous != nil else { throw BrowserError("This browser no longer exists.") }
         var profile = profile
+        profile.description = description?.isEmpty == false ? description : nil
         var imported: URL?
         do {
             if let file = backgroundFile {

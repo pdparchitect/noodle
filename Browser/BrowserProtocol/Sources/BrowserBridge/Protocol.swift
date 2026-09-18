@@ -51,16 +51,19 @@ public struct BrowserBookmark: Codable, Identifiable, Equatable, Sendable {
 }
 
 public struct RemoteBrowser: Codable, Identifiable, Hashable, Sendable {
+    public static let maximumDescriptionLength = 500
     public var id: UUID
     public var name: String
+    /// What the user keeps this browser for; tells an agent which assigned browser fits a task.
+    public var description: String?
     public var symbol: String
     public var colour: Int
     public var icon: Data?
     public var muted: Bool
     public var paused: Bool
     public var tabCount: Int
-    public init(id: UUID, name: String, symbol: String = "globe", colour: Int = 0, icon: Data? = nil, muted: Bool = true, paused: Bool = false, tabCount: Int = 0) {
-        self.id = id; self.name = name; self.symbol = symbol; self.colour = colour
+    public init(id: UUID, name: String, description: String? = nil, symbol: String = "globe", colour: Int = 0, icon: Data? = nil, muted: Bool = true, paused: Bool = false, tabCount: Int = 0) {
+        self.id = id; self.name = name; self.description = description; self.symbol = symbol; self.colour = colour
         self.icon = icon
         self.muted = muted; self.paused = paused; self.tabCount = tabCount
     }

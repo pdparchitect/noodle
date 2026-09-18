@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Give each Noodle Browser an optional description of what it is for. Assigned bots receive it with the browser's name from `browser list` so they choose the right browser; the bot editor's browser picker shows and searches it. Page-preview cards never include it.
+
 ### Fixed
 
 - Keep the Read more reader open after saving an annotation so more annotations can be added.

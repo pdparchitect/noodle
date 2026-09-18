@@ -157,6 +157,39 @@ final class BrowserLibraryTests: XCTestCase {
         XCTAssertNotEqual(profile.id, other.id)
         XCTAssertNotEqual(try second.directory(profile.id, category: "Uploads"), try second.directory(other.id, category: "Uploads"))
     }
+    @MainActor func testDescriptionsPersistReachTheCatalogueAndStayOutOfCards() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = BrowserLibrary(root: root)
+        var work = try library.create(name: "Work", description: "  Company Google account.\n")
+        XCTAssertEqual(work.description, "Company Google account.")
+        let plain = try library.create(name: "Personal", description: " \n ")
+        XCTAssertNil(plain.description)
+        XCTAssertThrowsError(try library.create(name: "Long", description: String(repeating: "a", count: RemoteBrowser.maximumDescriptionLength + 1)))
+        work.description = String(repeating: "b", count: RemoteBrowser.maximumDescriptionLength + 1)
+        XCTAssertThrowsError(try library.update(work))
+        work.description = "Staging admin console."
+        try library.update(work)
+
+        let restored = BrowserLibrary(root: root)
+        XCTAssertEqual(try restored.profile(work.id).description, "Staging admin console.")
+        let remote = try JSONDecoder().decode(RemoteBrowser.self, from: JSONEncoder().encode(restored.profile(work.id).remote))
+        XCTAssertEqual(remote.description, "Staging admin console.")
+        XCTAssertNil(try restored.profile(plain.id).remote.description)
+        work.description = ""
+        try restored.update(work)
+        XCTAssertNil(try BrowserLibrary(root: root).profile(work.id).description)
+
+        // Archives and catalogues written before descriptions existed still load.
+        let legacy = Data(#"{"id":"\#(work.id.uuidString)","name":"Work","symbol":"globe","colour":0,"muted":true,"paused":false,"tabCount":0}"#.utf8)
+        XCTAssertNil(try JSONDecoder().decode(RemoteBrowser.self, from: legacy).description)
+
+        var reference = BrowserReference(browser: remote, tabID: UUID(), url: "https://example.com", title: "Page")
+        XCTAssertNil(reference.browser.description)
+        XCTAssertEqual(reference.browser.name, "Work")
+        reference.browser.description = String(repeating: "c", count: RemoteBrowser.maximumDescriptionLength + 1)
+        XCTAssertThrowsError(try reference.validate())
+    }
     @MainActor func testCorruptLibraryCannotBeOverwritten() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

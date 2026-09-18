@@ -41,6 +41,8 @@ import XCTest
         let f = try await fixture()
         let response = try await f.controller.perform(f.envelope(.list), agent: f.agent)
         XCTAssertEqual(response.browsers?.map(\.id), [f.browser])
+        // The description reaches the assigned bot; an unassigned browser's never does.
+        XCTAssertEqual(response.browsers?.map(\.description), ["Company account."])
         var request = f.envelope(.tabs); request.request.browserID = UUID()
         do { _ = try await f.controller.perform(request, agent: f.agent); XCTFail("Unassigned browser accepted") } catch {}
         request = f.envelope(.tabs); request.token = "forged"
@@ -127,6 +129,7 @@ import XCTest
         let file = f.repository.attachmentFileURL(attachment)
         let reference = try BrowserReference.decode(Data(contentsOf: file))
         XCTAssertEqual(reference, attachment.browser?.reference)
+        XCTAssertNil(reference.browser.description)
         let wire = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
         XCTAssertNil(wire["agentID"])
         XCTAssertEqual(try f.repository.loadMessages(conversationID: conversation.id).last?.attachmentIDs, [attachment.id])
@@ -139,7 +142,7 @@ private actor BrowserTestProvider {
     let root: URL
     var blocked: Bool
     let wrongCount: Bool
-    let browsers = [RemoteBrowser(id: UUID(), name: "Assigned"), RemoteBrowser(id: UUID(), name: "Private")]
+    let browsers = [RemoteBrowser(id: UUID(), name: "Assigned", description: "Company account."), RemoteBrowser(id: UUID(), name: "Private", description: "Personal banking.")]
     var gates: [CheckedContinuation<Void, Never>] = []
     private(set) var transfers: [BrowserRequest] = []
     private(set) var uploads: [Data] = []
@@ -149,7 +152,10 @@ private actor BrowserTestProvider {
         var response = BrowserResponse()
         if request.operation == .list { response.browsers = browsers; return response }
         if request.operation == .present {
-            response.reference = .init(browser: browsers[0], tabID: request.tabID!, url: "https://example.com", title: "Example")
+            var reference = BrowserReference(browser: browsers[0], tabID: request.tabID!, url: "https://example.com", title: "Example")
+            // A decoded companion response bypasses the initializer; the broker must still omit it.
+            reference.browser.description = browsers[0].description
+            response.reference = reference
             return response
         }
         guard request.operation.isFileTransfer else { return response }
