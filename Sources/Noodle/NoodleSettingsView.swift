@@ -22,6 +22,11 @@ struct NoodleSettingsView: View {
         }.count
     }
 
+    /// Tools whose row shows Needs attention.
+    private var toolsNeedingAttention: Int {
+        store.mcp.registry.connections.filter { store.mcp.errors[$0.id] != nil }.count
+    }
+
     var body: some View {
         @Bindable var store = store
 
@@ -74,6 +79,7 @@ struct NoodleSettingsView: View {
         .modifier(SettingsWindowResizeAnchor())
         .settingsScrollIndicators(selection: store.selectedSettingsTab)
         .background(SettingsTabBadge(counts: ["Harness": harnessesNeedingAttention,
+                                              "Tools": toolsNeedingAttention,
                                               "Companions": companionUpdates.updates.count]))
         // Check on opening Settings so the tabs are badged before they are selected.
         .onAppear { companionUpdates.refresh(CompanionApp.installedApps()) }
