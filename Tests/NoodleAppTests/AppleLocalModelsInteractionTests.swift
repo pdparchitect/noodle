@@ -27,6 +27,7 @@ import NoodleCore
         try select(model.id, for: fixture.b)
         let settings = host(Color.clear.sheet(isPresented: .constant(true)) {
             AppleLocalModelsView(checkSupport: { true }).environment(fixture.store)
+                .noodleSheetSizing(animated: true)
         })
         let settingsWindow = try XCTUnwrap(settings.window)
         // The fixture window is positioned offscreen, but must be ordered for

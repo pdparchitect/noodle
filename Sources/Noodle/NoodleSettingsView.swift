@@ -448,7 +448,7 @@ struct HarnessInstallationRow: View {
                 }
                 if id == .apple {
                     Button("Local Models…") { showsLocalModels = true }
-                        .sheet(isPresented: $showsLocalModels) { AppleLocalModelsView() }
+                        .sheet(isPresented: $showsLocalModels) { AppleLocalModelsView().noodleSheetSizing(animated: true) }
                 }
                 if let activity = setup.activity[id] {
                     HStack {

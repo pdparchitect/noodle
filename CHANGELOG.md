@@ -19,6 +19,7 @@ All notable changes to Noodle are documented here, following
 - Delete single Noodle Browser history entries and downloads from their right-click menus, alongside the bookmark Edit and Delete items; every delete asks for confirmation, and deleting a download also removes its stored file. Clicking a completed download saves it.
 - Make Noodle Browser's address bar wider and slightly taller.
 - Keep Noodle Browser's bookmark Add button enabled on a blank tab, where it starts an empty bookmark.
+- Open Local Models with the installed models and the last known support check already in place instead of a brief checking state, and animate the sheet when its height changes.
 
 ### Added
 

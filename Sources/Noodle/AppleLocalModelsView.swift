@@ -6,8 +6,8 @@ struct AppleLocalModelsView: View {
     @Environment(NoodleStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var models: [AppleLocalModel] = []
-    @State private var supported = false
-    @State private var checking = true
+    @State private var checkedSupport: Bool?
+    @State private var checked = false
     @State private var importing = false
     @State private var error: String?
     @State private var downloadingID: String?
@@ -29,6 +29,10 @@ struct AppleLocalModelsView: View {
 
     private var storage: AppleLocalModelStore { .init(repository: store.repository.rootURL) }
     private var busy: Bool { importing || downloadingID != nil }
+    // Open with the runtime's last known answer; the fresh check replaces it.
+    private var knownSupport: Bool? { checkedSupport ?? store.runtime.appleLocalModelsSupported }
+    private var supported: Bool { knownSupport == true }
+    private var checking: Bool { !checked && knownSupport == nil }
     private static let downloadByteFormatter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
@@ -85,12 +89,17 @@ struct AppleLocalModelsView: View {
         } message: { model in
             Text("Noodle’s copy of “\(model.name)” will be deleted. You can download or import it again later.")
         }
+        // Listing is a cheap local read; have it ready for the first frame.
+        .onAppear {
+            do { models = try storage.models() } catch { self.error = error.localizedDescription }
+        }
         .task {
             do {
-                models = try storage.models()
-                supported = try await checkSupport()
+                let result = try await checkSupport()
+                checkedSupport = result
+                store.runtime.recordAppleLocalModelsSupport(result)
             } catch { self.error = error.localizedDescription }
-            checking = false
+            checked = true
         }
     }
 

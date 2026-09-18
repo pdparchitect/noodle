@@ -106,6 +106,9 @@ final class AgentRuntimeCoordinator {
     private(set) var installations: [HarnessInstallation]
     private(set) var modelsByProvider: [HarnessProvider: [HarnessModel]] = [:]
     private(set) var capabilityErrors: [HarnessProvider: String] = [:]
+    /// Last known answer from the Apple host probe. It survives failed or
+    /// skipped probes so Local Models can open without waiting for a new one.
+    private(set) var appleLocalModelsSupported: Bool?
     private(set) var isLoadingCapabilities = false
     private(set) var isRefreshingInstallations = false
     private(set) var installationErrors: [HarnessProvider: String] = [:]
@@ -165,11 +168,16 @@ final class AgentRuntimeCoordinator {
             guard !Task.isCancelled else { return }
             modelsByProvider[.apple] = result.models
             capabilityErrors[.apple] = result.unavailableReason
+            appleLocalModelsSupported = result.localModelsSupported == true
         } catch {
             guard !Task.isCancelled else { return }
             modelsByProvider[.apple] = []
             capabilityErrors[.apple] = error.localizedDescription
         }
+    }
+
+    func recordAppleLocalModelsSupport(_ supported: Bool) {
+        if appleLocalModelsSupported != supported { appleLocalModelsSupported = supported }
     }
 
     private func discoveredInstallations() -> [HarnessInstallation] {
