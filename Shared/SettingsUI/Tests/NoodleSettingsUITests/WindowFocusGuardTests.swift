@@ -63,17 +63,23 @@ import XCTest
     func testSuppressionIsPerButtonAndRecoversFromMissingRelease() throws {
         let window = fixture()
         let guarder = WindowFocusGuard { _ in window.hasKey = true }
-        XCTAssertNil(guarder.filter(try mouse(.rightMouseDown, window), applicationActive: true))
-        XCTAssertNotNil(guarder.filter(try mouse(.leftMouseUp, window), applicationActive: true))
-        XCTAssertNil(guarder.filter(try mouse(.rightMouseDragged, window), applicationActive: true))
-        XCTAssertNil(guarder.filter(try mouse(.rightMouseUp, window), applicationActive: true))
+        // Synthesized events report button zero, and rebuilding them through
+        // CGEvent moves their location on some macOS releases. Pass the
+        // physical button number instead.
+        func filter(_ type: NSEvent.EventType, _ button: Int) throws -> NSEvent? {
+            guarder.filter(try mouse(type, window), button: button, applicationActive: true)
+        }
+        XCTAssertNil(try filter(.rightMouseDown, 1))
+        XCTAssertNotNil(try filter(.leftMouseUp, 0))
+        XCTAssertNil(try filter(.rightMouseDragged, 1))
+        XCTAssertNil(try filter(.rightMouseUp, 1))
         window.hasKey = false
-        XCTAssertNil(guarder.filter(try mouse(.otherMouseDown, window), applicationActive: true))
-        XCTAssertNil(guarder.filter(try mouse(.otherMouseUp, window), applicationActive: true))
+        XCTAssertNil(try filter(.otherMouseDown, 2))
+        XCTAssertNil(try filter(.otherMouseUp, 2))
         window.hasKey = false
-        XCTAssertNil(guarder.filter(try mouse(.leftMouseDown, window), applicationActive: true))
-        XCTAssertNotNil(guarder.filter(try mouse(.leftMouseDown, window), applicationActive: true))
-        XCTAssertNotNil(guarder.filter(try mouse(.leftMouseUp, window), applicationActive: true))
+        XCTAssertNil(try filter(.leftMouseDown, 0))
+        XCTAssertNotNil(try filter(.leftMouseDown, 0))
+        XCTAssertNotNil(try filter(.leftMouseUp, 0))
     }
 
     func testTitlebarHiddenWindowsAndNonKeyPanelsPassThrough() throws {
@@ -179,20 +185,9 @@ import XCTest
     }
 
     private func mouse(_ type: NSEvent.EventType, _ window: NSWindow?, point: NSPoint = .init(x: 80, y: 80)) throws -> NSEvent {
-        let event = try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+        try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
             timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window?.windowNumber ?? 0,
             context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
-        // NSEvent.mouseEvent initializes buttonNumber to zero even for right /
-        // other events. Give the fixture the button number of physical input.
-        let button: Int64
-        switch type {
-        case .rightMouseDown, .rightMouseDragged, .rightMouseUp: button = 1
-        case .otherMouseDown, .otherMouseDragged, .otherMouseUp: button = 2
-        default: return event
-        }
-        let cgEvent = try XCTUnwrap(event.cgEvent)
-        cgEvent.setIntegerValueField(.mouseEventButtonNumber, value: button)
-        return try XCTUnwrap(NSEvent(cgEvent: cgEvent))
     }
 }
 

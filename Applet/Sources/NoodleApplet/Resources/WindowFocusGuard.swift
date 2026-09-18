@@ -52,15 +52,20 @@ import AppKit
     }
 
     func filter(_ event: NSEvent, applicationActive: Bool) -> NSEvent? {
+        filter(event, button: event.buttonNumber, applicationActive: applicationActive)
+    }
+
+    /// Synthesized NSEvents always report button zero; tests pass the physical button.
+    func filter(_ event: NSEvent, button: Int, applicationActive: Bool) -> NSEvent? {
         switch event.type {
         case .leftMouseUp, .rightMouseUp, .otherMouseUp:
-            return suppressedButtons.remove(event.buttonNumber) == nil ? event : nil
+            return suppressedButtons.remove(button) == nil ? event : nil
         case .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
-            return suppressedButtons.contains(event.buttonNumber) ? nil : event
+            return suppressedButtons.contains(button) ? nil : event
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
             // A missing mouse-up (for example after switching apps) must not
             // swallow the next independent click.
-            suppressedButtons.remove(event.buttonNumber)
+            suppressedButtons.remove(button)
         default:
             return event
         }
@@ -80,7 +85,7 @@ import AppKit
                             nonactivating ? 0 : activatedAt)
         guard !hasFocus || event.timestamp < focusTime else { return event }
 
-        suppressedButtons.insert(event.buttonNumber)
+        suppressedButtons.insert(button)
         var target = window
         while let sheet = target.attachedSheet { target = sheet }
         focus(target)
