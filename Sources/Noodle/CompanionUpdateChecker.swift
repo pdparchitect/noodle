@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Sparkle
 
 /// The newest release a companion's own Sparkle feed offers this Mac.
@@ -10,17 +11,39 @@ struct CompanionRelease: Equatable {
 
 /// Reports whether an installed companion is behind its own update feed. The
 /// companion's Sparkle updater still owns downloading and installing.
-@MainActor final class CompanionUpdateChecker {
+@MainActor @Observable final class CompanionUpdateChecker {
     static let shared = CompanionUpdateChecker()
 
-    private let fetch: @MainActor (URL) async throws -> Data
-    private let now: @MainActor () -> Date
-    private var latest: [URL: (release: CompanionRelease?, checkedAt: Date)] = [:]
+    /// Installed companions that are behind their feed, as of the last refresh.
+    private(set) var updates: [CompanionApp: CompanionRelease] = [:]
+    @ObservationIgnored private let fetch: @MainActor (URL) async throws -> Data
+    @ObservationIgnored private let now: @MainActor () -> Date
+    @ObservationIgnored private var latest: [URL: (release: CompanionRelease?, checkedAt: Date)] = [:]
+    @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
     init(fetch: (@MainActor (URL) async throws -> Data)? = nil,
          now: @escaping @MainActor () -> Date = { Date() }) {
         self.fetch = fetch ?? { try await Self.fetchAppcast($0) }
         self.now = now
+    }
+
+    /// Replaces any refresh still in flight. Await the returned task for the result.
+    @discardableResult
+    func refresh(_ installations: [CompanionApp: CompanionAppInstallation], force: Bool = false) -> Task<Void, Never> {
+        refreshTask?.cancel()
+        let task = Task { @MainActor in
+            var found: [CompanionApp: CompanionRelease] = [:]
+            await withTaskGroup(of: (CompanionApp, CompanionRelease?).self) { group in
+                for (app, installation) in installations {
+                    group.addTask { @MainActor in (app, await self.availableUpdate(for: installation, force: force)) }
+                }
+                for await (app, release) in group { found[app] = release }
+            }
+            guard !Task.isCancelled else { return }
+            if found != updates { updates = found }
+        }
+        refreshTask = task
+        return task
     }
 
     func availableUpdate(for installation: CompanionAppInstallation, force: Bool) async -> CompanionRelease? {

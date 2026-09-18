@@ -94,6 +94,16 @@ import XCTest
         XCTAssertNil(updated)
     }
 
+    func testRefreshPublishesOnlyCompanionsThatAreBehindAndClearsThemOnceUpdated() async throws {
+        let data = appcast(item("2.0.0"))
+        let checker = CompanionUpdateChecker(fetch: { _ in data }, now: { self.now })
+        await checker.refresh([.browser: try installation(), .applet: try installation(version: "2.0.0"),
+                               .computer: try installation(updatesEnabled: false)]).value
+        XCTAssertEqual(checker.updates, [.browser: CompanionRelease(version: "2.0.0", displayVersion: "2.0.0")])
+        await checker.refresh([.browser: try installation(version: "2.0.0")]).value
+        XCTAssertTrue(checker.updates.isEmpty)
+    }
+
     func testAppcastSkipsReleasesThisMacCannotRunAndOtherChannels() {
         let data = appcast(
             item("1.5.0"),

@@ -7,15 +7,13 @@ struct CompanionAppsSettingsView: View {
     @State private var opening: CompanionApp?
     @State private var actionError: String?
     @State private var failedApp: CompanionApp?
-    @State private var updates: [CompanionApp: CompanionRelease] = [:]
-    @State private var updateCheck: Task<Void, Never>?
     private let discoverInstallations: @MainActor () -> [CompanionApp: CompanionAppInstallation]
     private let updateChecker: CompanionUpdateChecker
 
-    init(discoverInstallations: @escaping @MainActor () -> [CompanionApp: CompanionAppInstallation] = { CompanionApp.installedApps() },
-         updateChecker: CompanionUpdateChecker = .shared) {
+    @MainActor init(discoverInstallations: @escaping @MainActor () -> [CompanionApp: CompanionAppInstallation] = { CompanionApp.installedApps() },
+                    updateChecker: CompanionUpdateChecker? = nil) {
         self.discoverInstallations = discoverInstallations
-        self.updateChecker = updateChecker
+        self.updateChecker = updateChecker ?? .shared
         _installations = State(initialValue: discoverInstallations())
     }
 
@@ -40,7 +38,6 @@ struct CompanionAppsSettingsView: View {
             .padding(.horizontal, 20).padding(.vertical, 12)
         }
         .onAppear { refresh() }
-        .onDisappear { updateCheck?.cancel() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refresh()
         }
@@ -83,7 +80,7 @@ struct CompanionAppsSettingsView: View {
                     if let installation {
                         Text(installation.version.map { "Version \($0)" } ?? "Version unavailable")
                             .textSelection(.enabled)
-                        if let update = updates[app] {
+                        if let update = updateChecker.updates[app] {
                             Text("Update available — \(update.displayVersion)").foregroundStyle(.orange)
                         }
                     } else {
@@ -108,20 +105,7 @@ struct CompanionAppsSettingsView: View {
         store.applets.refreshSkills()
         let current = discoverInstallations()
         if current != installations { installations = current }
-        updateCheck?.cancel()
-        updateCheck = Task { @MainActor in
-            var found: [CompanionApp: CompanionRelease] = [:]
-            await withTaskGroup(of: (CompanionApp, CompanionRelease?).self) { group in
-                for (app, installation) in current {
-                    group.addTask { @MainActor in
-                        (app, await updateChecker.availableUpdate(for: installation, force: forceUpdates))
-                    }
-                }
-                for await (app, release) in group { found[app] = release }
-            }
-            guard !Task.isCancelled else { return }
-            if found != updates { updates = found }
-        }
+        updateChecker.refresh(current, force: forceUpdates)
     }
 
     private func open(_ app: CompanionApp) {

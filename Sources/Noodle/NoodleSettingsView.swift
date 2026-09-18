@@ -9,6 +9,7 @@ enum NoodleSettingsTab: Hashable {
 
 struct NoodleSettingsView: View {
     @Environment(NoodleStore.self) private var store
+    private let companionUpdates = CompanionUpdateChecker.shared
 
     var body: some View {
         @Bindable var store = store
@@ -61,6 +62,9 @@ struct NoodleSettingsView: View {
         }
         .modifier(SettingsWindowResizeAnchor())
         .settingsScrollIndicators(selection: store.selectedSettingsTab)
+        .background(SettingsTabBadge(label: "Companions", count: companionUpdates.updates.count))
+        // Check on opening Settings so the tab is badged before it is selected.
+        .onAppear { companionUpdates.refresh(CompanionApp.installedApps()) }
     }
 }
 
