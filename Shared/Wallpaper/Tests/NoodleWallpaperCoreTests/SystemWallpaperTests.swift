@@ -55,6 +55,25 @@ final class SystemWallpaperTests: XCTestCase {
         XCTAssertEqual(SystemWallpaper.available(catalogue: catalogue, downloads: downloads, aerials: try directory()), [])
     }
 
+    func testOffersHiddenCatalogueWallpapersAndDownloadsWithoutADescriptor() throws {
+        let catalogue = try directory(), downloads = try directory(), aerials = try directory()
+        let horizon = catalogue.appendingPathComponent(".wallpapers/Horizon")
+        try writeImage(horizon.appendingPathComponent("Horizon.heic"))
+        try writeImage(horizon.appendingPathComponent("Horizon Thumbnail@2x.png"))
+        try writeImage(horizon.appendingPathComponent("Horizon Thumbnail.png"))
+        let graphic = catalogue.appendingPathComponent(".wallpapers/Graphic")
+        try FileManager.default.createDirectory(at: graphic, withIntermediateDirectories: true)
+        try Data("video".utf8).write(to: graphic.appendingPathComponent("Graphic Landscape.mov"))
+        try writeImage(downloads.appendingPathComponent("Retired.heic"))
+        try writeImage(downloads.appendingPathComponent("Photo.jpg"))
+
+        let wallpapers = SystemWallpaper.available(catalogue: catalogue, downloads: downloads, aerials: aerials)
+
+        XCTAssertEqual(wallpapers.map(\.name), ["Graphic Landscape", "Horizon", "Photo", "Retired"])
+        XCTAssertEqual(wallpapers[1].thumbnailURL?.lastPathComponent, "Horizon Thumbnail@2x.png")
+        XCTAssertNil(wallpapers[0].thumbnailURL)
+    }
+
     func testOffersDownloadedAerialsByTheirManifestName() throws {
         let aerials = try directory()
         let videos = aerials.appendingPathComponent("videos")

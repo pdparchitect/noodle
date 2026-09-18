@@ -32,15 +32,18 @@ public struct SystemWallpaper: Equatable, Sendable {
 
     public static func available(catalogue: URL = catalogue, downloads: URL = downloads,
                                  aerials: URL = aerials) -> [SystemWallpaper] {
-        (stills(catalogue: catalogue, downloads: downloads) + aerialVideos(in: aerials))
+        (stills(catalogue: catalogue, downloads: downloads) + hiddenWallpapers(in: catalogue) + aerialVideos(in: aerials))
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
     private static func stills(catalogue: URL, downloads: URL) -> [SystemWallpaper] {
         let entries = (try? FileManager.default.contentsOfDirectory(at: catalogue,
             includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
+        // A download whose descriptor has left the catalogue is still a usable wallpaper.
+        let downloaded = (try? FileManager.default.contentsOfDirectory(at: downloads,
+            includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
         var seen = Set<String>()
-        return entries.compactMap { entry -> SystemWallpaper? in
+        return (entries + downloaded).compactMap { entry -> SystemWallpaper? in
             let name = entry.deletingPathExtension().lastPathComponent
             let image: URL
             if entry.pathExtension.lowercased() == "madesktop" {
@@ -59,6 +62,24 @@ public struct SystemWallpaper: Equatable, Sendable {
         }
     }
 
+    /// macOS also ships wallpapers in a hidden catalogue folder that the listing above
+    /// skips: one subfolder each, holding stills or videos beside their own thumbnails.
+    private static func hiddenWallpapers(in catalogue: URL) -> [SystemWallpaper] {
+        let folders = (try? FileManager.default.contentsOfDirectory(at: catalogue.appendingPathComponent(".wallpapers"),
+            includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
+        return folders.flatMap { folder -> [SystemWallpaper] in
+            let files = (try? FileManager.default.contentsOfDirectory(at: folder,
+                includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
+            return files.compactMap { file -> SystemWallpaper? in
+                let name = file.deletingPathExtension().lastPathComponent
+                guard !name.contains("Thumbnail"), isUsableImage(file) || isUsableVideo(file) else { return nil }
+                let thumbnail = folder.appendingPathComponent("\(name) Thumbnail@2x.png")
+                return SystemWallpaper(name: name, url: file,
+                    thumbnailURL: FileManager.default.isReadableFile(atPath: thumbnail.path) ? thumbnail : nil)
+            }
+        }
+    }
+
     /// Each downloaded aerial is `videos/<asset id>.mov`, with its preview in
     /// `thumbnails` and its display name in the manifest beside them.
     private static func aerialVideos(in aerials: URL) -> [SystemWallpaper] {
@@ -74,14 +95,18 @@ public struct SystemWallpaper: Equatable, Sendable {
         let names = Dictionary((manifest?.assets ?? []).compactMap { asset in asset.accessibilityLabel.map { (asset.id, $0) } },
                                uniquingKeysWith: { first, _ in first })
         return videos.compactMap { video -> SystemWallpaper? in
-            guard UTType(filenameExtension: video.pathExtension)?.conforms(to: .movie) == true,
-                  let values = try? video.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
-                  values.isRegularFile == true, (values.fileSize ?? 0) > 0 else { return nil }
+            guard isUsableVideo(video) else { return nil }
             let identifier = video.deletingPathExtension().lastPathComponent
             let thumbnail = aerials.appendingPathComponent("thumbnails/\(identifier).png")
             return SystemWallpaper(name: names[identifier] ?? "Aerial", url: video,
                 thumbnailURL: FileManager.default.isReadableFile(atPath: thumbnail.path) ? thumbnail : nil)
         }
+    }
+
+    private static func isUsableVideo(_ url: URL) -> Bool {
+        guard UTType(filenameExtension: url.pathExtension)?.conforms(to: .movie) == true,
+              let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]) else { return false }
+        return values.isRegularFile == true && (values.fileSize ?? 0) > 0
     }
 
     /// Reads only the header, so a partial or unreadable download is left out.

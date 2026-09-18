@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import ImageIO
 import NoodleWallpaperCore
 import SwiftUI
@@ -92,7 +93,13 @@ private struct SystemWallpaperThumbnail: View {
         if let cached = cache[wallpaper.url] { return cached }
         let source = wallpaper.thumbnailURL ?? wallpaper.url
         let decoded = await Task.detached(priority: .userInitiated) { () -> CGImage? in
-            guard let source = CGImageSourceCreateWithURL(source as CFURL, nil) else { return nil }
+            // A video without a shipped thumbnail shows its first frame.
+            guard let source = CGImageSourceCreateWithURL(source as CFURL, nil), CGImageSourceGetCount(source) > 0 else {
+                let generator = AVAssetImageGenerator(asset: BackgroundMedia.videoAsset(at: source))
+                generator.appliesPreferredTrackTransform = true
+                generator.maximumSize = CGSize(width: 360, height: 360)
+                return try? await generator.image(at: .zero).image
+            }
             return CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceCreateThumbnailWithTransform: true,
