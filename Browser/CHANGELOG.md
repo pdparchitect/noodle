@@ -25,6 +25,8 @@
 ### Fixed
 
 - Keep the Downloads title at the same height as the History and Bookmarks titles so it no longer shifts when switching views.
+- Read a chosen icon image in the background, so a large file no longer freezes the icon editor.
+- Say that an unreadable icon image could not be used, instead of asking for one smaller than 50 MB.
 
 ## [0.1.0] - 2026-09-18
 

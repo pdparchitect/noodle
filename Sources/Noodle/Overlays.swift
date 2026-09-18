@@ -155,7 +155,6 @@ struct NewBotSheet: View {
         }
         .sheet(isPresented: $editingAvatar) {
             BotIconEditor(
-                name: name,
                 symbolName: $avatarSymbolName,
                 colorIndex: $avatarColorIndex,
                 imageData: $avatarImageData
@@ -356,7 +355,6 @@ struct EditBotSheet: View {
         }
         .sheet(isPresented: $editingAvatar) {
             BotIconEditor(
-                name: name,
                 symbolName: $avatarSymbolName,
                 colorIndex: $avatarColorIndex,
                 imageData: $avatarImageData
@@ -489,22 +487,11 @@ private struct BotBackstoryEditor: View {
 }
 
 private struct BotIconEditor: View {
-    @Environment(\.dismiss) private var dismiss
-    let name: String
     @Binding var symbolName: String?
     @Binding var colorIndex: Int
     @Binding var imageData: Data?
 
-    @State private var editedSymbolName: String?
-    @State private var editedColorIndex: Int
-    @State private var editedImageData: Data?
-    @State private var photoSelection: PhotosPickerItem?
-    @State private var choosingFile = false
-    @State private var choosingPhoto = false
-    @State private var isLoadingPhoto = false
-    @State private var photoError: String?
-
-    private let symbols = [
+    private static let symbols = [
         "sparkles",
         "bolt.fill",
         "brain.head.profile",
@@ -519,272 +506,23 @@ private struct BotIconEditor: View {
         "gearshape.2.fill"
     ]
 
-    init(
-        name: String,
-        symbolName: Binding<String?>,
-        colorIndex: Binding<Int>,
-        imageData: Binding<Data?>
-    ) {
-        self.name = name
-        _symbolName = symbolName
-        _colorIndex = colorIndex
-        _imageData = imageData
-        _editedSymbolName = State(initialValue: symbolName.wrappedValue ?? "sparkles")
-        _editedColorIndex = State(initialValue: colorIndex.wrappedValue)
-        _editedImageData = State(initialValue: imageData.wrappedValue)
-    }
-
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.blue)
-                Spacer()
-                Text("Bot Icon").font(.headline)
-                Spacer()
-                Button("Done") {
-                    symbolName = editedSymbolName
-                    colorIndex = editedColorIndex
-                    imageData = editedImageData
-                    dismiss()
+        // Bot icons are stored as JPEG, and the colour stays the bot's own seed
+        // until the user picks one. Done always records a symbol, as it always has.
+        IconEditorSheet(
+            title: "Bot Icon",
+            icon: Binding(
+                get: { IconAppearance(symbol: symbolName, colour: colorIndex, image: imageData) },
+                set: { icon in
+                    symbolName = icon.iconSymbol ?? BotAvatar.defaultSymbol
+                    colorIndex = icon.iconColour
+                    imageData = icon.iconImage
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.blue)
-            }
-            .padding(16)
-
-            Divider()
-
-            VStack(spacing: 18) {
-                BotAvatar(agent: previewAgent, size: 104)
-                    .padding(.top, 4)
-
-                GroupBox("Image") {
-                    VStack(spacing: 8) {
-                        HStack(spacing: 8) {
-                            ImageSourceMenu(
-                                title: "Choose Image…",
-                                chooseFile: { choosingFile = true },
-                                choosePhoto: {
-                                    photoSelection = nil
-                                    choosingPhoto = true
-                                }
-                            )
-                            .frame(minWidth: 0, maxWidth: .infinity)
-
-                            if #available(macOS 15.1, *) {
-                                NoodleImagePlaygroundButton(
-                                    sourceImageData: editedImageData
-                                ) { url in
-                                    Task { await loadImage(at: url, requiresSecurityScope: false) }
-                                }
-                                .frame(minWidth: 0, maxWidth: .infinity)
-                            }
-                        }
-
-                        Divider()
-
-                        Button {
-                            editedImageData = nil
-                            photoSelection = nil
-                        } label: {
-                            Label(
-                                editedImageData == nil ? "Using Symbol" : "Use Symbol Instead",
-                                systemImage: editedImageData == nil ? "checkmark" : "square.grid.2x2"
-                            )
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(editedImageData == nil)
-
-                        if isLoadingPhoto {
-                            ProgressView()
-                                .controlSize(.small)
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .padding(8)
-                }
-
-                if let photoError {
-                    Text(photoError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-
-                GroupBox("Colour") {
-                    HStack(spacing: 12) {
-                        ForEach(BotAvatarPalette.gradients.indices, id: \.self) { index in
-                            Button {
-                                editedColorIndex = index
-                                editedImageData = nil
-                            } label: {
-                                Circle()
-                                    .fill(LinearGradient(
-                                        colors: BotAvatarPalette.gradients[index],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ))
-                                    .frame(width: 34, height: 34)
-                                    .overlay {
-                                        if editedImageData == nil && normalizedColorIndex == index {
-                                            Image(systemName: "checkmark")
-                                                .font(.system(size: 13, weight: .bold))
-                                                .foregroundStyle(.white)
-                                        }
-                                    }
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Colour \(index + 1)")
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                }
-
-                GroupBox("Symbol") {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 10) {
-                        ForEach(Array(symbols.enumerated()), id: \.offset) { _, symbol in
-                            Button {
-                                editedSymbolName = symbol
-                                editedImageData = nil
-                            } label: {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(
-                                            isSelected(symbol)
-                                                ? Color.accentColor
-                                                : Color.secondary.opacity(0.14)
-                                        )
-                                    Image(systemName: symbol)
-                                        .font(.system(size: 18, weight: .semibold))
-                                }
-                                .foregroundStyle(
-                                    isSelected(symbol) ? Color.white : Color.primary
-                                )
-                                .frame(height: 42)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(symbol)
-                        }
-                    }
-                    .padding(8)
-                }
-
-            }
-            .padding(20)
-        }
-        .frame(width: 440)
-        .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image]) { result in
-            switch result {
-            case .success(let url):
-                Task { await loadImage(at: url, requiresSecurityScope: true) }
-            case .failure(let error):
-                photoError = error.localizedDescription
-            }
-        }
-        .photosPicker(
-            isPresented: $choosingPhoto,
-            selection: $photoSelection,
-            matching: .images,
-            preferredItemEncoding: .current
+            ),
+            symbol: BotAvatar.defaultSymbol,
+            symbols: Self.symbols,
+            encoding: .jpeg(quality: 0.86)
         )
-        .onChange(of: photoSelection) { _, item in
-            guard let item else { return }
-            Task { await loadPhoto(item) }
-        }
-    }
-
-    @MainActor
-    private func loadImage(at url: URL, requiresSecurityScope: Bool) async {
-        isLoadingPhoto = true
-        photoError = nil
-        defer { isLoadingPhoto = false }
-
-        do {
-            let data = try await Task.detached(priority: .userInitiated) {
-                let accessed = requiresSecurityScope && url.startAccessingSecurityScopedResource()
-                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-
-                let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-                guard size <= 50 * 1_024 * 1_024 else { throw BotIconImageError.tooLarge }
-                return try Data(contentsOf: url)
-            }.value
-
-            guard let prepared = Self.preparedAvatarData(from: data) else {
-                throw BotIconImageError.invalidImage
-            }
-            editedImageData = prepared
-            photoSelection = nil
-        } catch {
-            photoError = error.localizedDescription
-        }
-    }
-
-    private var normalizedColorIndex: Int {
-        abs(editedColorIndex) % BotAvatarPalette.gradients.count
-    }
-
-    private var previewAgent: AgentRecord {
-        var preview = AgentRecord(
-            displayName: name.isEmpty ? "Bot" : name,
-            accentSeed: editedColorIndex
-        )
-        preview.avatarSymbolName = editedSymbolName
-        preview.avatarColorIndex = editedColorIndex
-        preview.avatarImageData = editedImageData
-        return preview
-    }
-
-    private func isSelected(_ symbol: String?) -> Bool {
-        editedImageData == nil && editedSymbolName == symbol
-    }
-
-    @MainActor
-    private func loadPhoto(_ item: PhotosPickerItem) async {
-        isLoadingPhoto = true
-        photoError = nil
-        defer { isLoadingPhoto = false }
-
-        do {
-            guard let data = try await item.loadTransferable(type: Data.self),
-                  let prepared = Self.preparedAvatarData(from: data) else {
-                photoError = "That image could not be used."
-                return
-            }
-            editedImageData = prepared
-        } catch {
-            photoError = error.localizedDescription
-        }
-    }
-
-    private static func preparedAvatarData(from data: Data) -> Data? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: 512
-              ] as CFDictionary) else { return nil }
-
-        return NSBitmapImageRep(cgImage: image).representation(
-            using: .jpeg,
-            properties: [.compressionFactor: 0.86]
-        )
-    }
-}
-
-private enum BotIconImageError: LocalizedError {
-    case invalidImage
-    case tooLarge
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidImage:
-            "That image could not be used."
-        case .tooLarge:
-            "Choose an image smaller than 50 MB."
-        }
     }
 }
 

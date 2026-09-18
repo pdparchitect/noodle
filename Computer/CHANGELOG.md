@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Read a chosen icon image in the background, so a large file no longer freezes the icon editor.
+- Say that an unreadable icon image could not be used, instead of asking for one smaller than 50 MB.
+
 ### Added
 
 - Choose a macOS system wallpaper as the background. Choose Background opens a System Wallpapers dialog showing thumbnails of the wallpapers already on this Mac, including dynamic ones, macOS's bundled video wallpapers and downloaded aerials, which play as animated backgrounds; clicking one chooses it. Wallpapers that System Settings has not downloaded are left out, and a Wallpaper Settings link opens System Settings to download more; the dialog refreshes on return. Reading downloaded wallpapers adds read-only sandbox exceptions for macOS's downloaded-wallpaper and aerials folders.

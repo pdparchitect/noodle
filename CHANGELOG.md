@@ -36,6 +36,8 @@ All notable changes to Noodle are documented here, following
 - Keep the Read more reader open after saving an annotation so more annotations can be added.
 - Keep Noodle Browser's Downloads title at the same height as the History and Bookmarks titles so it no longer shifts when switching views.
 - Build Noodle Applet with the selected Xcode SDK recorded in the app, so builds made with Xcode 27 keep the current macOS appearance instead of falling back to the legacy one.
+- Import bot icons from Photos items that do not offer generic data, using the same image transfer as backgrounds.
+- Keep the bot icon editor's Done button disabled while a chosen image is still loading, so it cannot save the previous icon.
 
 ## [0.19.0] - 2026-09-18
 
