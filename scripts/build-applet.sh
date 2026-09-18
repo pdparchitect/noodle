@@ -16,8 +16,17 @@ version="$(tr -d '[:space:]' < "$package/VERSION")"
 if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == 1 && ( "$configuration" != release || "$data_container" != production ) ]]; then
     print -u2 'Public releases require the optimized production Applet identity.'; exit 1
 fi
-swift build --disable-sandbox --package-path "$package" --scratch-path "$build_root" -c "$configuration" >&2
-bin_path="$(swift build --disable-sandbox --package-path "$package" --scratch-path "$build_root" -c "$configuration" --show-bin-path)"
+# Swift Build records the macOS 15 deployment target as the linked SDK, which selects
+# legacy AppKit and SwiftUI behavior. Build like Noodle, with the selected Xcode's SDK.
+applet_swift() {
+    NOODLE_SWIFT="$(xcrun --find swift)" NOODLE_MACOS_SDK="$(xcrun --sdk macosx --show-sdk-path)" \
+        zsh "$project_root/scripts/swift-apple.sh" "$@"
+}
+applet_swift build --disable-sandbox --package-path "$package" --scratch-path "$build_root" -c "$configuration" >&2
+bin_path="$(applet_swift build --disable-sandbox --package-path "$package" --scratch-path "$build_root" -c "$configuration" --show-bin-path)"
+for product in NoodleApplet noodlet NoodletPreview; do
+    python3 "$project_root/scripts/verify-build-sdk.py" "$bin_path/$product" "$(xcrun --sdk macosx --show-sdk-version)" >&2
+done
 swiftc -typecheck -parse-as-library -swift-version 5 -module-cache-path "$build_root/RuntimeCheckCache" \
     "$package/Sources/NoodleApplet/Resources/WindowFocusGuard.swift" \
     "$package/Sources/NoodleApplet/Resources/NoodletRuntime.swift" \
