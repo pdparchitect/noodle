@@ -1,6 +1,6 @@
 import AppKit
 import XCTest
-@testable import Noodle
+@testable import NoodleSettingsUI
 
 @MainActor final class SettingsTabBadgeTests: XCTestCase {
     private final class Tabs: NSObject, NSToolbarDelegate {

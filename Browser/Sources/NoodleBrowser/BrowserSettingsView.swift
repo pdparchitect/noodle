@@ -6,6 +6,7 @@ enum BrowserSettingsTab: Hashable { case general, updates }
 
 struct BrowserSettingsView: View {
     @State private var selection: BrowserSettingsTab
+    @ObservedObject private var updater = BrowserUpdater.shared
     init(selection: BrowserSettingsTab = .general) { _selection = State(initialValue: selection) }
     var body: some View {
         TabView(selection: $selection.animation(.easeInOut(duration: 0.22))) {
@@ -18,6 +19,9 @@ struct BrowserSettingsView: View {
         }
         .windowResizeAnchor(.top)
         .settingsScrollIndicators(selection: selection)
+        .background(SettingsTabBadge(counts: ["Update": updater.availableVersion == nil ? 0 : 1]))
+        // Check on opening Settings so the tab is badged before it is selected.
+        .onAppear { updater.probeForUpdate() }
     }
 }
 private struct BrowserGeneralSettingsView: View {
@@ -42,6 +46,9 @@ struct BrowserUpdatesSettingsView: View {
             Section {
                 LabeledContent("Installed Version") {
                     Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development")
+                }
+                if let version = updater.availableVersion {
+                    Text("Update available — \(version)").font(.caption).foregroundStyle(.orange)
                 }
                 BrowserCheckForUpdatesButton()
             }

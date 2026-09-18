@@ -3,18 +3,20 @@ import Combine
 import Sparkle
 import SwiftUI
 
-@MainActor final class AppletUpdater: ObservableObject {
+@MainActor final class AppletUpdater: NSObject, ObservableObject {
     static let shared = AppletUpdater()
     @Published private(set) var canCheck = false
     @Published private(set) var automaticallyChecks = false
     @Published private(set) var automaticallyDownloads = false
     @Published private(set) var allowsAutomaticUpdates = false
+    /// The newer version Sparkle last found, from any check. Skipped versions are not found.
+    @Published private(set) var availableVersion: String?
     var enabled: Bool {
         Bundle.main.object(forInfoDictionaryKey: "NoodleUpdatesEnabled") as? Bool == true
     }
     private var started = false
     private lazy var controller = SPUStandardUpdaterController(
-        startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
+        startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
 
     func start() {
         guard !started, enabled else { return }
@@ -29,11 +31,27 @@ import SwiftUI
         controller.startUpdater()
     }
     func check() { if started { controller.checkForUpdates(nil) } }
+    /// Asks Sparkle whether an update exists without offering it.
+    func probeForUpdate() {
+        if started, controller.updater.canCheckForUpdates { controller.updater.checkForUpdateInformation() }
+    }
     func setAutomaticChecks(_ enabled: Bool) {
         if started { controller.updater.automaticallyChecksForUpdates = enabled }
     }
     func setAutomaticDownloads(_ enabled: Bool) {
         if started { controller.updater.automaticallyDownloadsUpdates = enabled }
+    }
+}
+
+extension AppletUpdater: SPUUpdaterDelegate {
+    // Sparkle calls its delegate on the main thread.
+    nonisolated func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        let version = item.displayVersionString
+        MainActor.assumeIsolated { availableVersion = version }
+    }
+
+    nonisolated func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: Error) {
+        MainActor.assumeIsolated { availableVersion = nil }
     }
 }
 
@@ -54,6 +72,9 @@ struct AppletUpdatesSettingsView: View {
                     Text(
                         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
                             as? String ?? "Development")
+                }
+                if let version = updater.availableVersion {
+                    Text("Update available — \(version)").font(.caption).foregroundStyle(.orange)
                 }
                 AppletCheckForUpdatesButton()
             }

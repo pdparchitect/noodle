@@ -7,6 +7,7 @@ enum AppletSettingsTab: Hashable { case general, updates }
 struct AppletSettingsView: View {
     @ObservedObject var background: AppletBackgroundStore
     @State private var selection: AppletSettingsTab = .general
+    @ObservedObject private var updater = AppletUpdater.shared
 
     var body: some View {
         TabView(selection: $selection.animation(.easeInOut(duration: 0.22))) {
@@ -23,6 +24,9 @@ struct AppletSettingsView: View {
         }
         .modifier(AppletSettingsResizeAnchor())
         .settingsScrollIndicators(selection: selection)
+        .background(SettingsTabBadge(counts: ["Update": updater.availableVersion == nil ? 0 : 1]))
+        // Check on opening Settings so the tab is badged before it is selected.
+        .onAppear { updater.probeForUpdate() }
     }
 }
 

@@ -8,22 +8,24 @@ import SwiftUI
 /// SwiftUI keeps across updates and never touches. Their size, colour and
 /// top-trailing placement copy AppKit's toolbar item badge on macOS 26, the
 /// only layout they have been matched against.
-struct SettingsTabBadge: NSViewRepresentable {
+public struct SettingsTabBadge: NSViewRepresentable {
     let counts: [String: Int]
 
-    func makeNSView(context: Context) -> BadgeView { BadgeView() }
+    public init(counts: [String: Int]) { self.counts = counts }
 
-    func updateNSView(_ view: BadgeView, context: Context) {
+    public func makeNSView(context: Context) -> BadgeView { BadgeView() }
+
+    public func updateNSView(_ view: BadgeView, context: Context) {
         view.counts = counts
         view.apply()
     }
 
-    final class BadgeView: NSView {
+    public final class BadgeView: NSView {
         var counts: [String: Int] = [:]
         private var badges: [String: CountView] = [:]
         private var observer: CFRunLoopObserver?
 
-        override func viewDidMoveToWindow() {
+        public override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             if let observer {
                 CFRunLoopRemoveObserver(CFRunLoopGetMain(), observer, .commonModes)
