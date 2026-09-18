@@ -375,6 +375,7 @@ struct HarnessInstallationRow: View {
     @State private var showsExperimentalInfo = false
     @State private var showsLocalModels = false
     @State private var kickRequest: AgentKickRequest?
+    @State private var showsAgentIssues = false
     @Environment(\.openURL) private var openURL
 
     private var id: HarnessProvider { installation.provider }
@@ -424,7 +425,7 @@ struct HarnessInstallationRow: View {
                             }
                     }
                     Spacer()
-                    SettingsStatusLabel(title: statusText, systemImage: statusIcon, color: statusColor)
+                    statusLabel
                 }
 
                 if let path = installation.executablePath {
@@ -507,19 +508,30 @@ struct HarnessInstallationRow: View {
                             .disabled(isRefreshing || liveInstallation?.isAvailable != true)
                     }
                 }
-                agentIssues
             }
         }
         .padding(.vertical, 6)
         .modifier(AgentKickConfirmation(request: $kickRequest))
     }
 
-    @ViewBuilder private var agentIssues: some View {
-        if !affectedAgents.isEmpty {
-            Divider().padding(.vertical, 4)
-            ForEach(affectedAgents) { agent in
+    @ViewBuilder private var statusLabel: some View {
+        let label = SettingsStatusLabel(title: statusText, systemImage: statusIcon, color: statusColor)
+        if affectedAgents.isEmpty {
+            label
+        } else {
+            Button { showsAgentIssues.toggle() } label: { label.contentShape(Rectangle()) }
+                .buttonStyle(.plain)
+                .help("Show affected bots")
+                .popover(isPresented: $showsAgentIssues, arrowEdge: .bottom) { agentIssues }
+        }
+    }
+
+    private var agentIssues: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(Array(affectedAgents.enumerated()), id: \.element.id) { index, agent in
+                if index > 0 { Divider() }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(agent.displayName).font(.caption.weight(.semibold))
+                    Text(agent.displayName).fontWeight(.semibold)
                     let snapshot = store.runtime.snapshot(for: agent.id)
                     if let since = snapshot.reconnectingSince {
                         TimelineView(.periodic(from: since, by: 1)) { context in
@@ -529,18 +541,22 @@ struct HarnessInstallationRow: View {
                         }
                     } else {
                         Text(snapshot.detail)
-                            .font(.caption).foregroundStyle(.red)
+                            .font(.caption).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
                     }
                     Button("Kick") {
+                        showsAgentIssues = false
                         kickRequest = store.runtime.kick(agent: agent, repository: store.repository)
                     }
                     .controlSize(.small)
                     .disabled(store.runtime.changingAccess.contains(agent.id))
+                    .padding(.top, 2)
                 }
             }
         }
+        .padding(16)
+        .frame(width: 340, alignment: .leading)
     }
 
     private func openTerminal() {
