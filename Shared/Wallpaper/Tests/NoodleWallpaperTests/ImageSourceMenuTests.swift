@@ -75,23 +75,15 @@ private struct FrameProbe: NSViewRepresentable {
         XCTAssertEqual([files, photos], [1, 1])
     }
 
-    func testWallpapersAppearOnlyWhenSuppliedAndRouteTheirOwnFile() throws {
-        let lake = URL(fileURLWithPath: "/tmp/The Lake.heic"), sonoma = URL(fileURLWithPath: "/tmp/Sonoma.heic")
-        var files = 0, photos = 0, chosen: [URL] = []
+    func testSystemWallpapersItemAppearsOnlyWhenSuppliedAndOpensItsDialog() throws {
+        var files = 0, photos = 0, wallpapers = 0
         let presenter = ImageSourceMenu.Presenter()
         let menu = presenter.makeMenu(chooseFile: { files += 1 }, choosePhoto: { photos += 1 },
-            wallpapers: [SystemWallpaper(name: "Sonoma", url: sonoma, thumbnailURL: nil),
-                         SystemWallpaper(name: "The Lake", url: lake, thumbnailURL: nil)],
-            chooseWallpaper: { chosen.append($0) })
-        XCTAssertEqual(menu.items.map(\.title), ["Choose File…", "Photos Library…", "System Wallpapers"])
-        let wallpapers = try XCTUnwrap(menu.items[2].submenu)
-        XCTAssertTrue(wallpapers.items.isEmpty, "Wallpaper entries must be built lazily")
-        presenter.menuNeedsUpdate(wallpapers)
-        presenter.menuNeedsUpdate(wallpapers)
-        XCTAssertEqual(wallpapers.items.map(\.title), ["Sonoma", "The Lake"])
-        try send(wallpapers.items[1])
-        XCTAssertEqual(chosen, [lake])
-        XCTAssertEqual([files, photos], [0, 0])
+            chooseWallpaper: { wallpapers += 1 })
+        XCTAssertEqual(menu.items.map(\.title), ["Choose File…", "Photos Library…", "System Wallpapers…"])
+        XCTAssertNil(menu.items[2].submenu, "Wallpapers open a dialog, not a submenu")
+        try send(menu.items[2])
+        XCTAssertEqual([files, photos, wallpapers], [0, 0, 1])
     }
 
     private func send(_ item: NSMenuItem) throws {

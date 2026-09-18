@@ -31,6 +31,8 @@ public struct BackgroundPicker: View {
     @State private var photoSelection: PhotosPickerItem?
     @State private var importTask: Task<Void, Never>?
     @State private var sourceImageData: Data?
+    /// The wallpapers on disk when the dialog was opened; nil while it is closed.
+    @State private var wallpapers: [SystemWallpaper]?
 
     public init(selection: Binding<BackgroundSelection>, busy: Binding<Bool>, failure: Binding<String?>) {
         _selection = selection
@@ -49,7 +51,7 @@ public struct BackgroundPicker: View {
             ImageSourceMenu(title: "Choose Background…",
                 chooseFile: { choosingFile = true },
                 choosePhoto: { photoSelection = nil; choosingPhoto = true },
-                chooseWallpaper: { url in load { try await PreparedBackgroundFile.prepare(url) } })
+                chooseWallpaper: { wallpapers = SystemWallpaper.available() })
                 .frame(minWidth: 0, maxWidth: .infinity)
             if #available(macOS 15.1, *) {
                 NoodleImagePlaygroundButton(sourceImageData: sourceImageData) { url in
@@ -64,6 +66,12 @@ public struct BackgroundPicker: View {
             switch result {
             case .success(let url): load { try await PreparedBackgroundFile.prepare(url) }
             case .failure(let error): failure = error.localizedDescription
+            }
+        }
+        .sheet(isPresented: Binding(get: { wallpapers != nil }, set: { if !$0 { wallpapers = nil } })) {
+            SystemWallpaperSheet(wallpapers: wallpapers ?? []) { wallpaper in
+                let url = wallpaper.url
+                load { try await PreparedBackgroundFile.prepare(url) }
             }
         }
         .photosPicker(isPresented: $choosingPhoto, selection: $photoSelection,

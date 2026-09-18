@@ -9,11 +9,11 @@ public struct ImageSourceMenu: View {
     let chooseFile: () -> Void
     let choosePhoto: () -> Void
     /// Backgrounds pass this to offer the system wallpapers already on disk.
-    var chooseWallpaper: ((URL) -> Void)? = nil
+    var chooseWallpaper: (() -> Void)? = nil
     @State private var presenter = Presenter()
 
     public init(title: String, chooseFile: @escaping () -> Void, choosePhoto: @escaping () -> Void,
-                chooseWallpaper: ((URL) -> Void)? = nil) {
+                chooseWallpaper: (() -> Void)? = nil) {
         self.title = title
         self.chooseFile = chooseFile
         self.choosePhoto = choosePhoto
@@ -23,9 +23,9 @@ public struct ImageSourceMenu: View {
     public var body: some View {
         Button {
             guard let anchor = presenter.anchor else { return }
-            presenter.makeMenu(chooseFile: chooseFile, choosePhoto: choosePhoto,
-                wallpapers: chooseWallpaper == nil ? [] : SystemWallpaper.available(),
-                chooseWallpaper: chooseWallpaper ?? { _ in })
+            // Offer wallpapers only while this Mac actually has some on disk.
+            let wallpapers = chooseWallpaper.flatMap { SystemWallpaper.available().isEmpty ? nil : $0 }
+            presenter.makeMenu(chooseFile: chooseFile, choosePhoto: choosePhoto, chooseWallpaper: wallpapers)
                 .popUp(positioning: nil, at: NSPoint(x: 0, y: anchor.bounds.maxY), in: anchor)
         } label: {
             HStack(spacing: 6) {
@@ -42,83 +42,28 @@ public struct ImageSourceMenu: View {
         .accessibilityHint("Opens the file and Photos menu")
     }
 
-    @MainActor final class Presenter: NSObject, NSMenuDelegate {
+    @MainActor final class Presenter: NSObject {
         weak var anchor: NSView?
-        private var chooseFile: () -> Void = {}
-        private var choosePhoto: () -> Void = {}
-        private var chooseWallpaper: (URL) -> Void = { _ in }
-        private var wallpapers: [SystemWallpaper] = []
+        private var actions: [() -> Void] = []
 
         func makeMenu(chooseFile: @escaping () -> Void, choosePhoto: @escaping () -> Void,
-                      wallpapers: [SystemWallpaper] = [], chooseWallpaper: @escaping (URL) -> Void = { _ in }) -> NSMenu {
-            self.chooseFile = chooseFile
-            self.choosePhoto = choosePhoto
-            self.chooseWallpaper = chooseWallpaper
-            self.wallpapers = wallpapers
+                      chooseWallpaper: (() -> Void)? = nil) -> NSMenu {
+            var entries = [("Choose File…", "folder", chooseFile), ("Photos Library…", "photo.on.rectangle", choosePhoto)]
+            if let chooseWallpaper { entries.append(("System Wallpapers…", "desktopcomputer", chooseWallpaper)) }
+            actions = entries.map(\.2)
             let menu = NSMenu()
-            for (index, item) in [("Choose File…", "folder"), ("Photos Library…", "photo.on.rectangle")].enumerated() {
+            for (index, item) in entries.enumerated() {
                 let entry = NSMenuItem(title: item.0, action: #selector(choose(_:)), keyEquivalent: "")
                 entry.image = NSImage(systemSymbolName: item.1, accessibilityDescription: nil)
                 entry.tag = index
                 entry.target = self
                 menu.addItem(entry)
             }
-            if !wallpapers.isEmpty {
-                let entry = NSMenuItem(title: "System Wallpapers", action: nil, keyEquivalent: "")
-                entry.image = NSImage(systemSymbolName: "desktopcomputer", accessibilityDescription: nil)
-                entry.submenu = NSMenu()
-                entry.submenu?.delegate = self
-                menu.addItem(entry)
-            }
             return menu
         }
 
-        /// Thumbnails are decoded only when the submenu is first opened.
-        func menuNeedsUpdate(_ menu: NSMenu) {
-            guard menu.items.isEmpty else { return }
-            for wallpaper in wallpapers {
-                let entry = NSMenuItem(title: wallpaper.name, action: #selector(chooseWallpaper(_:)), keyEquivalent: "")
-                entry.image = wallpaper.thumbnailURL.flatMap(Self.thumbnail)
-                entry.representedObject = wallpaper.url
-                entry.target = self
-                menu.addItem(entry)
-            }
-        }
-
-        /// System thumbnails never change, so each is decoded once per launch.
-        private static var thumbnails: [URL: NSImage] = [:]
-
-        private static func thumbnail(at url: URL) -> NSImage? {
-            if let cached = thumbnails[url] { return cached }
-            let image = makeThumbnail(at: url)
-            thumbnails[url] = image
-            return image
-        }
-
-        private static func makeThumbnail(at url: URL) -> NSImage? {
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-                  let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                    kCGImageSourceCreateThumbnailFromImageAlways: true,
-                    kCGImageSourceThumbnailMaxPixelSize: 96
-                  ] as CFDictionary) else { return nil }
-            let size = NSSize(width: 36, height: 24)
-            return NSImage(size: size, flipped: false) { rect in
-                NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).addClip()
-                let scale = max(rect.width / CGFloat(image.width), rect.height / CGFloat(image.height))
-                let fill = NSSize(width: CGFloat(image.width) * scale, height: CGFloat(image.height) * scale)
-                NSImage(cgImage: image, size: fill).draw(in: NSRect(x: rect.midX - fill.width / 2,
-                    y: rect.midY - fill.height / 2, width: fill.width, height: fill.height))
-                return true
-            }
-        }
-
-        @objc private func chooseWallpaper(_ sender: NSMenuItem) {
-            if let url = sender.representedObject as? URL { chooseWallpaper(url) }
-        }
-
         @objc private func choose(_ sender: NSMenuItem) {
-            if sender.tag == 0 { chooseFile() }
-            if sender.tag == 1 { choosePhoto() }
+            if actions.indices.contains(sender.tag) { actions[sender.tag]() }
         }
     }
 }
