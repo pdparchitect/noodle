@@ -254,6 +254,8 @@ private struct LibraryView: View {
       .background(Color.black.opacity(0.24).ignoresSafeArea())
       .controlSize(.large)
       .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
+      .toolbar(removing: sidebarOwnsToolbar ? .sidebarToggle : nil)
+      .toolbar { sidebarToolbar }
     } detail: {
       ScrollView {
         LazyVGrid(
@@ -312,11 +314,34 @@ private struct LibraryView: View {
       Text(runtime.error ?? library.error ?? "")
     }
   }
+  /// SwiftUI places its own sidebar toggle last in the sidebar's toolbar section, so
+  /// while the sidebar is open it declares the toggle itself to let Open Noodlet
+  /// follow it. Column items are hidden with the sidebar; the system toggle and the
+  /// detail toolbar's Open Noodlet return then. Toolbar spacers need macOS 26.
+  private var sidebarOwnsToolbar: Bool {
+    if #available(macOS 26.0, *) { return columnVisibility != .detailOnly }
+    return false
+  }
+  private var openNoodletButton: some View {
+    Button { library.choosePackage(open: runtime.open) } label: {
+      Label("Open Noodlet", systemImage: "plus")
+    }.help("Open Noodlet")
+  }
+  @ToolbarContentBuilder private var sidebarToolbar: some ToolbarContent {
+    if #available(macOS 26.0, *), sidebarOwnsToolbar {
+      ToolbarSpacer(.flexible)
+      ToolbarItem {
+        Button { withAnimation { columnVisibility = .detailOnly } } label: {
+          Label("Hide Sidebar", systemImage: "sidebar.leading")
+        }.help("Hide Sidebar")
+      }
+      ToolbarSpacer(.fixed)
+      ToolbarItem { openNoodletButton }
+    }
+  }
   @ToolbarContentBuilder private var libraryToolbar: some ToolbarContent {
-    ToolbarItem(id: "applet-open", placement: .automatic) {
-      Button { library.choosePackage(open: runtime.open) } label: {
-        Label("Open Noodlet", systemImage: "folder")
-      }.help("Open Noodlet")
+    if !sidebarOwnsToolbar {
+      ToolbarItem(id: "applet-open", placement: .automatic) { openNoodletButton }
     }
     if #available(macOS 26.0, *) {
       ToolbarSpacer(.flexible, placement: .automatic)

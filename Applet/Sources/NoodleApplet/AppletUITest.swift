@@ -66,6 +66,35 @@ import AppletCore
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-applet-launch-check.json")
         try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: file, options: .atomic)
     }
+    /// Open Noodlet follows the sidebar toggle inside the sidebar's toolbar section. Both leave
+    /// with the sidebar, where the system toggle and the detail toolbar's Open Noodlet return.
+    private static func verifySidebarToolbar(_ window: NSWindow) async throws {
+        func frames(_ labels: [String]) -> [CGRect] {
+            let items = (window.toolbar?.items ?? []).filter(\.isVisible)
+            return labels.compactMap { label in items.first(where: { $0.label == label })?.view.map { $0.convert($0.bounds, to: nil) } }
+        }
+        func press(_ label: String) async throws {
+            func button(_ view: NSView) -> NSButton? { view as? NSButton ?? view.subviews.lazy.compactMap(button).first }
+            guard let toggle = window.toolbar?.items.first(where: { $0.label == label && $0.isVisible })?.view.flatMap(button) else {
+                throw AppletError("Missing \(label) toolbar button")
+            }
+            toggle.performClick(nil)
+            try await Task.sleep(for: .milliseconds(600))
+        }
+        // An aborted run can leave a collapsed sidebar persisted; start expanded.
+        if !frames(["Show Sidebar"]).isEmpty { try await press("Show Sidebar") }
+        let ordered: ([CGRect]) -> Bool = { zip($0, $0.dropFirst()).allSatisfy { $0.maxX < $1.minX } }
+        let expanded = frames(["Hide Sidebar", "Open Noodlet"])
+        try await press("Hide Sidebar")
+        let collapsed = frames(["Show Sidebar", "Open Noodlet"])
+        try await press("Show Sidebar")
+        let restored = frames(["Hide Sidebar", "Open Noodlet"])
+        print("APPLET_UI_SIDEBAR_TOOLBAR: expanded=\(expanded) collapsed=\(collapsed) restored=\(restored)")
+        guard expanded.count == 2, ordered(expanded), collapsed.count == 2, ordered(collapsed), restored.count == 2, ordered(restored) else {
+            throw AppletError("Open Noodlet must follow the sidebar toggle in every sidebar state")
+        }
+        print("PASS: Open Noodlet follows the sidebar toggle with the sidebar open, collapsed and reopened")
+    }
     static func run() async throws {
         setbuf(stdout, nil)
         var options = NoodletWindowOptions()
@@ -127,6 +156,7 @@ import AppletCore
             }
             print("PASS: search is on the right of the actual native toolbar")
         } else { throw AppletError("Search toolbar item is missing") }
+        if #available(macOS 26.0, *) { try await verifySidebarToolbar(library) }
         menu.performActionForItem(at: settings)
         try await Task.sleep(for: .milliseconds(800))
         guard

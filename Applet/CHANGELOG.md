@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Move the Open Noodlet button into the sidebar's toolbar, after the sidebar toggle, on macOS 26 and later; it returns to the main toolbar while the sidebar is hidden. It now uses the suite's plus icon.
+
+### Fixed
+
+- Build with the selected Xcode SDK recorded in the app, so builds made with Xcode 27 keep the current macOS appearance instead of falling back to the legacy one.
+
 ## [0.4.0] - 2026-09-18
 
 ### Fixed
