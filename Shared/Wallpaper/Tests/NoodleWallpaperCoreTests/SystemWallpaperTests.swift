@@ -32,7 +32,7 @@ final class SystemWallpaperTests: XCTestCase {
         try writeDescriptor("The Beach", identifier: "The Beach", in: catalogue)
         try writeImage(downloads.appendingPathComponent("The Lake.heic"))
 
-        let wallpapers = SystemWallpaper.available(catalogue: catalogue, downloads: downloads)
+        let wallpapers = SystemWallpaper.available(catalogue: catalogue, downloads: downloads, aerials: try directory())
 
         XCTAssertEqual(wallpapers.map(\.name), ["Sonoma", "The Lake"])
         XCTAssertEqual(wallpapers[0].url.lastPathComponent, "Sonoma.heic")
@@ -52,11 +52,33 @@ final class SystemWallpaperTests: XCTestCase {
         }
         try Data("junk".utf8).write(to: catalogue.appendingPathComponent("Broken.madesktop"))
 
-        XCTAssertEqual(SystemWallpaper.available(catalogue: catalogue, downloads: downloads), [])
+        XCTAssertEqual(SystemWallpaper.available(catalogue: catalogue, downloads: downloads, aerials: try directory()), [])
+    }
+
+    func testOffersDownloadedAerialsByTheirManifestName() throws {
+        let aerials = try directory()
+        let videos = aerials.appendingPathComponent("videos")
+        try FileManager.default.createDirectory(at: videos, withIntermediateDirectories: true)
+        try Data("video".utf8).write(to: videos.appendingPathComponent("A1.mov"))
+        try Data("video".utf8).write(to: videos.appendingPathComponent("B2.mov"))
+        try Data().write(to: videos.appendingPathComponent("Empty.mov"))
+        try Data("text".utf8).write(to: videos.appendingPathComponent("notes.txt"))
+        try writeImage(aerials.appendingPathComponent("thumbnails/A1.png"))
+        let manifest = ["assets": [["id": "A1", "accessibilityLabel": "Grand Canyon"], ["id": "Z9", "accessibilityLabel": "Not Downloaded"]]]
+        try FileManager.default.createDirectory(at: aerials.appendingPathComponent("manifest"), withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: manifest).write(to: aerials.appendingPathComponent("manifest/entries.json"))
+        let empty = try directory()
+
+        let wallpapers = SystemWallpaper.available(catalogue: empty, downloads: empty, aerials: aerials)
+
+        XCTAssertEqual(wallpapers.map(\.name), ["Aerial", "Grand Canyon"])
+        XCTAssertEqual(wallpapers[1].url.lastPathComponent, "A1.mov")
+        XCTAssertEqual(wallpapers[1].thumbnailURL?.lastPathComponent, "A1.png")
+        XCTAssertNil(wallpapers[0].thumbnailURL)
     }
 
     func testMissingFoldersYieldNoWallpapers() throws {
         let missing = try directory().appendingPathComponent("missing")
-        XCTAssertEqual(SystemWallpaper.available(catalogue: missing, downloads: missing), [])
+        XCTAssertEqual(SystemWallpaper.available(catalogue: missing, downloads: missing, aerials: missing), [])
     }
 }

@@ -138,7 +138,7 @@ if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.temp
 fi
 
 # Whitespace is stripped above, so "Application Support" appears without its space.
-if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key><array><string>/.local/bin/claude</string><string>/.local/share/claude/versions/</string><string>/.local/bin/fx</string><string>/Library/ApplicationSupport/com.apple.mobileAssetDesktop/</string></array>'; then
+if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key><array><string>/.local/bin/claude</string><string>/.local/share/claude/versions/</string><string>/.local/bin/fx</string><string>/Library/ApplicationSupport/com.apple.mobileAssetDesktop/</string><string>/Library/ApplicationSupport/com.apple.wallpaper/aerials/</string></array>'; then
     print -u2 "The narrow Claude Code / FX executable and downloaded system wallpaper exceptions are missing or broader than expected."
     exit 1
 fi

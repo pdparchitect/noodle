@@ -14,7 +14,7 @@ for key in required where !key.contains("application-groups") && !key.contains("
     precondition(entitlements[key] as? Bool == true, "Missing grant: \(key)")
 }
 // Read-only, and only the folder holding system wallpapers the user has downloaded.
-precondition(entitlements["com.apple.security.temporary-exception.files.home-relative-path.read-only"] as? [String] == ["/Library/Application Support/com.apple.mobileAssetDesktop/"],
+precondition(entitlements["com.apple.security.temporary-exception.files.home-relative-path.read-only"] as? [String] == ["/Library/Application Support/com.apple.mobileAssetDesktop/", "/Library/Application Support/com.apple.wallpaper/aerials/"],
     "Unexpected home-relative read-only exception")
 let team = info["NoodleSigningTeam"] as! String, bundle = info["CFBundleIdentifier"] as! String
 let local = bundle == "com.pdparchitect.noodle.applet.local"

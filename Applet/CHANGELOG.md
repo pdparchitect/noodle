@@ -4,7 +4,7 @@
 
 ### Added
 
-- Choose a macOS system wallpaper as the background. Choose Background opens a System Wallpapers dialog showing thumbnails of the wallpapers already on this Mac, including dynamic ones; wallpapers that System Settings has not downloaded are left out, and a Wallpaper Settings button opens System Settings to download more; the dialog refreshes on return. Reading downloaded wallpapers adds a read-only sandbox exception for macOS's downloaded-wallpaper folder.
+- Choose a macOS system wallpaper as the background. Choose Background opens a System Wallpapers dialog showing thumbnails of the wallpapers already on this Mac, including dynamic ones and downloaded aerials, which play as animated backgrounds; clicking one chooses it. Wallpapers that System Settings has not downloaded are left out, and a Wallpaper Settings link opens System Settings to download more; the dialog refreshes on return. Reading downloaded wallpapers adds read-only sandbox exceptions for macOS's downloaded-wallpaper and aerials folders.
 
 ### Changed
 

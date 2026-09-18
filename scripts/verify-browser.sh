@@ -27,7 +27,7 @@ expected={'com.apple.security.app-sandbox':True, 'com.apple.security.network.cli
  'com.apple.security.application-groups':[info['NoodleBrowserGroup']],
  'com.apple.security.temporary-exception.mach-lookup.global-name':[identifier+'-spks',identifier+'-spki'],
  # Read-only, and only the folder holding system wallpapers the user has downloaded.
- 'com.apple.security.temporary-exception.files.home-relative-path.read-only':['/Library/Application Support/com.apple.mobileAssetDesktop/']}
+ 'com.apple.security.temporary-exception.files.home-relative-path.read-only':['/Library/Application Support/com.apple.mobileAssetDesktop/','/Library/Application Support/com.apple.wallpaper/aerials/']}
 assert entitlements==expected, 'Unexpected Browser entitlements'
 suffix='.local' if identifier.endswith('.local') else ''
 assert info['NoodleBrowserGroup']==info['NoodleSigningTeam']+'.com.pdparchitect.noodle.browsers'+suffix

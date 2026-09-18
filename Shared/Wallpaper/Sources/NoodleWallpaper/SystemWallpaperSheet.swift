@@ -10,7 +10,6 @@ struct SystemWallpaperSheet: View {
     let onChoose: (SystemWallpaper) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var wallpapers: [SystemWallpaper]
-    @State private var selected: SystemWallpaper?
 
     /// System Settings downloads a wallpaper when it is picked there.
     static let settingsURL = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension")!
@@ -32,9 +31,7 @@ struct SystemWallpaperSheet: View {
                 Spacer()
                 Text("System Wallpapers").font(.headline).foregroundStyle(.primary)
                 Spacer()
-                Button("Choose") { if let selected { choose(selected) } }.foregroundStyle(.blue)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(selected == nil)
+                Button("Wallpaper Settings…") { NSWorkspace.shared.open(Self.settingsURL) }.foregroundStyle(.blue)
             }.buttonStyle(.plain).padding(16)
             Divider()
             ScrollView {
@@ -44,16 +41,10 @@ struct SystemWallpaperSheet: View {
                     }
                 }.padding(20)
             }
-            Divider()
-            HStack {
-                Button("Wallpaper Settings…") { NSWorkspace.shared.open(Self.settingsURL) }
-                Spacer()
-            }.padding(12)
         }
         // Coming back from System Settings: show what was downloaded there.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             wallpapers = reload()
-            if let selected, !wallpapers.contains(selected) { self.selected = nil }
         }
         // Wider than the 520-point editors that present it, so the previews are large enough to judge.
         .frame(width: 720, height: 560).controlSize(.regular)
@@ -66,22 +57,18 @@ struct SystemWallpaperSheet: View {
     }
 
     private func cell(_ wallpaper: SystemWallpaper) -> some View {
-        let isSelected = selected == wallpaper
-        return VStack(spacing: 6) {
+        VStack(spacing: 6) {
             SystemWallpaperThumbnail(wallpaper: wallpaper)
                 .aspectRatio(16 / 10, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2))
             Text(wallpaper.name).font(.caption).lineLimit(1)
         }
         .contentShape(Rectangle())
-        // A double click chooses at once; its first click has already selected.
-        .onTapGesture(count: 2) { choose(wallpaper) }
-        .simultaneousGesture(TapGesture().onEnded { selected = wallpaper })
+        .onTapGesture { choose(wallpaper) }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(wallpaper.name)
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-        .accessibilityAction { selected = wallpaper }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { choose(wallpaper) }
     }
 }
 

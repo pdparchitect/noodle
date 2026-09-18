@@ -27,6 +27,7 @@
         <string>/.local/share/claude/versions/</string>
         <string>/.local/bin/fx</string>
         <string>/Library/Application Support/com.apple.mobileAssetDesktop/</string>
+        <string>/Library/Application Support/com.apple.wallpaper/aerials/</string>
     </array>
 </dict>
 </plist>
