@@ -45,19 +45,34 @@ import NoodleCore
         first.transition(.working, reconnectingSince: Date().addingTimeInterval(-135))
         let view = host(HarnessInstallationRow(installation: installed, liveInstallation: installed,
             isRefreshing: false, setup: setup, install: {}).environment(f.store))
+        // Popovers only present from a window that is ordered in (still offscreen).
+        let window = try XCTUnwrap(view.window)
+        window.orderFront(nil)
         _ = try await control("Reconnecting", in: view)
-        _ = try await control(f.a.displayName, in: view)
-        try await wait { self.elements(view).flatMap { self.labels($0) }.contains { $0.hasPrefix("Reconnecting… · 2m ") } }
-        let kick = try await control("Kick", in: view)
+        XCTAssertFalse(hasControl(f.a.displayName, in: view), "Affected bots are listed in the status popover")
+        // The status label opens the affected bots, their elapsed time, and Kick.
+        press(try await control("Show affected bots", in: view))
+        var popover: NSView?
+        try await wait {
+            popover = NSApp.windows.filter { $0.isVisible && $0 !== window && $0.sheetParent == nil }
+                .compactMap(\.contentView).first { self.hasControl(f.a.displayName, in: $0) }
+            return popover != nil
+        }
+        let issues = try XCTUnwrap(popover)
+        try await wait { self.elements(issues).flatMap { self.labels($0) }.contains { $0.hasPrefix("Reconnecting… · 2m ") } }
+        let kick = try await control("Kick", in: issues)
         XCTAssertTrue(enabled(kick))
         XCTAssertFalse(hasControl("Needs attention", in: view))
         second.transition(.failed, detail: "Fixture account failure")
         _ = try await control("Needs attention", in: view)
         second.transition(.ready)
         _ = try await control("Reconnecting", in: view)
-        press(kick)
+        try await wait { self.elements(issues).filter { self.matches("Kick", node: $0) }.count == 1 }
+        press(try await control("Kick", in: issues))
         try await wait { f.runtime.factory.processes.count == 3 }
         XCTAssertEqual(first.stops, 1)
         _ = try await control("Signed in", in: view)
+        try await wait { issues.window?.isVisible != true }
+        window.close()
     }
 }
