@@ -86,14 +86,17 @@ import XCTest
         controller.scan()
         return stem.appendingPathExtension("response")
     }
-    func response(_ url: URL) async throws -> ComputerResponse {
-        try await wait { FileManager.default.fileExists(atPath: url.path) }
+    func response(_ url: URL, file: StaticString = #filePath, line: UInt = #line) async throws -> ComputerResponse {
+        try await wait(file: file, line: line) { FileManager.default.fileExists(atPath: url.path) }
         return try JSONDecoder().decode(ComputerResponse.self, from: Data(contentsOf: url))
     }
-    func wait(_ predicate: () -> Bool) async throws {
+    func wait(file: StaticString = #filePath, line: UInt = #line, _ predicate: () -> Bool) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(3))
         while !predicate() {
-            guard ContinuousClock.now < deadline else { XCTFail("Computer fixture timed out"); throw CancellationError() }
+            guard ContinuousClock.now < deadline else { XCTFail("Computer fixture timed out", file: file, line: line); throw CancellationError() }
+            // Monitoring is disabled to keep provider handshakes under test control.
+            // Pump the broker here: send() can scan before the vnode event arrives.
+            controller.scan()
             try await Task.sleep(for: .milliseconds(2))
         }
     }
