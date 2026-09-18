@@ -66,6 +66,30 @@ import XCTest
     private func fixture() -> SetupControllerFixture {
         let f = SetupControllerFixture(); addTeardownBlock { @MainActor in f.cleanUp() }; return f
     }
+    func testNeedsAttentionCoversUpdatesCompatibilityAndErrorsButNotMissingOrSignedOutHarnesses() async {
+        let f = fixture(), c = f.controller
+        XCTAssertTrue(c.needsAttention(.codex), "The cached report has a newer release")
+        XCTAssertFalse(c.needsAttention(.claudeCode), "An unchecked harness is not a warning")
+        f.versions.report = .init(installedVersion: "3.0.0", latestVersion: "3.0.0")
+        await c.refreshVersions([f.installation])
+        XCTAssertFalse(c.needsAttention(.codex))
+        f.versions.report = .init(installedVersion: "3.0.0", latestVersion: "3.0.0", compatibilityIssue: "Missing protocol")
+        await c.refreshVersions([f.installation])
+        XCTAssertTrue(c.needsAttention(.codex))
+        // A failed latest-release lookup alone is not actionable.
+        f.versions.report = .init(installedVersion: "3.0.0", checkError: "Offline")
+        await c.refreshVersions([f.installation])
+        XCTAssertFalse(c.needsAttention(.codex))
+        await c.refresh([f.claude])
+        XCTAssertEqual(c.authentication[.claudeCode], .unauthenticated)
+        XCTAssertFalse(c.needsAttention(.claudeCode), "Sign-in required is shown as neutral status")
+        await c.refresh([.init(provider: .claudeCode, executablePath: nil)])
+        XCTAssertFalse(c.needsAttention(.claudeCode), "Not installed is not a warning")
+        f.provider.statusError = HarnessSetupError("Account unavailable")
+        await c.refresh([.init(provider: .codex, executablePath: "/fixtures/codex-2")])
+        XCTAssertTrue(c.needsAttention(.codex))
+    }
+
     func testCachedPresentationSurvivesDiscoveryAndAccountCheckFailures() async {
         let f = fixture(), c = f.controller, before = c.snapshots
         await c.refresh([.init(provider: .codex, executablePath: nil)], discoveryErrors: [.codex: "Discovery unavailable"])

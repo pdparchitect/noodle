@@ -10,6 +10,17 @@ enum NoodleSettingsTab: Hashable {
 struct NoodleSettingsView: View {
     @Environment(NoodleStore.self) private var store
     private let companionUpdates = CompanionUpdateChecker.shared
+    // Owned here so the Harness tab is badged before it is selected.
+    @State private var harnessSetup = HarnessSetupController(versionChecker: HarnessVersionChecker())
+
+    private var harnessesNeedingAttention: Int {
+        HarnessProvider.allCases.filter { id in
+            harnessSetup.needsAttention(id) || store.agents.contains {
+                let snapshot = store.runtime.snapshot(for: $0.id)
+                return $0.harnessIdentifier == id.rawValue && snapshot.canKick && snapshot.phase == .failed
+            }
+        }.count
+    }
 
     var body: some View {
         @Bindable var store = store
@@ -27,7 +38,7 @@ struct NoodleSettingsView: View {
                     Label("Conversation", systemImage: "bubble.left.and.bubble.right")
                 }
                 .tag(NoodleSettingsTab.chat)
-            HarnessesSettingsView()
+            HarnessesSettingsView(setup: harnessSetup)
                 .settingsContentSize()
                 .tabItem {
                     Label("Harness", systemImage: "terminal")
@@ -62,9 +73,11 @@ struct NoodleSettingsView: View {
         }
         .modifier(SettingsWindowResizeAnchor())
         .settingsScrollIndicators(selection: store.selectedSettingsTab)
-        .background(SettingsTabBadge(label: "Companions", count: companionUpdates.updates.count))
-        // Check on opening Settings so the tab is badged before it is selected.
+        .background(SettingsTabBadge(counts: ["Harness": harnessesNeedingAttention,
+                                              "Companions": companionUpdates.updates.count]))
+        // Check on opening Settings so the tabs are badged before they are selected.
         .onAppear { companionUpdates.refresh(CompanionApp.installedApps()) }
+        .task { await harnessSetup.refreshAll(store.runtime) }
     }
 }
 
@@ -296,12 +309,11 @@ struct HeartbeatsSettingsView: View {
 
 private struct HarnessesSettingsView: View {
     @Environment(NoodleStore.self) private var store
-    @State private var setup = HarnessSetupController(versionChecker: HarnessVersionChecker())
+    let setup: HarnessSetupController
     @State private var showRefreshProgress = false
-    @State private var checkingAll = false
 
     private var isRefreshing: Bool {
-        checkingAll || store.runtime.isRefreshingInstallations || !setup.checking.isEmpty || setup.checkingVersions
+        setup.refreshingAll || store.runtime.isRefreshingInstallations || !setup.checking.isEmpty || setup.checkingVersions
     }
 
     var body: some View {
@@ -355,13 +367,7 @@ private struct HarnessesSettingsView: View {
     }
 
     private func refresh(forceLatest: Bool = false) async {
-        guard !checkingAll else { return }
-        checkingAll = true
-        defer { checkingAll = false }
-        await store.runtime.refreshInstallations()
-        guard !Task.isCancelled, !store.runtime.isRefreshingInstallations else { return }
-        await setup.refresh(store.runtime.installations, discoveryErrors: store.runtime.installationErrors)
-        await setup.refreshVersions(store.runtime.installations, forceLatest: forceLatest)
+        await setup.refreshAll(store.runtime, forceLatest: forceLatest)
     }
 }
 

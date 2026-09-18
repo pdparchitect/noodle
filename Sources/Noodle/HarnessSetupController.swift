@@ -14,6 +14,7 @@ final class HarnessSetupController {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let versionChecker: (any HarnessVersionChecking)?
     private(set) var checkingVersions = false
+    private(set) var refreshingAll = false
     @ObservationIgnored private(set) var operations: [HarnessProvider: Task<Void, Never>] = [:]
     @ObservationIgnored private var signInAttempts: [HarnessProvider: (id: UUID, installation: HarnessInstallation)] = [:]
     @ObservationIgnored private var statusChecks: [HarnessProvider: (id: UUID, installation: HarnessInstallation)] = [:]
@@ -48,6 +49,24 @@ final class HarnessSetupController {
         snapshots[installation.provider] = snapshot
         authentication[installation.provider] = snapshot.authentication
         HarnessPresentationCache.save(snapshots, to: defaults)
+    }
+
+    /// True when the harness's row shows an error, a required update, or an available update.
+    func needsAttention(_ id: HarnessProvider) -> Bool {
+        if errors[id] != nil { return true }
+        guard let snapshot = snapshots[id], snapshot.installation.isAvailable else { return false }
+        return snapshot.version?.compatibilityIssue != nil || snapshot.version?.updateAvailable == true
+    }
+
+    /// Rediscovers installations, then checks sign-in and versions.
+    func refreshAll(_ runtime: AgentRuntimeCoordinator, forceLatest: Bool = false) async {
+        guard !refreshingAll else { return }
+        refreshingAll = true
+        defer { refreshingAll = false }
+        await runtime.refreshInstallations()
+        guard !Task.isCancelled, !runtime.isRefreshingInstallations else { return }
+        await refresh(runtime.installations, discoveryErrors: runtime.installationErrors)
+        await refreshVersions(runtime.installations, forceLatest: forceLatest)
     }
 
     func refreshVersions(_ installations: [HarnessInstallation], forceLatest: Bool = false) async {
