@@ -11,6 +11,7 @@
 
 - Move the Create button into the sidebar's toolbar beside the sidebar toggle, apart from Back and Forward.
 - Move the Edit Browser button after the view picker, beside Mute and Pause Agents.
+- Tighten the content panel's corner radius so the page's corners sit evenly inside the window's.
 
 ## [0.1.0] - 2026-09-18
 

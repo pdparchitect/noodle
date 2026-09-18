@@ -5,7 +5,7 @@ import NoodleWallpaper
 import SwiftUI
 import WebKit
 
-private let browserContentCornerRadius = CompanionContentGeometry.cornerRadius
+private let browserTabCornerRadius: CGFloat = 12
 private let browserTabInset: CGFloat = 8
 
 struct BrowserProfileIcon: View {
@@ -242,7 +242,7 @@ private struct BrowserDetailView: View {
                                 .accessibilityIdentifier("browser.tab.close.\(tab.id)")
                         }.buttonStyle(.plain)
                             .background(profile.selectedTabID == tab.id ? Color.primary.opacity(0.10) : Color.clear,
-                                in: RoundedRectangle(cornerRadius: browserContentCornerRadius - browserTabInset, style: .continuous))
+                                in: RoundedRectangle(cornerRadius: browserTabCornerRadius, style: .continuous))
                             .fixedSize()
                     }
                     // Only the space after the last tab opens a tab; the tabs are

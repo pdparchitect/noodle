@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Tighten the content panel's corner radius so the screen's corners sit evenly inside the window's.
+
 ## [0.9.0] - 2026-09-18
 
 ### Fixed
