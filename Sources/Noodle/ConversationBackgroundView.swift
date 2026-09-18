@@ -80,7 +80,8 @@ struct ConversationBackgroundSheet: View {
                     choosePhoto: {
                         photoSelection = nil
                         choosingPhoto = true
-                    }
+                    },
+                    chooseWallpaper: importFile
                 )
                 .frame(minWidth: 0, maxWidth: .infinity)
 
@@ -110,16 +111,7 @@ struct ConversationBackgroundSheet: View {
         .interactiveDismissDisabled(busy)
         .fileImporter(isPresented: $choosingImage, allowedContentTypes: BackgroundMedia.allowedContentTypes) { result in
             switch result {
-            case .success(let url):
-                busy = true
-                importTask = Task {
-                    do {
-                        let file = try await Task.detached { try await PreparedBackgroundFile.prepare(url) }.value
-                        guard !Task.isCancelled else { return }
-                        useFile(file)
-                    } catch { if !Task.isCancelled { failure = error.localizedDescription } }
-                    busy = false
-                }
+            case .success(let url): importFile(url)
             case .failure(let error): failure = error.localizedDescription
             }
         }
@@ -144,6 +136,18 @@ struct ConversationBackgroundSheet: View {
                     failure = "Photos couldn’t provide this image. If it’s in iCloud, open it in Photos and let it download, then try again. You can also use Choose Background → Choose File."
                 }
             }
+        }
+    }
+
+    private func importFile(_ url: URL) {
+        busy = true
+        importTask = Task {
+            do {
+                let file = try await Task.detached { try await PreparedBackgroundFile.prepare(url) }.value
+                guard !Task.isCancelled else { return }
+                useFile(file)
+            } catch { if !Task.isCancelled { failure = error.localizedDescription } }
+            busy = false
         }
     }
 

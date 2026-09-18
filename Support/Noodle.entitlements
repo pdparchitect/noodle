@@ -26,6 +26,7 @@
         <string>/.local/bin/claude</string>
         <string>/.local/share/claude/versions/</string>
         <string>/.local/bin/fx</string>
+        <string>/Library/Application Support/com.apple.mobileAssetDesktop/</string>
     </array>
 </dict>
 </plist>

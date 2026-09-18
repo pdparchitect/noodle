@@ -7,11 +7,15 @@ let info = try plist(CommandLine.arguments[1]), entitlements = try plist(Command
 let version = try String(contentsOfFile: CommandLine.arguments[3], encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
 let required: Set<String> = ["com.apple.security.app-sandbox", "com.apple.security.files.bookmarks.app-scope",
     "com.apple.security.network.client", "com.apple.security.files.user-selected.read-write",
-    "com.apple.security.application-groups", "com.apple.security.temporary-exception.mach-lookup.global-name"]
+    "com.apple.security.application-groups", "com.apple.security.temporary-exception.mach-lookup.global-name",
+    "com.apple.security.temporary-exception.files.home-relative-path.read-only"]
 precondition(Set(entitlements.keys) == required, "Unexpected Applet entitlement set")
-for key in required where !key.contains("application-groups") && !key.contains("mach-lookup") {
+for key in required where !key.contains("application-groups") && !key.contains("temporary-exception") {
     precondition(entitlements[key] as? Bool == true, "Missing grant: \(key)")
 }
+// Read-only, and only the folder holding system wallpapers the user has downloaded.
+precondition(entitlements["com.apple.security.temporary-exception.files.home-relative-path.read-only"] as? [String] == ["/Library/Application Support/com.apple.mobileAssetDesktop/"],
+    "Unexpected home-relative read-only exception")
 let team = info["NoodleSigningTeam"] as! String, bundle = info["CFBundleIdentifier"] as! String
 let local = bundle == "com.pdparchitect.noodle.applet.local"
 precondition(local || bundle == "com.pdparchitect.noodle.applet")

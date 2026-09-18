@@ -55,7 +55,8 @@ struct AppletBackgroundSheet: View {
             HStack(spacing: 8) {
                 ImageSourceMenu(title: "Choose Background…",
                     chooseFile: { choosingFile = true },
-                    choosePhoto: { photoSelection = nil; choosingPhoto = true })
+                    choosePhoto: { photoSelection = nil; choosingPhoto = true },
+                    chooseWallpaper: importFile)
                     .frame(minWidth: 0, maxWidth: .infinity)
                 if #available(macOS 15.1, *) {
                     NoodleImagePlaygroundButton(sourceImageData: imageData) { url in
@@ -75,14 +76,7 @@ struct AppletBackgroundSheet: View {
         .interactiveDismissDisabled(busy)
         .fileImporter(isPresented: $choosingFile, allowedContentTypes: BackgroundMedia.allowedContentTypes) { result in
             switch result {
-            case .success(let url):
-                busy = true; failure = nil
-                Task {
-                    defer { busy = false }
-                    do {
-                        useBackground(try await Task.detached { try await PreparedBackgroundFile.prepare(url) }.value)
-                    } catch { failure = error.localizedDescription }
-                }
+            case .success(let url): importFile(url)
             case .failure(let error): failure = error.localizedDescription
             }
         }
@@ -104,6 +98,16 @@ struct AppletBackgroundSheet: View {
             } catch {
                 if !Task.isCancelled { failure = error.localizedDescription }
             }
+        }
+    }
+
+    private func importFile(_ url: URL) {
+        busy = true; failure = nil
+        Task {
+            defer { busy = false }
+            do {
+                useBackground(try await Task.detached { try await PreparedBackgroundFile.prepare(url) }.value)
+            } catch { failure = error.localizedDescription }
         }
     }
 

@@ -1,0 +1,62 @@
+import AppKit
+import XCTest
+@testable import NoodleWallpaperCore
+
+final class SystemWallpaperTests: XCTestCase {
+    private func directory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("SystemWallpaperTests-\(UUID())")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        return url
+    }
+
+    private func writeImage(_ url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 4, pixelsHigh: 4,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: url)
+    }
+
+    private func writeDescriptor(_ name: String, identifier: String, in catalogue: URL) throws {
+        let data = try PropertyListSerialization.data(fromPropertyList: ["mobileAssetID": identifier], format: .xml, options: 0)
+        try data.write(to: catalogue.appendingPathComponent("\(name).madesktop"))
+    }
+
+    func testOffersBundledImagesAndOnlyDownloadedDescriptors() throws {
+        let catalogue = try directory(), downloads = try directory()
+        try writeImage(catalogue.appendingPathComponent("Sonoma.heic"))
+        try writeImage(catalogue.appendingPathComponent(".thumbnails/Sonoma.heic"))
+        try writeImage(catalogue.appendingPathComponent("Solid Colors/Black.png"))
+        try writeDescriptor("The Lake", identifier: "The Lake", in: catalogue)
+        try writeDescriptor("The Beach", identifier: "The Beach", in: catalogue)
+        try writeImage(downloads.appendingPathComponent("The Lake.heic"))
+
+        let wallpapers = SystemWallpaper.available(catalogue: catalogue, downloads: downloads)
+
+        XCTAssertEqual(wallpapers.map(\.name), ["Sonoma", "The Lake"])
+        XCTAssertEqual(wallpapers[0].url.lastPathComponent, "Sonoma.heic")
+        XCTAssertEqual(wallpapers[0].thumbnailURL?.path, catalogue.appendingPathComponent(".thumbnails/Sonoma.heic").path)
+        XCTAssertEqual(wallpapers[1].url.path, downloads.appendingPathComponent("The Lake.heic").path)
+        XCTAssertNil(wallpapers[1].thumbnailURL)
+    }
+
+    func testLeavesOutPartialDownloadsAndEscapingIdentifiers() throws {
+        let catalogue = try directory(), downloads = try directory()
+        try writeDescriptor("Partial", identifier: "Partial", in: catalogue)
+        try Data("not an image".utf8).write(to: downloads.appendingPathComponent("Partial.heic"))
+        try writeDescriptor("Escape", identifier: "../outside", in: catalogue)
+        try writeImage(downloads.deletingLastPathComponent().appendingPathComponent("outside.heic"))
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: downloads.deletingLastPathComponent().appendingPathComponent("outside.heic"))
+        }
+        try Data("junk".utf8).write(to: catalogue.appendingPathComponent("Broken.madesktop"))
+
+        XCTAssertEqual(SystemWallpaper.available(catalogue: catalogue, downloads: downloads), [])
+    }
+
+    func testMissingFoldersYieldNoWallpapers() throws {
+        let missing = try directory().appendingPathComponent("missing")
+        XCTAssertEqual(SystemWallpaper.available(catalogue: missing, downloads: missing), [])
+    }
+}

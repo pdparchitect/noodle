@@ -26,6 +26,7 @@ All notable changes to Noodle are documented here, following
 
 - Give each Noodle Browser an optional description of what it is for. Assigned bots receive it with the browser's name from `browser list` so they choose the right browser; the bot editor's browser picker shows and searches it. Page-preview cards never include it.
 - Open a new tab by double-clicking the empty space in Noodle Browser's tab bar; double-clicking a tab still only selects it.
+- Choose a macOS system wallpaper as a background in Noodle, Noodle Browser, Noodle Computer and Noodle Applet. Choose Background lists the wallpapers already on this Mac, including dynamic ones; wallpapers that System Settings has not downloaded are left out. Reading downloaded wallpapers adds a read-only sandbox exception for macOS's downloaded-wallpaper folder.
 
 ### Fixed
 

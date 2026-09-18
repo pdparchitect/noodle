@@ -251,7 +251,8 @@ struct ComputerAppearanceSheet: View {
                     chooseFile: { choosingFile = true },
                     choosePhoto: {
                         photoSelection = nil; choosingPhoto = true
-                    }
+                    },
+                    chooseWallpaper: importFile
                 ).frame(minWidth: 0, maxWidth: .infinity)
                 NoodleImagePlaygroundButton(sourceImageData: imageData) { url in
                     busy = true
@@ -282,13 +283,7 @@ struct ComputerAppearanceSheet: View {
             .interactiveDismissDisabled(busy)
             .fileImporter(isPresented: $choosingFile, allowedContentTypes: BackgroundMedia.allowedContentTypes) { result in
                 switch result {
-                case .success(let url):
-                    busy = true
-                    Task {
-                        defer { busy = false }
-                        do { useBackground(try await Task.detached { try await PreparedBackgroundFile.prepare(url) }.value) }
-                        catch { failure = error.localizedDescription }
-                    }
+                case .success(let url): importFile(url)
                 case .failure(let error): failure = error.localizedDescription
                 }
             }
@@ -308,6 +303,14 @@ struct ComputerAppearanceSheet: View {
                     imageData = photo.data
                 } catch { if !Task.isCancelled { failure = error.localizedDescription } }
             }
+    }
+    private func importFile(_ url: URL) {
+        busy = true
+        Task {
+            defer { busy = false }
+            do { useBackground(try await Task.detached { try await PreparedBackgroundFile.prepare(url) }.value) }
+            catch { failure = error.localizedDescription }
+        }
     }
     private func useBackground(_ file: PreparedBackgroundFile) {
         imageData = nil

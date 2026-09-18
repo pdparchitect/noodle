@@ -60,7 +60,7 @@ if [[ "$entitlement_count" != "8" ]] \
     || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.network.client</key><true/>' \
     || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.device.audio-input</key><true/>' \
     || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key><array><string>/.codex/</string></array>' \
-    || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key><array><string>/.local/bin/claude</string><string>/.local/share/claude/versions/</string><string>/.local/bin/fx</string></array>'; then
+    || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key><array><string>/.local/bin/claude</string><string>/.local/share/claude/versions/</string><string>/.local/bin/fx</string><string>/Library/Application Support/com.apple.mobileAssetDesktop/</string></array>'; then
     print -u2 "The signed app's sandbox entitlements do not match the reviewed eight-key policy."
     exit 1
 fi

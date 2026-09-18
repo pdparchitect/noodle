@@ -1,4 +1,5 @@
-// Compile with Sources/Noodle/ImageSourceMenu.swift. No Noodle store is opened.
+// Compile with Sources/Noodle/ImageSourceMenu.swift and
+// Shared/Wallpaper/Sources/NoodleWallpaperCore/SystemWallpaper.swift. No Noodle store is opened.
 import AppKit
 import SwiftUI
 
@@ -74,7 +75,25 @@ private struct FrameProbe: NSViewRepresentable {
             }
         }
         precondition(files == 6 && photos == 6, "File and Photos actions must route independently")
-        print("Image source menu: equal button widths, heights and tops for both titles at three widths in enabled/disabled layouts; both menu actions passed")
+
+        // Wallpapers appear only when supplied, and the chosen file is routed.
+        let lake = URL(fileURLWithPath: "/tmp/The Lake.heic"), sonoma = URL(fileURLWithPath: "/tmp/Sonoma.heic")
+        var chosen: [URL] = []
+        let presenter = ImageSourceMenu.Presenter()
+        let menu = presenter.makeMenu(chooseFile: { files += 1 }, choosePhoto: { photos += 1 },
+            wallpapers: [SystemWallpaper(name: "Sonoma", url: sonoma, thumbnailURL: nil),
+                         SystemWallpaper(name: "The Lake", url: lake, thumbnailURL: nil)],
+            chooseWallpaper: { chosen.append($0) })
+        precondition(menu.items.map(\.title) == ["Choose File…", "Photos Library…", "System Wallpapers"])
+        let wallpapers = menu.items[2].submenu!
+        precondition(wallpapers.items.isEmpty, "Wallpaper entries must be built lazily")
+        presenter.menuNeedsUpdate(wallpapers)
+        presenter.menuNeedsUpdate(wallpapers)
+        precondition(wallpapers.items.map(\.title) == ["Sonoma", "The Lake"])
+        let item = wallpapers.items[1]
+        precondition(NSApp.sendAction(item.action!, to: item.target, from: item))
+        precondition(chosen == [lake] && files == 6 && photos == 6, "Wallpaper choice must route its own file")
+        print("Image source menu: equal button widths, heights and tops for both titles at three widths in enabled/disabled layouts; file, Photos and wallpaper menu actions passed")
     }
 
     @MainActor private static func findView(_ view: NSView, matching predicate: (NSView) -> Bool) -> NSView? {

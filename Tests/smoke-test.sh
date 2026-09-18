@@ -137,8 +137,8 @@ if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.temp
     exit 1
 fi
 
-if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key><array><string>/.local/bin/claude</string><string>/.local/share/claude/versions/</string><string>/.local/bin/fx</string></array>'; then
-    print -u2 "The narrow Claude Code / FX executable exceptions are missing or broader than expected."
+if ! print -r -- "$compact_entitlements" | grep -q '<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key><array><string>/.local/bin/claude</string><string>/.local/share/claude/versions/</string><string>/.local/bin/fx</string><string>/Library/Application Support/com.apple.mobileAssetDesktop/</string></array>'; then
+    print -u2 "The narrow Claude Code / FX executable and downloaded system wallpaper exceptions are missing or broader than expected."
     exit 1
 fi
 
