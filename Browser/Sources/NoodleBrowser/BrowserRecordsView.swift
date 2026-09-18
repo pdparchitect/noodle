@@ -20,6 +20,7 @@ struct BrowserRecordsView: View {
     @State private var failure: String?
     @State private var clearing = false
     @State private var draft: BookmarkDraft?
+    @FocusState private var searching: Bool
     private let pageSize = 50
 
     var body: some View {
@@ -28,13 +29,18 @@ struct BrowserRecordsView: View {
                 Text(kind.rawValue).font(embedded ? .title2.weight(.semibold) : .headline)
                 Spacer()
                 if kind == .bookmarks {
-                    Button { draft = .init(bookmark: nil, title: currentTitle, url: currentURL) } label: { Image(systemName: "plus") }
+                    Button("Add") { draft = .init(bookmark: nil, title: currentTitle, url: currentURL) }
                         .help("Add Bookmark").disabled((try? BrowserRequest.navigationURL(currentURL)) == nil)
                 } else {
-                    Button("Clear…") { clearing = true }.disabled(total == 0 && query.isEmpty)
+                    Button("Clear") { clearing = true }.disabled(total == 0 && query.isEmpty)
                 }
             }.frame(minHeight: 28)
-            TextField("Search", text: $query).textFieldStyle(.roundedBorder)
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("Search", text: $query).textFieldStyle(.plain).focused($searching)
+            }.padding(.horizontal, 12).padding(.vertical, 9)
+                .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .contentShape(Rectangle()).onTapGesture { searching = true }
             if let failure { Text(failure).font(.caption).foregroundStyle(.red) }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -80,7 +86,7 @@ struct BrowserRecordsView: View {
             .sheet(item: $draft) { draft in BookmarkEditor(browserID: browserID, library: library, draft: draft) }
     }
     private func row(title: String, url: String, detail: String? = nil) -> some View {
-        Button { open(url, false) } label: {
+        Button { open(url, true) } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.body.weight(.medium)).foregroundStyle(.primary).lineLimit(1)
                 Text(url).font(.caption).foregroundStyle(.secondary).lineLimit(1)

@@ -11,6 +11,8 @@ All notable changes to Noodle are documented here, following
 - Move Noodle Browser's Create button into the sidebar's toolbar beside the sidebar toggle, apart from Back and Forward.
 - Move Noodle Browser's Edit Browser button after the view picker, beside Mute and Pause Agents.
 - Tighten the corner radius of Noodle Browser's content panel and selected tab so each sits evenly inside the corner around it.
+- Give Noodle Browser's History and Bookmarks a larger, rounder search bar, and replace the bookmark plus button with an Add button, and drop the ellipsis from History's Clear button.
+- Open Noodle Browser's History and Bookmarks entries in a new tab instead of replacing the page in the current tab.
 
 ### Added
 
