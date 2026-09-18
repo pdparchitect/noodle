@@ -348,6 +348,17 @@ struct ComputerLibraryView: View {
     }
   }
 
+  private var createMenu: some View {
+    Menu {
+      Button("New Container", systemImage: "desktopcomputer") { showingNew = true }
+        .keyboardShortcut("n", modifiers: .command)
+      Button("New from Container Image…", systemImage: "shippingbox") { showingCustom = true }
+      Button("New Local Mac…", systemImage: "person.crop.rectangle") { showingLocalMac = true }
+    } label: {
+      Label("Create", systemImage: "plus")
+    }.help("Create Computer")
+  }
+
   var body: some View {
     NavigationSplitView(columnVisibility: $columnVisibility) {
       List(selection: $store.selection) {
@@ -366,6 +377,23 @@ struct ComputerLibraryView: View {
       .overlay {
         if !store.sessions.isEmpty && filteredSessions.isEmpty {
           ContentUnavailableView.search(text: searchText)
+        }
+      }
+      // SwiftUI places its own sidebar toggle last in the sidebar's toolbar section, so
+      // while the sidebar is open it declares the toggle itself to let Create follow it.
+      // Column items are hidden with the sidebar; the system toggle and the window
+      // toolbar's Create return then.
+      .toolbar(removing: columnVisibility == .detailOnly ? nil : .sidebarToggle)
+      .toolbar {
+        if columnVisibility != .detailOnly {
+          ToolbarSpacer(.flexible)
+          ToolbarItem {
+            Button { withAnimation { columnVisibility = .detailOnly } } label: {
+              Label("Hide Sidebar", systemImage: "sidebar.leading")
+            }.help("Hide Sidebar")
+          }
+          ToolbarSpacer(.fixed)
+          ToolbarItem { createMenu }
         }
       }
     } detail: {
@@ -389,15 +417,8 @@ struct ComputerLibraryView: View {
     .background(ComputerWindowCompositing())
     .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
     .toolbar {
-      ToolbarItem(placement: .navigation) {
-        Menu {
-          Button("New Container", systemImage: "desktopcomputer") { showingNew = true }
-            .keyboardShortcut("n", modifiers: .command)
-          Button("New from Container Image…", systemImage: "shippingbox") { showingCustom = true }
-          Button("New Local Mac…", systemImage: "person.crop.rectangle") { showingLocalMac = true }
-        } label: {
-          Label("Create", systemImage: "plus")
-        }.help("Create Computer")
+      if columnVisibility == .detailOnly {
+        ToolbarItem(placement: .navigation) { createMenu }
       }
     }
     .onAppear { columnVisibility = sidebarVisible ? .all : .detailOnly }

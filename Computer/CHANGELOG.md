@@ -5,6 +5,7 @@
 ### Changed
 
 - Tighten the content panel's corner radius so the screen's corners sit evenly inside the window's.
+- Move the Create button into the sidebar's toolbar, after the sidebar toggle; it returns to the window toolbar while the sidebar is hidden.
 
 ## [0.9.0] - 2026-09-18
 
