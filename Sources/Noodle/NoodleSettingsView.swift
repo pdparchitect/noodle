@@ -10,6 +10,7 @@ enum NoodleSettingsTab: Hashable {
 struct NoodleSettingsView: View {
     @Environment(NoodleStore.self) private var store
     private let companionUpdates = CompanionUpdateChecker.shared
+    @ObservedObject private var appUpdater = AppUpdater.shared
     // Owned here so the Harness tab is badged before it is selected.
     @State private var harnessSetup = HarnessSetupController(versionChecker: HarnessVersionChecker())
 
@@ -80,9 +81,13 @@ struct NoodleSettingsView: View {
         .settingsScrollIndicators(selection: store.selectedSettingsTab)
         .background(SettingsTabBadge(counts: ["Harness": harnessesNeedingAttention,
                                               "Tools": toolsNeedingAttention,
-                                              "Companions": companionUpdates.updates.count]))
+                                              "Companions": companionUpdates.updates.count,
+                                              "Update": appUpdater.availableVersion == nil ? 0 : 1]))
         // Check on opening Settings so the tabs are badged before they are selected.
-        .onAppear { companionUpdates.refresh(CompanionApp.installedApps()) }
+        .onAppear {
+            companionUpdates.refresh(CompanionApp.installedApps())
+            appUpdater.probeForUpdate()
+        }
         .task { await harnessSetup.refreshAll(store.runtime) }
     }
 }

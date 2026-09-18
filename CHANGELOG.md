@@ -25,6 +25,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Show when a newer Noodle is available in Settings > Update, and badge the Update tab on macOS 26 and later. Noodle asks its updater when Settings opens, without offering the update; versions you chose to skip are not announced.
 - Badge the Harness and Tools tabs in Settings with the number of harnesses and tools that need attention on macOS 26 and later. A harness counts for a failed check, a failed bot, a required update, or an available update; a tool counts when its row shows Needs attention. Harnesses are now checked when Settings opens instead of when the Harness tab is first selected; harnesses that are not installed or not signed in are not counted.
 - Show when an installed companion app has a newer release in Settings > Companions, beside its version, and badge the Companions tab with the number of companions that are behind on macOS 26 and later. Noodle reads each companion's own update feed when Settings opens, at most every six hours, or on Check Again; the companion still installs its own updates, and builds with updates turned off are not checked.
 - Give each Noodle Browser an optional description of what it is for. Assigned bots receive it with the browser's name from `browser list` so they choose the right browser; the bot editor's browser picker shows and searches it. Page-preview cards never include it.
