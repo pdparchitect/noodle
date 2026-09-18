@@ -16,6 +16,7 @@
 - Open History and Bookmarks entries in a new tab instead of replacing the page in the current tab.
 - Give Downloads the same search, list and paging as History and Bookmarks.
 - Delete single history entries and downloads from their right-click menus, alongside the bookmark Edit and Delete items; every delete asks for confirmation, and deleting a download also removes its stored file. Clicking a completed download saves it.
+- Make the address bar wider and slightly taller.
 - Keep the bookmark Add button enabled on a blank tab, where it starts an empty bookmark.
 
 ### Fixed

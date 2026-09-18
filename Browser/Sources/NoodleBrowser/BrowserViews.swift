@@ -284,8 +284,8 @@ private struct BrowserAddressField: View {
                 if loading { presentation.currentTab?.web.stopLoading() } else { presentation.currentTab?.web.reload() }
             } label: { Image(systemName: loading ? "xmark" : "arrow.clockwise").font(.caption) }
                 .buttonStyle(.plain).help(loading ? "Stop Loading" : "Reload")
-        }.padding(.horizontal, 10).padding(.vertical, 7)
-            .frame(minWidth: 120, idealWidth: 280, maxWidth: 440)
+        }.padding(.horizontal, 12).padding(.vertical, 9)
+            .frame(minWidth: 120, idealWidth: 360, maxWidth: 560)
             .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 9))
             .onAppear { address = url == "about:blank" ? "" : url }
             .onChange(of: url) { _, value in if !focused { address = value == "about:blank" ? "" : value } }
