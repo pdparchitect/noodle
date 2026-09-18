@@ -66,7 +66,7 @@ private struct ReaderOpenAnchor: NSViewRepresentable {
         Task { @MainActor in
             do {
                 try await run()
-                print("PASS: reader annotations — selected text, saved message references, Cmd+Shift+R, region save/cancel, reader lifetime and composer focus")
+                print("PASS: reader annotations — selected text, saved message references, Cmd+Shift+R, region save/cancel, reader lifetime across saves")
                 parent.attach(to: nil); window.close()
                 try? FileManager.default.removeItem(at: root)
                 NSApp.terminate(nil)
@@ -171,13 +171,14 @@ private struct ReaderOpenAnchor: NSViewRepresentable {
         input.string = "Please explain this detail"
         try await key("\r", code: 36, flags: .command, in: input.window!)
         try await Task.sleep(for: .milliseconds(500))
-        try await until("Saving did not return to the chat composer") {
-            !self.state.showing && self.window.isKeyWindow && (self.window.firstResponder as? NSTextView)?.isEditable == true
+        try await until("Saving must keep the reader open for further annotations") {
+            self.state.showing && self.reader.isVisible && self.reader.isKeyWindow &&
+                !self.annotations.editor.hasPendingAnnotation && self.annotations.canAnnotate
         }
+        require(!parent.canAnnotate, "The chat must not take annotation shortcuts back after a reader save")
         require(store.saved.count == 1 && store.saved[0].attachment.annotation?.quote == "Quoted")
         require(store.saved[0].attachment.annotation?.sourceMessageID == message.id)
 
-        try await openReader()
         try await region()
         try await chooseRegion()
         require(annotations.editor.pending?.region?.isValid == true && annotations.editor.pendingImage != nil)
@@ -190,11 +191,12 @@ private struct ReaderOpenAnchor: NSViewRepresentable {
         try await chooseRegion()
         annotations.editor.commentInput!.string = "This region needs a closer look"
         try await key("\r", code: 36, flags: .command, in: annotations.editor.commentInput!.window!)
-        try await until("Region save did not close the reader and restore the chat") { !self.state.showing && self.parent.canAnnotate }
+        try await until("Region save must keep the reader open for further annotations") {
+            self.state.showing && self.reader.isVisible && self.annotations.canAnnotate
+        }
         require(store.saved.count == 2 && store.saved[1].attachment.annotation?.region?.isValid == true)
         require(store.saved[1].attachment.conversationID == message.conversationID)
 
-        try await openReader()
         try await region()
         try await key("\u{1b}", code: 53, in: reader)
         try await until("Escape before region selection must keep the reader") { self.reader.isVisible && self.annotations.canAnnotate }

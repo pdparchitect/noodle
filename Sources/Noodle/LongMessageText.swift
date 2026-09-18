@@ -50,7 +50,6 @@ struct MessageText: View {
 
 struct MessageTextReader: View {
     @Environment(NoodleStore.self) private var store
-    @Environment(\.conversationAnnotations) private var conversationAnnotations
     @State private var annotations = ConversationAnnotationController()
     let message: ChatMessage
     let close: () -> Void
@@ -96,9 +95,6 @@ struct MessageTextReader: View {
             title: store.conversations.first { $0.id == message.conversationID }.map { store.title(for: $0) } ?? "Message",
             save: { note, content, source, raw in
                 try store.saveConversationAnnotation(note, content: content, source: source, sourceData: raw)
-            }, focusComposer: {
-                close()
-                conversationAnnotations?.editor.focusConversationComposer?()
             }).frame(width: 0, height: 0))
         .onDisappear { annotations.cancel() }
     }

@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep the Read more reader open after saving an annotation so more annotations can be added.
+
 ## [0.19.0] - 2026-09-18
 
 ### Changed
