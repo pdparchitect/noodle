@@ -263,9 +263,13 @@ import NoodleCore
             await eventually { ExtendedAgentConnection.current.prompts == 1 && process.snapshot.phase == .working }
             let wire = ExtendedAgentConnection.current!
             precondition(wire.lastPromptText.contains(MessengerDocumentation.recoveredModelContext))
-            let saved = try JSONSerialization.jsonObject(with: Data(contentsOf: layout.sessionState(provider: .codex, extendedAccess: false))) as! [String: Any]
-            precondition(saved["threadID"] as? String != oldThread)
-            precondition(saved["needsHistoryRecovery"] as? Bool == false)
+            // The adapter is working once turn/start is sent, but clears the
+            // recovery flag only after the asynchronous acknowledgement.
+            func saved() -> [String: Any] {
+                (try? JSONSerialization.jsonObject(with: Data(contentsOf: layout.sessionState(provider: .codex, extendedAccess: false)))) as? [String: Any] ?? [:]
+            }
+            await eventually { saved()["needsHistoryRecovery"] as? Bool == false }
+            precondition(saved()["threadID"] as? String != oldThread)
             wire.complete()
             await eventually { process.snapshot.phase == .ready }
             process.stop { _ in }
