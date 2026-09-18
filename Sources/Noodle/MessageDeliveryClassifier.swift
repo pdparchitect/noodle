@@ -39,7 +39,7 @@ struct MessageDeliveryClassifier: MessageDeliveryClassifying {
                 \(context.prompt)
                 Classify the new message.
                 """, generating: MessageDeliveryIntent.self,
-                options: GenerationOptions(sampling: .greedy, maximumResponseTokens: 16))
+                options: GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 16))
             switch response.content {
             case .stop, .correction, .emergency: return true
             case .additionalTask, .acknowledgement, .question, .unclear: return false
