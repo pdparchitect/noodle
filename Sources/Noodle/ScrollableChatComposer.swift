@@ -15,7 +15,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
     let completion: ComposerNameCompletion
     let submit: () -> Void
     var focusSidebar: (() -> Void)? = nil
-    var pasteAttachments: (() -> Bool)? = nil
+    var pasteAttachments: ((NSPasteboard) -> Bool)? = nil
     var dropFiles: (([URL]) -> Void)? = nil
     @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showDescriptions = true
 
@@ -203,7 +203,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
 
 @MainActor final class ComposerTextView: NSTextView {
     var focusChanged: ((Bool) -> Void)?
-    var pasteAttachments: (() -> Bool)?
+    var pasteAttachments: ((NSPasteboard) -> Bool)?
     var dropFiles: (([URL]) -> Void)?
     var placeholder = "" { didSet { needsDisplay = true } }
     override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
@@ -220,6 +220,8 @@ struct ScrollableChatComposer: NSViewRepresentable {
         return super.dragOperation(for: draggingInfo, type: type)
     }
     override func readSelection(from pasteboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+        // Covers Paste and Match Style and text dragged into the editor, too.
+        if pasteAttachments?(pasteboard) == true { return true }
         // NSTextView otherwise consumes text documents itself, inserting their
         // contents or path instead of letting the conversation attach the file.
         if let dropFiles,
@@ -231,13 +233,13 @@ struct ScrollableChatComposer: NSViewRepresentable {
         return super.readSelection(from: pasteboard, type: type)
     }
     override func paste(_ sender: Any?) {
-        if pasteAttachments?() == true { return }
+        if pasteAttachments?(.general) == true { return }
         pasteAsPlainText(sender)
     }
     override func keyDown(with event: NSEvent) {
         let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
         if event.charactersIgnoringModifiers?.lowercased() == "v", modifiers == .control,
-           pasteAttachments?() == true { return }
+           pasteAttachments?(.general) == true { return }
         super.keyDown(with: event)
     }
     override func becomeFirstResponder() -> Bool {

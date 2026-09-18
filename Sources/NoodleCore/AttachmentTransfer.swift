@@ -48,8 +48,8 @@ public enum AttachmentTransfer {
         .data
     ]
 
-    // Plain text is intentionally excluded so Command-V continues to paste text
-    // into the composer rather than turning it into an attachment.
+    // The composer handles plain text itself, inserting short snippets and
+    // importing large pastes as text attachments.
     public static let pasteContentTypes: [UTType] = [
         .fileURL,
         .image,
@@ -88,8 +88,8 @@ public enum AttachmentTransfer {
 
     private static func preferredDataType(from provider: NSItemProvider, context: Context) -> UTType? {
         // Drops may provide document bytes without a file URL, including text,
-        // Markdown, source code, and HTML. Clipboard text still belongs in the
-        // composer; a browser URL should still win over its text/HTML fallback.
+        // Markdown, source code, and HTML. The composer handles clipboard text;
+        // a browser URL should still win over its text/HTML fallback.
         let includesText = context == .drop && !provider.hasItemConformingToTypeIdentifier(UTType.url.identifier)
         return provider.registeredTypeIdentifiers
             .compactMap(UTType.init)

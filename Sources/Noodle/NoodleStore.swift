@@ -703,6 +703,17 @@ final class NoodleStore {
             }
         }
 
+        if let text = pasteboard.string(forType: .string), LongTextPolicy.requiresPreview(text) {
+            do {
+                try importAttachment(data: Data(text.utf8), originalFilename: "Pasted Text.txt",
+                                     mediaType: "text/plain", into: conversationID)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            // Even on failure, leave the draft and clipboard intact for retry.
+            return true
+        }
+
         return false
     }
 

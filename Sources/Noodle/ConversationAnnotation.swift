@@ -135,7 +135,8 @@ struct ConversationAnnotationText: NSViewRepresentable {
                 return self.handle(event)
             }
             for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification,
-                         NSWindow.willCloseNotification, NSWindow.didResizeNotification, NSWindow.didMoveNotification] {
+                         NSWindow.willCloseNotification, NSWindow.didResizeNotification, NSWindow.didMoveNotification,
+                         NSWindow.didChangeOcclusionStateNotification] {
                 NotificationCenter.default.addObserver(self, selector: #selector(windowChanged(_:)), name: name, object: nil)
             }
         }
@@ -143,7 +144,11 @@ struct ConversationAnnotationText: NSViewRepresentable {
     }
 
     var canAnnotate: Bool {
-        window != nil && window?.isVisible == true && NSApp.keyWindow === window &&
+        // AppKit can report both a popover and its parent as key, while
+        // NSApp.keyWindow names the parent. Only the deepest key window owns
+        // annotations, so the chat cannot intercept the reader's shortcuts.
+        window != nil && window?.isVisible == true && window?.isKeyWindow == true &&
+            !(window?.childWindows ?? []).contains(where: { $0.isVisible && $0.isKeyWindow }) &&
             conversationID != nil && save != nil && !busy && !editor.hasPendingAnnotation &&
             NSApp.modalWindow == nil && window?.attachedSheet == nil
     }
@@ -167,7 +172,13 @@ struct ConversationAnnotationText: NSViewRepresentable {
         }
         // AppKit updates keyWindow around these notifications. Read the settled
         // window so opening a preview or a sheet cannot leave chat commands live.
-        DispatchQueue.main.async { [weak self] in self?.updateCommands() }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            // SwiftUI can cache a hidden popover without unmounting its host
+            // or calling onDisappear. Its annotation session must still end.
+            if self.window?.isVisible == false { self.cancel() }
+            else { self.updateCommands() }
+        }
     }
 
     func handle(_ event: NSEvent) -> NSEvent? {

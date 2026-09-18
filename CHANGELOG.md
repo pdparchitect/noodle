@@ -10,6 +10,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Keep long user and bot messages compact with a Read more popover, and turn large text pastes into text attachments without replacing the draft.
 - Move affected-bot details and Kick actions in Harness Settings into a popover opened from the harness status label.
 - Give the website’s reusable MacBook image a blank black display while retaining the separate screen overlay.
 - Make DMGs the primary release-page and website downloads, with ZIPs retained as an alternative.
@@ -37,6 +38,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Support selected-text annotations and the Annotate Region shortcut inside long-message reader popovers.
 - Prevent intermittent Computer lifecycle test timeouts when mailbox change notifications arrive after the initial request scan.
 - Require a focus click before interacting with an inactive window's content, preventing accidental link and attachment opens in conversations.
 - Let Browser scripts and WebMCP argument files be read directly from the bot's workspace while rejecting symlinks, oversized files and paths outside it.

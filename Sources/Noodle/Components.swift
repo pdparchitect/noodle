@@ -81,10 +81,6 @@ struct MessageBubble: View {
         return false
     }
 
-    private var renderedBody: AttributedString {
-        MessageMarkdownCache.shared.render(message)
-    }
-
     var body: some View {
         let attachments = store.attachments(for: message)
         if isSystem {
@@ -127,12 +123,8 @@ struct MessageBubble: View {
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
                 if !(message.body == VoiceMessage.messageBody && !attachments.isEmpty && attachments.allSatisfy { $0.voice != nil }) {
-                Text(renderedBody)
-                    .font(.system(size: 12.5))
-                    .lineSpacing(2)
+                MessageText(message: message)
                     .foregroundStyle(.white)
-                    .textSelection(.enabled)
-                    .background(ConversationAnnotationText(message: message))
                     .padding(.horizontal, 13)
                     .padding(.vertical, 8)
                     .background { messageBackground }

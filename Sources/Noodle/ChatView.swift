@@ -351,7 +351,7 @@ struct ChatView: View {
                 completion: nameCompletion,
                 submit: { store.sendDraft(to: conversation.id) },
                 focusSidebar: focusSidebar,
-                pasteAttachments: { store.importAttachmentsFromPasteboard(into: conversation.id) },
+                pasteAttachments: { store.importAttachmentsFromPasteboard(into: conversation.id, pasteboard: $0) },
                 dropFiles: { urls in
                     urls.forEach { store.importAttachment(from: $0, into: conversation.id) }
                 }
