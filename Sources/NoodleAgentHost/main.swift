@@ -266,7 +266,7 @@ private final class HostSession: NSObject, AgentHostService {
     private func startRuntime(harnessIdentifier: String, agentID: String, executablePath: String,
                               sessionID: String?, resumeSession: Bool, modelIdentifier: String?, effortIdentifier: String?,
                               restricted: Bool, appsEnabled: Bool = false, reply: @escaping (Int32, String?) -> Void) {
-        queue.async {
+        queue.async { [self] in
             guard self.process == nil, !self.stopping else { reply(0, "Runtime already started or stopping."); return }
             do {
                 guard let provider = HarnessProvider(rawValue: harnessIdentifier) else {
@@ -321,7 +321,7 @@ private final class HostSession: NSObject, AgentHostService {
     }
 
     func write(_ data: Data) {
-        queue.async {
+        queue.async { [self] in
             guard !self.stopping, data.count <= 16 * 1_024 * 1_024 else { return }
             self.input?.write(data) { [weak self] _ in self?.stop { _ in } }
         }
@@ -440,7 +440,7 @@ private final class HostSession: NSObject, AgentHostService {
         executablePath: String,
         withReply reply: @escaping (Bool, String?) -> Void
     ) {
-        queue.async {
+        queue.async { [self] in
             do {
                 guard let provider = HarnessProvider(rawValue: harnessIdentifier), provider == .claudeCode || provider == .fx else {
                     throw HostError("This harness does not support this sign-in flow.")

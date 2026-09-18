@@ -70,7 +70,7 @@ final class LocalNetworkAccessProbe: @unchecked Sendable {
     func check() async -> Bool {
         await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
-                queue.async {
+                queue.async { [self] in
                     if let result = self.result { continuation.resume(returning: result); return }
                     self.continuations.append(continuation)
                     guard self.continuations.count == 1 else { return }

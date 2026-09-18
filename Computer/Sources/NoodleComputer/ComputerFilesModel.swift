@@ -130,7 +130,7 @@ import Foundation
     func importFiles(_ urls: [URL], into destination: String? = nil) {
         guard !urls.isEmpty else { return }
         let folder = destination ?? folder
-        perform("Preparing import…", cancellationMessage: "Import cancelled. Completed items were kept.") {
+        perform("Preparing import…", cancellationMessage: "Import cancelled. Completed items were kept.") { [self] in
             let id = self.transferID
             try await self.service.importItems(urls, to: folder) { [weak self] progress in
                 await self?.updateTransferProgress(progress, verb: "Importing", id: id)
