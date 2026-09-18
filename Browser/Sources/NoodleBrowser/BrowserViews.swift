@@ -320,7 +320,8 @@ private struct BrowserDownloadsView: View {
     @State private var failure: String?
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Downloads").font(.title2.weight(.semibold))
+            // Matches the History and Bookmarks header row so the title holds its position across views.
+            Text("Downloads").font(.title2.weight(.semibold)).frame(minHeight: 28)
             if let failure { Text(failure).font(.caption).foregroundStyle(.red) }
             List(profile.downloads.reversed()) { download in
                 HStack(spacing: 14) {

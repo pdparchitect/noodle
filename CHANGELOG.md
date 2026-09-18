@@ -20,6 +20,7 @@ All notable changes to Noodle are documented here, following
 ### Fixed
 
 - Keep the Read more reader open after saving an annotation so more annotations can be added.
+- Keep Noodle Browser's Downloads title at the same height as the History and Bookmarks titles so it no longer shifts when switching views.
 
 ## [0.19.0] - 2026-09-18
 

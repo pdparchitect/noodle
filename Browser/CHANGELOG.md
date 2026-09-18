@@ -13,6 +13,10 @@
 - Move the Edit Browser button after the view picker, beside Mute and Pause Agents.
 - Tighten the corner radius of the content panel and selected tab so each sits evenly inside the corner around it.
 
+### Fixed
+
+- Keep the Downloads title at the same height as the History and Bookmarks titles so it no longer shifts when switching views.
+
 ## [0.1.0] - 2026-09-18
 
 ### Fixed
