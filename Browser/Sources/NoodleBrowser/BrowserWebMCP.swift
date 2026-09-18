@@ -6,7 +6,7 @@ import WebKit
 /// filesystem access, agent credentials, or way to invoke the Browser broker.
 @MainActor enum BrowserWebMCP {
     static let source: String = {
-        guard let url = Bundle.module.url(forResource: "Resources", withExtension: nil)?.appendingPathComponent("WebMCP.js"),
+        guard let url = BrowserResources.bundle.url(forResource: "Resources", withExtension: nil)?.appendingPathComponent("WebMCP.js"),
               let source = try? String(contentsOf: url, encoding: .utf8) else {
             preconditionFailure("Missing bundled WebMCP runtime")
         }

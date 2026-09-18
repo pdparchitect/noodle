@@ -19,6 +19,9 @@ import SwiftUI
     static func runAndExit() async {
         setbuf(stdout, nil)
         do {
+            let packagedResources = Bundle.main.resourceURL?.appendingPathComponent("NoodleBrowser_NoodleBrowser.bundle")
+            try require(BrowserResources.bundle.bundleURL.resolvingSymlinksInPath().path == packagedResources?.resolvingSymlinksInPath().path,
+                        "Browser scripts must load from the packaged app, not the build directory")
             let args = CommandLine.arguments
             func arg(_ name: String) throws -> String {
                 guard let i = args.firstIndex(of: name), i+1 < args.count else { throw BrowserError("Missing smoke argument " + name) }

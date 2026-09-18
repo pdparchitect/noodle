@@ -7,6 +7,7 @@
 ### Fixed
 
 - Focus inactive windows on the first content click before allowing page links and controls to respond, without affecting background agent input.
+- Load inspection, pointer and WebMCP scripts from the signed app's resource bundle so packaged Browser builds work without access to the build directory.
 
 ### Changed
 

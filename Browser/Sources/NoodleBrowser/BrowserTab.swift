@@ -259,7 +259,7 @@ import WebKit
         }
     }
     func inspect(frame: String?) async throws -> String {
-        let url = Bundle.module.url(forResource: "Resources", withExtension: nil)!.appendingPathComponent("Inspect.js")
+        let url = BrowserResources.bundle.url(forResource: "Resources", withExtension: nil)!.appendingPathComponent("Inspect.js")
         let source = try String(contentsOf: url, encoding: .utf8)
         let value = try await evaluate(source, frame: frame, world: Self.controlWorld)
         var result = value as? [String: Any] ?? [:]
@@ -270,7 +270,7 @@ import WebKit
         let generation = inputGeneration
         var point: CGPoint
         if let target {
-            let url = Bundle.module.url(forResource: "Resources", withExtension: nil)!.appendingPathComponent("PointerTarget.js")
+            let url = BrowserResources.bundle.url(forResource: "Resources", withExtension: nil)!.appendingPathComponent("PointerTarget.js")
             let source = try String(contentsOf: url, encoding: .utf8)
             guard let result = try await evaluate(source, arguments: ["target": target], frame: frame, world: Self.controlWorld) as? [String: Double],
                   let px = result["x"], let py = result["y"] else { throw BrowserError("Could not resolve the mouse target.") }
