@@ -78,6 +78,10 @@ enum CompanionApp: String, CaseIterable, Identifiable {
 struct CompanionAppInstallation: Equatable {
     let applicationURL: URL
     let version: String?
+    /// What Sparkle compares with a feed's `sparkle:version`.
+    let buildVersion: String?
+    let feedURL: URL?
+    let updatesEnabled: Bool
 
     init?(applicationURL: URL) {
         var isDirectory: ObjCBool = false
@@ -89,7 +93,13 @@ struct CompanionAppInstallation: Equatable {
         let info = (try? Data(contentsOf: infoURL)).flatMap {
             (try? PropertyListSerialization.propertyList(from: $0, format: nil)) as? [String: Any]
         }
-        let value = (info?["CFBundleShortVersionString"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        version = value.flatMap { $0.isEmpty ? nil : $0 }
+        let string: (String) -> String? = { key in
+            let value = (info?[key] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.flatMap { $0.isEmpty ? nil : $0 }
+        }
+        version = string("CFBundleShortVersionString")
+        buildVersion = string("CFBundleVersion")
+        feedURL = string("SUFeedURL").flatMap(URL.init(string:))
+        updatesEnabled = info?["NoodleUpdatesEnabled"] as? Bool == true
     }
 }
