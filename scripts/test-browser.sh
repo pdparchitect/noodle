@@ -24,9 +24,10 @@ cleanup() {
 trap cleanup EXIT
 python3 "$project_root/Browser/Tests/Fixtures/server.py" > "$artifacts/port" 2> "$artifacts/server.log" &
 fixture_pid=$!
-for _ in {1..100}; do [[ -s "$artifacts/port" ]] && break; sleep 0.1; done
+# Stop early if the server exits; allow a slow first Python launch on CI.
+for _ in {1..300}; do [[ -s "$artifacts/port" ]] && break; kill -0 "$fixture_pid" 2>/dev/null || break; sleep 0.1; done
 port="$(cat "$artifacts/port")"
-[[ "$port" == <-> ]] || { print -u2 'Fixture server failed to start.'; exit 1; }
+[[ "$port" == <-> ]] || { print -u2 "Fixture server failed to start ($(python3 --version 2>&1), $(command -v python3))."; cat "$artifacts/server.log" >&2; exit 1; }
 fixture_args=(--smoke-test --smoke-id "$smoke_id" --smoke-port "$port")
 if [[ "${NOODLE_BROWSER_TEST_WEBMCP_DEMOS:-0}" == 1 ]]; then fixture_args+=(--webmcp-demos); fi
 "$executable" "${fixture_args[@]}" > "$artifacts/browser.log" 2>&1 || { cat "$artifacts/browser.log"; exit 1; }
