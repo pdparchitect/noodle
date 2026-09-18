@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Changed
 
 - Move Noodle Browser's Create button into the sidebar's toolbar beside the sidebar toggle, apart from Back and Forward.
+- Move Noodle Browser's Edit Browser button after the view picker, beside Mute and Pause Agents.
 
 ### Added
 

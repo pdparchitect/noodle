@@ -192,15 +192,15 @@ private struct BrowserDetailView: View {
                 BrowserAddressField(presentation: presentation, url: selected?.info.url ?? "", loading: selected?.info.loading ?? false)
             }
             ToolbarSpacer(.flexible, placement: .automatic)
-            ToolbarItem(id: "browser-edit", placement: .primaryAction) {
-                Button { presentation.editing = profile } label: { Label("Edit Browser", systemImage: "slider.horizontal.3") }.help("Edit Browser")
-            }
             ToolbarItem(placement: .primaryAction) {
                 Picker("Browser View", selection: $presentation.mode) {
                     ForEach(BrowserDetailMode.allCases) { mode in
                         Image(systemName: mode.symbol).tag(mode).help(mode.rawValue).accessibilityLabel(mode.rawValue)
                     }
                 }.pickerStyle(.segmented).labelsHidden().fixedSize().accessibilityValue(presentation.mode.rawValue)
+            }
+            ToolbarItem(id: "browser-edit", placement: .primaryAction) {
+                Button { presentation.editing = profile } label: { Label("Edit Browser", systemImage: "slider.horizontal.3") }.help("Edit Browser")
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {

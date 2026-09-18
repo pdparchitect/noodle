@@ -10,6 +10,7 @@
 ### Changed
 
 - Move the Create button into the sidebar's toolbar beside the sidebar toggle, apart from Back and Forward.
+- Move the Edit Browser button after the view picker, beside Mute and Pause Agents.
 
 ## [0.1.0] - 2026-09-18
 
