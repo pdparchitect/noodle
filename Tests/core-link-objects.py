@@ -16,7 +16,7 @@ def main():
         raise SystemExit("Usage: core-link-objects.py SWIFTPM_BIN_PATH")
     directory = Path(sys.argv[1])
     objects = set()
-    for module in ("NoodleCore", "NoodleWallpaperCore", "ComputerBridge", "AppletBridge"):
+    for module in ("NoodleCore", "NoodleWallpaperCore", "ComputerBridge", "AppletBridge", "BrowserBridge"):
         mapping = json.loads((directory / f"{module}.build/output-file-map.json").read_text())
         for outputs in mapping.values():
             if name := outputs.get("object"):

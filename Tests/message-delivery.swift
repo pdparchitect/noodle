@@ -85,9 +85,11 @@ import NoodleCore
         var result: [String: Any] = [:]
         switch method {
         case "initialize":
-            result = provider == .muse
-                ? ["schema": ["version": 1], "serverInfo": ["name": "muse"], "sessionDurability": "durable"]
-                : ["protocolVersion": 1]
+            switch provider {
+            case .muse: result = ["schema": ["version": 1], "serverInfo": ["name": "muse"], "sessionDurability": "durable"]
+            case .openCode: result = ["protocolVersion": 1, "agentInfo": ["name": "opencode", "version": "2.0.0"]]
+            default: result = ["protocolVersion": 1]
+            }
         case "thread/start": result = ["thread": ["id": session]]
         case "thread/resume":
             if Self.rejectCodexResume {
@@ -149,7 +151,7 @@ import NoodleCore
             emit(["method": "turn/completed", "params": ["sessionId": session, "turnId": turnID ?? turn, "terminal": "completed"]])
         case .claudeCode:
             emit(["type": "result", "session_id": session, "is_error": false])
-        case .apple, .fx, .grokBuild:
+        case .apple, .fx, .grokBuild, .openCode:
             emit(["id": promptID!, "result": ["stopReason": cancelled ? "cancelled" : "end_turn"]])
         }
     }
@@ -200,7 +202,7 @@ import NoodleCore
             process = MuseAgentProcess(agent: agent, executableURL: executable, workspaceURL: workspace,
                 extendedAccess: true, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
                 onUnexpectedTermination: { _, _, _ in })
-        case .apple, .fx, .grokBuild:
+        case .apple, .fx, .grokBuild, .openCode:
             process = ACPAgentProcess(provider: provider, agent: agent, executableURL: executable, workspaceURL: workspace,
                 extendedAccess: provider != .apple && !restrictedACP, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
                 onUnexpectedTermination: { _, _, _ in })
