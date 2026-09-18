@@ -374,9 +374,7 @@ struct ComputerAssignmentPicker: View {
                 CompanionAssignmentItem(id: $0.id, name: $0.name, state: controller.available ? $0.state : "Unavailable",
                     symbol: $0.symbol, colour: $0.colour, icon: $0.icon)
             }, selectedIDs: $selectedIDs, createPrompt: createPrompt, openLibraryButton: openLibraryButton,
-            notice: updateNotice,
-            footer: "Computers can be shared with multiple bots. Their files and services are shared; terminal sessions are separate.",
-            failure: controller.failure)
+            notice: updateNotice, failure: controller.failure)
         .task { await controller.refresh(launchIfNeeded: true) }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didActivateApplicationNotification)) { notification in
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
