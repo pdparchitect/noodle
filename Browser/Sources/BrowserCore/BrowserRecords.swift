@@ -80,6 +80,10 @@ final class BrowserRecords {
         try execute("UPDATE history SET title=? WHERE id=?", [String(title.prefix(2048)), id.uuidString])
     }
     func clearHistory() throws { try execute("DELETE FROM history") }
+    func removeHistory(_ id: UUID) throws {
+        try execute("DELETE FROM history WHERE id=?", [id.uuidString])
+        guard sqlite3_changes(database) == 1 else { throw BrowserError("History entry does not belong to this browser or no longer exists.") }
+    }
     func bookmarks(query: String, limit: Int, offset: Int) throws -> ([BrowserBookmark], Int) {
         let filter = filter(query)
         return (try rows("SELECT id,url,title,created_at,updated_at FROM bookmarks" + filter.0 + " ORDER BY updated_at DESC,rowid DESC LIMIT ? OFFSET ?", filter.1 + [String(limit), String(offset)]).map(bookmark), try count("bookmarks", filter: filter))

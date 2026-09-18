@@ -175,14 +175,13 @@ private struct BrowserDetailView: View {
                 } else {
                     BrowserStartPage(profile: profile, presentation: presentation)
                 }
-            case .history, .bookmarks:
-                BrowserRecordsView(kind: presentation.mode == .history ? .history : .bookmarks,
+            case .history, .bookmarks, .downloads:
+                BrowserRecordsView(kind: BrowserRecordsKind(rawValue: presentation.mode.rawValue) ?? .history,
                     browserID: profile.id, library: presentation.library,
-                    currentURL: selected?.info.url ?? "", currentTitle: selected?.info.title ?? "", embedded: true) {
+                    currentURL: selected?.info.url ?? "", currentTitle: selected?.info.title ?? "", embedded: true,
+                    runtime: presentation.runtime) {
                         presentation.navigate($0, newTab: $1)
                     }.id(presentation.mode)
-            case .downloads:
-                BrowserDownloadsView(profile: profile, runtime: presentation.runtime)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -325,40 +324,6 @@ private struct BrowserStartPage: View {
     }
 }
 
-private struct BrowserDownloadsView: View {
-    let profile: BrowserProfile
-    let runtime: BrowserRuntime
-    @State private var failure: String?
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            // Matches the History and Bookmarks header row so the title holds its position across views.
-            Text("Downloads").font(.title2.weight(.semibold)).frame(minHeight: 28)
-            if let failure { Text(failure).font(.caption).foregroundStyle(.red) }
-            List(profile.downloads.reversed()) { download in
-                HStack(spacing: 14) {
-                    Image(systemName: "doc").font(.title2).foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(download.filename).lineLimit(1)
-                        Text(download.error ?? download.state.capitalized).font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if download.state == "complete" {
-                        Button("Save…") {
-                            do {
-                                let source = try runtime.downloadURL(browserID: profile.id, record: download)
-                                let panel = NSSavePanel(); panel.nameFieldStringValue = download.filename
-                                panel.begin { result in
-                                    if result == .OK, let url = panel.url { Task { do { try await runtime.exportUserFile(source, to: url) } catch { failure = error.localizedDescription } } }
-                                }
-                            } catch { failure = error.localizedDescription }
-                        }
-                    }
-                }.padding(.vertical, 8).listRowBackground(Color.clear)
-            }.scrollContentBackground(.hidden).listStyle(.plain)
-                .overlay { if profile.downloads.isEmpty { ContentUnavailableView("No downloads", systemImage: "arrow.down.circle") } }
-        }.padding(24)
-    }
-}
 private struct BrowserTabView: View {
     @ObservedObject var tab: BrowserTab
     @State private var dialogText = ""

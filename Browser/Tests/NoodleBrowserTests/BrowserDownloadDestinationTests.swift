@@ -49,6 +49,27 @@ final class BrowserDownloadDestinationTests: XCTestCase {
         XCTAssertNil(runtime.failure)
     }
 
+    @MainActor func testRemovingADownloadDeletesItsRecordAndFile() async throws {
+        let (library, root) = makeLibrary()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let profile = try library.create(name: "A"), other = try library.create(name: "B")
+        let runtime = BrowserRuntime(library: library)
+        var urls: [URL] = []
+        for name in ["keep.pdf", "drop.pdf"] {
+            let token = NSObject(), key = ObjectIdentifier(token)
+            runtime.track(key, browserID: profile.id)
+            let url = try XCTUnwrap(runtime.downloadDestination(for: key, suggestedFilename: name))
+            try Data("fixture".utf8).write(to: url); urls.append(url)
+        }
+        let drop = try XCTUnwrap(library.profile(profile.id).downloads.last)
+        XCTAssertThrowsError(try runtime.removeDownload(browserID: other.id, downloadID: drop.id))
+        try runtime.removeDownload(browserID: profile.id, downloadID: drop.id)
+        XCTAssertEqual(try library.profile(profile.id).downloads.map(\.filename), ["keep.pdf"])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: urls[0].path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: urls[1].deletingLastPathComponent().path))
+        XCTAssertThrowsError(try runtime.removeDownload(browserID: profile.id, downloadID: drop.id))
+    }
+
     @MainActor func testSuggestedFilenamesCannotEscapeTheDownloadsFolder() async throws {
         let (library, root) = makeLibrary()
         defer { try? FileManager.default.removeItem(at: root) }

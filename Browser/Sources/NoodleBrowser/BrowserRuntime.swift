@@ -320,6 +320,17 @@ import WebKit
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         return folder.appendingPathComponent(BrowserLibrary.safeFilename(record.filename))
     }
+    /// Forget a download and delete its stored file; one still in flight is cancelled first.
+    func removeDownload(browserID: UUID, downloadID: UUID) throws {
+        var profile = try library.profile(browserID)
+        guard let index = profile.downloads.firstIndex(where: { $0.id == downloadID }) else { throw BrowserError("Download does not belong to this browser or no longer exists.") }
+        let folder = try downloadURL(browserID: browserID, record: profile.downloads[index]).deletingLastPathComponent()
+        if let key = activeDownloads.first(where: { $0.value.record.id == downloadID })?.key {
+            activeDownloads.removeValue(forKey: key)?.download?.cancel { _ in }
+        }
+        profile.downloads.remove(at: index); try library.update(profile)
+        try? FileManager.default.removeItem(at: folder)
+    }
     func downloadDidFinish(_ download: WKDownload) { completeDownload(download, error: nil) }
     func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) { completeDownload(download, error: error) }
     private func completeDownload(_ download: WKDownload, error: Error?) {

@@ -109,6 +109,11 @@ final class BrowserLibraryTests: XCTestCase {
         XCTAssertEqual(try restored.history(a.id).total, 2)
         XCTAssertEqual(try restored.profile(a.id).id, a.id)
         let bookmark = try restored.addBookmark(a.id, url: "https://example.com", title: "Keep")
+        // One visit is removed without touching the rest, and only from its own browser.
+        XCTAssertThrowsError(try restored.removeHistory(b.id, visit: first))
+        try restored.removeHistory(a.id, visit: first)
+        XCTAssertEqual(try restored.history(a.id).entries.map(\.url), ["https://example.com/second"])
+        XCTAssertThrowsError(try restored.removeHistory(a.id, visit: first))
         try restored.clearHistory(a.id)
         XCTAssertEqual(try restored.history(a.id).total, 0)
         XCTAssertEqual(try restored.bookmarks(a.id).entries.first?.id, bookmark.id)

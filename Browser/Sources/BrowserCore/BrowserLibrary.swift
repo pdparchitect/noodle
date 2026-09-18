@@ -179,6 +179,9 @@ public struct BrowserProfile: Codable, Identifiable, Equatable, Sendable {
     public func clearHistory(_ id: UUID) throws {
         try records(id).clearHistory(); recordsRevision &+= 1
     }
+    public func removeHistory(_ id: UUID, visit: UUID) throws {
+        try records(id).removeHistory(visit); recordsRevision &+= 1
+    }
     public func bookmarks(_ id: UUID, query: String = "", limit: Int = 50, offset: Int = 0) throws -> (entries: [BrowserBookmark], total: Int) {
         var request = BrowserRequest(.bookmarks, browserID: id); request.query = query; request.limit = limit; request.offset = offset; try request.validate()
         return try records(id).bookmarks(query: query, limit: limit, offset: offset)

@@ -13,6 +13,9 @@ All notable changes to Noodle are documented here, following
 - Tighten the corner radius of Noodle Browser's content panel and selected tab so each sits evenly inside the corner around it.
 - Give Noodle Browser's History and Bookmarks a larger, rounder search bar, and replace the bookmark plus button with an Add button, and drop the ellipsis from History's Clear button.
 - Open Noodle Browser's History and Bookmarks entries in a new tab instead of replacing the page in the current tab.
+- Give Noodle Browser's Downloads the same search, list and paging as History and Bookmarks.
+- Delete single Noodle Browser history entries and downloads from their right-click menus, alongside the bookmark Edit and Delete items; every delete asks for confirmation, and deleting a download also removes its stored file. Clicking a completed download saves it.
+- Keep Noodle Browser's bookmark Add button enabled on a blank tab, where it starts an empty bookmark.
 
 ### Added
 
