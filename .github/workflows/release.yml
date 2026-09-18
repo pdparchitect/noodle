@@ -121,7 +121,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-  test-noodle-apple27:
+  test-noodle-macos27:
     needs: [versions, checks]
     # Use an established label; run the new suite only when this stable image
     # has the required OS and an installed SDK. Never queue on a preview label.
@@ -202,7 +202,7 @@ jobs:
         run: swift test --disable-sandbox --package-path Browser --scratch-path .build/browser
 
   prepare-noodle:
-    needs: [versions, checks, test-noodle, test-noodle-apple27, test-bridge]
+    needs: [versions, checks, test-noodle, test-noodle-macos27, test-bridge]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.noodle == 'true'
     uses: ./.github/workflows/prepare-noodle-release.yml
     secrets: inherit
@@ -231,7 +231,7 @@ jobs:
     secrets: inherit
 
   tag:
-    needs: [versions, workflow-lint, checks, test-noodle, test-noodle-apple27, test-computer, test-applet, test-browser, test-bridge, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-images]
+    needs: [versions, workflow-lint, checks, test-noodle, test-noodle-macos27, test-computer, test-applet, test-browser, test-bridge, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-images]
     # Explicitly accept unselected/skipped products, never a failed/cancelled build.
     if: >-
       always() && !cancelled() && github.event_name != 'pull_request' &&
@@ -243,7 +243,7 @@ jobs:
       (needs.versions.outputs.computer != 'true' || needs.test-computer.result == 'success') &&
       (needs.versions.outputs.applet != 'true' || needs.test-applet.result == 'success') &&
       (needs.versions.outputs.browser != 'true' || needs.test-browser.result == 'success') &&
-      (needs.versions.outputs.noodle != 'true' || needs.test-noodle-apple27.result == 'success') &&
+      (needs.versions.outputs.noodle != 'true' || needs.test-noodle-macos27.result == 'success') &&
       (needs.versions.outputs.noodle != 'true' || needs.prepare-noodle.result == 'success') &&
       (needs.versions.outputs.computer != 'true' || needs.prepare-computer.result == 'success') &&
       (needs.versions.outputs.applet != 'true' || needs.prepare-applet.result == 'success') &&
