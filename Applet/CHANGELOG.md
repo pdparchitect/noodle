@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-18
+
 ### Fixed
 
 - Require a focus click before interacting with inactive library and noodlet windows, sharing the same behavior for HTML and native Swift noodlets.

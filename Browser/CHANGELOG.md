@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-18
+
 ### Fixed
 
 - Focus inactive windows on the first content click before allowing page links and controls to respond, without affecting background agent input.
@@ -44,3 +46,4 @@
 - Upload workspace files and retrieve completed downloads through the Noodle broker, with separate file storage for each browser.
 - Keep tabs, website storage, download records and mute preferences across app restarts. Pause agent control during human use.
 - Add the Browser app icon, native library and browsing windows, sandboxed signing, and separate development and production identities.
+

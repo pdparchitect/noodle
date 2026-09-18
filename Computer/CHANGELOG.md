@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-18
+
 ### Fixed
 
 - Focus inactive windows on the first content click before allowing controls or computer input to respond, using the suite's shared behavior.

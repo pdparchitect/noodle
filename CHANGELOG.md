@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-09-18
+
 ### Changed
 
 - Give the website’s reusable MacBook image a blank black display while retaining the separate screen overlay.
