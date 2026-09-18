@@ -12,7 +12,7 @@ import WebKit
     var showBrowser: ((UUID) -> Void)?
     var willRemoveBrowser: ((UUID) -> Void)?
     private var server: BrowserConnectionServer?
-    private var activeDownloads: [ObjectIdentifier: (download: WKDownload, browserID: UUID, record: BrowserDownloadInfo)] = [:]
+    private var activeDownloads: [ObjectIdentifier: (download: WKDownload?, browserID: UUID, record: BrowserDownloadInfo)] = [:]
     private var busy: Set<UUID> = []
     private var deleting: Set<UUID> = []
     private let transferRoot: URL?
@@ -96,7 +96,7 @@ import WebKit
         willRemoveBrowser?(id)
         for tab in tabs.values.filter({ $0.browserID == id }) { tabs.removeValue(forKey: tab.id)?.stop() }
         for (key, value) in activeDownloads where value.browserID == id {
-            _ = await value.download.cancel(); activeDownloads.removeValue(forKey: key)
+            _ = await value.download?.cancel(); activeDownloads.removeValue(forKey: key)
         }
         // Let the native library unmount its selected tab before WebKit removes
         // the profile's data store. SwiftUI can retain it through this update.
@@ -292,19 +292,28 @@ import WebKit
         return destination
     }
     func receive(_ download: WKDownload, browserID: UUID) {
-        activeDownloads[ObjectIdentifier(download)] = (download, browserID, .init(filename: "download"))
+        track(ObjectIdentifier(download), download: download, browserID: browserID)
         download.delegate = self
     }
-    func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
-        let key = ObjectIdentifier(download)
-        guard var value = activeDownloads[key] else { completionHandler(nil); return }
+    func track(_ key: ObjectIdentifier, download: WKDownload? = nil, browserID: UUID,
+               record: BrowserDownloadInfo = .init(filename: "download")) {
+        activeDownloads[key] = (download, browserID, record)
+    }
+    /// Choose where a tracked download lands. Kept separate from the WebKit
+    /// callback so it can be exercised without a WKDownload, which has no
+    /// public initializer.
+    func downloadDestination(for key: ObjectIdentifier, suggestedFilename: String) -> URL? {
+        guard var value = activeDownloads[key] else { return nil }
         do {
             value.record.filename = BrowserLibrary.safeFilename(suggestedFilename)
             activeDownloads[key] = value
             var profile = try library.profile(value.browserID)
             profile.downloads.append(value.record); try library.update(profile)
-            completionHandler(try downloadURL(browserID: value.browserID, record: value.record))
-        } catch { failure = error.localizedDescription; completionHandler(nil) }
+            return try downloadURL(browserID: value.browserID, record: value.record)
+        } catch { failure = error.localizedDescription; return nil }
+    }
+    func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String) async -> URL? {
+        downloadDestination(for: ObjectIdentifier(download), suggestedFilename: suggestedFilename)
     }
     func downloadURL(browserID: UUID, record: BrowserDownloadInfo) throws -> URL {
         let folder = try library.directory(browserID, category: "Downloads").appendingPathComponent(record.id.uuidString.lowercased())

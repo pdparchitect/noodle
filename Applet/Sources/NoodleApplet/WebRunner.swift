@@ -159,110 +159,116 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKScriptMessageHandlerWit
     // Keep the privileged page on its package origin. Remote content belongs in a browser.
     decisionHandler(local || url.absoluteString == "about:blank" ? .allow : .cancel)
   }
-  func userContentController(
-    _ userContentController: WKUserContentController, didReceive message: WKScriptMessage,
-    replyHandler: @escaping (Any?, String?) -> Void
-  ) {
-    guard message.frameInfo.isMainFrame, let url = message.frameInfo.request.url,
-      url.isFileURL, url.standardizedFileURL.path.hasPrefix(package.url.path + "/"),
-      let body = message.body as? [String: Any], let operation = body["operation"] as? String
-    else {
-      replyHandler(nil, "The bridge is available only to the noodlet's main page.")
-      return
-    }
-    Task { @MainActor in
-      do {
-        switch operation {
-        case "rendering":
-          let data = try JSONSerialization.data(withJSONObject: body["state"] ?? [:])
-          rendering = try JSONDecoder().decode(AppletRenderingState.self, from: data)
-          replyHandler(true, nil)
-        case "dragWindow":
-          guard window.isVisible, let event = dragEvent, event.window === window,
-            ProcessInfo.processInfo.systemUptime - event.timestamp < 1 else {
-            throw AppletError("Window dragging requires a current user mouse-down inside this noodlet.")
+  /// The bridge dispatch, split from the WebKit callback so it can be
+  /// exercised without a WKScriptMessage, which has no public initializer.
+  /// Returns the (value, error) pair the page receives.
+  func handleBridge(operation: String, body: [String: Any]) async -> (Any?, String?) {
+    do {
+      switch operation {
+      case "rendering":
+        let data = try JSONSerialization.data(withJSONObject: body["state"] ?? [:])
+        rendering = try JSONDecoder().decode(AppletRenderingState.self, from: data)
+        return (true, nil)
+      case "dragWindow":
+        guard window.isVisible, let event = dragEvent, event.window === window,
+          ProcessInfo.processInfo.systemUptime - event.timestamp < 1 else {
+          throw AppletError("Window dragging requires a current user mouse-down inside this noodlet.")
+        }
+        dragEvent = nil
+        window.performDrag(with: event)
+        return (true, nil)
+      case "fetch":
+        return (try await network.fetch(body, enabled: package.manifest.network), nil)
+      case "cancelFetch":
+        if let id = body["id"] as? String { network.cancel(id) }
+        return (true, nil)
+      case "log":
+        log.append(body["level"] as? String ?? "console", body["text"] as? String ?? "")
+        return (true, nil)
+      case "read", "write":
+        guard let path = body["path"] as? String else {
+          throw AppletError("A relative data path is required.")
+        }
+        let file = try NoodletPackage.child(path, in: dataRoot)
+        if operation == "read" {
+          guard FileManager.default.fileExists(atPath: file.path) else {
+            return (NSNull(), nil)
           }
-          dragEvent = nil
-          window.performDrag(with: event)
-          replyHandler(true, nil)
-        case "fetch":
-          replyHandler(try await network.fetch(body, enabled: package.manifest.network), nil)
-        case "cancelFetch":
-          if let id = body["id"] as? String { network.cancel(id) }
-          replyHandler(true, nil)
-        case "log":
-          log.append(body["level"] as? String ?? "console", body["text"] as? String ?? "")
-          replyHandler(true, nil)
-        case "read", "write":
-          guard let path = body["path"] as? String else {
-            throw AppletError("A relative data path is required.")
-          }
-          let file = try NoodletPackage.child(path, in: dataRoot)
-          if operation == "read" {
-            guard FileManager.default.fileExists(atPath: file.path) else {
-              replyHandler(NSNull(), nil)
-              return
-            }
-            guard
-              try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0 <= 4
-                * 1_048_576
-            else { throw AppletError("Data file exceeds 4 MiB.") }
-            replyHandler(try String(contentsOf: file, encoding: .utf8), nil)
-          } else {
-            guard let text = body["text"] as? String, text.utf8.count <= 4 * 1_048_576
-            else { throw AppletError("Text must fit in 4 MiB.") }
-            try FileManager.default.createDirectory(
-              at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try text.write(to: file, atomically: true, encoding: .utf8)
-            replyHandler(true, nil)
-          }
-        case "openFile":
-          guard window.isVisible else {
-            throw AppletError(
-              "File dialogs require foreground mode. Use noodle.data in background mode."
-            )
-          }
-          let panel = NSOpenPanel()
-          panel.canChooseDirectories = false
-          let result = await panel.beginSheetModal(for: window)
-          guard result == .OK, let file = panel.url else {
-            replyHandler(NSNull(), nil)
-            return
-          }
-          let access = file.startAccessingSecurityScopedResource()
-          defer { if access { file.stopAccessingSecurityScopedResource() } }
           guard
             try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0 <= 4
               * 1_048_576
-          else { throw AppletError("Text file exceeds 4 MiB.") }
-          replyHandler(
-            [
-              "name": file.lastPathComponent,
-              "text": try String(contentsOf: file, encoding: .utf8),
-            ], nil)
-        case "saveFile":
-          guard window.isVisible else {
-            throw AppletError("File dialogs require foreground mode.")
-          }
+          else { throw AppletError("Data file exceeds 4 MiB.") }
+          return (try String(contentsOf: file, encoding: .utf8), nil)
+        } else {
           guard let text = body["text"] as? String, text.utf8.count <= 4 * 1_048_576
           else { throw AppletError("Text must fit in 4 MiB.") }
-          let panel = NSSavePanel()
-          panel.nameFieldStringValue =
-            URL(fileURLWithPath: body["name"] as? String ?? "Untitled.txt")
-            .lastPathComponent
-          guard await panel.beginSheetModal(for: window) == .OK, let file = panel.url
-          else {
-            replyHandler(false, nil)
-            return
-          }
-          let access = file.startAccessingSecurityScopedResource()
-          defer { if access { file.stopAccessingSecurityScopedResource() } }
+          try FileManager.default.createDirectory(
+            at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
           try text.write(to: file, atomically: true, encoding: .utf8)
-          replyHandler(true, nil)
-        default: throw AppletError("Unknown bridge operation.")
+          return (true, nil)
         }
-      } catch { replyHandler(nil, error.localizedDescription) }
-    }
+      case "openFile":
+        guard window.isVisible else {
+          throw AppletError(
+            "File dialogs require foreground mode. Use noodle.data in background mode."
+          )
+        }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        let result = await panel.beginSheetModal(for: window)
+        guard result == .OK, let file = panel.url else {
+          return (NSNull(), nil)
+        }
+        let access = file.startAccessingSecurityScopedResource()
+        defer { if access { file.stopAccessingSecurityScopedResource() } }
+        guard
+          try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0 <= 4
+            * 1_048_576
+        else { throw AppletError("Text file exceeds 4 MiB.") }
+        return (
+          [
+            "name": file.lastPathComponent,
+            "text": try String(contentsOf: file, encoding: .utf8),
+          ], nil)
+      case "saveFile":
+        guard window.isVisible else {
+          throw AppletError("File dialogs require foreground mode.")
+        }
+        guard let text = body["text"] as? String, text.utf8.count <= 4 * 1_048_576
+        else { throw AppletError("Text must fit in 4 MiB.") }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue =
+          URL(fileURLWithPath: body["name"] as? String ?? "Untitled.txt")
+          .lastPathComponent
+        guard await panel.beginSheetModal(for: window) == .OK, let file = panel.url
+        else {
+          return (false, nil)
+        }
+        let access = file.startAccessingSecurityScopedResource()
+        defer { if access { file.stopAccessingSecurityScopedResource() } }
+        try text.write(to: file, atomically: true, encoding: .utf8)
+        return (true, nil)
+      default: throw AppletError("Unknown bridge operation.")
+      }
+    } catch { return (nil, error.localizedDescription) }
+  }
+  /// Whether a bridge message really came from the noodlet's own main page.
+  nonisolated static func isTrustedBridgeSource(isMainFrame: Bool, url: URL?, packagePath: String) -> Bool {
+    guard isMainFrame, let url, url.isFileURL,
+      url.standardizedFileURL.path.hasPrefix(packagePath + "/")
+    else { return false }
+    return true
+  }
+  func userContentController(
+    _ userContentController: WKUserContentController, didReceive message: WKScriptMessage
+  ) async -> (Any?, String?) {
+    guard
+      Self.isTrustedBridgeSource(
+        isMainFrame: message.frameInfo.isMainFrame, url: message.frameInfo.request.url,
+        packagePath: package.url.path),
+      let body = message.body as? [String: Any], let operation = body["operation"] as? String
+    else { return (nil, "The bridge is available only to the noodlet's main page.") }
+    return await handleBridge(operation: operation, body: body)
   }
   func evaluate(_ source: String) async throws -> String {
     // callAsyncJavaScript awaits promises and preserves thrown JS errors.
