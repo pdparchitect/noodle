@@ -170,8 +170,20 @@ import ScreenCaptureKit
     private static func verifyTabTargets(_ presentation: BrowserPresentation, window: NSWindow) async throws {
         guard let original = presentation.currentTab, let content = window.contentView else { throw BrowserError("Missing tab fixture.") }
         let other = try presentation.runtime.makeTab(browserID: original.browserID)
-        try await Task.sleep(for: .milliseconds(250))
+        // Start inactive to cover hosted runners. WindowFocusGuard intentionally
+        // consumes an activating click; test the tab hit target after focus and
+        // create the input events only after activation has completed.
+        NSApp.deactivate()
+        try await BrowserSmokeTest.eventually("inactive tab fixture") { !NSApp.isActive }
+        NSApp.activate(ignoringOtherApps: true)
+        try await BrowserSmokeTest.eventually("tab fixture application activation") { NSApp.isActive }
+        window.makeKeyAndOrderFront(nil)
+        try await BrowserSmokeTest.eventually("tab fixture key window") { NSApp.isActive && window.isKeyWindow }
         let identifier = "browser.tab.\(original.id)"
+        try await BrowserSmokeTest.eventually("tab selection button layout") {
+            content.layoutSubtreeIfNeeded()
+            return elements(content).contains { attribute($0, .identifier) as? String == identifier }
+        }
         guard let button = elements(content).first(where: { attribute($0, .identifier) as? String == identifier }),
               button.responds(to: NSSelectorFromString("accessibilityFrame")),
               let frame = (button.value(forKey: "accessibilityFrame") as? NSValue)?.rectValue else {
@@ -180,6 +192,10 @@ import ScreenCaptureKit
         // Click inside the leading padding, outside the icon and text. Events
         // stay in this process and target only the isolated fixture window.
         let point = window.convertPoint(fromScreen: .init(x: frame.minX + 3, y: frame.midY))
+        guard !frame.isEmpty, window.contentLayoutRect.contains(point) else {
+            throw BrowserError("Tab padding is outside the fixture content: frame=\(frame), point=\(point).")
+        }
+        print("BROWSER_UI_TAB_INPUT: active=\(NSApp.isActive) key=\(window.isKeyWindow) frame=\(frame) point=\(point) selected=\(String(describing: presentation.profile?.selectedTabID))")
         for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
             guard let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
                 timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
@@ -188,17 +204,18 @@ import ScreenCaptureKit
             }
             NSApp.postEvent(event, atStart: false)
         }
-        try await Task.sleep(for: .milliseconds(300))
-        guard presentation.profile?.selectedTabID == original.id else { throw BrowserError("Clicking tab padding did not select the tab.") }
+        try await BrowserSmokeTest.eventually("clicking tab padding selects the tab") {
+            presentation.profile?.selectedTabID == original.id
+        }
+        print("BROWSER_UI_TAB_RESULT: active=\(NSApp.isActive) key=\(window.isKeyWindow) selected=\(String(describing: presentation.profile?.selectedTabID))")
         guard let close = elements(content).first(where: { attribute($0, .identifier) as? String == "browser.tab.close.\(other.id)" }) else {
             throw BrowserError("Missing independent tab close button.")
         }
         press(close)
-        try await Task.sleep(for: .milliseconds(250))
-        guard presentation.profile?.selectedTabID == original.id,
-              presentation.profile?.tabs.contains(where: { $0.id == other.id }) == false else {
-            throw BrowserError("Closing another tab changed the selected tab.")
+        try await BrowserSmokeTest.eventually("closing the other tab") {
+            presentation.profile?.tabs.contains(where: { $0.id == other.id }) == false
         }
+        guard presentation.profile?.selectedTabID == original.id else { throw BrowserError("Closing another tab changed the selected tab.") }
     }
     private static func containsTextField(_ value: String, in view: NSView) -> Bool {
         (view as? NSTextField)?.stringValue == value || view.subviews.contains { containsTextField(value, in: $0) }
