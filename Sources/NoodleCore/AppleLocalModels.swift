@@ -16,6 +16,17 @@ public struct AppleLocalModel: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+/// Staging folders owned by transfers running in this process. Names are
+/// unique, so the sweep can tell them from folders an earlier run abandoned.
+private final class AppleModelStaging: @unchecked Sendable {
+    static let shared = AppleModelStaging()
+    private let lock = NSLock()
+    private var active: Set<String> = []
+    func begin(_ staging: URL) { lock.withLock { _ = active.insert(staging.lastPathComponent) } }
+    func end(_ staging: URL) { lock.withLock { _ = active.remove(staging.lastPathComponent) } }
+    func owns(_ staging: URL) -> Bool { lock.withLock { active.contains(staging.lastPathComponent) } }
+}
+
 public struct AppleLocalModelStore: Sendable {
     public let directory: URL
     private static let metadata = ".noodle-model.json"
@@ -97,10 +108,10 @@ public struct AppleLocalModelStore: Sendable {
             throw HarnessSetupError("This model has no chat template. Import a chat/instruct model.")
         }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        removeAbandonedStaging()
         let id = "mlx-" + UUID().uuidString.lowercased()
-        let staging = directory.appendingPathComponent(".import-" + UUID().uuidString.lowercased())
-        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false)
-        defer { try? FileManager.default.removeItem(at: staging) }
+        let staging = try beginStaging(Self.importStaging)
+        defer { endStaging(staging) }
         var size: Int64 = 0
         for file in files {
             try Task.checkCancellation()
@@ -118,9 +129,54 @@ public struct AppleLocalModelStore: Sendable {
         return model
     }
 
+    /// Removal must not depend on readable model information, or a damaged
+    /// folder could never be deleted.
     public func remove(id: String) throws {
-        _ = try model(id: id)
         try FileManager.default.removeItem(at: folder(id: id))
+    }
+
+    /// Folders whose model information cannot be read are unusable but still
+    /// hold weights. They are listed only so they can be removed.
+    public func unreadableModels() throws -> [AppleLocalModel] {
+        guard FileManager.default.fileExists(atPath: directory.path) else { return [] }
+        return try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .compactMap { entry -> AppleLocalModel? in
+                let id = entry.lastPathComponent
+                guard Self.validIdentifier(id), let folder = try? folder(id: id),
+                      (try? model(id: id)) == nil else { return nil }
+                let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.fileSizeKey])) ?? []
+                let size = files.reduce(Int64(0)) { $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+                return .init(id: id, name: "Unreadable Model", contextSize: 0, byteCount: size,
+                             modelType: "", sourceRepository: nil)
+            }.sorted { $0.id < $1.id }
+    }
+
+    static let importStaging = ".import-"
+    static let downloadStaging = ".download-"
+
+    /// Staging folders are hidden from the catalogue. The caller ends the
+    /// returned folder with `endStaging`.
+    func beginStaging(_ prefix: String) throws -> URL {
+        let staging = directory.appendingPathComponent(prefix + UUID().uuidString.lowercased())
+        AppleModelStaging.shared.begin(staging)
+        do { try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false) }
+        catch { AppleModelStaging.shared.end(staging); throw error }
+        return staging
+    }
+
+    func endStaging(_ staging: URL) {
+        try? FileManager.default.removeItem(at: staging)
+        AppleModelStaging.shared.end(staging)
+    }
+
+    /// A crash or force quit skips `endStaging`, leaving partial weights that
+    /// nothing lists. Reclaim every staging folder no running transfer owns.
+    public func removeAbandonedStaging() {
+        guard let entries = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return }
+        for entry in entries where [Self.importStaging, Self.downloadStaging].contains(where: entry.lastPathComponent.hasPrefix)
+            && !AppleModelStaging.shared.owns(entry) {
+            try? FileManager.default.removeItem(at: entry)
+        }
     }
 
     public func validateResources(id: String) throws {

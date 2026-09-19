@@ -141,6 +141,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NoodleNotifications.configure(delegate: self)
         // A migration milestone must finish before Sparkle can offer its successor.
         if NoodleStore.active?.storageReady == true { AppUpdater.shared.start() }
+        // A force quit mid-download leaves partial weights that nothing lists.
+        if let root = NoodleStore.active?.repository.rootURL {
+            Task.detached(priority: .utility) { AppleLocalModelStore(repository: root).removeAbandonedStaging() }
+        }
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
             selector: #selector(workspaceDidWake),

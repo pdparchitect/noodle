@@ -6,6 +6,7 @@ struct AppleLocalModelsView: View {
     @Environment(NoodleStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var models: [AppleLocalModel] = []
+    @State private var unreadable: [AppleLocalModel] = []
     @State private var checkedSupport: Bool?
     @State private var checked = false
     @State private var importing = false
@@ -29,6 +30,7 @@ struct AppleLocalModelsView: View {
 
     private var storage: AppleLocalModelStore { .init(repository: store.repository.rootURL) }
     private var busy: Bool { importing || downloadingID != nil }
+    private var installed: [AppleLocalModel] { models + unreadable }
     // Open with the runtime's last known answer; the fresh check replaces it.
     private var knownSupport: Bool? { checkedSupport ?? store.runtime.appleLocalModelsSupported }
     private var supported: Bool { knownSupport == true }
@@ -73,7 +75,7 @@ struct AppleLocalModelsView: View {
         .interactiveDismissDisabled(busy)
         .onDisappear { downloadTask?.cancel() }
         .sheet(item: $editingAgent, onDismiss: {
-            if let id = returnToModelID, models.contains(where: { $0.id == id }) { modelUsageID = id }
+            if let id = returnToModelID, installed.contains(where: { $0.id == id }) { modelUsageID = id }
             returnToModelID = nil
         }) { agent in
             EditBotSheet(agent: agent, initialTab: .runtime)
@@ -91,7 +93,7 @@ struct AppleLocalModelsView: View {
         }
         // Listing is a cheap local read; have it ready for the first frame.
         .onAppear {
-            do { models = try storage.models() } catch { self.error = error.localizedDescription }
+            do { try reload() } catch { self.error = error.localizedDescription }
         }
         .task {
             do {
@@ -115,9 +117,9 @@ struct AppleLocalModelsView: View {
             Text("Requires macOS 27 and a Noodle build with local model support.")
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-        } else if !models.isEmpty {
+        } else if !installed.isEmpty {
             Text("Installed").font(.headline)
-            List(models) { model in
+            List(installed) { model in
                 let users = botsUsing(model)
                 HStack(alignment: .center, spacing: 12) {
                     VStack(alignment: .leading, spacing: 5) {
@@ -144,7 +146,7 @@ struct AppleLocalModelsView: View {
                 .padding(.vertical, 6)
             }
             .listStyle(.inset).scrollContentBackground(.hidden)
-            .frame(height: min(200, CGFloat(models.count) * 64 + 16))
+            .frame(height: min(200, CGFloat(installed.count) * 64 + 16))
             .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
             .clipShape(RoundedRectangle(cornerRadius: 10))
         }
@@ -227,7 +229,7 @@ struct AppleLocalModelsView: View {
             defer { downloadingID = nil; downloadAttempt = nil; downloadTask = nil; downloadProgress = nil; cancelling = false }
             do {
                 _ = try await worker.value
-                models = try storage.models()
+                try reload()
                 await store.runtime.checkExternalInstallation(.apple)
             } catch {
                 if !(error is CancellationError) && !worker.isCancelled {
@@ -253,10 +255,15 @@ struct AppleLocalModelsView: View {
             defer { if access { source.stopAccessingSecurityScopedResource() }; importing = false }
             do {
                 _ = try await Task.detached { try storage.importModel(from: source) }.value
-                models = try storage.models()
+                try reload()
                 await store.runtime.checkExternalInstallation(.apple)
             } catch { self.error = error.localizedDescription }
         }
+    }
+
+    private func reload() throws {
+        models = try storage.models()
+        unreadable = try storage.unreadableModels()
     }
 
     private func botsUsing(_ model: AppleLocalModel) -> [AgentRecord] {
@@ -285,7 +292,7 @@ struct AppleLocalModelsView: View {
         modelUsageID = nil
         do {
             try storage.remove(id: model.id)
-            models = try storage.models()
+            try reload()
             Task { await store.runtime.checkExternalInstallation(.apple) }
         } catch { self.error = error.localizedDescription }
     }

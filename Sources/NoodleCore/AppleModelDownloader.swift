@@ -29,15 +29,17 @@ public struct AppleModelDownloader: Sendable {
             return existing
         }
         try FileManager.default.createDirectory(at: store.directory, withIntermediateDirectories: true)
+        // Partial weights from an interrupted run must not count against this download.
+        store.removeAbandonedStaging()
         let capacity = try store.directory.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
         if let available = capacity.volumeAvailableCapacityForImportantUsage,
            available < recommendation.byteCount * 2 + 64 * 1_024 * 1_024 {
             throw HarnessSetupError("Not enough disk space to download and import this model.")
         }
-        let staging = store.directory.appendingPathComponent(".download-" + UUID().uuidString.lowercased())
+        let staging = try store.beginStaging(AppleLocalModelStore.downloadStaging)
+        defer { store.endStaging(staging) }
         let source = staging.appendingPathComponent(recommendation.sourceURL.lastPathComponent)
         try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: staging) }
         var completed: Int64 = 0
         for file in recommendation.files {
             try Task.checkCancellation()

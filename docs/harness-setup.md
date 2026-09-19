@@ -119,6 +119,11 @@ model library or make network requests. Models load on first use and remain
 cached in that bot's helper; switching models or stopping the helper releases
 the cached weights. Importing does not enable Apple Intelligence and local models
 do not depend on its availability. Change bots using a model before removing it.
+**Remove** deletes Noodle's copy of the weights; a folder you imported from is
+left in place. Partial files from a download or import interrupted by a crash or
+force quit are deleted at the next launch and before the next download or import.
+A model whose stored information is damaged is listed as **Unreadable Model** so
+it can still be removed.
 Different bots can load separate copies, so account for their combined memory.
 Specialized MLX shaders compile in the helper's own Metal cache. The compiler
 receives scoped access to that cache and read-only bundled resources; model

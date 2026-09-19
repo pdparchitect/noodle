@@ -27,7 +27,46 @@ final class AppleLocalModelsTests: XCTestCase {
             XCTAssertEqual(try String(contentsOf: copied), "synthetic weights")
             try store.remove(id: imported.id)
             XCTAssertTrue(try store.models().isEmpty)
+            XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: store.directory.path).isEmpty)
             XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+        }
+    }
+
+    func testUnreadableModelIsListedOnlyForRemovalAndDeletesItsWeights() throws {
+        try fixture { source, store in
+            let imported = try store.importModel(from: source)
+            let folder = try store.folder(id: imported.id)
+            try Data("damaged".utf8).write(to: folder.appendingPathComponent(".noodle-model.json"))
+            XCTAssertTrue(try store.models().isEmpty)
+            let unreadable = try store.unreadableModels()
+            XCTAssertEqual(unreadable.map(\.id), [imported.id])
+            XCTAssertGreaterThanOrEqual(unreadable[0].byteCount, Int64("synthetic weights".utf8.count))
+            try store.remove(id: imported.id)
+            XCTAssertTrue(try store.unreadableModels().isEmpty)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+            XCTAssertThrowsError(try store.remove(id: "../" + imported.id))
+        }
+    }
+
+    func testAbandonedStagingIsReclaimedWithoutTouchingRunningTransfersOrModels() throws {
+        try fixture { source, store in
+            let imported = try store.importModel(from: source)
+            let abandoned = [".download-", ".import-"].map { store.directory.appendingPathComponent($0 + UUID().uuidString.lowercased()) }
+            for folder in abandoned {
+                try FileManager.default.createDirectory(at: folder.appendingPathComponent("partial"), withIntermediateDirectories: true)
+                try Data("partial weights".utf8).write(to: folder.appendingPathComponent("partial/model.safetensors"))
+            }
+            let running = try store.beginStaging(AppleLocalModelStore.downloadStaging)
+            store.removeAbandonedStaging()
+            for folder in abandoned { XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path)) }
+            XCTAssertTrue(FileManager.default.fileExists(atPath: running.path))
+            XCTAssertEqual(try store.models(), [imported])
+            store.endStaging(running)
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: store.directory.path), [imported.id])
+            // The next transfer reclaims what an earlier run left behind.
+            try FileManager.default.createDirectory(at: abandoned[0], withIntermediateDirectories: true)
+            let second = try store.importModel(from: source)
+            XCTAssertEqual(Set(try FileManager.default.contentsOfDirectory(atPath: store.directory.path)), [imported.id, second.id])
         }
     }
 
