@@ -16,6 +16,7 @@
 
 - Tighten the content panel's corner radius so the screen's corners sit evenly inside the window's.
 - Move the Create button into the sidebar's toolbar, after the sidebar toggle; it returns to the window toolbar while the sidebar is hidden.
+- Move the App Settings button, shown when both Show in Dock and Show in Menu Bar are off, to the end of the toolbar instead of beside the sidebar.
 - Start Create Image from the still image being previewed, however it was chosen, instead of only from Photos and generated images.
 - Explain that an iCloud photo may need downloading when Photos cannot provide the chosen background.
 

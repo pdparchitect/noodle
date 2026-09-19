@@ -14,7 +14,6 @@ struct NoodleComputerApp: App {
   var body: some Scene {
     Window(ComputerAppIdentity.name, id: "library") {
       ComputerRootView()
-        .companionSettingsAccess()
         .frame(minWidth: 850, minHeight: 580)
         .background(ComputerLibraryWindowHost(library: delegate.libraryWindow))
     }
@@ -199,6 +198,7 @@ struct ComputerRootView: View {
         ContentUnavailableView(
           "Cannot Open Computer Library", systemImage: "exclamationmark.triangle",
           description: Text(startupError))
+          .toolbar { CompanionSettingsToolbarItem(spacing: .flexible) }
       } else {
         ProgressView("Opening computer library…")
       }
@@ -407,6 +407,7 @@ struct ComputerLibraryView: View {
         } description: {
           Text("Create a computer to get started.")
         }
+        .toolbar { CompanionSettingsToolbarItem(spacing: .flexible) }
       }
     }
     .navigationSplitViewStyle(.balanced)
@@ -679,6 +680,7 @@ struct ComputerDetailView: View {
           LocalMacFocusWindowButton(runtime: local, enabled: session.phase == .running, all: true)
         }
       }
+      CompanionSettingsToolbarItem(spacing: .flexible)
     }
     .sheet(isPresented: $editing) {
       EditComputerView(store: store, session: session)

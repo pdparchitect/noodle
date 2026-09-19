@@ -154,14 +154,17 @@ private struct CompanionSettingsAccess: ViewModifier {
 
 /// The same fallback for toolbars that must order it themselves: a root-level
 /// item lands ahead of a column's own items, so declare this one last instead.
+/// A toolbar without its own flexible space passes `.flexible` to push the item
+/// to the window's trailing edge; items otherwise pack against the sidebar.
 @available(macOS 26.0, *)
 @MainActor public struct CompanionSettingsToolbarItem: ToolbarContent {
     @ObservedObject private var visibility = CompanionAppVisibility.shared
-    public init() {}
+    private let spacing: SpacerSizing
+    public init(spacing: SpacerSizing = .fixed) { self.spacing = spacing }
 
     public var body: some ToolbarContent {
         if !visibility.showInDock && !visibility.showMenuBar {
-            ToolbarSpacer(.fixed, placement: .primaryAction)
+            ToolbarSpacer(spacing, placement: .primaryAction)
             ToolbarItem(id: "companion-settings", placement: .primaryAction) { CompanionSettingsButton() }
         }
     }
