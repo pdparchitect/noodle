@@ -386,4 +386,26 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: workspace.appendingPathComponent("ok"), encoding: .utf8), "ok")
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("denied").path))
     }
+
+    /// The upload broker reads workspace files with the user's rights, so a
+    /// sandboxed bot must not be able to link outside files into its workspace.
+    func testOutsideFilesCannotBeHardLinkedIntoTheWorkspace() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("sandbox-\(UUID())").resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workspace = root.appendingPathComponent("workspace"), secret = root.appendingPathComponent("secret")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        try Data("secret".utf8).write(to: secret)
+        let policy = RestrictedAgentSandbox.profile(workspace: workspace, repository: root,
+            codexHome: workspace, executableDirectory: URL(fileURLWithPath: "/bin"), application: workspace, temporary: workspace)
+        XCTAssertFalse(policy.contains("file-link"))
+        let process = Process(), errors = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
+        process.arguments = ["-p", policy, "/bin/sh", "-c", "set -e; printf ok > \"$1/ok\"; if ln \"$2\" \"$1/leak\"; then exit 10; fi", "probe", workspace.path, secret.path]
+        process.standardError = errors
+        try process.run()
+        let details = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0, details)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: workspace.appendingPathComponent("leak").path))
+    }
 }

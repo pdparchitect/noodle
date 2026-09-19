@@ -150,9 +150,12 @@ import WebKit
         failed(BrowserError("Page process stopped. Reload this tab to continue."))
         let pending = operations.values; operations.removeAll(); pending.forEach { $0() }
     }
+    /// Page-initiated loads never reach local files or other applications.
+    nonisolated static func permitsNavigation(_ url: URL) -> Bool {
+        ["http", "https", "about", "blob", "data"].contains(url.scheme?.lowercased() ?? "")
+    }
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        guard let url = navigationAction.request.url,
-              ["http", "https", "about", "blob", "data"].contains(url.scheme?.lowercased() ?? "") else {
+        guard let url = navigationAction.request.url, Self.permitsNavigation(url) else {
             info.error = "This link requires an external application."; runtime?.saveTab(self)
             decisionHandler(.cancel); return
         }
