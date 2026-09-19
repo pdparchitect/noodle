@@ -41,12 +41,15 @@ public enum AppleExecutableTrust {
 /// Inspection uses the same system-service grants, without bot storage access.
 public enum AppleAgentSandbox {
     public static func profile(application: URL, workspace: URL? = nil, repository: URL? = nil,
-                               modelsDirectory: URL? = nil, localModel: Bool = false) -> String {
+                               modelsDirectory: URL? = nil, localModel: Bool = false,
+                               folders: [AgentFolder] = []) -> String {
         var reads = ["/System", "/usr", "/bin", "/sbin", "/dev", "/Library/Apple",
                      "/Library/Preferences", "/private/etc", "/private/var/db/timezone", application.path]
         if let workspace { reads.append(AgentStorageLayout(workspace: workspace).package.path) }
         var writes: [String] = []
         if let workspace { reads.append(workspace.path); writes.append(workspace.path) }
+        reads += folders.map(\.path)
+        writes += folders.filter(\.writable).map(\.path)
         let imagePreparation: String
         var usesGPU = localModel
         if #available(macOS 27, *) {

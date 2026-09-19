@@ -5,13 +5,14 @@ import Foundation
 struct AgentConfiguration: Codable {
     var agent: AgentRecord
     var backstory: String?
+    var folders: [AgentFolder] = []
 
     init(agent: AgentRecord, backstory: String) {
         self.agent = agent
         self.backstory = backstory
     }
 
-    private enum CodingKeys: String, CodingKey { case backstory }
+    private enum CodingKeys: String, CodingKey { case backstory, folders }
 
     init(from decoder: Decoder) throws {
         agent = try AgentRecord(from: decoder)
@@ -19,12 +20,14 @@ struct AgentConfiguration: Codable {
         // Absence identifies an unmigrated package. Null and other invalid
         // values are corruption, not a request to reimport generated Markdown.
         backstory = values.contains(.backstory) ? try values.decode(String.self, forKey: .backstory) : nil
+        folders = try values.decodeIfPresent([AgentFolder].self, forKey: .folders) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
         try agent.encode(to: encoder)
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encodeIfPresent(backstory, forKey: .backstory)
+        if !folders.isEmpty { try values.encode(folders, forKey: .folders) }
     }
 
     func requireBackstory() throws -> String {

@@ -9,7 +9,7 @@ Runtime wake notifications tell a bot to check for work. Messenger deliveries ca
 
 ## Agent instruction loading
 
-The bot's `AGENTS.md` (also exposed as `CLAUDE.md`) is entirely generated from its private configuration and Noodle's runtime guidance. Backstory is stored in `agent.json` one level above the workspace and edited through Noodle. The generated file warns that all edits will be overwritten during synchronization; no managed-section markers are needed. Agents read `preferences.md` for standing user preferences and use `memory.md` for durable facts and context; Noodle preserves these files. `AGENTS.md` and Codex runtime instructions point to `.agents/skills/messenger/SKILL.md`. The Messenger skill holds the complete generated guidance below; startup instructions do not repeat it.
+The bot's `AGENTS.md` (also exposed as `CLAUDE.md`) is entirely generated from its private configuration and Noodle's runtime guidance. Backstory is stored in `agent.json` one level above the workspace and edited through Noodle. Folders shared with the bot in Edit Bot are stored there too and listed under `## Shared folders` with their access and optional description. The generated file warns that all edits will be overwritten during synchronization; no managed-section markers are needed. Agents read `preferences.md` for standing user preferences and use `memory.md` for durable facts and context; Noodle preserves these files. `AGENTS.md` and Codex runtime instructions point to `.agents/skills/messenger/SKILL.md`. The Messenger skill holds the complete generated guidance below; startup instructions do not repeat it.
 
 When missing or incompatible private model context must be replaced, the runtime appends this recovery guidance to its wake:
 

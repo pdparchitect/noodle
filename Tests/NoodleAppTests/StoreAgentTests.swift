@@ -40,6 +40,30 @@ import XCTest
         XCTAssertEqual(f.store.draft(for: f.directA.id), "Existing draft")
     }
 
+    func testSharedFoldersSaveWithSettingsAndInvalidOnesRollBackTheWholeSave() throws {
+        let f = try fixture()
+        let shared = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-shared-\(UUID())", isDirectory: true)
+        try FileManager.default.createDirectory(at: shared, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: shared) }
+        let folder = AgentFolder(path: shared.standardizedFileURL.path, writable: false, description: "Reference material")
+        func save(_ folders: [AgentFolder]?, name: String) -> Bool {
+            f.store.updateAgent(f.a, name: name, harnessIdentifier: HarnessProvider.codex.rawValue, modelIdentifier: nil,
+                reasoningEffort: nil, avatarSymbolName: "sparkles", avatarColorIndex: 3, avatarImageData: nil,
+                publicDescription: "", backstory: "Backstory", folders: folders)
+        }
+        XCTAssertTrue(save([folder], name: "Shared"), f.store.errorMessage ?? "")
+        XCTAssertEqual(f.store.folders(for: f.a), [folder])
+        let instructions = f.repository.directory(for: f.a).appendingPathComponent("AGENTS.md")
+        XCTAssertTrue(try String(contentsOf: instructions, encoding: .utf8).contains("` (read only): Reference material"))
+
+        XCTAssertFalse(save([AgentFolder(path: f.repository.rootURL.path)], name: "Greedy"))
+        XCTAssertEqual(f.store.folders(for: f.a), [folder])
+        XCTAssertEqual(try f.repository.loadAgents().first { $0.id == f.a.id }?.displayName, "Shared")
+        // Saves from callers that do not edit folders leave them alone.
+        XCTAssertTrue(save(nil, name: "Renamed"), f.store.errorMessage ?? "")
+        XCTAssertEqual(f.store.folders(for: f.a), [folder])
+    }
+
     func testCreationValidationDoesNotCreateOrAuthorizeAnything() throws {
         let f = try fixture(), before = try f.repository.loadAgents()
         for (name, harness, mcp, computers) in [

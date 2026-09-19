@@ -74,7 +74,8 @@ migration does not grant legacy unrestricted access.
 The signed Agent Host applies a dedicated filesystem sandbox before starting
 restricted Codex, FX, Grok Build, Muse Code, OpenCode, or Apple. Each can read only its own
 bot package alongside required system/application files, and write its workspace;
-parent configuration and runtime state stay read-only. Cloud harness homes and
+parent configuration and runtime state stay read-only. Folders shared in Edit Bot
+are read from the bot's `agent.json` by Agent Host and added to that profile. Cloud harness homes and
 session stores are private to the bot, seeded only with provider login material.
 Messenger uses an app-side broker bound to the registered bot workspace and token.
 The broker checks conversation membership and copies attachments into the caller's

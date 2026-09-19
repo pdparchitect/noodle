@@ -25,17 +25,19 @@ public enum RestrictedAgentSandbox {
     }
 
     public static func profile(provider: HarnessProvider, workspace: URL, repository: URL, home: URL,
-                               executable: URL, application: URL, temporary: URL) throws -> String {
+                               executable: URL, application: URL, temporary: URL,
+                               folders: [AgentFolder] = []) throws -> String {
         let privateHome = RestrictedHarnessStorage.home(workspace: workspace)
         let account = try accountDirectory(provider: provider, home: privateHome)
         var readFiles = [String]()
         if provider == .fx || provider == .openCode {
             readFiles += ancestorDirectories(of: workspace) + ancestorDirectories(of: account)
+            readFiles += folders.flatMap { ancestorDirectories(of: URL(fileURLWithPath: $0.path)) }
         }
         if provider == .fx { readFiles.append("/Library/Keychains/System.keychain") }
         let base = profile(workspace: workspace,
             executablePaths: [executable.path], application: application,
-            readFiles: Array(Set(readFiles)).sorted())
+            readFiles: Array(Set(readFiles)).sorted(), folders: folders)
         guard provider == .openCode else { return base }
         // V2's native ACP implementation starts a password-authenticated server
         // on 127.0.0.1. Only that verified executable can listen; tools cannot.
@@ -85,17 +87,19 @@ public enum RestrictedAgentSandbox {
     }
 
     public static func profile(workspace: URL, repository: URL, codexHome: URL,
-                               executableDirectory: URL, application: URL, temporary: URL) -> String {
+                               executableDirectory: URL, application: URL, temporary: URL,
+                               folders: [AgentFolder] = []) -> String {
         profile(workspace: workspace,
-                executablePaths: [executableDirectory.path], application: application)
+                executablePaths: [executableDirectory.path], application: application, folders: folders)
     }
 
     private static func profile(workspace: URL, executablePaths: [String], application: URL,
-                                readFiles: [String] = []) -> String {
+                                readFiles: [String] = [], folders: [AgentFolder] = []) -> String {
         let reads = ["/System", "/usr", "/bin", "/sbin", "/dev", "/Library/Apple",
                      "/Library/Preferences", "/private/etc", "/private/var/db/timezone",
                      AgentStorageLayout(workspace: workspace).package.path, application.path] + executablePaths
-        let writes = [workspace.path]
+            + folders.map(\.path)
+        let writes = [workspace.path] + folders.filter(\.writable).map(\.path)
         return """
         (version 1)
         (deny default)
@@ -122,7 +126,7 @@ public enum RestrictedAgentSandbox {
 
     // Foundation normalizes some /private/var URLs back to /var on macOS.
     // Seatbelt subpaths must use the kernel's actual resolved spelling.
-    private static func sandboxPath(_ path: String) -> String {
+    static func sandboxPath(_ path: String) -> String {
         if let resolved = realpath(path, nil) {
             defer { free(resolved) }
             return String(cString: resolved)

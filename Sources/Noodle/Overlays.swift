@@ -51,6 +51,7 @@ struct NewBotSheet: View {
     @State private var mcpConnectionIDs: Set<UUID> = []
     @State private var computerIDs: Set<UUID> = []
     @State private var browserIDs: Set<UUID> = []
+    @State private var folders: [AgentFolder] = []
     @State private var selectedTab = BotEditorTab.general
     @FocusState private var nameFocused: Bool
 
@@ -130,6 +131,7 @@ struct NewBotSheet: View {
                         selectedModelIdentifier: $selectedModelIdentifier,
                         selectedEffort: $selectedEffort
                     )
+                    BotFolderPicker(folders: $folders)
                 case .mcp:
                     MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs)
                 case .browsers:
@@ -197,7 +199,7 @@ struct NewBotSheet: View {
             publicDescription: publicDescription,
             backstory: backstory,
             mcpConnectionIDs: mcpConnectionIDs,
-            computerIDs: computerIDs, browserIDs: browserIDs
+            computerIDs: computerIDs, browserIDs: browserIDs, folders: folders
         )
     }
 
@@ -245,6 +247,7 @@ struct EditBotSheet: View {
     @State private var mcpConnectionIDs: Set<UUID> = []
     @State private var computerIDs: Set<UUID> = []
     @State private var browserIDs: Set<UUID> = []
+    @State private var folders: [AgentFolder] = []
     @State private var confirmingDeletion = false
     @State private var selectedTab = BotEditorTab.general
     @State private var backgroundDraft: BackgroundSelection?
@@ -328,6 +331,7 @@ struct EditBotSheet: View {
                         selectedModelIdentifier: $selectedModelIdentifier,
                         selectedEffort: $selectedEffort
                     )
+                    BotFolderPicker(folders: $folders)
                     Text("Saving restarts the bot. Its workspace and history stay unchanged.")
                         .font(.caption).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -348,6 +352,7 @@ struct EditBotSheet: View {
             mcpConnectionIDs = store.mcp.selectedIDs(for: agent)
             computerIDs = store.computers.selectedIDs(for: agent)
             browserIDs = store.browsers.selectedIDs(for: agent)
+            folders = store.folders(for: agent)
             if selectedHarnessIdentifier.isEmpty {
                 selectedHarnessIdentifier = store.runtime.availableInstallations.first?.provider.rawValue ?? ""
             }
@@ -415,7 +420,7 @@ struct EditBotSheet: View {
                 publicDescription: publicDescription,
                 backstory: backstory,
                 mcpConnectionIDs: mcpConnectionIDs,
-                computerIDs: computerIDs, browserIDs: browserIDs
+                computerIDs: computerIDs, browserIDs: browserIDs, folders: folders
             )
         }) {
             dismiss()

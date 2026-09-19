@@ -776,6 +776,7 @@ public struct WorkspaceRepository: Sendable {
         }
 
         let backstory = try loadAgentBackstory(agent)
+        let folderInstructions = AgentFolder.instructions(try loadAgentFolders(agent))
         let workspaceFiles = try WorkspaceMailbox(workspace: directory, path: "")
         let agentsFiles = try WorkspaceMailbox(workspace: directory, path: ".agents", create: true)
         let messengerFiles = try WorkspaceMailbox(workspace: directory, path: ".agents/skills/messenger", create: true)
@@ -792,7 +793,7 @@ public struct WorkspaceRepository: Sendable {
         let appletInstructions = appletEnabled ? "\n## Creative applets\n\nRead `.agents/skills/applet/SKILL.md` to build and run HTML and native Swift noodlets in Noodle Applet.\n" : ""
         let computerInstructions = computerAssigned ? "\n## Assigned computers\n\nRead `.agents/skills/computer/SKILL.md` to access your assigned computers through Noodle.\n" : ""
         try workspaceFiles.writeData(Data((Self.renderedAgentInstructions(backstory: backstory,
-            mcpConnections: mcpRegistry.assigned(to: agent.id)) + computerInstructions + browserInstructions + appletInstructions).utf8), named: "AGENTS.md")
+            mcpConnections: mcpRegistry.assigned(to: agent.id)) + folderInstructions + computerInstructions + browserInstructions + appletInstructions).utf8), named: "AGENTS.md")
         workspaceFiles.remove("instructions.md")
         try workspaceFiles.symlink("CLAUDE.md", destination: "AGENTS.md")
         let mcpExecutable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("mcpshim")
@@ -839,6 +840,17 @@ public struct WorkspaceRepository: Sendable {
         var configuration = try AgentConfiguration.load(from: layout)
         _ = try configuration.requireBackstory()
         configuration.backstory = backstory.trimmingCharacters(in: .whitespacesAndNewlines)
+        try configuration.save(to: layout)
+    }
+
+    public func loadAgentFolders(_ agent: AgentRecord) throws -> [AgentFolder] {
+        try AgentConfiguration.load(from: storage(for: agent.id)).folders
+    }
+
+    public func updateAgentFolders(_ agent: AgentRecord, folders: [AgentFolder]) throws {
+        let layout = storage(for: agent.id)
+        var configuration = try AgentConfiguration.load(from: layout)
+        configuration.folders = try AgentFolder.validated(folders, protecting: AgentFolder.protectedLocations(root: rootURL))
         try configuration.save(to: layout)
     }
 

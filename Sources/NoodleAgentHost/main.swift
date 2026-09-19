@@ -33,6 +33,10 @@ private enum HostPaths {
         }
     }
 
+    static var container: URL {
+        home.appendingPathComponent("Library/Containers/\(AgentHostIdentity.application)", isDirectory: true)
+    }
+
     static func workspace(_ id: String) throws -> URL {
         guard let uuid = UUID(uuidString: id) else { throw HostError("Invalid bot identifier.") }
         let root = home.appendingPathComponent("Library/Containers/\(AgentHostIdentity.application)/Data/Library/Application Support/Noodle/Agents", isDirectory: true).resolvingSymlinksInPath()
@@ -132,24 +136,28 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
             let privateHome = RestrictedHarnessStorage.home(workspace: workspace)
             let codexHome = privateHome.appendingPathComponent(".codex", isDirectory: true)
             let temporary = workspace.appendingPathComponent(".noodle/tmp", isDirectory: true)
-            // Only fixed paths derived by this host enter the profile. The XPC
-            // caller cannot supply policy text, writable roots, or a command.
+            // Only paths derived by this host enter the profile. The XPC caller
+            // cannot supply policy text, writable roots, or a command. Shared
+            // folders come from the bot's own agent.json, which the bot cannot
+            // write, and are revalidated here against Noodle's storage.
+            let folders = try AgentFolder.granted(workspace: workspace, protecting: [HostPaths.container])
             let profile: String
             switch provider {
             case .apple:
                 let localModel = model.map(AppleLocalModelStore.validIdentifier) ?? false
                 let modelDirectory = try localModel ? AppleLocalModelStore(directory: HostPaths.appleModels).folder(id: model!) : nil
                 profile = AppleAgentSandbox.profile(application: HostPaths.application, workspace: workspace, repository: repository,
-                    modelsDirectory: modelDirectory, localModel: localModel)
+                    modelsDirectory: modelDirectory, localModel: localModel, folders: folders)
             case .codex:
                 let certificates = try RestrictedCodexCertificates.prepare(workspace: workspace)
                 setenv("CODEX_CA_CERTIFICATE", certificates.path, 1)
                 profile = RestrictedAgentSandbox.profile(workspace: workspace, repository: repository,
                     codexHome: codexHome, executableDirectory: executable.deletingLastPathComponent().deletingLastPathComponent(),
-                    application: HostPaths.application, temporary: temporary)
+                    application: HostPaths.application, temporary: temporary, folders: folders)
             case .claudeCode, .fx, .grokBuild, .muse, .openCode:
                 profile = try RestrictedAgentSandbox.profile(provider: provider, workspace: workspace, repository: repository,
-                    home: HostPaths.home, executable: executable, application: HostPaths.application, temporary: temporary)
+                    home: HostPaths.home, executable: executable, application: HostPaths.application, temporary: temporary,
+                    folders: folders)
             }
             setenv("TMPDIR", temporary.path, 1)
             setenv("TMPPREFIX", temporary.appendingPathComponent("zsh").path, 1)

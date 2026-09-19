@@ -132,7 +132,7 @@ private struct AgentAccessInfo: View {
         if isExtended {
             "This bot can read and change files and use services beyond its private workspace, with the access available to your Mac account. macOS and tool permissions still apply. Noodle approves supported tool requests automatically."
         } else {
-            "This bot runs in a macOS filesystem sandbox. It can work in its private workspace and use allowed harness storage, while unrelated personal files are blocked. Assigned tools and computers use their own permissions."
+            "This bot runs in a macOS filesystem sandbox. It can work in its private workspace, the folders added in Edit Bot, and allowed harness storage, while unrelated personal files are blocked. Assigned tools and computers use their own permissions."
         }
     }
 

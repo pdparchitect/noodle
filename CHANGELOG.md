@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Share folders outside the workspace with a bot in Edit Bot > Harness, each as Read & Write or Read Only and with an optional description of what it is for. A restricted bot's sandbox opens only those folders in addition to its workspace, and they are listed with their descriptions in the bot's generated `AGENTS.md`. Saving restarts the bot. Noodle's own storage and the whole disk cannot be shared.
 - Offer Qwen3 1.7B and Qwen3 14B in Local Models alongside Qwen3 4B Instruct and Qwen3 8B. The list is now titled Available and runs from smallest to largest, each model has a one-line description of what it suits and the memory it wants, and the best fit for this Mac's memory is tagged Recommended.
 
 ### Changed

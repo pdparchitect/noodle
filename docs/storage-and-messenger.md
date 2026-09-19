@@ -7,7 +7,7 @@ workspace, right-click it in the sidebar and choose **Show Workspace in Finder**
 ```text
 Noodle/
 ├── Agents/<bot-uuid>/
-│   ├── agent.json             # Bot settings and private Backstory
+│   ├── agent.json             # Bot settings, private Backstory, shared folders
 │   ├── .noodle-storage.json   # Storage layout version
 │   ├── runtime/              # Session pointers and unfinished-turn markers
 │   └── workspace/            # Harness working directory

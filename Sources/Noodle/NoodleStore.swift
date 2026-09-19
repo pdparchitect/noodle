@@ -257,7 +257,8 @@ final class NoodleStore {
         backstory: String,
         mcpConnectionIDs: Set<UUID> = [],
         computerIDs: Set<UUID> = [],
-        browserIDs: Set<UUID> = []
+        browserIDs: Set<UUID> = [],
+        folders: [AgentFolder] = []
     ) -> Bool {
         guard runtime.availableInstallations.contains(where: { $0.provider.rawValue == harnessIdentifier }) else {
             errorMessage = "Set up a supported harness in Settings before creating a bot."
@@ -277,6 +278,7 @@ final class NoodleStore {
                 avatarColorIndex: avatarColorIndex, avatarImageData: avatarImageData, backstory: backstory
             )
             created = result
+            if !folders.isEmpty { try repository.updateAgentFolders(result.agent, folders: folders) }
             try mcp.assign(mcpConnectionIDs, to: result.agent, synchronizeWorkspace: false)
             try computers.assign(computerIDs, to: result.agent, synchronizeWorkspace: false)
             try browsers.assign(browserIDs, to: result.agent, synchronizeWorkspace: false)
@@ -323,7 +325,8 @@ final class NoodleStore {
         backstory: String,
         mcpConnectionIDs: Set<UUID>? = nil,
         computerIDs: Set<UUID>? = nil,
-        browserIDs: Set<UUID>? = nil
+        browserIDs: Set<UUID>? = nil,
+        folders: [AgentFolder]? = nil
     ) -> Bool {
         var checkpoint: AgentSettingsCheckpoint?
         let updated: AgentRecord
@@ -348,6 +351,7 @@ final class NoodleStore {
                 try repository.updateConversation(updatedConversations[index])
             }
             try repository.updateAgentBackstory(updated, backstory: backstory)
+            if let folders { try repository.updateAgentFolders(updated, folders: folders) }
             if let mcpConnectionIDs { try mcp.assign(mcpConnectionIDs, to: updated, synchronizeWorkspace: false) }
             if let computerIDs { try computers.assign(computerIDs, to: updated, synchronizeWorkspace: false) }
             if let browserIDs { try browsers.assign(browserIDs, to: updated, synchronizeWorkspace: false) }
@@ -394,6 +398,15 @@ final class NoodleStore {
         } catch {
             errorMessage = error.localizedDescription
             return ""
+        }
+    }
+
+    func folders(for agent: AgentRecord) -> [AgentFolder] {
+        do {
+            return try repository.loadAgentFolders(agent)
+        } catch {
+            errorMessage = error.localizedDescription
+            return []
         }
     }
 

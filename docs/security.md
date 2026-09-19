@@ -34,6 +34,18 @@ conversation store, Noodle preferences, and unrelated personal files are outside
 the content-read and write boundary. System libraries, the signed app/harness
 installation, and required system services remain available.
 
+Edit Bot → Harness → Folders shares chosen folders outside the workspace with one bot,
+each as Read & Write or Read Only and with an optional description. The list is
+stored in that bot's `agent.json`, which the bot cannot write. Agent Host reads
+it at launch, not from the app's request, and refuses the whole disk, any folder
+that contains or lies inside Noodle's own storage, and links that resolve
+there. A folder nested inside another read-and-write shared folder is covered
+by that folder and never resolved on its own, and a missing folder is skipped.
+Saving restarts the bot, because a running sandbox cannot be widened. Shared
+folders and descriptions are listed in the generated `AGENTS.md`. Sharing a
+folder exposes everything in it to the bot's model provider and tools; FX and
+OpenCode can also list the names in that folder's parent directories.
+
 Conversation access goes through the Messenger CLI and an app-side broker.
 Noodle must be running. The broker derives bot identity from the registered
 workspace and a per-bot session token, then checks conversation membership. A CLI
