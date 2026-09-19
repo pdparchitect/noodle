@@ -176,9 +176,11 @@ Declare the protected resources a noodlet uses in `noodlet.json`:
 
 Applet asks once per noodlet before it starts, then macOS asks for Noodle Applet
 as a whole. Declining fails `open` with `permission-denied`. HTML noodlets get
-`getUserMedia` and `MediaRecorder` for the microphone and camera only when declared;
-screen capture is for native noodlets. A new screen recording grant applies after
-Applet restarts.
+`getUserMedia` and `MediaRecorder` for the microphone and camera, and `getDisplayMedia`
+for the screen, only when declared. macOS still shows its own screen picker. WebKit
+has no public delegate for `getDisplayMedia`, so this uses a guarded private one; an
+unsupported WebKit build reports that in the session log. A new screen recording
+grant applies after Applet restarts.
 `info`, `status` and `open` report each declared permission as `granted`, `denied`
 or `not-requested`. **Settings → Permissions** lists what each noodlet was allowed
 and removes it, so the noodlet asks again.

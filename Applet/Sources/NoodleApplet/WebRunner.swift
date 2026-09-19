@@ -57,6 +57,13 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
     }
     web.navigationDelegate = self
     web.uiDelegate = self
+    if package.manifest.permissions?.contains("screen-capture") == true,
+      objc_getProtocol("WKUIDelegatePrivate").map({
+        protocol_getMethodDescription($0, Self.displayCaptureSelector, false, true).name == nil
+      }) ?? true
+    {
+      log.append("permissions", "This WebKit build does not support screen capture from HTML.")
+    }
     config.userContentController.addScriptMessageHandler(
       self, contentWorld: .page, name: "noodle")
     let scriptURL = AppletResources.bundle.url(forResource: "Resources", withExtension: nil)!
@@ -163,6 +170,20 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
       @unknown default: ["unsupported"]
       }
     return needed.isSubset(of: allowed) ? .grant : .deny
+  }
+  // WebKit has no public delegate for getDisplayMedia and refuses it without this
+  // SPI. 1 asks the user to pick a screen; 0 denies. macOS still shows its own picker.
+  static let displayCaptureSelector = NSSelectorFromString(
+    "_webView:requestDisplayCapturePermissionForOrigin:initiatedByFrame:withSystemAudio:decisionHandler:")
+  @objc(_webView:requestDisplayCapturePermissionForOrigin:initiatedByFrame:withSystemAudio:decisionHandler:)
+  func webView(
+    _ webView: WKWebView, requestDisplayCapturePermissionFor origin: WKSecurityOrigin,
+    initiatedBy frame: WKFrameInfo, withSystemAudio: Bool,
+    decisionHandler: @escaping @convention(block) (Int) -> Void
+  ) {
+    let allowed = package.manifest.permissions?.contains("screen-capture") == true
+    log.append("permissions", "Screen capture \(allowed ? "offered to the user" : "denied; declare screen-capture in noodlet.json").")
+    decisionHandler(allowed ? 1 : 0)
   }
   func webView(
     _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,

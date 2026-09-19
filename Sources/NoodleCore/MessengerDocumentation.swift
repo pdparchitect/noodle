@@ -402,8 +402,9 @@ extension MessengerDocumentation {
         (only those needed) in noodlet.json. The user is
         asked once per noodlet before it starts, then macOS asks for Noodle Applet.
         A refusal fails open with permission-denied; tell the user what to allow.
-        HTML uses getUserMedia and MediaRecorder; Swift uses AVFoundation, Speech and
-        ScreenCaptureKit. Screen recording is native only and applies after Applet restarts.
+        HTML uses getUserMedia, getDisplayMedia and MediaRecorder; Swift uses AVFoundation,
+        Speech and ScreenCaptureKit. A new screen recording grant applies after Applet
+        restarts. getDisplayMedia needs a visible, focused window and shows macOS's picker.
         Use typecheck to check any Swift file or folder without building a noodlet.
 
         Use headless mode for automated checks with separate test data. It still needs

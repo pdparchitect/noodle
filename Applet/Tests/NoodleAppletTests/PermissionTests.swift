@@ -64,5 +64,6 @@ import XCTest
     func testMediaCaptureDelegateIsVisibleToWebKit() {
         XCTAssertTrue(WebRunner.instancesRespond(to: Selector(
             ("webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:"))))
+        XCTAssertTrue(WebRunner.instancesRespond(to: WebRunner.displayCaptureSelector))
     }
 }
