@@ -6,7 +6,7 @@ extension HarnessDistribution {
     /// SHA-256 and size. Noodle keeps that executable alone, without the
     /// self-updating shell launcher the Agent Host refuses to run anyway.
     static let muse: HarnessDistribution = {
-        let platform = isAppleSilicon ? "aarch64" : "x86"
+        let platform = "aarch64"
         let base = "https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version="
         return HarnessDistribution(
             provider: .muse, executablePath: "muse", isArchive: false,

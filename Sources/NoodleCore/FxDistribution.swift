@@ -4,7 +4,7 @@ extension HarnessDistribution {
     /// As https://fx.sh/setup.sh reads it. Vercel publishes no checksum, so the
     /// signature check in the Agent Host is the only verification.
     static let fx: HarnessDistribution = {
-        let platform = isAppleSilicon ? "macos-aarch64" : "macos-x86_64"
+        let platform = "macos-aarch64"
         return HarnessDistribution(
             provider: .fx, executablePath: "fx", isArchive: true,
             latest: URL(string: "https://releases.fx.sh/latest.txt")!, hosts: ["releases.fx.sh"],

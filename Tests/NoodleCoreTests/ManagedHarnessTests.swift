@@ -35,7 +35,7 @@ final class ManagedHarnessTests: XCTestCase {
         XCTAssertNil(muse.release(from: Data(#"{"channel":"muse-beta","version":"1.3.0-R3401.1","state":"public"}"#.utf8)))
         func museManifest(url: String, version: String = "1.3.0-R3401.1") -> Data {
             let entry = #"{"url":"\#(url)","checksum":"\#(String(repeating: "e", count: 64))","size":42}"#
-            return Data(#"{"version":"\#(version)","checksum_algorithm":"sha256","artifacts":{"aarch64_macos":\#(entry),"x86_macos":\#(entry)}}"#.utf8)
+            return Data(#"{"version":"\#(version)","checksum_algorithm":"sha256","artifacts":{"aarch64_macos":\#(entry)}}"#.utf8)
         }
         XCTAssertEqual(muse.expectation(museRelease, museManifest(url: museRelease.artifact.absoluteString))?.byteCount, 42)
         XCTAssertNil(muse.expectation(museRelease, museManifest(url: "https://lookaside.facebook.com/elsewhere")),
@@ -191,7 +191,7 @@ final class ManagedHarnessTests: XCTestCase {
         XCTAssertEqual(release.version, "2.1.278")
         XCTAssertTrue(release.artifact.absoluteString.hasPrefix("https://downloads.claude.ai/claude-code-releases/2.1.278/darwin-"))
         XCTAssertNil(claude.release(from: Data("<html>unavailable</html>".utf8)))
-        let manifest = Data(#"{"platforms":{"darwin-arm64":{"checksum":"\#(String(repeating: "a", count: 64))","size":12},"darwin-x64":{"checksum":"\#(String(repeating: "b", count: 64))","size":13}}}"#.utf8)
+        let manifest = Data(#"{"platforms":{"darwin-arm64":{"checksum":"\#(String(repeating: "a", count: 64))","size":12}}}"#.utf8)
         XCTAssertNotNil(claude.expectation(release, manifest)?.byteCount)
         XCTAssertNil(claude.expectation(release, Data(#"{"platforms":{}}"#.utf8)))
 
@@ -213,7 +213,7 @@ final class ManagedHarnessTests: XCTestCase {
 
     func testStagingStopsAtAChecksumMismatchAndSkipsAnInstalledRelease() async throws {
         try place(.claudeCode, version: "2.1.0")
-        let manifest = #"{"platforms":{"darwin-arm64":{"checksum":"\#(String(repeating: "a", count: 64))"},"darwin-x64":{"checksum":"\#(String(repeating: "a", count: 64))"}}}"#
+        let manifest = #"{"platforms":{"darwin-arm64":{"checksum":"\#(String(repeating: "a", count: 64))"}}}"#
         func downloader(latest: String) -> HarnessDownloader {
             HarnessDownloader(fetchData: { url, _ in Data((url.lastPathComponent == "latest" ? latest : manifest).utf8) },
                               fetchFile: { _, destination, _, _, _ in try Data("not the release".utf8).write(to: destination) })

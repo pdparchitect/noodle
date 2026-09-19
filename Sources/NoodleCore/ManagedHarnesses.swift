@@ -180,8 +180,8 @@ extension HarnessProvider {
     public var supportsManagedInstallation: Bool { HarnessDistribution(self) != nil }
 }
 
-/// How one vendor publishes its macOS release, as that vendor's own installer
-/// reads it. Each harness defines its own beside its trust rules; everything
+/// How one vendor publishes its Apple silicon macOS release, as that vendor's
+/// own installer reads it. Each harness defines its own beside its trust rules; everything
 /// else here, in the Agent Host, and in Settings is the same for all of them.
 public struct HarnessDistribution: Sendable {
     public struct Release: Equatable, Sendable {
@@ -213,14 +213,6 @@ public struct HarnessDistribution: Sendable {
     let expectation: @Sendable (Release, Data) -> Expectation?
     /// The vendor's pinned signature, for the executable and anything it launches from its package.
     let verify: @Sendable (_ package: URL, _ executable: URL) throws -> Void
-
-    static var isAppleSilicon: Bool {
-        #if arch(arm64)
-        true
-        #else
-        false
-        #endif
-    }
 
     func allows(_ url: URL) -> Bool {
         guard url.scheme == "https", url.user == nil, url.password == nil,

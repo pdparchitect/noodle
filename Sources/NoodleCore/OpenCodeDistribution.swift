@@ -5,7 +5,7 @@ extension HarnessDistribution {
     /// the platform package comes from the npm registry, whose metadata carries
     /// the tarball's SHA-512.
     static let openCode: HarnessDistribution = {
-        let package = isAppleSilicon ? "cli-darwin-arm64" : "cli-darwin-x64"
+        let package = "cli-darwin-arm64"
         let registry = "https://registry.npmjs.org/@opencode"
         return HarnessDistribution(
             provider: .openCode, executablePath: "package/bin/opencode", isArchive: true,

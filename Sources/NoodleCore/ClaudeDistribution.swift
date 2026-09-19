@@ -4,7 +4,7 @@ extension HarnessDistribution {
     /// As https://claude.ai/install.sh reads it: a plain version pointer, a
     /// manifest of per-platform checksums, and one executable.
     static let claudeCode: HarnessDistribution = {
-        let platform = isAppleSilicon ? "darwin-arm64" : "darwin-x64"
+        let platform = "darwin-arm64"
         let base = "https://downloads.claude.ai/claude-code-releases/"
         return HarnessDistribution(
             provider: .claudeCode, executablePath: "claude", isArchive: false,

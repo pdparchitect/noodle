@@ -5,7 +5,7 @@ extension HarnessDistribution {
     /// executable. xAI publishes no checksum, so the signature check in the Agent
     /// Host is the only verification.
     static let grokBuild: HarnessDistribution = {
-        let platform = isAppleSilicon ? "macos-aarch64" : "macos-x86_64"
+        let platform = "macos-aarch64"
         return HarnessDistribution(
             provider: .grokBuild, executablePath: "grok", isArchive: false,
             latest: URL(string: "https://x.ai/cli/stable")!, hosts: ["x.ai"],

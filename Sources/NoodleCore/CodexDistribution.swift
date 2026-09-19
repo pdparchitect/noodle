@@ -4,7 +4,7 @@ extension HarnessDistribution {
     /// As https://chatgpt.com/codex/install.sh reads it: the GitHub release names
     /// the version, and OpenAI's release host serves the package and its checksums.
     static let codex: HarnessDistribution = {
-        let platform = isAppleSilicon ? "aarch64-apple-darwin" : "x86_64-apple-darwin"
+        let platform = "aarch64-apple-darwin"
         return HarnessDistribution(
             provider: .codex, executablePath: "bin/codex", isArchive: true,
             latest: URL(string: "https://api.github.com/repos/openai/codex/releases/latest")!,
