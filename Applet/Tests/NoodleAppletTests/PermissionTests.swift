@@ -13,7 +13,8 @@ import XCTest
             return manifest
         }
         XCTAssertEqual(try manifest(#"["microphone","speech-recognition"]"#).permissions, ["microphone", "speech-recognition"])
-        XCTAssertThrowsError(try manifest(#"["camera"]"#))
+        XCTAssertNoThrow(try manifest(#"["camera","screen-capture"]"#))
+        XCTAssertThrowsError(try manifest(#"["contacts"]"#))
     }
 
     func testRefusedPermissionFailsOpenWithReason() async throws {

@@ -6,7 +6,10 @@ import Speech
 /// Asks once per noodlet for the permissions its manifest declares, then lets
 /// macOS ask for Applet as a whole.
 @MainActor enum AppletPermissions {
-  private static let names = ["microphone": "the microphone", "speech-recognition": "speech recognition"]
+  private static let names = [
+    "microphone": "the microphone", "camera": "the camera", "speech-recognition": "speech recognition",
+    "screen-capture": "screen recording",
+  ]
 
   /// Returns why the noodlet may not start, or nil when everything it declares is allowed.
   static func authorize(_ package: NoodletPackage, defaults: UserDefaults) async -> String? {
@@ -27,6 +30,13 @@ import Speech
     }
     if wanted.contains("microphone"), await !AVCaptureDevice.requestAccess(for: .audio) {
       return "Microphone access is off for Noodle Applet in System Settings > Privacy & Security."
+    }
+    if wanted.contains("camera"), await !AVCaptureDevice.requestAccess(for: .video) {
+      return "Camera access is off for Noodle Applet in System Settings > Privacy & Security."
+    }
+    // macOS applies a new screen recording grant only after the app restarts.
+    if wanted.contains("screen-capture"), !CGPreflightScreenCaptureAccess(), !CGRequestScreenCaptureAccess() {
+      return "Allow Noodle Applet in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen Noodle Applet."
     }
     if wanted.contains("speech-recognition") {
       let status = await withCheckedContinuation { continuation in

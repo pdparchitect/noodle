@@ -7,6 +7,7 @@ let info = try plist(CommandLine.arguments[1]), entitlements = try plist(Command
 let version = try String(contentsOfFile: CommandLine.arguments[3], encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
 let required: Set<String> = ["com.apple.security.app-sandbox", "com.apple.security.files.bookmarks.app-scope",
     "com.apple.security.network.client", "com.apple.security.device.audio-input",
+    "com.apple.security.device.camera",
     "com.apple.security.files.user-selected.read-write",
     "com.apple.security.application-groups", "com.apple.security.temporary-exception.mach-lookup.global-name",
     "com.apple.security.temporary-exception.files.home-relative-path.read-only"]
@@ -29,8 +30,10 @@ if local { precondition(info["NoodleUpdatesEnabled"] as? Bool == false) }
 precondition(entitlements["com.apple.security.temporary-exception.mach-lookup.global-name"] as? [String] == ["\(bundle)-spks", "\(bundle)-spki"])
 precondition(info["CFBundleShortVersionString"] as? String == version && info["CFBundleVersion"] as? String == version)
 precondition(info["LSMinimumSystemVersion"] as? String == "15.0")
-// Noodlets that declare the microphone or speech recognition prompt as Applet.
-precondition(info["NSMicrophoneUsageDescription"] is String && info["NSSpeechRecognitionUsageDescription"] is String)
+// Noodlets that declare these permissions prompt as Applet.
+for key in ["NSMicrophoneUsageDescription", "NSCameraUsageDescription", "NSSpeechRecognitionUsageDescription"] {
+    precondition(info[key] is String, "Missing usage description: \(key)")
+}
 let links = info["CFBundleURLTypes"] as! [[String: Any]]
 precondition(links.count == 1 && links[0]["CFBundleURLSchemes"] as? [String] == [documentExtension], "Cross-environment URL registration")
 let types = info["CFBundleDocumentTypes"] as! [[String: Any]]
@@ -41,7 +44,7 @@ precondition((exports[0]["UTTypeTagSpecification"] as! [String: Any])["public.fi
 precondition(info["UTImportedTypeDeclarations"] == nil)
 precondition(info["SUAllowsAutomaticUpdates"] as? Bool == true)
 precondition(info["SUAutomaticallyUpdate"] as? Bool == false)
-print("Applet version, eight-key sandbox policy and opt-in automatic-install update policy verified")
+print("Applet version, nine-key sandbox policy and opt-in automatic-install update policy verified")
 let previewInfo = try plist(CommandLine.arguments[4]), previewEntitlements = try plist(CommandLine.arguments[5])
 precondition(previewInfo["CFBundleIdentifier"] as? String == bundle + ".preview")
 precondition(previewInfo["CFBundleVersion"] as? String == version)

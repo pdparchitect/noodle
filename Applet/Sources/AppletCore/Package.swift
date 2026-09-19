@@ -13,7 +13,7 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
   public var window: NoodletWindowOptions?
   /// Protected resources the user is asked about before the noodlet starts.
   public var permissions: [String]?
-  public static let knownPermissions = ["microphone", "speech-recognition"]
+  public static let knownPermissions = ["microphone", "camera", "speech-recognition", "screen-capture"]
   public init(
     title: String, runtime: String = "html", entry: String = "index.html",
     summary: String? = nil, symbol: String? = nil, network: Bool = false

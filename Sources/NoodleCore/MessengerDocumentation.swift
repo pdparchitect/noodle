@@ -395,11 +395,13 @@ extension MessengerDocumentation {
         a security boundary between trusted native creations. The network manifest
         flag restricts HTML only. Do not run untrusted native packages.
 
-        To listen, record audio or transcribe speech, declare
-        "permissions":["microphone","speech-recognition"] in noodlet.json. The user is
+        To use the microphone, camera, speech recognition or screen recording, declare
+        "permissions":["microphone","camera","speech-recognition","screen-capture"]
+        (only those needed) in noodlet.json. The user is
         asked once per noodlet before it starts, then macOS asks for Noodle Applet.
         A refusal fails open with permission-denied; tell the user what to allow.
-        HTML uses getUserMedia and MediaRecorder; Swift uses AVFoundation and Speech.
+        HTML uses getUserMedia and MediaRecorder; Swift uses AVFoundation, Speech and
+        ScreenCaptureKit. Screen recording is native only and applies after Applet restarts.
         Use typecheck to check any Swift file or folder without building a noodlet.
 
         Use headless mode for automated checks with separate test data. It still needs

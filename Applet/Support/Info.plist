@@ -30,6 +30,8 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Noodlets you allow can listen and record through the microphone.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Noodlets you allow can see through the camera.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Noodlets you allow can turn speech into text.</string>
 	<key>NSHighResolutionCapable</key>

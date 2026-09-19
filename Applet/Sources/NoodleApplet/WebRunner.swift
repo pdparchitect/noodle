@@ -154,8 +154,15 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
     _ webView: WKWebView, decideMediaCapturePermissionsFor origin: WKSecurityOrigin,
     initiatedBy frame: WKFrameInfo, type: WKMediaCaptureType
   ) async -> WKPermissionDecision {
-    type == .microphone && package.manifest.permissions?.contains("microphone") == true
-      ? .grant : .deny
+    let allowed = Set(package.manifest.permissions ?? [])
+    let needed: Set<String> =
+      switch type {
+      case .microphone: ["microphone"]
+      case .camera: ["camera"]
+      case .cameraAndMicrophone: ["camera", "microphone"]
+      @unknown default: ["unsupported"]
+      }
+    return needed.isSubset(of: allowed) ? .grant : .deny
   }
   func webView(
     _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,

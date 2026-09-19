@@ -4,6 +4,7 @@
 <key>com.apple.security.app-sandbox</key><true/>
 <key>com.apple.security.network.client</key><true/>
 <key>com.apple.security.device.audio-input</key><true/>
+<key>com.apple.security.device.camera</key><true/>
 <key>com.apple.security.files.user-selected.read-write</key><true/>
 <key>com.apple.security.files.bookmarks.app-scope</key><true/>
 <key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key><array><string>/Library/Application Support/com.apple.mobileAssetDesktop/</string><string>/Library/Application Support/com.apple.wallpaper/aerials/</string></array>
