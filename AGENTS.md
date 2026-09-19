@@ -2,6 +2,12 @@
 
 Assume that multiple ai agents are editing this project. Don't get surprised.
 
+# Commits
+
+Committing is prohibited. Never commit, amend, push, tag or rewrite history unless
+the user explicitly asks for it in that message. A documented process, a finished
+task or an earlier approval is not permission. Stage changes only when asked.
+
 # Project instructions
 
 ## Release notes
