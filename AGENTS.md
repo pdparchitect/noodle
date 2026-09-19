@@ -6,12 +6,9 @@ Assume that multiple ai agents are editing this project. Don't get surprised.
 
 ## Behaviour changes are test-first
 
-Do not change behaviour on the strength of reading the code. First write a test
-that exercises the specific code and fails because of the problem, and run it to
-see it fail. Then make the change and run the same test to see it pass. Report
-both runs. A suspected cause that no test can reproduce is still a hypothesis;
-say so instead of changing code. Tests must not depend on a harness account, a
-model, the network or timing, so that they also pass in CI.
+Never change behaviour without a test that fails first. Follow the
+`test-first-changes` skill in
+[`.agents/skills/test-first-changes/SKILL.md`](.agents/skills/test-first-changes/SKILL.md).
 
 ## UI copy
 
