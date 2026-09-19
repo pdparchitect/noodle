@@ -12,8 +12,8 @@ struct NoodleSettingsView: View {
     private let companionUpdates = CompanionUpdateChecker.shared
     private let permissions = AppPermissionChecker.shared
     @ObservedObject private var appUpdater = AppUpdater.shared
-    // Owned here so the Harness tab is badged before it is selected.
-    @State private var harnessSetup = HarnessSetupController(versionChecker: HarnessVersionChecker())
+    // Owned by the store so the Harness tab is badged before it is selected.
+    private var harnessSetup: HarnessSetupController { store.harnessSetup }
 
     private var harnessesNeedingAttention: Int {
         HarnessProvider.allCases.filter { id in
@@ -351,6 +351,12 @@ private struct HarnessesSettingsView: View {
                         }
                     }
                 }
+                if setup.displayedInstallations.contains(where: setup.isManaged) {
+                    Section {
+                        @Bindable var setup = setup
+                        Toggle("Update harnesses installed by Noodle automatically", isOn: $setup.automaticUpdates)
+                    }
+                }
             }
             .formStyle(.grouped)
 
@@ -403,6 +409,7 @@ struct HarnessInstallationRow: View {
     @State private var showsExperimentalInfo = false
     @State private var showsLocalModels = false
     @State private var showsProfiles = false
+    @State private var confirmsRemoval = false
     @State private var kickRequest: AgentKickRequest?
     @State private var showsAgentIssues = false
     @Environment(\.openURL) private var openURL
@@ -458,7 +465,7 @@ struct HarnessInstallationRow: View {
                 }
 
                 if let path = installation.executablePath {
-                    Text(id == .apple ? "Local" : path)
+                    Text(id == .apple ? "Local" : (setup.isManaged(installation) ? "Installed by Noodle" : path))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
@@ -470,6 +477,7 @@ struct HarnessInstallationRow: View {
 
                 if let error = setup.errors[id] {
                     Text(error).font(.caption).foregroundStyle(.red)
+                        .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if installation.isAvailable {
@@ -481,7 +489,11 @@ struct HarnessInstallationRow: View {
                 }
                 if let activity = setup.activity[id] {
                     HStack {
-                        ProgressView().controlSize(.small)
+                        if let fraction = setup.installProgress[id] {
+                            ProgressView(value: fraction).frame(width: 120)
+                        } else {
+                            ProgressView().controlSize(.small)
+                        }
                         Text(activity).font(.caption)
                         Spacer()
                         Button("Cancel") { setup.cancel(id) }
@@ -519,18 +531,19 @@ struct HarnessInstallationRow: View {
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                             if let terminalError { Text(terminalError).font(.caption).foregroundStyle(.red) }
+                        } else if setup.canInstall(id) {
+                            HStack {
+                                Button("Install") { setup.install(id, runtime: store.runtime) }
+                                Button("Install Manually…") { showsInstallationGuide = true }
+                            }
                         } else {
                             Button("Install…") { showsInstallationGuide = true }
                         }
-                    } else if setup.authentication[id] == .managedExternally {
-                        Text("Could not determine the saved sign-in status. Check Muse in Terminal, then choose Check Again.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    } else if id == .muse, setup.authentication[id] == .unauthenticated {
-                        Text("Run muse login in Terminal, then choose Check Again.")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Button("Open Terminal") { openTerminal() }
-                        if let terminalError { Text(terminalError).font(.caption).foregroundStyle(.red) }
-                    } else if setup.authentication[id] == .unauthenticated {
+                    } else if setup.authentication[id] == .unauthenticated || setup.authentication[id] == .managedExternally {
+                        if setup.authentication[id] == .managedExternally {
+                            Text("Could not determine the saved sign-in status.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                         Button("Sign In…") {
                             if let liveInstallation, liveInstallation.isAvailable { setup.signIn(liveInstallation) }
                         }
@@ -634,7 +647,8 @@ struct HarnessInstallationRow: View {
                 Text(error).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             }
         }
-        if id.supportsProfiles || version?.updateAvailable == true {
+        let managed = setup.isManaged(installation)
+        if id.supportsProfiles || version?.updateAvailable == true || managed {
             HStack {
                 if id.supportsProfiles {
                     Button("Profiles…") { showsProfiles = true }
@@ -645,11 +659,31 @@ struct HarnessInstallationRow: View {
                         }
                 }
                 if version?.updateAvailable == true {
-                    Button("Update Instructions…") { showsUpdateGuide.toggle() }
+                    if managed {
+                        Button("Update") { setup.install(id, runtime: store.runtime) }
+                            .disabled(setup.activity[id] != nil)
+                    } else {
+                        Button("Update Instructions…") { showsUpdateGuide.toggle() }
+                    }
+                }
+                if managed {
+                    Button("Remove…") { confirmsRemoval = true }
+                        .disabled(setup.activity[id] != nil)
+                        .confirmationDialog("Remove \(id.displayName)?", isPresented: $confirmsRemoval) {
+                            Button("Remove", role: .destructive) {
+                                // A running bot would lose the tools beside its executable mid-turn.
+                                for agent in store.agents where agent.harnessIdentifier == id.rawValue {
+                                    store.runtime.stop(agentID: agent.id, revokeAccess: false)
+                                }
+                                setup.removeManaged(id, runtime: store.runtime)
+                            }
+                        } message: {
+                            Text("Bots that use \(id.displayName) stop working until it is installed again. Your sign-in is kept.")
+                        }
                 }
             }
         }
-        if version?.updateAvailable == true, showsUpdateGuide {
+        if version?.updateAvailable == true, showsUpdateGuide, !managed {
             let guide = HarnessVersionPolicy.updateGuide(for: installation)
             Text(guide.instructions).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let command = guide.command {

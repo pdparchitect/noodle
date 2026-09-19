@@ -18,6 +18,8 @@ private enum HostPaths {
     }()
 
     static func executable(_ path: String, provider: HarnessProvider) throws -> URL {
+        // A harness Noodle installed is held to the same vendor signature, in Noodle's storage.
+        if let managed = try managedHarnesses.trustedExecutable(at: path, provider: provider) { return managed }
         switch provider {
         case .apple:
             guard let requirement = AgentHostIdentity.requirement(for: AgentHostIdentity.application + ".apple-agent") else {
@@ -39,6 +41,17 @@ private enum HostPaths {
 
     static var profiles: HarnessProfileStore {
         HarnessProfileStore(root: container.appendingPathComponent("Data/Library/Application Support/Noodle", isDirectory: true))
+    }
+
+    static var managedHarnesses: ManagedHarnessStore {
+        ManagedHarnessStore(root: container.appendingPathComponent("Data/Library/Application Support/Noodle", isDirectory: true))
+    }
+
+    /// The copy Noodle installed, verified, for inspections that otherwise look
+    /// only at the vendor's own location.
+    static func managedExecutable(_ provider: HarnessProvider) throws -> URL? {
+        guard let path = managedHarnesses.executable(provider)?.path else { return nil }
+        return try managedHarnesses.trustedExecutable(at: path, provider: provider)
     }
 
     static func workspace(_ id: String) throws -> URL {
@@ -135,6 +148,11 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
             if let effort { strings += ["--reasoning-effort", effort] }
             strings += ["stdio"]
         case .claudeCode:
+            // Noodle updates the copy it installed. Claude Code updating itself would
+            // install a second one into the user's home and retire this one.
+            if HostPaths.managedHarnesses.manages(HarnessInstallation(provider: provider, executablePath: CommandLine.arguments[3])) {
+                setenv("DISABLE_AUTOUPDATER", "1", 1)
+            }
             strings = [executable.path] + (try ClaudeLaunch.arguments(sessionID: sessionID,
                 resumeSession: resumeSession, model: model, effort: effort, restricted: restricted, appsEnabled: appsEnabled))
         }
@@ -210,6 +228,7 @@ private final class HostSession: NSObject, AgentHostService {
     private let queue = DispatchQueue(label: "Noodle.agent-host-session")
     private var process: Process?
     private var accountProcess: Process?
+    private var codexAccount: Task<Void, Never>?
     private var input: ProcessInputWriter?
     private var outputs: [FileHandle] = []
     private var stopping = false
@@ -362,6 +381,8 @@ private final class HostSession: NSObject, AgentHostService {
             self.accountProcess?.terminationHandler = nil
             if self.accountProcess?.isRunning == true { self.accountProcess?.terminate() }
             self.accountProcess = nil
+            self.codexAccount?.cancel()
+            self.codexAccount = nil
             self.loginOutput?.readabilityHandler = nil
             self.loginOutput = nil
             self.loginText = ""
@@ -418,10 +439,23 @@ private final class HostSession: NSObject, AgentHostService {
         }
     }
 
+    func publishHarness(harnessIdentifier: String, version: String, stagingID: String,
+                        withReply reply: @escaping (String?, String?) -> Void) {
+        queue.async {
+            do {
+                guard let provider = HarnessProvider(rawValue: harnessIdentifier), let staging = UUID(uuidString: stagingID) else {
+                    throw HostError("Invalid harness installation request.")
+                }
+                reply(try HostPaths.managedHarnesses.publish(provider, version: version, staging: staging).path, nil)
+            } catch { reply(nil, error.localizedDescription) }
+        }
+    }
+
     func inspectGrok(withReply reply: @escaping (Data?, String?) -> Void) {
         queue.async {
             do {
-                let result = try GrokInspection.inspect(home: HostPaths.home, environment: self.accountEnvironment)
+                let result = try GrokInspection.inspect(home: HostPaths.home, environment: self.accountEnvironment,
+                                                        managed: HostPaths.managedExecutable(.grokBuild))
                 reply(try JSONEncoder().encode(result), nil)
             } catch { reply(nil, error.localizedDescription) }
         }
@@ -430,7 +464,8 @@ private final class HostSession: NSObject, AgentHostService {
     func inspectOpenCode(withReply reply: @escaping (Data?, String?) -> Void) {
         queue.async {
             do {
-                let result = try OpenCodeInspection.inspect(home: HostPaths.home, application: HostPaths.application)
+                let result = try OpenCodeInspection.inspect(home: HostPaths.home, application: HostPaths.application,
+                                                            managed: HostPaths.managedExecutable(.openCode))
                 reply(try JSONEncoder().encode(result), nil)
             } catch { reply(nil, error.localizedDescription) }
         }
@@ -439,7 +474,8 @@ private final class HostSession: NSObject, AgentHostService {
     func inspectMuse(withReply reply: @escaping (Data?, String?) -> Void) {
         queue.async {
             do {
-                let result = try MuseInspection.inspect(home: HostPaths.home, environment: self.accountEnvironment)
+                let result = try MuseInspection.inspect(home: HostPaths.home, environment: self.accountEnvironment,
+                                                        managed: HostPaths.managedExecutable(.muse))
                 reply(try JSONEncoder().encode(result), nil)
             } catch { reply(nil, error.localizedDescription) }
         }
@@ -452,6 +488,10 @@ private final class HostSession: NSObject, AgentHostService {
     ) {
         queue.async {
             do {
+                if harnessIdentifier == HarnessProvider.codex.rawValue {
+                    let executable = try HostPaths.executable(executablePath, provider: .codex)
+                    return self.runCodexAccount(executable, home: HostPaths.home.appendingPathComponent(".codex"), signIn: false, reply: reply)
+                }
                 guard let provider = HarnessProvider(rawValue: harnessIdentifier), provider == .claudeCode || provider == .fx else {
                     throw HostError("This harness does not use the Claude Code account check.")
                 }
@@ -468,7 +508,25 @@ private final class HostSession: NSObject, AgentHostService {
     ) {
         queue.async { [self] in
             do {
-                guard let provider = HarnessProvider(rawValue: harnessIdentifier), provider == .claudeCode || provider == .fx else {
+                if harnessIdentifier == HarnessProvider.codex.rawValue {
+                    let executable = try HostPaths.executable(executablePath, provider: .codex)
+                    return self.runCodexAccount(executable, home: HostPaths.home.appendingPathComponent(".codex"), signIn: true, reply: reply)
+                }
+                guard let provider = HarnessProvider(rawValue: harnessIdentifier) else { throw HostError("Unsupported harness.") }
+                if let arguments = HarnessProfileLogin.arguments(provider) {
+                    // Grok Build and Muse Code: the same device-code login a profile uses, into the system account.
+                    let executable = try HostPaths.executable(executablePath, provider: provider)
+                    let environment = self.accountEnvironment
+                    return self.runLogin(executable: executable, arguments: arguments, environment: environment, name: provider.displayName,
+                                         challenge: { HarnessProfileLogin.challenge(provider: provider, text: $0) },
+                                         status: {
+                                             provider == .grokBuild
+                                                 ? try GrokInspection.inspect(home: HostPaths.home, environment: environment,
+                                                                              managed: HostPaths.managedExecutable(.grokBuild)).authenticated
+                                                 : MuseAuthentication.inspect(home: HostPaths.home, environment: environment) != .unauthenticated
+                                         }, reply: reply)
+                }
+                guard provider == .claudeCode || provider == .fx else {
                     throw HostError("This harness does not support this sign-in flow.")
                 }
                 let executable = try HostPaths.executable(executablePath, provider: provider)
@@ -487,6 +545,9 @@ private final class HostSession: NSObject, AgentHostService {
                                     withReply reply: @escaping (Bool, String?) -> Void) {
         queue.async {
             do {
+                if let codex = try self.codexProfile(profileID, executablePath: executablePath) {
+                    return self.runCodexAccount(codex.executable, home: codex.home, signIn: false, reply: reply)
+                }
                 let account = try self.profileAccount(profileID, executablePath: executablePath)
                 reply(try account.status(), nil)
             } catch { reply(false, error.localizedDescription) }
@@ -497,6 +558,9 @@ private final class HostSession: NSObject, AgentHostService {
                        withReply reply: @escaping (Bool, String?) -> Void) {
         queue.async { [self] in
             do {
+                if let codex = try self.codexProfile(profileID, executablePath: executablePath) {
+                    return self.runCodexAccount(codex.executable, home: codex.home, signIn: true, reply: reply)
+                }
                 let account = try self.profileAccount(profileID, executablePath: executablePath)
                 guard let arguments = HarnessProfileLogin.arguments(account.provider) else {
                     throw HostError("This harness does not support this sign-in flow.")
@@ -507,6 +571,33 @@ private final class HostSession: NSObject, AgentHostService {
                               status: account.status, reply: reply)
             } catch { reply(false, error.localizedDescription) }
         }
+    }
+
+    /// Codex reports its account over its own app-server protocol, not a login
+    /// command. The app runs this itself for a Codex it can execute; a copy Noodle
+    /// installed sits in the app's container, where only this host can run it.
+    private func runCodexAccount(_ executable: URL, home: URL, signIn: Bool, reply: @escaping (Bool, String?) -> Void) {
+        let environment = accountEnvironment
+        codexAccount?.cancel()
+        codexAccount = Task { @MainActor [weak self] in
+            let provider = CodexSetupProvider(codexHome: home, environment: environment)
+            let installation = HarnessInstallation(provider: .codex, executablePath: executable.path)
+            do {
+                let status = try await signIn
+                    ? provider.signIn(for: installation) { self?.client?.signInChallenge($0.url.absoluteString, code: $0.code) }
+                    : provider.status(for: installation)
+                reply(status != .unauthenticated, nil)
+            } catch { reply(false, error is CancellationError ? "Sign-in was cancelled." : error.localizedDescription) }
+        }
+    }
+
+    /// Nil unless the identifier names a Codex profile; its folder is resolved here.
+    private func codexProfile(_ profileID: String, executablePath: String) throws -> (executable: URL, home: URL)? {
+        guard let id = UUID(uuidString: profileID) else { throw HostError("Invalid profile identifier.") }
+        let profiles = HostPaths.profiles
+        let profile = try profiles.validated(id)
+        guard profile.provider == .codex else { return nil }
+        return (try HostPaths.executable(executablePath, provider: .codex), profiles.accountHome(profile))
     }
 
     private struct ProfileAccount {
@@ -529,7 +620,8 @@ private final class HostSession: NSObject, AgentHostService {
         return ProfileAccount(provider: provider, executable: executable, environment: environment) {
             switch provider {
             case .grokBuild:
-                return try GrokInspection.inspect(home: HostPaths.home, environment: environment).authenticated
+                return try GrokInspection.inspect(home: HostPaths.home, environment: environment,
+                                                  managed: HostPaths.managedExecutable(.grokBuild)).authenticated
             case .muse:
                 guard !profiles.loginIsShared(profile) else {
                     throw HostError("This Muse Code version saved the sign-in to the shared Keychain item, so it cannot be kept as a separate profile.")
@@ -610,6 +702,19 @@ private final class HostSession: NSObject, AgentHostService {
             do {
                 let executable = try HostPaths.executable(executablePath, provider: .fx)
                 reply(try JSONEncoder().encode(FxInspection.models(executable: executable, environment: self.accountEnvironment)), nil)
+            } catch { reply(nil, error.localizedDescription) }
+        }
+    }
+
+    func codexModels(executablePath: String, withReply reply: @escaping (Data?, String?) -> Void) {
+        queue.async {
+            do {
+                let executable = try HostPaths.executable(executablePath, provider: .codex)
+                var environment = self.accountEnvironment
+                environment["CODEX_HOME"] = HostPaths.home.appendingPathComponent(".codex").path
+                let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+                reply(try JSONEncoder().encode(CodexInspection.models(executable: executable, environment: environment,
+                                                                      clientVersion: version)), nil)
             } catch { reply(nil, error.localizedDescription) }
         }
     }

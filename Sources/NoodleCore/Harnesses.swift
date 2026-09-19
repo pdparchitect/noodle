@@ -145,6 +145,7 @@ public struct HarnessDiscovery: Sendable {
     private let standaloneGrokURL: URL
     private let standaloneOpenCodeURL: URL
     private let standaloneMuseURL: URL
+    private let managedHarnesses: ManagedHarnessStore?
     #if DEBUG
     private let simulateNoHarnesses: Bool
     private var externalInstallChecks: Set<HarnessProvider> = []
@@ -155,12 +156,14 @@ public struct HarnessDiscovery: Sendable {
         applicationsDirectory: URL = URL(fileURLWithPath: "/Applications", isDirectory: true),
         executableSearchDirectories: [URL]? = nil,
         applicationBundleURL: URL = Bundle.main.bundleURL,
+        managedHarnesses: ManagedHarnessStore? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
         #if DEBUG
         simulateNoHarnesses = environment["NOODLE_SIMULATE_NO_HARNESSES"] == "1"
         #endif
         self.applicationsDirectory = applicationsDirectory.standardizedFileURL
+        self.managedHarnesses = managedHarnesses
         self.bundledAppleURL = applicationBundleURL.appendingPathComponent("Contents/Helpers/NoodleAppleAgent")
         self.standaloneCodexURL = homeDirectory.appendingPathComponent(".codex/packages/standalone/current/bin/codex")
         self.standaloneClaudeURL = homeDirectory.appendingPathComponent(".local/bin/claude")
@@ -191,13 +194,26 @@ public struct HarnessDiscovery: Sendable {
         #if DEBUG
         // Keep the override at discovery so startup, Settings, and refresh agree.
         if simulateNoHarnesses {
-            let executable = externalInstallChecks.contains(provider)
-                ? standaloneCandidates(for: provider).first(where: isExecutable) : nil
+            // Noodle's own copy stays visible: simulation is how its install flow is exercised.
+            let executable = (externalInstallChecks.contains(provider)
+                ? standaloneCandidates(for: provider).first(where: isExecutable) : nil) ?? managedHarnesses?.executable(provider)
             return HarnessInstallation(provider: provider, executablePath: executable?.path)
         }
         #endif
-        let executable = executableCandidates(for: provider).first(where: isExecutable)
+        // The user's own installation always wins over the copy Noodle installed.
+        let executable = executableCandidates(for: provider).first(where: isExecutable) ?? managedHarnesses?.executable(provider)
         return HarnessInstallation(provider: provider, executablePath: executable?.path)
+    }
+
+    /// Two versions must never share one account home, so Noodle's copy goes
+    /// once the user installs their own. Call before any bot starts.
+    public func removeSupersededManagedHarnesses() {
+        guard let managedHarnesses else { return }
+        for provider in HarnessProvider.allCases where managedHarnesses.executable(provider) != nil {
+            if discover(provider).isAvailable, !managedHarnesses.manages(discover(provider)) {
+                try? managedHarnesses.remove(provider)
+            }
+        }
     }
 
     #if DEBUG

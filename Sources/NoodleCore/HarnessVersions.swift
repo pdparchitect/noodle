@@ -122,7 +122,9 @@ public enum HarnessVersionPolicy {
         switch installation.provider {
         case .apple: return nil
         case .codex: address = "https://api.github.com/repos/openai/codex/releases/latest"
-        case .claudeCode: address = "https://api.github.com/repos/anthropics/claude-code/releases/latest"
+        // The pointer Anthropic's installer and `claude update` read. The GitHub
+        // release can name a version before it can be downloaded.
+        case .claudeCode: address = "https://downloads.claude.ai/claude-code-releases/latest"
         case .fx: address = "https://releases.fx.sh/latest.txt"
         case .grokBuild: address = "https://x.ai/cli/stable"
         case .muse: address = "https://api.meta.ai/muse-code/channels/muse-stable"
@@ -133,7 +135,7 @@ public enum HarnessVersionPolicy {
 
     public static func latestVersion(provider: HarnessProvider, data: Data) -> String? {
         let value: String
-        if provider == .codex || provider == .claudeCode {
+        if provider == .codex {
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   object["prerelease"] as? Bool != true, object["draft"] as? Bool != true,
                   let tag = object["tag_name"] as? String else { return nil }

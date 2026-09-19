@@ -12,8 +12,12 @@ final class GrokSetupProvider: HarnessSetupProviding {
         let result = try await GrokHostProbe().load()
         return result.authenticated ? .authenticated : .unauthenticated
     }
+    /// The Agent Host runs Grok Build's own device-code login, as it does for a profile.
     func signIn(for installation: HarnessInstallation, onChallenge: @escaping @MainActor (HarnessSignInChallenge) -> Void) async throws -> HarnessAuthenticationStatus {
-        throw HarnessSetupError("Run grok login in Terminal, complete sign-in, then choose Check Again here.")
+        guard installation.provider == .grokBuild, let path = installation.executablePath else {
+            throw HarnessSetupError("Install the harness first.")
+        }
+        return try await HarnessAccountOperation().run(executablePath: path, signIn: true, provider: .grokBuild, onChallenge: onChallenge)
     }
 }
 

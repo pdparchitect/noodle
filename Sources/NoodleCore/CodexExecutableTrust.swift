@@ -24,22 +24,26 @@ public enum CodexExecutableTrust {
                   executable.deletingLastPathComponent().lastPathComponent == "bin" else {
                 throw HarnessSetupError("The standalone Codex package layout is unsupported.")
             }
-            let package = executable.deletingLastPathComponent().deletingLastPathComponent()
-            for (entry, identifier) in [
-                "bin/codex": "codex",
-                "bin/codex-code-mode-host": "codex-code-mode-host",
-                "codex-path/rg": "com.openai.codex.rg",
-                "codex-resources/zsh/bin/zsh": "com.openai.codex.zsh"
-            ] {
-                let tool = package.appendingPathComponent(entry)
-                guard tool.resolvingSymlinksInPath().path == tool.standardizedFileURL.path else {
-                    throw HarnessSetupError("Codex supporting tools must not be redirected.")
-                }
-                try verifySignature(tool, identifier: identifier)
-            }
+            try verifyPackage(executable.deletingLastPathComponent().deletingLastPathComponent())
         }
         try verifySignature(executable, identifier: "codex")
         return executable
+    }
+
+    /// The main executable and every tool it can launch from its package.
+    public static func verifyPackage(_ package: URL) throws {
+        for (entry, identifier) in [
+            "bin/codex": "codex",
+            "bin/codex-code-mode-host": "codex-code-mode-host",
+            "codex-path/rg": "com.openai.codex.rg",
+            "codex-resources/zsh/bin/zsh": "com.openai.codex.zsh"
+        ] {
+            let tool = package.appendingPathComponent(entry)
+            guard tool.resolvingSymlinksInPath().path == tool.standardizedFileURL.path else {
+                throw HarnessSetupError("Codex supporting tools must not be redirected.")
+            }
+            try verifySignature(tool, identifier: identifier)
+        }
     }
 
     public static func verifySignature(_ url: URL, identifier: String) throws {

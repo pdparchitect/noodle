@@ -275,6 +275,32 @@ or writable roots. Unrestricted harnesses use the separate authorized launch pat
 The host runs as the current user, never root. App and helper entitlements are
 unchanged by bot isolation.
 
+A harness [installed by Noodle](harness-setup.md#harnesses-installed-by-noodle) lives in
+`Harnesses/<harness>/<version>` in Noodle's storage. The sandboxed app downloads
+the provider's release over HTTPS from a fixed list of the provider's own hosts,
+following redirects on the same host only, checks the published SHA-256 where the
+provider has one, and unpacks it into a staging folder. macOS quarantines what a
+sandboxed app writes, so nothing the app stages can run. The app then names the
+harness, version, and staging identifier to Agent Host, never a path. The host
+derives the folder, refuses entries that link outside it, verifies the same pinned
+vendor signature it requires of a native installation (for Codex, its bundled
+tools too), and only then lifts the quarantine and moves the release into place. A
+download that fails any check is deleted. At every launch the host validates the
+path again: it must be exactly a version folder of that harness, reached without
+links, and correctly signed. A compromised app can therefore install only genuine
+vendor-signed releases, though it could choose an older one. The App Sandbox
+refuses the app execute access to everything in its own container, so only the
+host can ever run a harness installed this way. That includes the two things the
+app otherwise runs a Codex installation for itself: the account check and
+sign-in, and the model list. For a Codex the app cannot execute, the host runs
+both with its fixed environment, returns only the sign-in state or the model
+catalogue, and forwards a device code only for OpenAI's own sign-in page. Grok
+Build and Muse Code sign in to the system account the same way a profile does:
+the host runs the harness's own device-code login and forwards only a code for
+xAI's or Meta's own page. The host's Grok Build, Muse Code and OpenCode
+inspections look at the vendor's location first and at Noodle's verified copy
+only when that is absent.
+
 The built-in `NoodleAppleAgent` is verified against this app's exact helper path,
 signing team, and helper identifier. It has no extra entitlements and does not
 inherit the app sandbox. Agent Host applies its own deny-by-default policy before

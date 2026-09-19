@@ -4,10 +4,19 @@ A harness is the agent program Noodle runs for each bot. Noodle supports Codex,
 Claude Code, Vercel FX, Grok Build, Muse Code, and OpenCode v2, using your existing account,
 plus the experimental bundled Apple Intelligence harness running on device.
 
-For an external harness:
+When you have not installed the harness yourself:
 
 1. Open **Settings → Harness**.
-2. Choose **Install…** beside your provider and run the displayed command in Terminal.
+2. Choose **Install** beside your provider. Noodle downloads the provider's current
+   macOS release from the provider's own servers into Noodle's storage.
+3. Sign in using the option below.
+
+The row then reads **Installed by Noodle**. See [Harnesses installed by Noodle](#harnesses-installed-by-noodle).
+
+To install a harness yourself:
+
+1. Open **Settings → Harness**.
+2. Choose **Install Manually…** beside your provider and run the displayed command in Terminal.
 3. Return to Noodle and choose **Check Installation**.
 4. Sign in using the option below, then choose **Check Again**.
 
@@ -16,9 +25,9 @@ For an external harness:
 | Codex | **Sign In…** in Noodle, or `codex login` in Terminal |
 | Claude Code | **Sign In…** in Noodle, or `claude auth login` in Terminal |
 | FX | **Sign In…** in Noodle, or `fx login` in Terminal |
-| Grok Build | `grok login` in Terminal |
-| Muse Code | `muse login` in Terminal |
-| OpenCode v2 | `opencode auth login` in Terminal |
+| Grok Build | **Sign In…** in Noodle, or `grok login` in Terminal |
+| Muse Code | **Sign In…** in Noodle, or `muse login` in Terminal |
+| OpenCode v2 | Works without an account on OpenCode's free models. For your own providers run `opencode auth login` in Terminal; for a copy Noodle installed, **Sign In…** shows the full command to paste. |
 | Apple Intelligence | Bundled with Noodle; enable Apple Intelligence in System Settings on a supported Mac running macOS 26 or later. No separate install or sign-in. |
 
 Once a harness is detected, create a bot and select its model and, where available,
@@ -82,12 +91,40 @@ configured in the bot workspace's `opencode.json`. Environment-only credentials 
 storage paths are not used for restricted bots. Models that do not require a
 provider login can also be used.
 
+## Harnesses installed by Noodle
+
+Noodle installs a harness only when this Mac does not already have it, and keeps
+it in its own storage, outside your home folder and your shell's `PATH`.
+
+- **Your own installation always wins.** If you later install the harness
+  yourself, Noodle uses yours from then on and deletes its copy the next time it
+  starts. It never runs two copies against one account.
+- **Your sign-in is shared.** Noodle's copy uses the harness's normal account
+  folder or Keychain item, so switching between the two copies does not sign you out.
+- **Updates.** Noodle checks every six hours and installs a newer release by
+  itself. **Update harnesses installed by Noodle automatically** in Settings →
+  Harness turns that off, and the row then offers **Update**. A harness you
+  installed yourself is never updated by Noodle. Running bots keep their current
+  version until restarted; Noodle keeps the previous version, and any older one a
+  bot is still running from. If a new release fails Noodle's compatibility check,
+  Noodle goes back to the previous version and does not fetch that release again.
+- **Remove…** deletes Noodle's copy. Bots on that harness stop working until it
+  is installed again, by Noodle or by you.
+- **Verification.** Claude Code, Codex and Muse Code downloads are checked against
+  the provider's published SHA-256, and OpenCode's against the npm registry's
+  SHA-512. Vercel and xAI publish none for FX and Grok Build. Every download must carry the provider's Apple code
+  signature before it can run; see [Agent access and privacy](security.md#implementation-boundary).
+
+Muse Code's own installer adds a shell launcher that updates itself. Noodle
+installs the native executable alone, which is the only part it ever runs.
+
 ## If setup fails
 
 - **Not installed:** use the installer shown in Noodle. Noodle checks supported native installations; an arbitrary shell wrapper may not work.
 - **Codex browser sign-in fails:** run `codex login` in Terminal if your account does not allow device-code login.
 - **Sign-in status unknown:** check the harness in Terminal, then choose **Check Again**. Unknown does not mean signed out.
-- **Update required:** follow the update instructions in Settings and recheck. Noodle does not install harness updates itself.
+- **Update required:** for a harness installed by Noodle, choose **Update**. Otherwise follow the update instructions in Settings and recheck; Noodle does not update a harness you installed yourself.
+- **Install failed:** the row shows the reason. A failed signature or checksum check discards the download; choose **Install** to retry, or **Install Manually…**.
 - **Update check failed:** choose **Check Again** to retry the release check. The installed version remains visible while the latest version is unavailable.
 - **Bot fails to start:** resolve the reported installation, account, or service error, then choose **Kick** for that bot in **Settings → Harness**. Kick is also available from the bot's sidebar menu. Review any recovery confirmation before proceeding.
 

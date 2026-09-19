@@ -837,6 +837,7 @@ public struct WorkspaceRepository: Sendable {
     }
 
     public var harnessProfiles: HarnessProfileStore { HarnessProfileStore(root: rootURL) }
+    public var managedHarnesses: ManagedHarnessStore { ManagedHarnessStore(root: rootURL) }
 
     public func importAttachment(
         from sourceURL: URL,

@@ -8,9 +8,13 @@ public enum GrokExecutableTrust {
         guard supportsInstallation(requested: url, resolved: resolved, home: home) else {
             throw HarnessSetupError("Grok Build requires its official native installation at ~/.grok/bin/grok.")
         }
-        let rule = "anchor apple generic and identifier \"xai-grok-pager\" and certificate leaf[subject.OU] = \"5Y6N3AJ54S\""
-        try HarnessSignatureVerification.verify(resolved, requirement: rule, signatureName: "Grok Build’s xAI signature")
+        try verifySignature(resolved)
         return resolved
+    }
+
+    static func verifySignature(_ url: URL) throws {
+        let rule = "anchor apple generic and identifier \"xai-grok-pager\" and certificate leaf[subject.OU] = \"5Y6N3AJ54S\""
+        try HarnessSignatureVerification.verify(url, requirement: rule, signatureName: "Grok Build’s xAI signature")
     }
 
     /// Layout validation only. Every accepted executable must still pass the

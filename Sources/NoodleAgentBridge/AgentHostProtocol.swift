@@ -75,10 +75,15 @@ public enum AgentHostIdentity {
     func signInProfile(profileID: String, executablePath: String,
                        withReply reply: @escaping (Bool, String?) -> Void)
     func fxModels(executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
+    func codexModels(executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
     func inspectGrok(withReply reply: @escaping (Data?, String?) -> Void)
     func inspectOpenCode(withReply reply: @escaping (Data?, String?) -> Void)
     func inspectMuse(withReply reply: @escaping (Data?, String?) -> Void)
     func inspectHarnessVersion(harnessIdentifier: String, executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
+    /// The app names a download it staged in Noodle's storage. The host derives
+    /// the folder, checks the vendor's signature, and replies with the executable.
+    func publishHarness(harnessIdentifier: String, version: String, stagingID: String,
+                        withReply reply: @escaping (String?, String?) -> Void)
 }
 
 @objc public protocol AgentHostClient {

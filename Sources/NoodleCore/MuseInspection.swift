@@ -2,9 +2,14 @@ import Foundation
 
 public enum MuseInspection {
     /// No login, prompts, sessions, Keychain access, or shell launcher.
-    public static func inspect(home: URL, environment: [String: String]) throws -> MuseInspectionResult {
+    /// `managed` is the copy Noodle installed, already verified by the caller,
+    /// and is used only when the user has no installation of their own.
+    public static func inspect(home: URL, environment: [String: String], managed: URL? = nil) throws -> MuseInspectionResult {
         let path = home.appendingPathComponent(".local/bin/muse").path
-        guard FileManager.default.isExecutableFile(atPath: path) else { return .init(executablePath: nil, models: []) }
+        guard FileManager.default.isExecutableFile(atPath: path) else {
+            guard let managed else { return .init(executablePath: nil, models: []) }
+            return try inspect(executable: managed, installationPath: managed.path, home: home, environment: environment)
+        }
         let executable = try MuseExecutableTrust.executable(at: path, home: home)
         return try inspect(executable: executable, installationPath: path, home: home, environment: environment)
     }

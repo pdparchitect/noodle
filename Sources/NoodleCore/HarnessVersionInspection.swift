@@ -6,8 +6,12 @@ public enum HarnessVersionInspection {
     public static func inspect(provider: HarnessProvider, executable: URL, environment: [String: String]) throws -> HarnessVersionReport {
         let version = try run(executable, arguments: ["--version"], environment: environment)
         var report = HarnessVersionReport(installedVersion: HarnessVersion.parseOutput(version.text)?.text)
-        if provider == .muse, executable.lastPathComponent.hasPrefix("muse-bin-") {
-            let release = String(executable.lastPathComponent.dropFirst("muse-bin-".count))
+        if provider == .muse {
+            // Muse prints only "1.3.0"; its release, which updates compare, is in the
+            // name Meta's launcher gives the binary, or the folder Noodle installed it in.
+            let name = executable.lastPathComponent
+            let release = name.hasPrefix("muse-bin-") ? String(name.dropFirst("muse-bin-".count))
+                : executable.deletingLastPathComponent().lastPathComponent
             if MuseExecutableTrust.validVersion(release) { report.installedVersion = release }
         }
         if report.installedVersion == nil { report.checkError = "Could not read the installed version." }

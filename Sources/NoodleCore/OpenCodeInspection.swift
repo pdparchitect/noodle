@@ -1,10 +1,13 @@
 import Foundation
 
 public enum OpenCodeInspection {
-    public static func inspect(home: URL, application: URL) throws -> OpenCodeInspectionResult {
+    /// `managed` is the copy Noodle installed, already verified by the caller,
+    /// and is used only when the user has no installation of their own.
+    public static func inspect(home: URL, application: URL, managed: URL? = nil) throws -> OpenCodeInspectionResult {
         let path = home.appendingPathComponent(".opencode/bin/opencode").path
         guard FileManager.default.isExecutableFile(atPath: path) else {
-            return .init(executablePath: nil, authenticated: false, models: [])
+            guard let managed else { return .init(executablePath: nil, authenticated: false, models: []) }
+            return try inspect(executable: managed, installationPath: managed.path, home: home, application: application)
         }
         let executable = try OpenCodeExecutableTrust.executable(at: path, home: home)
         return try inspect(executable: executable, installationPath: path, home: home, application: application)

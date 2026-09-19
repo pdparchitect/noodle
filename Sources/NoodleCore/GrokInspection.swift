@@ -3,10 +3,13 @@ import Foundation
 /// An account/catalogue-only ACP exchange. No sessions, prompts or tools.
 /// Called by the signed host; Noodle receives only the sanitized result.
 public enum GrokInspection {
-    public static func inspect(home: URL, environment: [String: String]) throws -> GrokInspectionResult {
+    /// `managed` is the copy Noodle installed, already verified by the caller,
+    /// and is used only when the user has no installation of their own.
+    public static func inspect(home: URL, environment: [String: String], managed: URL? = nil) throws -> GrokInspectionResult {
         let path = home.appendingPathComponent(".grok/bin/grok").path
         guard FileManager.default.isExecutableFile(atPath: path) else {
-            return .init(executablePath: nil, authenticated: false, models: [])
+            guard let managed else { return .init(executablePath: nil, authenticated: false, models: []) }
+            return try inspect(executable: managed, installationPath: managed.path, environment: environment)
         }
         let executable = try GrokExecutableTrust.executable(at: path, home: home)
         return try inspect(executable: executable, installationPath: path, environment: environment)

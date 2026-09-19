@@ -47,8 +47,16 @@ public enum HarnessStorage {
 
 @MainActor public final class CodexSetupProvider: HarnessSetupProviding {
     private let codexHome: URL
-    public init(codexHome: URL) {
+    private let environment: [String: String]?
+    /// The Agent Host passes its own fixed environment; the app uses its own.
+    public init(codexHome: URL, environment: [String: String]? = nil) {
         self.codexHome = codexHome
+        self.environment = environment
+    }
+
+    /// A sign-in page relayed by the Agent Host is held to the same rule as one read directly.
+    nonisolated public static func relayedChallenge(url: String, code: String) -> HarnessSignInChallenge? {
+        try? CodexAccountResponse.challenge(["type": "chatgptDeviceCode", "verificationUrl": url, "userCode": code])
     }
 
     public func status(for installation: HarnessInstallation) async throws -> HarnessAuthenticationStatus {
@@ -72,7 +80,7 @@ public enum HarnessStorage {
         guard installation.provider == .codex, let path = installation.executablePath else {
             throw HarnessSetupError("Install the harness first.")
         }
-        return CodexAccountSession(executableURL: URL(fileURLWithPath: path), codexHome: codexHome)
+        return CodexAccountSession(executableURL: URL(fileURLWithPath: path), codexHome: codexHome, environment: environment)
     }
 }
 
@@ -104,6 +112,7 @@ enum CodexAccountResponse {
 @MainActor private final class CodexAccountSession {
     private let executableURL: URL
     private let codexHome: URL
+    private let baseEnvironment: [String: String]?
     private var process: Process?
     private var input: ProcessInputWriter?
     private var output: FileHandle?
@@ -116,9 +125,10 @@ enum CodexAccountResponse {
         Task { @MainActor in self?.receive(message) }
     }
 
-    init(executableURL: URL, codexHome: URL) {
+    init(executableURL: URL, codexHome: URL, environment: [String: String]? = nil) {
         self.executableURL = executableURL
         self.codexHome = codexHome
+        baseEnvironment = environment
     }
 
     func run(onChallenge: (@MainActor (HarnessSignInChallenge) -> Void)? = nil) async throws -> HarnessAuthenticationStatus {
@@ -132,7 +142,7 @@ enum CodexAccountResponse {
                     child.executableURL = executableURL
                     child.arguments = CodexLaunch.appServerArguments()
                     child.currentDirectoryURL = FileManager.default.temporaryDirectory
-                    var environment = ProcessInfo.processInfo.environment
+                    var environment = baseEnvironment ?? ProcessInfo.processInfo.environment
                     environment["CODEX_HOME"] = codexHome.path
                     child.environment = environment
                     child.standardInput = stdinPipe

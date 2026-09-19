@@ -143,6 +143,9 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
     func fxModels(executablePath: String, reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.fxModels(executablePath: executablePath, withReply: reply)
     }
+    func codexModels(executablePath: String, reply: @escaping (Data?, String?) -> Void) {
+        proxy(failure: { reply(nil, $0) })?.codexModels(executablePath: executablePath, withReply: reply)
+    }
     func inspectGrok(reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.inspectGrok(withReply: reply)
     }
@@ -151,6 +154,10 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
     }
     func inspectMuse(reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.inspectMuse(withReply: reply)
+    }
+    func publishHarness(_ staged: StagedHarness, reply: @escaping (String?, String?) -> Void) {
+        proxy(failure: { reply(nil, $0) })?.publishHarness(harnessIdentifier: staged.provider.rawValue, version: staged.version,
+                                                           stagingID: staged.staging.uuidString, withReply: reply)
     }
     func inspectHarnessVersion(provider: HarnessProvider, executablePath: String, reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.inspectHarnessVersion(harnessIdentifier: provider.rawValue, executablePath: executablePath, withReply: reply)

@@ -12,8 +12,12 @@ final class MuseSetupProvider: HarnessSetupProviding {
         let result = try await MuseHostProbe().load()
         return result.authentication ?? .managedExternally
     }
+    /// The Agent Host runs Muse Code's own device-code login, as it does for a profile.
     func signIn(for installation: HarnessInstallation, onChallenge: @escaping @MainActor (HarnessSignInChallenge) -> Void) async throws -> HarnessAuthenticationStatus {
-        throw HarnessSetupError("Run muse login in Terminal, then choose Check Again here.")
+        guard installation.provider == .muse, let path = installation.executablePath else {
+            throw HarnessSetupError("Install the harness first.")
+        }
+        return try await HarnessAccountOperation().run(executablePath: path, signIn: true, provider: .muse, onChallenge: onChallenge)
     }
 }
 

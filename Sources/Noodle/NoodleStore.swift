@@ -112,8 +112,10 @@ final class NoodleStore {
     let applets: AppletController
     let harnessProfiles: HarnessProfilesController
     let runtime: AgentRuntimeCoordinator
+    let harnessSetup: HarnessSetupController
     private let connectsServices: Bool
     private var transcriptRefreshTask: Task<Void, Never>?
+    private var harnessUpdateTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptGeneration: UInt = 0
     private var attachmentLookupByConversation: [UUID: [UUID: ConversationAttachment]] = [:]
     @ObservationIgnored private var transcriptRevisions: [UUID: TranscriptRevision] = [:]
@@ -121,7 +123,6 @@ final class NoodleStore {
     private var failedShareIDs: Set<UUID> = []
 
     init(repository: WorkspaceRepository? = nil, runtime: AgentRuntimeCoordinator? = nil, connectsServices: Bool = true) {
-        self.runtime = runtime ?? AgentRuntimeCoordinator()
         self.connectsServices = connectsServices
         if let repository {
             self.repository = repository
@@ -139,6 +140,16 @@ final class NoodleStore {
                     : Bundle.main.executableURL
             )
         }
+        if let runtime {
+            self.runtime = runtime
+        } else {
+            // Only the app's own storage holds harnesses the Agent Host will trust.
+            let discovery = HarnessDiscovery(managedHarnesses: repository == nil ? self.repository.managedHarnesses : nil)
+            discovery.removeSupersededManagedHarnesses()
+            self.runtime = AgentRuntimeCoordinator(discovery: discovery)
+        }
+        harnessSetup = HarnessSetupController(versionChecker: HarnessVersionChecker(),
+            installer: repository == nil ? ManagedHarnessInstaller(store: self.repository.managedHarnesses) : nil)
 
         transcriptPositions = TranscriptPositionStore(fileURL: self.repository.rootURL.appendingPathComponent("scroll-positions.json"))
         conversationWindows = ConversationWindowRegistry(fileURL: self.repository.rootURL.appendingPathComponent("conversation-windows.json"))
@@ -1288,6 +1299,14 @@ final class NoodleStore {
                 self.runtime.checkHeartbeats()
             }
         }
+        // Harnesses Noodle installed have no updater of their own. Settings need not be open.
+        harnessUpdateTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(90))
+            while !Task.isCancelled {
+                if let store = self { await store.harnessSetup.updateManagedHarnesses(store.runtime) }
+                try? await Task.sleep(for: .seconds(6 * 60 * 60))
+            }
+        }
     }
 
     func recoverAgentsAfterWake() {
@@ -1297,6 +1316,8 @@ final class NoodleStore {
     func stopMonitoring() {
         transcriptRefreshTask?.cancel()
         transcriptRefreshTask = nil
+        harnessUpdateTask?.cancel()
+        harnessUpdateTask = nil
         runtime.stopAll()
     }
 }

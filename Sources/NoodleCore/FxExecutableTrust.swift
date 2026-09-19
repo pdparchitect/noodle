@@ -8,8 +8,12 @@ public enum FxExecutableTrust {
         guard url == expected, url.resolvingSymlinksInPath() == url else {
             throw HarnessSetupError("FX requires its official native installation at ~/.local/bin/fx, without redirects.")
         }
+        try verifySignature(url)
+        return url
+    }
+
+    public static func verifySignature(_ url: URL) throws {
         let rule = "anchor apple generic and identifier \"com.vercel.fx\" and certificate leaf[subject.OU] = \"JW6Y669B67\""
         try HarnessSignatureVerification.verify(url, requirement: rule, signatureName: "FX’s Vercel signature")
-        return url
     }
 }

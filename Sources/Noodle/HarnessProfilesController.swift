@@ -105,7 +105,7 @@ final class HarnessProfilesController {
 
     private func setupProvider(for profile: HarnessProfile) -> (any HarnessProfileAccount)? {
         switch profile.provider {
-        case .codex: CodexSetupProvider(codexHome: store.accountHome(profile))
+        case .codex: CodexAccountProvider(codexHome: store.accountHome(profile), profile: profile.id)
         case .grokBuild, .muse: HostProfileSetupProvider(profile: profile)
         default: nil
         }
@@ -119,7 +119,7 @@ final class HarnessProfilesController {
                 onChallenge: @escaping @MainActor (HarnessSignInChallenge) -> Void) async throws -> HarnessAuthenticationStatus
 }
 
-extension CodexSetupProvider: HarnessProfileAccount {}
+extension CodexAccountProvider: HarnessProfileAccount {}
 
 /// Grok Build and Muse Code sign in through the Agent Host, which resolves the
 /// profile's folder itself and runs the harness's own device-code login.

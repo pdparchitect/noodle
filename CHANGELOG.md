@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - Teach bots the Applet skill's new `noodlet typecheck` command, which checks any Swift file or folder without building a noodlet, and the `permissions` manifest key for microphone, camera, speech recognition and screen recording.
+- Install Codex, Claude Code, FX, Grok Build, Muse Code and OpenCode from Settings > Harness without Terminal. Install downloads the provider's current release into Noodle's storage, where it is checked against the provider's Apple code signature before it can run, and the row then reads Installed by Noodle with Update and Remove… beside it. A harness you installed yourself always takes priority: Noodle never installs over it, and deletes its own copy at the next launch once yours appears. Noodle keeps its own copies up to date, which Update harnesses installed by Noodle automatically turns off, and returns to the previous version if a new release does not work with Noodle. Install Manually… keeps the Terminal command.
 - Sign Codex, Grok Build and Muse Code in to more than one account. Profiles… under the harness in Settings > Harness opens the list, each profile with its own sign-in kept in Noodle's storage, and Edit Bot > Harness chooses which one a bot uses. System remains the default and is the harness login already on this Mac. Grok Build and Muse Code profiles sign in with a device code shown in Noodle, without Terminal. An unrestricted bot on a profile uses that profile's harness configuration instead of the one in your home folder. Deleting a profile returns its bots to System.
 - Share folders outside the workspace with a bot in Edit Bot > Harness, each as Read & Write or Read Only and with an optional description of what it is for. A restricted bot's sandbox opens only those folders in addition to its workspace, and they are listed with their descriptions in the bot's generated `AGENTS.md`. Saving restarts the bot. Noodle's own storage and the whole disk cannot be shared.
 - Import and run Gemma 4 local models, and offer Gemma 4 E4B in Local Models. Noodle loads the text model only; the checkpoint's image and audio weights are copied but unused.
@@ -16,6 +17,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Sign Grok Build and Muse Code in to their system account from Settings > Harness with a device code shown in Noodle, as their profiles already did. Terminal is no longer needed.
 - Ask for confirmation before removing a tool connection, computer, browser or shared folder from a bot in the bot editor. The removal still applies only when the bot is saved, and the tool, companion or folder itself is kept.
 - Remove the explanatory footer beneath the companion list in Settings > Companions.
 - Show installed models in Local Models the same way as the Available list, with their description, size and details link, and drop a model from Available once it is installed.

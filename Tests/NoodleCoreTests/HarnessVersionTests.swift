@@ -36,8 +36,7 @@ final class HarnessVersionTests: XCTestCase {
 
     func testLatestResponses() {
         XCTAssertEqual(HarnessVersionPolicy.latestVersion(provider: .codex, data: Data(#"{"tag_name":"rust-v0.153.4"}"#.utf8)), "0.153.4")
-        XCTAssertEqual(HarnessVersionPolicy.latestVersion(provider: .claudeCode, data: Data(#"{"tag_name":"v2.1.263"}"#.utf8)), "2.1.263")
-        for provider in [HarnessProvider.fx, .grokBuild] {
+        for provider in [HarnessProvider.claudeCode, .fx, .grokBuild] {
             XCTAssertEqual(HarnessVersionPolicy.latestVersion(provider: provider, data: Data("1.2.3\n".utf8)), "1.2.3")
             XCTAssertNil(HarnessVersionPolicy.latestVersion(provider: provider, data: Data("<html>1.2.3</html>".utf8)))
         }

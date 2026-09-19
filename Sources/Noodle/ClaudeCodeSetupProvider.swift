@@ -56,8 +56,13 @@ final class HarnessAccountOperation {
                 }
                 connection.onSignInChallenge = { url, code in
                     Task { @MainActor in
-                        let challenge = profile == nil ? FxProtocol.loginChallenge("Open \(url)\nCode: \(code)\n")
-                            : HarnessProfileLogin.challenge(provider: provider, url: url, code: code)
+                        // Each vendor's page is pinned; a challenge for any other address is dropped.
+                        let challenge: HarnessSignInChallenge?
+                        switch provider {
+                        case .codex: challenge = CodexSetupProvider.relayedChallenge(url: url, code: code)
+                        case .grokBuild, .muse: challenge = HarnessProfileLogin.challenge(provider: provider, url: url, code: code)
+                        default: challenge = FxProtocol.loginChallenge("Open \(url)\nCode: \(code)\n")
+                        }
                         if let challenge { onChallenge?(challenge) }
                     }
                 }

@@ -13,7 +13,11 @@ final class OpenCodeSetupProvider: HarnessSetupProviding {
         return result.authenticated ? .authenticated : (result.models.isEmpty ? .unauthenticated : .notRequired)
     }
     func signIn(for installation: HarnessInstallation, onChallenge: @escaping @MainActor (HarnessSignInChallenge) -> Void) async throws -> HarnessAuthenticationStatus {
-        throw HarnessSetupError("Run opencode auth login in Terminal, complete sign-in, then choose Check Again here.")
+        // OpenCode's login is an interactive prompt. A copy Noodle installed is not
+        // on the shell's PATH, so name it in full; Terminal can run it from there.
+        let standard = HarnessStorage.userHome.appendingPathComponent(".opencode/bin/opencode").path
+        let command = installation.executablePath.map { $0 == standard ? "opencode" : "'\($0)'" } ?? "opencode"
+        throw HarnessSetupError("Run \(command) auth login in Terminal, complete sign-in, then choose Check Again here.")
     }
 }
 

@@ -111,6 +111,7 @@ final class AgentRuntimeCoordinator {
     private(set) var appleLocalModelsSupported: Bool?
     private(set) var isLoadingCapabilities = false
     private(set) var isRefreshingInstallations = false
+    private var installationChanges = 0
     private(set) var installationErrors: [HarnessProvider: String] = [:]
     private(set) var snapshots: [UUID: AgentRuntimeSnapshot] = [:] {
         didSet {
@@ -150,6 +151,7 @@ final class AgentRuntimeCoordinator {
     private var runtimeIDs: [UUID: UUID] = [:]
     private var capabilityProbe: CodexCapabilityProbe?
     private var fxCapabilityTask: Task<Void, Never>?
+    private var codexCapabilityTask: Task<Void, Never>?
     private var grokCapabilityTask: Task<Void, Never>?
     private var hostGrokInstallation: HarnessInstallation?
     private var openCodeCapabilityTask: Task<Void, Never>?
@@ -198,7 +200,7 @@ final class AgentRuntimeCoordinator {
             installationErrors[.grokBuild] = nil
             installations = installations.map { $0.provider == .grokBuild ? installation : $0 }
             modelsByProvider[.grokBuild] = result.models
-            capabilityErrors[.grokBuild] = result.executablePath == nil ? "Grok Build is not installed" : (result.authenticated ? nil : "Run grok login in Terminal, then check again.")
+            capabilityErrors[.grokBuild] = result.executablePath == nil ? "Grok Build is not installed" : (result.authenticated ? nil : "Sign in to Grok Build in Settings → Harness.")
         } catch {
             guard !Task.isCancelled else { return }
             installationErrors[.grokBuild] = error.localizedDescription
@@ -439,22 +441,44 @@ final class AgentRuntimeCoordinator {
         guard !isRefreshingInstallations else { return }
         isRefreshingInstallations = true
         defer { isRefreshingInstallations = false }
-        let discovery = discovery
-        let detected = await Task.detached(priority: .utility) {
-            discovery.discover()
-        }.value
-        guard !Task.isCancelled else { return }
         await refreshOpenCodeCapabilities()
         await refreshGrokCapabilities()
         await refreshMuseCapabilities()
         await refreshAppleCapabilities()
         guard !Task.isCancelled else { return }
+        // Look after the slow host probes, and again if Noodle installed or removed
+        // a harness meanwhile: an earlier snapshot would undo that change.
+        let discovery = discovery
+        var detected: [HarnessInstallation]
+        var changes: Int
+        repeat {
+            changes = installationChanges
+            detected = await Task.detached(priority: .utility) { discovery.discover() }.value
+            guard !Task.isCancelled else { return }
+        } while changes != installationChanges
         let complete = detected.map { installation in
             installation.provider == .openCode ? (hostOpenCodeInstallation ?? installation) :
                 installation.provider == .grokBuild ? (hostGrokInstallation ?? installation) :
                 (installation.provider == .muse ? (hostMuseInstallation ?? installation) : installation)
         }
         if installations != complete { installations = complete }
+    }
+
+    /// Noodle installed or removed this harness itself. Only its files changed,
+    /// so the other harnesses need none of the host probes a full refresh runs.
+    @discardableResult
+    func refreshInstallation(_ provider: HarnessProvider) -> HarnessInstallation {
+        installationChanges += 1
+        // What the Agent Host last reported for this harness is now out of date.
+        switch provider {
+        case .grokBuild: hostGrokInstallation = nil
+        case .muse: hostMuseInstallation = nil
+        case .openCode: hostOpenCodeInstallation = nil
+        default: break
+        }
+        let installation = discovery.discover(provider)
+        installations = installations.map { $0.provider == provider ? installation : $0 }
+        return installation
     }
 
     func installation(for agent: AgentRecord) -> HarnessInstallation? {
@@ -579,6 +603,26 @@ final class AgentRuntimeCoordinator {
         }
 
         isLoadingCapabilities = true
+        codexCapabilityTask?.cancel()
+        codexCapabilityTask = nil
+        guard FileManager.default.isExecutableFile(atPath: executablePath) else {
+            // A Codex that Noodle installed sits in the app's container, where the
+            // sandbox lets only the Agent Host run it.
+            codexCapabilityTask = Task { [weak self] in
+                do {
+                    let models = try await FxModelProbe().load(path: executablePath, provider: .codex)
+                    guard !Task.isCancelled else { return }
+                    self?.modelsByProvider[.codex] = models
+                    self?.capabilityErrors[.codex] = nil
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    self?.modelsByProvider[.codex] = []
+                    self?.capabilityErrors[.codex] = error.localizedDescription
+                }
+                self?.isLoadingCapabilities = false
+            }
+            return
+        }
         let probe = CodexCapabilityProbe(executableURL: URL(fileURLWithPath: executablePath))
         capabilityProbe = probe
         probe.loadModels { [weak self, weak probe] result in
@@ -1692,30 +1736,13 @@ private final class CodexCapabilityProbe {
         } else if id == 2 {
             let result = message["result"] as? [String: Any]
             let data = result?["data"] as? [[String: Any]] ?? []
-            let models = data.compactMap(Self.parseModel)
+            let models = data.compactMap(CodexInspection.model)
             guard !models.isEmpty else {
                 finish(.failure(ProbeError("Codex returned no available models")))
                 return
             }
             finish(.success(models))
         }
-    }
-
-    private static func parseModel(_ value: [String: Any]) -> HarnessModel? {
-        guard let id = (value["model"] as? String) ?? (value["id"] as? String) else { return nil }
-        let effortValues = value["supportedReasoningEfforts"] as? [[String: Any]] ?? []
-        let efforts = effortValues.compactMap { effort -> HarnessEffort? in
-            guard let id = effort["reasoningEffort"] as? String else { return nil }
-            return HarnessEffort(id: id, description: effort["description"] as? String ?? "")
-        }
-        return HarnessModel(
-            id: id,
-            displayName: value["displayName"] as? String ?? id,
-            description: value["description"] as? String ?? "",
-            supportedEfforts: efforts,
-            defaultEffort: value["defaultReasoningEffort"] as? String ?? efforts.first?.id ?? "medium",
-            isDefault: value["isDefault"] as? Bool ?? false
-        )
     }
 
     private func send(_ object: [String: Any]) throws {

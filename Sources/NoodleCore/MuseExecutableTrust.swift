@@ -28,9 +28,13 @@ public enum MuseExecutableTrust {
         guard binary.resolvingSymlinksInPath() == binary, FileManager.default.isExecutableFile(atPath: binary.path) else {
             throw HarnessSetupError("Muse Code’s native executable is missing or redirected. Run its installer in Terminal.")
         }
+        try verifySignature(binary)
+        return binary
+    }
+
+    static func verifySignature(_ binary: URL) throws {
         try HarnessSignatureVerification.verify(binary,
             requirement: "anchor apple generic and certificate leaf[subject.OU] = \"V9WTTPBFK9\"",
             signatureName: "Muse Code’s Meta signature")
-        return binary
     }
 }
