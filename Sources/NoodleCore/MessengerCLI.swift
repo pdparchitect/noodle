@@ -61,21 +61,12 @@ public enum MessengerCLI {
                     conversationID: conversationID, kind: kind, requestID: requestID)
                 return .json(MessengerEffectReceipt(effect: event))
 
-            case .getLatest(let consumes, let includesInlineImages):
+            case .getLatest(let consumes):
                 var response = MessengerCommandResult.json([MessengerDelivery]())
                 do {
                     let deliveries = try repository.latestMessages(for: agentID, consuming: consumes, preparing: { original in
                         let visible = try brokered ? project(original, repository: repository, agentID: agentID) : original
-                        if includesInlineImages {
-                            var includedIDs = Set<UUID>()
-                            let images = original.flatMap(\.attachments).compactMap { attachment -> MessengerInlineImage? in
-                                guard includedIDs.insert(attachment.id).inserted,
-                                      let dataURL = try? repository.inlineImageDataURL(for: attachment) else { return nil }
-                                return MessengerInlineImage(attachmentID: attachment.id,
-                                    originalFilename: attachment.originalFilename, mediaType: attachment.mediaType, dataURL: dataURL)
-                            }
-                            response = .json(MessengerInboxPayload(deliveries: visible, images: images))
-                        } else { response = .json(visible) }
+                        response = .json(visible)
                         if brokered, try JSONEncoder().encode(response).count > MessengerBridgeClient.maxResponseBytes {
                             throw HarnessSetupError("The inbox is too large. Read individual conversations with --list-messages; no inbox offsets were advanced.")
                         }
@@ -235,10 +226,7 @@ public enum MessengerCLI {
                 }
                 action = .listEffects
             case .getLatest:
-                action = .getLatest(
-                    consumes: !values.contains("--peek"),
-                    includesInlineImages: values.contains("--inline-images")
-                )
+                action = .getLatest(consumes: !values.contains("--peek"))
             case .listConversations:
                 action = .listConversations
             case .listParticipants:
@@ -399,7 +387,7 @@ private extension MessengerCommandResult {
 public enum MessengerAction: Codable, Sendable {
         case listEffects
         case effect(conversationID: UUID, kind: String, requestID: UUID)
-        case getLatest(consumes: Bool, includesInlineImages: Bool)
+        case getLatest(consumes: Bool)
         case listConversations
         case listParticipants(conversationID: UUID)
         case listMessages(conversationID: UUID)

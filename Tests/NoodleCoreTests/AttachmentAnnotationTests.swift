@@ -202,16 +202,13 @@ final class AttachmentAnnotationTests: XCTestCase {
         XCTAssertEqual(repaired.mediaType, "image/png")
         XCTAssertEqual(repaired.annotation, note, "Image type repair must preserve annotation metadata")
         _ = try repository.sendUserMessage(conversationID: bot.conversation.id, body: "Review", attachmentIDs: [file.id])
-        let cli = MessengerCLI.runDirect(arguments: ["messenger", "--get-latest", "--peek", "--inline-images"],
+        let cli = MessengerCLI.runDirect(arguments: ["messenger", "--get-latest", "--peek"],
             environment: ["NOODLE_WORKSPACE": repository.directory(for: bot.agent).path])
         XCTAssertEqual(cli.exitCode, 0, cli.standardError)
-        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(cli.standardOutput.utf8)) as? [String: Any])
-        let images = try XCTUnwrap(json["images"] as? [[String: Any]])
-        XCTAssertEqual(images.count, 1)
-        XCTAssertEqual(images.first?["mediaType"] as? String, "image/png")
-        XCTAssertEqual(images.first?["dataURL"] as? String, "data:image/png;base64,\(png.base64EncodedString())")
-        let deliveries = try XCTUnwrap(json["deliveries"] as? [[String: Any]])
+        let deliveries = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(cli.standardOutput.utf8)) as? [[String: Any]])
         let files = deliveries.compactMap { $0["attachments"] as? [[String: Any]] }.flatMap { $0 }
+        XCTAssertEqual(files.first?["mediaType"] as? String, "image/png")
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: XCTUnwrap(files.first?["absolutePath"] as? String))), png)
         let metadata = try XCTUnwrap(files.first?["annotation"] as? [String: Any])
         XCTAssertEqual(metadata["comment"] as? String, note.comment)
         XCTAssertEqual(metadata["sourceAttachmentID"] as? String, source.id.uuidString)

@@ -133,7 +133,7 @@ public actor AppleToolContext {
         try beginCall()
         // A repeated tool call in one turn never consumes a second inbox batch.
         if let inboxResult { return inboxResult }
-        let deliveries: [MessengerDelivery] = try messenger.call(.getLatest(consumes: true, includesInlineImages: false))
+        let deliveries: [MessengerDelivery] = try messenger.call(.getLatest(consumes: true))
         inboxDeliveries = deliveries
         for delivery in deliveries where delivery.message.author == .user && delivery.reactionChange == nil {
             pendingReplies[delivery.conversation.id.uuidString.lowercased(), default: []].insert(delivery.message.id)

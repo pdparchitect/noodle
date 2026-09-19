@@ -55,7 +55,7 @@ final class MessengerBridgeTests: XCTestCase {
         XCTAssertNotEqual(try call(.listMessages(conversationID: group.id)).exitCode, 0)
         XCTAssertNotEqual(try call(.listParticipants(conversationID: group.id)).exitCode, 0)
         XCTAssertNotEqual(try call(.send(conversationID: group.id, body: "after removal", attachmentURLs: [])).exitCode, 0)
-        let deliveries = try decode(call(.getLatest(consumes: false, includesInlineImages: false)), as: [MessengerDelivery].self)
+        let deliveries = try decode(call(.getLatest(consumes: false)), as: [MessengerDelivery].self)
         XCTAssertFalse(deliveries.contains { $0.message.conversationID == group.id })
         XCTAssertFalse(try repository.loadMessages(conversationID: group.id).contains { $0.body == "after removal" })
     }
@@ -109,10 +109,10 @@ final class MessengerBridgeTests: XCTestCase {
             delivery: .queued, attachmentIDs: [attachment.id]))
         let redirect = workspace.appendingPathComponent(".noodle/messenger-attachments")
         try FileManager.default.createSymbolicLink(at: redirect, withDestinationURL: repository.directory(for: other))
-        XCTAssertNotEqual(try call(.getLatest(consumes: true, includesInlineImages: false)).exitCode, 0)
+        XCTAssertNotEqual(try call(.getLatest(consumes: true)).exitCode, 0)
         XCTAssertFalse(FileManager.default.fileExists(atPath: repository.directory(for: other).appendingPathComponent(conversation.id.uuidString.lowercased()).path))
         try FileManager.default.removeItem(at: redirect)
-        let deliveries = try decode(call(.getLatest(consumes: true, includesInlineImages: false)), as: [MessengerDelivery].self)
+        let deliveries = try decode(call(.getLatest(consumes: true)), as: [MessengerDelivery].self)
         XCTAssertTrue(deliveries.contains { $0.message.body == "attachment" })
     }
 

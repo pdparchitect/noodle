@@ -18,6 +18,7 @@ All notable changes to Noodle are documented here, following
 - Ask for confirmation before removing a tool connection, computer, browser or shared folder from a bot in the bot editor. The removal still applies only when the bot is saved, and the tool, companion or folder itself is kept.
 - Remove the explanatory footer beneath the companion list in Settings > Companions.
 - Show installed models in Local Models the same way as the Available list, with their description, size and details link, and drop a model from Available once it is installed.
+- Remove Messenger's `--get-latest --inline-images` option, which returned images to bots as base64 data. Every harness now reads the inbox with plain `--get-latest` and opens image attachments from their `absolutePath`, which keeps large image data out of a bot's context.
 
 ### Fixed
 

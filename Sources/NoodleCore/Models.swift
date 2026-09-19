@@ -327,35 +327,6 @@ public struct MessengerRoster: Codable, Hashable, Sendable {
     }
 }
 
-public struct MessengerInlineImage: Codable, Hashable, Sendable {
-    public let attachmentID: UUID
-    public let originalFilename: String
-    public let mediaType: String
-    public let dataURL: String
-
-    public init(
-        attachmentID: UUID,
-        originalFilename: String,
-        mediaType: String,
-        dataURL: String
-    ) {
-        self.attachmentID = attachmentID
-        self.originalFilename = originalFilename
-        self.mediaType = mediaType
-        self.dataURL = dataURL
-    }
-}
-
-public struct MessengerInboxPayload: Codable, Hashable, Sendable {
-    public let deliveries: [MessengerDelivery]
-    public let images: [MessengerInlineImage]
-
-    public init(deliveries: [MessengerDelivery], images: [MessengerInlineImage]) {
-        self.deliveries = deliveries
-        self.images = images
-    }
-}
-
 public struct ManagedSkillManifest: Codable, Hashable, Sendable {
     public let version: Int
     public let managedPaths: [String]
@@ -1101,24 +1072,6 @@ public struct WorkspaceRepository: Sendable {
     public func attachmentFileURL(_ attachment: ConversationAttachment) -> URL {
         attachmentsDirectory(conversationID: attachment.conversationID)
             .appendingPathComponent(attachment.storedFilename)
-    }
-
-    public func inlineImageDataURL(for attachment: MessengerAttachment) throws -> String? {
-        guard attachment.url == nil, attachment.mediaType.lowercased().hasPrefix("image/") else { return nil }
-
-        let directory = attachmentsDirectory(conversationID: attachment.conversationID)
-            .standardizedFileURL
-        let file = directory.appendingPathComponent(attachment.storedFilename)
-            .standardizedFileURL
-        let deliveredFile = URL(fileURLWithPath: attachment.absolutePath)
-            .standardizedFileURL
-        guard file.deletingLastPathComponent() == directory,
-              file == deliveredFile else {
-            throw WorkspaceError.invalidAttachment
-        }
-
-        let data = try Data(contentsOf: file, options: .mappedIfSafe)
-        return "data:\(attachment.mediaType);base64,\(data.base64EncodedString())"
     }
 
     public func removeAttachment(_ attachment: ConversationAttachment) throws {

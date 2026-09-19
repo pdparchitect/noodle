@@ -65,10 +65,9 @@ final class RepositoryTests: XCTestCase {
         XCTAssertFalse(agentsGuide.contains(MessengerDocumentation.transportInstructions))
         XCTAssertFalse(agentsGuide.contains("TextEncoder"))
         XCTAssertFalse(agentsGuide.contains("noodle_get_latest"))
-        XCTAssertTrue(messengerGuide.contains("tools.exec_command"))
-        XCTAssertTrue(messengerGuide.contains("--get-latest --inline-images"))
-        XCTAssertTrue(messengerGuide.contains("max_output_tokens: 250000"))
-        XCTAssertTrue(messengerGuide.contains("image(visual.dataURL"))
+        XCTAssertTrue(messengerGuide.contains("messenger --get-latest` with the native shell tool"))
+        XCTAssertFalse(messengerGuide.contains("--inline-images"))
+        XCTAssertFalse(messengerGuide.contains("dataURL"))
         XCTAssertTrue(messengerGuide.contains("named `participants`"))
         XCTAssertTrue(messengerGuide.contains("--body-percent-encoded"))
         XCTAssertTrue(messengerGuide.contains("--attach <file-path-or-url>"))
@@ -757,23 +756,7 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(deliveredAttachment.originalFilename, "reference.png")
         XCTAssertTrue(deliveredAttachment.absolutePath.hasPrefix("/"))
         XCTAssertTrue(FileManager.default.fileExists(atPath: deliveredAttachment.absolutePath))
-        XCTAssertEqual(
-            try repository.inlineImageDataURL(for: deliveredAttachment),
-            "data:image/png;base64,aW1hZ2UgYnl0ZXM="
-        )
-
-        let inlineResult = MessengerCLI.runDirect(arguments: [
-            command.path, "--get-latest", "--peek", "--inline-images"
-        ])
-        XCTAssertEqual(inlineResult.exitCode, 0)
-        let payload = try decode(MessengerInboxPayload.self, from: inlineResult.standardOutput)
-        XCTAssertEqual(payload.deliveries.count, 1)
-        XCTAssertEqual(payload.images, [MessengerInlineImage(
-            attachmentID: attachment.id,
-            originalFilename: "reference.png",
-            mediaType: "image/png",
-            dataURL: "data:image/png;base64,aW1hZ2UgYnl0ZXM="
-        )])
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: deliveredAttachment.absolutePath)), Data("image bytes".utf8))
     }
 
     func testMessengerConsumesUnreadMessagesAndCanReply() throws {

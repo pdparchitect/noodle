@@ -81,7 +81,6 @@ final class URLAttachmentTests: XCTestCase {
         let delivered = try XCTUnwrap(deliveries.first(where: { $0.message.id == sent.id })?.attachments.first)
         XCTAssertEqual(delivered.url, url)
         XCTAssertTrue(FileManager.default.fileExists(atPath: delivered.absolutePath))
-        XCTAssertNil(try reloaded.inlineImageDataURL(for: delivered))
 
         // Old attachment records have no URL key and continue to decode as files.
         let file = ConversationAttachment(conversationID: group.id, originalFilename: "a.txt", storedFilename: "a.txt", mediaType: "text/plain", byteCount: 1)
