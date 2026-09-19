@@ -78,6 +78,7 @@ struct NoodleApp: App {
                 Button("\(NoodleAppIdentity.name) Help") {
                     NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle")!)
                 }
+                BotSetupCommand(store: store)
             }
             CommandGroup(after: .appSettings) {
                 CheckForUpdatesButton()
@@ -323,11 +324,8 @@ struct RootView: View {
                 ZStack {
                     Color(nsColor: .textBackgroundColor).opacity(0.28)
                         .accessibilityHidden(true)
-                    if !store.canCreateBot {
-                        HarnessSetupPrompt {
-                            store.selectedSettingsTab = .harnesses
-                            openSettings()
-                        }
+                    if store.agents.isEmpty {
+                        FirstBotPrompt { store.showsFirstBotSetup = true }
                     }
                 }
             }
@@ -409,6 +407,12 @@ struct RootView: View {
                     .noodleSheetSizing()
             }
         }
+        .sheet(isPresented: $store.showsFirstBotSetup) {
+            FirstBotSetupSheet(setup: store.harnessSetup, runtime: store.runtime)
+                .environment(store)
+                .noodleSheetSizing(animated: true)
+        }
+        .task { store.offerFirstBotSetup() }
         .sheet(item: $store.agentBeingEdited) { agent in
             EditBotSheet(agent: agent)
                 .environment(store)

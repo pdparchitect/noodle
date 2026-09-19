@@ -500,16 +500,7 @@ struct HarnessInstallationRow: View {
                     }
                 }
                 if let challenge = setup.challenges[id] {
-                    HStack {
-                        Text(challenge.code).font(.system(.body, design: .monospaced)).textSelection(.enabled)
-                        Button("Copy Code") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(challenge.code, forType: .string)
-                        }
-                        Button("Open Sign-In Page") { openURL(challenge.url) }
-                    }
-                    Text("Enter this code on the sign-in page.")
-                        .font(.caption).foregroundStyle(.secondary)
+                    HarnessSignInChallengeView(challenge: challenge)
                 } else if setup.activity[id] == nil {
                     if !installation.isAvailable && setup.snapshots[id] != nil {
                         if showsInstallationGuide, let guide = setup.installationGuide(for: id) {

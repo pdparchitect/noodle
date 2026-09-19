@@ -73,6 +73,7 @@ final class NoodleStore {
         markConversationRead(conversationID)
     }
     var creationSheet: CreationSheet?
+    var showsFirstBotSetup = false
     var selectedSettingsTab: NoodleSettingsTab = .general
     var agentBeingEdited: AgentRecord?
     var groupBeingEdited: BotConversation?
@@ -168,6 +169,17 @@ final class NoodleStore {
     }
 
     var canCreateBot: Bool { storageReady && !runtime.availableInstallations.isEmpty }
+
+    /// Once, for someone with no bots yet. Afterwards the empty window offers it.
+    func offerFirstBotSetup(defaults: UserDefaults = .standard) {
+        guard storageReady, agents.isEmpty, !defaults.bool(forKey: FirstBotSetup.dismissedKey) else { return }
+        showsFirstBotSetup = true
+    }
+
+    func finishFirstBotSetup(defaults: UserDefaults = .standard) {
+        defaults.set(true, forKey: FirstBotSetup.dismissedKey)
+        showsFirstBotSetup = false
+    }
 
     func showNewBot() {
         guard canCreateBot else { return }

@@ -5,7 +5,8 @@ common goal. Conversations hold the instructions, progress, and results.
 
 ## Give an agent a job
 
-Create a bot, choose its [harness](harness-setup.md), and use the backstory to define
+On first launch Noodle [sets up your first bot](harness-setup.md) with you. After
+that, create a bot, choose its [harness](harness-setup.md), and use the backstory to define
 its role and how it should work. Tell it what you want done and attach the files
 it needs. Each bot keeps its own workspace and history so you can return to the work.
 

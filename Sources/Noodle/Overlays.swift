@@ -21,7 +21,7 @@ private struct BotEditorTabPicker: View {
     }
 }
 
-private struct NameValidationMessage: View {
+struct NameValidationMessage: View {
     let name: String
     var body: some View {
         if !name.isEmpty, let error = ConversationName.error(for: name) {

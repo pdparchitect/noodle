@@ -108,16 +108,7 @@ struct HarnessProfilesView: View {
                 .accessibilityLabel("Profile Actions")
             }
             if let challenge = controller.challenges[profile.id] {
-                HStack {
-                    Text(challenge.code).font(.system(.body, design: .monospaced)).textSelection(.enabled)
-                    Button("Copy Code") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(challenge.code, forType: .string)
-                    }
-                    Button("Open Sign-In Page") { openURL(challenge.url) }
-                }
-                Text("Enter this code on the sign-in page.")
-                    .font(.caption).foregroundStyle(.secondary)
+                HarnessSignInChallengeView(challenge: challenge)
             }
             if let error = controller.errors[profile.id] {
                 Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)

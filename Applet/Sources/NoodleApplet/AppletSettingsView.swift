@@ -19,18 +19,15 @@ struct AppletSettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag(AppletSettingsTab.general)
             AppletPermissionsSettingsView(library: library)
-                .frame(width: 580)
-                .fixedSize(horizontal: false, vertical: true)
+                .settingsList()
                 .tabItem { Label("Permissions", systemImage: "hand.raised") }
                 .tag(AppletSettingsTab.permissions)
             AppletSecretsSettingsView(library: library)
-                .frame(width: 580)
-                .fixedSize(horizontal: false, vertical: true)
+                .settingsList()
                 .tabItem { Label("Secrets", systemImage: "key") }
                 .tag(AppletSettingsTab.secrets)
             AppletStorageSettingsView(library: library, runtime: runtime)
-                .frame(width: 580)
-                .fixedSize(horizontal: false, vertical: true)
+                .settingsList()
                 .tabItem { Label("Storage", systemImage: "internaldrive") }
                 .tag(AppletSettingsTab.storage)
             AppletUpdatesSettingsView()
@@ -167,6 +164,13 @@ private struct AppletStorageSettingsView: View {
         }
         .formStyle(.grouped)
         .onAppear { sizes = AppletStorage.sizes(root: library.root) }
+    }
+}
+
+extension View {
+    /// Fits a short list and scrolls a long one, instead of growing the window past the screen.
+    func settingsList() -> some View {
+        frame(width: 580).frame(maxHeight: 520).fixedSize(horizontal: false, vertical: true)
     }
 }
 
