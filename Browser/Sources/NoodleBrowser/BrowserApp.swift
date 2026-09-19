@@ -15,7 +15,6 @@ import NoodleSettingsUI
     var body: some Scene {
         Window(BrowserBuildIdentity.current.appName, id: "library") {
             BrowserLibraryView(presentation: delegate.presentation)
-                .companionSettingsAccess()
                 .frame(minWidth: 850, minHeight: 580)
                 .preferredColorScheme(.dark)
                 .background(BrowserLibraryWindowHost(library: delegate.libraryWindow))

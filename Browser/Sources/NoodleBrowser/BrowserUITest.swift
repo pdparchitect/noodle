@@ -48,6 +48,7 @@ import ScreenCaptureKit
             }
             try await snapshot(window, to: library.root.appendingPathComponent("browser.png"))
             try verifyCreatePlacement(window, collapsed: false)
+            try verifySettingsPlacement(window)
             try await verifyWebSurface(presentation, window: window, root: library.root)
             try await verifyTabTargets(presentation, window: window)
             guard let hide = sidebarToggle(window, "Hide Sidebar") else { throw BrowserError("Missing native sidebar toggle.") }
@@ -156,6 +157,16 @@ import ScreenCaptureKit
         guard frames.count == labels.count, items.contains(where: { $0.label == "Create" }) != collapsed,
               zip(frames, frames.dropFirst()).allSatisfy({ $0.maxX < $1.minX }) else {
             throw BrowserError("Create Browser must follow the sidebar toggle, apart from Back and Forward: \(labels)=\(frames).")
+        }
+    }
+    /// The fixture hides both entry points, so the App Settings fallback must close the toolbar.
+    private static func verifySettingsPlacement(_ window: NSWindow) throws {
+        let items = (window.toolbar?.items ?? []).filter { $0.isVisible && $0.view != nil }
+        let frames = items.map { ($0.label, $0.view.map { $0.convert($0.bounds, to: nil) } ?? .zero) }
+        print("BROWSER_UI_SETTINGS_PLACEMENT: \(frames)")
+        guard let settings = frames.first(where: { $0.0 == "App Settings" })?.1,
+              frames.allSatisfy({ $0.0 == "App Settings" || $0.1.maxX <= settings.minX }) else {
+            throw BrowserError("App Settings must be the last toolbar item: \(frames).")
         }
     }
     private static func sidebarToggle(_ window: NSWindow, _ label: String) -> NSObject? {

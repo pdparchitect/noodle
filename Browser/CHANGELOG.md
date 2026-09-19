@@ -13,6 +13,7 @@
 
 - Move the Create button into the sidebar's toolbar, after the sidebar toggle and apart from Back and Forward; it hides with the sidebar.
 - Move the Edit Browser button after the view picker, beside Mute and Pause Agents.
+- Move the App Settings button, shown when both Show in Dock and Show in Menu Bar are off, to the end of the toolbar instead of between Forward and the address bar.
 - Tighten the corner radius of the content panel and selected tab so each sits evenly inside the corner around it.
 - Give History and Bookmarks a larger, rounder search bar, and replace the bookmark plus button with an Add button, and drop the ellipsis from History's Clear button.
 - Open History and Bookmarks entries in a new tab instead of replacing the page in the current tab.

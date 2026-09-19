@@ -16,7 +16,10 @@ cleanup() {
     "$executable" --browser-ui-test --browser-ui-id "$fixture_id" --cleanup-ui > "$artifacts/cleanup.log" 2>&1 || true
 }
 trap cleanup EXIT
-"$executable" --browser-ui-test --browser-ui-id "$fixture_id" > "$artifacts/ui.log" 2>&1 || { cat "$artifacts/ui.log"; exit 1; }
+# The argument domain hides both entry points without touching saved preferences,
+# so the toolbar's App Settings fallback is present for the placement check. The
+# values must be property-list booleans; a bare NO arrives as a string.
+"$executable" --browser-ui-test --browser-ui-id "$fixture_id" -showInDock '<false/>' -showMenuBar '<false/>' > "$artifacts/ui.log" 2>&1 || { cat "$artifacts/ui.log"; exit 1; }
 for name in browser browser-page browser-collapsed browser-icon history bookmarks edit-browser settings updates research background new-browser empty-library; do
     cp "$root/$name.png" "$artifacts/$name.png"
 done

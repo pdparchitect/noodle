@@ -1,6 +1,7 @@
 import AppKit
 import BrowserBridge
 import BrowserCore
+import NoodleSettingsUI
 import NoodleWallpaper
 import SwiftUI
 import WebKit
@@ -88,6 +89,7 @@ struct BrowserLibraryView: View {
                 ContentUnavailableView {
                     Label("Browsers", systemImage: "globe")
                 }
+                .toolbar { CompanionSettingsToolbarItem() }
             }
         }
         .navigationSplitViewStyle(.balanced)
@@ -224,6 +226,7 @@ private struct BrowserDetailView: View {
                 } label: { Label(profile.paused ? "Resume Agents" : "Pause Agents", systemImage: profile.paused ? "play.fill" : "pause.fill") }
                     .help(profile.paused ? "Resume Agents" : "Pause Agents")
             }
+            CompanionSettingsToolbarItem()
         }
     }
 

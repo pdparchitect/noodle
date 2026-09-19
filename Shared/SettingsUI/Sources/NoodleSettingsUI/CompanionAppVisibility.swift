@@ -142,16 +142,36 @@ public extension View {
 
 private struct CompanionSettingsAccess: ViewModifier {
     @ObservedObject private var visibility = CompanionAppVisibility.shared
-    @Environment(\.openSettings) private var openSettings
 
     func body(content: Content) -> some View {
         content.toolbar {
             ToolbarItem(placement: .automatic) {
-                if !visibility.showInDock && !visibility.showMenuBar {
-                    Button("App Settings", systemImage: "gearshape", action: { openSettings() })
-                        .help("App Settings")
-                }
+                if !visibility.showInDock && !visibility.showMenuBar { CompanionSettingsButton() }
             }
         }
+    }
+}
+
+/// The same fallback for toolbars that must order it themselves: a root-level
+/// item lands ahead of a column's own items, so declare this one last instead.
+@available(macOS 26.0, *)
+@MainActor public struct CompanionSettingsToolbarItem: ToolbarContent {
+    @ObservedObject private var visibility = CompanionAppVisibility.shared
+    public init() {}
+
+    public var body: some ToolbarContent {
+        if !visibility.showInDock && !visibility.showMenuBar {
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+            ToolbarItem(id: "companion-settings", placement: .primaryAction) { CompanionSettingsButton() }
+        }
+    }
+}
+
+private struct CompanionSettingsButton: View {
+    @Environment(\.openSettings) private var openSettings
+
+    var body: some View {
+        Button("App Settings", systemImage: "gearshape", action: { openSettings() })
+            .help("App Settings")
     }
 }
