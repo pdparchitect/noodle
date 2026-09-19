@@ -28,6 +28,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Interrupt a busy bot when a message asks it to stop, even when Apple Intelligence is slow to start. Automatic delivery gave the model 10 seconds to decide, which a cold model often missed, so the message waited for the turn to finish. It now has a minute.
 - Check OpenCode's latest release again in Settings > Harness. Noodle rejected the provider's release information whenever its rollout flag was off, so OpenCode showed "Could not check the latest release" and never offered an update.
 - Reclaim the partial files of a local model download or import that was interrupted by a crash or force quit. Noodle now deletes them at launch and before the next download or import, so they no longer hold disk space or count against the free-space check.
 - List a local model whose stored information is damaged as Unreadable Model in Local Models so its weights can be removed; it previously disappeared from the list while staying on disk.

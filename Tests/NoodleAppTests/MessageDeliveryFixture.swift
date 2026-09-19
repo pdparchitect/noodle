@@ -96,9 +96,14 @@ import XCTest
     let process = RoutingProcess()
     static let context = MessageDeliveryContext(unreadMessages: ["Pause those edits"], recentMessages: ["Assistant: editing files"])
 
-    init(timeout: Duration, now: @escaping () -> ContinuousClock.Instant) {
+    /// A nil timeout keeps the production default.
+    init(timeout: Duration?, now: @escaping () -> ContinuousClock.Instant) {
         defaults = UserDefaults(suiteName: suite)!
-        router = MessageDeliveryRouter(defaults: defaults, classifier: classifier, timeout: timeout, now: now)
+        router = if let timeout {
+            MessageDeliveryRouter(defaults: defaults, classifier: classifier, timeout: timeout, now: now)
+        } else {
+            MessageDeliveryRouter(defaults: defaults, classifier: classifier, now: now)
+        }
     }
     func mode(_ mode: MessageDeliveryMode) { defaults.set(mode.rawValue, forKey: MessageDeliveryMode.defaultsKey) }
     func notify(_ process: RoutingProcess? = nil) -> Task<Void, Never>? {

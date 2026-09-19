@@ -4,7 +4,7 @@ import XCTest
 @testable import Noodle
 
 @MainActor final class MessageDeliveryRouterTests: XCTestCase {
-    private func fixture(timeout: Duration = .seconds(30),
+    private func fixture(timeout: Duration? = .seconds(30),
                          now: @escaping () -> ContinuousClock.Instant = { .now }) -> RoutingFixture {
         let fixture = RoutingFixture(timeout: timeout, now: now)
         addTeardownBlock { await MainActor.run { fixture.cleanUp() } }
@@ -318,6 +318,32 @@ import XCTest
         }
         await finish(task)
         XCTAssertTrue(f.classifier.contexts.isEmpty)
+        XCTAssertFalse(f.process.pending.isImmediate)
+    }
+
+    func testDefaultDeadlineOutlastsAColdModelLoad() async {
+        var instant = ContinuousClock.now
+        let f = fixture(timeout: nil, now: { instant })
+        f.classifier.respond = { _ in
+            // A cold on-device model measured 8 seconds on an idle Mac; a busy
+            // one is slower. A stop request must still interrupt the turn.
+            instant = instant.advanced(by: .seconds(20))
+            return true
+        }
+        await finish(f.notify())
+        XCTAssertEqual(f.process.promotions, [f.process.pending.id!])
+        XCTAssertTrue(f.process.pending.isImmediate)
+    }
+
+    func testDefaultDeadlineStillBoundsAStuckModel() async {
+        var instant = ContinuousClock.now
+        let f = fixture(timeout: nil, now: { instant })
+        f.classifier.respond = { _ in
+            instant = instant.advanced(by: .seconds(61))
+            return true
+        }
+        await finish(f.notify())
+        XCTAssertTrue(f.process.promotions.isEmpty)
         XCTAssertFalse(f.process.pending.isImmediate)
     }
 
