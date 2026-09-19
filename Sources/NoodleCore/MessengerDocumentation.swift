@@ -396,12 +396,15 @@ extension MessengerDocumentation {
         SpriteKit and other installed Apple SDKs. NoodletContext.dataDirectory and
         packageDirectory provide URLs; isBackground reports the initial launch mode.
         `try await NoodletContext.secrets.set(name, value)` / `get(name)` / `delete(name)` /
-        `names()` is the same per-noodlet Keychain store. Like data directories, it is
-        not a security boundary between native creations.
-        Swift requires installed Apple developer tools. Native code runs in a child
-        process inheriting Applet's sandbox; data directories are a convention, not
-        a security boundary between trusted native creations. The network manifest
-        flag restricts HTML only. Do not run untrusted native packages.
+        `names()` is the same per-noodlet Keychain store.
+        Swift requires installed Apple developer tools. Native code runs confined to
+        its package, NoodletContext.dataDirectory and a private home directory. It
+        cannot read the user's files, other noodlets, Applet's storage or the
+        Keychain, NSOpenPanel and NSSavePanel do not work, and UserDefaults does not
+        persist. In foreground mode `try await NoodletContext.files.open()` lets the
+        user pick a file and returns a copy inside dataDirectory, or nil;
+        `files.save("relative/path", suggestedName:)` saves a dataDirectory file
+        where the user chooses. The network manifest flag restricts HTML only.
 
         To use the microphone, camera, speech recognition or screen recording, declare
         "permissions":["microphone","camera","speech-recognition","screen-capture"]

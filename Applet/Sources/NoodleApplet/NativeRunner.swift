@@ -6,7 +6,11 @@ import AppletCore
   let package: NoodletPackage, dataRoot: URL, buildRoot: URL
   let log: AppletLog
   var secrets = AppletSecrets.shared
-  private var process: Process?
+  /// Granted manifest permissions, which the confinement has to admit as well.
+  var devices: [String] = []
+  /// Only a visible noodlet may raise Applet's file dialogs.
+  private var foreground = false
+  private var process: ConfinedProcess?
   private var input: Pipe?
   private var pending: [String: CheckedContinuation<String, Error>] = [:]
   private var ready = false
@@ -21,6 +25,22 @@ import AppletCore
   private var moduleCache: URL {
     buildRoot.deletingLastPathComponent().appendingPathComponent("ModuleCache")
   }
+  private var root: URL { buildRoot.deletingLastPathComponent().deletingLastPathComponent() }
+  /// Frameworks keep caches and window frames under the home directory. The
+  /// noodlet's own one lives beside its data, never in Applet's.
+  private var home: URL {
+    root.appendingPathComponent("Homes/\(package.key)/\(dataRoot.lastPathComponent)")
+  }
+  // Applet's environment names its container. A confined process starts clean.
+  private static func environment(home: URL) -> [String: String] {
+    var env = ProcessInfo.processInfo.environment.filter {
+      ["PATH", "LANG", "USER", "LOGNAME", "__CF_USER_TEXT_ENCODING"].contains($0.key) || $0.key.hasPrefix("LC_")
+    }
+    env["HOME"] = home.path
+    env["CFFIXED_USER_HOME"] = home.path
+    env["TMPDIR"] = home.appendingPathComponent("tmp").path
+    return env
+  }
   private let prefix = "NOODLET_\(UUID().uuidString)_"
   var exited: ((Int32, Bool) -> Void)?
   init(package: NoodletPackage, dataRoot: URL, buildRoot: URL, log: AppletLog) {
@@ -29,6 +49,7 @@ import AppletCore
     self.buildRoot = buildRoot
     self.log = log
   }
+  /// The compiler runs no noodlet code, so it may fill the shared module cache.
   private static func runProcess(
     _ executable: String, _ arguments: [String], directory: URL, log: AppletLog,
     control: NativeProcessControl, timeout: TimeInterval = 150
@@ -36,18 +57,21 @@ import AppletCore
     let outputURL = directory.appendingPathComponent("compiler-output.txt")
     FileManager.default.createFile(atPath: outputURL.path, contents: nil)
     let output = try FileHandle(forWritingTo: outputURL)
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: executable)
-    process.arguments = arguments
-    process.currentDirectoryURL = directory
-    process.standardOutput = output
-    process.standardError = output
-    var env = ProcessInfo.processInfo.environment
-    env["CLANG_MODULE_CACHE_PATH"] =
-      directory.deletingLastPathComponent().appendingPathComponent("ModuleCache").path
-    env["SWIFT_MODULECACHE_PATH"] =
-      directory.deletingLastPathComponent().appendingPathComponent("ModuleCache").path
-    process.environment = env
+    let cache = directory.deletingLastPathComponent().appendingPathComponent("ModuleCache")
+    let scratch = directory.appendingPathComponent("Home")
+    for folder in [cache, scratch.appendingPathComponent("tmp")] {
+      try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    }
+    var env = environment(home: scratch)
+    env["CLANG_MODULE_CACHE_PATH"] = cache.path
+    env["SWIFT_MODULECACHE_PATH"] = cache.path
+    let process = ConfinedProcess(
+      NoodletLaunch(
+        executable: executable, arguments: arguments, environment: env, directory: directory.path,
+        readable: [], writable: [directory.path, cache.path]),
+      root: directory.deletingLastPathComponent().deletingLastPathComponent())
+    process.output = output
+    process.error = output
     let reader = try CompilerOutput(url: outputURL, log: log)
     let polling = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
     polling.schedule(deadline: .now(), repeating: .milliseconds(200))
@@ -55,25 +79,27 @@ import AppletCore
     polling.resume()
     try await withCheckedThrowingContinuation { continuation in
       let completion = CompilerCompletion(continuation)
-      process.terminationHandler = { process in
+      process.terminationHandler = { [weak process] status, _ in
         polling.cancel()
         try? output.close()
         reader.drain()
-        control.clear(process)
-        if process.terminationStatus == 0 {
+        if let process { control.clear(process) }
+        if status == 0 {
           completion.finish(.success(()))
         } else {
           completion.finish(
             .failure(
               AppletError(
-                "Build command failed (exit \(process.terminationStatus)). Inspect this session's logs for compiler diagnostics."
+                "Build command failed (exit \(status)). Inspect this session's logs for compiler diagnostics."
               )))
         }
       }
-      do { try control.start(process) } catch {
-        polling.cancel()
-        try? output.close()
-        completion.finish(.failure(error))
+      Task {
+        do { try await control.start(process) } catch {
+          polling.cancel()
+          try? output.close()
+          completion.finish(.failure(error))
+        }
       }
       DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
         guard !completion.finished else { return }
@@ -245,10 +271,44 @@ import AppletCore
       }
       throw error
     }
+    try await warm(combined, toolchain: toolchain)
     log.append("build", "Build succeeded.")
   }
+  private func interpreterArguments(_ program: URL, sdk: String) -> [String] {
+    [
+      "-interpret", "-enable-objc-interop", "-module-name", "main", "-sdk", sdk,
+      "-swift-version", "5", "-module-cache-path", moduleCache.path,
+    ] + plugins + [program.path]
+  }
+  /// Module names the source imports, whatever attributes or kinds decorate them.
+  nonisolated static func imports(_ source: String) -> [String] {
+    let kinds: Set<Substring> = ["struct", "class", "enum", "protocol", "typealias", "func", "let", "var"]
+    var modules = Set<String>()
+    for line in source.split(whereSeparator: { $0.isNewline || $0 == ";" }) {
+      var words = line.split(whereSeparator: { $0 == " " || $0 == "\t" })[...]
+      while words.first?.hasPrefix("@") == true { words = words.dropFirst() }
+      guard words.first == "import" else { continue }
+      words = words.dropFirst()
+      if let kind = words.first, kinds.contains(kind) { words = words.dropFirst() }
+      guard let module = words.first?.split(separator: ".").first,
+        module.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_") })
+      else { continue }
+      modules.insert(String(module))
+    }
+    return modules.sorted()
+  }
+  // The interpreter keeps Clang modules under a different hash than -typecheck,
+  // and a running noodlet may not write the cache it shares with the others.
+  // Interpreting the import lines alone fills it without running noodlet code.
+  private func warm(_ source: String, toolchain: Toolchain) async throws {
+    let program = buildRoot.appendingPathComponent("Imports.swift")
+    try Self.imports(source).map { "#if canImport(\($0))\nimport \($0)\n#endif\n" }.joined()
+      .write(to: program, atomically: true, encoding: .utf8)
+    try await Self.runProcess(
+      toolchain.frontend, interpreterArguments(program, sdk: toolchain.sdk), directory: buildRoot,
+      log: log, control: buildControl)
+  }
   func start(mode: String, size: CGSize, rememberFrame: Bool = true) async throws {
-    let p = Process()
     let stdin = Pipe()
     let stdout = Pipe()
     let stderr = Pipe()
@@ -258,13 +318,11 @@ import AppletCore
     // Evaluate in Apple's signed interpreter process. Generated source is
     // data, so App Sandbox never needs to bless a new executable on disk.
     let snapshot = buildRoot.appendingPathComponent("Package.\(AppletBuildIdentity.current.fileExtension)")
-    p.executableURL = URL(fileURLWithPath: interpreter)
-    p.currentDirectoryURL = snapshot
-    p.arguments = [
-      "-interpret", "-enable-objc-interop", "-module-name", "main", "-sdk", sdk,
-      "-swift-version", "5", "-module-cache-path", moduleCache.path,
-    ] + plugins + [buildRoot.appendingPathComponent("Program.swift").path]
-    var env = ProcessInfo.processInfo.environment
+    for folder in [dataRoot, home.appendingPathComponent("tmp")] {
+      try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    }
+    foreground = mode == "foreground"
+    var env = Self.environment(home: home)
     // Match swift-driver's interpreter environment so JIT symbol lookup
     // finds the system SwiftUI framework, including NSHostingView.
     env["DYLD_FRAMEWORK_PATH"] = "/System/Library/Frameworks"
@@ -277,13 +335,20 @@ import AppletCore
     env["NOODLET_WINDOW"] = String(
       decoding: try JSONEncoder().encode(package.manifest.window ?? NoodletWindowOptions()),
       as: UTF8.self)
-    env["NOODLET_WINDOW_KEY"] = package.key
     env["NOODLET_REMEMBER_FRAME"] = rememberFrame && mode != "headless" ? "1" : "0"
     env["NOODLET_PROTOCOL"] = prefix
-    p.environment = env
-    p.standardInput = stdin
-    p.standardOutput = stdout
-    p.standardError = stderr
+    // The noodlet reads its build and the module cache and writes only its own
+    // data and home. Nothing else of Applet's, or the user's, is in reach.
+    let p = ConfinedProcess(
+      NoodletLaunch(
+        executable: interpreter,
+        arguments: interpreterArguments(buildRoot.appendingPathComponent("Program.swift"), sdk: sdk),
+        environment: env, directory: snapshot.path, readable: [buildRoot.path, moduleCache.path],
+        writable: [dataRoot.path, home.path], devices: devices),
+      root: root)
+    p.input = stdin.fileHandleForReading
+    p.output = stdout.fileHandleForWriting
+    p.error = stderr.fileHandleForWriting
     let buffer = NativeLineBuffer()
     stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
       let lines = buffer.append(handle.availableData)
@@ -298,23 +363,25 @@ import AppletCore
       startupError.record(text)
       log.append("stderr", text)
     }
-    p.terminationHandler = { [weak self] p in
+    p.terminationHandler = { [weak self] status, signalled in
       Task { @MainActor in
         self?.failPending(
-          AppletError(
-            "Native process exited with \(p.terminationReason == .uncaughtSignal ? "signal" : "status") \(p.terminationStatus)."
-          ))
-        self?.exited?(p.terminationStatus, p.terminationReason == .uncaughtSignal)
+          AppletError("Native process exited with \(signalled ? "signal" : "status") \(status)."))
+        self?.exited?(status, signalled)
         stdout.fileHandleForReading.readabilityHandler = nil
         stderr.fileHandleForReading.readabilityHandler = nil
       }
     }
     process = p
     input = stdin
-    do { try p.run() } catch {
+    do { try await p.run() } catch {
       log.append("launch", String(reflecting: error))
       throw error
     }
+    // The child holds its own copies. Keeping these open would hide its exit.
+    try? stdin.fileHandleForReading.close()
+    try? stdout.fileHandleForWriting.close()
+    try? stderr.fileHandleForWriting.close()
     for _ in 0..<1200 {
       if ready { return }
       if !p.isRunning {
@@ -344,16 +411,25 @@ import AppletCore
     // The noodlet asking the host. Only this noodlet's pipe reaches here, so the
     // account is the host's, never one the noodlet names.
     if let call = object["call"] as? String {
-      var reply: [String: Any] = ["reply": id]
-      do {
-        guard call.hasPrefix("secrets.") else { throw AppletError("Unknown host call.") }
-        reply["value"] = try secrets.perform(
-          String(call.dropFirst("secrets.".count)), name: object["name"] as? String,
-          value: object["value"] as? String,
-          account: AppletSecrets.account(package, dataRoot: dataRoot))
-      } catch { reply["error"] = error.localizedDescription }
-      if let data = try? JSONSerialization.data(withJSONObject: reply) {
-        try? input?.fileHandleForWriting.write(contentsOf: data + Data([10]))
+      let name = object["name"] as? String, value = object["value"] as? String
+      Task {
+        var reply: [String: Any] = ["reply": id]
+        do {
+          if call.hasPrefix("secrets.") {
+            reply["value"] = try secrets.perform(
+              String(call.dropFirst("secrets.".count)), name: name, value: value,
+              account: AppletSecrets.account(package, dataRoot: dataRoot))
+          } else if call == "files.open" {
+            reply["value"] = try await openFile() ?? NSNull()
+          } else if call == "files.save" {
+            reply["value"] = try await saveFile(name ?? "", suggested: value)
+          } else {
+            throw AppletError("Unknown host call.")
+          }
+        } catch { reply["error"] = error.localizedDescription }
+        if let data = try? JSONSerialization.data(withJSONObject: reply) {
+          try? input?.fileHandleForWriting.write(contentsOf: data + Data([10]))
+        }
       }
       return
     }
@@ -367,6 +443,38 @@ import AppletCore
           options: [.fragmentsAllowed, .sortedKeys])) ?? Data("null".utf8)
       callback.resume(returning: String(decoding: value, as: UTF8.self))
     }
+  }
+  // A confined noodlet cannot raise a file dialog. Applet asks the user for it
+  // and hands over a copy inside the noodlet's data, so only the chosen file moves.
+  private func openFile() async throws -> String? {
+    guard foreground else { throw AppletError("File dialogs require foreground mode.") }
+    let panel = NSOpenPanel()
+    panel.canChooseDirectories = false
+    NSApp.activate(ignoringOtherApps: true)
+    guard await panel.begin() == .OK, let file = panel.url else { return nil }
+    let access = file.startAccessingSecurityScopedResource()
+    defer { if access { file.stopAccessingSecurityScopedResource() } }
+    let relative = "Selected/\(UUID().uuidString)/\(file.lastPathComponent)"
+    let copy = try NoodletPackage.child(relative, in: dataRoot)
+    try FileManager.default.createDirectory(
+      at: copy.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.copyItem(at: file, to: copy)
+    return relative
+  }
+  private func saveFile(_ relative: String, suggested: String?) async throws -> Bool {
+    guard foreground else { throw AppletError("File dialogs require foreground mode.") }
+    let source = try NoodletPackage.child(relative, in: dataRoot)
+    guard try source.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
+      throw AppletError("Save a regular file from the noodlet's data directory.")
+    }
+    let panel = NSSavePanel()
+    panel.nameFieldStringValue = URL(fileURLWithPath: suggested ?? relative).lastPathComponent
+    NSApp.activate(ignoringOtherApps: true)
+    guard await panel.begin() == .OK, let file = panel.url else { return false }
+    let access = file.startAccessingSecurityScopedResource()
+    defer { if access { file.stopAccessingSecurityScopedResource() } }
+    try Data(contentsOf: source).write(to: file, options: .atomic)
+    return true
   }
   func perform(_ request: AppletRequest) async throws -> String {
     guard let process, process.isRunning, let input else {
@@ -390,7 +498,8 @@ import AppletCore
   }
   func snapshot() async throws -> NSImage {
     _ = try await perform(AppletRequest(.screenshot))
-    let path = dataRoot.appendingPathComponent(".capture.png")
+    // A link here would have Applet read a file the noodlet itself cannot.
+    let path = try NoodletPackage.child(".capture.png", in: dataRoot)
     guard let image = NSImage(contentsOf: path) else {
       throw AppletError("Native screenshot could not be decoded.")
     }
@@ -398,7 +507,7 @@ import AppletCore
   }
   func stop() {
     buildControl.cancel()
-    if let process, process.isRunning { kill(process.processIdentifier, SIGKILL) }
+    process?.kill()
     try? input?.fileHandleForWriting.close()
     input = nil
     failPending(AppletError("Noodlet terminated."))
@@ -410,31 +519,32 @@ import AppletCore
   }
   deinit {
     buildControl.cancel()
-    if let process, process.isRunning { kill(process.processIdentifier, SIGKILL) }
+    process?.kill()
     try? FileManager.default.removeItem(at: buildRoot)
   }
 }
 
 private final class NativeProcessControl: @unchecked Sendable {
   private let lock = NSLock()
-  private var process: Process?, cancelled = false
-  func start(_ process: Process) throws {
-    lock.lock()
-    defer { lock.unlock() }
-    guard !cancelled else { throw AppletError("Build cancelled.") }
-    try process.run()
-    self.process = process
+  private var process: ConfinedProcess?, cancelled = false
+  func start(_ process: ConfinedProcess) async throws {
+    try lock.withLock {
+      guard !cancelled else { throw AppletError("Build cancelled.") }
+      self.process = process
+    }
+    try await process.run()
+    // Cancelled while the host was starting it.
+    if lock.withLock({ cancelled }) { process.kill() }
   }
-  func clear(_ process: Process) {
-    lock.lock()
-    defer { lock.unlock() }
-    if self.process === process { self.process = nil }
+  func clear(_ process: ConfinedProcess) {
+    lock.withLock { if self.process === process { self.process = nil } }
   }
   func cancel() {
-    lock.lock()
-    defer { lock.unlock() }
-    cancelled = true
-    if let process, process.isRunning { kill(process.processIdentifier, SIGKILL) }
+    let running = lock.withLock {
+      cancelled = true
+      return process
+    }
+    running?.kill()
   }
 }
 

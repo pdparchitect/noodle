@@ -58,3 +58,14 @@ precondition(previewEntitlements["com.apple.security.application-groups"] as? [S
 print("Quick Look extension type registration, version and three-key sandbox policy verified")
 
 precondition(previewInfo["NoodleAppletGroup"] as? String == group)
+
+// The host confines native noodlets from outside App Sandbox. It holds no
+// entitlement of its own and answers only the Applet it ships in.
+let hostInfo = try plist(CommandLine.arguments[6])
+let hostEntitlements = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[7]))
+let hostGrants = hostEntitlements.isEmpty ? [:] : try plist(CommandLine.arguments[7])
+precondition(hostGrants.isEmpty, "Unexpected noodlet host entitlements")
+precondition(hostInfo["CFBundleIdentifier"] as? String == bundle + ".noodlet-host")
+precondition(hostInfo["NoodleAppletIdentifier"] as? String == bundle && hostInfo["NoodleSigningTeam"] as? String == team)
+precondition(hostInfo["CFBundleVersion"] as? String == version && hostInfo["LSBackgroundOnly"] as? Bool == true)
+print("Noodlet host identity and empty entitlement set verified")

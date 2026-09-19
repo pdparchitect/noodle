@@ -2,7 +2,13 @@
 
 ## [Unreleased]
 
+### Security
+
+- Confine native Swift noodlets to their own files. They compile and run under a deny-by-default sandbox that reaches only their package, data directory and a private home directory, so a noodlet can no longer read other noodlets, Applet's storage, its Keychain secrets or anything else on the Mac. A new `NoodletHost.xpc` service applies it, because App Sandbox refuses nested sandboxes.
+
 ### Added
+
+- Add `NoodletContext.files.open()` and `files.save(_:suggestedName:)` for native noodlets. Applet shows the dialog and copies only the chosen file into or out of the noodlet's data directory. `NSOpenPanel` and `NSSavePanel` no longer work inside native noodlets.
 
 - Let noodlets use the microphone, camera, speech recognition and screen recording. A noodlet declares `"permissions": ["microphone", "camera", "speech-recognition", "screen-capture"]` in its manifest; Applet asks once per noodlet before it starts, then macOS asks for Noodle Applet. Adds the audio input and camera sandbox entitlements. A new screen recording grant applies after Applet restarts.
 - Give noodlets a place for API keys and tokens. `noodle.secrets` in HTML and `NoodletContext.secrets` in Swift keep values in Applet's Keychain, separately for each noodlet. Settings > Secrets lists their names and removes them.

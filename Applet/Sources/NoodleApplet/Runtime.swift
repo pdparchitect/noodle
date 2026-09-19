@@ -501,6 +501,8 @@ import AppletCore
           package: package, dataRoot: session.dataRoot,
           buildRoot: library.root.appendingPathComponent(
             "Builds/\(session.id.uuidString)"), log: session.log)
+        // Authorization already passed, so every declared permission is granted.
+        runner.devices = package.manifest.permissions ?? []
         session.native = runner
         session.state = "building"
         _ = status(session)

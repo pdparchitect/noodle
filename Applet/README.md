@@ -182,10 +182,8 @@ let key = try await NoodletContext.secrets.get("openai")
 
 `delete(name)` and `names()` complete the API. Applet keeps each noodlet's secrets
 in its own login Keychain item, up to 64 values of 16 KiB, with separate values for
-headless test runs. An HTML noodlet can only ever reach its own. Native noodlets
-inherit Applet's Keychain identity: the API gives each its own secrets, but native
-code that goes around it can read Applet's Keychain items, as it can other
-noodlets' data. Do not run untrusted native packages.
+headless test runs. A noodlet can only ever reach its own: HTML through the bridge,
+and native code because its confinement cannot read the Keychain at all.
 **Settings → Secrets** lists names, never values, and removes them.
 **Settings → Storage** shows each noodlet's saved data and removes it, including an
 HTML noodlet's WebKit store.
@@ -396,10 +394,18 @@ it has no file-write grants or native-code runner.
 The group socket authenticates peer audit tokens and signing identities. Noodle
 stamps bot identity before forwarding requests; bots cannot select another bot's
 sessions or captures. CLI helpers run in the invoking harness's boundary and do
-not receive the application group entitlement. Native Swift subprocesses inherit
-the host sandbox; they cannot exceed it, but their per-noodlet data directories
-are conventions rather than a security boundary between native creations.
-The manifest's network switch applies to HTML only. Run trusted native code.
+not receive the application group entitlement. Native Swift code is treated as
+untrusted. App Sandbox refuses a nested sandbox, so `NoodletHost.xpc` runs outside
+it, accepts only the Applet it ships in, starts nothing but the installed Apple
+compiler, and applies a deny-by-default profile to every compile and run. A native
+noodlet reads the system, the toolchain, its build and the module cache, and
+writes only its data directory and a private home directory. The user's files,
+other noodlets, Applet's storage, its security-scoped bookmarks and the Keychain
+are out of reach. The shared module cache is filled before noodlet code runs and
+is read-only afterwards. Files enter or leave only through Applet's own dialogs:
+`NoodletContext.files.open()` copies the user's choice into the data directory and
+`files.save` copies a data file out. Outbound network, and the devices a granted
+permission names, remain available. The manifest's network switch applies to HTML only.
 
 Web input is synthetic DOM input and cannot emulate trusted browser gestures.
 JavaScript evaluation is available for HTML noodlets. Native input supports

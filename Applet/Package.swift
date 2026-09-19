@@ -8,6 +8,7 @@ let package = Package(
         .executable(name: "NoodleApplet", targets: ["NoodleApplet"]),
         .executable(name: "noodlet", targets: ["NoodletCLI"]),
         .executable(name: "NoodletPreview", targets: ["NoodletPreview"]),
+        .executable(name: "NoodletHost", targets: ["NoodletHost"]),
     ],
     dependencies: [
         .package(path: "../Shared/SettingsUI"),
@@ -30,6 +31,7 @@ let package = Package(
         .executableTarget(
             name: "NoodletCLI",
             dependencies: ["AppletCore", .product(name: "AppletBridge", package: "Protocol")]),
+        .executableTarget(name: "NoodletHost", dependencies: ["AppletCore"]),
         .executableTarget(name: "NoodletPreview", dependencies: ["AppletCore", .product(name: "AppletBridge", package: "Protocol")], swiftSettings: [.unsafeFlags(["-application-extension"])], linkerSettings: [.unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]),
         .testTarget(
             name: "AppletCoreTests",

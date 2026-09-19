@@ -9,13 +9,13 @@ protocol AppletSecretStorage: Sendable {
   func accounts() throws -> [String]
 }
 
-/// One login Keychain item per noodlet. An HTML noodlet can only reach its own
-/// through the bridge. A native noodlet inherits Applet's Keychain identity, so
-/// for native code this separates noodlets by convention, not by enforcement.
+/// One login Keychain item per noodlet. A noodlet can only reach its own: HTML
+/// through the bridge, native code through the host pipe. NoodletConfinement keeps
+/// native code from reading the Keychain directly.
 struct AppletKeychain: AppletSecretStorage {
   let service = AppletBuildIdentity.current.providerID + ".secrets"
-  // The data protection Keychain would keep native noodlets out, but it refuses
-  // Applet (-34018) without a provisioning profile, which these builds do not have.
+  // The data protection Keychain refuses Applet (-34018) without a provisioning
+  // profile, which these builds do not have.
   private var base: [String: Any] {
     [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
   }

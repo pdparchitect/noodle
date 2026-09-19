@@ -9,6 +9,22 @@ public enum NoodletContext {
     public static var isBackground: Bool { ProcessInfo.processInfo.environment["NOODLET_MODE"] != "foreground" }
     /// Kept in Applet's Keychain, separately for each noodlet.
     public static let secrets = NoodletSecrets()
+    /// The only way to files outside the noodlet: the user picks them in Applet's dialog.
+    public static let files = NoodletFiles()
+}
+
+public struct NoodletFiles: Sendable {
+    /// A copy of the file the user chose, inside dataDirectory, or nil when cancelled.
+    public func open() async throws -> URL? {
+        guard let path = try await NoodletHost.call("files.open", [:]) as? String else { return nil }
+        return NoodletContext.dataDirectory.appendingPathComponent(path)
+    }
+    /// Saves a file from dataDirectory where the user chooses. False when cancelled.
+    public func save(_ path: String, suggestedName: String? = nil) async throws -> Bool {
+        var arguments = ["name": path]
+        if let suggestedName { arguments["value"] = suggestedName }
+        return try await NoodletHost.call("files.save", arguments) as? Bool ?? false
+    }
 }
 
 public struct NoodletSecrets: Sendable {
@@ -89,8 +105,14 @@ public struct NoodletSecrets: Sendable {
         window.contentMaxSize = NSSize(width: CGFloat(options["maxWidth"] as? Int ?? 4096), height: CGFloat(options["maxHeight"] as? Int ?? 4096))
         window.setContentSize(size); window.center()
         if options["rememberFrame"] as? Bool == true && env["NOODLET_REMEMBER_FRAME"] == "1" {
-            let name = "Noodlet." + (env["NOODLET_WINDOW_KEY"] ?? "")
-            window.setFrameUsingName(name); window.setFrameAutosaveName(name)
+            // Frame autosave writes user defaults, which a confined noodlet has none of.
+            let store = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("WindowFrame")
+            if let saved = try? String(contentsOf: store, encoding: .utf8) { window.setFrame(from: saved) }
+            for change in [NSWindow.didMoveNotification, NSWindow.didEndLiveResizeNotification] {
+                NotificationCenter.default.addObserver(forName: change, object: window, queue: .main) { note in
+                    MainActor.assumeIsolated { try? (note.object as? NSWindow)?.frameDescriptor.write(to: store, atomically: false, encoding: .utf8) }
+                }
+            }
             let current = window.contentRect(forFrameRect: window.frame).size
             window.setContentSize(NSSize(width: min(max(current.width, window.contentMinSize.width), window.contentMaxSize.width), height: min(max(current.height, window.contentMinSize.height), window.contentMaxSize.height)))
         }

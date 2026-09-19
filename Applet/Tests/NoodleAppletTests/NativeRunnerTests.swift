@@ -36,4 +36,17 @@ final class NativeRunnerTests: XCTestCase {
             "-plugin-path", fixture.root.appendingPathComponent("Toolchain/usr/lib/swift/host/plugins").path,
         ])
     }
+
+    func testWarmUpImportsNameModulesOnly() {
+        let source = """
+            import SwiftUI
+            @preconcurrency import AVFoundation; import Vision
+              import struct Foundation.URL
+            import Darwin.C
+            // import Commented
+            let imported = "import Fake"
+            import Bad-Name
+            """
+        XCTAssertEqual(NativeRunner.imports(source), ["AVFoundation", "Darwin", "Foundation", "SwiftUI", "Vision"])
+    }
 }

@@ -250,6 +250,13 @@ from its previous session. Revoked callers receive neither success payloads nor
 provider diagnostics. An operation already dispatched to Applet may still finish;
 these checks do not undo its effects or erase files previously delivered.
 
+A noodlet a bot writes does not widen that bot's file access. HTML noodlets read
+only their package and data directory. Native Swift noodlets compile and run under
+a deny-by-default profile applied by Applet's `NoodletHost.xpc`, limited to their
+build, their data directory and a private home directory. Neither kind can read
+the user's files, another noodlet, Applet's storage or the Keychain. A file
+reaches a noodlet only when the user picks it in a dialog Applet presents.
+
 ## Files, recording, and computers
 
 Noodle stores chats and bot workspaces locally. Your harness sends work to its

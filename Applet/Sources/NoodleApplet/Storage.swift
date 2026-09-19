@@ -18,7 +18,9 @@ import WebKit
     return sizes
   }
   static func remove(_ key: String, root: URL, defaults: UserDefaults) async {
-    try? FileManager.default.removeItem(at: root.appendingPathComponent("Data/\(key)"))
+    for folder in ["Data", "Homes"] {
+      try? FileManager.default.removeItem(at: root.appendingPathComponent("\(folder)/\(key)"))
+    }
     for scope in ["user", "test"] {
       let name = "store.\(key).\(scope)"
       if let id = defaults.string(forKey: name).flatMap(UUID.init(uuidString:)) {

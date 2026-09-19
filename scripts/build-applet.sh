@@ -24,7 +24,7 @@ applet_swift() {
 }
 applet_swift build --disable-sandbox --package-path "$package" --scratch-path "$build_root" -c "$configuration" >&2
 bin_path="$(applet_swift build --disable-sandbox --package-path "$package" --scratch-path "$build_root" -c "$configuration" --show-bin-path)"
-for product in NoodleApplet noodlet NoodletPreview; do
+for product in NoodleApplet noodlet NoodletPreview NoodletHost; do
     python3 "$project_root/scripts/verify-build-sdk.py" "$bin_path/$product" "$(xcrun --sdk macosx --show-sdk-version)" >&2
 done
 swiftc -typecheck -parse-as-library -swift-version 5 -module-cache-path "$build_root/RuntimeCheckCache" \
@@ -45,8 +45,18 @@ cp "$package/Support/Preview-Info.plist" "$preview/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :NSExtension:NSExtensionAttributes:QLSupportedContentTypes:0 $content_type" "$preview/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$preview/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$preview/Contents/Info.plist"
+# App Sandbox refuses a nested sandbox, so this service stays outside it and
+# confines native noodlets to their own files. It accepts Applet alone.
+noodlet_host="$app/Contents/XPCServices/NoodletHost.xpc"
+mkdir -p "$noodlet_host/Contents/MacOS"
+cp "$bin_path/NoodletHost" "$noodlet_host/Contents/MacOS/"
+cp "$package/Support/Host-Info.plist" "$noodlet_host/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.noodlet-host" "$noodlet_host/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :NoodleAppletIdentifier string $bundle_identifier" "$noodlet_host/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$noodlet_host/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$noodlet_host/Contents/Info.plist"
 toolchain="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain"
-for executable in "$app/Contents/MacOS/NoodleApplet" "$app/Contents/Helpers/noodlet" "$preview/Contents/MacOS/NoodletPreview"; do
+for executable in "$app/Contents/MacOS/NoodleApplet" "$app/Contents/Helpers/noodlet" "$preview/Contents/MacOS/NoodletPreview" "$noodlet_host/Contents/MacOS/NoodletHost"; do
     otool -l "$executable" | awk '/cmd LC_RPATH/ {found=1;next} found && /path / {print $2;found=0}' |
         while IFS= read -r rpath; do
             if [[ "$rpath" == "$bin_path" || "$rpath" == "$toolchain/"* || "$rpath" == /*/Metal.xctoolchain/* ]]; then install_name_tool -delete_rpath "$rpath" "$executable"; fi
@@ -113,6 +123,8 @@ cp "$package/Support/Preview.entitlements" "$staging/preview-entitlements.plist"
 /usr/libexec/PlistBuddy -c "Add :com.apple.security.application-groups:0 string $group" "$staging/preview-entitlements.plist"
 /usr/libexec/PlistBuddy -c "Add :NoodleAppletGroup string $group" "$preview/Contents/Info.plist"
 codesign --force --options runtime "$timestamp_option" --sign "$identity" --entitlements "$staging/preview-entitlements.plist" "$preview"
+/usr/libexec/PlistBuddy -c "Add :NoodleSigningTeam string $team" "$noodlet_host/Contents/Info.plist"
+codesign --force --options runtime "$timestamp_option" --sign "$identity" "$noodlet_host"
 for component in "$sparkle/Versions/B/XPCServices/Installer.xpc" "$sparkle/Versions/B/Autoupdate" "$sparkle/Versions/B/Updater.app" "$sparkle"; do
     codesign --force --options runtime "$timestamp_option" --sign "$identity" "$component"
 done
