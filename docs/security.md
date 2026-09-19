@@ -62,13 +62,18 @@ not copy standalone conversations, global skills, hooks, or MCP configuration.
 FX also receives its selected provider/model settings. Native installations stay
 read-only.
 
-A Codex bot can select a [profile](harness-setup.md#codex-profiles) in place of
-the system login. The selection is a private field in the bot's `agent.json`.
-The app never sends a path: Agent Host reads the field at launch, resolves it to
-`HarnessProfiles/<uuid>/home` in Noodle's storage, and refuses a profile that is
-missing, redirected through a link, or made for another harness, so a bot
-never starts under a different account by accident. A restricted bot's sandbox
-cannot read that folder, and shared folders cannot overlap it.
+A Codex, Grok Build, or Muse Code bot can select a [profile](harness-setup.md#profiles)
+in place of the system login. The selection is a private field in the bot's
+`agent.json`. The app never sends a path, environment, or command: Agent Host
+reads the field at launch, resolves it to `HarnessProfiles/<uuid>/home` in
+Noodle's storage, and refuses a profile that is missing, redirected through a
+link, or made for another harness, so a bot never starts under a different
+account by accident. Profile sign-in and status checks name the profile by
+identifier only; the host derives the harness, the folder, and the fixed login
+command from it, and forwards only a device code whose page is the vendor's own
+sign-in address. A profile's login is its files alone: the host never reads a
+Keychain item on a profile's behalf. A restricted bot's sandbox cannot read the
+profiles folder, and shared folders cannot overlap it.
 
 For Claude, FX, and Muse Keychain-backed sign-ins, the host requests only the exact
 provider credential item, without prompting. The harness receives a private file

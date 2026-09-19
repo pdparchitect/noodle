@@ -95,23 +95,60 @@ public struct HarnessProfileStore: Sendable {
         loginHome(profile).appendingPathComponent(Self.accountPath(profile.provider), isDirectory: true)
     }
 
+    /// What points the harness at this profile instead of the user's home.
+    public func environment(_ profile: HarnessProfile) -> [String: String] {
+        switch profile.provider {
+        case .codex: ["CODEX_HOME": accountHome(profile).path]
+        case .grokBuild: ["GROK_HOME": accountHome(profile).path]
+        case .muse:
+            // Muse otherwise keeps every login in one Keychain item per user.
+            ["XDG_CONFIG_HOME": loginHome(profile).appendingPathComponent(".config", isDirectory: true).path,
+             "TBH_CREDENTIAL_BACKEND": "file"]
+        default: [:]
+        }
+    }
+
     /// Resolves the profile a bot selected in its agent.json. Nil means the
     /// system profile. A missing, redirected, or mismatched profile is an
     /// error: a bot must never start under a different account by accident.
     public func selected(workspace: URL, provider: HarnessProvider) throws -> HarnessProfile? {
         guard let id = try AgentConfiguration.load(from: AgentStorageLayout(workspace: workspace)).harnessProfile else { return nil }
-        guard provider.supportsProfiles, let profile = try? profile(id), profile.provider == provider else {
+        guard let profile = try? validated(id), profile.provider == provider else {
             throw HarnessSetupError("This bot's \(provider.displayName) profile is unavailable. Choose another profile in the bot's settings, then retry startup.")
         }
-        try AgentStorageLayout.requireDirectory(loginHome(profile))
-        try AgentStorageLayout.requireDirectory(accountHome(profile))
         return profile
+    }
+
+    /// A profile whose folders are in place and not redirected elsewhere.
+    public func validated(_ id: UUID) throws -> HarnessProfile {
+        let profile = try profile(id)
+        guard profile.provider.supportsProfiles else {
+            throw HarnessSetupError("\(profile.provider.displayName) does not support separate profiles.")
+        }
+        var folder = accountHome(profile)
+        while folder.path.hasPrefix(loginHome(profile).path) {
+            try AgentStorageLayout.requireDirectory(folder)
+            folder.deleteLastPathComponent()
+        }
+        return profile
+    }
+
+    /// True when the login sits in the user's shared Keychain item, not in this
+    /// folder, so it is neither separate nor readable for a restricted bot.
+    public func loginIsShared(_ profile: HarnessProfile) -> Bool {
+        guard profile.provider == .muse,
+              let files = try? WorkspaceMailbox(workspace: loginHome(profile), path: Self.accountPath(.muse)),
+              files.contains("auth.json"), let data = try? files.read("auth.json", limit: 1_048_576),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let meta = (root["providers"] as? [String: Any])?["meta"] as? [String: Any] else { return false }
+        return meta["storage"] as? String == "keychain"
     }
 
     private static func accountPath(_ provider: HarnessProvider) -> String {
         switch provider {
-        case .codex: ".codex"
-        default: ".\(provider.rawValue)"
+        case .grokBuild: ".grok"
+        case .muse: ".config/muse"
+        default: ".codex"
         }
     }
 
@@ -130,5 +167,45 @@ public struct HarnessProfileStore: Sendable {
         let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try AtomicFile.write(encoder.encode(profile), to: folder(profile.id).appendingPathComponent("profile.json"))
+    }
+}
+
+/// Device-code sign-in for a profile, run by the Agent Host with the profile's
+/// environment. Only the vendor's own sign-in page is ever offered to the user.
+public enum HarnessProfileLogin {
+    public static func arguments(_ provider: HarnessProvider) -> [String]? {
+        switch provider {
+        case .grokBuild: ["login", "--device-auth"]
+        case .muse: ["login"]
+        default: nil
+        }
+    }
+
+    /// A streaming read can end midway through a line; only whole lines count.
+    public static func challenge(provider: HarnessProvider, text: String) -> HarnessSignInChallenge? {
+        for line in text.components(separatedBy: .newlines).dropLast() {
+            let candidate = line.trimmingCharacters(in: .whitespaces)
+            guard candidate.hasPrefix("https://"), let components = URLComponents(string: candidate) else { continue }
+            let name = provider == .grokBuild ? "user_code" : "code"
+            guard let code = components.queryItems?.first(where: { $0.name == name })?.value,
+                  let challenge = challenge(provider: provider, url: candidate, code: code) else { continue }
+            return challenge
+        }
+        return nil
+    }
+
+    public static func challenge(provider: HarnessProvider, url rawURL: String, code: String) -> HarnessSignInChallenge? {
+        let page: (host: String, path: String)
+        switch provider {
+        case .grokBuild: page = ("accounts.x.ai", "/oauth2/device")
+        case .muse: page = ("auth.meta.com", "/oauth/device")
+        default: return nil
+        }
+        // Foundation drops a trailing slash from the path on some releases only.
+        guard let url = URL(string: rawURL), url.scheme == "https", url.host == page.host,
+              [page.path, page.path + "/"].contains(url.path), url.user == nil, url.password == nil, url.port == nil,
+              (4...64).contains(code.count),
+              code.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }) else { return nil }
+        return HarnessSignInChallenge(url: url, code: code)
     }
 }

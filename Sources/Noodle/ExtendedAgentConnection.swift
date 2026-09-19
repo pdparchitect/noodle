@@ -129,6 +129,14 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
             withReply: reply
         )
     }
+    func checkProfileAuthentication(profile: UUID, executablePath: String, reply: @escaping (Bool, String?) -> Void) {
+        proxy(failure: { reply(false, $0) })?.checkProfileAuthentication(
+            profileID: profile.uuidString, executablePath: executablePath, withReply: reply)
+    }
+    func signInProfile(profile: UUID, executablePath: String, reply: @escaping (Bool, String?) -> Void) {
+        proxy(failure: { reply(false, $0) })?.signInProfile(
+            profileID: profile.uuidString, executablePath: executablePath, withReply: reply)
+    }
     func receive(_ data: Data, isError: Bool) { onData?(data, isError) }
     func terminated(_ status: Int32) { onExit?(status) }
     func signInChallenge(_ url: String, code: String) { onSignInChallenge?(url, code) }

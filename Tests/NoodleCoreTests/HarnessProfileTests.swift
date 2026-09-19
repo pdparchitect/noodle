@@ -34,7 +34,7 @@ final class HarnessProfileTests: XCTestCase {
         XCTAssertEqual(try store.load().map(\.displayName), ["Client"])
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.loginHome(personal).path))
 
-        XCTAssertThrowsError(try store.create(provider: .grokBuild, named: "Other"))
+        XCTAssertThrowsError(try store.create(provider: .claudeCode, named: "Other"))
         XCTAssertThrowsError(try store.create(provider: .codex, named: " \n "))
     }
 
@@ -77,6 +77,67 @@ final class HarnessProfileTests: XCTestCase {
         XCTAssertThrowsError(try store.selected(workspace: workspace, provider: .codex)) {
             XCTAssertTrue($0.localizedDescription.contains("profile is unavailable"))
         }
+    }
+
+    func testEachHarnessIsPointedAtItsOwnProfileFolder() throws {
+        let codex = try store.create(provider: .codex, named: "Codex"), grok = try store.create(provider: .grokBuild, named: "Grok")
+        let muse = try store.create(provider: .muse, named: "Muse")
+        XCTAssertEqual(store.environment(codex), ["CODEX_HOME": store.loginHome(codex).appendingPathComponent(".codex").path])
+        XCTAssertEqual(store.environment(grok), ["GROK_HOME": store.loginHome(grok).appendingPathComponent(".grok").path])
+        XCTAssertEqual(store.environment(muse), ["XDG_CONFIG_HOME": store.loginHome(muse).appendingPathComponent(".config").path,
+                                                 "TBH_CREDENTIAL_BACKEND": "file"])
+        XCTAssertEqual(store.accountHome(muse).path, store.loginHome(muse).appendingPathComponent(".config/muse").path)
+        for profile in [codex, grok, muse] {
+            XCTAssertEqual(try store.validated(profile.id), profile)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: store.accountHome(profile).path))
+        }
+        // A link anywhere between the login home and the account folder is refused.
+        let config = store.loginHome(muse).appendingPathComponent(".config"), moved = store.loginHome(muse).appendingPathComponent("moved")
+        try FileManager.default.moveItem(at: config, to: moved)
+        try FileManager.default.createSymbolicLink(at: config, withDestinationURL: moved)
+        XCTAssertThrowsError(try store.validated(muse.id))
+    }
+
+    func testSignInChallengeAcceptsOnlyTheVendorsDevicePage() throws {
+        let grok = "\nTo sign in, open this URL in your browser:\n\n  https://accounts.x.ai/oauth2/device?user_code=7ABC-DEFG\n\nConfirm this code in your browser:\n\n  7ABC-DEFG\n\nWaiting"
+        let challenge = try XCTUnwrap(HarnessProfileLogin.challenge(provider: .grokBuild, text: grok))
+        XCTAssertEqual(challenge.code, "7ABC-DEFG")
+        XCTAssertEqual(challenge.url.absoluteString, "https://accounts.x.ai/oauth2/device?user_code=7ABC-DEFG")
+        let muse = "Open this page to sign in:\n  https://auth.meta.com/oauth/device/?code=ABCD-EFGH\nconfirm this code matches:\n  ABCD-EFGH\n"
+        XCTAssertEqual(HarnessProfileLogin.challenge(provider: .muse, text: muse)?.code, "ABCD-EFGH")
+
+        // A read that ends inside the URL line waits for the rest.
+        XCTAssertNil(HarnessProfileLogin.challenge(provider: .muse, text: "  https://auth.meta.com/oauth/device/?code=ABCD"))
+        XCTAssertNil(HarnessProfileLogin.challenge(provider: .grokBuild, text: muse))
+        XCTAssertNil(HarnessProfileLogin.challenge(provider: .codex, text: grok))
+        for url in ["http://accounts.x.ai/oauth2/device?user_code=7ABC-DEFG", "https://accounts.x.ai.evil.example/oauth2/device",
+                    "https://user@accounts.x.ai/oauth2/device", "https://accounts.x.ai:8443/oauth2/device", "https://accounts.x.ai/other"] {
+            XCTAssertNil(HarnessProfileLogin.challenge(provider: .grokBuild, url: url, code: "7ABC-DEFG"), url)
+        }
+        XCTAssertNil(HarnessProfileLogin.challenge(provider: .grokBuild, url: "https://accounts.x.ai/oauth2/device", code: "7ABC DEFG; rm"))
+    }
+
+    func testMuseProfileNeverFallsBackToTheSharedKeychainLogin() throws {
+        let agent = try repository.createAgent(named: "Muse Bot", harnessIdentifier: "muse").agent
+        let workspace = repository.storage(for: agent.id).workspace
+        let profile = try store.create(provider: .muse, named: "Work")
+        let auth = store.accountHome(profile).appendingPathComponent("auth.json")
+        func write(_ meta: [String: Any]) throws {
+            try JSONSerialization.data(withJSONObject: ["schema_version": 1, "providers": ["meta": meta]]).write(to: auth)
+        }
+        XCTAssertFalse(store.loginIsShared(profile))
+
+        try write(["mechanism": "oauth", "storage": "keychain"])
+        XCTAssertTrue(store.loginIsShared(profile))
+        XCTAssertThrowsError(try RestrictedHarnessStorage.prepare(provider: .muse, workspace: workspace,
+            loginHome: store.loginHome(profile), secret: { _, _ in nil }))
+
+        try write(["mechanism": "oauth", "storage": "file", "access_token": "work-token"])
+        XCTAssertFalse(store.loginIsShared(profile))
+        try RestrictedHarnessStorage.prepare(provider: .muse, workspace: workspace, loginHome: store.loginHome(profile),
+            secret: { _, _ in XCTFail("A profile must not read the Keychain"); return nil })
+        let seeded = RestrictedHarnessStorage.home(workspace: workspace).appendingPathComponent(".config/muse/auth.json")
+        XCTAssertTrue(try String(contentsOf: seeded, encoding: .utf8).contains("work-token"))
     }
 
     func testRestrictedBotIsSeededFromItsProfileLogin() throws {

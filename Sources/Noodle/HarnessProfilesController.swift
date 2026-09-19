@@ -103,10 +103,43 @@ final class HarnessProfilesController {
         operations[id] = nil; activity[id] = nil; challenges[id] = nil
     }
 
-    private func setupProvider(for profile: HarnessProfile) -> (any HarnessSetupProviding)? {
+    private func setupProvider(for profile: HarnessProfile) -> (any HarnessProfileAccount)? {
         switch profile.provider {
         case .codex: CodexSetupProvider(codexHome: store.accountHome(profile))
+        case .grokBuild, .muse: HostProfileSetupProvider(profile: profile)
         default: nil
         }
+    }
+}
+
+/// The account half of harness setup; a profile has no installation of its own.
+@MainActor private protocol HarnessProfileAccount {
+    func status(for installation: HarnessInstallation) async throws -> HarnessAuthenticationStatus
+    func signIn(for installation: HarnessInstallation,
+                onChallenge: @escaping @MainActor (HarnessSignInChallenge) -> Void) async throws -> HarnessAuthenticationStatus
+}
+
+extension CodexSetupProvider: HarnessProfileAccount {}
+
+/// Grok Build and Muse Code sign in through the Agent Host, which resolves the
+/// profile's folder itself and runs the harness's own device-code login.
+@MainActor private final class HostProfileSetupProvider: HarnessProfileAccount {
+    private let profile: HarnessProfile
+    init(profile: HarnessProfile) { self.profile = profile }
+
+    func status(for installation: HarnessInstallation) async throws -> HarnessAuthenticationStatus {
+        try await run(installation, signIn: false, onChallenge: nil)
+    }
+    func signIn(for installation: HarnessInstallation,
+                onChallenge: @escaping @MainActor (HarnessSignInChallenge) -> Void) async throws -> HarnessAuthenticationStatus {
+        try await run(installation, signIn: true, onChallenge: onChallenge)
+    }
+    private func run(_ installation: HarnessInstallation, signIn: Bool,
+                     onChallenge: (@MainActor (HarnessSignInChallenge) -> Void)?) async throws -> HarnessAuthenticationStatus {
+        guard installation.provider == profile.provider, let path = installation.executablePath else {
+            throw HarnessSetupError("Install the harness first.")
+        }
+        return try await HarnessAccountOperation().run(executablePath: path, signIn: signIn, provider: profile.provider,
+                                                       profile: profile.id, onChallenge: onChallenge)
     }
 }

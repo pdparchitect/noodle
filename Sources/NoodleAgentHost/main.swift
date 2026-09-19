@@ -141,7 +141,14 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
         if restricted {
             let layout = AgentStorageLayout(workspace: workspace)
             let repository = layout.package.deletingLastPathComponent().deletingLastPathComponent()
-            try RestrictedHarnessStorage.prepare(provider: provider, workspace: workspace, loginHome: loginHome)
+            if harnessProfile == nil {
+                try RestrictedHarnessStorage.prepare(provider: provider, workspace: workspace, loginHome: loginHome)
+            } else {
+                // A profile's login is its files alone. The user's Keychain items
+                // belong to the system profile and must never stand in for them.
+                try RestrictedHarnessStorage.prepare(provider: provider, workspace: workspace, loginHome: loginHome,
+                                                     secret: { _, _ in nil })
+            }
             let privateHome = RestrictedHarnessStorage.home(workspace: workspace)
             let codexHome = privateHome.appendingPathComponent(".codex", isDirectory: true)
             let temporary = workspace.appendingPathComponent(".noodle/tmp", isDirectory: true)
@@ -185,8 +192,8 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
                     environment: ProcessInfo.processInfo.environment, profile: profile)
             }
             strings = ["/usr/bin/sandbox-exec", "-p", profile] + strings
-        } else if let harnessProfile, provider == .codex {
-            setenv("CODEX_HOME", profiles.accountHome(harnessProfile).path, 1)
+        } else if let harnessProfile {
+            for (key, value) in profiles.environment(harnessProfile) { setenv(key, value, 1) }
         }
         var arguments: [UnsafeMutablePointer<CChar>?] = strings.map { value in value.withCString { strdup($0) } }
         arguments.append(nil)
@@ -465,54 +472,128 @@ private final class HostSession: NSObject, AgentHostService {
                     throw HostError("This harness does not support this sign-in flow.")
                 }
                 let executable = try HostPaths.executable(executablePath, provider: provider)
-                let login = Process()
-                login.executableURL = executable
-                login.arguments = provider == .fx ? ["login"] : ["auth", "login", "--claudeai"]
-                login.currentDirectoryURL = FileManager.default.temporaryDirectory
-                login.standardInput = FileHandle.nullDevice
-                login.standardOutput = FileHandle.nullDevice
-                login.standardError = FileHandle.nullDevice
-                login.environment = self.accountEnvironment
-                if provider == .fx {
-                    let output = Pipe()
-                    login.standardOutput = output
-                    self.loginText = ""
-                    self.loginChallengeSent = false
-                    self.loginOutput = output.fileHandleForReading
-                    output.fileHandleForReading.readabilityHandler = { [weak self] handle in
-                        let data = handle.availableData
-                        if data.isEmpty { handle.readabilityHandler = nil; return }
-                        self?.queue.async {
-                            guard let self, self.accountProcess === login, !self.loginChallengeSent else { return }
-                            self.loginText += String(decoding: data, as: UTF8.self)
-                            self.loginText = String(self.loginText.prefix(16_384))
-                            if let challenge = FxProtocol.loginChallenge(self.loginText) {
-                                self.loginChallengeSent = true
-                                self.loginText = ""
-                                self.client?.signInChallenge(challenge.url.absoluteString, code: challenge.code)
-                            }
+                let environment = self.accountEnvironment
+                self.runLogin(executable: executable, arguments: provider == .fx ? ["login"] : ["auth", "login", "--claudeai"],
+                              environment: environment, name: provider.displayName,
+                              challenge: provider == .fx ? FxProtocol.loginChallenge : nil,
+                              status: { try provider == .fx ? FxInspection.status(executable: executable, environment: environment).authenticated
+                                  : self.claudeAuthenticationStatus(executable) },
+                              reply: reply)
+            } catch { reply(false, error.localizedDescription) }
+        }
+    }
+
+    func checkProfileAuthentication(profileID: String, executablePath: String,
+                                    withReply reply: @escaping (Bool, String?) -> Void) {
+        queue.async {
+            do {
+                let account = try self.profileAccount(profileID, executablePath: executablePath)
+                reply(try account.status(), nil)
+            } catch { reply(false, error.localizedDescription) }
+        }
+    }
+
+    func signInProfile(profileID: String, executablePath: String,
+                       withReply reply: @escaping (Bool, String?) -> Void) {
+        queue.async { [self] in
+            do {
+                let account = try self.profileAccount(profileID, executablePath: executablePath)
+                guard let arguments = HarnessProfileLogin.arguments(account.provider) else {
+                    throw HostError("This harness does not support this sign-in flow.")
+                }
+                self.runLogin(executable: account.executable, arguments: arguments, environment: account.environment,
+                              name: account.provider.displayName,
+                              challenge: { HarnessProfileLogin.challenge(provider: account.provider, text: $0) },
+                              status: account.status, reply: reply)
+            } catch { reply(false, error.localizedDescription) }
+        }
+    }
+
+    private struct ProfileAccount {
+        let provider: HarnessProvider
+        let executable: URL
+        let environment: [String: String]
+        let status: () throws -> Bool
+    }
+
+    /// Everything here derives from the profile's identifier. The caller
+    /// cannot supply a folder, an environment, or a command.
+    private func profileAccount(_ profileID: String, executablePath: String) throws -> ProfileAccount {
+        guard let id = UUID(uuidString: profileID) else { throw HostError("Invalid profile identifier.") }
+        let profiles = HostPaths.profiles
+        let profile = try profiles.validated(id)
+        let provider = profile.provider
+        guard HarnessProfileLogin.arguments(provider) != nil else { throw HostError("This harness does not support this sign-in flow.") }
+        let executable = try HostPaths.executable(executablePath, provider: provider)
+        let environment = accountEnvironment.merging(profiles.environment(profile)) { _, profile in profile }
+        return ProfileAccount(provider: provider, executable: executable, environment: environment) {
+            switch provider {
+            case .grokBuild:
+                return try GrokInspection.inspect(home: HostPaths.home, environment: environment).authenticated
+            case .muse:
+                guard !profiles.loginIsShared(profile) else {
+                    throw HostError("This Muse Code version saved the sign-in to the shared Keychain item, so it cannot be kept as a separate profile.")
+                }
+                return MuseAuthentication.inspect(home: HostPaths.home, environment: environment) == .authenticated
+            default: throw HostError("This harness does not support this sign-in flow.")
+            }
+        }
+    }
+
+    /// One account command at a time. Output is read only to find the sign-in
+    /// challenge; nothing else the harness prints leaves the host.
+    private func runLogin(executable: URL, arguments: [String], environment: [String: String], name: String,
+                          challenge: ((String) -> HarnessSignInChallenge?)?, status: @escaping () throws -> Bool,
+                          reply: @escaping (Bool, String?) -> Void) {
+        do {
+            let login = Process()
+            login.executableURL = executable
+            login.arguments = arguments
+            login.currentDirectoryURL = FileManager.default.temporaryDirectory
+            login.standardInput = FileHandle.nullDevice
+            login.standardOutput = FileHandle.nullDevice
+            login.standardError = FileHandle.nullDevice
+            login.environment = environment
+            if let challenge {
+                let output = Pipe()
+                login.standardOutput = output
+                login.standardError = output
+                self.loginText = ""
+                self.loginChallengeSent = false
+                self.loginOutput = output.fileHandleForReading
+                output.fileHandleForReading.readabilityHandler = { [weak self] handle in
+                    let data = handle.availableData
+                    if data.isEmpty { handle.readabilityHandler = nil; return }
+                    self?.queue.async {
+                        guard let self, self.accountProcess === login, !self.loginChallengeSent else { return }
+                        self.loginText += String(decoding: data, as: UTF8.self)
+                        self.loginText = String(self.loginText.prefix(16_384))
+                        if let challenge = challenge(self.loginText) {
+                            self.loginChallengeSent = true
+                            self.loginText = ""
+                            self.client?.signInChallenge(challenge.url.absoluteString, code: challenge.code)
                         }
                     }
                 }
-                login.terminationHandler = { [weak self] login in
-                    self?.queue.async {
-                        guard let self, self.accountProcess === login else { return }
-                        self.accountProcess = nil
-                        self.loginOutput?.readabilityHandler = nil
-                        self.loginOutput = nil
-                        self.loginText = ""
-                        do {
-                            guard login.terminationStatus == 0 else {
-                                throw HostError("\(provider.displayName) sign-in did not complete. Try signing in from Terminal.")
-                            }
-                            reply(try provider == .fx ? FxInspection.status(executable: executable, environment: self.accountEnvironment).authenticated : self.claudeAuthenticationStatus(executable), nil)
-                        } catch { reply(false, error.localizedDescription) }
-                    }
+            }
+            login.terminationHandler = { [weak self] login in
+                self?.queue.async {
+                    guard let self, self.accountProcess === login else { return }
+                    self.accountProcess = nil
+                    self.loginOutput?.readabilityHandler = nil
+                    self.loginOutput = nil
+                    self.loginText = ""
+                    do {
+                        guard login.terminationStatus == 0 else {
+                            throw HostError("\(name) sign-in did not complete. Try signing in from Terminal.")
+                        }
+                        reply(try status(), nil)
+                    } catch { reply(false, error.localizedDescription) }
                 }
-                try login.run()
-                self.accountProcess = login
-            } catch { reply(false, error.localizedDescription) }
-        }
+            }
+            try login.run()
+            self.accountProcess = login
+        } catch { reply(false, error.localizedDescription) }
     }
 
     private var accountEnvironment: [String: String] {

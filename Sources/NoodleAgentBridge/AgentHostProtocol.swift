@@ -68,6 +68,12 @@ public enum AgentHostIdentity {
         executablePath: String,
         withReply reply: @escaping (Bool, String?) -> Void
     )
+    /// The profile is named by identifier only; the host resolves its folder
+    /// in Noodle's storage and derives the harness and environment from it.
+    func checkProfileAuthentication(profileID: String, executablePath: String,
+                                    withReply reply: @escaping (Bool, String?) -> Void)
+    func signInProfile(profileID: String, executablePath: String,
+                       withReply reply: @escaping (Bool, String?) -> Void)
     func fxModels(executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
     func inspectGrok(withReply reply: @escaping (Data?, String?) -> Void)
     func inspectOpenCode(withReply reply: @escaping (Data?, String?) -> Void)

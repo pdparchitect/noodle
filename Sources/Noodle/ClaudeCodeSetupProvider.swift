@@ -45,7 +45,7 @@ final class HarnessAccountOperation {
 
     init() throws { connection = try ExtendedAgentConnection() }
 
-    func run(executablePath: String, signIn: Bool, provider: HarnessProvider = .claudeCode,
+    func run(executablePath: String, signIn: Bool, provider: HarnessProvider = .claudeCode, profile: UUID? = nil,
              onChallenge: (@MainActor (HarnessSignInChallenge) -> Void)? = nil) async throws -> HarnessAuthenticationStatus {
         try await withTaskCancellationHandler {
             try Task.checkCancellation()
@@ -56,7 +56,9 @@ final class HarnessAccountOperation {
                 }
                 connection.onSignInChallenge = { url, code in
                     Task { @MainActor in
-                        if let challenge = FxProtocol.loginChallenge("Open \(url)\nCode: \(code)\n") { onChallenge?(challenge) }
+                        let challenge = profile == nil ? FxProtocol.loginChallenge("Open \(url)\nCode: \(code)\n")
+                            : HarnessProfileLogin.challenge(provider: provider, url: url, code: code)
+                        if let challenge { onChallenge?(challenge) }
                     }
                 }
                 timeout = Task { [weak self] in
@@ -71,7 +73,10 @@ final class HarnessAccountOperation {
                         else { self.finish(.success(authenticated ? .authenticated : .unauthenticated)) }
                     }
                 }
-                if signIn {
+                if let profile {
+                    if signIn { connection.signInProfile(profile: profile, executablePath: executablePath, reply: reply) }
+                    else { connection.checkProfileAuthentication(profile: profile, executablePath: executablePath, reply: reply) }
+                } else if signIn {
                     connection.signIn(provider: provider, executablePath: executablePath, reply: reply)
                 } else {
                     connection.checkAuthentication(provider: provider, executablePath: executablePath, reply: reply)

@@ -31,23 +31,34 @@ Apps connected to ChatGPT or Claude.ai are off by default for Noodle bots. Enabl
 is separate for each bot and harness; [account apps](security.md#account-apps)
 explains the scope and how it differs from Noodle's assigned tools.
 
-## Codex profiles
+## Profiles
 
-Codex can be signed in to several accounts at once. Under Codex in
-**Settings → Harness**, choose **Profiles…**, then **Add Profile…**, name it, and
-choose **Sign In…** beside it. Choose the profile for a bot in **Edit Bot → Harness → Profile**; the row
-appears once a profile exists. **System** is the default and is the Codex login
-already on this Mac, shared with the Codex CLI and other apps.
+Codex, Grok Build, and Muse Code can each be signed in to several accounts at
+once. Under the harness in **Settings → Harness**, choose **Profiles…**, then
+**Add Profile…**, name it, and choose **Sign In…** beside it. Noodle shows the
+harness's device code and a button for its sign-in page. Choose the profile for a
+bot in **Edit Bot → Harness → Profile**; the row appears once that harness has a
+profile. **System** is the default and is the harness login already on this Mac,
+shared with its CLI and other apps.
 
-Every profile runs the same Codex installation. A profile holds only its own
-Codex home inside Noodle's storage, with the login kept in a file there, not
-in the Keychain. A restricted bot receives a copy of its profile's login, as it
-does from System. An unrestricted bot on a profile uses the profile's Codex home
-for configuration and sessions, so settings in `~/.codex/config.toml` do not
-apply to it and its Codex thread starts again when the profile changes. The
-model list in the bot editor comes from the System login. Deleting a profile
-removes its login from Noodle and returns its bots to System. Other harnesses
-use the System login only.
+Every profile runs the same harness installation. A profile holds only its own
+configuration folder inside Noodle's storage, with the login kept in a file
+there, not in the Keychain:
+
+| Harness | Profile folder is passed as | Notes |
+| --- | --- | --- |
+| Codex | `CODEX_HOME` | |
+| Grok Build | `GROK_HOME` | Grok sign-ins expire after seven days; sign the profile in again from **Profiles…**. |
+| Muse Code | `XDG_CONFIG_HOME`, with `TBH_CREDENTIAL_BACKEND=file` | A Muse version that still saves the sign-in to its shared Keychain item is reported as an error, because that login would not be separate. |
+
+A restricted bot receives a copy of its profile's login, as it does from System,
+and never the System Keychain login. An unrestricted bot on a profile uses the
+profile's folder for the harness's configuration, so settings in `~/.codex`,
+`~/.grok`, or `~/.config/muse` do not apply to it, and a Codex thread starts
+again when the profile changes. The model list in the bot editor comes from the
+System login. Deleting a profile removes its login from Noodle and returns its
+bots to System. Claude Code, FX, OpenCode, and Apple Intelligence use the System
+login only.
 
 ## OpenCode v2
 
