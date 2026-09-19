@@ -10,8 +10,12 @@ final class UpdateRelaunchTests: XCTestCase {
         let updater = try String(contentsOf: root.appendingPathComponent("Sources/Noodle/AppUpdater.swift"))
         let app = try String(contentsOf: root.appendingPathComponent("Sources/Noodle/NoodleApp.swift"))
         let store = try String(contentsOf: root.appendingPathComponent("Sources/Noodle/NoodleStore.swift"))
-        XCTAssertTrue(updater.contains("updaterDelegate: nil"))
+        // The updater delegate only observes whether an update was found.
+        XCTAssertTrue(updater.contains("userDriverDelegate: nil"))
         XCTAssertFalse(updater.contains("shouldPostponeRelaunchForUpdate"))
+        XCTAssertFalse(updater.contains("shouldProceedWithUpdate"))
+        XCTAssertFalse(updater.contains("mayPerform"))
+        XCTAssertFalse(updater.contains("updaterShouldRelaunchApplication"))
         XCTAssertFalse(updater.contains("NoodleStore.active"))
         XCTAssertFalse(updater.contains("isWaitingToRelaunch"))
         // Window restoration may observe Quit, but must not delay or veto it.
