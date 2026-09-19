@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-19
+
 ### Added
 
 - Show when a newer version is available in Settings > Update, and badge the Update tab on macOS 26 and later. The app asks its updater when Settings opens, without offering the update; versions you chose to skip are not announced.
@@ -26,6 +28,7 @@
 
 ### Fixed
 
+- Stay out of the Dock and app switcher when Show in Dock is off; opening a window or a request from Noodle no longer brings the Dock icon back.
 - Keep the Downloads title at the same height as the History and Bookmarks titles so it no longer shifts when switching views.
 - Read a chosen icon image in the background, so a large file no longer freezes the icon editor.
 - Say that an unreadable icon image could not be used, instead of asking for one smaller than 50 MB.

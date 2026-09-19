@@ -2,8 +2,11 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-19
+
 ### Fixed
 
+- Stay out of the Dock and app switcher when Show in Dock is off; opening a window or a request from Noodle no longer brings the Dock icon back.
 - Read a chosen icon image in the background, so a large file no longer freezes the icon editor.
 - Say that an unreadable icon image could not be used, instead of asking for one smaller than 50 MB.
 
