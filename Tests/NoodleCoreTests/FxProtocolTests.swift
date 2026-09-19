@@ -8,6 +8,23 @@ final class FxProtocolTests: XCTestCase {
         XCTAssertFalse(unknown.contains("secret-account-token"))
         XCTAssertTrue(unknown.contains("Kick in Settings → Harness"))
     }
+    func testSkillDiscoveryNoticeDropsOnlyRootsHiddenByTheSandbox() {
+        func root(_ path: String) -> String {
+            "inventory incomplete because root \"\(path)\" could not be read, so an unknown number of skills may be missing; fix access to the root and reload skills"
+        }
+        let tail = "1 additional diagnostic omitted; relaunch with FX_TRACE=1 to write a trace log"
+        let prefix = "skill discovery warning: "
+        let hidden = prefix + [root("/Users/me/.fx/skills"), root("/Users/me/.claude/skills"), tail].joined(separator: "; ")
+        XCTAssertNil(FxProtocol.skillDiscoveryNotice(hidden))
+        XCTAssertNil(FxProtocol.skillDiscoveryNotice(prefix + root("/Users/me/.codex/skills")))
+        let invalid = "candidate \"/c/Noodle/Agents/A/workspace/.agents/skills/bad\" was skipped because its metadata is invalid (missing_name); use one safe name, then reload skills"
+        XCTAssertEqual(FxProtocol.skillDiscoveryNotice(prefix + [invalid, root("/Users/me/.fx/skills")].joined(separator: "; ")), prefix + invalid)
+        let own = prefix + root("/c/Noodle/Agents/A/workspace/.agents/skills")
+        XCTAssertEqual(FxProtocol.skillDiscoveryNotice(own), own)
+        XCTAssertEqual(FxProtocol.skillDiscoveryNotice(prefix + invalid), prefix + invalid)
+        XCTAssertEqual(FxProtocol.skillDiscoveryNotice("Done."), "Done.")
+    }
+
     func testHeldReviewsAreNotSuccessfulToolRuns() {
         let content: [[String: Any]] = [["content": ["type": "text", "text": #"{"error":{"type":"tool_review_held","held":true}}"#]]]
         XCTAssertTrue(FxProtocol.reviewWasHeld(["sessionUpdate": "tool_call_update", "status": "failed", "content": content]))

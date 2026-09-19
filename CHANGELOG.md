@@ -22,6 +22,7 @@ All notable changes to Noodle are documented here, following
 - Check OpenCode's latest release again in Settings > Harness. Noodle rejected the provider's release information whenever its rollout flag was off, so OpenCode showed "Could not check the latest release" and never offered an update.
 - Reclaim the partial files of a local model download or import that was interrupted by a crash or force quit. Noodle now deletes them at launch and before the next download or import, so they no longer hold disk space or count against the free-space check.
 - List a local model whose stored information is damaged as Unreadable Model in Local Models so its weights can be removed; it previously disappeared from the list while staying on disk.
+- Stop restricted FX bots from logging a "skill discovery warning" on their first prompt. FX reported every account folder above the workspace that the sandbox hides, such as `~/.claude/skills`, as bot output. Noodle now leaves those out of the activity log and still shows problems with the bot's own skills.
 - Limit the height of the affected-bots list that opens from a harness's status in Settings > Harness and scroll it when many bots need a kick; it previously grew past the screen with no way to reach the bots at the bottom.
 
 ## [0.20.0] - 2026-09-19

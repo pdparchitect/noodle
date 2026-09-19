@@ -37,6 +37,27 @@ public enum FxProtocol {
             return error["type"] as? String == "tool_review_held" && error["held"] as? Bool == true
         }
     }
+    /// FX walks the workspace's ancestors for skills and reports every account
+    /// folder the restricted sandbox hides, such as the login home's `.claude`,
+    /// as an assistant message. Those roots are hidden by design. Returns the
+    /// text without them, or nil when nothing else was reported. Problems with
+    /// the bot's own skills, and unrecognized wording, are kept.
+    public static func skillDiscoveryNotice(_ text: String) -> String? {
+        let prefix = "skill discovery warning: "
+        guard text.hasPrefix(prefix) else { return text }
+        var kept = [String](), hidden = false, droppedRoot = false
+        for clause in text.dropFirst(prefix.count).components(separatedBy: "; ") {
+            if clause.hasPrefix("inventory incomplete because root \"") {
+                droppedRoot = !clause.contains("/Noodle/Agents/")
+                hidden = hidden || droppedRoot
+            } else if !(droppedRoot && clause.hasPrefix("fix access to the root")) { droppedRoot = false }
+            if !droppedRoot { kept.append(clause) }
+        }
+        guard hidden else { return text }
+        // An omitted count and trace hint alone describe only the hidden roots.
+        let reported = kept.filter { !$0.contains("additional diagnostic") && !$0.hasPrefix("relaunch with FX_TRACE") }
+        return reported.isEmpty ? nil : prefix + kept.joined(separator: "; ")
+    }
     public static func validIdentifier(_ value: String) -> Bool {
         !value.isEmpty && value.utf8.count <= 256 && !value.hasPrefix("-") &&
         value.unicodeScalars.allSatisfy { !CharacterSet.controlCharacters.contains($0) && !CharacterSet.whitespacesAndNewlines.contains($0) }

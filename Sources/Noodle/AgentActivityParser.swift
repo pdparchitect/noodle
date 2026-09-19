@@ -109,7 +109,8 @@ enum AgentActivityParser {
             guard let title = update["title"] as? String, !title.isEmpty else { return [] }
             return [.init(title: title)]
         case "agent_message_chunk", "agent_thought_chunk":
-            let text = contentText(update["content"])
+            var text = contentText(update["content"])
+            if provider == .fx && type == "agent_message_chunk" { text = FxProtocol.skillDiscoveryNotice(text) ?? "" }
             if provider == .apple && text == "Working" { return [.init(title: "Working", streamID: "apple-working")] }
             return textEvent(type == "agent_message_chunk" ? "Output" : "Reasoning summary", text,
                              stream: type, appending: true)

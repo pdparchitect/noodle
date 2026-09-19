@@ -24,6 +24,11 @@ import XCTest
         XCTAssertFalse(log.text.contains("Reasoning summary"))
         let status: [String: Any] = ["method": "session/update", "params": ["update": ["sessionUpdate": "noodle_activity", "title": "Apple only"]]]
         XCTAssertTrue(AgentActivityParser.events(status, provider: .fx).isEmpty)
+        let hiddenRoots = "skill discovery warning: inventory incomplete because root \"/Users/me/.claude/skills\" could not be read, so an unknown number of skills may be missing; fix access to the root and reload skills"
+        let notice: [String: Any] = ["method": "session/update", "params": ["update": ["sessionUpdate": "agent_message_chunk",
+            "content": ["type": "text", "text": hiddenRoots]]]]
+        XCTAssertTrue(AgentActivityParser.events(notice, provider: .fx).isEmpty)
+        XCTAssertEqual(AgentActivityParser.events(notice, provider: .grokBuild).first?.detail, hiddenRoots)
     }
 
     func testStreamCoalescingCompletionAndLifecycleBoundaries() {
