@@ -24,8 +24,6 @@ struct CompanionAppsSettingsView: View {
                     ForEach(CompanionApp.allCases) { app in
                         companionRow(app)
                     }
-                } footer: {
-                    Text("Install companion apps to give your bots more ways to work. Open an installed app to manage it and check for updates.")
                 }
             }
             .formStyle(.grouped)
