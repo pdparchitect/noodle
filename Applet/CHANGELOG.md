@@ -18,6 +18,7 @@
 - Run Swift noodlets that use `.task`, `if #available` or other back-deployed APIs instead of exiting at startup with a missing `__isPlatformVersionAtLeast` symbol.
 - Report the first line a Swift noodlet wrote to standard error when it exits during startup or fails later, instead of only an exit status.
 - Stop reporting a capture warning from Applet's own runtime in every Swift noodlet's build log.
+- Open noodlets from the library in Noodle Applet Dev instead of failing with "The caller belongs to a different Applet environment."
 
 ## [0.5.0] - 2026-09-19
 

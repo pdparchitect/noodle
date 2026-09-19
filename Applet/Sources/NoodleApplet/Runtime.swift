@@ -561,7 +561,7 @@ import AppletCore
       request.path = package.url.path
       request.mode = "foreground"
       request.owner = owners[package.key] ?? "local"
-      let result = await handle(request, identity: "com.pdparchitect.noodle")
+      let result = await handle(request, identity: AppletBuildIdentity.current.noodleID)
       if let error = result.error { self.error = error }
     }
   }
