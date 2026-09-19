@@ -40,6 +40,30 @@ import XCTest
         XCTAssertEqual(f.store.draft(for: f.directA.id), "Existing draft")
     }
 
+    func testHarnessProfileSavesWithSettingsAndDeletingItReturnsBotsToSystem() throws {
+        let f = try fixture()
+        let profile = try f.store.harnessProfiles.create(provider: .codex, named: "Work")
+        func save(_ selection: UUID??, harness: HarnessProvider = .codex) -> Bool {
+            f.store.updateAgent(f.a, name: "Profile bot", harnessIdentifier: harness.rawValue, modelIdentifier: nil,
+                reasoningEffort: nil, avatarSymbolName: "sparkles", avatarColorIndex: 3, avatarImageData: nil,
+                publicDescription: "", backstory: "Backstory", harnessProfile: selection)
+        }
+        XCTAssertTrue(save(.some(profile.id)), f.store.errorMessage ?? "")
+        XCTAssertEqual(try f.repository.loadAgentHarnessProfile(f.a), profile.id)
+        // A save that does not mention the profile keeps it.
+        XCTAssertTrue(save(nil), f.store.errorMessage ?? "")
+        XCTAssertEqual(f.store.harnessProfile(for: try XCTUnwrap(f.store.agents.first { $0.id == f.a.id })), profile.id)
+        // A profile never follows the bot to another harness.
+        XCTAssertTrue(save(nil, harness: .claudeCode), f.store.errorMessage ?? "")
+        XCTAssertNil(try f.repository.loadAgentHarnessProfile(f.a))
+
+        XCTAssertTrue(save(.some(profile.id)), f.store.errorMessage ?? "")
+        f.store.deleteHarnessProfile(profile)
+        XCTAssertNil(f.store.errorMessage)
+        XCTAssertNil(try f.repository.loadAgentHarnessProfile(f.a))
+        XCTAssertEqual(f.store.harnessProfiles.profiles, [])
+    }
+
     func testSharedFoldersSaveWithSettingsAndInvalidOnesRollBackTheWholeSave() throws {
         let f = try fixture()
         let shared = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-shared-\(UUID())", isDirectory: true)

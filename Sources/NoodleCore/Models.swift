@@ -854,6 +854,19 @@ public struct WorkspaceRepository: Sendable {
         try configuration.save(to: layout)
     }
 
+    public func loadAgentHarnessProfile(_ agent: AgentRecord) throws -> UUID? {
+        try AgentConfiguration.load(from: storage(for: agent.id)).harnessProfile
+    }
+
+    public func updateAgentHarnessProfile(_ agent: AgentRecord, profile: UUID?) throws {
+        let layout = storage(for: agent.id)
+        var configuration = try AgentConfiguration.load(from: layout)
+        configuration.harnessProfile = profile
+        try configuration.save(to: layout)
+    }
+
+    public var harnessProfiles: HarnessProfileStore { HarnessProfileStore(root: rootURL) }
+
     public func importAttachment(
         from sourceURL: URL,
         into conversationID: UUID,

@@ -6,13 +6,15 @@ struct AgentConfiguration: Codable {
     var agent: AgentRecord
     var backstory: String?
     var folders: [AgentFolder] = []
+    /// Nil selects the system profile: the harness's login in the user's home.
+    var harnessProfile: UUID?
 
     init(agent: AgentRecord, backstory: String) {
         self.agent = agent
         self.backstory = backstory
     }
 
-    private enum CodingKeys: String, CodingKey { case backstory, folders }
+    private enum CodingKeys: String, CodingKey { case backstory, folders, harnessProfile }
 
     init(from decoder: Decoder) throws {
         agent = try AgentRecord(from: decoder)
@@ -21,6 +23,7 @@ struct AgentConfiguration: Codable {
         // values are corruption, not a request to reimport generated Markdown.
         backstory = values.contains(.backstory) ? try values.decode(String.self, forKey: .backstory) : nil
         folders = try values.decodeIfPresent([AgentFolder].self, forKey: .folders) ?? []
+        harnessProfile = try values.decodeIfPresent(UUID.self, forKey: .harnessProfile)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -28,6 +31,7 @@ struct AgentConfiguration: Codable {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encodeIfPresent(backstory, forKey: .backstory)
         if !folders.isEmpty { try values.encode(folders, forKey: .folders) }
+        try values.encodeIfPresent(harnessProfile, forKey: .harnessProfile)
     }
 
     func requireBackstory() throws -> String {

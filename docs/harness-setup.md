@@ -31,6 +31,24 @@ Apps connected to ChatGPT or Claude.ai are off by default for Noodle bots. Enabl
 is separate for each bot and harness; [account apps](security.md#account-apps)
 explains the scope and how it differs from Noodle's assigned tools.
 
+## Codex profiles
+
+Codex can be signed in to several accounts at once. Under Codex in
+**Settings → Harness**, choose **Profiles…**, then **Add Profile…**, name it, and
+choose **Sign In…** beside it. Choose the profile for a bot in **Edit Bot → Harness → Profile**; the row
+appears once a profile exists. **System** is the default and is the Codex login
+already on this Mac, shared with the Codex CLI and other apps.
+
+Every profile runs the same Codex installation. A profile holds only its own
+Codex home inside Noodle's storage, with the login kept in a file there, not
+in the Keychain. A restricted bot receives a copy of its profile's login, as it
+does from System. An unrestricted bot on a profile uses the profile's Codex home
+for configuration and sessions, so settings in `~/.codex/config.toml` do not
+apply to it and its Codex thread starts again when the profile changes. The
+model list in the bot editor comes from the System login. Deleting a profile
+removes its login from Noodle and returns its bots to System. Other harnesses
+use the System login only.
+
 ## OpenCode v2
 
 Install the native CLI using [OpenCode’s v2 installer](https://opencode.ai/v2/docs):

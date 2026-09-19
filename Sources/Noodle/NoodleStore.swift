@@ -110,6 +110,7 @@ final class NoodleStore {
     let computers: ComputerController
     let browsers: BrowserController
     let applets: AppletController
+    let harnessProfiles: HarnessProfilesController
     let runtime: AgentRuntimeCoordinator
     private let connectsServices: Bool
     private var transcriptRefreshTask: Task<Void, Never>?
@@ -146,6 +147,7 @@ final class NoodleStore {
         computers = ComputerController(repository: self.repository)
         browsers = BrowserController(repository: self.repository)
         applets = AppletController(repository: self.repository)
+        harnessProfiles = HarnessProfilesController(store: self.repository.harnessProfiles)
         reload()
         Self.active = self
     }
@@ -258,7 +260,8 @@ final class NoodleStore {
         mcpConnectionIDs: Set<UUID> = [],
         computerIDs: Set<UUID> = [],
         browserIDs: Set<UUID> = [],
-        folders: [AgentFolder] = []
+        folders: [AgentFolder] = [],
+        harnessProfile: UUID? = nil
     ) -> Bool {
         guard runtime.availableInstallations.contains(where: { $0.provider.rawValue == harnessIdentifier }) else {
             errorMessage = "Set up a supported harness in Settings before creating a bot."
@@ -279,6 +282,9 @@ final class NoodleStore {
             )
             created = result
             if !folders.isEmpty { try repository.updateAgentFolders(result.agent, folders: folders) }
+            if let profile = validHarnessProfile(harnessProfile, harnessIdentifier: harnessIdentifier) {
+                try repository.updateAgentHarnessProfile(result.agent, profile: profile)
+            }
             try mcp.assign(mcpConnectionIDs, to: result.agent, synchronizeWorkspace: false)
             try computers.assign(computerIDs, to: result.agent, synchronizeWorkspace: false)
             try browsers.assign(browserIDs, to: result.agent, synchronizeWorkspace: false)
@@ -326,7 +332,8 @@ final class NoodleStore {
         mcpConnectionIDs: Set<UUID>? = nil,
         computerIDs: Set<UUID>? = nil,
         browserIDs: Set<UUID>? = nil,
-        folders: [AgentFolder]? = nil
+        folders: [AgentFolder]? = nil,
+        harnessProfile: UUID?? = nil
     ) -> Bool {
         var checkpoint: AgentSettingsCheckpoint?
         let updated: AgentRecord
@@ -352,6 +359,10 @@ final class NoodleStore {
             }
             try repository.updateAgentBackstory(updated, backstory: backstory)
             if let folders { try repository.updateAgentFolders(updated, folders: folders) }
+            // Nil keeps the saved profile, unless the harness no longer matches it.
+            let savedProfile = try repository.loadAgentHarnessProfile(updated)
+            let profile = validHarnessProfile(harnessProfile ?? savedProfile, harnessIdentifier: harnessIdentifier)
+            if profile != savedProfile { try repository.updateAgentHarnessProfile(updated, profile: profile) }
             if let mcpConnectionIDs { try mcp.assign(mcpConnectionIDs, to: updated, synchronizeWorkspace: false) }
             if let computerIDs { try computers.assign(computerIDs, to: updated, synchronizeWorkspace: false) }
             if let browserIDs { try browsers.assign(browserIDs, to: updated, synchronizeWorkspace: false) }
@@ -398,6 +409,27 @@ final class NoodleStore {
         } catch {
             errorMessage = error.localizedDescription
             return ""
+        }
+    }
+
+    func harnessProfile(for agent: AgentRecord) -> UUID? {
+        validHarnessProfile(try? repository.loadAgentHarnessProfile(agent), harnessIdentifier: agent.harnessIdentifier ?? "")
+    }
+
+    private func validHarnessProfile(_ id: UUID?, harnessIdentifier: String) -> UUID? {
+        guard let profile = harnessProfiles.profile(id), profile.provider.rawValue == harnessIdentifier else { return nil }
+        return profile.id
+    }
+
+    /// Bots on a deleted profile return to the system profile, never to another account.
+    func deleteHarnessProfile(_ profile: HarnessProfile) {
+        do {
+            let affected = agents.filter { (try? repository.loadAgentHarnessProfile($0)) == profile.id }
+            for agent in affected { try repository.updateAgentHarnessProfile(agent, profile: nil) }
+            try harnessProfiles.delete(profile)
+            for agent in affected { runtime.restart(agent: agent, repository: repository) }
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 

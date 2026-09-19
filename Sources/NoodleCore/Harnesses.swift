@@ -22,6 +22,9 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
         }
     }
 
+    /// Harnesses whose whole login lives in one relocatable configuration home.
+    public var supportsProfiles: Bool { self == .codex }
+
     public var displayName: String {
         switch self {
         case .apple: return "Apple Intelligence"

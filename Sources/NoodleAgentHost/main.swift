@@ -37,6 +37,10 @@ private enum HostPaths {
         home.appendingPathComponent("Library/Containers/\(AgentHostIdentity.application)", isDirectory: true)
     }
 
+    static var profiles: HarnessProfileStore {
+        HarnessProfileStore(root: container.appendingPathComponent("Data/Library/Application Support/Noodle", isDirectory: true))
+    }
+
     static func workspace(_ id: String) throws -> URL {
         guard let uuid = UUID(uuidString: id) else { throw HostError("Invalid bot identifier.") }
         let root = home.appendingPathComponent("Library/Containers/\(AgentHostIdentity.application)/Data/Library/Application Support/Noodle/Agents", isDirectory: true).resolvingSymlinksInPath()
@@ -93,6 +97,11 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
         guard !appsEnabled || provider.supportsAccountApps else { throw HostError("This harness does not support account apps.") }
         guard restricted || CommandLine.arguments[9] == "autonomous",
               !restricted || provider.supportsRestrictedAccess else { throw HostError("Unsupported runtime access mode.") }
+        // The profile comes from the bot's own agent.json and is resolved here
+        // to a folder in Noodle's storage. The XPC caller cannot supply a path.
+        let profiles = HostPaths.profiles
+        let harnessProfile = try profiles.selected(workspace: workspace, provider: provider)
+        let loginHome = harnessProfile.map(profiles.loginHome) ?? HostPaths.home
         try isolateProcessGroup()
         guard chdir(workspace.path) == 0 else { throw HostError("Could not open the bot workspace: \(String(cString: strerror(errno)))") }
         var strings: [String]
@@ -132,7 +141,7 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
         if restricted {
             let layout = AgentStorageLayout(workspace: workspace)
             let repository = layout.package.deletingLastPathComponent().deletingLastPathComponent()
-            try RestrictedHarnessStorage.prepare(provider: provider, workspace: workspace, loginHome: HostPaths.home)
+            try RestrictedHarnessStorage.prepare(provider: provider, workspace: workspace, loginHome: loginHome)
             let privateHome = RestrictedHarnessStorage.home(workspace: workspace)
             let codexHome = privateHome.appendingPathComponent(".codex", isDirectory: true)
             let temporary = workspace.appendingPathComponent(".noodle/tmp", isDirectory: true)
@@ -176,6 +185,8 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
                     environment: ProcessInfo.processInfo.environment, profile: profile)
             }
             strings = ["/usr/bin/sandbox-exec", "-p", profile] + strings
+        } else if let harnessProfile, provider == .codex {
+            setenv("CODEX_HOME", profiles.accountHome(harnessProfile).path, 1)
         }
         var arguments: [UnsafeMutablePointer<CChar>?] = strings.map { value in value.withCString { strdup($0) } }
         arguments.append(nil)

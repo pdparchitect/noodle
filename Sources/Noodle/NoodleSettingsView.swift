@@ -402,6 +402,7 @@ struct HarnessInstallationRow: View {
     @State private var showsUpdateGuide = false
     @State private var showsExperimentalInfo = false
     @State private var showsLocalModels = false
+    @State private var showsProfiles = false
     @State private var kickRequest: AgentKickRequest?
     @State private var showsAgentIssues = false
     @Environment(\.openURL) private var openURL
@@ -633,8 +634,20 @@ struct HarnessInstallationRow: View {
                 Text(error).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             }
         }
-        if version?.updateAvailable == true {
-            Button("Update Instructions…") { showsUpdateGuide.toggle() }
+        if id.supportsProfiles || version?.updateAvailable == true {
+            HStack {
+                if id.supportsProfiles {
+                    Button("Profiles…") { showsProfiles = true }
+                        .sheet(isPresented: $showsProfiles) {
+                            HarnessProfilesView(installation: liveInstallation ?? installation)
+                                .environment(store)
+                                .noodleSheetSizing(animated: true)
+                        }
+                }
+                if version?.updateAvailable == true {
+                    Button("Update Instructions…") { showsUpdateGuide.toggle() }
+                }
+            }
         }
         if version?.updateAvailable == true, showsUpdateGuide {
             let guide = HarnessVersionPolicy.updateGuide(for: installation)

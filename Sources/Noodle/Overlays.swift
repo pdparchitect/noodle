@@ -52,6 +52,7 @@ struct NewBotSheet: View {
     @State private var computerIDs: Set<UUID> = []
     @State private var browserIDs: Set<UUID> = []
     @State private var folders: [AgentFolder] = []
+    @State private var selectedProfileID: UUID?
     @State private var selectedTab = BotEditorTab.general
     @FocusState private var nameFocused: Bool
 
@@ -129,7 +130,8 @@ struct NewBotSheet: View {
                             set: { selectedHarnessIdentifier = $0; hasChosenHarness = true }
                         ),
                         selectedModelIdentifier: $selectedModelIdentifier,
-                        selectedEffort: $selectedEffort
+                        selectedEffort: $selectedEffort,
+                        selectedProfileID: $selectedProfileID
                     )
                     BotFolderPicker(folders: $folders)
                 case .mcp:
@@ -199,7 +201,8 @@ struct NewBotSheet: View {
             publicDescription: publicDescription,
             backstory: backstory,
             mcpConnectionIDs: mcpConnectionIDs,
-            computerIDs: computerIDs, browserIDs: browserIDs, folders: folders
+            computerIDs: computerIDs, browserIDs: browserIDs, folders: folders,
+            harnessProfile: selectedProfileID
         )
     }
 
@@ -248,6 +251,7 @@ struct EditBotSheet: View {
     @State private var computerIDs: Set<UUID> = []
     @State private var browserIDs: Set<UUID> = []
     @State private var folders: [AgentFolder] = []
+    @State private var selectedProfileID: UUID?
     @State private var confirmingDeletion = false
     @State private var selectedTab = BotEditorTab.general
     @State private var backgroundDraft: BackgroundSelection?
@@ -329,7 +333,8 @@ struct EditBotSheet: View {
                     AgentConfigurationFields(
                         selectedHarnessIdentifier: $selectedHarnessIdentifier,
                         selectedModelIdentifier: $selectedModelIdentifier,
-                        selectedEffort: $selectedEffort
+                        selectedEffort: $selectedEffort,
+                        selectedProfileID: $selectedProfileID
                     )
                     BotFolderPicker(folders: $folders)
                     Text("Saving restarts the bot. Its workspace and history stay unchanged.")
@@ -353,6 +358,7 @@ struct EditBotSheet: View {
             computerIDs = store.computers.selectedIDs(for: agent)
             browserIDs = store.browsers.selectedIDs(for: agent)
             folders = store.folders(for: agent)
+            selectedProfileID = store.harnessProfile(for: agent)
             if selectedHarnessIdentifier.isEmpty {
                 selectedHarnessIdentifier = store.runtime.availableInstallations.first?.provider.rawValue ?? ""
             }
@@ -420,7 +426,8 @@ struct EditBotSheet: View {
                 publicDescription: publicDescription,
                 backstory: backstory,
                 mcpConnectionIDs: mcpConnectionIDs,
-                computerIDs: computerIDs, browserIDs: browserIDs, folders: folders
+                computerIDs: computerIDs, browserIDs: browserIDs, folders: folders,
+                harnessProfile: .some(selectedProfileID)
             )
         }) {
             dismiss()

@@ -6,8 +6,15 @@ struct AgentConfigurationFields: View {
     @Binding var selectedHarnessIdentifier: String
     @Binding var selectedModelIdentifier: String
     @Binding var selectedEffort: String
+    @Binding var selectedProfileID: UUID?
     @State private var choosingHarness = false
+    @State private var choosingProfile = false
     @State private var choosingModel = false
+
+    private var profiles: [HarnessProfile] {
+        guard let selectedProvider, selectedProvider.supportsProfiles else { return [] }
+        return store.harnessProfiles.profiles(for: selectedProvider)
+    }
 
     private var models: [HarnessModel] {
         store.runtime.models(for: selectedHarnessIdentifier)
@@ -53,6 +60,22 @@ struct AgentConfigurationFields: View {
                         installations: store.runtime.availableInstallations,
                         selection: $selectedHarnessIdentifier
                     )
+                }
+
+                if !profiles.isEmpty {
+                    Divider().padding(.leading, 44)
+
+                    Button { choosingProfile = true } label: {
+                        RuntimeSelectionRow(
+                            title: "Profile",
+                            value: store.harnessProfiles.profile(selectedProfileID)?.displayName ?? "System",
+                            icon: AnyView(Image(systemName: "person.crop.circle"))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $choosingProfile, arrowEdge: .leading) {
+                        HarnessProfileChooser(profiles: profiles, selection: $selectedProfileID)
+                    }
                 }
 
                 Divider().padding(.leading, 44)
@@ -106,6 +129,7 @@ struct AgentConfigurationFields: View {
         .onChange(of: selectedHarnessIdentifier) { _, _ in
             selectedModelIdentifier = ""
             selectedEffort = ""
+            selectedProfileID = nil
         }
         .onChange(of: selectedModelIdentifier) { _, newValue in
             guard let model = models.first(where: { $0.id == newValue }) else {
@@ -206,6 +230,50 @@ struct HarnessChooser: View {
             .listStyle(.inset)
         }
         .frame(width: 300, height: max(110, min(320, 62 + CGFloat(installations.count) * 44)))
+    }
+}
+
+struct HarnessProfileChooser: View {
+    let profiles: [HarnessProfile]
+    @Binding var selection: UUID?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Choose Profile")
+                .font(.headline)
+                .padding(14)
+
+            Divider()
+
+            List {
+                profileButton(id: nil, name: "System")
+                ForEach(profiles) { profileButton(id: $0.id, name: $0.displayName) }
+            }
+            .listStyle(.inset)
+        }
+        .frame(width: 300, height: max(110, min(320, 62 + CGFloat(profiles.count + 1) * 44)))
+    }
+
+    private func profileButton(id: UUID?, name: String) -> some View {
+        Button {
+            selection = id
+            dismiss()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: id == nil ? "house" : "person.crop.circle")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                Text(name)
+                Spacer()
+                if selection == id {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.tint)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

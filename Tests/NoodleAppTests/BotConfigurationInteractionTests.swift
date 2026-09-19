@@ -9,6 +9,7 @@ import NoodleCore
     var harness = HarnessProvider.claudeCode.rawValue
     var model = "opus"
     var effort = "max"
+    var profile: UUID?
     func binding(_ key: ReferenceWritableKeyPath<ConfigurationSelection, String>) -> Binding<String> {
         Binding(get: { self[keyPath: key] }, set: { self[keyPath: key] = $0 })
     }
@@ -17,7 +18,8 @@ import NoodleCore
 @MainActor final class BotConfigurationInteractionTests: HiddenViewTests {
     private func fields(_ selection: ConfigurationSelection, fixture: StoreFixture) -> some View {
         AgentConfigurationFields(selectedHarnessIdentifier: selection.binding(\.harness),
-            selectedModelIdentifier: selection.binding(\.model), selectedEffort: selection.binding(\.effort))
+            selectedModelIdentifier: selection.binding(\.model), selectedEffort: selection.binding(\.effort),
+            selectedProfileID: Binding(get: { selection.profile }, set: { selection.profile = $0 }))
             .environment(fixture.store)
     }
     private func readyFixture() throws -> StoreFixture {
