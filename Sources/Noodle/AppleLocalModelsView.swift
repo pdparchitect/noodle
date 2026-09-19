@@ -52,7 +52,7 @@ struct AppleLocalModelsView: View {
                 modelContent
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                recommendedContent
+                availableContent
 
                 if let error {
                     Label(error, systemImage: "exclamationmark.triangle")
@@ -152,37 +152,47 @@ struct AppleLocalModelsView: View {
         }
     }
 
-    private var recommendedContent: some View {
+    private var availableContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Recommended").font(.headline)
-            ForEach(AppleModelRecommendation.recommended) { recommendation in
+            Text("Available").font(.headline)
+            ForEach(AppleDownloadableModel.available) { downloadable in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(recommendation.name).fontWeight(.medium)
+                            HStack(spacing: 6) {
+                                Text(downloadable.name).fontWeight(.medium)
+                                if downloadable.id == AppleDownloadableModel.recommended()?.id {
+                                    Text("Recommended").font(.caption2).foregroundStyle(.tint)
+                                        .padding(.horizontal, 6).padding(.vertical, 2)
+                                        .background(.tint.opacity(0.12), in: Capsule())
+                                        .help("The best fit for this Mac’s memory.")
+                                }
+                            }
+                            Text(downloadable.summary).font(.caption).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                             HStack(spacing: 8) {
-                                Text("4-bit · \(ByteCountFormatter.string(fromByteCount: recommendation.byteCount, countStyle: .file))")
+                                Text("4-bit · \(ByteCountFormatter.string(fromByteCount: downloadable.byteCount, countStyle: .file))")
                                     .foregroundStyle(.secondary)
-                                Link("Details", destination: recommendation.sourceURL)
+                                Link("Details", destination: downloadable.sourceURL)
                                     .help("Model details and license on Hugging Face")
                             }
                             .font(.caption)
                         }
                         Spacer(minLength: 4)
-                        if downloadingID == recommendation.id {
+                        if downloadingID == downloadable.id {
                             Button("Cancel") {
                                 cancelling = true
                                 downloadTask?.cancel()
                             }
                             .disabled(cancelling)
-                        } else if models.contains(where: { $0.sourceRepository == recommendation.repository }) {
+                        } else if models.contains(where: { $0.sourceRepository == downloadable.repository }) {
                             Text("Installed").font(.callout).foregroundStyle(.secondary)
                         } else {
-                            Button("Download") { download(recommendation) }
+                            Button("Download") { download(downloadable) }
                                 .disabled(!supported || busy)
                         }
                     }
-                    if downloadingID == recommendation.id {
+                    if downloadingID == downloadable.id {
                         VStack(alignment: .leading, spacing: 5) {
                             ProgressView(value: downloadProgress?.fraction ?? 0)
                             Text(downloadStatus).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -208,16 +218,16 @@ struct AppleLocalModelsView: View {
         }
     }
 
-    private func download(_ recommendation: AppleModelRecommendation) {
+    private func download(_ downloadable: AppleDownloadableModel) {
         let storage = storage
         let attempt = UUID()
         downloadAttempt = attempt
-        downloadingID = recommendation.id
+        downloadingID = downloadable.id
         downloadProgress = nil
         cancelling = false
         error = nil
         let worker = Task.detached {
-            try await AppleModelDownloader().download(recommendation, into: storage) { progress in
+            try await AppleModelDownloader().download(downloadable, into: storage) { progress in
                 Task { @MainActor in
                     guard downloadAttempt == attempt else { return }
                     downloadProgress = progress

@@ -22,10 +22,10 @@ public struct AppleModelDownloader: Sendable {
     }
     init(fetch: @escaping Fetch) { self.fetch = fetch }
 
-    public func download(_ recommendation: AppleModelRecommendation, into store: AppleLocalModelStore,
+    public func download(_ downloadable: AppleDownloadableModel, into store: AppleLocalModelStore,
                          progress: @escaping @Sendable (AppleModelDownloadProgress) -> Void = { _ in }) async throws -> AppleLocalModel {
         try Task.checkCancellation()
-        if let existing = try store.models().first(where: { $0.sourceRepository == recommendation.repository }) {
+        if let existing = try store.models().first(where: { $0.sourceRepository == downloadable.repository }) {
             return existing
         }
         try FileManager.default.createDirectory(at: store.directory, withIntermediateDirectories: true)
@@ -33,43 +33,43 @@ public struct AppleModelDownloader: Sendable {
         store.removeAbandonedStaging()
         let capacity = try store.directory.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
         if let available = capacity.volumeAvailableCapacityForImportantUsage,
-           available < recommendation.byteCount * 2 + 64 * 1_024 * 1_024 {
+           available < downloadable.byteCount * 2 + 64 * 1_024 * 1_024 {
             throw HarnessSetupError("Not enough disk space to download and import this model.")
         }
         let staging = try store.beginStaging(AppleLocalModelStore.downloadStaging)
         defer { store.endStaging(staging) }
-        let source = staging.appendingPathComponent(recommendation.sourceURL.lastPathComponent)
+        let source = staging.appendingPathComponent(downloadable.sourceURL.lastPathComponent)
         try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
         var completed: Int64 = 0
-        for file in recommendation.files {
+        for file in downloadable.files {
             try Task.checkCancellation()
             guard !file.name.hasPrefix("."), !file.name.contains("/"),
                   ["json", "safetensors", "model", "txt", "jinja"].contains((file.name as NSString).pathExtension) else {
-                throw HarnessSetupError("The recommended model contains an invalid resource.")
+                throw HarnessSetupError("The model download contains an invalid resource.")
             }
-            let url = recommendation.sourceURL.appendingPathComponent("resolve")
-                .appendingPathComponent(recommendation.revision).appendingPathComponent(file.name)
+            let url = downloadable.sourceURL.appendingPathComponent("resolve")
+                .appendingPathComponent(downloadable.revision).appendingPathComponent(file.name)
             let destination = source.appendingPathComponent(file.name)
             let previous = completed
-            progress(.init(phase: .downloading, completedBytes: previous, totalBytes: recommendation.byteCount))
+            progress(.init(phase: .downloading, completedBytes: previous, totalBytes: downloadable.byteCount))
             try await fetch(url, destination, file.byteCount) { received in
                 progress(.init(phase: .downloading, completedBytes: previous + min(file.byteCount, max(0, received)),
-                               totalBytes: recommendation.byteCount))
+                               totalBytes: downloadable.byteCount))
             }
-            progress(.init(phase: .verifying, completedBytes: previous + file.byteCount, totalBytes: recommendation.byteCount))
+            progress(.init(phase: .verifying, completedBytes: previous + file.byteCount, totalBytes: downloadable.byteCount))
             try Self.verify(destination, file: file)
             completed += file.byteCount
         }
         try Task.checkCancellation()
-        // Another settings window may have completed the same recommendation.
-        if let existing = try store.models().first(where: { $0.sourceRepository == recommendation.repository }) {
+        // Another settings window may have completed the same download.
+        if let existing = try store.models().first(where: { $0.sourceRepository == downloadable.repository }) {
             return existing
         }
-        progress(.init(phase: .importing, completedBytes: completed, totalBytes: recommendation.byteCount))
-        return try store.importModel(from: source, sourceRepository: recommendation.repository)
+        progress(.init(phase: .importing, completedBytes: completed, totalBytes: downloadable.byteCount))
+        return try store.importModel(from: source, sourceRepository: downloadable.repository)
     }
 
-    static func verify(_ url: URL, file: AppleModelRecommendation.File) throws {
+    static func verify(_ url: URL, file: AppleDownloadableModel.File) throws {
         let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
         guard values.isRegularFile == true, values.isSymbolicLink != true,
               values.fileSize.map(Int64.init) == file.byteCount else {

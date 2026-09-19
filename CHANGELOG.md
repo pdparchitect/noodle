@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Offer Qwen3 1.7B and Qwen3 14B in Local Models alongside Qwen3 4B Instruct and Qwen3 8B. The list is now titled Available and runs from smallest to largest, each model has a one-line description of what it suits and the memory it wants, and the best fit for this Mac's memory is tagged Recommended.
+
 ### Fixed
 
 - Reclaim the partial files of a local model download or import that was interrupted by a crash or force quit. Noodle now deletes them at launch and before the next download or import, so they no longer hold disk space or count against the free-space check.

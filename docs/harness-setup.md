@@ -95,7 +95,8 @@ Tool success still depends on the model and the request.
 ### Import a local model
 
 1. Open **Settings → Harness → Apple Intelligence → Local Models**.
-2. Choose **Download** beside a recommended model to download and import it.
+2. Choose **Download** beside a model under **Available** to download and import it.
+   The model tagged **Recommended** is the best fit for this Mac's memory.
    The list shows each download size and links to its model details and license.
    Downloads use pinned Hugging Face revisions, verify each file, and publish the
    model only after import validation succeeds. **Cancel** removes partial files;
@@ -107,8 +108,10 @@ Tool success still depends on the model and the request.
    be copied into a folder with real files.
 4. Edit a bot, choose Apple Intelligence, and select the imported model.
 
-The recommended list is available before downloading any weights. It starts with
-Qwen3 4B Instruct (2507, 4-bit) and Qwen3 8B (4-bit); both accept text and tools.
+The Available list is shown before downloading any weights. It runs from
+smallest to largest: Qwen3 1.7B, Qwen3 4B Instruct (2507), Qwen3 8B and Qwen3 14B,
+all 4-bit. Each entry says what the model suits and the memory it wants; all accept
+text and tools.
 Downloads run in the app using its existing outbound network access and private
 storage. The restricted bot helper remains offline. Allow space for both the
 download and the imported copy during installation.
