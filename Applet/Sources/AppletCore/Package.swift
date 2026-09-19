@@ -11,6 +11,9 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
   public var symbol: String?
   public var network: Bool
   public var window: NoodletWindowOptions?
+  /// Protected resources the user is asked about before the noodlet starts.
+  public var permissions: [String]?
+  public static let knownPermissions = ["microphone", "speech-recognition"]
   public init(
     title: String, runtime: String = "html", entry: String = "index.html",
     summary: String? = nil, symbol: String? = nil, network: Bool = false
@@ -24,7 +27,7 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
     self.network = network
   }
   enum CodingKeys: String, CodingKey {
-    case version, title, runtime, entry, summary, symbol, network, window
+    case version, title, runtime, entry, summary, symbol, network, window, permissions
   }
   public init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -36,9 +39,13 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
     symbol = try c.decodeIfPresent(String.self, forKey: .symbol)
     network = try c.decodeIfPresent(Bool.self, forKey: .network) ?? false
     window = try c.decodeIfPresent(NoodletWindowOptions.self, forKey: .window)
+    permissions = try c.decodeIfPresent([String].self, forKey: .permissions)
   }
   public func validate() throws {
     try window?.validate()
+    for permission in permissions ?? [] where !Self.knownPermissions.contains(permission) {
+      throw AppletError("Unknown permission \(permission.prefix(40)). Use \(Self.knownPermissions.joined(separator: ", ")).")
+    }
     guard version == 1 else { throw AppletError("Unsupported noodlet version \(version).") }
     guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, title.count <= 200
     else { throw AppletError("A noodlet needs a title of 1–200 characters.") }

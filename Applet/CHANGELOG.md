@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- Let noodlets listen, record audio and transcribe speech. A noodlet declares `"permissions": ["microphone", "speech-recognition"]` in its manifest; Applet asks once per noodlet before it starts, then macOS asks for Noodle Applet. Adds the audio input sandbox entitlement.
+- Add `noodlet typecheck --path FILE_OR_FOLDER` to check any Swift sources and return compiler diagnostics, without a noodlet manifest, import or session.
+- Report why a failed session stopped in a new `failure` field on `status` and other session responses.
+
+### Fixed
+
+- Compile Swift noodlets that use `@State`, `@Observable`, `@Entry` and other macros. The toolchain's macro plugins are now found when Xcode is installed; Command Line Tools alone do not include SwiftUI's macros, and a failed build says so.
+- Run Swift noodlets that use `.task`, `if #available` or other back-deployed APIs instead of exiting at startup with a missing `__isPlatformVersionAtLeast` symbol.
+- Report the first line a Swift noodlet wrote to standard error when it exits during startup or fails later, instead of only an exit status.
+- Stop reporting a capture warning from Applet's own runtime in every Swift noodlet's build log.
+
 ## [0.5.0] - 2026-09-19
 
 ### Added

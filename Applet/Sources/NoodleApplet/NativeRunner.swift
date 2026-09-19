@@ -12,6 +12,11 @@ import AppletCore
   private let buildControl = NativeProcessControl()
   private var interpreter: String?
   private var sdk: String?
+  private var plugins: [String] = []
+  private let startupError = NativeStartupError()
+  /// The first line the native process wrote to standard error, which names
+  /// an interpreter failure ahead of its symbol dump.
+  var firstErrorLine: String? { startupError.line }
   private var moduleCache: URL {
     buildRoot.deletingLastPathComponent().appendingPathComponent("ModuleCache")
   }
@@ -82,14 +87,10 @@ import AppletCore
     }
   }
 
-  func build() async throws {
-    try FileManager.default.createDirectory(at: buildRoot, withIntermediateDirectories: true)
-    let resources = AppletResources.bundle.url(forResource: "Resources", withExtension: nil)!
-    let source = resources.appendingPathComponent("NoodletRuntime.swift")
-    _ = try NoodletPackage.install(
-      package.files(), to: buildRoot.appendingPathComponent("Package.\(AppletBuildIdentity.current.fileExtension)"))
-    // xcrun deliberately refuses App Sandbox. Invoke the installed compiler
-    // and SDK directly; the compiler still inherits the app's containment.
+  struct Toolchain { let frontend: String, sdk: String, plugins: [String] }
+  // xcrun deliberately refuses App Sandbox. Invoke the installed compiler
+  // and SDK directly; the compiler still inherits the app's containment.
+  nonisolated static func toolchain() throws -> Toolchain {
     let toolchains: [(String, String)] = [
       (
         "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
@@ -115,8 +116,101 @@ import AppletCore
     guard FileManager.default.isExecutableFile(atPath: frontend) else {
       throw AppletError("The installed Swift toolchain is incomplete.")
     }
-    interpreter = frontend
-    sdk = toolchain.1
+    return Toolchain(
+      frontend: frontend, sdk: toolchain.1,
+      plugins: pluginArguments(compiler: toolchain.0, sdk: toolchain.1))
+  }
+  static let missingMacros =
+    "This toolchain has no SwiftUI macro plugins. @State, @Entry and #Preview need Xcode in /Applications."
+  // swiftc's driver adds the macro plugin search paths; swift-frontend does
+  // not. SwiftUI's macros ship only with Xcode's platform, not Command Line Tools.
+  nonisolated static func pluginArguments(compiler: String, sdk: String) -> [String] {
+    let files = FileManager.default
+    let usr = URL(fileURLWithPath: compiler).deletingLastPathComponent().deletingLastPathComponent()
+    let platform = URL(fileURLWithPath: sdk).deletingLastPathComponent().deletingLastPathComponent()
+    var arguments: [String] = []
+    for directory in ["lib/swift/host/plugins", "local/lib/swift/host/plugins"] {
+      let path = usr.appendingPathComponent(directory).path
+      if files.fileExists(atPath: path) { arguments += ["-plugin-path", path] }
+    }
+    let server = platform.appendingPathComponent("usr/bin/swift-plugin-server").path
+    guard files.isExecutableFile(atPath: server) else { return arguments }
+    // The compiler wraps the plugin server in sandbox-exec, which App Sandbox
+    // refuses to nest. The server still inherits the app's containment.
+    arguments.append("-disable-sandbox")
+    for directory in ["usr/lib/swift/host/plugins", "usr/local/lib/swift/host/plugins"] {
+      let path = platform.appendingPathComponent(directory).path
+      if files.fileExists(atPath: path) {
+        arguments += ["-external-plugin-path", "\(path)#\(server)"]
+      }
+    }
+    return arguments
+  }
+  // Availability checks call compiler-rt, which the interpreter does not link.
+  private static let availabilitySupport = """
+
+    @_cdecl("__isPlatformVersionAtLeast")
+    public func noodletIsPlatformVersionAtLeast(
+      _ platform: UInt32, _ major: UInt32, _ minor: UInt32, _ patch: UInt32
+    ) -> Int32 {
+      ProcessInfo.processInfo.isOperatingSystemAtLeast(
+        OperatingSystemVersion(
+          majorVersion: Int(major), minorVersion: Int(minor), patchVersion: Int(patch))) ? 1 : 0
+    }
+    @_cdecl("__isOSVersionAtLeast")
+    public func noodletIsOSVersionAtLeast(_ major: Int32, _ minor: Int32, _ patch: Int32) -> Int32 {
+      ProcessInfo.processInfo.isOperatingSystemAtLeast(
+        OperatingSystemVersion(
+          majorVersion: Int(major), minorVersion: Int(minor), patchVersion: Int(patch))) ? 1 : 0
+    }
+
+    """
+
+  /// Typechecks loose Swift sources as one module. No Noodlet view, import or session.
+  static func typecheck(_ sources: [String: Data], root: URL) async throws -> (passed: Bool, diagnostics: String) {
+    let toolchain = try toolchain()
+    let directory = root.appendingPathComponent("Builds/Typecheck-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let names = sources.keys.sorted()
+    for name in names {
+      let url = directory.appendingPathComponent(name)
+      try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try sources[name]!.write(to: url)
+    }
+    // Match swiftc: one file, or a main.swift, may hold top-level code.
+    let script =
+      names.contains { ($0 as NSString).lastPathComponent == "main.swift" }
+      || (names.count == 1 && !String(decoding: sources[names[0]]!, as: UTF8.self).contains("@main"))
+    var failure: String?
+    do {
+      try await runProcess(
+        toolchain.frontend,
+        [
+          "-sdk", toolchain.sdk, "-typecheck", "-swift-version", "5", "-module-name", "Sources",
+          "-module-cache-path", root.appendingPathComponent("Builds/ModuleCache").path,
+        ] + (script ? [] : ["-parse-as-library"]) + toolchain.plugins + names,
+        directory: directory, log: AppletLog(url: directory.appendingPathComponent("log.jsonl")),
+        control: NativeProcessControl())
+    } catch { failure = error.localizedDescription }
+    let passed = failure == nil
+    var diagnostics =
+      (try? String(contentsOf: directory.appendingPathComponent("compiler-output.txt"), encoding: .utf8)) ?? ""
+    if !passed, !toolchain.plugins.contains("-external-plugin-path") { diagnostics += missingMacros + "\n" }
+    if let failure, diagnostics.isEmpty { diagnostics = failure + "\n" }
+    return (passed, diagnostics)
+  }
+
+  func build() async throws {
+    try FileManager.default.createDirectory(at: buildRoot, withIntermediateDirectories: true)
+    let resources = AppletResources.bundle.url(forResource: "Resources", withExtension: nil)!
+    let source = resources.appendingPathComponent("NoodletRuntime.swift")
+    _ = try NoodletPackage.install(
+      package.files(), to: buildRoot.appendingPathComponent("Package.\(AppletBuildIdentity.current.fileExtension)"))
+    let toolchain = try Self.toolchain()
+    interpreter = toolchain.frontend
+    sdk = toolchain.sdk
+    plugins = toolchain.plugins
     let files = try package.files().keys.filter { $0.hasSuffix(".swift") }.sorted().map {
       package.url.appendingPathComponent($0)
     }
@@ -130,18 +224,26 @@ import AppletCore
     combined += try String(contentsOf: resources.appendingPathComponent("WindowFocusGuard.swift"), encoding: .utf8) + "\n"
     combined += try String(contentsOf: source, encoding: .utf8).replacingOccurrences(
       of: "@main struct NoodletRuntime", with: "struct NoodletRuntime")
+    combined += Self.availabilitySupport
     combined += "\nMainActor.assumeIsolated { NoodletRuntime.main() }\n"
     let program = buildRoot.appendingPathComponent("Program.swift")
     try combined.write(to: program, atomically: true, encoding: .utf8)
     log.append(
       "build",
       "Compiling \(files.count) Swift source file(s) with the installed Apple toolchain.")
-    try await Self.runProcess(
-      frontend,
-      [
-        "-sdk", toolchain.1, "-typecheck", "-swift-version", "5", "-module-name",
-        "NoodletCreation", "-module-cache-path", moduleCache.path, program.path,
-      ], directory: buildRoot, log: log, control: buildControl)
+    do {
+      try await Self.runProcess(
+        toolchain.frontend,
+        [
+          "-sdk", toolchain.sdk, "-typecheck", "-swift-version", "5", "-module-name",
+          "NoodletCreation", "-module-cache-path", moduleCache.path,
+        ] + plugins + [program.path], directory: buildRoot, log: log, control: buildControl)
+    } catch {
+      if !plugins.contains("-external-plugin-path") {
+        log.append("build", Self.missingMacros)
+      }
+      throw error
+    }
     log.append("build", "Build succeeded.")
   }
   func start(mode: String, size: CGSize, rememberFrame: Bool = true) async throws {
@@ -160,8 +262,7 @@ import AppletCore
     p.arguments = [
       "-interpret", "-enable-objc-interop", "-module-name", "main", "-sdk", sdk,
       "-swift-version", "5", "-module-cache-path", moduleCache.path,
-      buildRoot.appendingPathComponent("Program.swift").path,
-    ]
+    ] + plugins + [buildRoot.appendingPathComponent("Program.swift").path]
     var env = ProcessInfo.processInfo.environment
     // Match swift-driver's interpreter environment so JIT symbol lookup
     // finds the system SwiftUI framework, including NSHostingView.
@@ -188,9 +289,13 @@ import AppletCore
       Task { @MainActor in for line in lines { self?.receive(line) } }
     }
     let log = self.log
+    let startupError = self.startupError
     stderr.fileHandleForReading.readabilityHandler = { handle in
       let data = handle.availableData
-      if !data.isEmpty { log.append("stderr", String(decoding: data, as: UTF8.self)) }
+      guard !data.isEmpty else { return }
+      let text = String(decoding: data, as: UTF8.self)
+      startupError.record(text)
+      log.append("stderr", text)
     }
     p.terminationHandler = { [weak self] p in
       Task { @MainActor in
@@ -212,7 +317,10 @@ import AppletCore
     for _ in 0..<1200 {
       if ready { return }
       if !p.isRunning {
-        throw AppletError("Native process failed during startup. Inspect logs.")
+        // Standard error is read on another queue and may trail the exit.
+        try? await Task.sleep(for: .milliseconds(100))
+        throw AppletError(
+          "Native process failed during startup\(firstErrorLine.map { ": \($0)." } ?? ".") Inspect logs.")
       }
       try await Task.sleep(for: .milliseconds(50))
     }
@@ -310,6 +418,24 @@ private final class NativeProcessControl: @unchecked Sendable {
     defer { lock.unlock() }
     cancelled = true
     if let process, process.isRunning { kill(process.processIdentifier, SIGKILL) }
+  }
+}
+
+private final class NativeStartupError: @unchecked Sendable {
+  private let lock = NSLock()
+  private var first: String?
+  var line: String? {
+    lock.lock()
+    defer { lock.unlock() }
+    return first
+  }
+  func record(_ text: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    guard first == nil else { return }
+    first = text.split(whereSeparator: \.isNewline).lazy
+      .map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty }
+      .map { String($0.prefix(300)) }
   }
 }
 

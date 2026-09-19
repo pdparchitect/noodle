@@ -249,7 +249,8 @@ extension MessengerDocumentation {
         target the exact session returned by open. It must belong to that shared package.
         Without --session, select an active session first, otherwise the newest session.
         Session responses include mode, dataScope (user/test), testClock, viewAvailable,
-        and HTML rendering diagnostics when available. Errors retain resolved session
+        and HTML rendering diagnostics when available. A failed session says why in failure.
+        Errors retain resolved session
         metadata; errorCode distinguishes session-not-found, session-unavailable,
         session-not-running, session-mode-conflict and unsupported-operation when applicable.
         After Applet restarts, --session UUID can still read saved status/logs. Live
@@ -283,6 +284,7 @@ extension MessengerDocumentation {
         case .info: "Resolve --id UUID_OR_URL, --path, or --session without starting the noodlet. Returns noodletID, url, path, title, runtime, and state. Validate an unregistered source first."
         case .validate: "Read --path, validate noodlet.json and package bounds, and import the package."
         case .build: "Validate HTML or typecheck combined Swift sources with the installed Apple toolchain. Read logs for diagnostics."
+        case .typecheck: "Typecheck Swift from --path FILE_OR_FOLDER as one module and return compiler diagnostics in text. Needs no noodlet.json or Noodlet view, imports nothing and starts no session."
         case .open: "Import --path and start or reconnect to its single live instance; defaults to background. Changed source requires restart."
         case .status: "Inspect the session's state and supported capabilities. Check before retrying an uncertain operation."
         case .logs: "Read durable JSON-line logs from --offset; --follow streams subsequent chunks, --text-output emits the raw log."
@@ -392,6 +394,13 @@ extension MessengerDocumentation {
         process inheriting Applet's sandbox; data directories are a convention, not
         a security boundary between trusted native creations. The network manifest
         flag restricts HTML only. Do not run untrusted native packages.
+
+        To listen, record audio or transcribe speech, declare
+        "permissions":["microphone","speech-recognition"] in noodlet.json. The user is
+        asked once per noodlet before it starts, then macOS asks for Noodle Applet.
+        A refusal fails open with permission-denied; tell the user what to allow.
+        HTML uses getUserMedia and MediaRecorder; Swift uses AVFoundation and Speech.
+        Use typecheck to check any Swift file or folder without building a noodlet.
 
         Use headless mode for automated checks with separate test data. It still needs
         a logged-in Mac. Prefer background for normal data without foreground activation.

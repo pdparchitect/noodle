@@ -69,7 +69,7 @@ public enum NoodletContext {
         if !NoodletContext.isBackground { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
         emit(["id":"ready","value":"ready"])
         let prefix = self.prefix
-        DispatchQueue.global().async {
+        DispatchQueue.global().async { [weak self] in
             while let line = readLine() {
                 guard let data = line.data(using: .utf8), let command = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
                 Task { @MainActor [weak self] in self?.handle(command) }

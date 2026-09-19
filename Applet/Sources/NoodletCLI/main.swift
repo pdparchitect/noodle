@@ -14,6 +14,30 @@ import Foundation
             exit(1)
         }
     }
+    /// Applet is sandboxed, so the sources travel with the request.
+    static func swiftSources(at url: URL) throws -> [String: Data] {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+            throw AppletError("No Swift file or folder at \(url.path).")
+        }
+        var sources: [String: Data] = [:]
+        let root = url.resolvingSymlinksInPath().pathComponents
+        if isDirectory.boolValue {
+            let files = FileManager.default.enumerator(
+                at: url, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
+            while let file = files?.nextObject() as? URL {
+                guard file.pathExtension == "swift" else { continue }
+                // The enumerator may spell the folder differently, such as /private/tmp.
+                let name = file.pathComponents.suffix(
+                    file.resolvingSymlinksInPath().pathComponents.count - root.count)
+                sources[name.joined(separator: "/")] = try Data(contentsOf: file)
+            }
+        } else if url.pathExtension == "swift" {
+            sources[url.lastPathComponent] = try Data(contentsOf: url)
+        }
+        guard !sources.isEmpty else { throw AppletError("No Swift sources at \(url.path).") }
+        return sources
+    }
     static func run() async throws {
         var args = Array(CommandLine.arguments.dropFirst())
         guard let command = args.first, command != "--help" else {
@@ -111,6 +135,11 @@ import Foundation
         }
         if [.open, .build, .validate].contains(operation), let path = request.path {
             request.files = try NoodletPackage(url: URL(fileURLWithPath: path)).files()
+        }
+        if operation == .typecheck {
+            guard let path = request.path else { throw AppletError("Provide --path to a Swift file or folder.") }
+            request.files = try swiftSources(at: URL(fileURLWithPath: path))
+            request.path = nil
         }
         try request.validate()
         let bridge = try workspaceBridge()

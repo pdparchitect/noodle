@@ -28,6 +28,10 @@
 	<string>15.0</string>
 	<key>LSMultipleInstancesProhibited</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Noodlets you allow can listen and record through the microphone.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Noodlets you allow can turn speech into text.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>

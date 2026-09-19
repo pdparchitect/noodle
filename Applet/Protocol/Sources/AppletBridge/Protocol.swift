@@ -13,14 +13,14 @@ public struct AppletError: Error, LocalizedError, Sendable {
 }
 
 public enum AppletOperation: String, Codable, CaseIterable, Sendable {
-    case list, info, validate, build, open, status, logs, inspect, eval, click, type, key, scroll, drag
+    case list, info, validate, build, typecheck, open, status, logs, inspect, eval, click, type, key, scroll, drag
     case screenshot, step
     case recordStart = "record-start"
     case recordStop = "record-stop"
     case show, hide, close, terminate, restart, artifact, present
     public var timeout: Int {
         switch self {
-        case .build, .open, .restart: return 180
+        case .build, .typecheck, .open, .restart: return 180
         case .recordStop: return 60
         default: return 30
         }
@@ -62,7 +62,7 @@ public struct AppletRequest: Codable, Sendable {
         if noodletID != nil, path != nil || files != nil {
             throw AppletError("Use --id without --path or package files.")
         }
-        if sessionID != nil, [.open, .build, .validate, .list].contains(operation) {
+        if sessionID != nil, [.open, .build, .validate, .typecheck, .list].contains(operation) {
             throw AppletError("This command does not accept --session.")
         }
         if testClock != nil, ![.open, .restart].contains(operation) {
@@ -123,6 +123,8 @@ public struct AppletResponse: Codable, Sendable {
     public var runtime: String?
     public var previewBookmark: Data?
     public var state: String?
+    /// Why a failed session stopped. Reported without making the command itself fail.
+    public var failure: String?
     public var mode: String?
     public var dataScope: String?
     public var testClock: Bool?

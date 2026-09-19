@@ -6,6 +6,7 @@ import AppletCore
   let id = UUID(), package: NoodletPackage, owner: String, log: AppletLog, dataRoot: URL
   var lock: InstanceLock?
   var state = "starting", mode: String, revision: String
+  var failure: String?
   let createdAt = Date()
   let testClock: Bool
   var isActive: Bool { ["starting", "building", "running"].contains(state) }
@@ -56,6 +57,10 @@ import AppletCore
   private var origins: [String: String]
   private var owners: [String: String]
   private let defaults: UserDefaults
+  /// Returns why a noodlet may not use the permissions it declares. Replaced in tests.
+  lazy var authorize: (NoodletPackage) async -> String? = { [defaults] in
+    await AppletPermissions.authorize($0, defaults: defaults)
+  }
   init(library: AppletLibrary, defaults: UserDefaults = .standard) {
     self.defaults = defaults
     self.library = library
@@ -111,6 +116,16 @@ import AppletCore
         }
         request.path = package.url.path
         request.noodletID = nil
+      }
+      if request.operation == .typecheck {
+        let sources = (request.files ?? [:]).filter { $0.key.hasSuffix(".swift") }
+        guard !sources.isEmpty else { throw AppletError("Provide --path to a Swift file or folder.") }
+        let result = try await NativeRunner.typecheck(sources, root: library.root)
+        var response = AppletResponse()
+        response.state = result.passed ? "valid" : "failed"
+        response.text = result.diagnostics
+        if !result.passed { response.error = "Typecheck failed. Read text for compiler diagnostics." }
+        return response
       }
       if request.operation == .info {
         let package: NoodletPackage
@@ -442,6 +457,9 @@ import AppletCore
       "lifecycle",
       "Opening \(package.manifest.title) (\(package.manifest.runtime), \(session.mode)).")
     do {
+      if request.operation != .build, let refusal = await authorize(package) {
+        throw AppletError(refusal, code: "permission-denied")
+      }
       if package.manifest.runtime == "html" {
         if request.operation == .build {
           session.state = "built"
@@ -465,6 +483,7 @@ import AppletCore
           guard let session else { return }
           session.stop()
           session.state = "failed"
+          session.failure = message
           _ = self?.status(session)
           self?.objectWillChange.send()
         }
@@ -493,13 +512,14 @@ import AppletCore
           session.native = nil
           return status(session)
         }
-        runner.exited = { [weak self, weak session] code, signal in
+        runner.exited = { [weak self, weak session, weak runner] code, signal in
           guard let session else { return }
           if session.state != "stopped" {
             session.state = code == 0 ? "stopped" : "failed"
-            session.log.append(
-              signal ? "crash" : "exit",
-              "Native process \(signal ? "signal":"status") \(code).")
+            let reason = code == 0 ? nil : runner?.firstErrorLine
+            let summary = "Native process \(signal ? "signal":"status") \(code)\(reason.map { ": \($0)" } ?? ".")"
+            if code != 0 { session.failure = summary }
+            session.log.append(signal ? "crash" : "exit", summary)
             session.lock = nil
           }
           _ = self?.status(session)
@@ -527,6 +547,7 @@ import AppletCore
       session.log.append("error", error.localizedDescription)
       session.stop()
       session.state = cancelled ? "stopped" : "failed"
+      if !cancelled { session.failure = error.localizedDescription }
       objectWillChange.send()
       var response = status(session)
       response.error = "\(error.localizedDescription) Session: \(session.id.uuidString)."
@@ -555,6 +576,7 @@ import AppletCore
     var response = (try? packageInfo(session.package)) ?? AppletResponse()
     response.sessionID = session.id
     response.state = session.state
+    response.failure = session.failure
     response.mode = session.mode
     response.dataScope = session.dataRoot.lastPathComponent == "Testing" ? "test" : "user"
     response.testClock = session.testClock

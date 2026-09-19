@@ -4,8 +4,8 @@ import AppletCore
 import WebKit
 
 @MainActor
-final class WebRunner: NSObject, WKNavigationDelegate, WKScriptMessageHandlerWithReply,
-  NSWindowDelegate
+final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
+  WKScriptMessageHandlerWithReply, NSWindowDelegate
 {
   let package: NoodletPackage
   let dataRoot: URL
@@ -56,6 +56,7 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKScriptMessageHandlerWit
       return event
     }
     web.navigationDelegate = self
+    web.uiDelegate = self
     config.userContentController.addScriptMessageHandler(
       self, contentWorld: .page, name: "noodle")
     let scriptURL = AppletResources.bundle.url(forResource: "Resources", withExtension: nil)!
@@ -118,6 +119,7 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKScriptMessageHandlerWit
     web.configuration.userContentController.removeScriptMessageHandler(
       forName: "noodle", contentWorld: .page)
     web.navigationDelegate = nil
+    web.uiDelegate = nil
     window.close()
     window.contentView = nil
   }
@@ -146,6 +148,14 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKScriptMessageHandlerWit
     log.append("crash", message)
     finishLoad(AppletError(message))
     failed?(message)
+  }
+  // The user already agreed to the manifest's permissions before this page loaded.
+  func webView(
+    _ webView: WKWebView, decideMediaCapturePermissionsFor origin: WKSecurityOrigin,
+    initiatedBy frame: WKFrameInfo, type: WKMediaCaptureType
+  ) async -> WKPermissionDecision {
+    type == .microphone && package.manifest.permissions?.contains("microphone") == true
+      ? .grant : .deny
   }
   func webView(
     _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,

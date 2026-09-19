@@ -166,6 +166,22 @@ off. `rememberFrame: true` restores them by canonical package location. Headless
 runs and explicit CLI sizes ignore remembered frames; dimensions are still
 clamped to the package's limits. The bundled Focus example uses these controls.
 
+## Permissions
+
+Declare the protected resources a noodlet uses in `noodlet.json`:
+
+```json
+"permissions": ["microphone", "speech-recognition"]
+```
+
+Applet asks once per noodlet before it starts, then macOS asks for Noodle Applet
+as a whole. Declining fails `open` with `permission-denied`. HTML noodlets get
+`getUserMedia` and `MediaRecorder` for the microphone only when it is declared.
+Native noodlets run in a child process that inherits Applet's grants, so the
+declaration is the user's consent, not a boundary between native noodlets.
+
+## Window dragging
+
 HTML can define additional native drag regions with CSS:
 
 ```css
@@ -331,13 +347,18 @@ SDKs. `NoodletContext.dataDirectory` and `.packageDirectory` expose file URLs;
 `/Applications/Xcode.app`, or Command Line Tools at their standard location.
 The compiler and SDK are not bundled. HTML needs neither.
 
+Swift macros such as `@State`, `@Observable`, `@Entry` and `#Preview` expand
+through the installed toolchain's plugins. SwiftUI's macros ship only with Xcode,
+so with Command Line Tools alone use `@StateObject` and `@Published` instead.
+Availability checks, `.task` and other back-deployed APIs work in the interpreter.
+
 ## Capture and containment
 
-The host is signed with App Sandbox, outbound networking, user-selected file
+The host is signed with App Sandbox, outbound networking, audio input, user-selected file
 read/write, app-scoped bookmarks, and one private Noodle Applet application group.
 Sparkle adds the same two bundle-specific installer Mach service exceptions as
 Computer; its signed installer replaces the application outside the sandbox.
-The unused downloader service is removed. Verification checks the exact six-key
+The unused downloader service is removed. Verification checks the exact eight-key
 host entitlement set and each embedded updater component. The signed Quick Look
 extension has only sandbox, outbound network, and the shared preview-cache group;
 it has no file-write grants or native-code runner.
