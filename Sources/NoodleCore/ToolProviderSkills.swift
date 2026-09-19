@@ -1,0 +1,64 @@
+import Foundation
+
+/// One generated skill per active provider, so bots find tools the way they find
+/// every other skill. The text comes from the provider's manifest and tool list.
+public enum ToolProviderSkills {
+    /// Distinguishes these folders from other Noodle-managed skills when cleaning up.
+    static let marker = ".noodle-tool-provider"
+
+    public static func document(_ manifest: ToolProviderManifest, tools: [ToolDescriptor]) -> String {
+        let line: (String) -> String = { $0.split(whereSeparator: \.isNewline).joined(separator: " ") }
+        let command = "./.agents/skills/messenger/messenger tool \(manifest.id)"
+        var text = """
+        ---
+        name: \(manifest.id)
+        description: \(line(manifest.summary))\(manifest.summary.isEmpty ? "" : " ")Tools: \(tools.map(\.name).joined(separator: ", ")).
+        ---
+        # \(line(manifest.title))
+
+        Run `\(command) TOOL [--OPTION VALUE ...]` in this bot's workspace. Noodle must be running. `\(command)` lists the tools and `\(command) TOOL --help` returns one tool's full schema. Use `--input JSON` for values options cannot express. File options take a path inside your workspace. Results are JSON; a tool error exits 1. Never automatically repeat a call that timed out: the action may already have happened.
+        """
+        if !manifest.instructions.isEmpty { text += "\n\n" + manifest.instructions }
+        text += "\n\n## Tools\n"
+        for tool in tools {
+            text += "\n### \(tool.name)\n\n" + (tool.description.isEmpty ? "" : line(tool.description) + "\n\n")
+            let schema = (try? JSONSerialization.jsonObject(with: tool.inputSchema)) as? [String: Any] ?? [:]
+            let required = Set(schema["required"] as? [String] ?? [])
+            for (name, value) in (schema["properties"] as? [String: Any] ?? [:]).sorted(by: { $0.key < $1.key }) {
+                let property = value as? [String: Any] ?? [:]
+                let type = property["type"] as? String
+                let placeholder = type == "boolean" ? "" : property["format"] as? String == "noodle-file" ? " FILE" : " VALUE"
+                let notes = [required.contains(name) ? "required" : nil, type == "array" ? "repeatable" : nil].compactMap { $0 }
+                let description = (property["description"] as? String).map { " — " + line($0) } ?? ""
+                text += "- `--\(name)\(placeholder)`\(notes.isEmpty ? "" : " (\(notes.joined(separator: ", ")))")\(description)\n"
+            }
+        }
+        return text
+    }
+
+    /// Writes a skill for every listed provider and removes generated skills that are
+    /// no longer listed. A user's own skill of the same name is left exactly as it is.
+    public static func synchronize(workspace: URL, providers: [(manifest: ToolProviderManifest, tools: [ToolDescriptor])]) {
+        let active = Set(providers.map(\.manifest.id))
+        if let skills = try? WorkspaceMailbox(workspace: workspace, path: ".agents/skills"), let names = try? skills.names() {
+            for name in names where !active.contains(name) {
+                guard let folder = try? WorkspaceMailbox(workspace: workspace, path: ".agents/skills/" + name), folder.contains(marker) else { continue }
+                folder.remove(marker)
+                try? WorkspaceMailbox.synchronizeSkill(workspace: workspace, name: name, enabled: false, instructions: "", command: marker, executable: nil)
+            }
+        }
+        for provider in providers {
+            let name = provider.manifest.id
+            do {
+                try WorkspaceMailbox.synchronizeSkill(workspace: workspace, name: name, enabled: true,
+                    instructions: document(provider.manifest, tools: provider.tools), command: marker, executable: nil)
+                let folder = try WorkspaceMailbox(workspace: workspace, path: ".agents/skills/" + name)
+                try folder.writeData(Data(), named: marker)
+                // Workspaces whose .claude/skills is a real folder list each skill by link.
+                if let native = try? WorkspaceMailbox(workspace: workspace, path: ".claude/skills"), !native.contains(name) {
+                    try? native.symlink(name, destination: "../../.agents/skills/" + name)
+                }
+            } catch { NSLog("Noodle could not write the %@ tool skill: %@", name, error.localizedDescription) }
+        }
+    }
+}

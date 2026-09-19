@@ -102,6 +102,15 @@ cp "$project_root/Support/ShareExtension-Info.plist" "$share_extension/Contents/
 /usr/libexec/PlistBuddy -c "Add :NoodleSharingScheme string $url_scheme" "$share_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$share_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$share_extension/Contents/Info.plist"
+# Tool extensions are discovered through Noodle's extension point, not named in code.
+vision_extension="$contents/Extensions/NoodleVision.appex"
+mkdir -p "$vision_extension/Contents/MacOS"
+cp "$bin_path/NoodleVisionExtension" "$vision_extension/Contents/MacOS/NoodleVisionExtension"
+cp "$project_root/Support/VisionExtension-Info.plist" "$vision_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.vision" "$vision_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :EXAppExtensionAttributes:EXExtensionPointIdentifier $bundle_identifier.tool" "$vision_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$vision_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$vision_extension/Contents/Info.plist"
 cp "$bin_path/Noodle" "$contents/MacOS/Noodle"
 # SwiftPM adds development-only search paths. Keep system and bundle-relative paths.
 otool -l "$contents/MacOS/Noodle" \
@@ -231,6 +240,10 @@ xcrun appintentsmetadataprocessor \
     --validate-assistant-intents \
     --no-app-shortcuts-localization
 test -f "$contents/Resources/Metadata.appintents/extract.actionsdata"
+# The same constant values carry the tool extension point declared in ToolExtensionDiscovery.swift.
+xargs xcrun exutil extract-extension-points --bundle-identifier "$bundle_identifier" \
+    --output "$contents/Extensions/Noodle.appexpt" < "$intent_const_values_list"
+[[ "$(/usr/libexec/PlistBuddy -c "Print :$bundle_identifier.tool:EXExtensionPointName" "$contents/Extensions/Noodle.appexpt")" == tool ]]
 
 signing_identity="${NOODLE_SIGNING_IDENTITY:-}"
 if [[ -z "$signing_identity" ]]; then
@@ -315,6 +328,9 @@ for file in "$contents/Info.plist" "$share_extension/Contents/Info.plist"; do
 done
 codesign --force --options runtime "$timestamp_option" \
     --entitlements "$share_entitlements" --sign "$signing_identity" "$share_extension"
+# Tool extensions get the sandbox and nothing else: no groups, network or files.
+codesign --force --options runtime "$timestamp_option" \
+    --entitlements "$project_root/Support/ToolExtension.entitlements" --sign "$signing_identity" "$vision_extension"
 # Sign Sparkle inside-out. These installer components are deliberately outside the
 # host's sandbox so they can replace the signed app; no other app permissions change.
 for component in \
@@ -330,5 +346,6 @@ codesign --force --options runtime "$timestamp_option" \
 codesign --verify --deep --strict --verbose=2 "$app"
 zsh "$project_root/scripts/verify-updater.sh" "$app" >&2
 zsh "$project_root/scripts/verify-agent-host.sh" "$app" >&2
+zsh "$project_root/scripts/verify-tool-extensions.sh" "$app" >&2
 
 print "$app"

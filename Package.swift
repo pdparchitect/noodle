@@ -46,6 +46,13 @@ let package = Package(
         .executableTarget(name: "NoodleMCPCLI", dependencies: ["NoodleCore", "NoodleMCPScripting"]),
         .executableTarget(name: "NoodleDocumentation", dependencies: ["NoodleCore"]),
         .target(name: "NoodleSharing", dependencies: ["NoodleCore"]),
+        .target(name: "NoodleVisionTools", dependencies: ["NoodleCore"]),
+        .executableTarget(
+            name: "NoodleVisionExtension",
+            dependencies: ["NoodleCore", "NoodleVisionTools"],
+            swiftSettings: [.unsafeFlags(["-parse-as-library", "-application-extension"])],
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]
+        ),
         .executableTarget(
             name: "NoodleShareExtension",
             dependencies: ["NoodleSharing"],
@@ -88,6 +95,7 @@ let package = Package(
             name: "NoodleSharingTests",
             dependencies: ["NoodleSharing", "NoodleCore"]
         ),
+        .testTarget(name: "NoodleVisionToolsTests", dependencies: ["NoodleVisionTools", "NoodleCore"]),
         .testTarget(name: "NoodleMCPScriptingTests", dependencies: ["NoodleMCPScripting", "NoodleCore"]),
         .testTarget(
             name: "NoodleMCPTests",

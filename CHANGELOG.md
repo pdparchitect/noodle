@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Give every bot on-device image tools on macOS 26 and later: `messenger tool vision ocr`, `classify` and `barcodes` read text, labels, barcodes and QR codes from an image in the bot's workspace, so models that cannot see images can still use them. The tools run in a sandboxed extension with no network or file access; Noodle opens the image for it.
+- Teach bots `messenger tool`, one command that lists the tools Noodle provides to a bot and calls them, with options typed from each tool's schema. Tool extensions bundled with Noodle are discovered automatically, and each one appears in the bot's workspace as a skill generated from its own description; tool connections, browsers and computers keep their existing skills for now.
 - Set Up Your First Bot opens the first time Noodle starts with no bots. It lists each harness with its state on this Mac, installs the one you choose if it is missing, signs you in, and creates the bot once you name it. Not Now closes it, the empty main window keeps a Set Up Your First Bot button, and Help > Set Up a Bot… opens it at any time.
 - Teach bots that native noodlets run confined to their own files and reach user-selected files through `NoodletContext.files`.
 - Teach bots to keep noodlet API keys in the new per-noodlet secrets store instead of source or data files.

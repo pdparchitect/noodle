@@ -29,6 +29,9 @@ public enum MessengerCLI {
             switch invocation.action {
             case .help: return MessengerCommandResult(exitCode: 0, standardOutput: help + "\n")
             case .listEffects: return .json(ConversationEffectKind.allCases.map(\.rawValue))
+            case .tool(let arguments):
+                return ToolCLI.run(arguments, workspace: invocation.workspace,
+                                   currentDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true))
             default: return try MessengerBridgeClient.request(invocation.action, workspace: invocation.workspace)
             }
         } catch {
@@ -141,6 +144,9 @@ public enum MessengerCLI {
 
             case .help:
                 return MessengerCommandResult(exitCode: 0, standardOutput: help + "\n")
+
+            case .tool:
+                throw HarnessSetupError("Tool commands use Noodle's tool bridge, not the Messenger broker.")
             }
         } catch { return .init(exitCode: 2, standardError: "messenger: \(error.localizedDescription)\n") }
     }
@@ -196,9 +202,13 @@ public enum MessengerCLI {
             agentID = id
 
             let command: MessengerCommandKind
-            if values.contains("-h") || values.isEmpty {
+            var toolValues = values
+            if let index = toolValues.firstIndex(of: "--agent-directory"), index == 0, toolValues.count >= 2 { toolValues.removeFirst(2) }
+            if toolValues.first == MessengerCommandKind.tool.rawValue {
+                command = .tool
+            } else if values.contains("-h") || values.isEmpty {
                 command = .help
-            } else if let matched = MessengerCommandKind.allCases.first(where: { values.contains($0.rawValue) }) {
+            } else if let matched = MessengerCommandKind.allCases.first(where: { $0 != .tool && values.contains($0.rawValue) }) {
                 command = matched
             } else {
                 throw MessengerCLIError.invalidArguments
@@ -207,6 +217,8 @@ public enum MessengerCLI {
             switch command {
             case .help:
                 action = .help
+            case .tool:
+                action = .tool(arguments: Array(toolValues.dropFirst()))
             case .effect:
                 let options = try Self.effectOptions(values)
                 guard let rawConversation = options["--conversation"],
@@ -393,5 +405,7 @@ public enum MessengerAction: Codable, Sendable {
         case listMessages(conversationID: UUID)
         case react(conversationID: UUID, messageID: UUID, emoji: String, present: Bool)
         case send(conversationID: UUID, body: String, attachmentURLs: [URL])
+        /// Handled by the CLI through the tool bridge; never sent to the Messenger broker.
+        case tool(arguments: [String])
         case help
     }

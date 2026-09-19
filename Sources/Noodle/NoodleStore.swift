@@ -107,6 +107,11 @@ final class NoodleStore {
     let repository: WorkspaceRepository
     @ObservationIgnored private let transcriptPositions: TranscriptPositionStore
     let messenger: MessengerBroker
+    /// Every source of agent tools registers here; `messenger tool` reaches them through `tools`.
+    let toolProviders = ToolProviderRegistry()
+    let tools: ToolBridgeBroker
+    /// `ToolExtensionDiscovery` on macOS 26 and later; earlier systems have no tool extensions.
+    @ObservationIgnored private var toolExtensions: AnyObject?
     let mcp: MCPController
     let computers: ComputerController
     let browsers: BrowserController
@@ -155,6 +160,8 @@ final class NoodleStore {
         transcriptPositions = TranscriptPositionStore(fileURL: self.repository.rootURL.appendingPathComponent("scroll-positions.json"))
         conversationWindows = ConversationWindowRegistry(fileURL: self.repository.rootURL.appendingPathComponent("conversation-windows.json"))
         messenger = MessengerBroker(repository: self.repository)
+        // No provider depends on an assignment yet, so no agent has any.
+        tools = ToolBridgeBroker(registry: toolProviders) { _ in [] }
         mcp = MCPController(repository: self.repository)
         computers = ComputerController(repository: self.repository)
         browsers = BrowserController(repository: self.repository)
@@ -221,6 +228,12 @@ final class NoodleStore {
             try repository.synchronizeAgentWorkspaces(agents)
             if connectsServices {
                 try messenger.start(agents: agents)
+                try tools.start(agents: toolAgents)
+                if #available(macOS 26.0, *) {
+                    let discovery = ToolExtensionDiscovery(registry: toolProviders)
+                    discovery.start()
+                    toolExtensions = discovery
+                }
                 mcp.start(agents: agents)
                 computers.start(agents: agents)
                 browsers.start(agents: agents)
@@ -424,6 +437,12 @@ final class NoodleStore {
         mcp.start(agents: agents)
         do { try messenger.start(agents: agents) }
         catch { errorMessage = "Bot settings were saved, but Messenger could not start: \(error.localizedDescription)" }
+        do { try tools.start(agents: toolAgents) }
+        catch { errorMessage = "Bot settings were saved, but tools could not start: \(error.localizedDescription)" }
+    }
+
+    private var toolAgents: [ToolBridgeAgent] {
+        agents.map { ToolBridgeAgent(id: $0.id, workspace: repository.directory(for: $0)) }
     }
 
     func backstory(for agent: AgentRecord) -> String {
