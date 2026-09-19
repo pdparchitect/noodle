@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep the App Settings button at the end of the toolbar when no browser is selected, instead of beside the sidebar.
+
 ## [0.2.0] - 2026-09-19
 
 ### Added

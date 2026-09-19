@@ -89,7 +89,7 @@ struct BrowserLibraryView: View {
                 ContentUnavailableView {
                     Label("Browsers", systemImage: "globe")
                 }
-                .toolbar { CompanionSettingsToolbarItem() }
+                .toolbar { CompanionSettingsToolbarItem(spacing: .flexible) }
             }
         }
         .navigationSplitViewStyle(.balanced)
