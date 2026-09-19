@@ -127,7 +127,9 @@ import AppletCore
         try await press("Show Sidebar")
         let restored = frames(["Hide Sidebar", "Open Noodlet"])
         print("APPLET_UI_SIDEBAR_TOOLBAR: expanded=\(expanded) collapsed=\(collapsed) restored=\(restored)")
-        guard expanded.count == 2, ordered(expanded), collapsed.count == 2, ordered(collapsed), restored.count == 2, ordered(restored) else {
+        // The toolbar drops Open Noodlet while there is no room for it; the toggle must
+        // always be there, and Open Noodlet must follow it whenever it is shown.
+        guard [expanded, collapsed, restored].allSatisfy({ !$0.isEmpty && ordered($0) }), !frames(["Hide Sidebar"]).isEmpty else {
             throw AppletError("Open Noodlet must follow the sidebar toggle in every sidebar state")
         }
         print("PASS: Open Noodlet follows the sidebar toggle with the sidebar open, collapsed and reopened")

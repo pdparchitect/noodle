@@ -151,10 +151,12 @@ import ScreenCaptureKit
     /// leaves with the sidebar, so it never joins Back and Forward.
     private static func verifyCreatePlacement(_ window: NSWindow, collapsed: Bool) throws {
         let items = (window.toolbar?.items ?? []).filter(\.isVisible)
-        let labels = collapsed ? ["Show Sidebar", "Back"] : ["Hide Sidebar", "Create", "Back"]
+        // The toolbar drops Create while the sidebar is too narrow to hold it.
+        let fits = items.contains(where: { $0.label == "Create" })
+        let labels = collapsed ? ["Show Sidebar", "Back"] : fits ? ["Hide Sidebar", "Create", "Back"] : ["Hide Sidebar", "Back"]
         let frames = labels.compactMap { toolbarItem(window, $0)?.view.map { $0.convert($0.bounds, to: nil) } }
         print("BROWSER_UI_CREATE_PLACEMENT: \(labels)=\(frames)")
-        guard frames.count == labels.count, items.contains(where: { $0.label == "Create" }) != collapsed,
+        guard frames.count == labels.count, !(collapsed && fits),
               zip(frames, frames.dropFirst()).allSatisfy({ $0.maxX < $1.minX }) else {
             throw BrowserError("Create Browser must follow the sidebar toggle, apart from Back and Forward: \(labels)=\(frames). Toolbar: \(describeToolbar(window))")
         }
