@@ -346,41 +346,187 @@ struct EffortControl: View {
     }
 
     var body: some View {
-        VStack(spacing: 5) {
-            HStack {
-                Label("Effort", systemImage: "bolt.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(selectionName)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(selection.isEmpty ? Color.secondary : Color.accentColor)
-            }
+        // The icon column matches RuntimeSelectionRow so the label and track align with its text.
+        HStack(spacing: 11) {
+            Image(systemName: "bolt.fill")
+                .foregroundStyle(.secondary)
+                .frame(width: 20, height: 20)
 
-            Group {
-                if choices.count > 1 {
-                    Slider(
-                        value: Binding(
-                            get: { Double(selectedIndex) },
-                            set: { selection = choices[Int($0.rounded()).clamped(to: choices.indices)] }
-                        ),
-                        in: 0...Double(choices.count - 1),
-                        step: 1
-                    )
-                    .controlSize(.small)
-                    .accessibilityLabel("Reasoning Effort")
-                    .accessibilityValue(selectionName)
-                } else {
-                    Text("Choose a model to tune its effort")
+            VStack(spacing: 5) {
+                HStack {
+                    Text("Effort")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(selectionName)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(selection.isEmpty ? Color.secondary : Color.accentColor)
                 }
+
+                Group {
+                    if choices.count > 1 {
+                        EffortTrack(count: choices.count, index: selectedIndex) { selection = choices[$0] }
+                            // The drawn track stays a standard slider to assistive clients.
+                            .accessibilityRepresentation {
+                                Slider(
+                                    value: Binding(
+                                        get: { Double(selectedIndex) },
+                                        set: { selection = choices[Int($0.rounded()).clamped(to: choices.indices)] }
+                                    ),
+                                    in: 0...Double(choices.count - 1),
+                                    step: 1
+                                )
+                                .accessibilityLabel("Reasoning Effort")
+                                .accessibilityValue(selectionName)
+                            }
+                    } else {
+                        Text("Choose a model to tune its effort")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .frame(height: EffortTrack.height)
             }
-            .frame(height: 18)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
+    }
+}
+
+/// A stepped track whose glow and sparkle density grow with the chosen effort.
+private struct EffortTrack: View {
+    static let height: CGFloat = 22
+
+    let count: Int
+    let index: Int
+    let select: (Int) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var spectrum: LinearGradient {
+        LinearGradient(
+            stops: [
+                .init(color: Color(red: 0.80, green: 0.36, blue: 0.16), location: 0),
+                .init(color: Color(red: 0.78, green: 0.42, blue: 0.48), location: 0.3),
+                .init(color: Color(red: 0.42, green: 0.48, blue: 0.96), location: 0.58),
+                .init(color: Color(red: 0.90, green: 0.96, blue: 1.00), location: 0.8),
+                .init(color: Color(red: 0.98, green: 0.56, blue: 0.74), location: 1)
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let height = Self.height
+            let travel = max(proxy.size.width - height, 1)
+            let fraction = CGFloat(index) / CGFloat(max(count - 1, 1))
+            let knobX = height / 2 + fraction * travel
+
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.08))
+
+                ForEach(0..<count, id: \.self) { stop in
+                    Circle()
+                        .fill(Color.primary.opacity(0.2))
+                        .frame(width: 3, height: 3)
+                        .position(x: height / 2 + CGFloat(stop) / CGFloat(max(count - 1, 1)) * travel, y: height / 2)
+                }
+
+                ZStack {
+                    spectrum
+                    Ellipse()
+                        .fill(Color.white.opacity(0.2 + 0.5 * fraction))
+                        .frame(width: height * 3.2, height: height * 1.3)
+                        .blur(radius: 9)
+                        .position(x: knobX - height * 0.9, y: height / 2)
+                    EffortSparkles(isPaused: reduceMotion || index == 0)
+                }
+                .mask(alignment: .leading) {
+                    Capsule().frame(width: knobX + height / 2)
+                }
+
+                spectrum
+                    .mask {
+                        Circle()
+                            .frame(width: height, height: height)
+                            .position(x: knobX, y: height / 2)
+                    }
+                    .overlay {
+                        Circle()
+                            .fill(Color.white.opacity(0.5))
+                            .strokeBorder(Color.white.opacity(0.75), lineWidth: 1)
+                            .frame(width: height, height: height)
+                            .position(x: knobX, y: height / 2)
+                    }
+                    // Without flattening, the shadow of the masked gradient smears past the track.
+                    .compositingGroup()
+                    .shadow(color: .black.opacity(0.3), radius: 2.5, y: 1)
+            }
+            .contentShape(Capsule())
+            .gesture(
+                DragGesture(minimumDistance: 0).onChanged { value in
+                    let position = (value.location.x - height / 2) / travel * CGFloat(count - 1)
+                    let next = Int(position.rounded()).clamped(to: 0..<count)
+                    guard next != index else { return }
+                    NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                    select(next)
+                }
+            )
+            .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: index)
+        }
+        .frame(height: Self.height)
+    }
+}
+
+private struct EffortSparkles: View {
+    let isPaused: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: isPaused)) { timeline in
+            Canvas { context, size in
+                let time = timeline.date.timeIntervalSinceReferenceDate
+                context.blendMode = .plusLighter
+                for particle in 0..<54 {
+                    let drift = 0.006 + sample(particle, 1) * 0.014
+                    let lane = (sample(particle, 2) + time * drift).truncatingRemainder(dividingBy: 1)
+                    // The square root crowds sparkles toward the high-effort end.
+                    let x = lane.squareRoot() * size.width
+                    let sway = sin(time * (0.4 + sample(particle, 3)) + sample(particle, 4) * 6) * 1.5
+                    let y = size.height * (0.14 + sample(particle, 5) * 0.72) + sway
+                    let twinkle = 0.5 + 0.5 * sin(time * (1.2 + sample(particle, 6) * 2.6) + sample(particle, 7) * 6)
+                    let radius = 0.5 + sample(particle, 8) * 1.5
+                    context.opacity = 0.2 + 0.75 * twinkle * twinkle
+                    context.fill(star(at: CGPoint(x: x, y: y), radius: radius), with: .color(.white))
+                }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func star(at center: CGPoint, radius: Double) -> Path {
+        guard radius > 1.2 else {
+            return Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
+        }
+        let reach = radius * 2.2
+        let waist = radius * 0.32
+        var path = Path()
+        for point in 0..<8 {
+            let angle = Double(point) * .pi / 4
+            let length = point.isMultiple(of: 2) ? reach : waist
+            let vertex = CGPoint(x: center.x + cos(angle) * length, y: center.y + sin(angle) * length)
+            if point == 0 { path.move(to: vertex) } else { path.addLine(to: vertex) }
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    private func sample(_ index: Int, _ salt: UInt64) -> Double {
+        var value = UInt64(index) &* 0x9E3779B97F4A7C15 &+ salt &* 0xBF58476D1CE4E5B9
+        value = (value ^ (value >> 30)) &* 0xBF58476D1CE4E5B9
+        value = (value ^ (value >> 27)) &* 0x94D049BB133111EB
+        return Double((value ^ (value >> 31)) & 0xFFFF) / 65535
     }
 }
 
