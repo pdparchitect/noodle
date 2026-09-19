@@ -4,7 +4,7 @@ import NoodleCore
 import NoodleSettingsUI
 
 enum NoodleSettingsTab: Hashable {
-    case general, chat, harnesses, mcps, heartbeats, sandbox, permissions, keybindings, companions, updates
+    case general, chat, harnesses, mcps, heartbeats, sandbox, keybindings, permissions, companions, updates
 }
 
 struct NoodleSettingsView: View {
@@ -61,10 +61,6 @@ struct NoodleSettingsView: View {
                 .settingsContentSize()
                 .tabItem { Label("Sandbox", systemImage: "lock.shield") }
                 .tag(NoodleSettingsTab.sandbox)
-            PermissionsSettingsView()
-                .settingsContentSize()
-                .tabItem { Label("Permissions", systemImage: "hand.raised") }
-                .tag(NoodleSettingsTab.permissions)
             MCPSettingsView()
                 .settingsContentSize()
                 .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
@@ -73,6 +69,10 @@ struct NoodleSettingsView: View {
                 .settingsContentSize()
                 .tabItem { Label("Keybindings", systemImage: "keyboard") }
                 .tag(NoodleSettingsTab.keybindings)
+            PermissionsSettingsView()
+                .settingsContentSize()
+                .tabItem { Label("Permissions", systemImage: "hand.raised") }
+                .tag(NoodleSettingsTab.permissions)
             CompanionAppsSettingsView()
                 .settingsContentSize()
                 .tabItem { Label("Companions", systemImage: "square.stack.3d.up") }
@@ -85,8 +85,8 @@ struct NoodleSettingsView: View {
         .modifier(SettingsWindowResizeAnchor())
         .settingsScrollIndicators(selection: store.selectedSettingsTab)
         .background(SettingsTabBadge(counts: ["Harness": harnessesNeedingAttention,
-                                              "Permissions": permissions.needingAttention,
                                               "Tools": toolsNeedingAttention,
+                                              "Permissions": permissions.needingAttention,
                                               "Companions": companionUpdates.updates.count,
                                               "Update": appUpdater.availableVersion == nil ? 0 : 1]))
         // Check on opening Settings so the tabs are badged before they are selected.
