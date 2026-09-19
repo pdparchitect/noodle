@@ -13,6 +13,7 @@ All notable changes to Noodle are documented here, following
 ### Changed
 
 - Remove the explanatory footer beneath the companion list in Settings > Companions.
+- Show installed models in Local Models the same way as the Available list, with their description, size and details link, and drop a model from Available once it is installed.
 
 ### Fixed
 

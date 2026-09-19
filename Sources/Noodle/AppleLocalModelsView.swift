@@ -20,6 +20,7 @@ struct AppleLocalModelsView: View {
     @State private var editingAgent: AgentRecord?
     @State private var returnToModelID: String?
     @State private var modelPendingRemoval: AppleLocalModel?
+    @State private var installedHeight: CGFloat = 0
     private let checkSupport: @MainActor () async throws -> Bool
 
     init(checkSupport: @escaping @MainActor () async throws -> Bool = {
@@ -31,6 +32,11 @@ struct AppleLocalModelsView: View {
     private var storage: AppleLocalModelStore { .init(repository: store.repository.rootURL) }
     private var busy: Bool { importing || downloadingID != nil }
     private var installed: [AppleLocalModel] { models + unreadable }
+    private var available: [AppleDownloadableModel] {
+        AppleDownloadableModel.available.filter { downloadable in
+            !models.contains { $0.sourceRepository == downloadable.repository }
+        }
+    }
     // Open with the runtime's last known answer; the fresh check replaces it.
     private var knownSupport: Bool? { checkedSupport ?? store.runtime.appleLocalModelsSupported }
     private var supported: Bool { knownSupport == true }
@@ -118,90 +124,107 @@ struct AppleLocalModelsView: View {
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         } else if !installed.isEmpty {
-            Text("Installed").font(.headline)
-            List(installed) { model in
-                let users = botsUsing(model)
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(model.name).fontWeight(.medium).lineLimit(2)
-                        Text(ByteCountFormatter.string(fromByteCount: model.byteCount, countStyle: .file))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 4)
-                    Button("Remove", role: .destructive) { requestRemoval(model) }
-                        .disabled(busy)
-                        .help(users.isEmpty ? "Remove Noodle’s copy of this model."
-                              : "Used by \(users.map(\.displayName).joined(separator: ", ")).")
-                        .popover(isPresented: Binding(
-                            get: { modelUsageID == model.id },
-                            set: { if !$0, modelUsageID == model.id { modelUsageID = nil } }
-                        ), arrowEdge: .trailing) {
-                            AppleModelUsagePopover(model: model, agents: botsUsing(model), edit: { agent in
-                                returnToModelID = model.id
-                                modelUsageID = nil
-                                editingAgent = agent
-                            }, remove: { requestRemoval(model) }, close: { modelUsageID = nil })
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Installed").font(.headline)
+                ScrollView {
+                    VStack(spacing: 12) {
+                        ForEach(installed) { model in
+                            let users = botsUsing(model)
+                            let source = AppleDownloadableModel.available.first { $0.repository == model.sourceRepository }
+                            modelRow(name: model.name, summary: source?.summary, byteCount: model.byteCount, sourceURL: source?.sourceURL) {
+                                Button("Remove", role: .destructive) { requestRemoval(model) }
+                                    .disabled(busy)
+                                    .help(users.isEmpty ? "Remove Noodle’s copy of this model."
+                                          : "Used by \(users.map(\.displayName).joined(separator: ", ")).")
+                                    .popover(isPresented: Binding(
+                                        get: { modelUsageID == model.id },
+                                        set: { if !$0, modelUsageID == model.id { modelUsageID = nil } }
+                                    ), arrowEdge: .trailing) {
+                                        AppleModelUsagePopover(model: model, agents: botsUsing(model), edit: { agent in
+                                            returnToModelID = model.id
+                                            modelUsageID = nil
+                                            editingAgent = agent
+                                        }, remove: { requestRemoval(model) }, close: { modelUsageID = nil })
+                                    }
+                            }
+                            .padding(12)
+                            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
                         }
+                    }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { installedHeight = $0 }
                 }
-                .padding(.vertical, 6)
+                .scrollBounceBehavior(.basedOnSize)
+                // Leave the sheet room for the models still on offer.
+                .frame(height: min(installedHeight, max(200, 560 - CGFloat(available.count) * 96)))
             }
-            .listStyle(.inset).scrollContentBackground(.hidden)
-            .frame(height: min(200, CGFloat(installed.count) * 64 + 16))
-            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
     }
 
+    @ViewBuilder
     private var availableContent: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Available").font(.headline)
-            ForEach(AppleDownloadableModel.available) { downloadable in
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 6) {
-                                Text(downloadable.name).fontWeight(.medium)
-                                if downloadable.id == AppleDownloadableModel.recommended()?.id {
-                                    Text("Recommended").font(.caption2).foregroundStyle(.tint)
-                                        .padding(.horizontal, 6).padding(.vertical, 2)
-                                        .background(.tint.opacity(0.12), in: Capsule())
-                                        .help("The best fit for this Mac’s memory.")
+        if !available.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Available").font(.headline)
+                ForEach(available) { downloadable in
+                    VStack(alignment: .leading, spacing: 8) {
+                        modelRow(name: downloadable.name, summary: downloadable.summary, byteCount: downloadable.byteCount,
+                                 sourceURL: downloadable.sourceURL,
+                                 recommended: downloadable.id == AppleDownloadableModel.recommended()?.id) {
+                            if downloadingID == downloadable.id {
+                                Button("Cancel") {
+                                    cancelling = true
+                                    downloadTask?.cancel()
                                 }
+                                .disabled(cancelling)
+                            } else {
+                                Button("Download") { download(downloadable) }
+                                    .disabled(!supported || busy)
                             }
-                            Text(downloadable.summary).font(.caption).foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            HStack(spacing: 8) {
-                                Text("4-bit · \(ByteCountFormatter.string(fromByteCount: downloadable.byteCount, countStyle: .file))")
-                                    .foregroundStyle(.secondary)
-                                Link("Details", destination: downloadable.sourceURL)
-                                    .help("Model details and license on Hugging Face")
-                            }
-                            .font(.caption)
                         }
-                        Spacer(minLength: 4)
                         if downloadingID == downloadable.id {
-                            Button("Cancel") {
-                                cancelling = true
-                                downloadTask?.cancel()
+                            VStack(alignment: .leading, spacing: 5) {
+                                ProgressView(value: downloadProgress?.fraction ?? 0)
+                                Text(downloadStatus).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                             }
-                            .disabled(cancelling)
-                        } else if models.contains(where: { $0.sourceRepository == downloadable.repository }) {
-                            Text("Installed").font(.callout).foregroundStyle(.secondary)
-                        } else {
-                            Button("Download") { download(downloadable) }
-                                .disabled(!supported || busy)
                         }
                     }
-                    if downloadingID == downloadable.id {
-                        VStack(alignment: .leading, spacing: 5) {
-                            ProgressView(value: downloadProgress?.fraction ?? 0)
-                            Text(downloadStatus).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                        }
+                    .padding(12)
+                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+                }
+            }
+        }
+    }
+
+    /// A model from the catalogue carries its summary and source; an imported one has only its name and size.
+    private func modelRow(name: String, summary: String?, byteCount: Int64, sourceURL: URL?, recommended: Bool = false,
+                          @ViewBuilder action: () -> some View) -> some View {
+        let size = ByteCountFormatter.string(fromByteCount: byteCount, countStyle: .file)
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(name).fontWeight(.medium).lineLimit(2)
+                    if recommended {
+                        Text("Recommended").font(.caption2).foregroundStyle(.tint)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(.tint.opacity(0.12), in: Capsule())
+                            .help("The best fit for this Mac’s memory.")
                     }
                 }
-                .padding(12)
-                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+                if let summary {
+                    Text(summary).font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(spacing: 8) {
+                    Text(sourceURL == nil ? size : "4-bit · \(size)").foregroundStyle(.secondary)
+                    if let sourceURL {
+                        Link("Details", destination: sourceURL)
+                            .help("Model details and license on Hugging Face")
+                    }
+                }
+                .font(.caption)
             }
+            Spacer(minLength: 4)
+            action()
         }
     }
 

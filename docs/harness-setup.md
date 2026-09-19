@@ -111,7 +111,8 @@ Tool success still depends on the model and the request.
 The Available list is shown before downloading any weights. It runs from
 smallest to largest: Qwen3 1.7B, Qwen3 4B Instruct (2507), Qwen3 8B and Qwen3 14B,
 all 4-bit. Each entry says what the model suits and the memory it wants; all accept
-text and tools.
+text and tools. A downloaded model moves from Available to **Installed**, where it
+keeps the same description, size and details link.
 Downloads run in the app using its existing outbound network access and private
 storage. The restricted bot helper remains offline. Allow space for both the
 download and the imported copy during installation.
