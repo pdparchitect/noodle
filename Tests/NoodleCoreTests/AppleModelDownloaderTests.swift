@@ -10,8 +10,8 @@ final class AppleModelDownloaderTests: XCTestCase {
         "model.safetensors": Data("test model weights".utf8)
     ]
 
-    private var recommendation: AppleModelRecommendation {
-        .init(name: "Test model", repository: "mlx-community/test-model", revision: String(repeating: "a", count: 40),
+    private var downloadable: AppleDownloadableModel {
+        .init(name: "Test model", summary: "Test", memory: 8, repository: "mlx-community/test-model", revision: String(repeating: "a", count: 40),
               files: payloads.keys.sorted().map { name in
                   let data = payloads[name]!
                   return .init(name: name, byteCount: Int64(data.count),
@@ -28,23 +28,23 @@ final class AppleModelDownloaderTests: XCTestCase {
 
     func testDownloadImportsVerifiedResourcesAndRemembersSource() async throws {
         let payloads = payloads
-        let recommendation = recommendation
+        let downloadable = downloadable
         try await fixture { store in
             let downloader = AppleModelDownloader { url, destination, size, progress in
-                XCTAssertTrue(url.path.contains("/resolve/\(recommendation.revision)/"))
+                XCTAssertTrue(url.path.contains("/resolve/\(downloadable.revision)/"))
                 let data = try XCTUnwrap(payloads[url.lastPathComponent])
                 XCTAssertEqual(Int64(data.count), size)
                 try data.write(to: destination)
                 progress(size)
             }
-            let model = try await downloader.download(recommendation, into: store)
-            XCTAssertEqual(model.sourceRepository, recommendation.repository)
+            let model = try await downloader.download(downloadable, into: store)
+            XCTAssertEqual(model.sourceRepository, downloadable.repository)
             XCTAssertEqual(try store.models(), [model])
             XCTAssertEqual(try Data(contentsOf: store.folder(id: model.id).appendingPathComponent("model.safetensors")),
                            payloads["model.safetensors"])
             XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: store.directory.path), [model.id])
             let noNetwork = AppleModelDownloader { _, _, _, _ in XCTFail("Already installed model was downloaded again") }
-            let existing = try await noNetwork.download(recommendation, into: store)
+            let existing = try await noNetwork.download(downloadable, into: store)
             XCTAssertEqual(existing.id, model.id)
         }
     }
@@ -66,7 +66,7 @@ final class AppleModelDownloaderTests: XCTestCase {
                     try data.write(to: destination)
                 }
                 do {
-                    _ = try await downloader.download(recommendation, into: store)
+                    _ = try await downloader.download(downloadable, into: store)
                     XCTFail("Expected \(failure) to fail")
                 } catch {
                     if failure == "cancel" { XCTAssertTrue(error is CancellationError) }
@@ -81,11 +81,11 @@ final class AppleModelDownloaderTests: XCTestCase {
         var invalidPayloads = payloads
         invalidPayloads["config.json"] = Data(#"{"model_type":"unknown","max_position_embeddings":32768}"#.utf8)
         let invalidFiles = invalidPayloads.map { name, data in
-            AppleModelRecommendation.File(name: name, byteCount: Int64(data.count),
+            AppleDownloadableModel.File(name: name, byteCount: Int64(data.count),
                 digest: .sha256(SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()))
         }
-        let invalid = AppleModelRecommendation(name: "Invalid", repository: recommendation.repository,
-                                               revision: recommendation.revision, files: invalidFiles)
+        let invalid = AppleDownloadableModel(name: "Invalid", summary: "Test", memory: 8, repository: downloadable.repository,
+                                               revision: downloadable.revision, files: invalidFiles)
         let contents = invalidPayloads
         try await fixture { store in
             let downloader = AppleModelDownloader { url, destination, _, _ in
@@ -115,11 +115,23 @@ final class AppleModelDownloaderTests: XCTestCase {
         }
     }
 
-    func testRecommendationsHavePinnedCompatibleResources() {
-        XCTAssertFalse(AppleModelRecommendation.recommended.isEmpty)
-        for model in AppleModelRecommendation.recommended {
+    func testAvailableModelsHavePinnedCompatibleResources() {
+        XCTAssertFalse(AppleDownloadableModel.available.isEmpty)
+        XCTAssertEqual(AppleDownloadableModel.available.map(\.byteCount), AppleDownloadableModel.available.map(\.byteCount).sorted())
+        XCTAssertEqual(Set(AppleDownloadableModel.available.map(\.repository)).count, AppleDownloadableModel.available.count)
+        XCTAssertEqual(AppleDownloadableModel.available.map(\.memory), AppleDownloadableModel.available.map(\.memory).sorted())
+        let recommended = { (gigabytes: UInt64) in AppleDownloadableModel.recommended(forPhysicalMemory: gigabytes << 30)?.name }
+        XCTAssertEqual(recommended(8), "Qwen3 4B Instruct")
+        XCTAssertEqual(recommended(16), "Qwen3 8B")
+        XCTAssertEqual(recommended(18), "Qwen3 8B")
+        XCTAssertEqual(recommended(24), "Qwen3 14B")
+        XCTAssertEqual(recommended(128), "Qwen3 14B")
+        XCTAssertEqual(recommended(4), "Qwen3 1.7B")
+        for model in AppleDownloadableModel.available {
             XCTAssertNotNil(model.revision.range(of: "^[0-9a-f]{40}$", options: .regularExpression))
             XCTAssertTrue(model.repository.hasPrefix("mlx-community/"))
+            XCTAssertFalse(model.summary.isEmpty)
+            XCTAssertLessThanOrEqual(model.summary.count, 120)
             let names = Set(model.files.map(\.name))
             XCTAssertEqual(names.count, model.files.count)
             XCTAssertTrue(names.isSuperset(of: ["config.json", "tokenizer.json", "tokenizer_config.json"]))
@@ -138,7 +150,7 @@ final class AppleModelDownloaderTests: XCTestCase {
         guard ProcessInfo.processInfo.environment["NOODLE_TEST_MODEL_DOWNLOAD"] == "1" else {
             throw XCTSkip("Set NOODLE_TEST_MODEL_DOWNLOAD=1 for a small Hugging Face transfer and cancellation probe.")
         }
-        let model = try XCTUnwrap(AppleModelRecommendation.recommended.first)
+        let model = try XCTUnwrap(AppleDownloadableModel.available.first)
         let config = try XCTUnwrap(model.files.first { $0.name == "config.json" })
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("live-model-download-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
