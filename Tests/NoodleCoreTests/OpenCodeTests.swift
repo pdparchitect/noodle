@@ -53,6 +53,10 @@ final class OpenCodeTests: XCTestCase {
         XCTAssertThrowsError(try OpenCodeProtocol.models(from: Data("[]".utf8)))
         let release = Data(#"{"channel":"latest","name":"cli","distribution":"npm","version":"2.0.7","active":true}"#.utf8)
         XCTAssertEqual(HarnessVersionPolicy.latestVersion(provider: .openCode, data: release), "2.0.7")
+        // The live endpoint reports the current release with the rollout flag off.
+        let inactive = Data(#"{"channel":"latest","name":"cli","distribution":"npm","version":"2.0.8","metadata":{"package":"@opencode/cli"},"active":false,"minimum":false}"#.utf8)
+        XCTAssertEqual(HarnessVersionPolicy.latestVersion(provider: .openCode, data: inactive), "2.0.8")
+        XCTAssertNil(HarnessVersionPolicy.latestVersion(provider: .openCode, data: Data(#"{"channel":"beta","name":"cli","distribution":"npm","version":"2.0.9","active":true}"#.utf8)))
         XCTAssertNil(HarnessVersionPolicy.latestVersion(provider: .openCode, data: Data(#"{"tag_name":"v1.9.0"}"#.utf8)))
         XCTAssertNil(HarnessVersionPolicy.compatibilityIssue(provider: .openCode, help: "USAGE\nopencode acp api auth --standalone"))
         XCTAssertNotNil(HarnessVersionPolicy.compatibilityIssue(provider: .openCode, help: "USAGE\nopencode acp auth"))

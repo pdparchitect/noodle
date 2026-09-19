@@ -139,9 +139,10 @@ public enum HarnessVersionPolicy {
                   let tag = object["tag_name"] as? String else { return nil }
             value = tag.hasPrefix("rust-v") ? String(tag.dropFirst(6)) : tag
         } else if provider == .openCode {
+            // OpenCode's installer and updater ignore the `active` rollout flag; the latest release can report false.
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   object["channel"] as? String == "latest", object["name"] as? String == "cli",
-                  object["distribution"] as? String == "npm", object["active"] as? Bool == true,
+                  object["distribution"] as? String == "npm",
                   let version = object["version"] as? String else { return nil }
             value = version
         } else if provider == .muse {
