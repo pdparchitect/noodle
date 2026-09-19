@@ -359,6 +359,9 @@ extension MessengerDocumentation {
         `await noodle.storage.set(key, JSON_value)` / `await noodle.storage.get(key)` persist
         small values. `noodle.data.writeText(relativePath, text)` / `readText(relativePath)`
         use its data directory (4 MiB per file). Missing values/files return null.
+        `await noodle.secrets.set(name, value)` / `get(name)` / `delete(name)` / `names()` keep
+        API keys and tokens in Applet's Keychain, separately for each noodlet; never put
+        them in storage, data files or source. Missing secrets return null.
         `noodle.files.openText()` returns {name,text} or null; `saveText(name,text)` returns
         a boolean. File dialogs require a visible window. Set network:true to enable
         remote resources and HTTP(S) `fetch()` / `noodle.fetch()`. Requests use the native
@@ -392,6 +395,9 @@ extension MessengerDocumentation {
         in the installed Swift interpreter. Use SwiftUI, AppKit via NSViewRepresentable,
         SpriteKit and other installed Apple SDKs. NoodletContext.dataDirectory and
         packageDirectory provide URLs; isBackground reports the initial launch mode.
+        `try await NoodletContext.secrets.set(name, value)` / `get(name)` / `delete(name)` /
+        `names()` is the same per-noodlet Keychain store. Like data directories, it is
+        not a security boundary between native creations.
         Swift requires installed Apple developer tools. Native code runs in a child
         process inheriting Applet's sandbox; data directories are a convention, not
         a security boundary between trusted native creations. The network manifest

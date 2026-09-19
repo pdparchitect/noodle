@@ -5,6 +5,7 @@ import AppletCore
 @MainActor final class NativeRunner {
   let package: NoodletPackage, dataRoot: URL, buildRoot: URL
   let log: AppletLog
+  var secrets = AppletSecrets.shared
   private var process: Process?
   private var input: Pipe?
   private var pending: [String: CheckedContinuation<String, Error>] = [:]
@@ -338,6 +339,22 @@ import AppletCore
     }
     if id == "ready" {
       ready = true
+      return
+    }
+    // The noodlet asking the host. Only this noodlet's pipe reaches here, so the
+    // account is the host's, never one the noodlet names.
+    if let call = object["call"] as? String {
+      var reply: [String: Any] = ["reply": id]
+      do {
+        guard call.hasPrefix("secrets.") else { throw AppletError("Unknown host call.") }
+        reply["value"] = try secrets.perform(
+          String(call.dropFirst("secrets.".count)), name: object["name"] as? String,
+          value: object["value"] as? String,
+          account: AppletSecrets.account(package, dataRoot: dataRoot))
+      } catch { reply["error"] = error.localizedDescription }
+      if let data = try? JSONSerialization.data(withJSONObject: reply) {
+        try? input?.fileHandleForWriting.write(contentsOf: data + Data([10]))
+      }
       return
     }
     guard let callback = pending.removeValue(forKey: id) else { return }

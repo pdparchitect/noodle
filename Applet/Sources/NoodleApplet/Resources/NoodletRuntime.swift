@@ -7,6 +7,34 @@ public enum NoodletContext {
     public static let dataDirectory = URL(fileURLWithPath: ProcessInfo.processInfo.environment["NOODLET_DATA"]!)
     public static let packageDirectory = URL(fileURLWithPath: ProcessInfo.processInfo.environment["NOODLET_PACKAGE"]!)
     public static var isBackground: Bool { ProcessInfo.processInfo.environment["NOODLET_MODE"] != "foreground" }
+    /// Kept in Applet's Keychain, separately for each noodlet.
+    public static let secrets = NoodletSecrets()
+}
+
+public struct NoodletSecrets: Sendable {
+    public func get(_ name: String) async throws -> String? { try await NoodletHost.call("secrets.get", ["name": name]) as? String }
+    public func set(_ name: String, _ value: String) async throws { _ = try await NoodletHost.call("secrets.set", ["name": name, "value": value]) }
+    public func delete(_ name: String) async throws { _ = try await NoodletHost.call("secrets.delete", ["name": name]) }
+    public func names() async throws -> [String] { try await NoodletHost.call("secrets.names", [:]) as? [String] ?? [] }
+}
+
+/// Requests from the noodlet to Applet, answered over the same pipe as its commands.
+@MainActor enum NoodletHost {
+    static var emit: (([String: Any]) -> Void)?
+    private static var pending: [String: CheckedContinuation<Any, Error>] = [:]
+    static func call(_ name: String, _ arguments: [String: Any]) async throws -> Any {
+        guard let emit else { throw RuntimeError("Applet is not connected yet.") }
+        let id = UUID().uuidString
+        return try await withCheckedThrowingContinuation { continuation in
+            pending[id] = continuation
+            emit(arguments.merging(["id": id, "call": name]) { _, new in new })
+        }
+    }
+    static func resolve(_ reply: [String: Any]) {
+        guard let id = reply["reply"] as? String, let continuation = pending.removeValue(forKey: id) else { return }
+        if let error = reply["error"] as? String { continuation.resume(throwing: RuntimeError(error)) }
+        else { continuation.resume(returning: reply["value"] ?? NSNull()) }
+    }
 }
 
 @main struct NoodletRuntime {
@@ -67,6 +95,7 @@ public enum NoodletContext {
             window.setContentSize(NSSize(width: min(max(current.width, window.contentMinSize.width), window.contentMaxSize.width), height: min(max(current.height, window.contentMinSize.height), window.contentMaxSize.height)))
         }
         if !NoodletContext.isBackground { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
+        NoodletHost.emit = { [weak self] in self?.emit($0) }
         emit(["id":"ready","value":"ready"])
         let prefix = self.prefix
         DispatchQueue.global().async { [weak self] in
@@ -84,6 +113,7 @@ public enum NoodletContext {
         FileHandle.standardOutput.write(Data((prefix + String(decoding: data, as: UTF8.self) + "\n").utf8))
     }
     func handle(_ command: [String: Any]) {
+        if command["reply"] != nil { NoodletHost.resolve(command); return }
         let id = command["id"] as? String ?? "", op = command["operation"] as? String ?? ""
         do {
             var value: Any = ["ok":true]

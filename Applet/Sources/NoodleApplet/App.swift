@@ -48,7 +48,7 @@ import OSLog
       AppletFileCommands(delegate: delegate)
     }
     Settings {
-      AppletSettingsView(background: delegate.background, library: delegate.library).preferredColorScheme(.dark)
+      AppletSettingsView(background: delegate.background, library: delegate.library, runtime: delegate.runtime).preferredColorScheme(.dark)
     }
     .windowResizability(.contentSize)
     .handlesExternalEvents(matching: [])

@@ -5,6 +5,8 @@
 ### Added
 
 - Let noodlets use the microphone, camera, speech recognition and screen recording. A noodlet declares `"permissions": ["microphone", "camera", "speech-recognition", "screen-capture"]` in its manifest; Applet asks once per noodlet before it starts, then macOS asks for Noodle Applet. Adds the audio input and camera sandbox entitlements. A new screen recording grant applies after Applet restarts.
+- Give noodlets a place for API keys and tokens. `noodle.secrets` in HTML and `NoodletContext.secrets` in Swift keep values in Applet's Keychain, separately for each noodlet. Settings > Secrets lists their names and removes them.
+- Show what each noodlet has saved, and remove it, in Settings > Storage.
 - Let HTML noodlets that declare `screen-capture` share the screen with `getDisplayMedia`. macOS shows its own picker.
 - Report each permission a noodlet declares as `granted`, `denied` or `not-requested` in `info`, `status` and `open`, and list and remove what each noodlet was allowed in Settings > Permissions.
 - Add `noodlet typecheck --path FILE_OR_FOLDER` to check any Swift sources and return compiler diagnostics, without a noodlet manifest, import or session.

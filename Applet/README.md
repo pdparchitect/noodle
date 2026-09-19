@@ -166,6 +166,30 @@ off. `rememberFrame: true` restores them by canonical package location. Headless
 runs and explicit CLI sizes ignore remembered frames; dimensions are still
 clamped to the package's limits. The bundled Focus example uses these controls.
 
+## Secrets
+
+Keep API keys and tokens out of source, storage and data files:
+
+```js
+await noodle.secrets.set("openai", key)      // HTML
+const key = await noodle.secrets.get("openai") // null when missing
+```
+
+```swift
+try await NoodletContext.secrets.set("openai", key)   // Swift
+let key = try await NoodletContext.secrets.get("openai")
+```
+
+`delete(name)` and `names()` complete the API. Applet keeps each noodlet's secrets
+in its own login Keychain item, up to 64 values of 16 KiB, with separate values for
+headless test runs. An HTML noodlet can only ever reach its own. Native noodlets
+inherit Applet's Keychain identity: the API gives each its own secrets, but native
+code that goes around it can read Applet's Keychain items, as it can other
+noodlets' data. Do not run untrusted native packages.
+**Settings → Secrets** lists names, never values, and removes them.
+**Settings → Storage** shows each noodlet's saved data and removes it, including an
+HTML noodlet's WebKit store.
+
 ## Permissions
 
 Declare the protected resources a noodlet uses in `noodlet.json`:

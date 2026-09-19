@@ -68,6 +68,7 @@
     fetch:nativeFetch,
     data:Object.freeze({readText:path=>send({operation:'read',path}),writeText:(path,text)=>send({operation:'write',path,text})}),
     storage:Object.freeze({get:async name=>{const value=await send({operation:'read',path:key(name)});return value===null?null:JSON.parse(value);},set:(name,value)=>send({operation:'write',path:key(name),text:JSON.stringify(value)})}),
+    secrets:Object.freeze({get:name=>send({operation:'secret',action:'get',name}),set:(name,value)=>send({operation:'secret',action:'set',name,value}),delete:name=>send({operation:'secret',action:'delete',name}),names:()=>send({operation:'secret',action:'names'})}),
     files:Object.freeze({openText:()=>send({operation:'openFile'}),saveText:(name,text)=>send({operation:'saveFile',name,text})})
   }), writable:false});
   window.__noodletControl = async r => {

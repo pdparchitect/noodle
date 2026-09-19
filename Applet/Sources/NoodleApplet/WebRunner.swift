@@ -10,6 +10,7 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
   let package: NoodletPackage
   let dataRoot: URL
   let log: AppletLog
+  let secrets: AppletSecrets
   let web: WKWebView
   let window: NSWindow
   private var loadContinuation: CheckedContinuation<Void, Error>?
@@ -24,9 +25,10 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
   private(set) var rendering: AppletRenderingState?
   init(
     package: NoodletPackage, dataRoot: URL, log: AppletLog, size: CGSize, storeID: UUID,
-    rememberFrame: Bool = true, testClock: Bool = false
+    rememberFrame: Bool = true, testClock: Bool = false, secrets: AppletSecrets = .shared
   ) {
     self.package = package
+    self.secrets = secrets
     self.dataRoot = dataRoot
     self.log = log
     let config = WKWebViewConfiguration()
@@ -223,6 +225,13 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
       case "log":
         log.append(body["level"] as? String ?? "console", body["text"] as? String ?? "")
         return (true, nil)
+      case "secret":
+        return (
+          try secrets.perform(
+            body["action"] as? String ?? "", name: body["name"] as? String,
+            value: body["value"] as? String,
+            account: AppletSecrets.account(package, dataRoot: dataRoot)), nil
+        )
       case "read", "write":
         guard let path = body["path"] as? String else {
           throw AppletError("A relative data path is required.")
