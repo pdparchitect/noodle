@@ -5,6 +5,7 @@
 ### Added
 
 - Let noodlets use the microphone, camera, speech recognition and screen recording. A noodlet declares `"permissions": ["microphone", "camera", "speech-recognition", "screen-capture"]` in its manifest; Applet asks once per noodlet before it starts, then macOS asks for Noodle Applet. Adds the audio input and camera sandbox entitlements. A new screen recording grant applies after Applet restarts.
+- Report each permission a noodlet declares as `granted`, `denied` or `not-requested` in `info`, `status` and `open`, and list and remove what each noodlet was allowed in Settings > Permissions.
 - Add `noodlet typecheck --path FILE_OR_FOLDER` to check any Swift sources and return compiler diagnostics, without a noodlet manifest, import or session.
 - Report why a failed session stopped in a new `failure` field on `status` and other session responses.
 

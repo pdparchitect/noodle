@@ -250,6 +250,8 @@ extension MessengerDocumentation {
         Without --session, select an active session first, otherwise the newest session.
         Session responses include mode, dataScope (user/test), testClock, viewAvailable,
         and HTML rendering diagnostics when available. A failed session says why in failure.
+        permissions lists each permission the manifest declares as granted, denied or
+        not-requested; tell the user what to allow instead of guessing from failures.
         Errors retain resolved session
         metadata; errorCode distinguishes session-not-found, session-unavailable,
         session-not-running, session-mode-conflict and unsupported-operation when applicable.

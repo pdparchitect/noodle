@@ -142,6 +142,8 @@ public struct AppletResponse: Codable, Sendable {
     public var height: Int?
     public var items: [AppletItem]?
     public var capabilities: [String]?
+    /// Each permission the manifest declares: granted, denied or not-requested.
+    public var permissions: [String: String]?
     public init(error: String? = nil, errorCode: String? = nil) {
         self.error = error
         self.errorCode = errorCode

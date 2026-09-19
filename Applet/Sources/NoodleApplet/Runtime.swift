@@ -411,6 +411,7 @@ import AppletCore
     response.path = package.url.path
     response.title = package.manifest.title
     response.runtime = package.manifest.runtime
+    response.permissions = AppletPermissions.status(package, defaults: defaults)
     response.state = "available"
     return response
   }

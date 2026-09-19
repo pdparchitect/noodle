@@ -38,6 +38,8 @@ import XCTest
         ]
         let response = await runtime.handle(request, identity: AppletBuildIdentity.current.noodleID)
         XCTAssertEqual(asked, ["microphone"])
+        XCTAssertNotEqual(response.permissions?["microphone"], "granted", "The user refused this noodlet")
+        XCTAssertEqual(response.permissions?.keys.sorted(), ["microphone"])
         XCTAssertEqual(response.state, "failed")
         XCTAssertEqual(response.failure, "Permission was not given.")
         XCTAssertTrue(response.error?.hasPrefix("Permission was not given.") == true)
@@ -47,6 +49,16 @@ import XCTest
         let later = await runtime.handle(status, identity: AppletBuildIdentity.current.noodleID)
         XCTAssertNil(later.error, "Reporting a failure must not fail the status command")
         XCTAssertEqual(later.failure, "Permission was not given.")
+    }
+
+    func testGrantsAreListedAndRevoked() {
+        let suite = "AppletPermissions." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(["camera", "microphone"], forKey: "permissions.fixture")
+        XCTAssertEqual(AppletPermissions.grants(defaults: defaults)["fixture"], ["camera", "microphone"])
+        AppletPermissions.revoke(packageKey: "fixture", defaults: defaults)
+        XCTAssertNil(AppletPermissions.grants(defaults: defaults)["fixture"])
     }
 
     func testMediaCaptureDelegateIsVisibleToWebKit() {

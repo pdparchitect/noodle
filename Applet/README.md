@@ -179,6 +179,9 @@ as a whole. Declining fails `open` with `permission-denied`. HTML noodlets get
 `getUserMedia` and `MediaRecorder` for the microphone and camera only when declared;
 screen capture is for native noodlets. A new screen recording grant applies after
 Applet restarts.
+`info`, `status` and `open` report each declared permission as `granted`, `denied`
+or `not-requested`. **Settings → Permissions** lists what each noodlet was allowed
+and removes it, so the noodlet asks again.
 Native noodlets run in a child process that inherits Applet's grants, so the
 declaration is the user's consent, not a boundary between native noodlets.
 
