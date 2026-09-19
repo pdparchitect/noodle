@@ -34,8 +34,20 @@ import XCTest
         let missing = UUID(); selection.ids.insert(missing)
         let picker = host(BrowserAssignmentPicker(controller: controller, selectedIDs: selection.idsBinding))
         _ = try await control("Add Browsers", in: picker)
-        press(try await control("Remove Work from bot", in: picker))
-        press(try await control("Remove Unavailable browser from bot", in: picker))
+        let window = try XCTUnwrap(picker.window)
+        func confirmation(_ name: String) async throws -> NSView {
+            press(try await control("Remove \(name) from bot", in: picker))
+            try await wait { !window.sheets.isEmpty }
+            let content = try XCTUnwrap(window.sheets.first?.contentView)
+            _ = try await control("Remove “\(name)”?", in: content)
+            return content
+        }
+        press(try await control("Cancel", in: try await confirmation("Work")))
+        try await wait { window.sheets.isEmpty }
+        XCTAssertEqual(selection.ids, [work.id, personal.id, missing], "Cancel must keep the browser")
+        press(try await control("Remove Browser", in: try await confirmation("Work")))
+        try await wait { window.sheets.isEmpty && !selection.ids.contains(work.id) }
+        press(try await control("Remove Browser", in: try await confirmation("Unavailable browser")))
         try await wait { selection.ids == [personal.id] }
         XCTAssertEqual(controller.selectedIDs(for: agent), [work.id])
         XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("browsers.json")), before)

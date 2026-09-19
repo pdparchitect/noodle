@@ -228,6 +228,7 @@ struct MCPAssignmentPicker: View {
     @State private var wantsNewTool = false
     @State private var showingNewTool = false
     @State private var editing: MCPConnectionRecord?
+    @State private var removing: MCPConnectionRecord?
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -258,7 +259,7 @@ struct MCPAssignmentPicker: View {
                                 Button { editing = connection } label: {
                                     Image(systemName: "pencil").foregroundStyle(.secondary)
                                 }.buttonStyle(.plain).help("Edit \(connection.name)")
-                                Button { selectedIDs.remove(connection.id) } label: {
+                                Button { removing = connection } label: {
                                     Image(systemName: "minus.circle.fill").foregroundStyle(.secondary)
                                 }.buttonStyle(.plain).help("Remove \(connection.name) from this bot")
                             }.padding(8)
@@ -275,6 +276,14 @@ struct MCPAssignmentPicker: View {
         }
         .sheet(item: $editing) { connection in
             MCPEditor(controller: controller, existing: connection).noodleSheetSizing()
+        }
+        .confirmationDialog("Remove “\(removing?.name ?? "")”?", isPresented: Binding(
+            get: { removing != nil }, set: { if !$0 { removing = nil } }
+        ), titleVisibility: .visible, presenting: removing) { connection in
+            Button("Remove Tool", role: .destructive) { selectedIDs.remove(connection.id) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("This bot loses access to it when you save. The tool connection itself is not deleted.")
         }
     }
 }

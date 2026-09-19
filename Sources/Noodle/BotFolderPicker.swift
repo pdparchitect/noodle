@@ -55,6 +55,7 @@ private struct BotFolderRow: View {
     @Binding var folder: AgentFolder
     let remove: () -> Void
     @State private var showingOptions = false
+    @State private var confirmingRemoval = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -77,11 +78,17 @@ private struct BotFolderRow: View {
             }.buttonStyle(.plain).help("Access and Description")
                 .accessibilityLabel("Access and description of \(folder.name)")
                 .popover(isPresented: $showingOptions, arrowEdge: .bottom) { BotFolderOptions(folder: $folder) }
-            Button(action: remove) {
+            Button { confirmingRemoval = true } label: {
                 Image(systemName: "minus.circle.fill").symbolRenderingMode(.palette)
                     .foregroundStyle(.white, Color(nsColor: .darkGray))
             }.buttonStyle(.plain).help("Remove \(folder.name) from bot")
                 .accessibilityLabel("Remove \(folder.name) from bot")
+        }
+        .confirmationDialog("Remove “\(folder.name)”?", isPresented: $confirmingRemoval, titleVisibility: .visible) {
+            Button("Remove Folder", role: .destructive, action: remove)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This bot loses access to the folder when you save. The folder and its contents stay on your Mac.")
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         .help([folder.path, folder.description].compactMap { $0 }.joined(separator: "\n"))

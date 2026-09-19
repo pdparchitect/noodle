@@ -27,6 +27,7 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
     var failure: String?
     @State private var showingAdd = false
     @State private var search = ""
+    @State private var removing: CompanionAssignmentItem?
 
     private var selected: [CompanionAssignmentItem] {
         let known = items.filter { selectedIDs.contains($0.id) }
@@ -68,7 +69,7 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
                             VStack(spacing: 8) {
                                 CompanionAssignmentAvatar(item: item, size: 48)
                                     .overlay(alignment: .topTrailing) {
-                                        Button { selectedIDs.remove(item.id) } label: {
+                                        Button { removing = item } label: {
                                             Image(systemName: "xmark.circle.fill")
                                                 .font(.system(size: 17)).symbolRenderingMode(.palette)
                                                 .foregroundStyle(.white, Color(nsColor: .darkGray))
@@ -92,6 +93,14 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
             if let failure {
                 Text(failure).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
+        }
+        .confirmationDialog("Remove “\(removing?.name ?? "")”?", isPresented: Binding(
+            get: { removing != nil }, set: { if !$0 { removing = nil } }
+        ), titleVisibility: .visible, presenting: removing) { item in
+            Button("Remove \(noun.capitalized)", role: .destructive) { selectedIDs.remove(item.id) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("This bot loses access to it when you save. The \(noun) itself is not deleted.")
         }
     }
 }

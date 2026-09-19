@@ -151,7 +151,19 @@ import NoodleCore
         try await wait { !self.hasControl("Personal", in: chooser) }
         press(try await control("Done", in: chooser)); XCTAssertEqual(selection.done, 1)
         let picker = host(MCPAssignmentPicker(controller: f.controller, selectedIDs: selection.idsBinding))
-        press(try await control("Remove Work from this bot", in: picker))
+        let window = try XCTUnwrap(picker.window)
+        func confirmation() async throws -> NSView {
+            press(try await control("Remove Work from this bot", in: picker))
+            try await wait { !window.sheets.isEmpty }
+            let content = try XCTUnwrap(window.sheets.first?.contentView)
+            _ = try await control("Remove “Work”?", in: content)
+            XCTAssertEqual(selection.ids, [first.id, second.id], "The tool must stay until removal is confirmed")
+            return content
+        }
+        press(try await control("Cancel", in: try await confirmation()))
+        try await wait { window.sheets.isEmpty }
+        XCTAssertEqual(selection.ids, [first.id, second.id], "Cancel must keep the tool")
+        press(try await control("Remove Tool", in: try await confirmation()))
         try await wait { selection.ids == [second.id] }
         XCTAssertEqual(try Data(contentsOf: f.registryURL), before)
         XCTAssertEqual(f.controller.selectedIDs(for: f.a), [first.id])
