@@ -152,11 +152,30 @@ import ScreenCaptureKit
     private static func verifyCreatePlacement(_ window: NSWindow, collapsed: Bool) throws {
         let items = (window.toolbar?.items ?? []).filter(\.isVisible)
         let labels = collapsed ? ["Show Sidebar", "Back"] : ["Hide Sidebar", "Create", "Back"]
-        let frames = labels.compactMap { label in items.first(where: { $0.label == label })?.view.map { $0.convert($0.bounds, to: nil) } }
+        let frames = labels.compactMap { toolbarItem(window, $0)?.view.map { $0.convert($0.bounds, to: nil) } }
         print("BROWSER_UI_CREATE_PLACEMENT: \(labels)=\(frames)")
         guard frames.count == labels.count, items.contains(where: { $0.label == "Create" }) != collapsed,
               zip(frames, frames.dropFirst()).allSatisfy({ $0.maxX < $1.minX }) else {
-            throw BrowserError("Create Browser must follow the sidebar toggle, apart from Back and Forward: \(labels)=\(frames).")
+            throw BrowserError("Create Browser must follow the sidebar toggle, apart from Back and Forward: \(labels)=\(frames). Toolbar: \(describeToolbar(window))")
+        }
+    }
+    /// macOS 26 bridges a toolbar group as one item, so a button is also found through
+    /// its group and its accessibility label.
+    private static func toolbarItem(_ window: NSWindow, _ label: String) -> NSToolbarItem? {
+        let items = (window.toolbar?.items ?? []).filter { $0.isVisible && $0.view != nil }
+        return items.first(where: { $0.label == label })
+            ?? items.first(where: { ($0 as? NSToolbarItemGroup)?.subitems.contains(where: { $0.label == label }) == true })
+            ?? items.first(where: { item in
+                item.toolTip == label || item.view.map(elements)?.contains(where: {
+                    attribute($0, .description) as? String == label || attribute($0, .title) as? String == label
+                }) == true
+            })
+    }
+    private static func describeToolbar(_ window: NSWindow) -> [String] {
+        (window.toolbar?.items ?? []).map { item in
+            let frame = item.view.map { $0.convert($0.bounds, to: nil) }
+            let subitems = (item as? NSToolbarItemGroup)?.subitems.map(\.label) ?? []
+            return "\(item.itemIdentifier.rawValue) label=\(item.label) visible=\(item.isVisible) view=\(item.view.map { String(describing: type(of: $0)) } ?? "nil") frame=\(String(describing: frame)) subitems=\(subitems)"
         }
     }
     /// The fixture hides both entry points, so the App Settings fallback must close the toolbar.
@@ -170,7 +189,7 @@ import ScreenCaptureKit
         }
     }
     private static func sidebarToggle(_ window: NSWindow, _ label: String) -> NSObject? {
-        (window.toolbar?.items.first(where: { $0.label == label && $0.isVisible })?.view).flatMap { view in
+        toolbarItem(window, label)?.view.flatMap { view in
             elements(view).first(where: { $0 is NSButton || attribute($0, .role) as? String == "AXButton" })
         }
     }

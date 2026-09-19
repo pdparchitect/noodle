@@ -66,19 +66,56 @@ import AppletCore
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-applet-launch-check.json")
         try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: file, options: .atomic)
     }
+    private static func attribute(_ node: NSObject, _ key: NSAccessibility.Attribute) -> Any? {
+        if let value = node.accessibilityAttributeValue(key) { return value }
+        let names: [NSAccessibility.Attribute: String] = [.children: "accessibilityChildren", .title: "accessibilityTitle",
+            .description: "accessibilityLabel", .role: "accessibilityRole",
+            .init(rawValue: "AXChildrenInNavigationOrder"): "accessibilityChildrenInNavigationOrder"]
+        guard let name = names[key], node.responds(to: NSSelectorFromString(name)) else { return nil }
+        return node.value(forKey: name)
+    }
+    private static func elements(_ root: NSView) -> [NSObject] {
+        var pending: [NSObject] = [root], visited = Set<ObjectIdentifier>(), result: [NSObject] = []
+        while let node = pending.popLast() {
+            guard visited.insert(ObjectIdentifier(node)).inserted else { continue }
+            result.append(node)
+            pending.append(contentsOf: attribute(node, .children) as? [NSObject] ?? [])
+            pending.append(contentsOf: attribute(node, .init(rawValue: "AXChildrenInNavigationOrder")) as? [NSObject] ?? [])
+            if let view = node as? NSView { pending.append(contentsOf: view.subviews) }
+        }
+        return result
+    }
     /// Open Noodlet follows the sidebar toggle inside the sidebar's toolbar section. Both leave
     /// with the sidebar, where the system toggle and the detail toolbar's Open Noodlet return.
     private static func verifySidebarToolbar(_ window: NSWindow) async throws {
+        // macOS 26 hosts SwiftUI toolbar buttons without an NSButton, so items are also
+        // found by their accessibility label and pressed through accessibility.
+        func item(_ label: String) -> NSToolbarItem? {
+            let items = (window.toolbar?.items ?? []).filter { $0.isVisible && $0.view != nil }
+            return items.first(where: { $0.label == label }) ?? items.first(where: { item in
+                item.toolTip == label || item.view.map(elements)?.contains(where: {
+                    attribute($0, .description) as? String == label || attribute($0, .title) as? String == label
+                }) == true
+            })
+        }
         func frames(_ labels: [String]) -> [CGRect] {
-            let items = (window.toolbar?.items ?? []).filter(\.isVisible)
-            return labels.compactMap { label in items.first(where: { $0.label == label })?.view.map { $0.convert($0.bounds, to: nil) } }
+            labels.compactMap { item($0)?.view.map { $0.convert($0.bounds, to: nil) } }
         }
         func press(_ label: String) async throws {
-            func button(_ view: NSView) -> NSButton? { view as? NSButton ?? view.subviews.lazy.compactMap(button).first }
-            guard let toggle = window.toolbar?.items.first(where: { $0.label == label && $0.isVisible })?.view.flatMap(button) else {
-                throw AppletError("Missing \(label) toolbar button")
+            guard let toggle = item(label)?.view.map(elements)?.first(where: {
+                $0 is NSButton || attribute($0, .role) as? String == "AXButton"
+            }) else {
+                let toolbar = (window.toolbar?.items ?? []).map {
+                    "\($0.itemIdentifier.rawValue) label=\($0.label) visible=\($0.isVisible) view=\($0.view.map { String(describing: type(of: $0)) } ?? "nil")"
+                }
+                throw AppletError("Missing \(label) toolbar button. Toolbar: \(toolbar)")
             }
-            toggle.performClick(nil)
+            let perform = NSSelectorFromString("accessibilityPerformPress")
+            if let button = toggle as? NSButton { button.performClick(nil) }
+            else if toggle.responds(to: perform) {
+                typealias Press = @convention(c) (AnyObject, Selector) -> Bool
+                _ = unsafeBitCast(toggle.method(for: perform), to: Press.self)(toggle, perform)
+            } else { toggle.accessibilityPerformAction(.press) }
             try await Task.sleep(for: .milliseconds(600))
         }
         // An aborted run can leave a collapsed sidebar persisted; start expanded.
@@ -97,6 +134,8 @@ import AppletCore
     }
     static func run() async throws {
         setbuf(stdout, nil)
+        // SwiftUI builds its toolbar buttons' accessibility elements only once a client asks.
+        NSApp.accessibilitySetValue(true, forAttribute: .init(rawValue: "AXEnhancedUserInterface"))
         var options = NoodletWindowOptions()
         options.type = .preview; options.background = .translucent
         options.width = 320; options.height = 350; options.minWidth = 260; options.minHeight = 300
