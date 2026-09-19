@@ -167,7 +167,7 @@ enum ScreenCaptureFrame: Sendable {
 @MainActor final class ScreenCaptureService: ScreenCaptureProviding {
     private var thumbnailContent: SCShareableContent?
     var hasPermission: Bool { CGPreflightScreenCaptureAccess() }
-    func requestPermission() { CGRequestScreenCaptureAccess() }
+    func requestPermission() { ScreenRecordingAccess.request() }
 
     func sources(kind: ScreenCaptureKind, excluding: [CGWindowID]) async throws -> [ScreenCaptureSource] {
         // Include inactive Spaces and full-screen apps on every display. A

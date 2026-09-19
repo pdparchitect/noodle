@@ -4,12 +4,13 @@ import NoodleCore
 import NoodleSettingsUI
 
 enum NoodleSettingsTab: Hashable {
-    case general, chat, harnesses, mcps, heartbeats, sandbox, keybindings, companions, updates
+    case general, chat, harnesses, mcps, heartbeats, sandbox, permissions, keybindings, companions, updates
 }
 
 struct NoodleSettingsView: View {
     @Environment(NoodleStore.self) private var store
     private let companionUpdates = CompanionUpdateChecker.shared
+    private let permissions = AppPermissionChecker.shared
     @ObservedObject private var appUpdater = AppUpdater.shared
     // Owned here so the Harness tab is badged before it is selected.
     @State private var harnessSetup = HarnessSetupController(versionChecker: HarnessVersionChecker())
@@ -60,6 +61,10 @@ struct NoodleSettingsView: View {
                 .settingsContentSize()
                 .tabItem { Label("Sandbox", systemImage: "lock.shield") }
                 .tag(NoodleSettingsTab.sandbox)
+            PermissionsSettingsView()
+                .settingsContentSize()
+                .tabItem { Label("Permissions", systemImage: "hand.raised") }
+                .tag(NoodleSettingsTab.permissions)
             MCPSettingsView()
                 .settingsContentSize()
                 .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
@@ -80,6 +85,7 @@ struct NoodleSettingsView: View {
         .modifier(SettingsWindowResizeAnchor())
         .settingsScrollIndicators(selection: store.selectedSettingsTab)
         .background(SettingsTabBadge(counts: ["Harness": harnessesNeedingAttention,
+                                              "Permissions": permissions.needingAttention,
                                               "Tools": toolsNeedingAttention,
                                               "Companions": companionUpdates.updates.count,
                                               "Update": appUpdater.availableVersion == nil ? 0 : 1]))
@@ -87,6 +93,7 @@ struct NoodleSettingsView: View {
         .onAppear {
             companionUpdates.refresh(CompanionApp.installedApps())
             appUpdater.probeForUpdate()
+            permissions.refresh()
         }
         .task { await harnessSetup.refreshAll(store.runtime) }
     }

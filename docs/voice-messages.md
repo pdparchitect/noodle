@@ -14,7 +14,8 @@ The shortcut controls the active chat window. It is unavailable while preparing,
 finishing transcription, sending, or reviewing an existing voice draft.
 
 Choose a microphone in **Settings → Conversation**. If Noodle reports no sound, check
-the microphone selection and hardware mute switch. Recordings stop after ten
+the microphone selection and hardware mute switch, and that Microphone is allowed
+in **Settings → Permissions**. Recordings stop after ten
 minutes without sending automatically.
 
 Switching chats stops recording and keeps the draft with its chat, including
