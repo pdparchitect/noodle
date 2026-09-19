@@ -1,4 +1,5 @@
 import AppKit
+import ImagePlayground
 import SwiftUI
 import XCTest
 @testable import NoodleWallpaper
@@ -64,7 +65,13 @@ private struct Host: View {
         XCTAssertEqual(below.minY, buttons.maxY + 20, accuracy: 0.5, "Buttons row must be a direct child of the stack")
         XCTAssertTrue((64...80).contains(swatches), "Swatch row should sit between two 20-point gaps, got \(swatches)")
         XCTAssertEqual(buttons.minX, 0, accuracy: 0.5)
-        XCTAssertEqual(buttons.width, (472 - 8) / 2, accuracy: 0.5)
+        // Create Image shares the row only where Image Playground is supported; otherwise the chooser fills it.
+        XCTAssertEqual(buttons.width, supportsImagePlayground ? (472 - 8) / 2 : 472, accuracy: 0.5)
+    }
+
+    private var supportsImagePlayground: Bool {
+        if #available(macOS 15.1, *) { return ImagePlaygroundViewController.isAvailable }
+        return false
     }
 
     private func find(_ view: NSView, matching predicate: (NSView) -> Bool) -> NSView? {
