@@ -19,15 +19,18 @@ struct AppletSettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag(AppletSettingsTab.general)
             AppletPermissionsSettingsView(library: library)
-                .settingsList()
+                .frame(width: 580)
+                .fixedSize(horizontal: false, vertical: true)
                 .tabItem { Label("Permissions", systemImage: "hand.raised") }
                 .tag(AppletSettingsTab.permissions)
             AppletSecretsSettingsView(library: library)
-                .settingsList()
+                .frame(width: 580)
+                .fixedSize(horizontal: false, vertical: true)
                 .tabItem { Label("Secrets", systemImage: "key") }
                 .tag(AppletSettingsTab.secrets)
             AppletStorageSettingsView(library: library, runtime: runtime)
-                .settingsList()
+                .frame(width: 580)
+                .fixedSize(horizontal: false, vertical: true)
                 .tabItem { Label("Storage", systemImage: "internaldrive") }
                 .tag(AppletSettingsTab.storage)
             AppletUpdatesSettingsView()
@@ -64,34 +67,47 @@ private struct AppletGeneralSettingsView: View {
     }
 }
 
-private struct AppletPermissionsSettingsView: View {
-    @ObservedObject var library: AppletLibrary
-    @State private var grants: [String: [String]] = [:]
 
-    private func title(_ key: String) -> String {
-        noodletTitle(key, in: library)
-    }
+/// The list panel Noodle's Tools settings use: fits a short list, scrolls a long one.
+struct SettingsListPanel<Content: View>: View {
+    let empty: String
+    let isEmpty: Bool
+    @ViewBuilder var content: Content
+    @State private var contentHeight: CGFloat = 80
+
     var body: some View {
-        Form {
-            Section {
-                if grants.isEmpty {
-                    Text("No noodlets have permissions.").foregroundStyle(.secondary)
+        ScrollView {
+            VStack(spacing: 0) {
+                if isEmpty {
+                    Text(empty).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 80)
                 }
-                ForEach(grants.keys.sorted { title($0) < title($1) }, id: \.self) { key in
-                    LabeledContent {
-                        Button("Remove") {
-                            AppletPermissions.revoke(packageKey: key, defaults: .standard)
-                            grants = AppletPermissions.grants(defaults: .standard)
-                        }
-                    } label: {
-                        Text(title(key))
-                        Text((grants[key] ?? []).compactMap { AppletPermissions.titles[$0] }.joined(separator: ", "))
-                    }
-                }
+                content
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
         }
-        .formStyle(.grouped)
-        .onAppear { grants = AppletPermissions.grants(defaults: .standard) }
+        .frame(height: min(430, contentHeight))
+        .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
+        .padding(20)
+    }
+}
+
+private struct SettingsListRow<Accessory: View>: View {
+    let title: String
+    var detail: String?
+    var divider = true
+    @ViewBuilder var accessory: Accessory
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).lineLimit(1)
+                if let detail { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+            }
+            Spacer(minLength: 8)
+            accessory.controlSize(.small)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        if divider { Divider().padding(.leading, 14) }
     }
 }
 
@@ -99,35 +115,68 @@ private struct AppletPermissionsSettingsView: View {
     library.entries.first { $0.package.key == key }?.package.manifest.title ?? "Removed Noodlet"
 }
 
-private struct AppletSecretsSettingsView: View {
+private struct AppletPermissionsSettingsView: View {
     @ObservedObject var library: AppletLibrary
-    @State private var names: [String: [String]] = [:]
+    @State private var grants: [String: [String]] = [:]
 
-    /// Accounts are a package key followed by .user or .test.
-    private func title(_ account: String) -> String {
-        let key = String(account.split(separator: ".").dropLast().joined(separator: "."))
-        return noodletTitle(key, in: library) + (account.hasSuffix(".test") ? " (Test)" : "")
-    }
     var body: some View {
-        Form {
-            if names.isEmpty {
-                Section { Text("No noodlets have secrets.").foregroundStyle(.secondary) }
-            }
-            ForEach(names.keys.sorted { title($0) < title($1) }, id: \.self) { account in
-                Section(title(account)) {
-                    ForEach(names[account] ?? [], id: \.self) { name in
-                        LabeledContent(name) {
-                            Button("Remove") {
-                                _ = try? AppletSecrets.shared.perform("delete", name: name, value: nil, account: account)
-                                names = AppletSecrets.shared.names()
-                            }
-                        }
+        let keys = grants.keys.sorted { noodletTitle($0, in: library) < noodletTitle($1, in: library) }
+        SettingsListPanel(empty: "No noodlets have permissions.", isEmpty: keys.isEmpty) {
+            ForEach(keys, id: \.self) { key in
+                SettingsListRow(
+                    title: noodletTitle(key, in: library),
+                    detail: (grants[key] ?? []).compactMap { AppletPermissions.titles[$0] }.joined(separator: ", "),
+                    divider: key != keys.last
+                ) {
+                    Button("Remove") {
+                        AppletPermissions.revoke(packageKey: key, defaults: .standard)
+                        grants = AppletPermissions.grants(defaults: .standard)
                     }
                 }
             }
         }
-        .formStyle(.grouped)
+        .onAppear { grants = AppletPermissions.grants(defaults: .standard) }
+    }
+}
+
+private struct AppletSecretsSettingsView: View {
+    private struct Secret: Identifiable, Equatable {
+        let account: String, name: String
+        var id: String { account + "\0" + name }
+    }
+    @ObservedObject var library: AppletLibrary
+    @State private var names: [String: [String]] = [:]
+    @State private var removing: Secret?
+
+    /// Accounts are a package key followed by .user or .test.
+    private func title(_ account: String) -> String {
+        let key = account.split(separator: ".").dropLast().joined(separator: ".")
+        return noodletTitle(key, in: library) + (account.hasSuffix(".test") ? " (Test)" : "")
+    }
+    var body: some View {
+        let secrets = names.keys.sorted { title($0) < title($1) }
+            .flatMap { account in (names[account] ?? []).map { Secret(account: account, name: $0) } }
+        SettingsListPanel(empty: "No noodlets have secrets.", isEmpty: secrets.isEmpty) {
+            ForEach(secrets) { secret in
+                SettingsListRow(title: secret.name, detail: title(secret.account), divider: secret != secrets.last) {
+                    Button("Remove…") { removing = secret }
+                }
+            }
+        }
         .onAppear { names = AppletSecrets.shared.names() }
+        .confirmationDialog(
+            "Remove Secret?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Remove Secret", role: .destructive) {
+                if let removing {
+                    _ = try? AppletSecrets.shared.perform("delete", name: removing.name, value: nil, account: removing.account)
+                }
+                names = AppletSecrets.shared.names()
+            }
+        } message: {
+            Text("“\(removing.map { title($0.account) } ?? "")” will need “\(removing?.name ?? "")” entered again.")
+        }
     }
 }
 
@@ -135,42 +184,41 @@ private struct AppletStorageSettingsView: View {
     @ObservedObject var library: AppletLibrary
     @ObservedObject var runtime: AppletRuntime
     @State private var sizes: [String: Int] = [:]
+    @State private var removing: String?
 
     private func running(_ key: String) -> Bool {
         runtime.sessions.values.contains { $0.package.key == key && $0.isActive }
     }
     var body: some View {
-        Form {
-            Section {
-                if sizes.isEmpty {
-                    Text("No noodlets have saved data.").foregroundStyle(.secondary)
-                }
-                ForEach(sizes.keys.sorted { noodletTitle($0, in: library) < noodletTitle($1, in: library) }, id: \.self) { key in
-                    LabeledContent {
-                        Button("Remove") {
-                            Task {
-                                await AppletStorage.remove(key, root: library.root, defaults: .standard)
-                                sizes = AppletStorage.sizes(root: library.root)
-                            }
-                        }
+        let keys = sizes.keys.sorted { noodletTitle($0, in: library) < noodletTitle($1, in: library) }
+        SettingsListPanel(empty: "No noodlets have saved data.", isEmpty: keys.isEmpty) {
+            ForEach(keys, id: \.self) { key in
+                SettingsListRow(
+                    title: noodletTitle(key, in: library),
+                    detail: ByteCountFormatter.string(fromByteCount: Int64(sizes[key] ?? 0), countStyle: .file),
+                    divider: key != keys.last
+                ) {
+                    Button("Remove…") { removing = key }
                         .disabled(running(key))
                         .help(running(key) ? "Close this noodlet before removing its data." : "")
-                    } label: {
-                        Text(noodletTitle(key, in: library))
-                        Text(ByteCountFormatter.string(fromByteCount: Int64(sizes[key] ?? 0), countStyle: .file))
-                    }
                 }
             }
         }
-        .formStyle(.grouped)
         .onAppear { sizes = AppletStorage.sizes(root: library.root) }
-    }
-}
-
-extension View {
-    /// Fits a short list and scrolls a long one, instead of growing the window past the screen.
-    func settingsList() -> some View {
-        frame(width: 580).frame(maxHeight: 520).fixedSize(horizontal: false, vertical: true)
+        .confirmationDialog(
+            "Remove Saved Data?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Remove Data", role: .destructive) {
+                guard let key = removing else { return }
+                Task {
+                    await AppletStorage.remove(key, root: library.root, defaults: .standard)
+                    sizes = AppletStorage.sizes(root: library.root)
+                }
+            }
+        } message: {
+            Text("Everything “\(removing.map { noodletTitle($0, in: library) } ?? "")” has saved will be deleted.")
+        }
     }
 }
 

@@ -4,12 +4,19 @@ import XCTest
 
 @MainActor final class SettingsListTests: XCTestCase {
     private func height(rows: Int) -> CGFloat {
-        let form = Form { Section { ForEach(0..<rows, id: \.self) { LabeledContent("Row \($0)") { Button("Remove") {} } } } }
-            .formStyle(.grouped)
-        return NSHostingView(rootView: form.settingsList()).fittingSize.height
+        let panel = SettingsListPanel(empty: "None", isEmpty: rows == 0) {
+            ForEach(0..<rows, id: \.self) { Text("Row \($0)").frame(height: 44) }
+        }
+        let host = NSHostingView(rootView: panel.frame(width: 580))
+        host.frame = CGRect(x: 0, y: 0, width: 580, height: 2000)
+        host.layoutSubtreeIfNeeded()
+        // The panel measures its content, then settles on the next update.
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        host.layoutSubtreeIfNeeded()
+        return host.fittingSize.height
     }
     func testLongListsScrollInsteadOfGrowingTheWindow() {
-        XCTAssertLessThan(height(rows: 3), 300, "A short list still fits its content")
-        XCTAssertEqual(height(rows: 400), 520, "A long list is capped and scrolls")
+        XCTAssertEqual(height(rows: 2), 88 + 40, "A short list fits its rows plus the panel's padding")
+        XCTAssertEqual(height(rows: 400), 430 + 40, "A long list stops at the panel's height and scrolls")
     }
 }
