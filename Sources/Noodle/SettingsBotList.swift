@@ -40,8 +40,9 @@ struct SettingsBotList<Row: View>: View {
 }
 
 /// Propose the height limit during measurement, including when the Settings
-/// window asks for its ideal size. No later state update should resize the tab.
-private struct SettingsBotListLayout: Layout {
+/// window or a popover asks for its ideal size. No later state update should
+/// resize the tab.
+struct SettingsBotListLayout: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         subviews[0].sizeThatFits(ProposedViewSize(width: proposal.width, height: 360))
     }

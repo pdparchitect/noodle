@@ -10,6 +10,7 @@ All notable changes to Noodle are documented here, following
 
 - Reclaim the partial files of a local model download or import that was interrupted by a crash or force quit. Noodle now deletes them at launch and before the next download or import, so they no longer hold disk space or count against the free-space check.
 - List a local model whose stored information is damaged as Unreadable Model in Local Models so its weights can be removed; it previously disappeared from the list while staying on disk.
+- Limit the height of the affected-bots list that opens from a harness's status in Settings > Harness and scroll it when many bots need a kick; it previously grew past the screen with no way to reach the bots at the bottom.
 
 ## [0.20.0] - 2026-09-19
 

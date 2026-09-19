@@ -555,6 +555,17 @@ struct HarnessInstallationRow: View {
     }
 
     private var agentIssues: some View {
+        SettingsBotListLayout {
+            ViewThatFits(in: .vertical) {
+                agentIssueRows
+                ScrollView { agentIssueRows }
+                    .scrollBounceBehavior(.basedOnSize)
+            }
+        }
+        .frame(width: 340, alignment: .leading)
+    }
+
+    private var agentIssueRows: some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(Array(affectedAgents.enumerated()), id: \.element.id) { index, agent in
                 if index > 0 { Divider() }
@@ -584,7 +595,7 @@ struct HarnessInstallationRow: View {
             }
         }
         .padding(16)
-        .frame(width: 340, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func openTerminal() {
