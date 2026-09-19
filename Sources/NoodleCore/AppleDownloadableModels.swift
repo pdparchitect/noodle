@@ -28,8 +28,10 @@ public struct AppleDownloadableModel: Identifiable, Sendable {
     }
 
     /// The most capable model that runs comfortably in this much physical memory.
+    /// Among models wanting the same memory, the first listed is the reviewed default.
     public static func recommended(forPhysicalMemory bytes: UInt64 = ProcessInfo.processInfo.physicalMemory) -> Self? {
-        available.last { UInt64($0.memory) << 30 <= bytes }
+        available.filter { UInt64($0.memory) << 30 <= bytes }
+            .reduce(nil) { best, next in best.map { next.memory > $0.memory ? next : $0 } ?? next }
     }
 
     /// Listed smallest first, so capability and memory needs rise down the list.
@@ -74,6 +76,18 @@ public struct AppleDownloadableModel: Identifiable, Sendable {
                 .init(name: "vocab.json", byteCount: 2776833, digest: .gitSHA1("4783fe10ac3adce15ac8f358ef5462739852c569")),
                 .init(name: "tokenizer.json", byteCount: 11422654, digest: .sha256("aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4")),
                 .init(name: "model.safetensors", byteCount: 4607835174, digest: .sha256("f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8")),
+              ]),
+        .init(name: "Gemma 4 E4B", summary: "Google’s compact model. Quick replies and tool calls without thinking first. Best with 16 GB of memory.", memory: 16,
+              repository: "mlx-community/gemma-4-e4b-it-4bit",
+              revision: "475b9088d29754a3379866cf5aeb6b41acd313c2", files: [
+                .init(name: "generation_config.json", byteCount: 208, digest: .gitSHA1("e605bb4523b1462ea9d9a3810b9e3ecf7ab7b1f6")),
+                .init(name: "processor_config.json", byteCount: 1316, digest: .gitSHA1("a086fb7e04b477c291a120b0a004abb78b11c6d2")),
+                .init(name: "tokenizer_config.json", byteCount: 2740, digest: .gitSHA1("cf6235aee46a24bf71f251c0a4e7a0379948f7d2")),
+                .init(name: "config.json", byteCount: 6628, digest: .gitSHA1("4ee08502c4f98810dd43800ec849bd69f94adc98")),
+                .init(name: "chat_template.jinja", byteCount: 17336, digest: .gitSHA1("c19999a347da729cf62806a8ddb7eb8e315223b5")),
+                .init(name: "model.safetensors.index.json", byteCount: 240961, digest: .gitSHA1("c03ce5f7086b735345038501f731634de064493b")),
+                .init(name: "tokenizer.json", byteCount: 32169626, digest: .sha256("cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f")),
+                .init(name: "model.safetensors", byteCount: 5146800534, digest: .sha256("932b8271fc3fe65adcc78b96c10c6268bbfb13e8f67d1358727c0d6ee97e1eff")),
               ]),
         .init(name: "Qwen3 14B", summary: "Strongest reasoning and tool use in this list. Best with 24 GB of memory or more.", memory: 24,
               repository: "mlx-community/Qwen3-14B-4bit",

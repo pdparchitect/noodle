@@ -119,16 +119,18 @@ Tool success still depends on the model and the request.
    Downloads use pinned Hugging Face revisions, verify each file, and publish the
    model only after import validation succeeds. **Cancel** removes partial files;
    retry a failed or cancelled download with **Download**.
-3. Alternatively, choose **Import Model** and select an already downloaded MLX Qwen2, Qwen3, or
-   Llama text chat/instruct model folder. It must contain regular files, including
-   `config.json`, `tokenizer.json`, `tokenizer_config.json`, and `.safetensors`
-   weights, plus a chat template. Linked Hugging Face cache snapshots must first
+3. Alternatively, choose **Import Model** and select an already downloaded MLX Qwen2, Qwen3,
+   Llama, or Gemma 4 chat/instruct model folder. Gemma 4 checkpoints include image and audio
+   weights; Noodle copies them but loads the text model only. The folder must contain
+   regular files, including `config.json`, `tokenizer.json`, `tokenizer_config.json`,
+   and `.safetensors` weights, plus a chat template. Linked Hugging Face cache snapshots must first
    be copied into a folder with real files.
 4. Edit a bot, choose Apple Intelligence, and select the imported model.
 
 The Available list is shown before downloading any weights. It runs from
-smallest to largest: Qwen3 1.7B, Qwen3 4B Instruct (2507), Qwen3 8B and Qwen3 14B,
-all 4-bit. Each entry says what the model suits and the memory it wants; all accept
+smallest to largest: Qwen3 1.7B, Qwen3 4B Instruct (2507), Qwen3 8B, Gemma 4 E4B and
+Qwen3 14B, all 4-bit. Gemma 4 is offered under Google's Gemma terms, linked from
+**Details**. Each entry says what the model suits and the memory it wants; all accept
 text and tools. A downloaded model moves from Available to **Installed**, where it
 keeps the same description, size and details link.
 Downloads run in the app using its existing outbound network access and private

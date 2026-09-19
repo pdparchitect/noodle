@@ -32,6 +32,22 @@ final class AppleLocalModelsTests: XCTestCase {
         }
     }
 
+    func testGemma4ImportsWithItsTextContextWhileOtherMultimodalModelsAreRejected() throws {
+        try fixture { source, store in
+            let config = source.appendingPathComponent("config.json")
+            try Data(#"{"model_type":"gemma4","vision_config":{},"audio_config":{},"text_config":{"max_position_embeddings":131072}}"#.utf8).write(to: config)
+            let imported = try store.importModel(from: source)
+            XCTAssertEqual(imported.modelType, "gemma4")
+            XCTAssertEqual(imported.contextSize, 131_072)
+            // Gemma 4 keeps its context under text_config; a top-level value is not its own.
+            try Data(#"{"model_type":"gemma4","max_position_embeddings":4096}"#.utf8).write(to: config)
+            XCTAssertThrowsError(try store.importModel(from: source))
+            try Data(#"{"model_type":"qwen3","max_position_embeddings":32768,"vision_config":{}}"#.utf8).write(to: config)
+            XCTAssertThrowsError(try store.importModel(from: source))
+            XCTAssertEqual(try store.models(), [imported])
+        }
+    }
+
     func testUnreadableModelIsListedOnlyForRemovalAndDeletesItsWeights() throws {
         try fixture { source, store in
             let imported = try store.importModel(from: source)

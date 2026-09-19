@@ -80,11 +80,13 @@ public struct AppleLocalModelStore: Sendable {
         try Self.regularFile(configURL, maximumSize: 4_194_304)
         guard let config = try JSONSerialization.jsonObject(with: Data(contentsOf: configURL)) as? [String: Any],
               let modelType = config["model_type"] as? String,
-              // These text families have tool-aware templates supported by MLX.
-              ["qwen2", "qwen3", "qwen3_moe", "llama"].contains(modelType),
-              let context = config["max_position_embeddings"] as? Int,
-              (1_024...1_048_576).contains(context), config["vision_config"] == nil else {
-            throw HarnessSetupError("Import an MLX Qwen2, Qwen3, or Llama text chat model with a valid context size.")
+              // These families have tool-aware templates supported by MLX. Gemma 4
+              // checkpoints are multimodal; MLX loads their text weights only and
+              // their text settings sit under `text_config`.
+              ["qwen2", "qwen3", "qwen3_moe", "llama", "gemma4"].contains(modelType),
+              let context = (modelType == "gemma4" ? config["text_config"] as? [String: Any] : config)?["max_position_embeddings"] as? Int,
+              (1_024...1_048_576).contains(context), modelType == "gemma4" || config["vision_config"] == nil else {
+            throw HarnessSetupError("Import an MLX Qwen2, Qwen3, Llama, or Gemma 4 chat model with a valid context size.")
         }
         let files = try Self.resources(in: source)
         let names = Set(files.map(\.lastPathComponent))
