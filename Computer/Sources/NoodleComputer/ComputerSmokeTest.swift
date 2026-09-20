@@ -417,17 +417,16 @@ import WebKit
 
     private static func checkApplicationNaming() throws {
         let displayName = ComputerAppIdentity.name
-        let menuName = String(displayName.dropFirst("Noodle ".count))
-        guard Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String == menuName,
+        guard Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String == displayName,
               Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String == displayName,
               Bundle.main.bundleURL.lastPathComponent == "\(displayName).app" else {
-            throw ComputerError("Short menu name must not replace the full application name.")
+            throw ComputerError("The menu bar, Finder and bundle must all use the full application name.")
         }
         guard let appMenu = NSApp.mainMenu?.items.first?.submenu,
               appMenu.items.contains(where: { $0.title == "About \(ComputerAppIdentity.name)" }) else {
             throw ComputerError("Application menu must retain the full About name.")
         }
-        print("APPLICATION NAME TEST PASSED: menu=\(menuName), app=\(displayName), About retains full name")
+        print("APPLICATION NAME TEST PASSED: menu and app=\(displayName), About retains full name")
     }
 
     private static func checkTerminalScrollIndicator() throws {

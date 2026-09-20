@@ -11,13 +11,11 @@ case "$data_container" in
         bundle_identifier="com.pdparchitect.noodle.computer.local"
         computer_group_suffix="com.pdparchitect.noodle.computers.local"
         app_name="Noodle Computer Dev"
-        menu_name="Computer Dev"
         document_suffix="-dev" ;;
     production)
         bundle_identifier="com.pdparchitect.noodle.computer"
         computer_group_suffix="com.pdparchitect.noodle.computers"
         app_name="Noodle Computer"
-        menu_name="Computer"
         document_suffix="" ;;
     *) print -u2 'NOODLE_COMPUTER_DATA_CONTAINER must be development or production.'; exit 1 ;;
 esac
@@ -29,7 +27,6 @@ if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == 1 && ( "${NOODLE_COMPUTER_TEST_BUIL
 fi
 if [[ "${NOODLE_COMPUTER_TEST_BUILD:-0}" == 1 ]]; then
     app_name="Noodle Computer Tests"
-    menu_name="Computer Tests"
     destination_app="$project_root/.build/$app_name.app"
     bundle_identifier="com.pdparchitect.noodle.computer.tests"
     computer_group_suffix="com.pdparchitect.noodle.computers.tests"
@@ -76,7 +73,7 @@ rm -rf "$sparkle/Versions/B/XPCServices/Downloader.xpc"
 cp "$package/Support/Info.plist" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier" "$app/Contents/Info.plist"
 # Keep the menu's short name separate from the app's Finder/display name.
-/usr/libexec/PlistBuddy -c "Set :CFBundleName $menu_name" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleName $app_name" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $app_name" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDocumentTypes:0:LSItemContentTypes:0 $content_type" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDocumentTypes:0:CFBundleTypeName $app_name Reference" "$app/Contents/Info.plist"
