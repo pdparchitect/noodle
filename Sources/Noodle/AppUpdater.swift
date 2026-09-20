@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import NoodleSettingsUI
 import Sparkle
 import SwiftUI
 
@@ -84,7 +85,8 @@ struct UpdatesSettingsView: View {
                 if let version = updater.availableVersion {
                     Text("Update available — \(version)").font(.caption).foregroundStyle(.orange)
                 }
-                CheckForUpdatesButton()
+                UpdateSettingsButton(availableVersion: updater.availableVersion, canCheck: updater.canCheckForUpdates,
+                                     action: updater.checkForUpdates)
             }
             Section {
                 Toggle("Automatically check for updates", isOn: Binding(

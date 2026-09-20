@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- Rename the Settings > Update button to Install Update… once a newer version is found. The app menu keeps Check for Updates….
+
 ## [0.21.0] - 2026-09-20
 
 ### Added

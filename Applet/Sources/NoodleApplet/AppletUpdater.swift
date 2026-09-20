@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import NoodleSettingsUI
 import Sparkle
 import SwiftUI
 
@@ -76,7 +77,9 @@ struct AppletUpdatesSettingsView: View {
                 if let version = updater.availableVersion {
                     Text("Update available — \(version)").font(.caption).foregroundStyle(.orange)
                 }
-                AppletCheckForUpdatesButton()
+                UpdateSettingsButton(
+                    availableVersion: updater.availableVersion, canCheck: updater.canCheck,
+                    action: updater.check)
             }
             Section {
                 Toggle(

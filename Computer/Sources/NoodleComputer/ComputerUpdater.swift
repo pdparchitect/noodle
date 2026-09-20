@@ -113,7 +113,8 @@ struct ComputerUpdatesSettingsView: View {
                 if let version = updater.availableVersion {
                     Text("Update available — \(version)").font(.caption).foregroundStyle(.orange)
                 }
-                ComputerCheckForUpdatesButton()
+                UpdateSettingsButton(availableVersion: updater.availableVersion, canCheck: updater.canCheck,
+                                     action: updater.check)
             }
             Section {
                 Toggle("Automatically check for updates", isOn: Binding(

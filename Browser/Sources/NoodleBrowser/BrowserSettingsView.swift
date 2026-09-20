@@ -50,7 +50,7 @@ struct BrowserUpdatesSettingsView: View {
                 if let version = updater.availableVersion {
                     Text("Update available — \(version)").font(.caption).foregroundStyle(.orange)
                 }
-                BrowserCheckForUpdatesButton()
+                UpdateSettingsButton(availableVersion: updater.availableVersion, canCheck: updater.canCheck, action: updater.check)
             }
             Section {
                 Toggle("Automatically check for updates", isOn: Binding(get: { updater.automaticallyChecks }, set: updater.setAutomaticChecks))
