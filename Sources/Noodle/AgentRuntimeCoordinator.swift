@@ -3,6 +3,46 @@ import Foundation
 import Observation
 import NoodleCore
 
+/// What the Agent Host reports about a harness the sandboxed app cannot inspect itself.
+struct HarnessHostInspection {
+    let executablePath: String?
+    let models: [HarnessModel]
+    /// Why the harness cannot be used yet, shown beside it in Settings.
+    let capabilityError: String?
+
+    init(executablePath: String?, models: [HarnessModel], capabilityError: String?) {
+        self.executablePath = executablePath
+        self.models = models
+        self.capabilityError = capabilityError
+    }
+
+    init(_ result: GrokInspectionResult) {
+        self.init(executablePath: result.executablePath, models: result.models,
+            capabilityError: result.executablePath == nil ? "Grok Build is not installed" : (result.authenticated ? nil : "Sign in to Grok Build in Settings → Harness."))
+    }
+
+    init(_ result: OpenCodeInspectionResult) {
+        self.init(executablePath: result.executablePath, models: result.models,
+            capabilityError: result.executablePath == nil ? "OpenCode is not installed" : (result.authenticated || !result.models.isEmpty ? nil : "Run opencode auth login in Terminal, then check again."))
+    }
+
+    init(_ result: MuseInspectionResult) {
+        self.init(executablePath: result.executablePath, models: result.models,
+            capabilityError: result.executablePath == nil ? "Muse Code is not installed" : nil)
+    }
+
+    static let providers: [HarnessProvider] = [.openCode, .grokBuild, .muse]
+
+    @MainActor static func load(_ provider: HarnessProvider) async throws -> HarnessHostInspection {
+        switch provider {
+        case .grokBuild: return .init(try await GrokHostProbe().load())
+        case .openCode: return .init(try await OpenCodeHostProbe().load())
+        case .muse: return .init(try await MuseHostProbe().load())
+        default: throw HarnessSetupError("\(provider.displayName) is not inspected by the Agent Host.")
+        }
+    }
+}
+
 /// A confirmation is valid only for this bot configuration, runtime, and failure.
 struct AgentKickRequest: Identifiable {
     let id = UUID()
@@ -83,17 +123,15 @@ final class AgentRuntimeCoordinator {
     @ObservationIgnored private let now: @MainActor () -> Date
     @ObservationIgnored private let sleep: @MainActor (Duration) async throws -> Void
     @ObservationIgnored private let makeProcess: @MainActor (AgentRuntimeLaunch) -> any AgentRuntimeProcess
+    @ObservationIgnored private let inspectHost: @MainActor (HarnessProvider) async throws -> HarnessHostInspection
     private var processes: [UUID: any AgentRuntimeProcess] = [:]
     private var runtimeIDs: [UUID: UUID] = [:]
     private var capabilityProbe: CodexCapabilityProbe?
     private var fxCapabilityTask: Task<Void, Never>?
     private var codexCapabilityTask: Task<Void, Never>?
-    private var grokCapabilityTask: Task<Void, Never>?
-    private var hostGrokInstallation: HarnessInstallation?
-    private var openCodeCapabilityTask: Task<Void, Never>?
-    private var hostOpenCodeInstallation: HarnessInstallation?
-    private var hostMuseInstallation: HarnessInstallation?
-    private var museCapabilityTask: Task<Void, Never>?
+    private var hostCapabilityTasks: [HarnessProvider: Task<Void, Never>] = [:]
+    /// What the Agent Host last reported, which outranks the app's own discovery.
+    private var hostInstallations: [HarnessProvider: HarnessInstallation] = [:]
     private var appleCapabilityTask: Task<Void, Never>?
 
     private func refreshAppleCapabilities() async {
@@ -119,74 +157,36 @@ final class AgentRuntimeCoordinator {
     }
 
     private func discoveredInstallations() -> [HarnessInstallation] {
-        discovery.discover().map { installation in
-            installation.provider == .openCode ? (hostOpenCodeInstallation ?? installation) :
-                installation.provider == .grokBuild ? (hostGrokInstallation ?? installation) :
-                (installation.provider == .muse ? (hostMuseInstallation ?? installation) : installation)
-        }
+        discovery.discover().map { hostInstallations[$0.provider] ?? $0 }
     }
 
-    private func refreshGrokCapabilities() async {
-        guard discovery.allowsHostDiscovery(for: .grokBuild) else { return }
+    private func refreshHostCapabilities(_ provider: HarnessProvider) async {
+        guard discovery.allowsHostDiscovery(for: provider) else { return }
         do {
-            let result = try await GrokHostProbe().load()
+            let result = try await inspectHost(provider)
             guard !Task.isCancelled else { return }
-            let installation = HarnessInstallation(provider: .grokBuild, executablePath: result.executablePath)
-            hostGrokInstallation = installation
-            installationErrors[.grokBuild] = nil
-            installations = installations.map { $0.provider == .grokBuild ? installation : $0 }
-            modelsByProvider[.grokBuild] = result.models
-            capabilityErrors[.grokBuild] = result.executablePath == nil ? "Grok Build is not installed" : (result.authenticated ? nil : "Sign in to Grok Build in Settings → Harness.")
+            let installation = HarnessInstallation(provider: provider, executablePath: result.executablePath)
+            hostInstallations[provider] = installation
+            installationErrors[provider] = nil
+            installations = installations.map { $0.provider == provider ? installation : $0 }
+            modelsByProvider[provider] = result.models
+            capabilityErrors[provider] = result.capabilityError
         } catch {
             guard !Task.isCancelled else { return }
-            installationErrors[.grokBuild] = error.localizedDescription
-            capabilityErrors[.grokBuild] = error.localizedDescription
-        }
-    }
-
-    private func refreshOpenCodeCapabilities() async {
-        guard discovery.allowsHostDiscovery(for: .openCode) else { return }
-        do {
-            let result = try await OpenCodeHostProbe().load()
-            guard !Task.isCancelled else { return }
-            let installation = HarnessInstallation(provider: .openCode, executablePath: result.executablePath)
-            hostOpenCodeInstallation = installation
-            installationErrors[.openCode] = nil
-            installations = installations.map { $0.provider == .openCode ? installation : $0 }
-            modelsByProvider[.openCode] = result.models
-            capabilityErrors[.openCode] = result.executablePath == nil ? "OpenCode is not installed" : (result.authenticated || !result.models.isEmpty ? nil : "Run opencode auth login in Terminal, then check again.")
-        } catch {
-            guard !Task.isCancelled else { return }
-            installationErrors[.openCode] = error.localizedDescription
-            capabilityErrors[.openCode] = error.localizedDescription
-        }
-    }
-
-    private func refreshMuseCapabilities() async {
-        guard discovery.allowsHostDiscovery(for: .muse) else { return }
-        do {
-            let result = try await MuseHostProbe().load()
-            guard !Task.isCancelled else { return }
-            let installation = HarnessInstallation(provider: .muse, executablePath: result.executablePath)
-            hostMuseInstallation = installation
-            installationErrors[.muse] = nil
-            installations = installations.map { $0.provider == .muse ? installation : $0 }
-            modelsByProvider[.muse] = result.models
-            capabilityErrors[.muse] = result.executablePath == nil ? "Muse Code is not installed" : nil
-        } catch {
-            guard !Task.isCancelled else { return }
-            installationErrors[.muse] = error.localizedDescription
-            capabilityErrors[.muse] = error.localizedDescription
+            installationErrors[provider] = error.localizedDescription
+            capabilityErrors[provider] = error.localizedDescription
         }
     }
 
     init(discovery: HarnessDiscovery = HarnessDiscovery(), defaults: UserDefaults = .standard,
          makeProcess: @escaping @MainActor (AgentRuntimeLaunch) -> any AgentRuntimeProcess = { $0.makeProcess() },
+         inspectHost: @escaping @MainActor (HarnessProvider) async throws -> HarnessHostInspection = { try await HarnessHostInspection.load($0) },
          sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
          now: @escaping @MainActor () -> Date = Date.init) {
         self.now = now
         self.sleep = sleep
         self.makeProcess = makeProcess
+        self.inspectHost = inspectHost
         self.discovery = discovery
         self.defaults = defaults
         preventIdleSleepWhileWorking = defaults.bool(forKey: Self.preventIdleSleepDefaultsKey)
@@ -378,9 +378,7 @@ final class AgentRuntimeCoordinator {
         guard !isRefreshingInstallations else { return }
         isRefreshingInstallations = true
         defer { isRefreshingInstallations = false }
-        await refreshOpenCodeCapabilities()
-        await refreshGrokCapabilities()
-        await refreshMuseCapabilities()
+        for provider in HarnessHostInspection.providers { await refreshHostCapabilities(provider) }
         await refreshAppleCapabilities()
         guard !Task.isCancelled else { return }
         // Look after the slow host probes, and again if Noodle installed or removed
@@ -393,11 +391,7 @@ final class AgentRuntimeCoordinator {
             detected = await Task.detached(priority: .utility) { discovery.discover() }.value
             guard !Task.isCancelled else { return }
         } while changes != installationChanges
-        let complete = detected.map { installation in
-            installation.provider == .openCode ? (hostOpenCodeInstallation ?? installation) :
-                installation.provider == .grokBuild ? (hostGrokInstallation ?? installation) :
-                (installation.provider == .muse ? (hostMuseInstallation ?? installation) : installation)
-        }
+        let complete = detected.map { hostInstallations[$0.provider] ?? $0 }
         if installations != complete { installations = complete }
     }
 
@@ -407,12 +401,7 @@ final class AgentRuntimeCoordinator {
     func refreshInstallation(_ provider: HarnessProvider) -> HarnessInstallation {
         installationChanges += 1
         // What the Agent Host last reported for this harness is now out of date.
-        switch provider {
-        case .grokBuild: hostGrokInstallation = nil
-        case .muse: hostMuseInstallation = nil
-        case .openCode: hostOpenCodeInstallation = nil
-        default: break
-        }
+        hostInstallations[provider] = nil
         let installation = discovery.discover(provider)
         installations = installations.map { $0.provider == provider ? installation : $0 }
         return installation
@@ -500,12 +489,10 @@ final class AgentRuntimeCoordinator {
         installations = discoveredInstallations()
         appleCapabilityTask?.cancel()
         appleCapabilityTask = Task { [weak self] in await self?.refreshAppleCapabilities() }
-        openCodeCapabilityTask?.cancel()
-        openCodeCapabilityTask = Task { [weak self] in await self?.refreshOpenCodeCapabilities() }
-        grokCapabilityTask?.cancel()
-        grokCapabilityTask = Task { [weak self] in await self?.refreshGrokCapabilities() }
-        museCapabilityTask?.cancel()
-        museCapabilityTask = Task { [weak self] in await self?.refreshMuseCapabilities() }
+        for provider in HarnessHostInspection.providers {
+            hostCapabilityTasks[provider]?.cancel()
+            hostCapabilityTasks[provider] = Task { [weak self] in await self?.refreshHostCapabilities(provider) }
+        }
         fxCapabilityTask?.cancel()
         if let path = availableInstallations.first(where: { $0.provider == .fx })?.executablePath {
             fxCapabilityTask = Task { [weak self] in
@@ -790,8 +777,7 @@ final class AgentRuntimeCoordinator {
     func stopAll() {
         messageDelivery.cancelAll()
         fxCapabilityTask?.cancel()
-        openCodeCapabilityTask?.cancel()
-        grokCapabilityTask?.cancel()
+        hostCapabilityTasks.values.forEach { $0.cancel() }
         isStoppingAll = true
         lifecycleID = UUID()
         runtimeIDs.removeAll()

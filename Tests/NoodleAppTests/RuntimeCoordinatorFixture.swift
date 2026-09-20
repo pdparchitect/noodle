@@ -72,7 +72,7 @@ import XCTest
     let clock = RuntimeClockFixture()
     let runtime: AgentRuntimeCoordinator
 
-    init() throws {
+    init(inspectHost: @escaping @MainActor (HarnessProvider) async throws -> HarnessHostInspection = { try await HarnessHostInspection.load($0) }) throws {
         defaults = UserDefaults(suiteName: suite)!
         defaults.set(MessageDeliveryMode.queue.rawValue, forKey: MessageDeliveryMode.defaultsKey)
         repository = WorkspaceRepository(rootURL: root.appendingPathComponent("library"))
@@ -89,7 +89,7 @@ import XCTest
             executableSearchDirectories: [bin], applicationBundleURL: root, environment: [:])
         let factory = factory, clock = clock
         runtime = AgentRuntimeCoordinator(discovery: discovery, defaults: defaults,
-            makeProcess: { factory.make($0) }, sleep: { try await clock.sleep($0) }, now: { clock.date })
+            makeProcess: { factory.make($0) }, inspectHost: inspectHost, sleep: { try await clock.sleep($0) }, now: { clock.date })
     }
     func agent(_ name: String = "Fixture bot", harness: HarnessProvider? = .codex) throws -> AgentRecord {
         try repository.createAgent(named: name, harnessIdentifier: harness?.rawValue).agent
