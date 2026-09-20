@@ -1,5 +1,6 @@
 import AppKit
 import XCTest
+import NoodleCore
 @testable import Noodle
 
 @MainActor final class FloatingConversationTests: XCTestCase {
@@ -81,10 +82,36 @@ import XCTest
         XCTAssertEqual(panel.titleVisibility, .hidden)
     }
 
+    func testFloatingPanelRunsTheVoiceShortcutItselfBecauseItIsNotAScene() throws {
+        let bindings = KeyboardBindings(defaults: defaults())
+        let panel = FloatingConversationPanel.make(frame: NSRect(x: 0, y: 0, width: 420, height: 560))
+        panel.bindings = bindings
+        var toggles = 0, enabled = true
+        func press(_ characters: String, code: UInt16, flags: NSEvent.ModifierFlags) throws -> Bool {
+            let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
+                windowNumber: panel.windowNumber, context: nil, characters: characters, charactersIgnoringModifiers: characters,
+                isARepeat: false, keyCode: code))
+            return panel.performKeyEquivalent(with: event)
+        }
+        // Nothing mounted yet: the shortcut is not the panel's to take.
+        XCTAssertFalse(try press("d", code: 2, flags: [.command, .shift]))
+        panel.commands.voiceRecording = VoiceRecordingCommand(phase: { .idle }, isSending: { !enabled }, toggle: { toggles += 1 })
+        XCTAssertTrue(try press("d", code: 2, flags: [.command, .shift]))
+        XCTAssertEqual(toggles, 1)
+        // A rebound shortcut is honoured, and the old one is released.
+        try bindings.set(KeyBinding("d", modifiers: [.command, .control]), for: .recordVoice)
+        XCTAssertTrue(try press("d", code: 2, flags: [.command, .control]))
+        XCTAssertEqual(toggles, 2)
+        XCTAssertFalse(try press("d", code: 2, flags: [.command, .shift]))
+        enabled = false
+        _ = try press("d", code: 2, flags: [.command, .control])
+        XCTAssertEqual(toggles, 2, "A disabled command must not run")
+    }
+
     func testOnePanelPerConversationAndClosingReturnsItToNormalMode() {
         let floating = FloatingConversations(defaults: defaults())
         var terminating = false
-        let panels = FloatingConversationPanels(floating: floating, isTerminating: { terminating }) { _ in NSView() }
+        let panels = FloatingConversationPanels(floating: floating, isTerminating: { terminating }) { _, _ in NSView() }
         let id = UUID(), kept = UUID()
         let panel = panels.show(id, frame: NSRect(x: 0, y: 0, width: 420, height: 560), present: { _ in })
         XCTAssertTrue(floating.contains(id))
@@ -100,7 +127,7 @@ import XCTest
     }
 
     func testPanelCannotBeResizedBelowItsMinimumWhateverTheHostedViewAllows() {
-        let panels = FloatingConversationPanels(floating: FloatingConversations(defaults: defaults()), isTerminating: { false }) { _ in NSView() }
+        let panels = FloatingConversationPanels(floating: FloatingConversations(defaults: defaults()), isTerminating: { false }) { _, _ in NSView() }
         let panel = panels.show(UUID(), frame: nil, present: { _ in })
         // A hosted SwiftUI view can reset the window's own minimum, so the delegate holds it.
         panel.contentMinSize = .zero; panel.minSize = .zero
@@ -138,7 +165,7 @@ import XCTest
         XCTAssertEqual(Set([first.origin.x, second.origin.x, third.origin.x]).count, 3)
         XCTAssertTrue(visible.contains(third))
         // The controller applies it: two panels asked for the same spot end up apart.
-        let panels = FloatingConversationPanels(floating: FloatingConversations(defaults: defaults()), isTerminating: { false }) { _ in NSView() }
+        let panels = FloatingConversationPanels(floating: FloatingConversations(defaults: defaults()), isTerminating: { false }) { _, _ in NSView() }
         let a = panels.show(UUID(), frame: first, present: { _ in })
         let b = panels.show(UUID(), frame: first, present: { _ in })
         XCTAssertNotEqual(a.frame.origin, b.frame.origin)

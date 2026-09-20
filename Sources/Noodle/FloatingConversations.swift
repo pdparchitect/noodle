@@ -60,20 +60,20 @@ extension NoodleStore {
 /// One floating panel per conversation. The panels host the same view as a separate window.
 @MainActor final class FloatingConversationPanels: NSObject, NSWindowDelegate {
     static let shared = FloatingConversationPanels(floating: .shared,
-        isTerminating: { NoodleStore.active?.conversationWindows.isTerminating == true }) { id in
+        isTerminating: { NoodleStore.active?.conversationWindows.isTerminating == true }) { id, commands in
         guard let store = NoodleStore.active else { return NSView() }
         let view = NSHostingView(rootView: ConversationWindowView(conversationID: id, isFloatingPanel: true)
-            .environment(store).preferredColorScheme(.dark))
+            .environment(store).environment(\.floatingPanelCommands, commands).preferredColorScheme(.dark))
         // The panel owns its size; the chat must not resize it to fit content.
         view.sizingOptions = []
         return view
     }
     private let floating: FloatingConversations
     private let isTerminating: () -> Bool
-    private let content: (UUID) -> NSView
+    private let content: (UUID, FloatingPanelCommands) -> NSView
     private var panels: [UUID: FloatingConversationPanel] = [:]
 
-    init(floating: FloatingConversations, isTerminating: @escaping () -> Bool, content: @escaping (UUID) -> NSView) {
+    init(floating: FloatingConversations, isTerminating: @escaping () -> Bool, content: @escaping (UUID, FloatingPanelCommands) -> NSView) {
         self.floating = floating; self.isTerminating = isTerminating; self.content = content
     }
 
@@ -97,7 +97,7 @@ extension NoodleStore {
         if frame == nil { panel.center() }
         panel.conversationID = id
         panel.delegate = self
-        panel.contentView = content(id)
+        panel.contentView = content(id, panel.commands)
         panels[id] = panel
         present(panel)
         return panel
@@ -125,9 +125,20 @@ final class FloatingConversationPanel: NSPanel {
     static let compactSize = NSSize(width: 420, height: 560)
     static let minimumSize = NSSize(width: 380, height: 360)
     var conversationID: UUID?
+    /// The panel is not a scene, so its chat's menu commands arrive here and the panel runs their shortcuts.
+    let commands = FloatingPanelCommands()
+    var bindings = KeyboardBindings.shared
     override var canBecomeKey: Bool { true }
     // An attachment preview makes its host main, and AppKit throws if the host refuses.
     override var canBecomeMain: Bool { true }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.type == .keyDown, bindings.matches(.recordVoice, event: event), let command = commands.voiceRecording {
+            command.perform(in: self, bindings: bindings)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
 
     static func make(frame: NSRect) -> FloatingConversationPanel {
         let panel = FloatingConversationPanel(contentRect: frame,

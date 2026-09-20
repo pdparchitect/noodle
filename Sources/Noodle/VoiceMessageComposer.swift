@@ -9,6 +9,10 @@ struct VoiceMessageComposer<Content: View>: View {
     @State private var composerID = UUID()
     private var sending: Bool { recorder.isSending }
     @FocusState private var focused: Bool
+    @Environment(\.floatingPanelCommands) private var panelCommands
+    private var recordingCommand: VoiceRecordingCommand {
+        VoiceRecordingCommand(phase: { recorder.phase }, isSending: { sending }, toggle: toggleRecording)
+    }
     let send: (URL, VoiceMessage) throws -> Void
     let content: (@escaping () -> Void) -> Content
 
@@ -89,11 +93,11 @@ struct VoiceMessageComposer<Content: View>: View {
                 .id(ObjectIdentifier(recorder))
             }
         }
-        .focusedSceneValue(\.voiceRecordingCommand,
-            VoiceRecordingCommand(phase: { recorder.phase }, isSending: { sending }, toggle: toggleRecording))
-        .onAppear { mountRecorder() }
-        .onChange(of: ObjectIdentifier(recorder)) { _, _ in mountRecorder() }
+        .focusedSceneValue(\.voiceRecordingCommand, recordingCommand)
+        .onAppear { mountRecorder(); panelCommands?.voiceRecording = recordingCommand }
+        .onChange(of: ObjectIdentifier(recorder)) { _, _ in mountRecorder(); panelCommands?.voiceRecording = recordingCommand }
         .onDisappear {
+            panelCommands?.voiceRecording = nil
             mountedRecorder?.detachComposer(composerID)
             mountedRecorder = nil
         }

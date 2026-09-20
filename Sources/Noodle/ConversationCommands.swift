@@ -23,8 +23,10 @@ struct VoiceRecordingCommand {
         self.toggle = toggle
     }
 
-    @MainActor func perform() {
-        guard isEnabled, KeyboardBindings.shared.recordingAction == nil, NSApp.modalWindow == nil, let window = NSApp.keyWindow,
+    @MainActor func perform() { perform(in: NSApp.keyWindow, bindings: .shared) }
+
+    @MainActor func perform(in window: NSWindow?, bindings: KeyboardBindings) {
+        guard isEnabled, bindings.recordingAction == nil, NSApp.modalWindow == nil, let window,
               window.attachedSheet == nil, window.sheetParent == nil else { return }
         // Holding the shortcut must not stop a recording as soon as startup
         // completes and the command becomes enabled again.
@@ -33,9 +35,26 @@ struct VoiceRecordingCommand {
             // NSMenu can match a key equivalent with extra modifiers. Honor
             // the saved binding exactly, while allowing Return in an open menu.
             if !event.modifierFlags.intersection([.command, .control]).isEmpty,
-               !KeyboardBindings.shared.matches(.recordVoice, event: event) { return }
+               !bindings.matches(.recordVoice, event: event) { return }
         }
         toggle()
+    }
+}
+
+/// A floating panel is not a scene, so focused scene values never reach the menu
+/// from it. Its chat publishes commands here and the panel runs their shortcuts.
+@MainActor final class FloatingPanelCommands {
+    var voiceRecording: VoiceRecordingCommand?
+}
+
+private struct FloatingPanelCommandsKey: EnvironmentKey {
+    static let defaultValue: FloatingPanelCommands? = nil
+}
+
+extension EnvironmentValues {
+    var floatingPanelCommands: FloatingPanelCommands? {
+        get { self[FloatingPanelCommandsKey.self] }
+        set { self[FloatingPanelCommandsKey.self] = newValue }
     }
 }
 
