@@ -5,7 +5,6 @@ import Foundation
 public enum ConversationEffectKind: String, Codable, CaseIterable, Sendable {
     case confetti
     case fireworks
-    case fire
 }
 
 public struct ConversationEffect: Codable, Equatable, Identifiable, Sendable {

@@ -41,9 +41,6 @@ struct ConversationEffectsView: View {
                 case .fireworks:
                     if reduceMotion { stillAcknowledgement("🎆") }
                     else { FireworksCanvas(seed: playing.seed, startedAt: startedAt) }
-                case .fire:
-                    if reduceMotion { stillAcknowledgement("🔥") }
-                    else { FireCanvas(seed: playing.seed, startedAt: startedAt) }
                 case nil:
                     EmptyView()
                 }
@@ -225,122 +222,6 @@ private struct FireworksCanvas: View {
                 }
             }
         }
-    }
-}
-
-/// Flames close in from every edge and leave the middle readable. Blurred blobs cut by an
-/// alpha threshold merge into tongues; hotter, smaller layers sit inside cooler ones.
-private struct FireCanvas: View {
-    let seed: UUID
-    let startedAt: Date
-
-    private struct Layer {
-        let color: Color
-        /// Hotter layers use smaller blobs that burn out sooner, so they stay inside the cooler ones.
-        let scale: Double, lifetime: Double
-    }
-
-    private let layers = [
-        Layer(color: Color(red: 0.86, green: 0.13, blue: 0.0).opacity(0.8), scale: 1.0, lifetime: 1.0),
-        Layer(color: Color(red: 1.0, green: 0.4, blue: 0.0), scale: 0.78, lifetime: 0.86),
-        Layer(color: Color(red: 1.0, green: 0.74, blue: 0.1), scale: 0.54, lifetime: 0.66),
-        Layer(color: Color(red: 1.0, green: 0.96, blue: 0.72), scale: 0.3, lifetime: 0.4),
-    ]
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60)) { timeline in
-            Canvas { context, size in
-                let elapsed = timeline.date.timeIntervalSince(startedAt)
-                // Creeps in, burns, then dies down inside the 4 s playback window.
-                let strength = min(1, elapsed / 0.9) * min(1, max(0, (3.9 - elapsed) / 0.9))
-                guard strength > 0 else { return }
-                let seedValue = effectSeed(seed)
-
-                // Firelight on the chat before the flames themselves.
-                var glow = context
-                glow.blendMode = .plusLighter
-                glow.opacity = strength * (0.2 + 0.04 * sin(elapsed * 23) + 0.03 * sin(elapsed * 37))
-                let bounds = CGRect(origin: .zero, size: size)
-                for (start, end) in [(UnitPoint.bottom, 0.55), (.top, 0.22), (.leading, 0.3), (.trailing, 0.3)] {
-                    let from = CGPoint(x: start.x * size.width, y: start.y * size.height)
-                    let to = CGPoint(x: from.x + (0.5 - start.x) * 2 * end * size.width,
-                                     y: from.y + (0.5 - start.y) * 2 * end * size.height)
-                    glow.fill(Path(bounds), with: .linearGradient(
-                        Gradient(colors: [Color(red: 1, green: 0.35, blue: 0), .clear]), startPoint: from, endPoint: to))
-                }
-
-                var paths = layers.map { _ in Path() }
-                let perimeter = 2 * (size.width + size.height)
-                let slots = Int(perimeter / 17)
-                for slot in 0..<slots {
-                    let along = (Double(slot) + sample(seedValue, slot, 1) * 0.6) / Double(slots) * perimeter
-                    let edge = edgePoint(along, size)
-                    let phase = sample(seedValue, slot, 2) * 6.28
-                    // Each tongue flares and sinks on its own clock, so the fire line keeps moving.
-                    let flare = 0.5 + 0.5 * sin(elapsed * (2.2 + sample(seedValue, slot, 3) * 2.6) + phase)
-                    let height = edge.reach * strength * (0.25 + 0.75 * pow(flare, 1.6)) * (0.5 + sample(seedValue, slot, 4) * 0.5)
-                    let rate = 1.1 + sample(seedValue, slot, 5) * 0.6
-                    let base = (17 + sample(seedValue, slot, 6) * 11) * (0.4 + 0.6 * strength)
-                    // Puffs share one path and one sway, so they chain into a single bending tongue.
-                    // Taller tongues need more puffs, or their tips break into beads.
-                    let puffs = min(28, max(8, Int(height / 9)))
-                    for puff in 0..<puffs {
-                        let age = (elapsed * rate + Double(puff) / Double(puffs) + phase).truncatingRemainder(dividingBy: 1)
-                        let sway = sin(age * 4.2 + elapsed * 3.1 + phase) * 15 * age
-                        // Flames lean inward from every edge, and heat always lifts them.
-                        let x = edge.point.x + edge.inward.dx * height * age + edge.inward.dy * sway
-                        let y = edge.point.y + edge.inward.dy * height * age + edge.inward.dx * sway
-                            - edge.lift * height * age * age
-                        for (number, layer) in layers.enumerated() where age < layer.lifetime {
-                            // Tapers to a point, as a flame does.
-                            let r = base * layer.scale * pow(1 - age / layer.lifetime, 0.8)
-                            paths[number].addEllipse(in: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2))
-                        }
-                    }
-                }
-                for (layer, path) in zip(layers, paths) {
-                    context.drawLayer { flames in
-                        flames.addFilter(.blur(radius: 1.5))
-                        flames.addFilter(.alphaThreshold(min: 0.5, color: layer.color))
-                        flames.addFilter(.blur(radius: 4.5))
-                        flames.drawLayer { $0.fill(path, with: .color(.white)) }
-                    }
-                }
-
-                var embers = context
-                embers.blendMode = .plusLighter
-                for index in 0..<70 {
-                    let rate = 0.35 + sample(seedValue, index, 7) * 0.4
-                    let age = (elapsed * rate + sample(seedValue, index, 8)).truncatingRemainder(dividingBy: 1)
-                    let x = sample(seedValue, index, 9) * size.width + sin(age * 9 + Double(index)) * 22
-                    let y = size.height * (1 - age * (0.5 + sample(seedValue, index, 10) * 0.45))
-                    let r = 1 + sample(seedValue, index, 11) * 1.6
-                    embers.opacity = strength * (1 - age) * (0.6 + 0.4 * sin(elapsed * 30 + Double(index)))
-                    embers.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
-                                with: .color(Color(red: 1, green: 0.7, blue: 0.25)))
-                }
-            }
-        }
-    }
-
-    /// Walks the perimeter clockwise from the bottom-left corner. Fire climbs, so the bottom
-    /// edge burns tallest, the sides lick upward and the top only smoulders.
-    private func edgePoint(_ along: Double, _ size: CGSize)
-        -> (point: CGPoint, inward: CGVector, reach: Double, lift: Double) {
-        var d = along
-        if d < size.width {
-            return (CGPoint(x: d, y: size.height + 8), CGVector(dx: 0, dy: -1), size.height * 0.46, 0)
-        }
-        d -= size.width
-        if d < size.height {
-            return (CGPoint(x: size.width + 8, y: size.height - d), CGVector(dx: -1, dy: 0), size.width * 0.2, 1.1)
-        }
-        d -= size.height
-        if d < size.width {
-            return (CGPoint(x: size.width - d, y: -8), CGVector(dx: 0, dy: 1), size.height * 0.1, 0)
-        }
-        d -= size.width
-        return (CGPoint(x: -8, y: d), CGVector(dx: 1, dy: 0), size.width * 0.2, 1.1)
     }
 }
 

@@ -9,7 +9,6 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - Let bots mark a major milestone with fireworks: `messenger --effect fireworks` plays rockets that burst over the chat. Like confetti, it plays once in the foreground chat and shows a still 🎆 under Reduce Motion.
-- Let bots praise a hot streak with fire: `messenger --effect fire` sets the edges of the chat ablaze for a few seconds and leaves the messages readable. It shows a still 🔥 under Reduce Motion.
 
 ### Changed
 
