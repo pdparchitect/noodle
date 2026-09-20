@@ -38,6 +38,20 @@ class CoverageReportTests(unittest.TestCase):
             self.assertEqual(REPORT.percentage(report["totals"]["lines"]), 20)
             self.assertEqual(REPORT.percentage(report["totals"]["functions"]), 50)
 
+    def test_tool_sources_are_counted_under_their_module_and_tool_tests_are_not(self):
+        root = Path("/fixture")
+        report = REPORT.summarize(export(
+            entry("Tools/Vision/Sources/NoodleVisionTools/Provider.swift", 3, 4),
+            entry("/fixture/Tools/Vision/Sources/NoodleVisionToolsExtension/Extension.swift", 0, 2),
+            entry("Tools/Vision/Tests/NoodleVisionToolsTests/Test.swift", 100, 100),
+            entry("Tools/Vision/Loose.swift", 100, 100),
+            entry("Sources/Core/One.swift", 1, 4),
+        ), root)
+        self.assertEqual(sorted(report["modules"]), ["Core", "NoodleVisionTools", "NoodleVisionToolsExtension"])
+        self.assertEqual(report["modules"]["NoodleVisionTools"]["lines"], {"covered": 3, "count": 4})
+        self.assertIn("Tools/Vision/Sources/NoodleVisionTools/Provider.swift", report["files"])
+        self.assertEqual(report["totals"]["lines"], {"covered": 4, "count": 10})
+
     def test_duplicate_files_are_counted_once_and_conflicts_are_rejected(self):
         root = Path("/fixture")
         source = entry("Sources/Core/One.swift", 2, 4)

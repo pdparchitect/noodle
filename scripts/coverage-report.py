@@ -23,30 +23,36 @@ def percentage(value):
 def summarize(export, root):
     if not isinstance(export, dict) or export.get("type") != "llvm.coverage.json.export":
         raise ValueError("Expected an LLVM coverage JSON export from swift test")
-    source_root = (root / "Sources").resolve()
-    files = {}
+    base = root.resolve()
+    files, owners = {}, {}
     for group in export["data"]:
         for entry in group["files"]:
             source = Path(entry["filename"])
             if not source.is_absolute():
                 source = root / source
             try:
-                relative = source.resolve().relative_to(source_root)
+                parts = source.resolve().relative_to(base).parts
             except ValueError:
                 continue
-            if len(relative.parts) < 2:
+            # Sources/MODULE/… in the root, and Tools/TOOL/Sources/MODULE/… for a bundled tool.
+            if len(parts) >= 3 and parts[0] == "Sources":
+                module = parts[1]
+            elif len(parts) >= 5 and parts[0] == "Tools" and parts[2] == "Sources":
+                module = parts[3]
+            else:
                 continue
-            name = "Sources/" + relative.as_posix()
+            name = "/".join(parts)
+            owners[name] = module
             summary = {metric: counts(entry["summary"][metric]) for metric in METRICS}
             if name in files and files[name] != summary:
                 raise ValueError(f"Conflicting coverage entries for {name}")
             files[name] = summary
     if not files:
-        raise ValueError("No root Sources/ files found; check the report and repository root")
+        raise ValueError("No root Sources/ or Tools/ files found; check the report and repository root")
     modules = {}
     totals = {metric: {"covered": 0, "count": 0} for metric in METRICS}
     for name, summary in sorted(files.items()):
-        module = name.split("/")[1]
+        module = owners[name]
         target = modules.setdefault(module, {metric: {"covered": 0, "count": 0} for metric in METRICS})
         for metric in METRICS:
             for key in ("covered", "count"):

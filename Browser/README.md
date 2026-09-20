@@ -89,12 +89,12 @@ Uploads and downloads pass directly through app storage, without Finder dialogs 
 
 ## WebMCP
 
-The managed Browser CLI can discover and invoke tools that websites expose through WebMCP. Tools execute in the selected tab's signed-in profile, in the background. No extension or Safari developer setting is required.
+The browser tools can discover and invoke tools that websites expose through WebMCP. Tools execute in the selected tab's signed-in profile, in the background. No extension or Safari developer setting is required.
 
 ```sh
-browser webmcp list --browser BROWSER_UUID --tab TAB_UUID
-browser webmcp call --browser BROWSER_UUID --tab TAB_UUID --tool TOOL_ID --args '{"query":"report"}'
-browser webmcp call --browser BROWSER_UUID --tab TAB_UUID --tool TOOL_ID --args-file arguments.json
+browser webmcp-list --browser BROWSER_UUID --tab TAB_UUID
+browser webmcp-call --browser BROWSER_UUID --tab TAB_UUID --tool TOOL_ID --args '{"query":"report"}'
+browser webmcp-call --browser BROWSER_UUID --tab TAB_UUID --tool TOOL_ID --args-file arguments.json
 ```
 
 Use the IDs returned by discovery. Add `--frame FRAME_ID` to both commands to use a same-origin frame returned by `inspect`. Arguments default to `{}` and must be JSON objects; argument files must be UTF-8, at most 1 MiB, and inside the bot's workspace. Tool names are descriptive; opaque IDs bind calls to a document and registration, avoiding accidental execution of a replacement tool after navigation.
@@ -110,13 +110,13 @@ if (!search) throw Error('Search tool unavailable');
 return await document.modelContext.executeTool(search, { query: 'report' });
 ```
 
-`getTools()` descriptors include a Window reference, so return selected metadata when inspecting them through `eval`. Scripted `executeTool` follows the draft's string-or-null result convention. Compatibility CLI calls preserve JSON return values directly. Both paths support asynchronous tool results and use the existing live website session. The CLI applies a 15-second execution timeout and signals cancellation; website code must cooperate with cancellation, so an action may continue or already have completed. Navigation can interrupt delivery of the result. Inspect the page before retrying an uncertain action.
+`getTools()` descriptors include a Window reference, so return selected metadata when inspecting them through `eval`. Scripted `executeTool` follows the draft's string-or-null result convention. `webmcp-call` preserves JSON return values directly. Both paths support asynchronous tool results and use the existing live website session. `webmcp-call` applies a 15-second execution timeout and signals cancellation; website code must cooperate with cancellation, so an action may continue or already have completed. Navigation can interrupt delivery of the result. Inspect the page before retrying an uncertain action.
 
 Noodle bundles a document-local compatibility implementation of the [WebMCP draft API](https://webmachinelearning.github.io/webmcp/) for WebKit. It installs before website scripts and supports `document.modelContext.registerTool`, `getTools`, `executeTool`, registration/execution AbortSignals, `toolchange`, and the early `navigator.modelContext` alias. JavaScript tools and HTML forms annotated with `toolname` and `tooldescription` share discovery. Forms support ordinary input, textarea, select and radio fields, validation, `toolactivated`/`toolcancel`, `agentInvoked`, and asynchronous `respondWith`. Forms without `toolautosubmit` are prepared for human submission; use `present` to provide a clickable handoff. No browser window opens automatically.
 
 This implementation is experimental and does not claim full browser conformance. It supports HTTPS and secure loopback pages, with explicit selection of same-origin frames. Cross-origin tool sharing, automatic frame-tree aggregation, native CSS tool pseudo-classes, custom form-associated elements and repeated non-radio field names are unsupported. Use `upload` for file inputs. JSON Schema validation supports common object/array/scalar constraints, enums, composition and local `$ref`; unsupported validation keywords fail explicitly. Native WebMCP is preferred when the engine provides it. The CLI honors explicit `tools` response-policy opt-outs and `Origin-Agent-Cluster: ?0`; the compatibility layer is not a replacement for native Permissions Policy enforcement.
 
-Assignment authorization and Pause Agents apply to both CLI and `eval`. Tool descriptions, schemas, hints and outputs remain untrusted website data; they do not authorize actions outside the user's request. Scripts have no additional native privileges.
+Assignment authorization and Pause Agents apply to both the WebMCP tools and `eval`. Tool descriptions, schemas, hints and outputs remain untrusted website data; they do not authorize actions outside the user's request. Scripts have no additional native privileges.
 
 ## Persistence and compatibility
 
@@ -130,7 +130,7 @@ This is an embedded WebKit browser, not Safari. It does not share Safari or Chro
 
 ## Architecture and permissions
 
-Noodle owns browser assignments and installs the managed skill and CLI. Agents write to their workspace mailbox; Noodle validates their active session and assignment on each request. A versioned protocol connects Noodle to the companion over a private Unix socket in a narrowly scoped App Group. Both endpoints verify the peer's signing team and exact app identity. Bots do not receive direct access to that socket or the shared file staging directory.
+Noodle owns browser assignments. Its bundled Browser tools extension supplies the tools and the skill that describes them. Agents write to their workspace mailbox; Noodle validates their active session and assignment on each request, then passes the call to the extension. A versioned protocol connects Noodle to the companion over a private Unix socket in a narrowly scoped App Group. Both endpoints verify the peer's signing team and exact app identity. Bots do not receive direct access to that socket or the shared file staging directory.
 
 The Browser app uses App Sandbox, outbound networking, user-selected file access, and the Browser App Group. Like Computer and Applet, the signed Sparkle updater has only two additional Mach lookup grants, scoped to this app’s own installer endpoints (`<bundle-id>-spks` and `<bundle-id>-spki`). Its Installer, Autoupdate and Updater helpers are signed with the same team; the separate downloader is omitted. No general filesystem access is added. It does not require Accessibility, Apple Events, screen recording, Full Disk Access, or changing Safari's developer settings. Screenshots come from the web view; native input events are delivered to that view, not the system event stream. Operations are serialized per browser. A timeout never triggers an automatic replay of an action already sent.
 
@@ -145,7 +145,7 @@ zsh scripts/test-browser-ui.sh '.build/Noodle Browser Dev.app'
 
 `scripts/test-browser.sh` launches a loopback-only fake login/upload/download site, runs the signed app twice, saves screenshot artifacts under `.build/browser-verification`, and removes its test profiles. Set `NOODLE_BROWSER_TEST_NOODLE_APP` to a separately built Noodle app with the same Dev or normal identity to also verify its managed CLI and signed cross-app connection.
 
-The local fixture also exercises WebMCP registration before page scripts, CLI/eval parity, fake-account isolation, schema and form validation, stale IDs, frame boundaries, response-policy opt-outs, cancellation and navigation. Set `NOODLE_BROWSER_TEST_WEBMCP_DEMOS=1` to additionally exercise the live [Google Chrome Labs Pizza Maker](https://googlechromelabs.github.io/webmcp-tools/demos/pizza-maker/) and [Le Petit Bistro](https://googlechromelabs.github.io/webmcp-tools/demos/french-bistro/) demos with Noodle's injected runtime. That optional smoke test needs internet access and depends on the upstream demo contracts; the default fixture stays local and deterministic.
+The local fixture also exercises WebMCP registration before page scripts, tool/eval parity, fake-account isolation, schema and form validation, stale IDs, frame boundaries, response-policy opt-outs, cancellation and navigation. Set `NOODLE_BROWSER_TEST_WEBMCP_DEMOS=1` to additionally exercise the live [Google Chrome Labs Pizza Maker](https://googlechromelabs.github.io/webmcp-tools/demos/pizza-maker/) and [Le Petit Bistro](https://googlechromelabs.github.io/webmcp-tools/demos/french-bistro/) demos with Noodle's injected runtime. That optional smoke test needs internet access and depends on the upstream demo contracts; the default fixture stays local and deterministic.
 
 Use `zsh scripts/test-browser-webmcp.sh PATH_TO_BROWSER_APP` for the focused WebMCP fixture. It accepts the same demo and Noodle-broker environment variables and keeps temporary profiles separate from the browser library.
 

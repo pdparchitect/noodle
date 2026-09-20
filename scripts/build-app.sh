@@ -105,7 +105,7 @@ cp "$project_root/Support/ShareExtension-Info.plist" "$share_extension/Contents/
 vision_tools_extension="$contents/Extensions/NoodleVisionTools.appex"
 mkdir -p "$vision_tools_extension/Contents/MacOS"
 cp "$bin_path/NoodleVisionToolsExtension" "$vision_tools_extension/Contents/MacOS/NoodleVisionToolsExtension"
-cp "$project_root/Support/VisionToolsExtension-Info.plist" "$vision_tools_extension/Contents/Info.plist"
+cp "$project_root/Tools/Vision/Info.plist" "$vision_tools_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.tools.vision" "$vision_tools_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :EXAppExtensionAttributes:EXExtensionPointIdentifier $bundle_identifier.tool" "$vision_tools_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$vision_tools_extension/Contents/Info.plist"
@@ -113,7 +113,7 @@ cp "$project_root/Support/VisionToolsExtension-Info.plist" "$vision_tools_extens
 browser_tools_extension="$contents/Extensions/NoodleBrowserTools.appex"
 mkdir -p "$browser_tools_extension/Contents/MacOS"
 cp "$bin_path/NoodleBrowserToolsExtension" "$browser_tools_extension/Contents/MacOS/NoodleBrowserToolsExtension"
-cp "$project_root/Support/BrowserToolsExtension-Info.plist" "$browser_tools_extension/Contents/Info.plist"
+cp "$project_root/Tools/Browser/Info.plist" "$browser_tools_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.tools.browser" "$browser_tools_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :EXAppExtensionAttributes:EXExtensionPointIdentifier $bundle_identifier.tool" "$browser_tools_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$browser_tools_extension/Contents/Info.plist"
@@ -121,7 +121,7 @@ cp "$project_root/Support/BrowserToolsExtension-Info.plist" "$browser_tools_exte
 computer_tools_extension="$contents/Extensions/NoodleComputerTools.appex"
 mkdir -p "$computer_tools_extension/Contents/MacOS"
 cp "$bin_path/NoodleComputerToolsExtension" "$computer_tools_extension/Contents/MacOS/NoodleComputerToolsExtension"
-cp "$project_root/Support/ComputerToolsExtension-Info.plist" "$computer_tools_extension/Contents/Info.plist"
+cp "$project_root/Tools/Computer/Info.plist" "$computer_tools_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.tools.computer" "$computer_tools_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :EXAppExtensionAttributes:EXExtensionPointIdentifier $bundle_identifier.tool" "$computer_tools_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$computer_tools_extension/Contents/Info.plist"
@@ -336,17 +336,18 @@ for file in "$contents/Info.plist" "$share_extension/Contents/Info.plist"; do
 done
 codesign --force --options runtime "$timestamp_option" \
     --entitlements "$share_entitlements" --sign "$signing_identity" "$share_extension"
-# Tool extensions get the sandbox and nothing else: no groups, network or files.
+# Each tool extension is signed with its own Tools/NAME/Extension.entitlements: the sandbox and
+# nothing else, no groups, network or files.
 codesign --force --options runtime "$timestamp_option" \
-    --entitlements "$project_root/Support/ToolExtension.entitlements" --sign "$signing_identity" "$vision_tools_extension"
+    --entitlements "$project_root/Tools/Vision/Extension.entitlements" --sign "$signing_identity" "$vision_tools_extension"
 # The exceptions: Browser and Computer tools each also hold their companion's group, and only that group.
 computer_tools_entitlements="$build_root/ComputerToolsExtension.resolved.entitlements"
-cp "$project_root/Support/ComputerToolsExtension.entitlements" "$computer_tools_entitlements"
+cp "$project_root/Tools/Computer/Extension.entitlements" "$computer_tools_entitlements"
 /usr/libexec/PlistBuddy -c "Set :com.apple.security.application-groups:0 $computer_group" "$computer_tools_entitlements"
 codesign --force --options runtime "$timestamp_option" \
     --entitlements "$computer_tools_entitlements" --sign "$signing_identity" "$computer_tools_extension"
 browser_tools_entitlements="$build_root/BrowserToolsExtension.resolved.entitlements"
-cp "$project_root/Support/BrowserToolsExtension.entitlements" "$browser_tools_entitlements"
+cp "$project_root/Tools/Browser/Extension.entitlements" "$browser_tools_entitlements"
 /usr/libexec/PlistBuddy -c "Set :com.apple.security.application-groups:0 $browser_group" "$browser_tools_entitlements"
 codesign --force --options runtime "$timestamp_option" \
     --entitlements "$browser_tools_entitlements" --sign "$signing_identity" "$browser_tools_extension"

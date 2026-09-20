@@ -3,6 +3,24 @@
 import PackageDescription
 import Foundation
 
+/// The three targets of a tool in Tools/NAME: its provider, the extension that hosts it and its tests.
+/// See Tools/AGENTS.md.
+func tool(_ name: String, dependencies: [Target.Dependency] = []) -> [Target] {
+    let provider = "Noodle\(name)Tools", folder = "Tools/\(name)"
+    return [
+        .target(name: provider, dependencies: ["NoodleCore"] + dependencies, path: "\(folder)/Sources/\(provider)"),
+        .executableTarget(
+            name: provider + "Extension",
+            dependencies: ["NoodleCore", .target(name: provider)],
+            path: "\(folder)/Sources/\(provider)Extension",
+            swiftSettings: [.unsafeFlags(["-parse-as-library", "-application-extension"])],
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]
+        ),
+        .testTarget(name: provider + "Tests", dependencies: [.target(name: provider), "NoodleCore"] + dependencies,
+                    path: "\(folder)/Tests/\(provider)Tests")
+    ]
+}
+
 let package = Package(
     name: "Noodle",
     platforms: [
@@ -41,27 +59,6 @@ let package = Package(
         .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "MCP", package: "swift-sdk")]),
         .target(name: "NoodleMCPScripting", dependencies: ["NoodleCore"]),
         .target(name: "NoodleSharing", dependencies: ["NoodleCore"]),
-        .target(name: "NoodleVisionTools", dependencies: ["NoodleCore"]),
-        .target(name: "NoodleBrowserTools", dependencies: ["NoodleCore", .product(name: "BrowserBridge", package: "BrowserProtocol")]),
-        .target(name: "NoodleComputerTools", dependencies: ["NoodleCore", .product(name: "ComputerBridge", package: "Bridge")]),
-        .executableTarget(
-            name: "NoodleComputerToolsExtension",
-            dependencies: ["NoodleCore", "NoodleComputerTools"],
-            swiftSettings: [.unsafeFlags(["-parse-as-library", "-application-extension"])],
-            linkerSettings: [.unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]
-        ),
-        .executableTarget(
-            name: "NoodleBrowserToolsExtension",
-            dependencies: ["NoodleCore", "NoodleBrowserTools"],
-            swiftSettings: [.unsafeFlags(["-parse-as-library", "-application-extension"])],
-            linkerSettings: [.unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]
-        ),
-        .executableTarget(
-            name: "NoodleVisionToolsExtension",
-            dependencies: ["NoodleCore", "NoodleVisionTools"],
-            swiftSettings: [.unsafeFlags(["-parse-as-library", "-application-extension"])],
-            linkerSettings: [.unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]
-        ),
         .executableTarget(
             name: "NoodleShareExtension",
             dependencies: ["NoodleSharing"],
@@ -104,9 +101,6 @@ let package = Package(
             name: "NoodleSharingTests",
             dependencies: ["NoodleSharing", "NoodleCore"]
         ),
-        .testTarget(name: "NoodleVisionToolsTests", dependencies: ["NoodleVisionTools", "NoodleCore"]),
-        .testTarget(name: "NoodleComputerToolsTests", dependencies: ["NoodleComputerTools", "NoodleCore", .product(name: "ComputerBridge", package: "Bridge")]),
-        .testTarget(name: "NoodleBrowserToolsTests", dependencies: ["NoodleBrowserTools", "NoodleCore", .product(name: "BrowserBridge", package: "BrowserProtocol")]),
         .testTarget(name: "NoodleMCPScriptingTests", dependencies: ["NoodleMCPScripting", "NoodleCore"]),
         .testTarget(
             name: "NoodleMCPTests",
@@ -115,6 +109,10 @@ let package = Package(
     ],
     swiftLanguageModes: [.v5]
 )
+
+package.targets += tool("Vision")
+    + tool("Browser", dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol")])
+    + tool("Computer", dependencies: [.product(name: "ComputerBridge", package: "Bridge")])
 
 // A newer CLT SDK can build the isolated Apple helper while an older full
 // Xcode builds SwiftUI and packages the app. Keep their compiler outputs apart.
