@@ -16,6 +16,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Make the status under your messages mean something: a message shows Sent until a bot's harness fetches it, then Delivered. In a group it is delivered once any member fetches it. Messages shared from other apps, which stayed on Waiting for harness, follow the same rule.
 - Ask for confirmation before turning on Unrestricted access or Apps for a bot in Settings > Sandbox. Turning either off still applies at once.
 - Show a reset button beside each changed shortcut in Settings > Keybindings, so one command can return to its default without restoring them all.
 - Accept Option (⌥) alone as the modifier for any shortcut in Settings > Keybindings, such as ⌥Space. Shift alone or no modifier is still rejected.

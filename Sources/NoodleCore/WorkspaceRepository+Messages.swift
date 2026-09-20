@@ -56,6 +56,7 @@ extension WorkspaceRepository {
         if let conversationID, conversations.isEmpty { throw WorkspaceError.missingConversation(conversationID) }
         var inbox = try loadInbox(for: agentID)
         var deliveries: [MessengerDelivery] = []
+        var fetched: [(conversationID: UUID, count: Int)] = []
 
         func identity(for author: MessageAuthor) -> MessengerIdentity {
             switch author {
@@ -129,6 +130,9 @@ extension WorkspaceRepository {
                 inbox.conversationOffsets[key] = messages.count
                 if inbox.reactionOffsets == nil { inbox.reactionOffsets = [:] }
                 inbox.reactionOffsets?[key] = changes.map(\.sequence).max() ?? 0
+                if messages.contains(where: { $0.author == .user && $0.delivery == .queued }) {
+                    fetched.append((conversation.id, messages.count))
+                }
             }
         }
 
@@ -137,8 +141,25 @@ extension WorkspaceRepository {
         }
         // Broker attachment delivery must succeed before advancing the inbox.
         try preparing?(deliveries)
-        if consuming && !includingRead { try saveInbox(inbox, for: agentID) }
+        if consuming && !includingRead {
+            try saveInbox(inbox, for: agentID)
+            // Display status only: the inbox has advanced, so a failure here must not fail the read.
+            for item in fetched { try? markDelivered(conversationID: item.conversationID, upTo: item.count) }
+        }
         return deliveries
+    }
+
+    /// A user's message is delivered once any recipient's harness has fetched it.
+    private func markDelivered(conversationID: UUID, upTo count: Int) throws {
+        try withConversationLock(conversationID) {
+            var messages = try loadMessages(conversationID: conversationID)
+            let queued = messages.indices.prefix(count).filter {
+                messages[$0].author == .user && messages[$0].delivery == .queued
+            }
+            guard !queued.isEmpty else { return }
+            for index in queued { messages[index].delivery = .delivered }
+            try write(messages, to: conversationDirectory(id: conversationID).appendingPathComponent("messages.json"))
+        }
     }
 
     public func participantRoster(for agentID: UUID, conversationID: UUID) throws -> MessengerRoster {
@@ -296,7 +317,7 @@ extension WorkspaceRepository {
             author: .user,
             body: text,
             createdAt: now,
-            delivery: .delivered,
+            delivery: .queued,
             attachmentIDs: attachmentIDs
         )
         try append(message)

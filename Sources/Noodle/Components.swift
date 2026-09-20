@@ -341,7 +341,7 @@ struct MessageBubble: View {
     private var deliveryLabel: String {
         switch message.delivery {
         case .saved: return "Saved"
-        case .queued: return "Waiting for harness"
+        case .queued: return "Sent"
         case .delivered: return "Delivered"
         case .failed: return "Not delivered"
         }

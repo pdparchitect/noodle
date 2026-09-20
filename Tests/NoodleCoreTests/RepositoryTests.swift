@@ -712,7 +712,7 @@ final class RepositoryTests: XCTestCase {
 
         XCTAssertEqual(message.author, .user)
         XCTAssertEqual(message.body, "Run the release build.")
-        XCTAssertEqual(message.delivery, .delivered)
+        XCTAssertEqual(message.delivery, .queued)
         XCTAssertEqual(
             try repository.loadMessages(conversationID: created.conversation.id),
             [message]
