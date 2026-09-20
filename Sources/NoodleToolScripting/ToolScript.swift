@@ -4,7 +4,7 @@ import NoodleCore
 
 /// A fresh JavaScriptCore context with only JSON bridge operations and output.
 /// The CLI owns the process deadline, including time spent in JavaScript loops.
-public enum MCPScript {
+public enum ToolScript {
     public static let maxSourceBytes = 1_048_576
     public static let maxCalls = 100
     public static let maxOutputBytes = 8 * 1_048_576

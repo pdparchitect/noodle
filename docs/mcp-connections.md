@@ -194,7 +194,7 @@ the credentials. JavaScriptCore adds no external runtime or helper entitlements.
 Validate catalogue, protocol, and scripting changes with:
 
 ```sh
-swift test --disable-sandbox --filter 'ToolCatalogTests|NoodleMCPTests|NoodleMCPScriptingTests'
+swift test --disable-sandbox --filter 'ToolCatalogTests|NoodleMCPTests|NoodleToolScriptingTests'
 zsh Tests/build-sandbox-cli-fixture.sh
 NOODLE_TEST_CLI_APPLICATION="$PWD/.build/Sandbox CLI Tests.app" \
   swift test --disable-sandbox --filter BridgeCLISandboxTests

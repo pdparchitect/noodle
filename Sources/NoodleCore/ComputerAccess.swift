@@ -27,6 +27,8 @@ public struct ComputerAssignments: Codable, Sendable {
     }
 }
 
+// TODO(0.22.0): Remove ComputerAgentSkill, its call in synchronizeAgentWorkspace and its tests. 0.21.0 is the
+// only release that needs it: the clean-up finishes the first time that version syncs a bot's workspace.
 public enum ComputerAgentSkill {
     /// Bots now reach computers through `messenger tool computer`. Remove what earlier versions
     /// wrote: the hand-written skill with its command link, and the request mailbox.

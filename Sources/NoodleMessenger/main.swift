@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 import NoodleCore
-import NoodleMCPScripting
+import NoodleToolScripting
 
 // `messenger tool PROVIDER --run FILE|-` and `--eval CODE` stream output and need a watchdog
 // that works even while JavaScript loops forever, so the executable runs them itself.
@@ -50,8 +50,8 @@ func runScript(_ script: ToolCLI.Script, workspace: URL) -> Never {
         case .eval(let code): data = Data(code.utf8); sourceURL = URL(string: "messenger-tool:///eval.js")!
         case .run("-"):
             var input = Data()
-            while input.count <= MCPScript.maxSourceBytes,
-                  let chunk = try FileHandle.standardInput.read(upToCount: min(65_536, MCPScript.maxSourceBytes + 1 - input.count)), !chunk.isEmpty {
+            while input.count <= ToolScript.maxSourceBytes,
+                  let chunk = try FileHandle.standardInput.read(upToCount: min(65_536, ToolScript.maxSourceBytes + 1 - input.count)), !chunk.isEmpty {
                 input.append(chunk)
             }
             data = input; sourceURL = URL(string: "messenger-tool:///stdin.js")!
@@ -61,16 +61,16 @@ func runScript(_ script: ToolCLI.Script, workspace: URL) -> Never {
             do {
                 // The mailbox reader refuses symbolic and hard links, not only paths outside the workspace.
                 let folder = try WorkspaceMailbox(workspace: workspace, path: parts.dropLast().joined(separator: "/"))
-                data = try folder.read(String(parts.last!), limit: MCPScript.maxSourceBytes)
+                data = try folder.read(String(parts.last!), limit: ToolScript.maxSourceBytes)
             } catch { throw ToolProviderError("Cannot read script. Use a regular UTF-8 workspace file without links, no larger than 1 MiB.") }
             sourceURL = workspace.appendingPathComponent(relative)
         }
-        guard data.count <= MCPScript.maxSourceBytes, let source = String(data: data, encoding: .utf8) else {
+        guard data.count <= ToolScript.maxSourceBytes, let source = String(data: data, encoding: .utf8) else {
             throw ToolProviderError("JavaScript source must be UTF-8 and no larger than 1 MiB.")
         }
         // Asked once, on the first call: "@path" is a file for a tool connection and plain text for every other tool.
         var kinds: [String: String]?
-        try MCPScript.run(source, sourceURL: sourceURL, provider: script.provider, request: { request in
+        try ToolScript.run(source, sourceURL: sourceURL, provider: script.provider, request: { request in
             guard ProcessInfo.processInfo.systemUptime < deadline else { throw ToolProviderError("Tool script timed out. Verify any remote action before retrying.") }
             switch request {
             case .providers:

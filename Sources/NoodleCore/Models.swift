@@ -744,6 +744,7 @@ public struct WorkspaceRepository: Sendable {
         if !workspaceFiles.contains("preferences.md") {
             try workspaceFiles.writeData(Data(Self.initialAgentPreferences.utf8), named: "preferences.md", replaceExisting: false)
         }
+        // TODO(0.22.0): Remove these three clean-ups of what Noodle wrote before 0.21.0.
         BrowserAgentSkill.removeLegacy(workspace: directory)
         ComputerAgentSkill.removeLegacy(workspace: directory)
         MCPSkillWriter.removeLegacy(workspace: directory)
@@ -762,6 +763,7 @@ public struct WorkspaceRepository: Sendable {
         }
 
         // Earlier versions kept a list of managed paths here. Nothing read it.
+        // TODO(0.22.0): Remove this clean-up; 0.21.0 is the only release that needs it.
         agentsFiles.remove("managed-skills.json")
     }
 

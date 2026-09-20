@@ -120,6 +120,8 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
     }
 }
 
+// TODO(0.22.0): Remove MCPSkillWriter, its call in synchronizeAgentWorkspace and its tests. 0.21.0 is the
+// only release that needs it: the clean-up finishes the first time that version syncs a bot's workspace.
 public enum MCPSkillWriter {
     /// Bots now reach tool connections through `messenger tool`. Remove what earlier versions
     /// wrote: one hand-written skill per connection with its mcpshim link, the list that

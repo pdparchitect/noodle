@@ -57,7 +57,7 @@ let package = Package(
                                          "-Xlinker", "Support/AppleAgent-Info.plist"])]),
         .target(name: "NoodleCore", dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper")]),
         .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "MCP", package: "swift-sdk")]),
-        .target(name: "NoodleMCPScripting", dependencies: ["NoodleCore"]),
+        .target(name: "NoodleToolScripting", dependencies: ["NoodleCore"]),
         .target(name: "NoodleSharing", dependencies: ["NoodleCore"]),
         .executableTarget(
             name: "NoodleShareExtension",
@@ -79,7 +79,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "NoodleMessenger",
-            dependencies: ["NoodleCore", "NoodleMCPScripting"]
+            dependencies: ["NoodleCore", "NoodleToolScripting"]
         ),
         .testTarget(
             name: "NoodleAppleRuntimeTests",
@@ -101,7 +101,7 @@ let package = Package(
             name: "NoodleSharingTests",
             dependencies: ["NoodleSharing", "NoodleCore"]
         ),
-        .testTarget(name: "NoodleMCPScriptingTests", dependencies: ["NoodleMCPScripting", "NoodleCore"]),
+        .testTarget(name: "NoodleToolScriptingTests", dependencies: ["NoodleToolScripting", "NoodleCore"]),
         .testTarget(
             name: "NoodleMCPTests",
             dependencies: ["NoodleMCP", "NoodleCore", .product(name: "MCP", package: "swift-sdk")]
@@ -118,7 +118,7 @@ package.targets += tool("Vision")
 // Xcode builds SwiftUI and packages the app. Keep their compiler outputs apart.
 if ProcessInfo.processInfo.environment["NOODLE_APPLE_HARNESS_ONLY"] == "1" {
     let targets: Set<String> = ["NoodleCore", "NoodleAppleRuntime", "NoodleAppleAgent",
-                               "NoodleMessenger", "NoodleMCPScripting", "NoodleCoreTests", "NoodleAppleRuntimeTests"]
+                               "NoodleMessenger", "NoodleToolScripting", "NoodleCoreTests", "NoodleAppleRuntimeTests"]
     package.targets.removeAll { !targets.contains($0.name) }
     package.products.removeAll { !["NoodleCore", "NoodleMessenger"].contains($0.name) }
 }
