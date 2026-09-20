@@ -7,9 +7,15 @@ struct ConversationEffectsView: View {
     @Environment(NoodleStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let conversationID: UUID
-    @State private var playing: ConversationEffect?
+    @State private var playing: Playback?
     @State private var startedAt = Date.distantPast
     @State private var windowReference = EffectWindowReference()
+
+    /// A preview has no queued event behind it, so playback keeps only what rendering needs.
+    private struct Playback {
+        let kind: ConversationEffectKind?
+        let seed: UUID
+    }
 
     private var isVisibleChat: Bool {
         guard let window = windowReference.window else { return false }
@@ -20,7 +26,7 @@ struct ConversationEffectsView: View {
     var body: some View {
         ZStack {
             if let playing, isVisibleChat {
-                switch playing.supportedKind {
+                switch playing.kind {
                 case .confetti:
                     if reduceMotion {
                         // A still acknowledgement, rather than moving particles or flashing.
@@ -29,7 +35,7 @@ struct ConversationEffectsView: View {
                             .padding(12)
                             .background(.regularMaterial, in: Circle())
                     } else {
-                        ConfettiCanvas(seed: playing.id, startedAt: startedAt)
+                        ConfettiCanvas(seed: playing.seed, startedAt: startedAt)
                     }
                 case nil:
                     EmptyView()
@@ -41,6 +47,12 @@ struct ConversationEffectsView: View {
         .background(EffectWindowProbe(reference: windowReference))
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+        .onReceive(NotificationCenter.default.publisher(for: .previewEffect)) { notification in
+            guard NoodleAppIdentity.isDevelopment, isVisibleChat,
+                  let kind = notification.object as? ConversationEffectKind else { return }
+            startedAt = Date()
+            playing = Playback(kind: kind, seed: UUID())
+        }
         .task(id: conversationID) {
             playing = nil
             let repository = store.repository
@@ -56,7 +68,7 @@ struct ConversationEffectsView: View {
                     guard !Task.isCancelled else { return }
                     if let event, isVisibleChat, event.expiresAt > Date() {
                         startedAt = Date()
-                        playing = event
+                        playing = Playback(kind: event.supportedKind, seed: event.id)
                     }
                 } else if !isVisibleChat {
                     playing = nil

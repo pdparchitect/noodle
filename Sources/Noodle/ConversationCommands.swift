@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import NoodleCore
 
 /// Published by the visible composer so menu commands follow the key chat
 /// window, including when focus is in its sidebar rather than its text editor.
@@ -69,6 +70,22 @@ struct ConversationCommands: Commands {
             Button(command?.title ?? "Record Voice Message") { command?.perform() }
                 .appShortcut(.recordVoice)
                 .disabled(command?.isEnabled != true)
+            if NoodleAppIdentity.isDevelopment {
+                Divider()
+                // Plays in the key chat directly, skipping the queue a bot's effect goes through.
+                Menu("Play Effect") {
+                    ForEach(ConversationEffectKind.allCases, id: \.self) { kind in
+                        Button(kind.rawValue.capitalized) {
+                            NotificationCenter.default.post(name: .previewEffect, object: kind)
+                        }
+                    }
+                }
+            }
         }
     }
+}
+
+extension Notification.Name {
+    /// Development only. The object is a `ConversationEffectKind`.
+    static let previewEffect = Notification.Name("Noodle.previewEffect")
 }

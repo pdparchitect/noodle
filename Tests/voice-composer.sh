@@ -17,7 +17,8 @@ swiftc -parse-as-library -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/VoiceInputDevice.swift" \
     "$project_root/Sources/Noodle/VoiceMessagePlayer.swift" \
     "$project_root/Sources/Noodle/VoiceMessageComposer.swift" \
-    "$project_root/Sources/Noodle/VoiceRecordingCommand.swift" \
+    "$project_root/Sources/Noodle/AppIdentity.swift" \
+    "$project_root/Sources/Noodle/ConversationCommands.swift" \
     "$project_root/Tests/NativeFixtureChecks.swift" \
     "$project_root/Tests/voice-composer.swift" \
     "${core_objects[@]}" \
