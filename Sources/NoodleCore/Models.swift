@@ -755,19 +755,15 @@ public struct WorkspaceRepository: Sendable {
         if !workspaceFiles.contains("preferences.md") {
             try workspaceFiles.writeData(Data(Self.initialAgentPreferences.utf8), named: "preferences.md", replaceExisting: false)
         }
-        let mcpRegistry = try MCPRegistry.load(root: rootURL)
         BrowserAgentSkill.removeLegacy(workspace: directory)
         ComputerAgentSkill.removeLegacy(workspace: directory)
+        MCPSkillWriter.removeLegacy(workspace: directory)
         let appletExecutable = appletExecutableURL
         let appletEnabled = appletExecutable != nil
         let appletInstructions = appletEnabled ? "\n## Creative applets\n\nRead `.agents/skills/applet/SKILL.md` to build and run HTML and native Swift noodlets in Noodle Applet.\n" : ""
-        try workspaceFiles.writeData(Data((Self.renderedAgentInstructions(backstory: backstory,
-            mcpConnections: mcpRegistry.assigned(to: agent.id)) + folderInstructions + ToolProviderSkills.instructions(workspace: directory) + appletInstructions).utf8), named: "AGENTS.md")
+        try workspaceFiles.writeData(Data((Self.renderedAgentInstructions(backstory: backstory) + folderInstructions + ToolProviderSkills.instructions(workspace: directory) + appletInstructions).utf8), named: "AGENTS.md")
         workspaceFiles.remove("instructions.md")
         try workspaceFiles.symlink("CLAUDE.md", destination: "AGENTS.md")
-        let mcpExecutable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("mcpshim")
-        try MCPSkillWriter.synchronize(workspace: directory, connections: mcpRegistry.assigned(to: agent.id),
-            executable: mcpExecutable.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil })
         try AppletAgentSkill.synchronize(workspace: directory, enabled: appletEnabled, executable: appletEnabled ? appletExecutable : nil)
         let claudeSkillPaths = try synchronizeClaudeSkillLinks(in: directory)
 
@@ -1641,7 +1637,7 @@ public struct WorkspaceRepository: Sendable {
 
     private static let initialAgentPreferences = "# Preferences\n\n"
 
-    private static func renderedAgentInstructions(backstory: String, mcpConnections: [MCPConnectionRecord] = []) -> String {
+    private static func renderedAgentInstructions(backstory: String) -> String {
         let normalizedBackstory = backstory.trimmingCharacters(in: .whitespacesAndNewlines)
         return """
         # Noodle Agent
@@ -1653,7 +1649,6 @@ public struct WorkspaceRepository: Sendable {
         \(normalizedBackstory)
 
         \(managedAgentInstructions)
-        \(MCPSkillWriter.index(mcpConnections))
         """
     }
 

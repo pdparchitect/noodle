@@ -27,47 +27,31 @@ final class MCPInvocationTests: XCTestCase {
         try JSONSerialization.data(withJSONObject: legacyRegistry).write(to: root.appendingPathComponent("MCP/connections.json"))
         let workspace = root.appendingPathComponent("workspace")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
-        try MCPSkillWriter.synchronize(workspace: workspace, connections: [legacy], executable: URL(fileURLWithPath: "/bin/echo"))
+        // The folder an earlier Noodle wrote for the old name, with its mcpshim link.
+        XCTAssertEqual(legacy.id, first.id)
         let oldFolder = workspace.appendingPathComponent(".agents/skills/" + oldName)
+        try FileManager.default.createDirectory(at: oldFolder, withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: oldFolder.appendingPathComponent("SKILL.md"))
+        try FileManager.default.createSymbolicLink(at: oldFolder.appendingPathComponent("mcpshim"), withDestinationURL: URL(fileURLWithPath: "/bin/echo"))
+        try JSONEncoder().encode([oldName]).write(to: workspace.appendingPathComponent(".agents/mcp-skills.json"))
         let notes = oldFolder.appendingPathComponent("notes.txt")
         try "Keep this".write(to: notes, atomically: true, encoding: .utf8)
         var migrated = try MCPRegistry.load(root: root)
         XCTAssertEqual(migrated.connections[0].id, first.id)
         XCTAssertEqual(migrated.assigned(to: agent).map(\.skillName), ["mcp-notion"])
         try migrated.save(root: root)
-        try MCPSkillWriter.synchronize(workspace: workspace, connections: migrated.connections, executable: URL(fileURLWithPath: "/bin/echo"))
+        MCPSkillWriter.removeLegacy(workspace: workspace)
+        let connection = migrated.connections[0]
+        ToolProviderSkills.synchronize(workspace: workspace, providers: [(ConnectionToolProvider(id: connection.skillName, title: connection.name,
+            connection: connection.id) { _, _, _, _, _ in Data() }.manifest, [])])
         XCTAssertEqual(try String(contentsOf: notes), "Keep this")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: oldFolder.appendingPathComponent("mcpshim").path))
+        XCTAssertNil(try? FileManager.default.destinationOfSymbolicLink(atPath: oldFolder.appendingPathComponent("mcpshim").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: oldFolder.appendingPathComponent("SKILL.md").path))
         let skill = try String(contentsOf: workspace.appendingPathComponent(".agents/skills/mcp-notion/SKILL.md"))
-        XCTAssertTrue(skill.contains("name: \"mcp-notion\""))
+        XCTAssertTrue(skill.contains("name: mcp-notion\n"))
         XCTAssertFalse(skill.contains(first.id.uuidString.lowercased()))
         XCTAssertFalse(skill.contains(first.id.uuidString.lowercased().replacingOccurrences(of: "-", with: "")))
         XCTAssertFalse(skill.contains("--connection"))
-    }
-
-    func testInvocationKeepsSkillSymlinkContextAndRejectsOtherWorkspace() throws {
-        let repositoryRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: repositoryRoot) }
-        let repository = WorkspaceRepository(rootURL: repositoryRoot)
-        let bot = try repository.createAgent(named: "Invocation")
-        let root = repository.directory(for: bot.agent)
-        let skill = root.appendingPathComponent(".agents/skills/mcp-notion")
-        try FileManager.default.createDirectory(at: skill, withIntermediateDirectories: true)
-        try FileManager.default.createSymbolicLink(at: skill.appendingPathComponent("mcpshim"), withDestinationURL: URL(fileURLWithPath: "/bin/echo"))
-        let context = try MCPInvocationContext.resolve(invocationPath: "./mcpshim", currentDirectory: skill)
-        XCTAssertEqual(context.skillName, "mcp-notion")
-        XCTAssertEqual(context.workspace, root.resolvingSymlinksInPath())
-        XCTAssertEqual(try MCPInvocationContext.resolve(invocationPath: skill.appendingPathComponent("mcpshim").path, currentDirectory: root), context)
-        let aliases = root.appendingPathComponent(".claude/skills")
-        try FileManager.default.removeItem(at: aliases)
-        try FileManager.default.createDirectory(at: aliases, withIntermediateDirectories: true)
-        let alias = aliases.appendingPathComponent("mcp-notion")
-        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: skill)
-        XCTAssertEqual(try MCPInvocationContext.resolve(invocationPath: alias.appendingPathComponent("mcpshim").path, currentDirectory: root), context)
-        let otherBot = try repository.createAgent(named: "Other")
-        let other = repository.directory(for: otherBot.agent)
-        XCTAssertNil(try MCPInvocationContext.resolve(invocationPath: skill.appendingPathComponent("mcpshim").path, currentDirectory: other).skillName)
-        XCTAssertNil(try MCPInvocationContext.resolve(invocationPath: "/app/Helpers/mcpshim", currentDirectory: root).skillName)
     }
 
     func testBrokerResolvesOnlyAssignedNamesAndRejectsAmbiguousTargets() throws {
@@ -92,7 +76,9 @@ final class MCPInvocationTests: XCTestCase {
         let file = folder.appendingPathComponent("SKILL.md")
         try "My own skill".write(to: file, atomically: true, encoding: .utf8)
         let connection = try MCPConnectionRecord(name: "Notion", endpoint: URL(string: "https://mcp.notion.com/mcp")!)
-        XCTAssertThrowsError(try MCPSkillWriter.synchronize(workspace: root, connections: [connection], executable: nil))
+        ToolProviderSkills.synchronize(workspace: root, providers: [(ConnectionToolProvider(id: connection.skillName, title: connection.name,
+            connection: connection.id) { _, _, _, _, _ in Data() }.manifest, [])])
+        MCPSkillWriter.removeLegacy(workspace: root)
         XCTAssertEqual(try String(contentsOf: file), "My own skill")
     }
 }

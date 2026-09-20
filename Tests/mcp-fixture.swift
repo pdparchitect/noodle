@@ -9,6 +9,9 @@ import NoodleMCP
     let mcp: MCPController
     let repository: WorkspaceRepository
     let agent: AgentRecord
+    /// The same pieces the app wires together: one provider per connection, the grants the
+    /// controller publishes, and the broker behind `messenger tool`.
+    let tools: ToolBridgeBroker
     init(root override: URL? = nil) throws {
         let root = override ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("MCPFixture", isDirectory: true)
@@ -16,8 +19,14 @@ import NoodleMCP
         repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: helper)
         try repository.prepare()
         agent = try repository.loadAgents().first ?? repository.createAgent(named: "MCP Test Bot").agent
+        let assignments = ToolAssignmentStore(), registry = ToolProviderRegistry()
+        let broker = ToolBridgeBroker(registry: registry) { assignments.assignments(for: $0) }
+        tools = broker
         mcp = MCPController(repository: repository)
+        mcp.toolRegistry = registry
+        mcp.onAssignmentsChange = { assignments.replace(ConnectionToolProvider.grantKind, with: $0); broker.synchronizeSkills() }
         mcp.start(agents: [agent])
+        try broker.start(agents: [ToolBridgeAgent(id: agent.id, workspace: repository.directory(for: agent))])
         if mcp.registry.connections.isEmpty {
             try mcp.save(MCPConnectionRecord(name: "Notion Test", endpoint: URL(string: "https://mcp.notion.com/mcp")!,
                                             description: "Isolated Notion integration test"))
@@ -54,16 +63,16 @@ struct MCPFixtureView: View {
             }
     }
     private func testCLI() {
-        guard let id = selected.first else { return }
+        guard let id = selected.first, let skill = store.mcp.registry.connections.first(where: { $0.id == id })?.skillName else { return }
         testing = true; result = "Discovering tools through the bundled CLI…"
         let workspace = store.repository.directory(for: store.agent)
         Task {
             do {
                 let count = try await Task.detached {
                     let process = Process()
-                    process.executableURL = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/mcpshim")
+                    process.executableURL = workspace.appendingPathComponent(".agents/skills/messenger/messenger")
                     process.currentDirectoryURL = workspace
-                    process.arguments = ["tools", "--connection", id.uuidString]
+                    process.arguments = ["tool", skill]
                     let output = Pipe()
                     process.standardOutput = output
                     process.standardError = FileHandle.nullDevice
@@ -228,9 +237,9 @@ struct MCPFixtureView: View {
         let workspace = store.repository.directory(for: store.agent)
         let count = try await Task.detached {
             let process = Process()
-            process.executableURL = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/mcpshim")
+            process.executableURL = workspace.appendingPathComponent(".agents/skills/messenger/messenger")
             process.currentDirectoryURL = workspace
-            process.arguments = ["tools", "--connection", connection.id.uuidString]
+            process.arguments = ["tool", connection.skillName]
             let output = Pipe()
             process.standardOutput = output
             process.standardError = FileHandle.standardError
@@ -249,48 +258,48 @@ struct MCPFixtureView: View {
     @MainActor private static func checkBridge(_ store: NoodleStore) async throws {
         guard let connection = store.mcp.registry.connections.first else { fatalError("Missing fixture connection") }
         let workspace = store.repository.directory(for: store.agent)
-        func run(executable: URL? = nil, directory: URL? = nil, arguments: [String]? = nil) async throws -> String {
+        func run(directory: URL? = nil) async throws -> String {
             return try await Task.detached {
                 let process = Process()
-                process.executableURL = executable ?? Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/mcpshim")
+                process.executableURL = workspace.appendingPathComponent(".agents/skills/messenger/messenger")
                 process.currentDirectoryURL = directory ?? workspace
-                process.arguments = arguments ?? ["tools", "--connection", connection.id.uuidString]
+                process.arguments = ["tool", connection.skillName]
                 let error = Pipe()
                 process.standardOutput = FileHandle.nullDevice
                 process.standardError = error
                 try process.run()
                 let data = error.fileHandleForReading.readDataToEndOfFile()
                 process.waitUntilExit()
-                guard process.terminationStatus == 1 else { throw MCPConnectionError.message("Expected a denied CLI request.") }
+                guard process.terminationStatus != 0 else { throw MCPConnectionError.message("Expected a denied CLI request.") }
                 return String(decoding: data, as: UTF8.self)
             }.value
         }
         guard try await run().contains("not assigned") else { throw MCPConnectionError.message("Unassigned request was not rejected.") }
         try store.mcp.assign([connection.id], to: store.agent)
         let folder = store.repository.directory(for: store.agent).appendingPathComponent(".agents/skills/" + connection.skillName)
+        // The skill is generated from the provider shortly after the grant is published.
+        for _ in 0..<100 where !FileManager.default.fileExists(atPath: folder.appendingPathComponent("SKILL.md").path) {
+            try await Task.sleep(for: .milliseconds(50))
+        }
         guard FileManager.default.fileExists(atPath: folder.appendingPathComponent("SKILL.md").path),
-              FileManager.default.isExecutableFile(atPath: folder.appendingPathComponent("mcpshim").path) else {
-            throw MCPConnectionError.message("Assigned skill or CLI is missing.")
+              !FileManager.default.fileExists(atPath: folder.appendingPathComponent("mcpshim").path) else {
+            throw MCPConnectionError.message("Assigned skill is missing, or the removed mcpshim link is still there.")
         }
         guard try await run().contains("Reconnect") else { throw MCPConnectionError.message("Unsigned-in request did not reach the credential gate.") }
-        let localCLI = folder.appendingPathComponent("mcpshim")
-        for directory in [folder, workspace] {
-            guard try await run(executable: localCLI, directory: directory, arguments: ["tools"]).contains("Reconnect") else {
-                throw MCPConnectionError.message("Skill-local CLI did not select its assigned connection.")
-            }
-        }
-        guard try await run(executable: localCLI, arguments: ["tools", "--connection", connection.id.uuidString]).contains("Omit --connection") else {
-            throw MCPConnectionError.message("Skill-local CLI accepted an explicit connection override.")
+        guard try await run(directory: folder).contains("Reconnect") else {
+            throw MCPConnectionError.message("The command did not work from the skill's own directory.")
         }
         try store.mcp.assign([], to: store.agent)
+        for _ in 0..<100 where FileManager.default.fileExists(atPath: folder.appendingPathComponent("SKILL.md").path) {
+            try await Task.sleep(for: .milliseconds(50))
+        }
         guard !FileManager.default.fileExists(atPath: folder.appendingPathComponent("SKILL.md").path),
               try await run().contains("not assigned") else { throw MCPConnectionError.message("Removed access remained usable.") }
-        // Bypass the CLI: a known skill name must still be denied by the broker.
-        let bridge = MCPBridgeFiles.directory(workspace: workspace)
+        // Bypass the command: a known provider name must still be denied by the broker.
+        let bridge = workspace.appendingPathComponent(ToolBroker.path)
         let session = try JSONDecoder().decode(MCPBridgeSession.self,
             from: MCPBridgeFiles.read(bridge.appendingPathComponent("session.json"), limit: 4096))
-        let request = MCPBridgeRequest(session: session.token, skillName: connection.skillName,
-                                       action: .tools, tool: nil, arguments: nil)
+        let request = ToolBridgeRequest(session: session.token, action: .tools, provider: connection.skillName)
         let stem = request.id.uuidString.lowercased()
         let requestFile = bridge.appendingPathComponent(stem + ".request")
         let responseFile = bridge.appendingPathComponent(stem + ".response")
@@ -298,12 +307,13 @@ struct MCPFixtureView: View {
             try? FileManager.default.removeItem(at: requestFile)
             try? FileManager.default.removeItem(at: responseFile)
         }
-        try MCPBridgeFiles.write(request, to: requestFile)
+        // Written exactly as the real client writes it, so only the missing grant can refuse it.
+        try WorkspaceMailbox(workspace: workspace, path: ToolBroker.path).write(request, named: stem + ".request")
         for _ in 0..<100 {
             if let data = try? MCPBridgeFiles.read(responseFile, limit: 4096) {
-                let response = try JSONDecoder().decode(MCPBridgeResponse.self, from: data)
+                let response = try JSONDecoder().decode(ToolBridgeResponse.self, from: data)
                 guard response.error?.contains("not assigned") == true else {
-                    throw MCPConnectionError.message("Broker accepted a revoked skill name.")
+                    throw MCPConnectionError.message("Broker accepted a revoked provider name: \(response.error ?? "no error")")
                 }
                 return
             }

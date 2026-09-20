@@ -18,19 +18,29 @@ final class MCPConnectionTests: XCTestCase {
         registry.remove(work.id)
         XCTAssertTrue(registry.assigned(to: agent).isEmpty)
     }
+    /// The skill Noodle generates for a connection: its provider's manifest and tools, rendered.
+    private func generatedSkill(_ record: MCPConnectionRecord) -> String {
+        let provider = ConnectionToolProvider(id: record.skillName, title: record.name, connection: record.id,
+            summary: record.description, userInstructions: record.instructions) { _, _, _, _, _ in Data() }
+        return ToolProviderSkills.document(provider.manifest, tools: [])
+    }
+    private func provider(_ record: MCPConnectionRecord) -> (manifest: ToolProviderManifest, tools: [ToolDescriptor]) {
+        (ConnectionToolProvider(id: record.skillName, title: record.name, connection: record.id, summary: record.description,
+                                userInstructions: record.instructions) { _, _, _, _, _ in Data() }.manifest, [])
+    }
     func testRenameDoesNotChangeSkillOrAssignment() throws {
         var record = try MCPConnectionRecord(name: "Notion Personal", endpoint: endpoint)
         let skill = record.skillName
         record.name = "New label"
         XCTAssertEqual(record.skillName, skill)
-        XCTAssertFalse(MCPSkillWriter.contents(record).contains(record.id.uuidString.lowercased()))
+        XCTAssertFalse(generatedSkill(record).lowercased().contains(record.id.uuidString.lowercased()))
     }
     func testGeneratedSkillMetadataRespectsFormatLimits() throws {
         for name in ["🪴", "abcdefghij klmnopqrs tuvwxyz", String(repeating: "n", count: 100)] {
             let record = try MCPConnectionRecord(name: name, endpoint: endpoint, description: String(repeating: "d", count: 1000))
             XCTAssertFalse(record.skillName.contains("--"))
             XCTAssertLessThanOrEqual(record.skillName.count, 64)
-            let line = try XCTUnwrap(MCPSkillWriter.contents(record).components(separatedBy: "\n").first { $0.hasPrefix("description: ") })
+            let line = try XCTUnwrap(generatedSkill(record).components(separatedBy: "\n").first { $0.hasPrefix("description: ") })
             let description = try JSONDecoder().decode(String.self, from: Data(line.dropFirst("description: ".count).utf8))
             XCTAssertFalse(description.isEmpty)
             XCTAssertLessThanOrEqual(description.count, 1024)
@@ -57,22 +67,32 @@ final class MCPConnectionTests: XCTestCase {
         XCTAssertEqual(try MCPRegistry.load(root: root), registry)
         let workspace = root.appendingPathComponent("agent")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
-        try MCPSkillWriter.synchronize(workspace: workspace, connections: [record], executable: URL(fileURLWithPath: "/bin/echo"))
+        // What an earlier Noodle wrote: a hand-written skill, its mcpshim link, the list that tracked it and a mailbox.
         let directory = workspace.appendingPathComponent(".agents/skills/\(record.skillName)")
-        let skill = try String(contentsOf: directory.appendingPathComponent("SKILL.md"), encoding: .utf8)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: workspace.appendingPathComponent(".noodle/mcp-bridge"), withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: directory.appendingPathComponent("SKILL.md"))
+        try FileManager.default.createSymbolicLink(at: directory.appendingPathComponent("mcpshim"), withDestinationURL: URL(fileURLWithPath: "/bin/echo"))
+        try JSONEncoder().encode([record.skillName]).write(to: workspace.appendingPathComponent(".agents/mcp-skills.json"))
+        let userFile = directory.appendingPathComponent("my-notes.txt")
+        try "Keep me".write(to: userFile, atomically: true, encoding: .utf8)
+        MCPSkillWriter.removeLegacy(workspace: workspace)
+        XCTAssertEqual(try String(contentsOf: userFile, encoding: .utf8), "Keep me")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("SKILL.md").path))
+        XCTAssertNil(try? FileManager.default.destinationOfSymbolicLink(atPath: directory.appendingPathComponent("mcpshim").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: workspace.appendingPathComponent(".agents/mcp-skills.json").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: workspace.appendingPathComponent(".noodle/mcp-bridge").path))
+
+        let skill = generatedSkill(record)
         XCTAssertTrue(skill.contains("Only use the work account."))
-        XCTAssertTrue(skill.contains("./mcpshim tools"))
-        XCTAssertTrue(skill.contains("./mcpshim run workflow.js"))
+        XCTAssertTrue(skill.contains("messenger tool \(record.skillName) TOOL"))
+        XCTAssertTrue(skill.contains("messenger tool \(record.skillName) --run FILE"))
+        XCTAssertFalse(skill.contains("mcpshim"))
         XCTAssertTrue(skill.contains("mcp.call(name, input = {})"))
         XCTAssertTrue(skill.contains("error.result"))
         XCTAssertFalse(skill.contains("--connection"))
         XCTAssertFalse(skill.contains(record.id.uuidString.lowercased()))
         XCTAssertFalse(skill.contains(record.id.uuidString.lowercased().replacingOccurrences(of: "-", with: "")))
-        let userFile = directory.appendingPathComponent("my-notes.txt")
-        try "Keep me".write(to: userFile, atomically: true, encoding: .utf8)
-        try MCPSkillWriter.synchronize(workspace: workspace, connections: [], executable: nil)
-        XCTAssertEqual(try String(contentsOf: userFile, encoding: .utf8), "Keep me")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("SKILL.md").path))
     }
     func testRedirectedSkillDirectoryIsNotWritten() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -84,7 +104,8 @@ final class MCPConnectionTests: XCTestCase {
         try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
         try FileManager.default.createSymbolicLink(at: workspace.appendingPathComponent(".agents"), withDestinationURL: outside)
         let connection = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
-        XCTAssertThrowsError(try MCPSkillWriter.synchronize(workspace: workspace, connections: [connection], executable: nil))
+        ToolProviderSkills.synchronize(workspace: workspace, providers: [provider(connection)])
+        MCPSkillWriter.removeLegacy(workspace: workspace)
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: outside.path).isEmpty)
     }
     func testBridgeRefusesSymlinksAndOversizedFiles() throws {
@@ -130,6 +151,8 @@ final class MCPConnectionTests: XCTestCase {
         registry.connections = [first, second]
         try registry.assign([first.id], to: agent.id)
         try registry.save(root: root)
+        // The app's broker generates a skill for each granted connection; the bot's instructions list those.
+        ToolProviderSkills.synchronize(workspace: repository.directory(for: agent), providers: [provider(first)])
         try repository.synchronizeAgentWorkspace(agent)
         let instructions = try String(contentsOf: repository.directory(for: agent).appendingPathComponent("AGENTS.md"), encoding: .utf8)
         XCTAssertTrue(instructions.contains(first.skillName + "/SKILL.md"))
@@ -137,6 +160,7 @@ final class MCPConnectionTests: XCTestCase {
         XCTAssertEqual(try repository.loadAgentBackstory(agent), "Private instructions")
         try registry.assign([], to: agent.id)
         try registry.save(root: root)
+        ToolProviderSkills.synchronize(workspace: repository.directory(for: agent), providers: [])
         try repository.synchronizeAgentWorkspace(agent)
         let updated = try String(contentsOf: repository.directory(for: agent).appendingPathComponent("AGENTS.md"), encoding: .utf8)
         XCTAssertFalse(updated.contains(first.skillName))

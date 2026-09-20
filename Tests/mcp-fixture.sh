@@ -11,6 +11,7 @@ swiftc -parse-as-library -I "$bin_path/Modules" \
     -Xcc "-I$project_root/.build/checkouts/swift-system/Sources/CSystem/include" \
     "$project_root/Sources/Noodle/MCPController.swift" \
     "$project_root/Sources/Noodle/ExternalEventPresentation.swift" \
+    "$project_root/Sources/Noodle/AppIdentity.swift" \
     "$project_root/Sources/Noodle/MCPSettingsView.swift" \
     "$project_root/Sources/Noodle/ToolCatalogView.swift" \
     "$project_root/Sources/Noodle/SheetSizing.swift" \
@@ -20,14 +21,12 @@ swiftc -parse-as-library -I "$bin_path/Modules" \
     "${objects[@]}" -o "$app/Contents/MacOS/MCPFixture"
 cp "$project_root/Tests/mcp-fixture-Info.plist" "$app/Contents/Info.plist"
 ditto "$project_root/Support/ToolIcons" "$app/Contents/Resources/ToolIcons"
-cp "$bin_path/NoodleMCPCLI" "$app/Contents/Helpers/mcpshim"
 cp "$bin_path/NoodleMessenger" "$app/Contents/Helpers/messenger"
 identity="${NOODLE_SIGNING_IDENTITY:-$(security find-identity -v -p codesigning | awk -F '"' '/Apple Development:/ { print $2; exit }')}"
 if [[ -z "$identity" ]]; then
     print -u2 "An Apple Development signing identity is required to test native OAuth and Keychain."
     exit 1
 fi
-codesign --force --options runtime --timestamp=none --sign "$identity" "$app/Contents/Helpers/mcpshim"
 codesign --force --options runtime --timestamp=none --sign "$identity" "$app/Contents/Helpers/messenger"
 codesign --force --options runtime --timestamp=none --sign "$identity" \
     --entitlements "$project_root/Tests/mcp-fixture.entitlements" "$app"

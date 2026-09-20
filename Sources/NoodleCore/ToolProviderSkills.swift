@@ -9,10 +9,13 @@ public enum ToolProviderSkills {
     public static func document(_ manifest: ToolProviderManifest, tools: [ToolDescriptor]) -> String {
         let line: (String) -> String = { $0.split(whereSeparator: \.isNewline).joined(separator: " ") }
         let command = "./.agents/skills/messenger/messenger tool \(manifest.id)"
+        // A JSON string is a valid YAML scalar, so quotes and colons in a name cannot break the header.
+        let summary = line(manifest.summary) + (manifest.summary.isEmpty ? "" : " ") + "Tools: \(tools.map(\.name).joined(separator: ", "))."
+        let description = String(data: (try? JSONEncoder().encode(String(summary.prefix(1024)))) ?? Data("\"\"".utf8), encoding: .utf8) ?? "\"\""
         var text = """
         ---
         name: \(manifest.id)
-        description: \(line(manifest.summary))\(manifest.summary.isEmpty ? "" : " ")Tools: \(tools.map(\.name).joined(separator: ", ")).
+        description: \(description)
         ---
         # \(line(manifest.title))
 
@@ -42,8 +45,8 @@ public enum ToolProviderSkills {
         return names.sorted().compactMap { name in
             guard let folder = try? WorkspaceMailbox(workspace: workspace, path: ".agents/skills/" + name), folder.contains(marker),
                   let text = try? String(decoding: folder.read("SKILL.md", limit: 1_048_576), as: UTF8.self) else { return nil }
-            let description = text.split(separator: "\n").prefix(8).first { $0.hasPrefix("description: ") }.map { String($0.dropFirst(13)) }
-            return (name, description ?? "")
+            let line = text.split(separator: "\n").prefix(8).first { $0.hasPrefix("description: ") }.map { String($0.dropFirst(13)) } ?? ""
+            return (name, (try? JSONDecoder().decode(String.self, from: Data(line.utf8))) ?? line)
         }
     }
 
@@ -58,6 +61,12 @@ public enum ToolProviderSkills {
     /// Writes a skill for every listed provider and removes generated skills that are
     /// no longer listed. A user's own skill of the same name is left exactly as it is.
     public static func synchronize(workspace: URL, providers: [(manifest: ToolProviderManifest, tools: [ToolDescriptor])]) {
+        synchronize(workspace: workspace, listed: providers.map { ($0.manifest, Optional($0.tools)) })
+    }
+
+    /// `tools` is nil while a provider cannot list them. Its skill is then written without a
+    /// tool list, or left as it was if one already exists, so a passing failure erases nothing.
+    public static func synchronize(workspace: URL, listed providers: [(manifest: ToolProviderManifest, tools: [ToolDescriptor]?)]) {
         let active = Set(providers.map(\.manifest.id))
         if let skills = try? WorkspaceMailbox(workspace: workspace, path: ".agents/skills"), let names = try? skills.names() {
             for name in names where !active.contains(name) {
@@ -68,9 +77,11 @@ public enum ToolProviderSkills {
         }
         for provider in providers {
             let name = provider.manifest.id
+            if provider.tools == nil, let existing = try? WorkspaceMailbox(workspace: workspace, path: ".agents/skills/" + name),
+               existing.contains(marker), existing.contains("SKILL.md") { continue }
             do {
                 try WorkspaceMailbox.synchronizeSkill(workspace: workspace, name: name, enabled: true,
-                    instructions: document(provider.manifest, tools: provider.tools), command: marker, executable: nil)
+                    instructions: document(provider.manifest, tools: provider.tools ?? []), command: marker, executable: nil)
                 let folder = try WorkspaceMailbox(workspace: workspace, path: ".agents/skills/" + name)
                 try folder.writeData(Data(), named: marker)
                 // Workspaces whose .claude/skills is a real folder list each skill by link.

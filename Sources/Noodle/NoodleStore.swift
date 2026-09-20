@@ -169,6 +169,11 @@ final class NoodleStore {
         tools = ToolBridgeBroker(registry: toolProviders,
                                  host: .repository(self.repository, revoked: { revocations.handle($0, $1, $2) }) { toolAssignments.assignments(for: $0) }) { toolAssignments.assignments(for: $0) }
         mcp = MCPController(repository: self.repository)
+        mcp.toolRegistry = toolProviders
+        mcp.onAssignmentsChange = { [toolAssignments, tools] granted in
+            toolAssignments.replace(ConnectionToolProvider.grantKind, with: granted)
+            tools.synchronizeSkills()
+        }
         computers = ComputerController(repository: self.repository)
         computers.onAssignmentsChange = { [toolAssignments, tools] assigned in
             toolAssignments.replace("computer", with: assigned)

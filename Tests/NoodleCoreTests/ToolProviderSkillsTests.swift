@@ -45,7 +45,12 @@ final class ToolProviderSkillsTests: XCTestCase {
     func testDocumentTeachesTheCommandOptionsAndProviderGuidance() async throws {
         let tools = try ToolDescriptor.list(mcp: try await Fixture(manifest: vision).tools(context: .init(agentID: UUID(), workspace: workspace)))
         let document = ToolProviderSkills.document(vision, tools: tools)
-        XCTAssertTrue(document.hasPrefix("---\nname: vision\ndescription: Read text from images. Tools: ocr.\n---\n"), document)
+        XCTAssertTrue(document.hasPrefix("---\nname: vision\ndescription: \"Read text from images. Tools: ocr.\"\n---\n"), document)
+        let tricky = ToolProviderSkills.document(.init(id: "x", title: "T", summary: "Say \"hi\": now " + String(repeating: "d", count: 2000)), tools: tools)
+        let header = try XCTUnwrap(tricky.split(separator: "\n").first { $0.hasPrefix("description: ") })
+        let decoded = try JSONDecoder().decode(String.self, from: Data(header.dropFirst(13).utf8))
+        XCTAssertTrue(decoded.hasPrefix("Say \"hi\": now "))
+        XCTAssertLessThanOrEqual(decoded.count, 1024)
         for expected in ["# Vision", "./.agents/skills/messenger/messenger tool vision TOOL", "Images stay on this Mac.", "### ocr", "Recognize text.",
                          "`--image FILE` (required) — Image file.", "`--languages VALUE` (repeatable) — Preferred languages.", "`--fast`"] {
             XCTAssertTrue(document.contains(expected), "Missing \(expected) in:\n\(document)")
@@ -90,6 +95,36 @@ final class ToolProviderSkillsTests: XCTestCase {
         private let lock = NSLock(); private var count = 0
         var value: Int { lock.withLock { count } }
         func increment() { lock.withLock { count += 1 } }
+    }
+
+    /// A tool connection that needs sign-in, or a server that is down, cannot list its tools.
+    func testAProviderThatCannotListItsToolsStillGetsItsSkillAndKeepsTheLastGoodOne() throws {
+        final class Flaky: ToolProvider, @unchecked Sendable {
+            let kind = ToolProviderKind.connection
+            let manifest = ToolProviderManifest(id: "mcp-notion", title: "Notion", summary: "Wiki.", instructions: "Ask the user to reconnect in Settings if sign-in is needed.")
+            private let lock = NSLock(); private var failing = true
+            var fails: Bool { get { lock.withLock { failing } } set { lock.withLock { failing = newValue } } }
+            func tools(context: ToolCallContext) async throws -> Data {
+                if fails { throw ToolProviderError("Reconnect Notion in Settings.") }
+                return Data(#"{"tools":[{"name":"search","description":"Search pages."}]}"#.utf8)
+            }
+            func call(_ tool: String, arguments: Data, files: [ToolFile], context: ToolCallContext) async throws -> Data { Data("{}".utf8) }
+        }
+        let provider = Flaky()
+        try registry.register(provider)
+        try broker.start(agents: [ToolBridgeAgent(id: UUID(), workspace: workspace)])
+        wait("The skill exists even though the tools cannot be listed yet.") { skill("mcp-notion") != nil }
+        XCTAssertTrue(skill("mcp-notion")?.contains("Ask the user to reconnect") == true)
+        XCTAssertFalse(skill("mcp-notion")?.contains("### search") == true)
+
+        provider.fails = false
+        broker.synchronizeSkills()
+        wait("Once the tools can be listed they appear.") { skill("mcp-notion")?.contains("### search") == true }
+        let good = skill("mcp-notion")
+        provider.fails = true
+        broker.synchronizeSkills()
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertEqual(skill("mcp-notion"), good, "a temporary failure does not erase what the bot already knows")
     }
 
     func testAUsersOwnSkillWithTheSameNameIsNeverReplacedOrRemoved() throws {

@@ -41,7 +41,6 @@ let package = Package(
         .target(name: "NoodleCore", dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper")]),
         .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "MCP", package: "swift-sdk")]),
         .target(name: "NoodleMCPScripting", dependencies: ["NoodleCore"]),
-        .executableTarget(name: "NoodleMCPCLI", dependencies: ["NoodleCore", "NoodleMCPScripting"]),
         .executableTarget(name: "NoodleDocumentation", dependencies: ["NoodleCore"]),
         .target(name: "NoodleSharing", dependencies: ["NoodleCore"]),
         .target(name: "NoodleVisionTools", dependencies: ["NoodleCore"]),
@@ -85,7 +84,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "NoodleMessenger",
-            dependencies: ["NoodleCore"]
+            dependencies: ["NoodleCore", "NoodleMCPScripting"]
         ),
         .testTarget(
             name: "NoodleAppleRuntimeTests",
@@ -123,7 +122,7 @@ let package = Package(
 // Xcode builds SwiftUI and packages the app. Keep their compiler outputs apart.
 if ProcessInfo.processInfo.environment["NOODLE_APPLE_HARNESS_ONLY"] == "1" {
     let targets: Set<String> = ["NoodleCore", "NoodleAppleRuntime", "NoodleAppleAgent",
-                               "NoodleMessenger", "NoodleDocumentation", "NoodleCoreTests", "NoodleAppleRuntimeTests"]
+                               "NoodleMessenger", "NoodleMCPScripting", "NoodleDocumentation", "NoodleCoreTests", "NoodleAppleRuntimeTests"]
     package.targets.removeAll { !targets.contains($0.name) }
     package.products.removeAll { !["NoodleCore", "NoodleMessenger", "NoodleDocumentation"].contains($0.name) }
 }

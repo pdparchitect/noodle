@@ -2,7 +2,7 @@ import Foundation
 
 /// CLI-only file conveniences. The broker and remote server still exchange MCP JSON.
 public enum MCPFileContent {
-    public static let directory = ".noodle/mcp-attachments"
+    public static let directory = ".noodle/tool-attachments"
 
     public static func arguments(_ data: Data, workspace: URL, currentDirectory: URL) throws -> Data {
         guard data.count <= MCPBridgeFiles.maxRequestBytes,

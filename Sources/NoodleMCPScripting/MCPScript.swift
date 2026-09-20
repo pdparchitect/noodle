@@ -76,17 +76,17 @@ public enum MCPScript {
         }
         context.setObject(request, forKeyedSubscript: "__mcpRequest" as NSString)
         context.setObject(write, forKeyedSubscript: "__mcpWrite" as NSString)
-        context.evaluateScript(bootstrap, withSourceURL: URL(string: "mcpshim:///runtime.js"))
+        context.evaluateScript(bootstrap, withSourceURL: URL(string: "messenger-tool:///runtime.js"))
         if let exception = context.exception { throw failure(exception.toString() ?? "JavaScript setup failed.") }
         let promise = context.objectForKeyedSubscript("Promise")
-        let scriptURL = sourceURL ?? URL(string: "mcpshim:///eval.js")!
+        let scriptURL = sourceURL ?? URL(string: "messenger-tool:///eval.js")!
         let result = context.evaluateScript(source, withSourceURL: scriptURL)
         if let terminalError { throw terminalError }
         if let exception = context.exception {
             let message = exception.toString() ?? "JavaScript failed."
             let stack = exception.isObject ? exception.forProperty("stack")?.toString() ?? "" : ""
             let frames = stack.components(separatedBy: "\n").filter {
-                !$0.isEmpty && $0 != "undefined" && !$0.contains("@mcpshim:///runtime.js:")
+                !$0.isEmpty && $0 != "undefined" && !$0.contains("@messenger-tool:///runtime.js:")
             }
             if !frames.isEmpty { throw failure(message + "\n" + frames.joined(separator: "\n")) }
             // Syntax errors have no stack in JavaScriptCore, but carry a source
@@ -148,7 +148,7 @@ public enum MCPScript {
         }
         function stack(error) {
             return typeof error.stack === 'string' ? error.stack.split('\n')
-                .filter(line => !line.includes('@mcpshim:///runtime.js:')).join('\n') : '';
+                .filter(line => !line.includes('@messenger-tool:///runtime.js:')).join('\n') : '';
         }
         function inspect(value) {
             try {

@@ -81,20 +81,20 @@ public final class ToolBridgeBroker: @unchecked Sendable {
         guard !agents.isEmpty else { return }
         Task { [weak self, registry, assignments, queue] in
             for agent in agents {
-                var providers: [(manifest: ToolProviderManifest, tools: [ToolDescriptor])] = []
+                var providers: [(manifest: ToolProviderManifest, tools: [ToolDescriptor]?)] = []
                 let granted = assignments(agent.id)
                 let context = ToolCallContext(agentID: agent.id, workspace: agent.workspace, assignments: granted)
                 for provider in registry.active(assignments: granted) {
-                    // A provider that cannot list its tools gets no skill rather than a wrong one.
-                    guard let list = try? await ToolBroker.withTimeout(30, tool: provider.manifest.id, { try await provider.tools(context: context) }),
-                          let tools = try? ToolDescriptor.list(mcp: list) else { continue }
-                    providers.append((provider.manifest, tools))
+                    // A connection that needs sign-in, or a server that is down, cannot list its tools. The bot
+                    // still needs the skill, which is how it learns to ask the person to reconnect.
+                    let list = try? await ToolBroker.withTimeout(30, tool: provider.manifest.id, { try await provider.tools(context: context) })
+                    providers.append((provider.manifest, list.flatMap { try? ToolDescriptor.list(mcp: $0) }))
                 }
                 let listed = providers
                 queue.async { [weak self] in
                     guard let self, self.agents.contains(where: { $0.id == agent.id }) else { return }
                     let before = ToolProviderSkills.generated(workspace: agent.workspace).map { $0.name + "\n" + $0.description }
-                    ToolProviderSkills.synchronize(workspace: agent.workspace, providers: listed)
+                    ToolProviderSkills.synchronize(workspace: agent.workspace, listed: listed)
                     if before != ToolProviderSkills.generated(workspace: agent.workspace).map({ $0.name + "\n" + $0.description }) {
                         self.skillsObserver?(agent.id)
                     }

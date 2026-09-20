@@ -74,7 +74,10 @@ public enum ToolBroker {
         }
         if request.action == .inspect {
             let tools = (try JSONSerialization.jsonObject(with: list) as? [String: Any])?["tools"] as? [[String: Any]] ?? []
-            return try JSONSerialization.data(withJSONObject: tools.first { $0["name"] as? String == descriptor.name } ?? [:], options: [.sortedKeys])
+            var tool = tools.first { $0["name"] as? String == descriptor.name } ?? [:]
+            // The command line treats a connection's arguments differently; see ToolCLI.
+            tool["_meta"] = (tool["_meta"] as? [String: Any] ?? [:]).merging(["noodle/kind": provider.kind.rawValue]) { $1 }
+            return try JSONSerialization.data(withJSONObject: tool, options: [.sortedKeys])
         }
         let (authorized, used) = try authorize(descriptor, provider: provider.manifest, arguments: request.arguments ?? Data("{}".utf8),
                                                assignments: assignments)

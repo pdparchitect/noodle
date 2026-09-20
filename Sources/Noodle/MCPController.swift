@@ -13,14 +13,15 @@ final class MCPController {
     var errorMessage: String?
     @ObservationIgnored private let repository: WorkspaceRepository
     @ObservationIgnored private let service: MCPService
-    @ObservationIgnored private var sessions: [UUID: String] = [:]
-    @ObservationIgnored private var bridgeTask: Task<Void, Never>?
-    @ObservationIgnored private let mailboxMonitor = WorkspaceMailboxMonitor()
     @ObservationIgnored private var loginTask: Task<Void, Never>?
-    @ObservationIgnored private var calls: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var agents: [AgentRecord] = []
+    @ObservationIgnored private var started = false
+    @ObservationIgnored private var providers: [UUID: String] = [:]
+    /// Where this controller registers one provider per connection.
+    @ObservationIgnored var toolRegistry: ToolProviderRegistry? { didSet { synchronizeProviders() } }
+    /// Receives the connections each bot is granted, now and on every change.
+    @ObservationIgnored var onAssignmentsChange: (([UUID: Set<String>]) -> Void)? { didSet { synchronizeProviders() } }
     @ObservationIgnored private let browser = MCPBrowserAuthorization()
-    @ObservationIgnored private var claimed: [UUID: Date] = [:]
     @ObservationIgnored private var registryReadable = true
 
     init(repository: WorkspaceRepository, service: MCPService? = nil) {
@@ -32,32 +33,14 @@ final class MCPController {
             errorMessage = "Could not read saved tool connections. They have not been replaced."
         }
     }
-    deinit {
-        bridgeTask?.cancel()
-        loginTask?.cancel()
-        calls.values.forEach { $0.cancel() }
-    }
+    deinit { loginTask?.cancel() }
+    /// Bots reach tool connections through Noodle's tool broker. This controller owns the
+    /// connections, their sign-in, and which bot is granted which connection.
     func start(agents: [AgentRecord]) {
-        mailboxMonitor.reset()
         self.agents = agents
-        do {
-            for agent in agents {
-                let folder = try MCPBridgeFiles.prepare(workspace: repository.directory(for: agent))
-                if sessions[agent.id] == nil {
-                    sessions[agent.id] = UUID().uuidString + UUID().uuidString
-                    try MCPBridgeFiles.write(MCPBridgeSession(token: sessions[agent.id]!, processID: getpid()),
-                                             to: folder.appendingPathComponent("session.json"), workspace: repository.directory(for: agent))
-                }
-            }
-            sessions = sessions.filter { id, _ in agents.contains { $0.id == id } }
-        } catch { errorMessage = "Could not prepare the MCP bridge: " + error.localizedDescription }
-        if bridgeTask == nil {
-            bridgeTask = Task { [weak self] in
-                while !Task.isCancelled {
-                    self?.scan()
-                    try? await Task.sleep(for: .milliseconds(250))
-                }
-            }
+        synchronizeProviders()
+        if !started {
+            started = true
             Task { [weak self] in
                 guard let self else { return }
                 for connection in registry.connections {
@@ -73,6 +56,7 @@ final class MCPController {
         else { next.connections.append(record) }
         try next.save(root: repository.rootURL)
         registry = next
+        synchronizeProviders()
         try synchronize()
     }
 
@@ -102,9 +86,11 @@ final class MCPController {
         try next.assign(ids, to: agent.id)
         try next.save(root: repository.rootURL)
         registry = next
+        synchronizeProviders()
         if synchronizeWorkspace { try repository.synchronizeAgentWorkspace(agent) }
     }
     func reloadAssignments() throws {
+        defer { synchronizeProviders() }
         do { registry = try MCPRegistry.load(root: repository.rootURL); registryReadable = true }
         catch { registryReadable = false; throw error }
     }
@@ -128,6 +114,7 @@ final class MCPController {
             try requireReadableRegistry()
             try next.save(root: repository.rootURL)
             registry = next // Revoke broker access immediately, before asynchronous cleanup.
+            synchronizeProviders()
             connected.remove(record.id)
             errors[record.id] = nil
             Task {
@@ -180,79 +167,41 @@ final class MCPController {
     private func synchronize() throws {
         for agent in agents { try repository.synchronizeAgentWorkspace(agent) }
     }
-    private func scan() {
-        guard calls.count < 16, mailboxMonitor.hasChanges() else { return }
-        claimed = claimed.filter { $0.value > Date() }
-        let manager = FileManager.default
-        for agent in agents {
-            let workspace = repository.directory(for: agent)
-            guard mailboxMonitor.needsScan(workspace: workspace, path: ".noodle/mcp-bridge") else { continue }
-            let folder = MCPBridgeFiles.directory(workspace: workspace)
-            guard let mailbox = try? WorkspaceMailbox(workspace: workspace, path: ".noodle/mcp-bridge") else { continue }
-            guard folder.resolvingSymlinksInPath() == folder.standardizedFileURL,
-                  let files = try? manager.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey]) else { continue }
-            for file in files.prefix(256) {
-                if file.pathExtension == "response" || file.pathExtension == "running" {
-                    if let date = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
-                       date < Date().addingTimeInterval(-300), UUID(uuidString: file.deletingPathExtension().lastPathComponent) != nil {
-                        mailbox.remove(file.lastPathComponent)
-                    }
-                    continue
-                }
-                guard file.pathExtension == "request", calls.count < 16,
-                      let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent) else { continue }
-                let responseURL = folder.appendingPathComponent(id.uuidString.lowercased() + ".response")
-                let runningURL = folder.appendingPathComponent(id.uuidString.lowercased() + ".running")
-                guard let data = try? mailbox.read(file.lastPathComponent, limit: MCPBridgeFiles.maxRequestEnvelopeBytes),
-                      let request = try? JSONDecoder().decode(MCPBridgeRequest.self, from: data),
-                      request.id == id, request.session == sessions[agent.id],
-                      (request.arguments?.count ?? 0) <= MCPBridgeFiles.maxRequestBytes,
-                      (request.tool?.utf8.count ?? 0) <= 1024,
-                      (request.uri?.utf8.count ?? 0) <= 4096,
-                      (request.skillName?.utf8.count ?? 0) <= 64,
-                      request.expiresAt > Date(), request.expiresAt < Date().addingTimeInterval(130),
-                      claimed[id] == nil else {
-                    mailbox.remove(file.lastPathComponent)
-                    try? mailbox.write(MCPBridgeResponse(error: "Expired or invalid MCP request."), named: responseURL.lastPathComponent)
-                    continue
-                }
-                // Consume before dispatch: a crash never silently replays an uncertain write.
-                do { try mailbox.claim(file.lastPathComponent, as: runningURL.lastPathComponent) } catch { continue }
-                claimed[id] = request.expiresAt
-                guard let connection = request.assignedConnection(in: registry.assigned(to: agent.id)) else {
-                    try? mailbox.write(MCPBridgeResponse(error: "This MCP connection is not assigned to this bot."), named: responseURL.lastPathComponent)
-                    mailbox.remove(runningURL.lastPathComponent)
-                    continue
-                }
-                calls[id] = Task { [weak self] in
-                    guard let self else { return }
-                    defer { calls[id] = nil; mailbox.remove(runningURL.lastPathComponent) }
-                    let response: MCPBridgeResponse
+    /// Call after every change to `registry`. A connection that cannot be read grants nothing.
+    private func synchronizeProviders() {
+        let connections = registryReadable ? registry.connections : []
+        if let toolRegistry {
+            let wanted = Dictionary(uniqueKeysWithValues: connections.map { ($0.id, $0.skillName + "\n" + $0.name + "\n" + $0.description + "\n" + $0.instructions) })
+            for (id, signature) in providers where wanted[id] != signature {
+                toolRegistry.unregister(String(signature.prefix { $0 != "\n" }))
+                providers[id] = nil
+            }
+            for connection in connections where providers[connection.id] == nil {
+                let id = connection.id, service = service
+                let provider = ConnectionToolProvider(id: connection.skillName, title: connection.name, connection: id,
+                    summary: connection.description, userInstructions: connection.instructions) { [weak self] action, tool, arguments, uri, authorized in
+                    // Use the connection as it is now: its endpoint or account may have been edited.
+                    guard let current = await self?.registry.connections.first(where: { $0.id == id }) else { throw MCPServiceError.revoked }
                     do {
-                        let result = try await service.perform(request, connection: connection) { [weak self] in
-                            await self?.permits(connection.id, agentID: agent.id, session: request.session) == true
-                        }
-                        guard registry.assigned(to: agent.id).contains(where: { $0.id == connection.id }) else {
-                            throw MCPServiceError.revoked
-                        }
-                        response = MCPBridgeResponse(result: result)
+                        return try await service.perform(MCPBridgeRequest(session: "", connectionID: id, action: action, tool: tool, arguments: arguments, uri: uri),
+                                                         connection: current, authorized: authorized)
                     } catch {
-                        response = MCPBridgeResponse(error: Self.safeError(error))
-                        errors[connection.id] = Self.safeError(error)
-                    }
-                    // The caller may have gone away. Never retain an expired result.
-                    if request.expiresAt > Date(), folder.resolvingSymlinksInPath() == folder.standardizedFileURL {
-                        try? mailbox.write(response, named: responseURL.lastPathComponent)
+                        let message = Self.safeError(error)
+                        await self?.record(message, for: id)
+                        throw ToolProviderError(message)
                     }
                 }
+                do { try toolRegistry.register(provider); providers[id] = wanted[id] }
+                catch { errors[id] = error.localizedDescription }
             }
         }
+        let granted = registryReadable ? registry.assignments : [:]
+        onAssignmentsChange?(Dictionary(uniqueKeysWithValues: granted.compactMap { key, ids in
+            UUID(uuidString: key).map { ($0, Set(ids.map(\.uuidString))) }
+        }))
     }
-    private func permits(_ connectionID: UUID, agentID: UUID, session: String) -> Bool {
-        sessions[agentID] == session && agents.contains(where: { $0.id == agentID }) &&
-            registry.assigned(to: agentID).contains(where: { $0.id == connectionID })
-    }
-    private static func safeError(_ error: Error) -> String {
+    private func record(_ message: String, for connection: UUID) { errors[connection] = message }
+    private nonisolated static func safeError(_ error: Error) -> String {
         if error is MCPServiceError || error is MCPConnectionError { return error.localizedDescription }
         return "The tool connection could not complete the request. Try reconnecting in Settings → Tools."
     }

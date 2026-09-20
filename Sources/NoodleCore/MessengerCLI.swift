@@ -42,6 +42,18 @@ public enum MessengerCLI {
         }
     }
 
+    /// The `tool` arguments and the bot workspace they apply to, when this invocation is a
+    /// tool command. The executable uses it to run scripts itself; see `ToolCLI.script`.
+    public static func toolInvocation(arguments: [String] = CommandLine.arguments,
+                                      environment: [String: String] = ProcessInfo.processInfo.environment) throws -> (workspace: URL, arguments: [String])? {
+        var values = Array(arguments.dropFirst())
+        if values.first == "messenger" { values.removeFirst() }
+        if values.first == "--agent-directory", values.count >= 2 { values.removeFirst(2) }
+        guard values.first == MessengerCommandKind.tool.rawValue else { return nil }
+        guard case .tool(let rest) = try Invocation(arguments: arguments, environment: environment).action else { return nil }
+        return (try Invocation(arguments: arguments, environment: environment).workspace, rest)
+    }
+
     /// Trusted in-process entry point for app operations and repository tests.
     /// The shipped CLI always uses the bot-bound bridge, without a disk fallback.
     public static func runDirect(arguments: [String], environment: [String: String] = [:]) -> MessengerCommandResult {

@@ -128,7 +128,7 @@ final class MCPScriptTests: XCTestCase {
         XCTAssertTrue(diagnostic.contains("Trace: checkpoint"))
         XCTAssertTrue(diagnostic.contains("inner@file:///workspace/trace.js:1:"))
         XCTAssertTrue(diagnostic.contains("outer@file:///workspace/trace.js:2:"))
-        XCTAssertFalse(diagnostic.contains("mcpshim:///runtime.js"))
+        XCTAssertFalse(diagnostic.contains("messenger-tool:///runtime.js"))
     }
 
     func testCallLimitCannotBeCaughtAndBypassed() throws {
@@ -173,7 +173,7 @@ final class MCPScriptTests: XCTestCase {
             XCTAssertTrue($0.localizedDescription.contains("Connection unavailable"))
             XCTAssertTrue($0.localizedDescription.contains("inner@file:///workspace/workflow.js:1:"))
             XCTAssertTrue($0.localizedDescription.contains("outer@file:///workspace/workflow.js:2:"))
-            XCTAssertFalse($0.localizedDescription.contains("mcpshim:///runtime.js"))
+            XCTAssertFalse($0.localizedDescription.contains("messenger-tool:///runtime.js"))
         }
         XCTAssertThrowsError(try MCPScript.run("\nthrow new Error('broken')", sourceURL: url, perform: unused, output: { _, _ in })) {
             XCTAssertTrue($0.localizedDescription.contains("broken"))

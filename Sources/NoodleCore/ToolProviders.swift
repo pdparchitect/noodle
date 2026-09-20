@@ -19,7 +19,16 @@ public struct ToolActivation: RawRepresentable, Codable, Hashable, Sendable {
     public static let always = Self(rawValue: "always")
     public static func whenAssigned(_ resource: String) -> Self { Self(rawValue: "assigned:" + resource) }
     public var resource: String? { rawValue.hasPrefix("assigned:") ? String(rawValue.dropFirst(9)) : nil }
-    var isValid: Bool { self == .always || !(resource ?? "").isEmpty }
+    /// `granted:KIND/ID`: the provider itself is what Noodle assigns, such as one tool
+    /// connection. Its tools name no resource; the grant is checked around every call.
+    public static func whenGranted(_ kind: String, id: String) -> Self { Self(rawValue: "granted:\(kind)/\(id)") }
+    public var grant: (kind: String, id: String)? {
+        guard rawValue.hasPrefix("granted:") else { return nil }
+        let parts = rawValue.dropFirst(8).split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false)
+        return parts.count == 2 && !parts[0].isEmpty && !parts[1].isEmpty ? (String(parts[0]), String(parts[1])) : nil
+    }
+    var isValid: Bool { self == .always || !(resource ?? "").isEmpty || grant != nil }
+    var isValidForTesting: Bool { isValid }
 }
 
 /// What Noodle granted one bot: resource kind (such as `browser`) to the identifiers it may use.
@@ -297,6 +306,7 @@ public final class ToolProviderRegistry: @unchecked Sendable {
 
     static func isActive(_ activation: ToolActivation, assignments: ToolAssignments) -> Bool {
         activation == .always || activation.resource.map { !assignments.ids($0).isEmpty } == true
+            || activation.grant.map { assignments.assigned($0.id, kind: $0.kind) != nil } == true
     }
 }
 

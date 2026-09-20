@@ -9,24 +9,31 @@ final class BridgeCLISandboxTests: XCTestCase {
         try check(helper: "messenger", bridge: "messenger", arguments: ["--list-conversations"],
                   response: JSONEncoder().encode(MessengerCommandResult(exitCode: 0, standardOutput: "[]")), expected: "[]")
     }
-    func testMCPCanUseWorkspaceBrokerWithoutNetworkOrSignalPermission() throws {
-        try check(helper: "mcpshim", bridge: "mcp", arguments: ["tools", "--connection", UUID().uuidString],
-                  response: JSONEncoder().encode(MCPBridgeResponse(result: Data("{\"tools\":[]}".utf8))), expected: "{\"tools\":[]}")
+    // Tool connections: `messenger tool mcp-fixture ...`. A call is two bridge requests,
+    // inspect (for the schema and the provider kind) and then the call itself.
+    private static let inspected = Data(#"{"name":"fixture","inputSchema":{"type":"object"},"_meta":{"noodle/kind":"connection"}}"#.utf8)
+    private func reply(_ result: Data) throws -> Data { try JSONEncoder().encode(ToolBridgeResponse(result: result)) }
+    private func request(_ data: Data) throws -> ToolBridgeRequest { try JSONDecoder().decode(ToolBridgeRequest.self, from: data) }
+
+    func testConnectionToolsListInsideSandbox() throws {
+        try check(helper: "messenger", bridge: "tool", arguments: ["tool", "mcp-fixture"],
+                  response: reply(Data("{\"tools\":[]}".utf8)), expected: "{\"tools\":[]}",
+                  inspectRequest: { XCTAssertEqual(try self.request($0).provider, "mcp-fixture") })
     }
-    func testMCPExpandsFileInputsAndSavesBinaryResultsInsideSandbox() throws {
+    func testConnectionExpandsFileInputsAndSavesBinaryResultsInsideSandbox() throws {
         let bytes = Data([0, 255, 128, 10])
         let result: [String: Any] = ["content": [
             ["type": "text", "text": "ready"],
             ["type": "image", "data": bytes.base64EncodedString(), "mimeType": "image/png"]],
             "structuredContent": ["accepted": true], "isError": true]
-        try check(helper: "mcpshim", bridge: "mcp",
-            arguments: ["call", "--connection", UUID().uuidString, "--tool", "fixture"],
-            response: JSONEncoder().encode(MCPBridgeResponse(result: JSONSerialization.data(withJSONObject: result))),
-            exitCode: 1,
-            input: Data("{\"data\":\"@report.pdf\",\"literal\":\"@@name\"}".utf8),
+        try check(helper: "messenger", bridge: "tool", arguments: ["tool", "mcp-fixture", "fixture", "--input", "-"],
+            response: Data(), exitCode: 1,
+            input: Data("{\"data\":\"@report.pdf\",\"literal\":\"@@name\"}".utf8), requestCount: 2,
+            responseForRequest: { _, index in try self.reply(index == 0 ? Self.inspected : JSONSerialization.data(withJSONObject: result)) },
             prepare: { workspace in try bytes.write(to: workspace.appendingPathComponent("report.pdf")) },
             inspectRequest: { data in
-                let request = try JSONDecoder().decode(MCPBridgeRequest.self, from: data)
+                let request = try self.request(data)
+                guard request.action == .call else { return XCTAssertEqual(request.action, .inspect) }
                 let arguments = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.arguments)) as? [String: String])
                 XCTAssertEqual(arguments, ["data": bytes.base64EncodedString(), "literal": "@name"])
             }, verify: { object, workspace in
@@ -36,28 +43,30 @@ final class BridgeCLISandboxTests: XCTestCase {
                 XCTAssertEqual(content[0]["text"] as? String, "ready")
                 XCTAssertEqual(content[1]["type"] as? String, "file")
                 let path = try XCTUnwrap(content[1]["path"] as? String)
-                XCTAssertTrue(path.hasPrefix(workspace.path + "/.noodle/mcp-attachments/"))
+                XCTAssertTrue(path.hasPrefix(workspace.path + "/.noodle/tool-attachments/"))
                 XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: path)), bytes)
             })
     }
-    func testMCPRawOutputAndToolErrorExitStatusInsideSandbox() throws {
+    func testConnectionRawOutputAndToolErrorExitStatusInsideSandbox() throws {
         let result = "{\"content\":[{\"type\":\"image\",\"data\":\"AP8=\",\"mimeType\":\"image/png\"}],\"isError\":true}"
-        try check(helper: "mcpshim", bridge: "mcp",
-            arguments: ["call", "--raw", "--connection", UUID().uuidString, "--tool", "fixture", "--input", "{}"],
-            response: JSONEncoder().encode(MCPBridgeResponse(result: Data(result.utf8))), expected: result, exitCode: 1,
+        try check(helper: "messenger", bridge: "tool", arguments: ["tool", "mcp-fixture", "fixture", "--raw", "--input", "{}"],
+            response: Data(), expected: result, exitCode: 1, requestCount: 2,
+            responseForRequest: { _, index in try self.reply(index == 0 ? Self.inspected : Data(result.utf8)) },
             verify: { _, workspace in
                 XCTAssertFalse(FileManager.default.fileExists(atPath: workspace.appendingPathComponent(MCPFileContent.directory).path))
             })
     }
-    func testMCPResourceReadSavesBlobInsideSandbox() throws {
+    func testConnectionResourceReadSavesBlobInsideSandbox() throws {
         let result = Data("{\"contents\":[{\"uri\":\"reports://file\",\"blob\":\"AP8=\",\"mimeType\":\"application/pdf\"}]}".utf8)
-        try check(helper: "mcpshim", bridge: "mcp",
-            arguments: ["read-resource", "--connection", UUID().uuidString, "--uri", "reports://file"],
-            response: JSONEncoder().encode(MCPBridgeResponse(result: result)),
+        let schema = Data(#"{"name":"mcp-read-resource","inputSchema":{"type":"object","required":["uri"],"properties":{"uri":{"type":"string"}}},"_meta":{"noodle/kind":"connection"}}"#.utf8)
+        try check(helper: "messenger", bridge: "tool", arguments: ["tool", "mcp-fixture", "mcp-read-resource", "--uri", "reports://file"],
+            response: Data(), requestCount: 2,
+            responseForRequest: { _, index in try self.reply(index == 0 ? schema : result) },
             inspectRequest: { data in
-                let request = try JSONDecoder().decode(MCPBridgeRequest.self, from: data)
-                XCTAssertEqual(request.action, .readResource)
-                XCTAssertEqual(request.uri, "reports://file")
+                let request = try self.request(data)
+                XCTAssertEqual(request.tool, "mcp-read-resource")
+                guard request.action == .call else { return }
+                XCTAssertEqual(try JSONDecoder().decode([String: String].self, from: XCTUnwrap(request.arguments)), ["uri": "reports://file"])
             }, verify: { object, _ in
                 let result = try XCTUnwrap(object as? [String: Any])
                 let content = try XCTUnwrap(result["contents"] as? [[String: Any]])
@@ -66,53 +75,50 @@ final class BridgeCLISandboxTests: XCTestCase {
                 XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: path)), Data([0, 255]))
             })
     }
-    func testMCPMissingFileFailsBeforeSendingRequest() throws {
-        try check(helper: "mcpshim", bridge: "mcp",
-            arguments: ["call", "--connection", UUID().uuidString, "--tool", "fixture", "--input", "{\"data\":\"@missing.pdf\"}"],
-            response: Data(), exitCode: 1, expectsRequest: false, expectedError: "Cannot read MCP file reference")
+    func testConnectionMissingFileFailsBeforeTheCallIsSent() throws {
+        try check(helper: "messenger", bridge: "tool",
+            arguments: ["tool", "mcp-fixture", "fixture", "--input", "{\"data\":\"@missing.pdf\"}"],
+            response: reply(Self.inspected), exitCode: 2, expectedError: "Cannot read MCP file reference",
+            inspectRequest: { XCTAssertEqual(try self.request($0).action, .inspect, "only the schema was asked for; the call never left") })
     }
-    func testMCPScriptChainsCallsThroughSkillLocalConnection() throws {
+    func testScriptChainsCallsThroughItsConnection() throws {
         let source = "const first = mcp.call('echo', {value: 1}); print(mcp.call('echo', {value: first.structuredContent.value + 1}).structuredContent);"
         var ids: Set<UUID> = []
-        try check(helper: "mcpshim", bridge: "mcp", arguments: ["eval", source, "--timeout", "10"],
-            response: Data(), expected: "{\"value\":2}", requestCount: 2, skillLocal: true,
+        try check(helper: "messenger", bridge: "tool", arguments: ["tool", "mcp-fixture", "--eval", source, "--timeout", "10"],
+            response: Data(), expected: "{\"value\":2}", requestCount: 2,
             responseForRequest: { data, index in
-                let request = try JSONDecoder().decode(MCPBridgeRequest.self, from: data)
+                let request = try self.request(data)
                 XCTAssertTrue(ids.insert(request.id).inserted)
-                XCTAssertEqual(request.skillName, "mcp-script-fixture")
-                XCTAssertNil(request.connectionID)
+                XCTAssertEqual([request.provider, request.tool], ["mcp-fixture", "echo"])
                 XCTAssertEqual(request.action, .call)
-                XCTAssertEqual(request.tool, "echo")
-                XCTAssertLessThanOrEqual(request.expiresAt.timeIntervalSinceNow, 10)
                 let value = try JSONDecoder().decode([String: Int].self, from: XCTUnwrap(request.arguments))
                 XCTAssertEqual(value["value"], index + 1)
-                return try JSONEncoder().encode(MCPBridgeResponse(result:
-                    JSONSerialization.data(withJSONObject: ["structuredContent": value])))
+                return try self.reply(JSONSerialization.data(withJSONObject: ["structuredContent": value]))
             })
     }
-    func testMCPScriptFileUsesExistingFileInputsAttachmentsAndRawResources() throws {
+    func testScriptFileUsesFileInputsAttachmentsAndRawResources() throws {
         let source = """
         const result = mcp.call('fixture', {data: '@report.pdf', literal: '@@name'});
         const raw = mcp.readResource('reports://file', {raw: true});
         print({result, raw});
         """
         let bytes = Data([0, 255])
-        try check(helper: "mcpshim", bridge: "mcp",
-            arguments: ["run", "workflow.js", "--connection", UUID().uuidString], response: Data(), requestCount: 2,
+        try check(helper: "messenger", bridge: "tool", arguments: ["tool", "mcp-fixture", "--run", "workflow.js"], response: Data(), requestCount: 2,
             responseForRequest: { data, index in
-                let request = try JSONDecoder().decode(MCPBridgeRequest.self, from: data)
+                let request = try self.request(data)
+                XCTAssertEqual(request.action, .call)
                 let result: String
                 if index == 0 {
-                    XCTAssertEqual(request.action, .call)
+                    XCTAssertEqual(request.tool, "fixture")
                     XCTAssertEqual(try JSONDecoder().decode([String: String].self, from: XCTUnwrap(request.arguments)),
                                    ["data": bytes.base64EncodedString(), "literal": "@name"])
                     result = #"{"content":[{"type":"image","data":"AP8=","mimeType":"image/png"}]}"#
                 } else {
-                    XCTAssertEqual(request.action, .readResource)
-                    XCTAssertEqual(request.uri, "reports://file")
+                    XCTAssertEqual(request.tool, "mcp-read-resource")
+                    XCTAssertEqual(try JSONDecoder().decode([String: String].self, from: XCTUnwrap(request.arguments)), ["uri": "reports://file"])
                     result = #"{"contents":[{"uri":"reports://file","blob":"AP8=","mimeType":"application/pdf"}]}"#
                 }
-                return try JSONEncoder().encode(MCPBridgeResponse(result: Data(result.utf8)))
+                return try self.reply(Data(result.utf8))
             }, prepare: { workspace in
                 try source.write(to: workspace.appendingPathComponent("workflow.js"), atomically: true, encoding: .utf8)
                 try bytes.write(to: workspace.appendingPathComponent("report.pdf"))
@@ -121,7 +127,7 @@ final class BridgeCLISandboxTests: XCTestCase {
                 let result = try XCTUnwrap(values["result"] as? [String: Any])
                 let content = try XCTUnwrap(result["content"] as? [[String: Any]])
                 let path = try XCTUnwrap(content.first?["path"] as? String)
-                XCTAssertTrue(path.hasPrefix(workspace.path + "/.noodle/mcp-attachments/"))
+                XCTAssertTrue(path.hasPrefix(workspace.path + "/.noodle/tool-attachments/"))
                 XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: path)), bytes)
                 let raw = try XCTUnwrap(values["raw"] as? [String: Any])
                 XCTAssertEqual((raw["contents"] as? [[String: String]])?.first?["blob"], "AP8=")
@@ -129,61 +135,60 @@ final class BridgeCLISandboxTests: XCTestCase {
                 XCTAssertEqual(directories.count, 1)
             })
     }
-    func testMCPScriptReadsSourceFromStdin() throws {
-        try check(helper: "mcpshim", bridge: "mcp", arguments: ["run", "-", "--connection", UUID().uuidString],
-            response: JSONEncoder().encode(MCPBridgeResponse(result: Data("{\"tools\":[{\"name\":\"echo\"}]}".utf8))),
+    func testScriptReadsSourceFromStdin() throws {
+        try check(helper: "messenger", bridge: "tool", arguments: ["tool", "mcp-fixture", "--run", "-"],
+            response: reply(Data("{\"tools\":[{\"name\":\"echo\"}]}".utf8)),
             expected: "[\"echo\"]", input: Data("print(mcp.tools().tools.map(t => t.name))".utf8))
     }
-    func testMCPScriptStopsOnRevokedConnectionWithoutReplaying() throws {
-        try check(helper: "mcpshim", bridge: "mcp",
-            arguments: ["eval", "mcp.tools(); mcp.tools(); print('unreachable')", "--connection", UUID().uuidString],
+    func testScriptStopsOnRevokedConnectionWithoutReplaying() throws {
+        try check(helper: "messenger", bridge: "tool",
+            arguments: ["tool", "mcp-fixture", "--eval", "mcp.tools(); mcp.tools(); print('unreachable')"],
             response: Data(), exitCode: 1, expectedError: "no longer assigned", requestCount: 2,
             responseForRequest: { _, index in
-                try JSONEncoder().encode(index == 0 ? MCPBridgeResponse(result: Data("{\"tools\":[]}".utf8))
-                    : MCPBridgeResponse(error: "Connection is no longer assigned"))
+                try JSONEncoder().encode(index == 0 ? ToolBridgeResponse(result: Data("{\"tools\":[]}".utf8))
+                    : ToolBridgeResponse(error: "Connection is no longer assigned"))
             })
     }
-    func testMCPScriptToolErrorExitsNonzero() throws {
-        try check(helper: "mcpshim", bridge: "mcp",
-            arguments: ["eval", "mcp.call('fixture'); print('unreachable')", "--connection", UUID().uuidString],
-            response: JSONEncoder().encode(MCPBridgeResponse(result: Data("{\"isError\":true,\"content\":[]}".utf8))),
+    func testScriptToolErrorExitsNonzero() throws {
+        try check(helper: "messenger", bridge: "tool",
+            arguments: ["tool", "mcp-fixture", "--eval", "mcp.call('fixture'); print('unreachable')"],
+            response: reply(Data("{\"isError\":true,\"content\":[]}".utf8)),
             exitCode: 1, expectedError: "MCP tool returned an error")
     }
-    func testMCPScriptDeadlineStopsInfiniteLoopInsideSandbox() throws {
+    func testScriptDeadlineStopsInfiniteLoopInsideSandbox() throws {
         let start = ProcessInfo.processInfo.systemUptime
-        try check(helper: "mcpshim", bridge: "mcp",
-            arguments: ["eval", "while (true) {}", "--connection", UUID().uuidString, "--timeout", "1"],
+        try check(helper: "messenger", bridge: "tool", arguments: ["tool", "mcp-fixture", "--eval", "while (true) {}", "--timeout", "1"],
             response: Data(), exitCode: 1, expectsRequest: false, expectedError: "script timed out")
         XCTAssertLessThan(ProcessInfo.processInfo.systemUptime - start, 10)
     }
-    func testMCPScriptErrorsPrintReadableStackAndSyntaxLocation() throws {
+    func testScriptErrorsPrintReadableStackAndSyntaxLocation() throws {
         for (source, expected) in [
             ("function inner() { throw new Error('broken'); }\nfunction outer() { inner(); }\nouter();", "Error: broken\ninner@"),
             ("\nconst =", "workflow.js:2")
         ] {
-            try check(helper: "mcpshim", bridge: "mcp", arguments: ["run", "workflow.js", "--connection", UUID().uuidString],
+            try check(helper: "messenger", bridge: "tool", arguments: ["tool", "mcp-fixture", "--run", "workflow.js"],
                 response: Data(), exitCode: 1, expectsRequest: false, expectedError: expected,
                 prepare: { workspace in
                     try source.write(to: workspace.appendingPathComponent("workflow.js"), atomically: true, encoding: .utf8)
                 })
         }
     }
-    func testMCPScriptDeadlineStopsBlockedOutputPipesInsideSandbox() throws {
+    func testScriptDeadlineStopsBlockedOutputPipesInsideSandbox() throws {
         // The fixture deliberately drains pipes only after exit, like a caller
         // which has stopped consuming output. The watchdog must not share a
         // blocking FileHandle lock with print or console.log.
         for function in ["print", "console.log", "throw new Error"] {
             let start = ProcessInfo.processInfo.systemUptime
-            try check(helper: "mcpshim", bridge: "mcp",
-                arguments: ["eval", "\(function)('x'.repeat(1048576))", "--connection", UUID().uuidString, "--timeout", "1"],
+            try check(helper: "messenger", bridge: "tool",
+                arguments: ["tool", "mcp-fixture", "--eval", "\(function)('x'.repeat(1048576))", "--timeout", "1"],
                 response: Data(), exitCode: 1, expectsRequest: false,
                 expectedError: function == "print" ? "script timed out" : "xxxxxxxx")
             XCTAssertLessThan(ProcessInfo.processInfo.systemUptime - start, 10)
         }
     }
-    func testMCPScriptRejectsLinkedFilesAndInvalidOptionsBeforeDispatch() throws {
+    func testScriptRejectsLinkedFilesAndInvalidOptionsBeforeDispatch() throws {
         for path in ["linked.js", "hardlinked.js", "../outside.js"] {
-            try check(helper: "mcpshim", bridge: "mcp", arguments: ["run", path, "--connection", UUID().uuidString],
+            try check(helper: "messenger", bridge: "tool", arguments: ["tool", "mcp-fixture", "--run", path],
                 response: Data(), exitCode: 1, expectsRequest: false, expectedError: path == "../outside.js" ? "without '..'" : "Cannot read script",
                 prepare: { workspace in
                     let file = workspace.appendingPathComponent("script.js")
@@ -192,10 +197,10 @@ final class BridgeCLISandboxTests: XCTestCase {
                     try FileManager.default.linkItem(at: file, to: workspace.appendingPathComponent("hardlinked.js"))
                 })
         }
-        try check(helper: "mcpshim", bridge: "mcp", arguments: ["eval", "mcp.tools()", "--timeout", "0"],
+        try check(helper: "messenger", bridge: "tool", arguments: ["tool", "mcp-fixture", "--eval", "mcp.tools()", "--timeout", "0"],
             response: Data(), exitCode: 1, expectsRequest: false, expectedError: "--timeout must be")
-        try check(helper: "mcpshim", bridge: "mcp", arguments: ["eval", "mcp.tools()", "--raw"],
-            response: Data(), exitCode: 1, expectsRequest: false, expectedError: "Unknown or repeated script option")
+        try check(helper: "messenger", bridge: "tool", arguments: ["tool", "mcp-fixture", "--eval", "mcp.tools()", "--raw"],
+            response: Data(), exitCode: 1, expectsRequest: false, expectedError: "optionally with --timeout")
     }
     /// Browsers, computers and every tool extension reach bots through this one path.
     func testMessengerToolCanUseWorkspaceBrokerWithoutNetworkOrSignalPermission() throws {
@@ -211,7 +216,7 @@ final class BridgeCLISandboxTests: XCTestCase {
     }
     private func check(helper: String, bridge: String, arguments: [String], response: Data, expected: String? = nil,
                        exitCode: Int32 = 0, input: Data? = nil, expectsRequest: Bool = true, expectedError: String? = nil,
-                       requestCount: Int = 1, skillLocal: Bool = false,
+                       requestCount: Int = 1,
                        responseForRequest: ((Data, Int) throws -> Data)? = nil,
                        prepare: (URL) throws -> Void = { _ in },
                        inspectRequest: @escaping (Data) throws -> Void = { _ in },
@@ -236,12 +241,7 @@ final class BridgeCLISandboxTests: XCTestCase {
         let repository = WorkspaceRepository(rootURL: root)
         let bot = try repository.createAgent(named: "CLI boundary fixture")
         let workspace = repository.directory(for: bot.agent)
-        var invocation = executable
-        if skillLocal {
-            let skill = try WorkspaceMailbox(workspace: workspace, path: ".agents/skills/mcp-script-fixture", create: true)
-            try skill.symlink("mcpshim", destination: executable.path)
-            invocation = skill.url.appendingPathComponent("mcpshim")
-        }
+        let invocation = executable
         try prepare(workspace)
         let mailbox = try WorkspaceMailbox(workspace: workspace, path: ".noodle/" + bridge + "-bridge", create: true)
         let token = UUID().uuidString

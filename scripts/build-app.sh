@@ -136,7 +136,6 @@ otool -l "$contents/MacOS/Noodle" \
         fi
     done
 cp "$bin_path/NoodleMessenger" "$contents/Helpers/messenger"
-cp "$bin_path/NoodleMCPCLI" "$contents/Helpers/mcpshim"
 swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-path "$project_root/.build/applet" -c release --product noodlet >&2
 applet_bin="$(swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-path "$project_root/.build/applet" -c release --show-bin-path)"
 cp "$applet_bin/noodlet" "$contents/Helpers/noodlet"
@@ -279,8 +278,6 @@ fi
 
 codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/messenger"
-codesign --force --options runtime "$timestamp_option" \
-    --sign "$signing_identity" "$contents/Helpers/mcpshim"
 applet_cli_identifier="com.pdparchitect.noodle.applet.cli"
 if [[ "$data_container" == development ]]; then applet_cli_identifier="com.pdparchitect.noodle.applet.local.cli"; fi
 codesign --force --options runtime "$timestamp_option" --identifier "$applet_cli_identifier" \

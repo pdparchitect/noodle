@@ -37,9 +37,12 @@ final class AppleSkillCatalogTests: XCTestCase {
     func testReadsGeneratedMCPMetadataWithEscapedQuotesAndNewlines() throws {
         let connection = try MCPConnectionRecord(name: "Team \"Tools\"", endpoint: URL(string: "https://example.com/mcp")!,
                                                   description: "Search files.\nRead C:\\notes too.")
-        let skill = try XCTUnwrap(AppleSkillCatalog.parse(MCPSkillWriter.contents(connection), directory: "fallback", path: "skill.md"))
+        // The skill Noodle generates for a tool connection, from its provider's manifest.
+        let manifest = ConnectionToolProvider(id: connection.skillName, title: connection.name, connection: connection.id,
+                                              summary: connection.description) { _, _, _, _, _ in Data() }.manifest
+        let skill = try XCTUnwrap(AppleSkillCatalog.parse(ToolProviderSkills.document(manifest, tools: []), directory: "fallback", path: "skill.md"))
         XCTAssertEqual(skill.name, connection.skillName)
-        XCTAssertEqual(skill.description, "Use the user's Team \"Tools\" MCP connection. Search files.\nRead C:\\notes too.")
+        XCTAssertEqual(skill.description, "Use the user's Team \"Tools\" tool connection. Search files. Read C:\\notes too. Tools: .")
     }
 
     func testReadsQuotedAndMultilineMetadataWithoutUsingNestedKeys() throws {

@@ -71,21 +71,24 @@ Check per-tool scopes for writes; setup examples may be read-only.
 
 ## Developer reference
 
-Run from the connection's generated skill directory in the bot's `.agents/skills`:
+Bots reach a connection through Noodle's one tool command, shown here as `messenger`
+for `./.agents/skills/messenger/messenger`. `mcp-notion` stands for the connection's
+name in the bot's `.agents/skills`:
 
 ```sh
-./mcpshim tools
-./mcpshim inspect --tool TOOL_NAME
-./mcpshim call --tool TOOL_NAME --input '{"argument":"value"}'
-./mcpshim resources
-./mcpshim read-resource --uri 'reports://monthly/123'
+messenger tool mcp-notion
+messenger tool mcp-notion TOOL_NAME --help
+messenger tool mcp-notion TOOL_NAME --argument value
+messenger tool mcp-notion TOOL_NAME --input '{"argument":"value"}'
+messenger tool mcp-notion mcp-resources
+messenger tool mcp-notion mcp-read-resource --uri 'reports://monthly/123'
 ```
 
-Calls also accept JSON on stdin. Results preserve text, metadata, `structuredContent`
+Options are typed from the tool's schema. `--input -` reads the JSON object from stdin. Results preserve text, metadata, `structuredContent`
 and `isError`; tool errors exit nonzero. Binary results are saved under
-`<bot-workspace>/.noodle/mcp-attachments/<call-id>/` and returned as `file` blocks
+`<bot-workspace>/.noodle/tool-attachments/<call-id>/` and returned as `file` blocks
 with `path`, `mimeType`, `bytes` and `sourceType`. Files remain after the call.
-Use `--raw` on `call` or `read-resource` for original JSON without extraction.
+Use `--raw` for original JSON without extraction.
 Resource links are not fetched automatically; resource operations require server support.
 
 In input JSON, `"@report.pdf"` substitutes a workspace file's base64 content;
@@ -95,19 +98,21 @@ Symlinks, hard links and `..` components are rejected. Filename and MIME fields
 are not inferred. Limits are **1 MiB arguments after expansion** and **8 MiB result
 JSON before extraction**, including with `--raw`.
 
-Requests use `.noodle/mcp-bridge`. Noodle checks the session and assignment, keeps
-credentials in Keychain and serializes calls per account. Consumed requests are
+Requests use `.noodle/tool-bridge`, the same path as every other tool. Noodle checks the
+session and that the connection is assigned before and after each call, removes anything a
+server sends that imitates Noodle's own tool markers, keeps credentials in Keychain and
+serializes calls per account. Consumed requests are
 never automatically replayed after a crash.
 
 ### JavaScript workflows
 
 Use the macOS JavaScriptCore runtime to filter results, loop, or chain calls on
-the connection selected by the skill-local shim:
+one connection:
 
 ```sh
-./mcpshim eval 'print(mcp.tools().tools.map(t => t.name))'
-./mcpshim run workflow.js
-./mcpshim run - <<'JS'
+messenger tool mcp-notion --eval 'print(mcp.tools().tools.map(t => t.name))'
+messenger tool mcp-notion --run workflow.js
+messenger tool mcp-notion --run - <<'JS'
 const tools = mcp.tools().tools;
 print(tools.filter(tool => /search/i.test(tool.name)));
 JS

@@ -49,15 +49,15 @@ fi
 
 codesign --verify --deep --strict --verbose=2 "$app"
 codesign --verify --strict --verbose=2 "$app/Contents/Helpers/messenger"
-codesign --verify --strict --verbose=2 "$app/Contents/Helpers/mcpshim"
-mcp_entitlements="$(codesign -d --entitlements :- "$app/Contents/Helpers/mcpshim" 2>/dev/null)"
-if print -r -- "$mcp_entitlements" | grep -q '<key>'; then
-    print -u2 "The MCP CLI must not inherit application entitlements."
+# Messenger is the one command bots run for every tool, including scripts against tool connections.
+messenger_entitlements="$(codesign -d --entitlements :- "$app/Contents/Helpers/messenger" 2>/dev/null)"
+if print -r -- "$messenger_entitlements" | grep -q '<key>'; then
+    print -u2 "Messenger must not inherit application entitlements."
     exit 1
 fi
-"$app/Contents/Helpers/mcpshim" --help
-if otool -L "$app/Contents/Helpers/mcpshim" | grep -Eq '/opt/homebrew|/usr/local'; then
-    print -u2 "The MCP CLI links against a mutable external dependency."
+[[ ! -e "$app/Contents/Helpers/mcpshim" ]] || { print -u2 "The removed mcpshim helper is still bundled."; exit 1; }
+if otool -L "$app/Contents/Helpers/messenger" | grep -Eq '/opt/homebrew|/usr/local'; then
+    print -u2 "Messenger links against a mutable external dependency."
     exit 1
 fi
 test -f "$app/Contents/Resources/swift-sdk-LICENSE.txt"
