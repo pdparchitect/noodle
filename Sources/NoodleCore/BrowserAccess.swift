@@ -22,8 +22,8 @@ public struct BrowserAssignments: Codable, Sendable {
         return Dictionary(uniqueKeysWithValues: agents.compactMap { key, ids in UUID(uuidString: key).map { ($0, Set(ids.map(\.uuidString))) } })
     }
 }
-// TODO(0.22.0): Remove BrowserAgentSkill, its call in synchronizeAgentWorkspace and its tests. 0.21.0 is the
-// only release that needs it: the clean-up finishes the first time that version syncs a bot's workspace.
+// TODO(0.22.0): Remove BrowserAgentSkill, its call in synchronizeAgentWorkspace and its tests after verifying
+// upgrades pass through the published 0.21.0 milestone, which runs this the first time it syncs a bot's workspace.
 public enum BrowserAgentSkill {
     /// Bots now reach browsers through `messenger tool browser`. Remove what earlier versions
     /// wrote: the hand-written skill with its command link, and the request mailbox.
