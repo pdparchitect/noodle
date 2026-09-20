@@ -108,6 +108,32 @@ import NoodleCore
         XCTAssertEqual(toggles, 2, "A disabled command must not run")
     }
 
+    func testKeepingOneFloatReplacesTheOpenOneInItsExactPlaceAndIsOffByDefault() {
+        let defaults = defaults()
+        let floating = FloatingConversations(defaults: defaults)
+        XCTAssertFalse(floating.keepsOne, "Several floats stay allowed unless the user asks for one")
+        let panels = FloatingConversationPanels(floating: floating, isTerminating: { false }) { _, _ in NSView() }
+        let first = UUID(), second = UUID(), third = UUID()
+        let opened = panels.show(first, frame: NSRect(x: 100, y: 100, width: 420, height: 560), present: { _ in })
+        // The user moves and resizes it; the next float must land exactly there.
+        let placed = NSRect(x: 310, y: 220, width: 500, height: 640)
+        opened.setFrame(placed, display: false)
+        defaults.set(true, forKey: FloatingConversations.keepsOneDefaultsKey)
+        XCTAssertTrue(floating.keepsOne)
+        let replacement = panels.show(second, frame: NSRect(x: 900, y: 50, width: 420, height: 560), present: { _ in })
+        XCTAssertEqual(replacement.frame, placed)
+        XCTAssertEqual(panels.openIDs, [second])
+        XCTAssertFalse(floating.contains(first))
+        XCTAssertTrue(floating.contains(second))
+        // Asking for the one that is open keeps it where it is.
+        XCTAssertTrue(panels.show(second, frame: nil, present: { _ in }) === replacement)
+        XCTAssertEqual(replacement.frame, placed)
+        // Turning the setting off allows several again.
+        defaults.set(false, forKey: FloatingConversations.keepsOneDefaultsKey)
+        panels.show(third, frame: NSRect(x: 900, y: 50, width: 420, height: 560), present: { _ in })
+        XCTAssertEqual(panels.openIDs, [second, third])
+    }
+
     func testOnePanelPerConversationAndClosingReturnsItToNormalMode() {
         let floating = FloatingConversations(defaults: defaults())
         var terminating = false

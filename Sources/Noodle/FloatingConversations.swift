@@ -7,6 +7,7 @@ import Observation
 @MainActor @Observable final class FloatingConversations {
     static let shared = FloatingConversations()
     static let defaultsKey = "Noodle.floatingConversations.v1"
+    static let keepsOneDefaultsKey = "Noodle.floatingConversations.keepsOne"
     private let defaults: UserDefaults
     private(set) var ids: Set<UUID>
 
@@ -16,6 +17,9 @@ import Observation
     }
 
     func contains(_ id: UUID) -> Bool { ids.contains(id) }
+
+    /// Settings > Chat. Off by default, so several conversations may float at once.
+    var keepsOne: Bool { defaults.bool(forKey: Self.keepsOneDefaultsKey) }
 
     func set(_ floating: Bool, for id: UUID) {
         if floating { ids.insert(id) } else { ids.remove(id) }
@@ -83,16 +87,28 @@ extension NoodleStore {
     /// A nil frame leaves placement to the saved frame the window registry restores.
     @discardableResult func show(_ id: UUID, frame: NSRect?, present: (NSPanel) -> Void) -> NSPanel {
         floating.set(true, for: id)
+        if floating.keepsOne {
+            // Closing mutates `panels`, so work from a copy.
+            let others = panels.filter { $0.key != id }.map(\.value)
+            let place = (others.first(where: \.isKeyWindow) ?? others.first)?.frame
+            others.forEach { $0.close() }
+            // The next conversation takes over the open float's exact place and size.
+            if panels[id] == nil, let place { return open(id, frame: place, present: present) }
+        }
         if let panel = panels[id] {
             present(panel)
             NotificationCenter.default.post(name: .focusConversationComposer, object: id)
             return panel
         }
         // Several floats opened from the same spot must not hide each other.
-        let frame = frame.map { requested in
+        let staggered = frame.map { requested in
             let visible = (NSScreen.screens.first { $0.frame.intersects(requested) } ?? NSScreen.main)?.visibleFrame ?? requested
             return FloatingConversationPanel.staggered(requested, avoiding: panels.values.map(\.frame), visible: visible)
         }
+        return open(id, frame: staggered, present: present)
+    }
+
+    private func open(_ id: UUID, frame: NSRect?, present: (NSPanel) -> Void) -> NSPanel {
         let panel = FloatingConversationPanel.make(frame: frame ?? NSRect(origin: .zero, size: FloatingConversationPanel.compactSize))
         if frame == nil { panel.center() }
         panel.conversationID = id

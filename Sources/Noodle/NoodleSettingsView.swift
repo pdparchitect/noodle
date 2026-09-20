@@ -132,6 +132,7 @@ struct ChatSettingsView: View {
     @AppStorage(VoiceInputDevice.defaultsKey) private var microphoneUID = ""
     @AppStorage(MessageDeliveryMode.defaultsKey) private var messageDelivery = MessageDeliveryMode.automatic.rawValue
     @AppStorage(ChatAttachmentLayout.defaultsKey) private var attachmentLayout = ChatAttachmentLayout.defaultValue.rawValue
+    @AppStorage(FloatingConversations.keepsOneDefaultsKey) private var keepsOneFloat = false
     @State private var microphones: [VoiceInputDevice] = []
     @State private var defaultMicrophoneID: UInt32 = 0
     private let microphoneDevices: () -> [VoiceInputDevice]
@@ -187,6 +188,10 @@ struct ChatSettingsView: View {
                 Toggle("Show descriptions in the @ name menu", isOn: $showBotDescriptions)
             } footer: {
                 Text("Show each bot's public description beside its name. Private backstories are never shown.")
+            }
+            Section {
+                Toggle("Keep one floating conversation", isOn: $keepsOneFloat)
+                    .help("Floating another conversation replaces the open one, in the same place and size.")
             }
             Section {
                 Picker("Link preview timeout", selection: $linkPreviewTimeout) {

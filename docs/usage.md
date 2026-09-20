@@ -58,6 +58,10 @@ message field. Capture and
 annotations work there as in any chat window, so you can share what is on screen
 without going back to Noodle. Change the shortcut in **Settings → Keybindings**.
 
+Several conversations can float at once. To keep a single float, turn on
+**Settings → Chat → Keep one floating conversation**: floating another
+conversation then closes the open one and takes its exact place and size.
+
 ## Watch an agent’s activity
 
 Right-click a bot in the sidebar or its avatar in a conversation and choose
