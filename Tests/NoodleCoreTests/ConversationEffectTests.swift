@@ -21,7 +21,7 @@ final class ConversationEffectTests: XCTestCase {
         let command = repository.directory(for: bot.agent).appendingPathComponent(".agents/skills/messenger/messenger").path
         let list = MessengerCLI.runDirect(arguments: [command, "--list-effects"], environment: [:])
         XCTAssertEqual(list.exitCode, 0, list.standardError)
-        XCTAssertEqual(try JSONDecoder().decode([String].self, from: Data(list.standardOutput.utf8)), ["confetti"])
+        XCTAssertEqual(try JSONDecoder().decode([String].self, from: Data(list.standardOutput.utf8)), ["confetti", "fireworks"])
         let id = UUID()
         let arguments = [command, "--effect", "confetti", "--conversation", bot.conversation.id.uuidString,
                          "--request-id", id.uuidString]
@@ -35,6 +35,23 @@ final class ConversationEffectTests: XCTestCase {
         XCTAssertEqual(retry.exitCode, 0, retry.standardError)
         XCTAssertTrue(retry.standardOutput.contains("consumed"))
         XCTAssertNil(try repository.takePendingEffect(conversationID: bot.conversation.id))
+    }
+
+    func testCLIQueuesEveryListedEffectAndTheSkillSaysWhenToUseIt() throws {
+        let bot = try repository.createAgent(named: "Builder")
+        let directory = repository.directory(for: bot.agent)
+        let command = directory.appendingPathComponent(".agents/skills/messenger/messenger").path
+        let skill = try String(contentsOf: directory.appendingPathComponent(".agents/skills/messenger/SKILL.md"), encoding: .utf8)
+        for (index, kind) in ConversationEffectKind.allCases.enumerated() {
+            let sent = try repository.sendEffect(agentID: bot.agent.id, conversationID: bot.conversation.id,
+                kind: kind.rawValue, now: Date().addingTimeInterval(Double(index * 2) - 20))
+            XCTAssertEqual(sent.supportedKind, kind)
+            XCTAssertTrue(skill.contains("--effect \(kind.rawValue)"), kind.rawValue)
+        }
+        let result = MessengerCLI.runDirect(arguments: [command, "--effect", "fireworks", "--conversation",
+            bot.conversation.id.uuidString], environment: [:])
+        XCTAssertEqual(result.exitCode, 0, result.standardError)
+        XCTAssertEqual(try repository.takePendingEffect(conversationID: bot.conversation.id)?.kind, "fireworks")
     }
 
     func testCLIRejectsMalformedAndMixedCommands() throws {

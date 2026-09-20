@@ -124,6 +124,13 @@ extension ConversationEffectKind {
                 guidance: """
                 You can celebrate a meaningful result with a temporary chat effect: `./.agents/skills/messenger/messenger --effect confetti --conversation <uuid>`. Use `--list-effects` to discover supported effect names. Effects are optional, should be used sparingly, and never replace a reply. They play once only when the user has that conversation in the foreground, expire after 30 seconds, and respect Reduce Motion. The JSON receipt confirms queuing, not that the user saw it. Effects do not create messages or notify agents. For a retry, reuse an optional `--request-id <uuid>`; recent IDs are retained for up to five minutes (32 events). You can only target conversations you participate in. Send at most one effect per conversation every two seconds.
                 """)
+        case .fireworks:
+            return .init(id: "effect:\(rawValue)",
+                fields: ConversationEffectKind.confetti.reference.fields,
+                recipients: ConversationEffectKind.confetti.reference.recipients,
+                guidance: """
+                For a rare, major milestone, such as a long task finished or a release shipped, use `--effect fireworks` instead of confetti. It is the louder of the two, so keep confetti for everyday wins. The same delivery, expiry and rate rules apply.
+                """)
         }
     }
 }

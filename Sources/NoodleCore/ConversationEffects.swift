@@ -4,6 +4,7 @@ import Foundation
 /// Extend this catalogue and the UI renderer together. Effects never execute code.
 public enum ConversationEffectKind: String, Codable, CaseIterable, Sendable {
     case confetti
+    case fireworks
 }
 
 public struct ConversationEffect: Codable, Equatable, Identifiable, Sendable {

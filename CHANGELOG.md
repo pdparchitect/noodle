@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Let bots mark a major milestone with fireworks: `messenger --effect fireworks` plays rockets that burst over the chat. Like confetti, it plays once in the foreground chat and shows a still 🎆 under Reduce Motion.
+
 ### Changed
 
 - Rename the Settings > Update button to Install Update… once a newer version is found. The app menu keeps Check for Updates….
