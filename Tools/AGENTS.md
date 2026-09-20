@@ -43,7 +43,7 @@ Bots reach every tool through `messenger tool PROVIDER TOOL`. There is no per-to
   - List every parameter a check depends on in the schema's `required`.
 - Before an action that cannot be undone, call `context.authorize`. It fails if the assignment was removed while the call was running.
 - Activation is `.always`, or `.whenAssigned(KIND)` when the tool only makes sense with an assigned resource.
-- Everything a bot reads about a tool comes from the extension: `manifest.summary`, `manifest.instructions` and the tool descriptions. Do not add tool text to `MessengerDocumentation`, `Models.swift` or `docs/`.
+- Everything a bot reads about a tool comes from the extension: `manifest.summary`, `manifest.instructions` and the tool descriptions. Do not add tool text to `MessengerDocumentation`, `WorkspaceRepository+Agents.swift` or `docs/`.
 - An extension gets the App Sandbox only. Browser and Computer also hold their companion's app group, and only that. `scripts/verify-tool-extensions.sh` pins this; a new entitlement needs a change there and a reason.
 - Bundled extensions only. Do not add loading of third-party extensions.
 - Extensions are background processes: keep `LSBackgroundOnly` in `Info.plist`.
