@@ -31,8 +31,9 @@ public struct KeyBinding: Codable, Hashable, Sendable {
     }
 
     public var isValid: Bool {
+        // Shift alone, or no modifier, would take ordinary typing.
         guard key.count == 1, key == key.lowercased(), modifiers.rawValue & ~15 == 0,
-              !modifiers.intersection([.command, .control]).isEmpty else { return false }
+              !modifiers.intersection([.command, .control, .option]).isEmpty else { return false }
         let scalar = key.unicodeScalars.first!.value
         return scalar >= 0x20 || ["\r", "\t", "\u{8}"].contains(key)
     }
@@ -56,6 +57,7 @@ public struct KeyBinding: Codable, Hashable, Sendable {
 
 public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiable {
     case newBot, newGroup, searchConversations, recordVoice, capture, annotateSelection, annotateRegion, saveAnnotation
+    case chooseConversation
     public var id: String { rawValue }
     public var title: String {
         switch self {
@@ -67,6 +69,7 @@ public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiabl
         case .annotateSelection: "Add Annotation"
         case .annotateRegion: "Annotate Region"
         case .saveAnnotation: "Save Annotation Comment"
+        case .chooseConversation: "Choose Conversation"
         }
     }
     public var summary: String {
@@ -79,6 +82,7 @@ public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiabl
         case .annotateSelection: "Comment on selected conversation or preview text; select a region for images."
         case .annotateRegion: "Mark a region of the Noodle window, an attachment preview, or a live capture."
         case .saveAnnotation: "Save a new annotation or an unsent comment edit."
+        case .chooseConversation: "From any app, pick a bot or group to float over your work."
         }
     }
     public var defaultBinding: KeyBinding {
@@ -91,6 +95,7 @@ public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiabl
         case .annotateSelection: KeyBinding("a", modifiers: [.command, .shift])
         case .annotateRegion: KeyBinding("r", modifiers: [.command, .shift])
         case .saveAnnotation: KeyBinding("\r")
+        case .chooseConversation: KeyBinding(" ", modifiers: [.control, .option])
         }
     }
 }
@@ -137,7 +142,7 @@ public enum ShortcutError: LocalizedError {
     case invalid, reserved(String), conflict(NoodleShortcut)
     public var errorDescription: String? {
         switch self {
-        case .invalid: "Choose a key with Command (⌘) or Control (⌃)."
+        case .invalid: "Choose a key with Command (⌘), Control (⌃) or Option (⌥)."
         case .reserved(let action): "That shortcut is used by \(action)."
         case .conflict(let action): "Already assigned to \(action.title). Change or clear that shortcut first."
         }

@@ -16,6 +16,9 @@ struct KeybindingsSettingsView: View {
                     row(.capture)
                     row(.recordVoice)
                 }
+                Section("Any App") {
+                    row(.chooseConversation)
+                }
                 Section {
                     row(.annotateSelection)
                     row(.annotateRegion)
@@ -30,7 +33,7 @@ struct KeybindingsSettingsView: View {
             Divider()
             HStack {
                 Text(bindings.recordingAction == nil
-                    ? "Use ⌘ or ⌃ with a key."
+                    ? "Use ⌘, ⌃ or ⌥ with a key."
                     : "Press a shortcut. Escape cancels; Delete clears.")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
@@ -42,6 +45,12 @@ struct KeybindingsSettingsView: View {
         .onDisappear { bindings.recordingAction = nil }
     }
 
+    private func reset(_ action: NoodleShortcut) {
+        if bindings.recordingAction == action { bindings.recordingAction = nil }
+        do { try bindings.reset(action); errors[action] = nil }
+        catch { errors[action] = error.localizedDescription }
+    }
+
     private func row(_ action: NoodleShortcut) -> some View {
         HStack(alignment: .center, spacing: 14) {
             VStack(alignment: .leading, spacing: 3) {
@@ -50,13 +59,21 @@ struct KeybindingsSettingsView: View {
                 if let error = errors[action] { Text(error).font(.caption).foregroundStyle(.red) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            // Shown only for a changed shortcut; the width is kept so the recorders stay aligned.
+            Group {
+                if bindings.isModified(action) {
+                    Button { reset(action) } label: { Image(systemName: "arrow.counterclockwise") }
+                        .buttonStyle(.borderless)
+                        .help("Reset to \(action.defaultBinding.displayName)")
+                        .accessibilityLabel("Reset \(action.title) to \(action.defaultBinding.displayName)")
+                }
+            }
+            .frame(width: 20)
             ShortcutRecorder(action: action, bindings: bindings) { errors[action] = $0 }
                 .frame(width: 112, height: 28)
                 .contextMenu {
-                    Button("Reset to \(action.defaultBinding.displayName)") {
-                        do { try bindings.reset(action); errors[action] = nil }
-                        catch { errors[action] = error.localizedDescription }
-                    }.disabled(!bindings.isModified(action))
+                    Button("Reset to \(action.defaultBinding.displayName)") { reset(action) }
+                        .disabled(!bindings.isModified(action))
                     Button("Clear Shortcut") {
                         try? bindings.set(nil, for: action); errors[action] = nil
                     }.disabled(bindings.binding(for: action) == nil)

@@ -8,10 +8,19 @@ struct ConversationWindowView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
     let conversationID: UUID
+    /// Hosted in a floating panel, not the scene's window: no wallpaper, toolbar or scene actions.
+    var isFloatingPanel = false
     @State private var agentBeingEdited: AgentRecord?
     @State private var groupBeingEdited: BotConversation?
     @State private var backgroundBeingEdited: BotConversation?
     @State private var isFileDropTargeted = false
+    @State private var composerFocusRequest: UUID?
+
+    private func open(_ id: UUID) {
+        guard store.conversations.contains(where: { $0.id == id }) else { return }
+        // A panel is outside the scene, so it opens windows through the registry.
+        if isFloatingPanel { store.conversationWindows.present(id) } else { openWindow(id: "conversation", value: id) }
+    }
 
     private var conversation: BotConversation? {
         store.conversations.first { $0.id == conversationID }
@@ -21,7 +30,7 @@ struct ConversationWindowView: View {
         AttachmentPreviewScope(conversationID: conversationID) { preview in
             if let conversation {
                 ChatView(conversation: conversation, attachmentPreview: preview,
-                    openDirectMessage: { openWindow(id: "conversation", value: $0) },
+                    composerFocusRequest: composerFocusRequest, openDirectMessage: open,
                     editAgent: { agentBeingEdited = $0 })
             } else {
                 ContentUnavailableView("Conversation Unavailable", systemImage: "bubble.left",
@@ -29,19 +38,20 @@ struct ConversationWindowView: View {
             }
         }
         .background {
-            let background = store.background(for: conversation)
-            ConversationWallpaper(background: background, imageURL: conversation.flatMap {
-                store.repository.backgroundImageURL(background, conversationID: $0.id)
-            })
-            .overlay(alignment: .top) { ConversationWindowHeaderShade() }
-            .ignoresSafeArea()
+            if isFloatingPanel {
+                FloatingWindowBackdrop().ignoresSafeArea()
+            } else {
+                let background = store.background(for: conversation)
+                ConversationWallpaper(background: background, imageURL: conversation.flatMap {
+                    store.repository.backgroundImageURL(background, conversationID: $0.id)
+                })
+                .overlay(alignment: .top) { ConversationWindowHeaderShade() }
+                .ignoresSafeArea()
+            }
         }
         .background(ConversationWindowHost(registry: store.conversationWindows,
             conversationID: conversation?.id, title: conversation.map { store.title(for: $0) } ?? "Conversation",
-            markRead: store.markConversationRead, openConversation: { id in
-                guard store.conversations.contains(where: { $0.id == id }) else { return }
-                openWindow(id: "conversation", value: id)
-            }))
+            markRead: store.markConversationRead, openConversation: open))
         .onDrop(of: AttachmentTransfer.dropContentTypes, isTargeted: $isFileDropTargeted) { providers in
             guard conversation != nil, !providers.isEmpty else { return false }
             store.markConversationRead(conversationID)
@@ -61,7 +71,7 @@ struct ConversationWindowView: View {
                 .sharedBackgroundVisibility(.hidden)
 
             ToolbarItem(placement: .primaryAction) {
-                if let conversation {
+                if let conversation, !isFloatingPanel {
                     Menu {
                         if conversation.kind == .direct, let agent = store.participants(for: conversation).first {
                             Button("Edit Bot…") { agentBeingEdited = agent }
@@ -69,6 +79,8 @@ struct ConversationWindowView: View {
                             Button("Edit Group…") { groupBeingEdited = conversation }
                         }
                         Button("Change Background…") { backgroundBeingEdited = conversation }
+                        Divider()
+                        Button("Float on Top") { store.floatConversation(conversation.id) }
                     } label: {
                         Label("Conversation Info", systemImage: "slider.horizontal.3")
                     }
@@ -86,8 +98,13 @@ struct ConversationWindowView: View {
             ConversationBackgroundSheet(conversation: conversation).environment(store).noodleSheetSizing()
         }
         .modifier(ConversationErrorAlert())
+        // A window opened or brought back for a conversation starts in its input.
+        .onAppear { composerFocusRequest = UUID() }
+        .onReceive(NotificationCenter.default.publisher(for: .focusConversationComposer)) { notification in
+            if notification.object as? UUID == conversationID { composerFocusRequest = UUID() }
+        }
         .onChange(of: conversation == nil) { _, missing in
-            if missing { dismiss() }
+            if missing { if isFloatingPanel { FloatingConversationPanels.shared.close(conversationID) } else { dismiss() } }
         }
     }
 
@@ -124,7 +141,8 @@ struct ConversationErrorAlert: ViewModifier {
     private let session: ConversationWindowSession
     private var knownConversationIDs: Set<UUID>?
     private var hasRestoredWindows = false
-    private var isTerminating = false
+    private(set) var isTerminating = false
+    private var openSeparateWindow: ((UUID) -> Void)?
 
     init(fileURL: URL? = nil) {
         session = ConversationWindowSession(fileURL: fileURL)
@@ -138,7 +156,9 @@ struct ConversationErrorAlert: ViewModifier {
         session.retainConversations(ids)
     }
 
-    func restoreWindows(openWindow: (UUID) -> Void) {
+    func restoreWindows(openWindow: @escaping (UUID) -> Void) {
+        // The main window's host selects in place, so panels and floating need the scene's own opener.
+        openSeparateWindow = openWindow
         guard !hasRestoredWindows else { return }
         hasRestoredWindows = true
         for id in session.frames.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
@@ -194,13 +214,41 @@ struct ConversationErrorAlert: ViewModifier {
         }
     }
 
-    @discardableResult func focus(_ conversationID: UUID) -> Bool {
-        let matches = hosts.allObjects.filter { $0.conversationID == conversationID }
+    @discardableResult func focus(_ conversationID: UUID, separateOnly: Bool = false) -> Bool {
+        let matches = hosts.allObjects.filter { $0.conversationID == conversationID && !(separateOnly && $0.isMainWindow) }
         guard let host = matches.first(where: { !$0.isMainWindow }) ?? matches.first,
               let window = host.window else { return false }
         show(window)
         host.markRead?(conversationID)
         return true
+    }
+
+    /// The conversation a window shows, so menu commands can act on the key window's chat.
+    func conversationID(in window: NSWindow?) -> UUID? {
+        guard let window else { return nil }
+        return hosts.allObjects.first { !$0.isClosed && $0.window === window }?.conversationID
+    }
+
+    /// Closes the conversation's normal separate window and returns the frame it had.
+    func closeSeparateWindow(_ conversationID: UUID) -> NSRect? {
+        guard let window = hosts.allObjects.first(where: {
+            !$0.isMainWindow && $0.conversationID == conversationID && !($0.window is FloatingConversationPanel)
+        })?.window else { return nil }
+        let frame = window.frame
+        window.close()
+        return frame
+    }
+
+    func hasSavedFrame(_ conversationID: UUID) -> Bool { session.frames[conversationID] != nil }
+
+    /// Opens or raises the conversation's separate window and puts the caret in its input.
+    func present(_ conversationID: UUID) {
+        let mounts = hosts.allObjects
+        if focus(conversationID, separateOnly: true) {
+            NotificationCenter.default.post(name: .focusConversationComposer, object: conversationID)
+            return
+        }
+        openSeparateWindow?(conversationID)
     }
 
     func focusMainWindow() {
@@ -296,7 +344,8 @@ struct ConversationWindowHost: NSViewRepresentable {
             guard !isClosed else { return }
             window?.title = title
             window?.titlebarAppearsTransparent = true
-            window?.backgroundColor = .windowBackgroundColor
+            // A floating window is see-through; FloatingWindowLevel owns its background.
+            if window?.level != .floating { window?.backgroundColor = .windowBackgroundColor }
             checkpoint()
             markVisibleRead()
         }
@@ -312,4 +361,9 @@ struct ConversationWindowHost: NSViewRepresentable {
             registry.closed(self)
         }
     }
+}
+
+extension Notification.Name {
+    /// The object is the conversation ID whose separate or floating window should return to its input.
+    static let focusConversationComposer = Notification.Name("Noodle.focusConversationComposer")
 }

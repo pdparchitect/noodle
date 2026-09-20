@@ -16,6 +16,22 @@ final class KeyboardShortcutsTests: XCTestCase {
         XCTAssertEqual(preferences.binding(for: .saveAnnotation)?.displayName, "⌘↩")
     }
 
+    func testAnyShortcutMayUseOptionAloneButNeverShiftOrNoModifier() throws {
+        var preferences = KeyboardShortcutPreferences()
+        XCTAssertEqual(preferences.binding(for: .chooseConversation)?.displayName, "⌃⌥Space")
+        // Option-Space takes the non-breaking space from every app, so it is a choice, not the default.
+        let optionSpace = KeyBinding(" ", modifiers: .option)
+        try preferences.set(optionSpace, for: .chooseConversation)
+        let optionK = KeyBinding("k", modifiers: .option)
+        try preferences.set(optionK, for: .capture)
+        XCTAssertThrowsError(try preferences.set(KeyBinding("j", modifiers: []), for: .newBot))
+        XCTAssertThrowsError(try preferences.set(KeyBinding("j", modifiers: .shift), for: .newBot))
+        // Saved Option-only shortcuts must survive a relaunch.
+        let restored = KeyboardShortcutPreferences(data: try JSONEncoder().encode(preferences))
+        XCTAssertEqual(restored.binding(for: .chooseConversation), optionSpace)
+        XCTAssertEqual(restored.binding(for: .capture), optionK)
+    }
+
     func testOverridesDisabledBindingsAndResetSurviveRoundTrip() throws {
         var preferences = KeyboardShortcutPreferences()
         let custom = KeyBinding("K", modifiers: [.control, .option])

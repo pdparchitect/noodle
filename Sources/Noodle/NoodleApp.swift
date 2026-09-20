@@ -96,9 +96,13 @@ struct NoodleApp: App {
                 .appShortcut(.newGroup)
             }
 
-            ConversationCommands {
+            ConversationCommands(search: {
                 NotificationCenter.default.post(name: .focusSearch, object: nil)
-            }
+            }, openInNewWindow: {
+                if let id = store.conversationWindows.conversationID(in: NSApp.keyWindow) { store.dockConversation(id) }
+            }, floatOnTop: {
+                if let id = store.conversationWindows.conversationID(in: NSApp.keyWindow) { store.floatConversation(id) }
+            })
         }
 
         WindowGroup("Conversation", id: "conversation", for: UUID.self) { $conversationID in
@@ -135,6 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         WindowFocusGuard.shared.start()
+        AgentPickerController.shared.start()
         NSApp.setActivationPolicy(.regular)
         NoodleStore.active?.updateDockBadge()
         NSApp.servicesProvider = services
@@ -260,7 +265,11 @@ struct RootView: View {
         }
         .task(id: store.storageReady) {
             guard store.storageReady else { return }
-            store.conversationWindows.restoreWindows { openWindow(id: "conversation", value: $0) }
+            store.conversationWindows.restoreWindows { id in
+                // A conversation left floating comes back as a panel, not a scene window.
+                if FloatingConversations.shared.contains(id) { store.floatConversation(id) }
+                else { openWindow(id: "conversation", value: id) }
+            }
         }
     }
 

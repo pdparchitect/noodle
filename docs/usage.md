@@ -31,6 +31,33 @@ Messages, unsent text, attachments, and conversation details update in both
 places. Each window scrolls independently. Closing a window keeps the conversation
 and its draft available in Noodle.
 
+## Float a conversation over other apps
+
+Right-click a bot or group in the sidebar and choose **Float on Top** to open it
+as a floating window. To switch a separate conversation window that is already
+open, choose **Float on Top** from its **Conversation Info** menu. The window
+stays above other apps, on every Space and over full-screen apps, and can be made
+smaller than a normal window. Typing in it does not bring Noodle's other windows
+forward. It floats again after you relaunch Noodle.
+
+For the chat in the current window, the **Conversation** menu has the same
+**Open in New Window** and **Float on Top** commands.
+
+A floating window blurs what is behind it in place of the conversation
+background. Its only window control is the close button, and it has no
+Conversation Info menu. Drag its header to move it. Closing it ends floating, and
+**Open in New Window** in the sidebar returns it to a normal window.
+
+Press ⌃⌥Space in any app, or choose **Conversation → Choose Conversation…**, to
+pick a bot or group from a grid. Type to filter, move with the arrow keys, press
+Return to choose and Escape to cancel. Conversations that are already floating
+come first and carry a badge, so the grid also switches between them. The
+conversation lands as a floating window by the pointer, or where you last left
+its window, stepped aside from any float already there, with the caret in its
+message field. Capture and
+annotations work there as in any chat window, so you can share what is on screen
+without going back to Noodle. Change the shortcut in **Settings → Keybindings**.
+
 ## Watch an agent’s activity
 
 Right-click a bot in the sidebar or its avatar in a conversation and choose

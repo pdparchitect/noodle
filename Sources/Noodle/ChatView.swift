@@ -137,7 +137,13 @@ struct ChatView: View {
             }
             .onDisappear { attachmentOpenTask?.cancel(); screenCapturePreview.close(); conversationAnnotations.cancel() }
             .onChange(of: composerFocusRequest) { _, request in
-                if request != nil { composerFocused = true }
+                guard request != nil else { return }
+                // The flag can still read focused just after another view took first responder;
+                // a request must move the caret back regardless.
+                if composerFocused {
+                    composerFocused = false
+                    DispatchQueue.main.async { composerFocused = true }
+                } else { composerFocused = true }
             }
     }
 

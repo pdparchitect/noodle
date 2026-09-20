@@ -82,6 +82,31 @@ import NoodleCore
         XCTAssertFalse(store.conversations.contains { $0.id == group.id })
     }
 
+    func testOpeningOrPresentingAConversationWindowFocusesItsComposer() async throws {
+        let (store, _, group) = try fixture()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 700),
+            styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: ConversationWindowView(conversationID: group.id)
+            .environment(store).preferredColorScheme(.dark))
+        window.contentView?.layoutSubtreeIfNeeded()
+        defer { window.close(); window.contentView = nil }
+        func editor(in view: NSView?) -> ComposerTextView? {
+            if let editor = view as? ComposerTextView { return editor }
+            return view?.subviews.lazy.compactMap { editor(in: $0) }.first
+        }
+        for _ in 0..<200 where window.firstResponder !== editor(in: window.contentView) || editor(in: window.contentView) == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let composer = try XCTUnwrap(editor(in: window.contentView))
+        XCTAssertTrue(window.firstResponder === composer, "A new conversation window must start in its input")
+        // Presenting a window that is already open returns to the input too.
+        XCTAssertTrue(window.makeFirstResponder(nil))
+        NotificationCenter.default.post(name: .focusConversationComposer, object: group.id)
+        for _ in 0..<200 where window.firstResponder !== composer { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertTrue(window.firstResponder === composer)
+    }
+
     func testTwoMountedChatViewsSynchronizeDraftsAndKeepIndependentEditors() async throws {
         let (store, direct, group) = try fixture()
         store.selectedConversationID = direct.id

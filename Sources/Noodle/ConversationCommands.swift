@@ -53,12 +53,20 @@ extension FocusedValues {
 struct ConversationCommands: Commands {
     @FocusedValue(\.voiceRecordingCommand) private var command
     let search: () -> Void
+    /// Act on the key window's conversation, as the sidebar menu does for its row.
+    var openInNewWindow: () -> Void = {}
+    var floatOnTop: () -> Void = {}
     private let annotations = AnnotationCommandsState.shared
 
     var body: some Commands {
         CommandMenu("Conversation") {
             Button("Search Conversations", action: search)
                 .appShortcut(.searchConversations)
+            Button("Choose Conversation…") { NotificationCenter.default.post(name: .floatConversation, object: nil) }
+                .appShortcut(.chooseConversation)
+            Divider()
+            Button("Open in New Window", action: openInNewWindow)
+            Button("Float on Top", action: floatOnTop)
             Divider()
             Button("Add Annotation…") { annotations.conversationOwner?.annotate() }
                 .appShortcut(.annotateSelection)
@@ -88,4 +96,5 @@ struct ConversationCommands: Commands {
 extension Notification.Name {
     /// Development only. The object is a `ConversationEffectKind`.
     static let previewEffect = Notification.Name("Noodle.previewEffect")
+    static let floatConversation = Notification.Name("Noodle.floatConversation")
 }
