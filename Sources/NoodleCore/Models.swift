@@ -327,16 +327,6 @@ public struct MessengerRoster: Codable, Hashable, Sendable {
     }
 }
 
-public struct ManagedSkillManifest: Codable, Hashable, Sendable {
-    public let version: Int
-    public let managedPaths: [String]
-
-    public init(version: Int, managedPaths: [String]) {
-        self.version = version
-        self.managedPaths = managedPaths
-    }
-}
-
 public struct CreatedAgentWorkspace: Sendable {
     public let agent: AgentRecord
     public let conversation: BotConversation
@@ -379,7 +369,6 @@ public struct WorkspaceRepository: Sendable {
     public let launcherExecutableURL: URL?
     private let discoverAppletApplication: @Sendable () -> URL?
 
-    public static let managedSkillVersion = 27
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil,
                 discoverAppletApplication: @escaping @Sendable () -> URL? = { AppletAgentSkill.installedApplicationURL() }) {
@@ -760,28 +749,20 @@ public struct WorkspaceRepository: Sendable {
         MCPSkillWriter.removeLegacy(workspace: directory)
         let appletExecutable = appletExecutableURL
         let appletEnabled = appletExecutable != nil
-        let appletInstructions = appletEnabled ? "\n## Creative applets\n\nRead `.agents/skills/applet/SKILL.md` to build and run HTML and native Swift noodlets in Noodle Applet.\n" : ""
+        let appletInstructions = appletEnabled ? "\n" + AppletGuidance.bootstrap + "\n" : ""
         try workspaceFiles.writeData(Data((Self.renderedAgentInstructions(backstory: backstory) + folderInstructions + ToolProviderSkills.instructions(workspace: directory) + appletInstructions).utf8), named: "AGENTS.md")
         workspaceFiles.remove("instructions.md")
         try workspaceFiles.symlink("CLAUDE.md", destination: "AGENTS.md")
         try AppletAgentSkill.synchronize(workspace: directory, enabled: appletEnabled, executable: appletEnabled ? appletExecutable : nil)
-        let claudeSkillPaths = try synchronizeClaudeSkillLinks(in: directory)
+        _ = try synchronizeClaudeSkillLinks(in: directory)
 
         try messengerFiles.writeData(Data(Self.messengerSkill.utf8), named: "SKILL.md")
         if let launcherExecutableURL {
             try messengerFiles.symlink("messenger", destination: launcherExecutableURL.path)
         }
 
-        let manifest = ManagedSkillManifest(
-            version: Self.managedSkillVersion,
-            managedPaths: [
-                "AGENTS.md",
-                "CLAUDE.md",
-                ".agents/skills/messenger/SKILL.md",
-                ".agents/skills/messenger/messenger"
-            ] + (appletEnabled ? [".agents/skills/applet/SKILL.md", ".agents/skills/applet/noodlet", ".agents/skills/applet/.noodle-managed"] : []) + claudeSkillPaths
-        )
-        try agentsFiles.write(manifest, named: "managed-skills.json")
+        // Earlier versions kept a list of managed paths here. Nothing read it.
+        agentsFiles.remove("managed-skills.json")
     }
 
     public func loadAgentBackstory(_ agent: AgentRecord) throws -> String {

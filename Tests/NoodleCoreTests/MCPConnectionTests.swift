@@ -89,7 +89,10 @@ final class MCPConnectionTests: XCTestCase {
         XCTAssertTrue(skill.contains("messenger tool \(record.skillName) --run FILE"))
         XCTAssertFalse(skill.contains("mcpshim"))
         XCTAssertTrue(skill.contains("mcp.call(name, input = {})"))
-        XCTAssertTrue(skill.contains("error.result"))
+        XCTAssertTrue(skill.contains("tools.call(provider, name, input)"), "a connection's script can reach every other tool")
+        // The scripting API is described once, by the command every skill shares.
+        XCTAssertTrue(MessengerCommandKind.tool.guidance.contains("error.result"))
+        XCTAssertTrue(MessengerDocumentation.skillInstructions.contains("tools.call(provider, name, input = {})"))
         XCTAssertFalse(skill.contains("--connection"))
         XCTAssertFalse(skill.contains(record.id.uuidString.lowercased()))
         XCTAssertFalse(skill.contains(record.id.uuidString.lowercased().replacingOccurrences(of: "-", with: "")))

@@ -10,7 +10,6 @@ struct VoiceRecordingCommand {
     @MainActor var title: String { presentation().title }
     @MainActor var isEnabled: Bool { presentation().isEnabled }
 
-    @available(macOS 26.0, *)
     init(phase: @escaping @MainActor () -> VoiceRecorder.Phase,
          isSending: @escaping @MainActor () -> Bool, toggle: @escaping () -> Void) {
         // Read observable recording state in the command's own view context;
@@ -66,12 +65,10 @@ struct ConversationCommands: Commands {
             Button("Annotate Region…") { annotations.conversationOwner?.startRegion() }
                 .appShortcut(.annotateRegion)
                 .disabled(!annotations.conversationEnabled)
-            if #available(macOS 26.0, *) {
-                Divider()
-                Button(command?.title ?? "Record Voice Message") { command?.perform() }
-                    .appShortcut(.recordVoice)
-                    .disabled(command?.isEnabled != true)
-            }
+            Divider()
+            Button(command?.title ?? "Record Voice Message") { command?.perform() }
+                .appShortcut(.recordVoice)
+                .disabled(command?.isEnabled != true)
         }
     }
 }

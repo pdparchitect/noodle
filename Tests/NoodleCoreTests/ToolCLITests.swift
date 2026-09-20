@@ -118,7 +118,7 @@ final class ToolCLITests: XCTestCase {
         try Data("pixels".utf8).write(to: layout.workspace.appendingPathComponent("cat.png"))
         func run(_ action: MCPBridgeAction, tool: String? = nil, arguments: String? = nil, uri: String? = nil, raw: Bool = false) throws -> NSDictionary {
             let data = try ToolCLI.operation(action, provider: "mcp-pictures", tool: tool, arguments: arguments.map { Data($0.utf8) }, uri: uri, raw: raw,
-                                             workspace: layout.workspace, currentDirectory: layout.workspace)
+                                             expandsFiles: true, workspace: layout.workspace, currentDirectory: layout.workspace)
             return try JSONSerialization.jsonObject(with: data) as! NSDictionary
         }
         XCTAssertEqual((try run(.tools)["tools"] as? [NSDictionary])?.first?["name"] as? String, "describe")
@@ -133,6 +133,16 @@ final class ToolCLITests: XCTestCase {
         XCTAssertEqual(try ToolCLI.script(["mcp-pictures", "--run", "flow.js", "--timeout", "5"])?.mode, .run("flow.js"))
         XCTAssertEqual(try ToolCLI.script(["mcp-pictures", "--eval", "print(1)"])?.timeout, 300)
         XCTAssertNil(try ToolCLI.script(["mcp-pictures", "describe", "--run", "x"]), "after a tool name, --run is that tool's option")
+        // Without a provider the script reaches every tool through `tools`.
+        let free = try XCTUnwrap(ToolCLI.script(["--run", "flow.js", "--timeout", "9"]))
+        XCTAssertNil(free.provider); XCTAssertEqual(free.mode, .run("flow.js")); XCTAssertEqual(free.timeout, 9)
+        XCTAssertNil(try ToolCLI.script(["--eval", "1"])?.provider)
+        XCTAssertEqual(try ToolCLI.kinds(workspace: layout.workspace, currentDirectory: layout.workspace),
+                       ["camera": "extension", "mcp-pictures": "connection", "shout": "builtIn"])
+        // "@" is a file reference for a connection and ordinary text for Noodle's own tools.
+        let literal = try ToolCLI.operation(.call, provider: "camera", tool: "describe", arguments: Data(#"{"image":"@cat.png"}"#.utf8), uri: nil, raw: true,
+                                            expandsFiles: false, workspace: layout.workspace, currentDirectory: layout.workspace)
+        XCTAssertTrue(String(decoding: literal, as: UTF8.self).contains("image=@cat.png"))
         XCTAssertThrowsError(try ToolCLI.script(["mcp-pictures", "--eval", "1", "--timeout", "0"]))
         XCTAssertThrowsError(try ToolCLI.script(["mcp-pictures", "--run"]))
     }

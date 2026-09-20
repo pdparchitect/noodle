@@ -268,10 +268,7 @@ struct RootView: View {
     /// while the sidebar is open it declares the toggle itself to let Create follow it.
     /// Column items are hidden with the sidebar; the system toggle and the window
     /// toolbar's Create return then. Toolbar spacers need macOS 26.
-    private var sidebarOwnsToolbar: Bool {
-        if #available(macOS 26.0, *) { return columnVisibility != .detailOnly }
-        return false
-    }
+    private var sidebarOwnsToolbar: Bool { columnVisibility != .detailOnly }
 
     private var createMenu: some View {
         Menu {
@@ -293,7 +290,7 @@ struct RootView: View {
     }
 
     @ToolbarContentBuilder private var sidebarToolbar: some ToolbarContent {
-        if #available(macOS 26.0, *), sidebarOwnsToolbar {
+        if sidebarOwnsToolbar {
             ToolbarSpacer(.flexible)
             ToolbarItem {
                 Button { withAnimation { columnVisibility = .detailOnly } } label: {

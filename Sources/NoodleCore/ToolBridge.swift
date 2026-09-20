@@ -61,6 +61,8 @@ public final class ToolBridgeBroker: @unchecked Sendable {
     private var running = 0
     private let mailboxMonitor = WorkspaceMailboxMonitor()
     private var skillsObserver: (@Sendable (UUID) -> Void)?
+    /// Counts skill rewrites, so a listing that was overtaken by a newer one is not written.
+    private var skillsGeneration = 0
     /// Called when the set or text of a bot's generated skills changed, so the app can
     /// refresh what that bot's AGENTS.md lists.
     public var onSkillsChanged: (@Sendable (UUID) -> Void)? {
@@ -76,10 +78,10 @@ public final class ToolBridgeBroker: @unchecked Sendable {
 
     /// Rewrites every agent's generated tool skills. Runs on start and whenever providers
     /// change; call it after changing what an agent is assigned.
-    public func synchronizeSkills() {
-        let agents = queue.sync { self.agents }
-        guard !agents.isEmpty else { return }
-        Task { [weak self, registry, assignments, queue] in
+    @discardableResult public func synchronizeSkills() -> Task<Void, Never> {
+        let (agents, generation) = queue.sync { skillsGeneration += 1; return (self.agents, skillsGeneration) }
+        guard !agents.isEmpty else { return Task {} }
+        return Task { [weak self, registry, assignments, queue] in
             for agent in agents {
                 var providers: [(manifest: ToolProviderManifest, tools: [ToolDescriptor]?)] = []
                 let granted = assignments(agent.id)
@@ -92,7 +94,7 @@ public final class ToolBridgeBroker: @unchecked Sendable {
                 }
                 let listed = providers
                 queue.async { [weak self] in
-                    guard let self, self.agents.contains(where: { $0.id == agent.id }) else { return }
+                    guard let self, generation == self.skillsGeneration, self.agents.contains(where: { $0.id == agent.id }) else { return }
                     let before = ToolProviderSkills.generated(workspace: agent.workspace).map { $0.name + "\n" + $0.description }
                     ToolProviderSkills.synchronize(workspace: agent.workspace, listed: listed)
                     if before != ToolProviderSkills.generated(workspace: agent.workspace).map({ $0.name + "\n" + $0.description }) {
@@ -136,6 +138,15 @@ public final class ToolBridgeBroker: @unchecked Sendable {
             guard mailboxMonitor.needsScan(workspace: agent.workspace, path: ToolBroker.path),
                   let mailbox = try? WorkspaceMailbox(workspace: agent.workspace, path: ToolBroker.path),
                   let names = try? mailbox.names() else { continue }
+            // A bot killed mid-call never collects its answer. Remove what it left, once no live
+            // request can still own it, and only files named by Noodle's own request IDs.
+            for name in names where name.hasSuffix(".response") || name.hasSuffix(".running") {
+                let file = mailbox.url.appendingPathComponent(name), stem = (name as NSString).deletingPathExtension
+                guard UUID(uuidString: stem) != nil, stem == stem.lowercased(),
+                      let modified = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
+                      modified < Date().addingTimeInterval(-300) else { continue }
+                mailbox.remove(name)
+            }
             for name in names where name.hasSuffix(".request") && running < 16 {
                 let stem = String(name.dropLast(".request".count))
                 guard let id = UUID(uuidString: stem), stem == id.uuidString.lowercased() else { continue }

@@ -11,6 +11,15 @@ public enum MCPScript {
     public typealias Perform = (MCPBridgeAction, String?, Data?, String?, Bool) throws -> Data
     public typealias Output = (Data, Bool) throws -> Void
 
+    /// What a script asks for. Every operation names its provider, so one script can use
+    /// any tool Noodle provides to the bot; each request is still authorized on its own.
+    public enum Request {
+        case providers
+        case operation(provider: String, action: MCPBridgeAction, tool: String?, arguments: Data?, uri: String?, raw: Bool)
+    }
+    public typealias Requester = (Request) throws -> Data
+
+    /// A script bound to one provider, as `messenger tool PROVIDER --run` starts it.
     public static func run(_ source: String, sourceURL: URL? = nil,
                            perform: @escaping Perform, output: @escaping Output) throws {
         try run(source, sourceURL: sourceURL, maxCalls: maxCalls, maxOutputBytes: maxOutputBytes,
@@ -19,6 +28,22 @@ public enum MCPScript {
 
     static func run(_ source: String, sourceURL: URL? = nil, maxCalls: Int, maxOutputBytes: Int,
                     perform: @escaping Perform, output: @escaping Output) throws {
+        try run(source, sourceURL: sourceURL, maxCalls: maxCalls, maxOutputBytes: maxOutputBytes, provider: "", request: { request in
+            guard case .operation(_, let action, let tool, let arguments, let uri, let raw) = request else {
+                throw failure("This script is bound to one provider.")
+            }
+            return try perform(action, tool, arguments, uri, raw)
+        }, output: output)
+    }
+
+    /// `provider` is what the `mcp` global is bound to; nil leaves only `tools`.
+    public static func run(_ source: String, sourceURL: URL? = nil, provider: String?,
+                           request: @escaping Requester, output: @escaping Output) throws {
+        try run(source, sourceURL: sourceURL, maxCalls: maxCalls, maxOutputBytes: maxOutputBytes, provider: provider, request: request, output: output)
+    }
+
+    static func run(_ source: String, sourceURL: URL? = nil, maxCalls: Int, maxOutputBytes: Int, provider bound: String?,
+                    request perform: @escaping Requester, output: @escaping Output) throws {
         guard source.utf8.count <= maxSourceBytes else { throw failure("JavaScript source exceeds 1 MiB.") }
         guard let context = JSContext() else { throw failure("Could not create a JavaScript context.") }
         var calls = 0
@@ -34,7 +59,14 @@ public enum MCPScript {
                 }
                 guard json.utf8.count <= MCPBridgeFiles.maxRequestBytes + 8192,
                       let fields = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
-                      let name = fields["action"] as? String, let action = MCPBridgeAction(rawValue: name) else {
+                      let name = fields["action"] as? String else {
+                    throw failure("Invalid or oversized MCP script request.")
+                }
+                if name == "providers" {
+                    calls += 1
+                    return try envelope(["value": try JSONSerialization.jsonObject(with: perform(.providers))])
+                }
+                guard let action = MCPBridgeAction(rawValue: name), let provider = fields["provider"] as? String else {
                     throw failure("Invalid or oversized MCP script request.")
                 }
                 let arguments: Data?
@@ -46,8 +78,8 @@ public enum MCPScript {
                     arguments = try JSONSerialization.data(withJSONObject: input)
                 } else { arguments = nil }
                 calls += 1
-                let result = try perform(action, fields["tool"] as? String, arguments, fields["uri"] as? String,
-                                         fields["raw"] as? Bool ?? false)
+                let result = try perform(.operation(provider: provider, action: action, tool: fields["tool"] as? String, arguments: arguments,
+                                                    uri: fields["uri"] as? String, raw: fields["raw"] as? Bool ?? false))
                 // The bridge applies the result limit before attachment extraction.
                 // File metadata may make its returned JSON slightly larger.
                 let object = try JSONSerialization.jsonObject(with: result)
@@ -74,6 +106,7 @@ public enum MCPScript {
                 return error.localizedDescription
             }
         }
+        context.setObject(bound as Any, forKeyedSubscript: "__mcpProvider" as NSString)
         context.setObject(request, forKeyedSubscript: "__mcpRequest" as NSString)
         context.setObject(write, forKeyedSubscript: "__mcpWrite" as NSString)
         context.evaluateScript(bootstrap, withSourceURL: URL(string: "messenger-tool:///runtime.js"))
@@ -107,9 +140,10 @@ public enum MCPScript {
     }
 
     private static let bootstrap = #"""
-    ((request, write) => {
+    ((request, write, boundProvider) => {
         delete globalThis.__mcpRequest;
         delete globalThis.__mcpWrite;
+        delete globalThis.__mcpProvider;
         const stringify = JSON.stringify, parse = JSON.parse, ErrorType = Error;
         function json(value) {
             const text = stringify(value);
@@ -193,16 +227,29 @@ public enum MCPScript {
             return [first, ...values.slice(used).map(inspect)].join(' ');
         }
         const log = (...values) => emit(format(values), true);
+        // One provider's operations. Every request names its provider, so Noodle authorizes each on its own.
+        const bind = provider => Object.freeze({
+            tools: () => invoke({provider, action: 'tools'}),
+            inspect: name => invoke({provider, action: 'inspect', tool: string(name, 'Tool name')}),
+            call: (name, input = {}, options = {}) => invoke({provider, action: 'call',
+                tool: string(name, 'Tool name'), arguments: object(input, 'Arguments'), raw: raw(options)}),
+            resources: () => invoke({provider, action: 'resources'}),
+            readResource: (uri, options = {}) => invoke({provider, action: 'read-resource',
+                uri: string(uri, 'Resource URI'), raw: raw(options)})
+        });
+        const named = provider => bind(string(provider, 'Provider'));
+        const unbound = () => { throw new ErrorType('This script is not bound to one provider. Use tools.call(provider, name, input), or run it with messenger tool PROVIDER --run.'); };
         Object.defineProperties(globalThis, {
-            mcp: { value: Object.freeze({
-                tools: () => invoke({action: 'tools'}),
-                inspect: name => invoke({action: 'inspect', tool: string(name, 'Tool name')}),
-                call: (name, input = {}, options = {}) => invoke({action: 'call',
-                    tool: string(name, 'Tool name'), arguments: object(input, 'Arguments'), raw: raw(options)}),
-                resources: () => invoke({action: 'resources'}),
-                readResource: (uri, options = {}) => invoke({action: 'read-resource',
-                    uri: string(uri, 'Resource URI'), raw: raw(options)})
+            tools: { value: Object.freeze({
+                providers: () => invoke({action: 'providers'}),
+                provider: named,
+                list: provider => named(provider).tools(),
+                inspect: (provider, name) => named(provider).inspect(name),
+                call: (provider, name, input = {}, options = {}) => named(provider).call(name, input, options)
             }) },
+            mcp: typeof boundProvider === 'string'
+                ? { value: bind(boundProvider) }
+                : { get: unbound },
             print: { value: value => emit(json(value), false) },
             console: { value: Object.freeze({
                 log, info: log, debug: log, warn: log, error: log,
@@ -216,6 +263,6 @@ public enum MCPScript {
                 }
             }) }
         });
-    })(__mcpRequest, __mcpWrite);
+    })(__mcpRequest, __mcpWrite, __mcpProvider);
     """#
 }

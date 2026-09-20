@@ -5,7 +5,7 @@ swift build --build-system native --disable-sandbox --package-path "$project_roo
 bin_path="$(swift build --build-system native --disable-sandbox --package-path "$project_root" --show-bin-path)"
 app="$project_root/.build/Noodle MCP Tests.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Helpers"
-objects=("${(@f)$(rg -v '/(Noodle|NoodleAgentBridge|NoodleSharing)\.build/' "$bin_path/Noodle.product/Objects.LinkFileList")}")
+objects=("${(@f)$(grep -Ev '/(Noodle|NoodleAgentBridge|NoodleSharing)\.build/' "$bin_path/Noodle.product/Objects.LinkFileList")}")
 swiftc -parse-as-library -I "$bin_path/Modules" \
     -Xcc "-fmodule-map-file=$project_root/.build/checkouts/swift-system/Sources/CSystem/include/module.modulemap" \
     -Xcc "-I$project_root/.build/checkouts/swift-system/Sources/CSystem/include" \

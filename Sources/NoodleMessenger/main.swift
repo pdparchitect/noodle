@@ -68,10 +68,19 @@ func runScript(_ script: ToolCLI.Script, workspace: URL) -> Never {
         guard data.count <= MCPScript.maxSourceBytes, let source = String(data: data, encoding: .utf8) else {
             throw ToolProviderError("JavaScript source must be UTF-8 and no larger than 1 MiB.")
         }
-        try MCPScript.run(source, sourceURL: sourceURL, perform: { action, tool, arguments, uri, raw in
+        // Asked once, on the first call: "@path" is a file for a tool connection and plain text for every other tool.
+        var kinds: [String: String]?
+        try MCPScript.run(source, sourceURL: sourceURL, provider: script.provider, request: { request in
             guard ProcessInfo.processInfo.systemUptime < deadline else { throw ToolProviderError("Tool script timed out. Verify any remote action before retrying.") }
-            return try ToolCLI.operation(action, provider: script.provider, tool: tool, arguments: arguments, uri: uri, raw: raw,
-                                         workspace: workspace, currentDirectory: currentDirectory)
+            switch request {
+            case .providers:
+                return try ToolBridgeClient.request(.providers, workspace: workspace, currentDirectory: currentDirectory)
+            case .operation(let provider, let action, let tool, let arguments, let uri, let raw):
+                if action == .call, kinds?[provider] == nil { kinds = try ToolCLI.kinds(workspace: workspace, currentDirectory: currentDirectory) }
+                return try ToolCLI.operation(action, provider: provider, tool: tool, arguments: arguments, uri: uri, raw: raw,
+                                             expandsFiles: kinds?[provider] == ToolProviderKind.connection.rawValue,
+                                             workspace: workspace, currentDirectory: currentDirectory)
+            }
         }, output: { data, diagnostic in
             try (diagnostic ? FileHandle.standardError : FileHandle.standardOutput).write(contentsOf: data)
         })

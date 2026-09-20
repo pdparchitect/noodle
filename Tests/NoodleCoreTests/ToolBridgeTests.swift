@@ -76,6 +76,66 @@ final class ToolBridgeTests: XCTestCase {
         XCTAssertThrowsError(try request(.providers)) { XCTAssertTrue($0.localizedDescription.contains("session"), $0.localizedDescription) }
     }
 
+    /// A bot that was killed mid-call never collects its answer. Those files must not pile up.
+    func testAbandonedResponsesAreRemovedButFreshAndUnrelatedFilesStay() throws {
+        let mailbox = try WorkspaceMailbox(workspace: caller.workspace, path: ToolBroker.path)
+        let old = UUID().uuidString.lowercased(), fresh = UUID().uuidString.lowercased()
+        for name in [old + ".response", old + ".running", fresh + ".response", "notes.response"] { try mailbox.writeData(Data("{}".utf8), named: name) }
+        let past = Date().addingTimeInterval(-600)
+        for name in [old + ".response", old + ".running", "notes.response"] {
+            try FileManager.default.setAttributes([.modificationDate: past], ofItemAtPath: mailbox.url.appendingPathComponent(name).path)
+        }
+        _ = try request(.providers) // any request makes the broker scan this mailbox
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline, (try mailbox.names()).contains(old + ".response") { Thread.sleep(forTimeInterval: 0.05) }
+        let names = Set(try mailbox.names())
+        XCTAssertFalse(names.contains(old + ".response") || names.contains(old + ".running"), "\(names)")
+        XCTAssertTrue(names.contains(fresh + ".response"), "a bot may still be about to read this")
+        XCTAssertTrue(names.contains("notes.response"), "only Noodle's own request IDs are touched")
+    }
+
+    /// Holds `tools()` open while armed, the way a slow server holds a listing open.
+    private final class Gate: @unchecked Sendable {
+        private let lock = NSLock(); private var armed = false, waiting = false
+        var isArmed: Bool { get { lock.withLock { armed } } set { lock.withLock { armed = newValue } } }
+        var isWaiting: Bool { get { lock.withLock { waiting } } set { lock.withLock { waiting = newValue } } }
+    }
+    private struct Slow: ToolProvider {
+        let kind = ToolProviderKind.builtIn
+        let manifest = ToolProviderManifest(id: "slow", title: "Slow", summary: "")
+        let gate: Gate
+        func tools(context: ToolCallContext) async throws -> Data {
+            while gate.isArmed { gate.isWaiting = true; try await Task.sleep(for: .milliseconds(5)) }
+            return Data(#"{"tools":[]}"#.utf8)
+        }
+        func call(_ tool: String, arguments: Data, files: [ToolFile], context: ToolCallContext) async throws -> Data { Data("{}".utf8) }
+    }
+
+    func testASlowListingCannotBringBackTheSkillOfARemovedProvider() async throws {
+        let gate = Gate(), registry = ToolProviderRegistry()
+        let agent = ToolBridgeAgent(id: UUID(), workspace: root.appendingPathComponent("slow"))
+        try FileManager.default.createDirectory(at: agent.workspace, withIntermediateDirectories: true)
+        try registry.register(Slow(gate: gate))
+        let slow = ToolBridgeBroker(registry: registry) { _ in .none }
+        try slow.start(agents: [agent])
+        defer { gate.isArmed = false; slow.stop() }
+        let skill = agent.workspace.appendingPathComponent(".agents/skills/slow/SKILL.md")
+
+        gate.isArmed = true
+        let stale = slow.synchronizeSkills()
+        while !gate.isWaiting { try await Task.sleep(for: .milliseconds(5)) }
+        registry.unregister("slow")
+        await slow.synchronizeSkills().value
+        _ = slow.onSkillsChanged    // runs behind the write the listing queued
+        XCTAssertFalse(FileManager.default.fileExists(atPath: skill.path))
+
+        // The listing that began while the provider still existed finishes last.
+        gate.isArmed = false
+        await stale.value
+        _ = slow.onSkillsChanged
+        XCTAssertFalse(FileManager.default.fileExists(atPath: skill.path), "an older listing must not overwrite a newer one")
+    }
+
     func testMissingBridgeAndOversizedArgumentsFailBeforeAnyRequestIsWritten() throws {
         XCTAssertThrowsError(try request(.call, provider: "echo", tool: "echo",
             arguments: #"{"text":""# + String(repeating: "x", count: ToolBridgeClient.maxArgumentBytes) + #""}"#))

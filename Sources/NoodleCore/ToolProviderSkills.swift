@@ -19,7 +19,7 @@ public enum ToolProviderSkills {
         ---
         # \(line(manifest.title))
 
-        Run `\(command) TOOL [--OPTION VALUE ...]` in this bot's workspace. Noodle must be running. `\(command)` lists the tools and `\(command) TOOL --help` returns one tool's full schema. Use `--input JSON` for values options cannot express. File options take a path inside your workspace. Results are JSON; a tool error exits 1. Never automatically repeat a call that timed out: the action may already have happened.
+        Run `\(command) TOOL [--OPTION VALUE ...]` in this bot's workspace. Noodle must be running. `\(command)` lists the tools and `\(command) TOOL --help` returns one tool's full schema. Use `--input JSON` for values options cannot express. File options take a path inside your workspace. Results are JSON; a tool error exits 1. Never automatically repeat a call that timed out: the action may already have happened. To chain this with other tools in one script, see `tool --run` in the Messenger skill.
         """
         if !manifest.instructions.isEmpty { text += "\n\n" + manifest.instructions }
         text += "\n\n## Tools\n"
@@ -37,6 +37,12 @@ public enum ToolProviderSkills {
             }
         }
         return text
+    }
+
+    /// The part of a skill that does not depend on its tool list: everything between the header and "## Tools".
+    private static func guidance(_ document: String) -> Substring {
+        let body = document.range(of: "\n---\n").map { document[$0.upperBound...] } ?? document[...]
+        return body.range(of: "\n## Tools\n").map { body[..<$0.lowerBound] } ?? body
     }
 
     /// The skills Noodle generated in this workspace, with the one-line description from each.
@@ -77,8 +83,11 @@ public enum ToolProviderSkills {
         }
         for provider in providers {
             let name = provider.manifest.id
+            // While tools cannot be listed, keep the last good skill, unless its title or guidance
+            // changed: a rename or new instructions must still reach the bot.
             if provider.tools == nil, let existing = try? WorkspaceMailbox(workspace: workspace, path: ".agents/skills/" + name),
-               existing.contains(marker), existing.contains("SKILL.md") { continue }
+               existing.contains(marker), let current = try? String(decoding: existing.read("SKILL.md", limit: 1_048_576), as: UTF8.self),
+               guidance(current) == guidance(document(provider.manifest, tools: [])) { continue }
             do {
                 try WorkspaceMailbox.synchronizeSkill(workspace: workspace, name: name, enabled: true,
                     instructions: document(provider.manifest, tools: provider.tools ?? []), command: marker, executable: nil)

@@ -163,27 +163,26 @@ struct ChatSettingsView: View {
             } footer: {
                 Text("Automatic uses Apple Intelligence to decide whether new messages should reach a busy agent immediately or wait until its turn finishes. When Apple Intelligence is unavailable, messages wait.")
             }
-            if #available(macOS 26.0, *) {
-                Section {
-                    Picker("Microphone", selection: $microphoneUID) {
-                        Text(microphones.first(where: { $0.audioID == defaultMicrophoneID })
-                            .map { "System Default — \($0.name)" } ?? "System Default").tag("")
-                        ForEach(microphones) { microphone in
-                            Text(microphone.name).tag(microphone.id)
-                        }
-                        if !microphoneUID.isEmpty && !microphones.contains(where: { $0.id == microphoneUID }) {
-                            Text("Selected microphone unavailable").tag(microphoneUID)
-                        }
+            Section {
+                Picker("Microphone", selection: $microphoneUID) {
+                    Text(microphones.first(where: { $0.audioID == defaultMicrophoneID })
+                        .map { "System Default — \($0.name)" } ?? "System Default").tag("")
+                    ForEach(microphones) { microphone in
+                        Text(microphone.name).tag(microphone.id)
                     }
-                }
-                .task {
-                    while !Task.isCancelled {
-                        microphones = microphoneDevices()
-                        defaultMicrophoneID = systemMicrophoneID()
-                        do { try await Task.sleep(for: .seconds(2)) } catch { break }
+                    if !microphoneUID.isEmpty && !microphones.contains(where: { $0.id == microphoneUID }) {
+                        Text("Selected microphone unavailable").tag(microphoneUID)
                     }
                 }
             }
+            .task {
+                while !Task.isCancelled {
+                    microphones = microphoneDevices()
+                    defaultMicrophoneID = systemMicrophoneID()
+                    do { try await Task.sleep(for: .seconds(2)) } catch { break }
+                }
+            }
+
             Section {
                 Toggle("Show descriptions in the @ name menu", isOn: $showBotDescriptions)
             } footer: {
@@ -206,11 +205,7 @@ struct ChatSettingsView: View {
 private struct SettingsWindowResizeAnchor: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            content.windowResizeAnchor(.top)
-        } else {
-            content
-        }
+        content.windowResizeAnchor(.top)
     }
 }
 

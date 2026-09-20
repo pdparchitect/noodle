@@ -16,11 +16,10 @@ struct DestructiveActionButton: NSViewRepresentable {
         button.hasDestructiveAction = true
         button.font = .systemFont(ofSize: NSFont.systemFontSize)
         button.setContentHuggingPriority(.required, for: .horizontal)
-        if #available(macOS 26.0, *) {
-            button.bezelColor = .systemRed
-            button.tintProminence = .secondary
-            button.borderShape = .capsule
-        }
+        button.bezelColor = .systemRed
+        button.tintProminence = .secondary
+        button.borderShape = .capsule
+
         return button
     }
 
@@ -28,12 +27,6 @@ struct DestructiveActionButton: NSViewRepresentable {
         context.coordinator.action = action
         button.title = title
         button.isEnabled = isEnabled
-        if #unavailable(macOS 26.0) {
-            button.attributedTitle = NSAttributedString(string: title, attributes: [
-                .foregroundColor: NSColor.systemRed,
-                .font: button.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
-            ])
-        }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSButton, context: Context) -> CGSize? {

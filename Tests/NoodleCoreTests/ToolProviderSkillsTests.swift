@@ -125,6 +125,12 @@ final class ToolProviderSkillsTests: XCTestCase {
         broker.synchronizeSkills()
         Thread.sleep(forTimeInterval: 0.3)
         XCTAssertEqual(skill("mcp-notion"), good, "a temporary failure does not erase what the bot already knows")
+
+        // A rename or new guidance must still reach the bot while the tools cannot be listed.
+        let renamed = ToolProviderManifest(id: "mcp-notion", title: "Company wiki", summary: "Wiki.", instructions: "Ask the user to reconnect in Settings if sign-in is needed.")
+        ToolProviderSkills.synchronize(workspace: workspace, listed: [(renamed, nil)])
+        XCTAssertTrue(skill("mcp-notion")?.contains("# Company wiki") == true)
+        XCTAssertFalse(skill("mcp-notion")?.contains("# Notion") == true)
     }
 
     func testAUsersOwnSkillWithTheSameNameIsNeverReplacedOrRemoved() throws {

@@ -95,7 +95,6 @@ final class NoodleStore {
     let activityWindows = AgentActivityWindows()
     @ObservationIgnored private var voiceRecorders: [UUID: AnyObject] = [:]
 
-    @available(macOS 26.0, *)
     func voiceRecorder(for conversationID: UUID) -> VoiceRecorder {
         if let recorder = voiceRecorders[conversationID] as? VoiceRecorder { return recorder }
         let recorder = VoiceRecorder(directory: repository.attachmentsDirectory(conversationID: conversationID)

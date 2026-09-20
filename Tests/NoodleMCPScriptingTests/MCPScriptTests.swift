@@ -23,6 +23,43 @@ final class MCPScriptTests: XCTestCase {
         XCTAssertEqual(output, ["[2,3]\n"])
     }
 
+    func testOneScriptCanCallAnyProviderAndChainTheirResults() throws {
+        var seen: [String] = []
+        var output: [String] = []
+        try MCPScript.run("""
+        const names = tools.providers().providers.map(p => p.id);
+        const text = tools.call('vision', 'ocr', {image: 'page.png'}).structuredContent.text;
+        const notion = tools.provider('mcp-notion');
+        notion.call('create-page', {title: text});
+        tools.list('browser'); tools.inspect('browser', 'click'); notion.resources(); notion.readResource('notion://1', {raw: true});
+        print({names, text});
+        """, provider: nil, request: { request in
+            switch request {
+            case .providers: seen.append("providers"); return Data(#"{"providers":[{"id":"vision"},{"id":"mcp-notion"}]}"#.utf8)
+            case .operation(let provider, let action, let tool, let arguments, let uri, let raw):
+                seen.append([provider, action.rawValue, tool ?? uri ?? "", raw ? "raw" : ""].filter { !$0.isEmpty }.joined(separator: " "))
+                if tool == "create-page" { XCTAssertEqual(try JSONDecoder().decode([String: String].self, from: XCTUnwrap(arguments)), ["title": "Pricing"]) }
+                return Data(#"{"structuredContent":{"text":"Pricing"}}"#.utf8)
+            }
+        }, output: { data, _ in output.append(String(decoding: data, as: UTF8.self)) })
+        XCTAssertEqual(seen, ["providers", "vision call ocr", "mcp-notion call create-page", "browser tools", "browser inspect click",
+                              "mcp-notion resources", "mcp-notion read-resource notion://1 raw"])
+        XCTAssertEqual(output, ["{\"names\":[\"vision\",\"mcp-notion\"],\"text\":\"Pricing\"}\n"])
+    }
+
+    func testMcpIsTheBoundProviderAndSaysSoWhenThereIsNone() throws {
+        var providers: [String] = []
+        try MCPScript.run("mcp.tools(); tools.call('vision', 'ocr');", provider: "mcp-notion", request: { request in
+            if case .operation(let provider, _, _, _, _, _) = request { providers.append(provider) }
+            return Data("{}".utf8)
+        }, output: { _, _ in })
+        XCTAssertEqual(providers, ["mcp-notion", "vision"], "a bound script can still reach every other provider")
+        XCTAssertThrowsError(try MCPScript.run("mcp.tools()", provider: nil, request: { _ in Data("{}".utf8) }, output: { _, _ in })) {
+            XCTAssertTrue($0.localizedDescription.contains("tools.call(provider"), $0.localizedDescription)
+        }
+        XCTAssertThrowsError(try MCPScript.run("tools.call('', 'x')", provider: nil, request: { _ in Data("{}".utf8) }, output: { _, _ in }))
+    }
+
     func testEveryOperationAndRawOptions() throws {
         var actions: [MCPBridgeAction] = []
         try MCPScript.run("""

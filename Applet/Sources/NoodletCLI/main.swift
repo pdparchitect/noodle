@@ -41,12 +41,8 @@ import Foundation
     static func run() async throws {
         var args = Array(CommandLine.arguments.dropFirst())
         guard let command = args.first, command != "--help" else {
-            let help = appBundle()?.url(forResource: "NoodletCLIHelp", withExtension: "txt")
-                .flatMap { try? String(contentsOf: $0, encoding: .utf8) }
-            print(
-                help
-                    ?? "noodlet \(AppletOperation.allCases.map(\.rawValue).joined(separator: "|")) [--path PACKAGE] [--session UUID] [--output FILE] [--help]\nUse --path for open/build/validate, --session for running instances, --file for eval, --text for typing, --target or --x/--y for clicks, and --mode background|foreground|headless."
-            )
+            // The same text Noodle writes into each bot's applet skill.
+            print(AppletGuidance.cliHelp(for: AppletBuildIdentity.current))
             return
         }
         args.removeFirst()

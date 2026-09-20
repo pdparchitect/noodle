@@ -81,7 +81,6 @@ struct SendNoodleCommandIntent: AppIntent {
         Summary("Send \(\.$command) to \(\.$conversation)")
     }
 
-    @available(macOS 26.0, *)
     static var supportedModes: IntentModes { .background }
 
     @MainActor

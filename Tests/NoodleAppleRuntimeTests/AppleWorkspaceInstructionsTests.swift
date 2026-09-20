@@ -8,11 +8,11 @@ final class AppleWorkspaceInstructionsTests: XCTestCase {
         let repository = WorkspaceRepository(rootURL: root)
         let backstory = String(repeating: "User-authored backstory. ", count: 100) + "Keep this final instruction."
         let bot = try repository.createAgent(named: "Instruction test", harnessIdentifier: "apple", backstory: backstory)
-        var assignments = ComputerAssignments()
-        assignments.agents[bot.agent.id.uuidString] = [UUID()]
-        try assignments.save(root: root)
-        try repository.synchronizeAgentWorkspace(bot.agent)
         let workspace = repository.directory(for: bot.agent)
+        // Noodle writes a skill for each tool the bot may use, and AGENTS.md lists what it wrote.
+        let computer = ToolProviderManifest(id: "computer", title: "Computer", summary: "Run commands in guest terminals")
+        ToolProviderSkills.synchronize(workspace: workspace, providers: [(computer, [])])
+        try repository.synchronizeAgentWorkspace(bot.agent)
         let generated = try String(contentsOf: workspace.appendingPathComponent("AGENTS.md"), encoding: .utf8)
 
         let text = try AppleWorkspaceInstructions.text(workspace: workspace)
@@ -24,11 +24,10 @@ final class AppleWorkspaceInstructionsTests: XCTestCase {
         XCTAssertTrue(text.contains("Run commands in guest terminals"), "Skill descriptions must reach the system instructions")
         XCTAssertFalse(text.contains("computer list"), "Commands belong in the skill, not the instruction loader")
 
-        assignments.agents[bot.agent.id.uuidString] = []
-        try assignments.save(root: root)
+        ToolProviderSkills.synchronize(workspace: workspace, providers: [])
         try repository.synchronizeAgentWorkspace(bot.agent)
         XCTAssertFalse(try AppleWorkspaceInstructions.text(workspace: workspace).contains(".agents/skills/computer/SKILL.md"),
-                       "The next wake must use the current assignments")
+                       "The next wake must use the current tools")
     }
 
     func testLoadsWorkspaceAuthoredInstructionsWithoutRequiringManagedSkillMarkers() throws {

@@ -3,7 +3,7 @@ import AppletBridge
 import Foundation
 
 public enum AppletAgentSkill {
-    public static var instructions: String { MessengerDocumentation.appletSkill(for: .current) }
+    public static var instructions: String { AppletGuidance.skill(for: .current) }
 
     public static func installedApplicationURL() -> URL? {
         AppletApplication.locate()

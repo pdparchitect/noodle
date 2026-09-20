@@ -118,6 +118,19 @@ print(tools.filter(tool => /search/i.test(tool.name)));
 JS
 ```
 
+Naming a connection binds the global `mcp` to it. A script can also reach every other
+tool Noodle provides to the bot, with or without a connection named:
+
+```js
+const text = tools.call('vision', 'ocr', {image: 'page.png'}).structuredContent.text;
+mcp.call('create-page', {title: 'Pricing', body: text});
+```
+
+`tools.providers()`, `tools.list(provider)`, `tools.inspect(provider, name)` and
+`tools.call(provider, name, input)` work for any provider; `tools.provider(name)` returns
+the same operations bound to one. Each call is authorized on its own, exactly as a single
+command is. `"@path"` file references apply only to calls on a tool connection.
+
 Scripts have these synchronous methods:
 
 | Method | Result |

@@ -23,28 +23,39 @@ public enum ToolCLI {
         }
     }
 
-    /// `PROVIDER --run FILE|-` or `PROVIDER --eval CODE`, each with an optional `--timeout SECONDS`.
+    /// `[PROVIDER] --run FILE|-` or `[PROVIDER] --eval CODE`, each with an optional `--timeout SECONDS`.
+    /// A script reaches every provider through `tools`; naming one also binds `mcp` to it.
     /// The Messenger executable runs these itself, because a script streams output and needs a watchdog.
     public struct Script: Equatable {
         public enum Mode: Equatable { case run(String), eval(String) }
-        public let provider: String
+        public let provider: String?
         public let mode: Mode
         public let timeout: Int
     }
     public static func script(_ arguments: [String]) throws -> Script? {
-        guard arguments.count >= 2, !arguments[0].hasPrefix("-"), ["--run", "--eval"].contains(arguments[1]) else { return nil }
-        guard arguments.count == 3 || (arguments.count == 5 && arguments[3] == "--timeout"), !arguments[2].isEmpty else {
+        let provider = arguments.first.flatMap { $0.hasPrefix("-") ? nil : $0 }
+        let rest = Array(arguments.dropFirst(provider == nil ? 0 : 1))
+        guard let flag = rest.first, ["--run", "--eval"].contains(flag) else { return nil }
+        guard rest.count == 2 || (rest.count == 4 && rest[2] == "--timeout"), !rest[1].isEmpty else {
             throw ToolProviderError("Use --run FILE, --run - for standard input, or --eval CODE, optionally with --timeout SECONDS.")
         }
-        guard let timeout = arguments.count == 5 ? Int(arguments[4]) : 300, (1...3600).contains(timeout) else {
+        guard let timeout = rest.count == 4 ? Int(rest[3]) : 300, (1...3600).contains(timeout) else {
             throw ToolProviderError("--timeout must be an integer from 1 to 3600 seconds.")
         }
-        return Script(provider: arguments[0], mode: arguments[1] == "--run" ? .run(arguments[2]) : .eval(arguments[2]), timeout: timeout)
+        return Script(provider: provider, mode: flag == "--run" ? .run(rest[1]) : .eval(rest[1]), timeout: timeout)
+    }
+
+    /// Each provider's kind, so a script knows which calls read "@path" arguments as files.
+    public static func kinds(workspace: URL, currentDirectory: URL) throws -> [String: String] {
+        let listed = try JSONSerialization.jsonObject(with: ToolBridgeClient.request(.providers, workspace: workspace, currentDirectory: currentDirectory))
+        let providers = (listed as? [String: Any])?["providers"] as? [[String: Any]] ?? []
+        return Dictionary(providers.compactMap { provider in (provider["id"] as? String).map { ($0, provider["kind"] as? String ?? "") } }) { $1 }
     }
 
     /// One script operation, with the same file rules and result handling as the command line.
+    /// `expandsFiles` is true for tool connections, whose tools take file contents as base64.
     public static func operation(_ action: MCPBridgeAction, provider: String, tool: String?, arguments: Data?, uri: String?, raw: Bool,
-                                 workspace: URL, currentDirectory: URL) throws -> Data {
+                                 expandsFiles: Bool, workspace: URL, currentDirectory: URL) throws -> Data {
         func request(_ action: ToolBridgeAction, _ tool: String? = nil, _ input: Data? = nil) throws -> Data {
             try ToolBridgeClient.request(action, provider: provider, tool: tool, arguments: input, workspace: workspace, currentDirectory: currentDirectory)
         }
@@ -54,7 +65,7 @@ public enum ToolCLI {
         case .resources, .readResource, .call:
             let name = action == .call ? tool : action == .resources ? ConnectionToolProvider.resourcesTool : ConnectionToolProvider.readResourceTool
             var input = action == .readResource ? try JSONSerialization.data(withJSONObject: ["uri": uri ?? ""]) : arguments ?? Data("{}".utf8)
-            if action == .call { input = try MCPFileContent.arguments(input, workspace: workspace, currentDirectory: currentDirectory) }
+            if action == .call, expandsFiles { input = try MCPFileContent.arguments(input, workspace: workspace, currentDirectory: currentDirectory) }
             return try MCPFileContent.result(try request(.call, name, input), workspace: workspace, callID: UUID(), raw: raw, resourceRead: action == .readResource)
         }
     }

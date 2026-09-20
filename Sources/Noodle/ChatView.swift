@@ -142,19 +142,11 @@ struct ChatView: View {
     }
 
     @ViewBuilder private var chatContent: some View {
-        if #available(macOS 26.0, *) {
-            topFadedTranscript
-                .scrollEdgeEffectStyle(.soft, for: .bottom)
-                .overlay(alignment: .bottom) {
-                    measuredPinnedBottomContent
-                }
-        } else {
-            topFadedTranscript
-                .overlay(alignment: .bottom) {
-                    measuredPinnedBottomContent
-                        .background(.bar)
-                }
-        }
+        topFadedTranscript
+            .scrollEdgeEffectStyle(.soft, for: .bottom)
+            .overlay(alignment: .bottom) {
+                measuredPinnedBottomContent
+            }
     }
 
     private var measuredPinnedBottomContent: some View {
@@ -232,11 +224,7 @@ struct ChatView: View {
     }
 
     @ViewBuilder private var composerControls: some View {
-        if #available(macOS 26.0, *) {
-            GlassEffectContainer(spacing: composerControlSpacing) {
-                composerControlRow
-            }
-        } else {
+        GlassEffectContainer(spacing: composerControlSpacing) {
             composerControlRow
         }
     }
@@ -268,71 +256,38 @@ struct ChatView: View {
                         },
                         capture: { showCapture(.window) })
                 }
-            if #available(macOS 26.0, *) {
-                VoiceMessageComposer(
-                    recorder: store.voiceRecorder(for: conversation.id),
-                    send: { url, voice in try store.sendVoiceMessage(from: url, voice: voice, to: conversation.id) }
-                ) { start in
-                    composerInput(microphoneAction: start)
-                }
-            } else {
-                composerInput()
+            VoiceMessageComposer(
+                recorder: store.voiceRecorder(for: conversation.id),
+                send: { url, voice in try store.sendVoiceMessage(from: url, voice: voice, to: conversation.id) }
+            ) { start in
+                composerInput(microphoneAction: start)
             }
         }
     }
 
     @ViewBuilder private var attachmentButton: some View {
-        if #available(macOS 26.0, *) {
-            Button {
-                showingAttachmentMenu = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .frame(width: composerControlHeight, height: composerControlHeight)
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.interactive(), in: Circle())
-            .help("Add Attachment")
-        } else {
-            Button {
-                showingAttachmentMenu = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: composerControlHeight, height: composerControlHeight)
-                    .background(.quaternary.opacity(0.35), in: Circle())
-            }
-            .buttonStyle(.plain)
-            .help("Add Attachment")
+        Button {
+            showingAttachmentMenu = true
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.primary)
+                .frame(width: composerControlHeight, height: composerControlHeight)
+                .contentShape(Circle())
         }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: Circle())
+        .help("Add Attachment")
     }
 
     @ViewBuilder private func composerInput(microphoneAction: (() -> Void)? = nil) -> some View {
-        if #available(macOS 26.0, *) {
-            composerInputContents(microphoneAction: microphoneAction)
-                .glassEffect(
-                    .regular,
-                    in: RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
-                )
-                .modifier(ComposerFocusSurface(cornerRadius: composerCornerRadius,
-                    controlsWidth: composerSendControlWidth + 7 + (microphoneAction == nil ? 0 : 31)) { composerFocused = true })
-        } else {
-            composerInputContents(microphoneAction: microphoneAction)
-                .background(
-                    .quaternary.opacity(0.10),
-                    in: RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
-                        .stroke(.separator.opacity(0.6))
-                        .allowsHitTesting(false)
-                }
-                .modifier(ComposerFocusSurface(cornerRadius: composerCornerRadius,
-                    controlsWidth: composerSendControlWidth + 7 + (microphoneAction == nil ? 0 : 31)) { composerFocused = true })
-        }
+        composerInputContents(microphoneAction: microphoneAction)
+            .glassEffect(
+                .regular,
+                in: RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
+            )
+            .modifier(ComposerFocusSurface(cornerRadius: composerCornerRadius,
+                controlsWidth: composerSendControlWidth + 7 + (microphoneAction == nil ? 0 : 31)) { composerFocused = true })
     }
 
     private func composerInputContents(microphoneAction: (() -> Void)? = nil) -> some View {
@@ -623,15 +578,6 @@ private struct PendingAttachmentChip: View {
 
 private struct PendingAttachmentSurface: ViewModifier {
     @ViewBuilder func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            content.glassEffect(.regular, in: Capsule())
-        } else {
-            content
-                .background(.regularMaterial, in: Capsule())
-                .overlay {
-                    Capsule().stroke(.separator.opacity(0.45))
-                        .allowsHitTesting(false)
-                }
-        }
+        content.glassEffect(.regular, in: Capsule())
     }
 }

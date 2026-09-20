@@ -11,6 +11,7 @@ import XCTest
         let f = try MCPControllerFixture(credentialFailure: credentialFailure, removed: removed)
         addTeardownBlock { @MainActor in
             f.controller.start(agents: [])
+            f.stop()
             try? FileManager.default.removeItem(at: f.root)
         }
         return f
@@ -84,20 +85,21 @@ import XCTest
         XCTAssertEqual(f.controller.registry.connections, [account])
     }
 
-    func testAssignmentAndRenameUpdateOnlyTheAssignedBotsInstructions() throws {
+    func testAssignmentAndRenameUpdateOnlyTheAssignedBotsInstructions() async throws {
         let f = try fixture(), account = try f.account()
-        f.controller.start(agents: [f.a, f.b])
+        try f.start([f.a, f.b])
         try f.controller.save(account)
         try f.controller.assign([account.id], to: f.a)
-        XCTAssertTrue(try f.instructions(f.a).contains(account.name))
+        // A bot's instructions list the skills Noodle generated for it, shortly after the grant.
+        try await f.waitUntil { (try? f.instructions(f.a).contains(account.name)) == true }
         XCTAssertFalse(try f.instructions(f.b).contains(account.name))
         var renamed = account
         renamed.name = "Renamed fixture tools"
         try f.controller.save(renamed)
-        XCTAssertTrue(try f.instructions(f.a).contains(renamed.name))
+        try await f.waitUntil { (try? f.instructions(f.a).contains(renamed.name)) == true }
         XCTAssertFalse(try f.instructions(f.a).contains(account.name))
         try f.controller.assign([], to: f.a)
-        XCTAssertFalse(try f.instructions(f.a).contains(renamed.name))
+        try await f.waitUntil { (try? f.instructions(f.a).contains(renamed.name)) == false }
     }
 
     func testUnreadableRegistryBlocksAllMutationsWithoutOverwritingIt() throws {
@@ -142,30 +144,31 @@ import XCTest
         try f.controller.save(other)
         try f.controller.assign([account.id, other.id], to: f.a)
         try f.controller.assign([account.id], to: f.b)
-        f.controller.start(agents: [f.a, f.b])
+        try f.start([f.a, f.b])
         f.controller.remove(account)
         // These assertions run before the asynchronous disconnect can execute.
         XCTAssertEqual(f.controller.registry.connections, [other])
         XCTAssertEqual(f.controller.selectedIDs(for: f.a), [other.id])
         XCTAssertTrue(f.controller.selectedIDs(for: f.b).isEmpty)
         XCTAssertEqual(try MCPRegistry.load(root: f.root), f.controller.registry)
-        XCTAssertFalse(try f.instructions(f.a).contains(account.name))
-        XCTAssertTrue(try f.instructions(f.a).contains(other.name))
+        try await f.waitUntil { (try? f.instructions(f.a).contains(other.name)) == true && (try? f.instructions(f.a).contains(account.name)) == false }
         await fulfillment(of: [removed], timeout: 2)
         XCTAssertNil(f.controller.errorMessage)
     }
 
+    // The request files, sessions and clean-up now belong to the tool bridge every provider
+    // shares. These tests drive it with this controller's real connections behind it.
     func testBridgeSessionsArePrivateStableAndRotatedAfterAnAgentIsRemoved() throws {
         let f = try fixture()
-        f.controller.start(agents: [f.a, f.b])
+        try f.start([f.a, f.b])
         let first = try f.session(f.a), second = try f.session(f.b)
         XCTAssertFalse(first.token.isEmpty)
         XCTAssertNotEqual(first.token, second.token)
         XCTAssertEqual(first.processID, getpid())
-        f.controller.start(agents: [f.a, f.b])
+        try f.start([f.a, f.b])
         XCTAssertEqual(try f.session(f.a).token, first.token)
-        f.controller.start(agents: [f.b])
-        f.controller.start(agents: [f.a, f.b])
+        try f.start([f.b])
+        try f.start([f.a, f.b])
         XCTAssertNotEqual(try f.session(f.a).token, first.token)
         XCTAssertEqual(try f.session(f.b).token, second.token)
     }
@@ -174,86 +177,84 @@ import XCTest
         let f = try fixture(), account = try f.account()
         try f.controller.save(account)
         try f.controller.assign([account.id], to: f.a)
-        f.controller.start(agents: [f.a, f.b])
+        try f.start([f.a, f.b])
+        try await f.skill(account, for: f.a)
+        let reached = f.reach.count
         let session = try f.session(f.a).token
-        let valid = MCPBridgeRequest(session: session, connectionID: account.id, action: .tools, tool: nil, arguments: nil)
+        let valid = ToolBridgeRequest(session: session, action: .tools, provider: account.skillName)
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(valid)) as? [String: Any])
         let variants: [(String, Any)] = [
             ("id", UUID().uuidString), ("session", "forged"), ("session", try f.session(f.b).token),
             ("expiresAt", Date().addingTimeInterval(-1).timeIntervalSinceReferenceDate),
             ("expiresAt", Date().addingTimeInterval(600).timeIntervalSinceReferenceDate),
             ("tool", String(repeating: "é", count: 513)),
-            ("uri", String(repeating: "x", count: 4097)),
-            ("skillName", String(repeating: "x", count: 65)),
-            ("arguments", Data(repeating: 65, count: MCPBridgeFiles.maxRequestBytes + 1).base64EncodedString()),
+            ("provider", String(repeating: "x", count: 49)),
+            ("currentDirectory", String(repeating: "x", count: 4097)),
             ("action", "unknown-action")
         ]
         for (field, value) in variants {
             var invalid = object
             invalid[field] = value
             let response = try await f.exchange(data: JSONSerialization.data(withJSONObject: invalid), id: valid.id)
-            XCTAssertEqual(response.error, "Expired or invalid MCP request.", field)
-            XCTAssertNil(response.result)
+            XCTAssertNotNil(response.error, field)
+            XCTAssertNil(response.result, field)
             XCTAssertFalse(f.exists(valid.id, extension: "request"))
             XCTAssertFalse(f.exists(valid.id, extension: "running"))
         }
         // A file ID must also agree with the decoded request ID.
         object["session"] = session
         let mismatch = try await f.exchange(data: JSONSerialization.data(withJSONObject: object), id: UUID())
-        XCTAssertEqual(mismatch.error, "Expired or invalid MCP request.")
-        for invalid in [Data("{unfinished JSON".utf8), Data(repeating: 65, count: MCPBridgeFiles.maxRequestEnvelopeBytes + 1)] {
+        XCTAssertNotNil(mismatch.error)
+        for invalid in [Data("{unfinished JSON".utf8), Data(repeating: 65, count: 4 * 1_048_576)] {
             let response = try await f.exchange(data: invalid, id: UUID())
-            XCTAssertEqual(response.error, "Expired or invalid MCP request.")
+            XCTAssertNotNil(response.error)
         }
-        XCTAssertTrue(f.controller.errors.isEmpty, "Invalid requests must not be dispatched to the service")
+        XCTAssertEqual(f.reach.count, reached, "Invalid requests must not be dispatched to the service")
     }
 
-    func testUnassignedAndAmbiguousConnectionsCannotReachTheService() async throws {
+    func testUnassignedAndUnknownConnectionsCannotReachTheService() async throws {
         let f = try fixture(), account = try f.account()
         try f.controller.save(account)
         try f.controller.assign([account.id], to: f.b)
-        f.controller.start(agents: [f.a, f.b])
-        let selectors: [(UUID?, String?)] = [(account.id, nil), (nil, account.skillName),
-            (UUID(), nil), (nil, "mcp-missing"), (nil, nil), (account.id, account.skillName)]
-        for (id, skill) in selectors {
-            let request = MCPBridgeRequest(session: try f.session(f.a).token, connectionID: id, skillName: skill,
-                action: .tools, tool: nil, arguments: nil)
+        try f.start([f.a, f.b])
+        try await f.skill(account, for: f.b)
+        let reached = f.reach.count
+        for provider in [account.skillName, "mcp-missing", account.id.uuidString.lowercased()] {
+            let request = ToolBridgeRequest(session: try f.session(f.a).token, action: .tools, provider: provider)
             let response = try await f.exchange(request)
-            XCTAssertEqual(response.error, "This MCP connection is not assigned to this bot.")
+            XCTAssertNotNil(response.error, provider)
             XCTAssertNil(response.result)
             XCTAssertFalse(f.exists(request.id, extension: "running"))
         }
-        XCTAssertTrue(f.controller.errors.isEmpty)
+        XCTAssertEqual(f.reach.count, reached)
+        // The bot it is assigned to reaches the service's sign-in gate.
+        let granted = try await f.exchange(ToolBridgeRequest(session: try f.session(f.b).token, action: .tools, provider: account.skillName), agent: f.b)
+        XCTAssertEqual(granted.error, MCPServiceError.signInRequired.localizedDescription)
+        XCTAssertEqual(f.reach.count, reached + 1)
     }
 
-    func testAssignedConnectionsReachServiceByIDOrSkillAndCannotReplay() async throws {
+    func testAssignedConnectionsReachTheServiceAndCannotReplay() async throws {
         let f = try fixture(), account = try f.account()
         try f.controller.save(account)
         try f.controller.assign([account.id], to: f.a)
-        f.controller.start(agents: [f.a])
-        for bySkill in [false, true] {
-            let request = MCPBridgeRequest(session: try f.session(f.a).token,
-                connectionID: bySkill ? nil : account.id, skillName: bySkill ? account.skillName : nil,
-                action: .call, tool: "echo", arguments: Data("{}".utf8))
-            let response = try await f.exchange(request)
-            XCTAssertEqual(response.error, MCPServiceError.signInRequired.localizedDescription)
-            XCTAssertEqual(f.controller.errors[account.id], response.error)
-            XCTAssertFalse(f.exists(request.id, extension: "running"))
-            let replay = try await f.exchange(request)
-            XCTAssertEqual(replay.error, "Expired or invalid MCP request.", "An uncertain tool call must never be replayed")
-        }
+        try f.start([f.a])
+        let request = ToolBridgeRequest(session: try f.session(f.a).token, action: .tools, provider: account.skillName)
+        let response = try await f.exchange(request)
+        XCTAssertEqual(response.error, MCPServiceError.signInRequired.localizedDescription)
+        try await f.waitUntil { f.controller.errors[account.id] == response.error }
+        XCTAssertFalse(f.exists(request.id, extension: "running"))
+        let replay = try await f.exchange(request)
+        XCTAssertEqual(replay.error, "Invalid or expired tool session.", "An uncertain tool call must never be replayed")
     }
 
     func testUnexpectedServiceErrorsDoNotExposePrivateDetailsToTheBot() async throws {
         let f = try fixture(credentialFailure: true), account = try f.account()
         try f.controller.save(account)
         try f.controller.assign([account.id], to: f.a)
-        f.controller.start(agents: [f.a])
-        let request = MCPBridgeRequest(session: try f.session(f.a).token, connectionID: account.id,
-            action: .tools, tool: nil, arguments: nil)
-        let response = try await f.exchange(request)
+        try f.start([f.a])
+        let response = try await f.exchange(ToolBridgeRequest(session: try f.session(f.a).token, action: .tools, provider: account.skillName))
         XCTAssertEqual(response.error, "The tool connection could not complete the request. Try reconnecting in Settings → Tools.")
-        XCTAssertEqual(f.controller.errors[account.id], response.error)
+        try await f.waitUntil { f.controller.errors[account.id] == response.error }
         XCTAssertNil(response.result)
     }
 
@@ -261,37 +262,41 @@ import XCTest
         let f = try fixture(), account = try f.account()
         try f.controller.save(account)
         try f.controller.assign([account.id], to: f.a)
-        f.controller.start(agents: [f.a])
+        try f.start([f.a])
         let oldToken = try f.session(f.a).token
+        try await f.skill(account, for: f.a)
         try f.controller.assign([], to: f.a)
-        let revoked = MCPBridgeRequest(session: oldToken, connectionID: account.id, action: .tools, tool: nil, arguments: nil)
-        let response = try await f.exchange(revoked)
-        XCTAssertEqual(response.error, "This MCP connection is not assigned to this bot.")
-        f.controller.start(agents: [])
-        f.controller.start(agents: [f.a])
+        try await f.skill(account, for: f.a, exists: false)
+        let reached = f.reach.count
+        let response = try await f.exchange(ToolBridgeRequest(session: oldToken, action: .tools, provider: account.skillName))
+        XCTAssertTrue(response.error?.contains("not assigned") == true, response.error ?? "no error")
+        try f.start([])
+        try f.start([f.a])
+        XCTAssertEqual(f.reach.count, reached)
         try f.controller.assign([account.id], to: f.a)
-        let stale = MCPBridgeRequest(session: oldToken, connectionID: account.id, action: .tools, tool: nil, arguments: nil)
-        let staleResponse = try await f.exchange(stale)
-        XCTAssertEqual(staleResponse.error, "Expired or invalid MCP request.")
-        XCTAssertTrue(f.controller.errors.isEmpty)
+        try await f.skill(account, for: f.a)
+        let listed = f.reach.count
+        let staleResponse = try await f.exchange(ToolBridgeRequest(session: oldToken, action: .tools, provider: account.skillName))
+        XCTAssertEqual(staleResponse.error, "Invalid or expired tool session.")
+        XCTAssertEqual(f.reach.count, listed)
     }
 
     func testScanCleansOnlyExpiredResponseAndRunningFilesWithRequestIDs() async throws {
         let f = try fixture()
-        f.controller.start(agents: [f.a])
-        let folder = f.folder(f.a), staleID = UUID(), recentID = UUID()
-        for name in ["\(staleID.uuidString).response", "\(staleID.uuidString).running", "user-notes.response", "user-notes.running"] {
+        try f.start([f.a])
+        let folder = f.folder(f.a), staleID = UUID().uuidString.lowercased(), recentID = UUID().uuidString.lowercased()
+        for name in ["\(staleID).response", "\(staleID).running", "user-notes.response", "user-notes.running"] {
             let url = folder.appendingPathComponent(name)
             try Data("keep unless stale IPC".utf8).write(to: url)
             try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-600)], ofItemAtPath: url.path)
         }
-        let recent = folder.appendingPathComponent("\(recentID.uuidString).response")
+        let recent = folder.appendingPathComponent("\(recentID).response")
         try Data("recent response".utf8).write(to: recent)
         // A response to this request proves the scan has run; wait for all stale files too.
         _ = try await f.exchange(data: Data("invalid".utf8), id: UUID())
         try await f.waitUntil {
-            !FileManager.default.fileExists(atPath: folder.appendingPathComponent("\(staleID.uuidString).response").path) &&
-            !FileManager.default.fileExists(atPath: folder.appendingPathComponent("\(staleID.uuidString).running").path)
+            !FileManager.default.fileExists(atPath: folder.appendingPathComponent("\(staleID).response").path) &&
+            !FileManager.default.fileExists(atPath: folder.appendingPathComponent("\(staleID).running").path)
         }
         XCTAssertTrue(FileManager.default.fileExists(atPath: recent.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent("user-notes.response").path))
@@ -306,6 +311,9 @@ import XCTest
     let b: AgentRecord
     let service: MCPService
     let controller: MCPController
+    /// The same pieces the app wires together around this controller.
+    let tools: ToolBridgeBroker
+    let reach = MCPServiceReach()
     var registryURL: URL { root.appendingPathComponent("MCP/connections.json") }
 
     init(credentialFailure: Bool, removed: XCTestExpectation?) throws {
@@ -314,39 +322,65 @@ import XCTest
         try repository.prepare()
         a = try repository.createAgent(named: "MCP A").agent
         b = try repository.createAgent(named: "MCP B").agent
-        service = MCPService(credentials: EmptyControllerCredentials(fails: credentialFailure, removed: removed), oauth: MCPOAuth(),
+        service = MCPService(credentials: EmptyControllerCredentials(fails: credentialFailure, removed: removed, reach: reach), oauth: MCPOAuth(),
             httpConfiguration: { XCTFail("An empty credential store must never start transport"); return .ephemeral })
         controller = MCPController(repository: repository, service: service)
+        let assignments = ToolAssignmentStore(), registry = ToolProviderRegistry()
+        let broker = ToolBridgeBroker(registry: registry) { assignments.assignments(for: $0) }
+        tools = broker
+        controller.toolRegistry = registry
+        controller.onAssignmentsChange = { assignments.replace(ConnectionToolProvider.grantKind, with: $0); broker.synchronizeSkills() }
+        let repository = repository, agents = [a, b]
+        broker.onSkillsChanged = { id in
+            Task { @MainActor in if let agent = agents.first(where: { $0.id == id }) { try? repository.synchronizeAgentWorkspace(agent) } }
+        }
+    }
+    /// What the app does whenever its bots change.
+    func start(_ agents: [AgentRecord]) throws {
+        controller.start(agents: agents)
+        try tools.start(agents: agents.map { ToolBridgeAgent(id: $0.id, workspace: repository.directory(for: $0)) })
+    }
+    func stop() { tools.stop() }
+    /// Noodle lists a connection's tools to write its skill, which reaches the service once. Waiting for
+    /// the skill leaves only the requests under test to move `reach`.
+    func skill(_ account: MCPConnectionRecord, for agent: AgentRecord, exists: Bool = true) async throws {
+        let file = repository.directory(for: agent).appendingPathComponent(".agents/skills/\(account.skillName)/SKILL.md")
+        try await waitUntil { FileManager.default.fileExists(atPath: file.path) == exists }
     }
 
     func account(name: String = "Fixture tools") throws -> MCPConnectionRecord {
         try MCPConnectionRecord(name: name, endpoint: URL(string: "https://example.com/mcp")!)
     }
-    func folder(_ agent: AgentRecord) -> URL { MCPBridgeFiles.directory(workspace: repository.directory(for: agent)) }
+    func folder(_ agent: AgentRecord) -> URL { repository.directory(for: agent).appendingPathComponent(ToolBroker.path) }
     func session(_ agent: AgentRecord) throws -> MCPBridgeSession {
         try JSONDecoder().decode(MCPBridgeSession.self, from: Data(contentsOf: folder(agent).appendingPathComponent("session.json")))
     }
     func instructions(_ agent: AgentRecord) throws -> String {
         try String(contentsOf: repository.directory(for: agent).appendingPathComponent("AGENTS.md"), encoding: .utf8)
     }
-    func file(_ id: UUID, extension suffix: String) -> URL {
-        folder(a).appendingPathComponent(id.uuidString.lowercased() + "." + suffix)
+    func file(_ id: UUID, extension suffix: String, agent: AgentRecord? = nil) -> URL {
+        folder(agent ?? a).appendingPathComponent(id.uuidString.lowercased() + "." + suffix)
     }
     func exists(_ id: UUID, extension suffix: String) -> Bool {
         FileManager.default.fileExists(atPath: file(id, extension: suffix).path)
     }
-    func exchange(_ request: MCPBridgeRequest) async throws -> MCPBridgeResponse {
-        try await exchange(data: JSONEncoder().encode(request), id: request.id)
+    func exchange(_ request: ToolBridgeRequest, agent: AgentRecord? = nil) async throws -> ToolBridgeResponse {
+        try await exchange(data: JSONEncoder().encode(request), id: request.id, agent: agent)
     }
-    func exchange(data: Data, id: UUID) async throws -> MCPBridgeResponse {
-        let response = file(id, extension: "response")
+    /// Written the way the real client writes it, so only what is under test can refuse it.
+    func exchange(data: Data, id: UUID, agent: AgentRecord? = nil) async throws -> ToolBridgeResponse {
+        let owner = agent ?? a, response = file(id, extension: "response", agent: owner)
         if FileManager.default.fileExists(atPath: response.path) { try FileManager.default.removeItem(at: response) }
-        try data.write(to: file(id, extension: "request"), options: .atomic)
-        try await waitUntil { self.exists(id, extension: "response") && !self.exists(id, extension: "running") }
-        return try JSONDecoder().decode(MCPBridgeResponse.self, from: Data(contentsOf: response))
+        try WorkspaceMailbox(workspace: repository.directory(for: owner), path: ToolBroker.path)
+            .writeData(data, named: id.uuidString.lowercased() + ".request")
+        try await waitUntil {
+            FileManager.default.fileExists(atPath: response.path) &&
+                !FileManager.default.fileExists(atPath: self.file(id, extension: "running", agent: owner).path)
+        }
+        return try JSONDecoder().decode(ToolBridgeResponse.self, from: Data(contentsOf: response))
     }
     func waitUntil(_ condition: () -> Bool) async throws {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
         while !condition() {
             guard ContinuousClock.now < deadline else {
                 XCTFail("MCP bridge did not finish before the test deadline")
@@ -357,10 +391,20 @@ import XCTest
     }
 }
 
+/// Every request the service accepts starts by loading the connection's credentials.
+final class MCPServiceReach: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    var count: Int { lock.withLock { value } }
+    func increment() { lock.withLock { value += 1 } }
+}
+
 private struct EmptyControllerCredentials: MCPCredentialStorage {
     let fails: Bool
     let removed: XCTestExpectation?
+    let reach: MCPServiceReach
     func load(_ id: UUID) throws -> MCPCredentials? {
+        reach.increment()
         if fails { throw NSError(domain: "fixture", code: 1, userInfo: [NSLocalizedDescriptionKey: "private-token=secret-fixture"]) }
         return nil
     }

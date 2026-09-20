@@ -5,7 +5,7 @@ import XCTest
 
 final class AppletAccessTests: XCTestCase {
     func testLocalInstructionsAndAttachmentsKeepTheirEnvironment() throws {
-        let skill = MessengerDocumentation.appletSkill(for: .development)
+        let skill = AppletGuidance.skill(for: .development)
         XCTAssertTrue(skill.contains("Name.noodlet-dev"))
         XCTAssertTrue(skill.contains("noodlet-dev://UUID"))
         XCTAssertTrue(skill.contains("Noodle Applet Dev"))
@@ -75,10 +75,10 @@ final class AppletAccessTests: XCTestCase {
 
     func testEveryCommandIsDocumentedInGeneratedSkillAndHelp() {
         for command in AppletOperation.allCases {
-            let guidance = MessengerDocumentation.appletGuidance(command)
+            let guidance = AppletGuidance.operation(command)
             XCTAssertFalse(guidance.isEmpty)
-            XCTAssertTrue(MessengerDocumentation.appletCLIHelp.contains(guidance))
-            XCTAssertTrue(MessengerDocumentation.appletSkill.contains(guidance))
+            XCTAssertTrue(AppletGuidance.cliHelp.contains(guidance))
+            XCTAssertTrue(AppletGuidance.skill.contains(guidance))
         }
     }
     func testManagedSkillPreservesCustomSkillAndExposesCorrectHelper() throws {
@@ -93,7 +93,7 @@ final class AppletAccessTests: XCTestCase {
                 atPath: skill.appendingPathComponent("noodlet").path), "/fixture/noodlet")
         XCTAssertEqual(
             try String(contentsOf: skill.appendingPathComponent("SKILL.md"), encoding: .utf8),
-            MessengerDocumentation.appletSkill)
+            AppletGuidance.skill)
         try AppletAgentSkill.synchronize(workspace: root, enabled: false, executable: nil)
         try FileManager.default.createDirectory(at: skill, withIntermediateDirectories: true)
         try Data("custom".utf8).write(to: skill.appendingPathComponent("SKILL.md"))

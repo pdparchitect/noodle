@@ -2,7 +2,6 @@ import SwiftUI
 import Speech
 import NoodleCore
 
-@available(macOS 26.0, *)
 struct VoiceMessageComposer<Content: View>: View {
     let recorder: VoiceRecorder
     @State private var mountedRecorder: VoiceRecorder?

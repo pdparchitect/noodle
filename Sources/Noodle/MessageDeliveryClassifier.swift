@@ -15,16 +15,15 @@ struct MessageDeliveryClassifier: MessageDeliveryClassifying {
     nonisolated init() {}
     var isAvailable: Bool {
         #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) {
-            return SystemLanguageModel.default.availability == .available
-        }
-        #endif
+        return SystemLanguageModel.default.availability == .available
+        #else
         return false
+        #endif
     }
 
     func shouldSendImmediately(_ context: MessageDeliveryContext) async throws -> Bool {
         #if canImport(FoundationModels)
-        if #available(macOS 26.0, *), isAvailable {
+        if isAvailable {
             // Use a fresh session so one conversation cannot influence another.
             let session = LanguageModelSession()
             // The macOS 26 SDK used by CI predates the samplingMode label.
@@ -57,7 +56,6 @@ struct MessageDeliveryClassifier: MessageDeliveryClassifying {
 }
 
 #if canImport(FoundationModels)
-@available(macOS 26.0, *)
 @Generable
 private enum MessageDeliveryIntent {
     case stop, correction, emergency, additionalTask, acknowledgement, question, unclear

@@ -10,7 +10,6 @@ struct VoiceRecordingDraft: Codable {
     let transcriptionComplete: Bool
 }
 
-@available(macOS 26.0, *)
 @MainActor @Observable final class VoiceRecorder {
     enum Phase { case idle, preparing, recording, finishing, ready, failed }
     private(set) var phase: Phase = .idle
@@ -337,7 +336,6 @@ struct VoiceFailure: LocalizedError {
 
 /// The audio callback owns conversion and writing under one lock. Buffers sent
 /// to SpeechAnalyzer are newly allocated and never modified after being yielded.
-@available(macOS 26.0, *)
 final class VoiceAudioSink: @unchecked Sendable {
     struct Snapshot {
         let duration: Double

@@ -14,7 +14,7 @@ struct KeybindingsSettingsView: View {
                     row(.newGroup)
                     row(.searchConversations)
                     row(.capture)
-                    if #available(macOS 26.0, *) { row(.recordVoice) }
+                    row(.recordVoice)
                 }
                 Section {
                     row(.annotateSelection)

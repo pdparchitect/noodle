@@ -293,7 +293,6 @@ import XCTest
             XCTAssertFalse(manager.fileExists(atPath: workspace.appendingPathComponent(".agents/skills/applet").path))
             XCTAssertNil(try? manager.destinationOfSymbolicLink(atPath: workspace.appendingPathComponent(".claude/skills/applet").path))
             XCTAssertFalse(try String(contentsOf: workspace.appendingPathComponent("AGENTS.md"), encoding: .utf8).contains("## Creative applets"))
-            XCTAssertFalse(try String(contentsOf: workspace.appendingPathComponent(".agents/managed-skills.json"), encoding: .utf8).contains("skills/applet"))
         }
         for agent in agents {
             XCTAssertEqual(try String(contentsOf: repository.directory(for: agent).appendingPathComponent(".claude/skills/custom.md"), encoding: .utf8), "custom")

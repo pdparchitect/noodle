@@ -57,12 +57,9 @@ struct ConversationWindowView: View {
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar {
-            if #available(macOS 26.0, *) {
-                ToolbarItem(placement: .principal) { windowTitle }
-                    .sharedBackgroundVisibility(.hidden)
-            } else {
-                ToolbarItem(placement: .principal) { windowTitle }
-            }
+            ToolbarItem(placement: .principal) { windowTitle }
+                .sharedBackgroundVisibility(.hidden)
+
             ToolbarItem(placement: .primaryAction) {
                 if let conversation {
                     Menu {

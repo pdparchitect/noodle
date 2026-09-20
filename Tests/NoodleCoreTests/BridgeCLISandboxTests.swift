@@ -13,6 +13,8 @@ final class BridgeCLISandboxTests: XCTestCase {
     // inspect (for the schema and the provider kind) and then the call itself.
     private static let inspected = Data(#"{"name":"fixture","inputSchema":{"type":"object"},"_meta":{"noodle/kind":"connection"}}"#.utf8)
     private func reply(_ result: Data) throws -> Data { try JSONEncoder().encode(ToolBridgeResponse(result: result)) }
+    /// A script asks once which providers are tool connections, before its first call.
+    private static let kinds = Data(#"{"providers":[{"id":"mcp-fixture","kind":"connection"},{"id":"vision","kind":"extension"}]}"#.utf8)
     private func request(_ data: Data) throws -> ToolBridgeRequest { try JSONDecoder().decode(ToolBridgeRequest.self, from: data) }
 
     func testConnectionToolsListInsideSandbox() throws {
@@ -85,10 +87,12 @@ final class BridgeCLISandboxTests: XCTestCase {
         let source = "const first = mcp.call('echo', {value: 1}); print(mcp.call('echo', {value: first.structuredContent.value + 1}).structuredContent);"
         var ids: Set<UUID> = []
         try check(helper: "messenger", bridge: "tool", arguments: ["tool", "mcp-fixture", "--eval", source, "--timeout", "10"],
-            response: Data(), expected: "{\"value\":2}", requestCount: 2,
-            responseForRequest: { data, index in
+            response: Data(), expected: "{\"value\":2}", requestCount: 3,
+            responseForRequest: { data, position in
                 let request = try self.request(data)
                 XCTAssertTrue(ids.insert(request.id).inserted)
+                if position == 0 { XCTAssertEqual(request.action, .providers); return try self.reply(Self.kinds) }
+                let index = position - 1
                 XCTAssertEqual([request.provider, request.tool], ["mcp-fixture", "echo"])
                 XCTAssertEqual(request.action, .call)
                 let value = try JSONDecoder().decode([String: Int].self, from: XCTUnwrap(request.arguments))
@@ -103,9 +107,11 @@ final class BridgeCLISandboxTests: XCTestCase {
         print({result, raw});
         """
         let bytes = Data([0, 255])
-        try check(helper: "messenger", bridge: "tool", arguments: ["tool", "mcp-fixture", "--run", "workflow.js"], response: Data(), requestCount: 2,
-            responseForRequest: { data, index in
+        try check(helper: "messenger", bridge: "tool", arguments: ["tool", "mcp-fixture", "--run", "workflow.js"], response: Data(), requestCount: 3,
+            responseForRequest: { data, position in
                 let request = try self.request(data)
+                if position == 0 { return try self.reply(Self.kinds) }
+                let index = position - 1
                 XCTAssertEqual(request.action, .call)
                 let result: String
                 if index == 0 {
@@ -152,8 +158,34 @@ final class BridgeCLISandboxTests: XCTestCase {
     func testScriptToolErrorExitsNonzero() throws {
         try check(helper: "messenger", bridge: "tool",
             arguments: ["tool", "mcp-fixture", "--eval", "mcp.call('fixture'); print('unreachable')"],
-            response: reply(Data("{\"isError\":true,\"content\":[]}".utf8)),
-            exitCode: 1, expectedError: "MCP tool returned an error")
+            response: Data(), exitCode: 1, expectedError: "MCP tool returned an error", requestCount: 2,
+            responseForRequest: { _, position in try self.reply(position == 0 ? Self.kinds : Data("{\"isError\":true,\"content\":[]}".utf8)) })
+    }
+    /// One script, no provider named: read a picture with Noodle's own tool, then hand the text to a connection.
+    func testScriptChainsAcrossProvidersAndOnlyAConnectionReadsAtFiles() throws {
+        let source = """
+        const text = tools.call('vision', 'ocr', {image: '@literal'}).structuredContent.text;
+        print(tools.call('mcp-fixture', 'save', {note: text, file: '@report.pdf'}).structuredContent);
+        """
+        let bytes = Data([1, 2, 3])
+        try check(helper: "messenger", bridge: "tool", arguments: ["tool", "--eval", source], response: Data(),
+            expected: "{\"saved\":true}", requestCount: 3,
+            responseForRequest: { data, position in
+                let request = try self.request(data)
+                switch position {
+                case 0: XCTAssertEqual(request.action, .providers); return try self.reply(Self.kinds)
+                case 1:
+                    XCTAssertEqual([request.provider, request.tool], ["vision", "ocr"])
+                    XCTAssertEqual(try JSONDecoder().decode([String: String].self, from: XCTUnwrap(request.arguments)), ["image": "@literal"],
+                                   "for Noodle's own tools an @ is ordinary text")
+                    return try self.reply(Data(#"{"structuredContent":{"text":"Invoice 4471"}}"#.utf8))
+                default:
+                    XCTAssertEqual([request.provider, request.tool], ["mcp-fixture", "save"])
+                    XCTAssertEqual(try JSONDecoder().decode([String: String].self, from: XCTUnwrap(request.arguments)),
+                                   ["note": "Invoice 4471", "file": bytes.base64EncodedString()])
+                    return try self.reply(Data(#"{"structuredContent":{"saved":true}}"#.utf8))
+                }
+            }, prepare: { workspace in try bytes.write(to: workspace.appendingPathComponent("report.pdf")) })
     }
     func testScriptDeadlineStopsInfiniteLoopInsideSandbox() throws {
         let start = ProcessInfo.processInfo.systemUptime

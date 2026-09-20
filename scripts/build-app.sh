@@ -139,9 +139,6 @@ cp "$bin_path/NoodleMessenger" "$contents/Helpers/messenger"
 swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-path "$project_root/.build/applet" -c release --product noodlet >&2
 applet_bin="$(swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-path "$project_root/.build/applet" -c release --show-bin-path)"
 cp "$applet_bin/noodlet" "$contents/Helpers/noodlet"
-applet_help_option="--write-applet-help"
-if [[ "$data_container" == development ]]; then applet_help_option="--write-applet-dev-help"; fi
-"$bin_path/NoodleDocumentation" "$applet_help_option" "$contents/Resources/NoodletCLIHelp.txt" >&2
 cp "$apple_bin/NoodleAppleAgent" "$contents/Helpers/NoodleAppleAgent"
 for resource in mlx-swift_Cmlx swift-transformers_Hub swift-crypto_Crypto; do
     if [[ -d "$apple_bin/$resource.bundle" || "$resource" == mlx-swift_Cmlx && -f "$apple_bin/mlx.metallib" ]]; then
