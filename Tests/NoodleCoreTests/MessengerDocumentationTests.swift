@@ -139,7 +139,7 @@ final class MessengerDocumentationTests: XCTestCase {
         XCTAssertFalse(refreshed.contains("noodle:managed:"))
         XCTAssertFalse(refreshed.contains("Obsolete runtime guidance"))
         XCTAssertTrue(refreshed.contains(MessengerDocumentation.bootstrapInstructions))
-        XCTAssertTrue(refreshed.contains(MessengerDocumentation.browserBootstrapInstructions))
+        XCTAssertFalse(refreshed.contains("skills/browser"), "Noodle names no tool itself; generated skills are listed instead")
         XCTAssertFalse(FileManager.default.fileExists(atPath: browserSkill.path),
                        "the hand-written browser skill is removed; the Browser tool extension's skill replaces it")
         XCTAssertFalse(refreshed.contains(MessengerDocumentation.skillInstructions))

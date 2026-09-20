@@ -3,20 +3,6 @@ import AppletBridge
 import BrowserBridge
 
 extension MessengerDocumentation {
-    public static var browserBootstrapInstructions: String {
-        """
-        ## Assigned browsers
-
-        Read `.agents/skills/browser/SKILL.md` to browse with your assigned persistent
-        profiles and share clickable page previews in chat. When unsure about a
-        capability or handoff format, check the current skill or CLI --help.
-        """
-    }
-
-}
-
-
-extension MessengerDocumentation {
     public static func appletSkill(for build: AppletBuildIdentity) -> String {
         appletSkill.replacingOccurrences(of: ".noodlet", with: "." + build.fileExtension)
             .replacingOccurrences(of: "noodlet://", with: build.urlScheme + "://")

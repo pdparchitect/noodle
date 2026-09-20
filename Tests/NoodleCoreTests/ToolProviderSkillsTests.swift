@@ -74,6 +74,24 @@ final class ToolProviderSkillsTests: XCTestCase {
         XCTAssertNotNil(skill("late"))
     }
 
+    func testTheAppHearsWhenABotsGeneratedSkillsChangeAndOnlyThen() throws {
+        let changes = Counter(), agent = UUID()
+        broker.onSkillsChanged = { id in if id == agent { changes.increment() } }
+        try registry.register(Fixture(manifest: vision))
+        try broker.start(agents: [ToolBridgeAgent(id: agent, workspace: workspace)])
+        wait("The first skill is a change.") { changes.value == 1 }
+        broker.synchronizeSkills()
+        broker.synchronizeSkills()
+        try registry.register(Fixture(manifest: .init(id: "late", title: "Late", summary: "Registered after start.")))
+        wait("A new provider is a change.") { changes.value == 2 }
+        XCTAssertEqual(changes.value, 2, "rewriting identical skills is not a change")
+    }
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock(); private var count = 0
+        var value: Int { lock.withLock { count } }
+        func increment() { lock.withLock { count += 1 } }
+    }
+
     func testAUsersOwnSkillWithTheSameNameIsNeverReplacedOrRemoved() throws {
         let folder = workspace.appendingPathComponent(".agents/skills/vision")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -86,6 +104,49 @@ final class ToolProviderSkillsTests: XCTestCase {
         registry.unregister("vision")
         wait("Sync ran again.") { skill("other") != nil }
         XCTAssertEqual(skill("vision"), "mine")
+    }
+}
+
+/// A bot's AGENTS.md names the tools Noodle generated skills for, whatever they are.
+final class ToolInstructionsTests: XCTestCase {
+    private var root: URL!
+    private var repository: WorkspaceRepository!
+    override func setUpWithError() throws {
+        root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
+        repository = WorkspaceRepository(rootURL: root)
+    }
+    override func tearDown() { try? FileManager.default.removeItem(at: root) }
+
+    func testGeneratedSkillsAreListedAndNothingElseIsNamed() throws {
+        let bot = try repository.createAgent(named: "Tools")
+        let workspace = repository.directory(for: bot.agent)
+        func guide() throws -> String { try String(contentsOf: workspace.appendingPathComponent("AGENTS.md"), encoding: .utf8) }
+        XCTAssertFalse(try guide().contains("## Tools"))
+
+        // Assignments alone name nothing: only a skill Noodle generated from a provider is listed.
+        var browsers = BrowserAssignments(); browsers.agents[bot.agent.id.uuidString] = [UUID()]; try browsers.save(root: root)
+        var computers = ComputerAssignments(); computers.agents[bot.agent.id.uuidString] = [UUID()]; try computers.save(root: root)
+        try repository.synchronizeAgentWorkspace(bot.agent)
+        let assigned = try guide()
+        XCTAssertFalse(assigned.contains("skills/browser") || assigned.contains("skills/computer"), assigned)
+
+        let mine = workspace.appendingPathComponent(".agents/skills/mine")
+        try FileManager.default.createDirectory(at: mine, withIntermediateDirectories: true)
+        try Data("---\nname: mine\ndescription: My own skill.\n---\n".utf8).write(to: mine.appendingPathComponent("SKILL.md"))
+        ToolProviderSkills.synchronize(workspace: workspace, providers: [
+            (ToolProviderManifest(id: "vision", title: "Vision", summary: "Read text from images."), []),
+            (ToolProviderManifest(id: "telescope", title: "Telescope", summary: "Point at\nthe sky."), [])])
+        XCTAssertEqual(ToolProviderSkills.generated(workspace: workspace).map(\.name), ["telescope", "vision"])
+        try repository.synchronizeAgentWorkspace(bot.agent)
+        let listed = try guide()
+        XCTAssertTrue(listed.contains("## Tools"))
+        XCTAssertTrue(listed.contains("- `.agents/skills/vision/SKILL.md`: Read text from images. Tools: ."), listed)
+        XCTAssertTrue(listed.contains("- `.agents/skills/telescope/SKILL.md`: Point at the sky."), listed)
+        XCTAssertFalse(listed.contains("skills/mine"), "a bot's own skills are its business")
+
+        ToolProviderSkills.synchronize(workspace: workspace, providers: [])
+        try repository.synchronizeAgentWorkspace(bot.agent)
+        XCTAssertFalse(try guide().contains("## Tools"))
     }
 }
 

@@ -25,6 +25,7 @@ All notable changes to Noodle are documented here, following
 ### Changed
 
 - Require macOS 26 or later, as Noodle Browser and Noodle Computer already do. Tool extensions are discovered with system APIs introduced there.
+- List the tools Noodle provides under one Tools heading in each bot's instructions, generated from the skills its tool extensions supply, instead of separate fixed notes for browsers and computers.
 - Remove the separate `browser` and `computer` commands and their hand-written skills. Bots use `messenger tool browser` and `messenger tool computer` with the same tool and option names, including `present`; Noodle removes the old skills and their request folders from each bot's workspace. `computer present` now always names the computer with `--computer`, also when it names a terminal, so the assignment is checked before anything runs.
 - Sign Grok Build and Muse Code in to their system account from Settings > Harness with a device code shown in Noodle, as their profiles already did. Terminal is no longer needed.
 - Ask for confirmation before removing a tool connection, computer, browser or shared folder from a bot in the bot editor. The removal still applies only when the bot is saved, and the tool, companion or folder itself is kept.

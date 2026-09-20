@@ -60,6 +60,13 @@ public final class ToolBridgeBroker: @unchecked Sendable {
     private var claimed: [UUID: Date] = [:]
     private var running = 0
     private let mailboxMonitor = WorkspaceMailboxMonitor()
+    private var skillsObserver: (@Sendable (UUID) -> Void)?
+    /// Called when the set or text of a bot's generated skills changed, so the app can
+    /// refresh what that bot's AGENTS.md lists.
+    public var onSkillsChanged: (@Sendable (UUID) -> Void)? {
+        get { queue.sync { skillsObserver } }
+        set { queue.sync { skillsObserver = newValue } }
+    }
 
     public init(registry: ToolProviderRegistry, host: ToolHostServices = .none, assignments: @escaping @Sendable (UUID) -> ToolAssignments) {
         self.registry = registry; self.assignments = assignments; self.host = host
@@ -85,8 +92,12 @@ public final class ToolBridgeBroker: @unchecked Sendable {
                 }
                 let listed = providers
                 queue.async { [weak self] in
-                    guard self?.agents.contains(where: { $0.id == agent.id }) == true else { return }
+                    guard let self, self.agents.contains(where: { $0.id == agent.id }) else { return }
+                    let before = ToolProviderSkills.generated(workspace: agent.workspace).map { $0.name + "\n" + $0.description }
                     ToolProviderSkills.synchronize(workspace: agent.workspace, providers: listed)
+                    if before != ToolProviderSkills.generated(workspace: agent.workspace).map({ $0.name + "\n" + $0.description }) {
+                        self.skillsObserver?(agent.id)
+                    }
                 }
             }
         }

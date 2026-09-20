@@ -756,22 +756,18 @@ public struct WorkspaceRepository: Sendable {
             try workspaceFiles.writeData(Data(Self.initialAgentPreferences.utf8), named: "preferences.md", replaceExisting: false)
         }
         let mcpRegistry = try MCPRegistry.load(root: rootURL)
-        let browserAssigned = !(try BrowserAssignments.load(root: rootURL)).assigned(to: agent.id).isEmpty
-        let browserInstructions = browserAssigned ? "\n" + MessengerDocumentation.browserBootstrapInstructions + "\n" : ""
-        let computerAssigned = !(try ComputerAssignments.load(root: rootURL)).assigned(to: agent.id).isEmpty
+        BrowserAgentSkill.removeLegacy(workspace: directory)
+        ComputerAgentSkill.removeLegacy(workspace: directory)
         let appletExecutable = appletExecutableURL
         let appletEnabled = appletExecutable != nil
         let appletInstructions = appletEnabled ? "\n## Creative applets\n\nRead `.agents/skills/applet/SKILL.md` to build and run HTML and native Swift noodlets in Noodle Applet.\n" : ""
-        let computerInstructions = computerAssigned ? "\n## Assigned computers\n\nRead `.agents/skills/computer/SKILL.md` to access your assigned computers through Noodle.\n" : ""
         try workspaceFiles.writeData(Data((Self.renderedAgentInstructions(backstory: backstory,
-            mcpConnections: mcpRegistry.assigned(to: agent.id)) + folderInstructions + computerInstructions + browserInstructions + appletInstructions).utf8), named: "AGENTS.md")
+            mcpConnections: mcpRegistry.assigned(to: agent.id)) + folderInstructions + ToolProviderSkills.instructions(workspace: directory) + appletInstructions).utf8), named: "AGENTS.md")
         workspaceFiles.remove("instructions.md")
         try workspaceFiles.symlink("CLAUDE.md", destination: "AGENTS.md")
         let mcpExecutable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("mcpshim")
         try MCPSkillWriter.synchronize(workspace: directory, connections: mcpRegistry.assigned(to: agent.id),
             executable: mcpExecutable.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil })
-        BrowserAgentSkill.removeLegacy(workspace: directory)
-        ComputerAgentSkill.removeLegacy(workspace: directory)
         try AppletAgentSkill.synchronize(workspace: directory, enabled: appletEnabled, executable: appletEnabled ? appletExecutable : nil)
         let claudeSkillPaths = try synchronizeClaudeSkillLinks(in: directory)
 

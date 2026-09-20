@@ -246,6 +246,13 @@ final class NoodleStore {
             try repository.synchronizeAgentWorkspaces(agents)
             if connectsServices {
                 try messenger.start(agents: agents)
+                // Provider skills appear after discovery; a bot's AGENTS.md lists them once they do.
+                tools.onSkillsChanged = { [weak self] id in
+                    Task { @MainActor in
+                        guard let self, let agent = self.agents.first(where: { $0.id == id }) else { return }
+                        try? self.repository.synchronizeAgentWorkspace(agent)
+                    }
+                }
                 try tools.start(agents: toolAgents)
                 toolExtensions.start()
                 mcp.start(agents: agents)

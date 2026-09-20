@@ -36,6 +36,25 @@ public enum ToolProviderSkills {
         return text
     }
 
+    /// The skills Noodle generated in this workspace, with the one-line description from each.
+    public static func generated(workspace: URL) -> [(name: String, description: String)] {
+        guard let skills = try? WorkspaceMailbox(workspace: workspace, path: ".agents/skills"), let names = try? skills.names() else { return [] }
+        return names.sorted().compactMap { name in
+            guard let folder = try? WorkspaceMailbox(workspace: workspace, path: ".agents/skills/" + name), folder.contains(marker),
+                  let text = try? String(decoding: folder.read("SKILL.md", limit: 1_048_576), as: UTF8.self) else { return nil }
+            let description = text.split(separator: "\n").prefix(8).first { $0.hasPrefix("description: ") }.map { String($0.dropFirst(13)) }
+            return (name, description ?? "")
+        }
+    }
+
+    /// What a bot's AGENTS.md says about them. Noodle names no tool itself.
+    public static func instructions(workspace: URL) -> String {
+        let skills = generated(workspace: workspace)
+        guard !skills.isEmpty else { return "" }
+        return "\n## Tools\n\nNoodle provides these tools to you. Read a tool's skill before using it.\n\n"
+            + skills.map { "- `.agents/skills/\($0.name)/SKILL.md`: \($0.description)" }.joined(separator: "\n") + "\n"
+    }
+
     /// Writes a skill for every listed provider and removes generated skills that are
     /// no longer listed. A user's own skill of the same name is left exactly as it is.
     public static func synchronize(workspace: URL, providers: [(manifest: ToolProviderManifest, tools: [ToolDescriptor])]) {
