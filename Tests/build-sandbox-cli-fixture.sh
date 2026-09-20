@@ -15,6 +15,8 @@ swift build --disable-sandbox --package-path "$project_root/Applet" \
     --scratch-path "$project_root/.build/applet" --product noodlet >&2
 applet_bin="$(swift build --disable-sandbox --package-path "$project_root/Applet" \
     --scratch-path "$project_root/.build/applet" --show-bin-path)"
+# Start empty: a helper this script no longer builds must not linger from an earlier run.
+rm -rf "$helpers"
 mkdir -p "$helpers"
 cp "$bin_path/NoodleMessenger" "$helpers/messenger"
 cp "$applet_bin/noodlet" "$helpers/noodlet"

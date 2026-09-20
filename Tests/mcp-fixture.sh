@@ -4,6 +4,8 @@ project_root="${0:A:h:h}"
 swift build --build-system native --disable-sandbox --package-path "$project_root"
 bin_path="$(swift build --build-system native --disable-sandbox --package-path "$project_root" --show-bin-path)"
 app="$project_root/.build/Noodle MCP Tests.app"
+# Start empty: a helper this script no longer builds must not linger from an earlier run.
+rm -rf "$app/Contents/Helpers"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Helpers"
 objects=("${(@f)$(grep -Ev '/(Noodle|NoodleAgentBridge|NoodleSharing)\.build/' "$bin_path/Noodle.product/Objects.LinkFileList")}")
 swiftc -parse-as-library -I "$bin_path/Modules" \
