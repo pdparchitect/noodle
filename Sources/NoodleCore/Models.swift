@@ -1449,20 +1449,6 @@ public struct WorkspaceRepository: Sendable {
         }.sorted { $0.createdAt < $1.createdAt }
     }
 
-    /// App startup only. The CLI deliberately cannot migrate app-owned storage.
-    @discardableResult
-    public func migrateAgentStorage() throws -> [UUID] {
-        try prepare()
-        return try agentPackages().compactMap { layout in
-            let agent = try agentRecord(in: layout)
-            let movedWorkspace = try AgentStorageMigration.migrate(layout)
-            try AgentBackstoryMigration.migrate(layout)
-            // Only the old directory migration establishes legacy access grants.
-            // Moving Backstory must never broaden a bot's permissions.
-            return movedWorkspace ? agent.id : nil
-        }
-    }
-
     private func agentPackages() throws -> [AgentStorageLayout] {
         try FileManager.default.contentsOfDirectory(at: agentsURL, includingPropertiesForKeys: nil,
                                                     options: [.skipsHiddenFiles]).compactMap { url in
@@ -1472,14 +1458,6 @@ public struct WorkspaceRepository: Sendable {
             try AgentStorageLayout.requireFile(layout.configuration)
             return layout
         }
-    }
-
-    private func agentRecord(in layout: AgentStorageLayout) throws -> AgentRecord {
-        let agent = try read(AgentRecord.self, from: layout.configuration)
-        guard layout.package.lastPathComponent == agent.id.uuidString.lowercased() else {
-            throw AgentStorageError("The bot identifier does not match its storage folder. Restore the original UUID folder name.")
-        }
-        return agent
     }
 
     private func saveAgentRecord(_ agent: AgentRecord) throws {

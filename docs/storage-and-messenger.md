@@ -29,23 +29,9 @@ on refresh. Keep standing preferences in `preferences.md` and durable context in
 `memory.md`; Noodle preserves those files and custom skills. Messenger stores read positions in
 `.noodle/inbox.json`; older `.agents/inbox.json` files are read for migration.
 
-On first launch after upgrading, Noodle moves flat agent workspaces into this
-layout before starting any bots. Migration preserves UUIDs, user files, inbox
-positions, and all harness session pointers. Existing user folders named
-`workspace` or `runtime` move inside the new workspace. An interrupted migration
-resumes on the next launch; conflicts stop migration without overwriting files.
-Absolute paths in custom scripts or external links may need updating.
-
-Noodle 0.14.0 also imports Backstory from older workspace Markdown into `agent.json`
-before regenerating instructions. A saved `backstory` string marks this migration
-complete, even when empty. If the old source is missing or its markers are damaged,
-startup reports the problem and leaves the source intact for recovery. Once migrated,
-generated Markdown can be rebuilt without recovering Backstory from it.
-
 To carry an agent's core to another installation, quit Noodle and copy the entire
 `Agents/<bot-uuid>` package, including hidden files and symlinks, into the other
-installation's `Agents` directory. Use Noodle 0.14.0 or later for packages with
-Backstory in `agent.json`; earlier releases do not preserve that field. Keep the UUID folder name. Noodle refreshes its
+installation's `Agents` directory. Keep the UUID folder name. Noodle refreshes its
 managed tool links on launch. Install and sign in to the selected harness and
 authorize unrestricted access if needed. Chats and attachments remain in
 `Conversations`; tool/computer assignments and credentials are separate.

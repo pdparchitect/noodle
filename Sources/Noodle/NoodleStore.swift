@@ -243,10 +243,9 @@ final class NoodleStore {
         storageReady = false
         do {
             try repository.prepare()
-            let migratedIDs = Set(try repository.migrateAgentStorage())
             agents = try repository.loadAgents()
             activityWindows.synchronize(agents: agents)
-            runtime.prepareAccessForExistingAgents(agents, migratedIDs: migratedIDs)
+            runtime.prepareAccessForExistingAgents()
             try repository.synchronizeAgentWorkspaces(agents)
             if connectsServices {
                 try messenger.start(agents: agents)

@@ -181,39 +181,28 @@ Noodle reads the [latest release feed](https://github.com/pdparchitect/noodle/re
 Its archive links point to immutable versioned releases. Publish only stable
 Noodle releases as the repository's latest release.
 
-## Storage migration milestones
+## Update milestones
 
-The **0.13.0** release introduced the agent-package storage layout.
-The **0.14.0** release moved Backstory into `agent.json` and is also a migration
-milestone. The **0.21.0** release moved bot tools to `messenger tool` and removes the
-skills, command links and request folders earlier versions wrote into each bot's
-workspace; it is a milestone so that clean-up can be deleted in 0.22.0. Keep published
-versions intact.
 `Support/update-milestones.json` declares releases that users must run before
-installing their successors. The first milestone contains the flat-workspace
-migration in `AgentStorageMigration.swift`; 0.14.0 contains the one-time Markdown
-import in `AgentBackstoryMigration.swift`. Startup runs these in order before
-loading bots or regenerating their instructions. A present `backstory` string in
-`agent.json`, including an empty string, is the Backstory migration completion flag.
+installing their successors. Use one when a release migrates or cleans up data that
+later versions will no longer handle. Keep published versions intact.
 
 Release packaging verifies the signed feeds of earlier milestones, preserves
 their signed archive entries and immutable URLs, adds Sparkle's
 `minimumUpdateVersion` to the new release, and signs the assembled feed. Older
 installations therefore receive the required milestone first; ordinary patch
 releases can still be skipped. Noodle enables update checks only after storage
-loads successfully, so the migration release runs its migration before offering
-the next update. Keep milestone assets publicly available.
+loads successfully, so a milestone finishes its work before the next update is
+offered. Keep milestone assets publicly available.
 
-Clean-up that a milestone makes temporary carries a `TODO(VERSION)` naming the release
-that may delete it, with its call site and tests. The 0.21.0 workspace clean-up has no
-startup check behind it: an installation that bypasses the feed keeps stale skill
-folders and loses nothing.
+Code that only a milestone needs carries a `TODO(VERSION)` naming the release that
+may delete it, with its call site and tests. Before deleting it, verify that the
+enforced upgrade chain runs the milestone. Where skipping it could damage data, keep
+a startup check with a clear error naming the release to run first. Manual app
+downloads and clients predating Sparkle 2.9 can bypass feed prerequisites.
 
-Before retiring a migration, verify that the enforced upgrade chain runs it.
-Retain the layout-version check, the required Backstory field check, and clear
-errors directing older packages to the appropriate migration release. Manual app downloads and clients predating
-Sparkle 2.9 can bypass feed prerequisites. Add future milestones in ascending
-order rather than requiring every minor release. Changing the milestone version
-before its first publication must update the policy file and these instructions.
+Add milestones in ascending order rather than requiring every minor release.
+Changing a milestone version before its first publication must update the policy
+file and the `TODO(VERSION)` comments that depend on it.
 
 [Documentation](README.md)

@@ -63,12 +63,7 @@ Agents are instructed to read it at session start and after changes; newer expli
 user requests take precedence. Apple loads a bounded preference excerpt alongside
 the backstory for every wake, including chat turns without workspace tools.
 
-At app startup, the one-time `AgentBackstoryMigration` runs after the directory
-migration and before bots load. It imports legacy marked Backstory, custom
-`AGENTS.md`, or older `instructions.md` into `agent.json` atomically before any
-regeneration. A present string, including an empty one, marks completion. Missing
-or damaged legacy sources stop migration with their files intact. Backstory
-migration does not grant legacy unrestricted access.
+Backstory lives in `agent.json`. Noodle never recovers it from generated Markdown.
 
 The signed Agent Host applies a dedicated filesystem sandbox before starting
 restricted Codex, FX, Grok Build, Muse Code, OpenCode, or Apple. Each can read only its own

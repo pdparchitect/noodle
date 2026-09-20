@@ -238,7 +238,6 @@ final class RepositoryTests: XCTestCase {
         for contents in [Data("Unrequested new role".utf8), Data(), Data([0xFF, 0xFE])] {
             try contents.write(to: agentsFile)
             XCTAssertEqual(try repository.loadAgentBackstory(created.agent), "Original backstory")
-            XCTAssertTrue(try repository.migrateAgentStorage().isEmpty)
             try repository.synchronizeAgentWorkspace(created.agent)
             let regenerated = try String(contentsOf: agentsFile, encoding: .utf8)
             XCTAssertTrue(regenerated.contains("Original backstory"))

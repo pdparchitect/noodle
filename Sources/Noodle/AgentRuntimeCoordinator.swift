@@ -280,9 +280,10 @@ final class AgentRuntimeCoordinator {
 
     private static let preventIdleSleepDefaultsKey = "Noodle.power.preventIdleSleepWhileWorking"
 
-    func prepareAccessForExistingAgents(_ agents: [AgentRecord], migratedIDs: Set<UUID> = []) {
-        accessConfiguration = AgentAccessConfiguration.migrateExistingAgents(migratedIDs, in: defaults)
-        accessConfiguration.migrateRequiredHarnessGrants(agents.filter { migratedIDs.contains($0.id) }, in: defaults)
+    /// No bot receives access implicitly: a first launch records an empty grant list, later launches load what was saved.
+    func prepareAccessForExistingAgents() {
+        accessConfiguration = AgentAccessConfiguration.migrateExistingAgents([], in: defaults)
+        accessConfiguration.migrateRequiredHarnessGrants([], in: defaults)
     }
 
     func authorizeSelectedHarness(_ agent: AgentRecord) {
