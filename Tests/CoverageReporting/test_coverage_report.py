@@ -52,6 +52,17 @@ class CoverageReportTests(unittest.TestCase):
         self.assertIn("Tools/Vision/Sources/NoodleVisionTools/Provider.swift", report["files"])
         self.assertEqual(report["totals"]["lines"], {"covered": 4, "count": 10})
 
+    def test_in_app_integration_drivers_are_test_code(self):
+        # They are compiled into the app so they can run inside it, and swift test never reaches them.
+        report = REPORT.summarize(export(
+            entry("Sources/Noodle/ComputerIntegrationTest.swift", 0, 372),
+            entry("Sources/Noodle/BrowserPickerIntegrationTest.swift", 0, 80),
+            entry("Sources/Noodle/IntegrationTestimonial.swift", 1, 2),
+            entry("Sources/Noodle/Store.swift", 3, 4),
+        ), Path("/fixture"))
+        self.assertEqual(sorted(report["files"]), ["Sources/Noodle/IntegrationTestimonial.swift", "Sources/Noodle/Store.swift"])
+        self.assertEqual(report["totals"]["lines"], {"covered": 4, "count": 6})
+
     def test_duplicate_files_are_counted_once_and_conflicts_are_rejected(self):
         root = Path("/fixture")
         source = entry("Sources/Core/One.swift", 2, 4)

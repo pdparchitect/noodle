@@ -34,6 +34,9 @@ def summarize(export, root):
                 parts = source.resolve().relative_to(base).parts
             except ValueError:
                 continue
+            # Drivers compiled into the app so they can run inside it are test code, which swift test never reaches.
+            if parts[-1].endswith("IntegrationTest.swift"):
+                continue
             # Sources/MODULE/… in the root, and Tools/TOOL/Sources/MODULE/… for a bundled tool.
             if len(parts) >= 3 and parts[0] == "Sources":
                 module = parts[1]
