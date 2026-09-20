@@ -3,8 +3,8 @@ import ComputerBridge
 
 /// Launch Services may prefer an installed release over the local app that owns
 /// the running computer library. Keep document opens on that same provider.
-@MainActor enum ComputerApplication {
-    static func locate() -> URL? {
+@MainActor public enum ComputerApplication {
+    public static func locate() -> URL? {
         let identity = ComputerBuildIdentity.current
         let applications = NSRunningApplication.runningApplications(withBundleIdentifier: identity.providerID)
             .filter { !$0.isTerminated && $0.bundleIdentifier == identity.providerID }
@@ -16,7 +16,7 @@ import ComputerBridge
         var known: [String: String] = [:]
         for url in running { known[url.standardizedFileURL.path] = identity.providerID }
         if let registered { known[registered.standardizedFileURL.path] = identity.providerID }
-        let sibling = Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent(identity.appName + ".app")
+        let sibling = containingApplication(of: Bundle.main.bundleURL).deletingLastPathComponent().appendingPathComponent(identity.appName + ".app")
         if Bundle(url: sibling)?.bundleIdentifier == identity.providerID {
             known[sibling.standardizedFileURL.path] = identity.providerID
         }
@@ -27,7 +27,15 @@ import ComputerBridge
             identify: { known[$0.standardizedFileURL.path] })
     }
 
-    static func select(running: [URL], development: URL?, registered: URL?,
+    /// Noodle's Computer tool extension runs from inside Noodle.app; a development
+    /// companion sits beside that app, not beside the extension.
+    public nonisolated static func containingApplication(of bundle: URL) -> URL {
+        let contents = bundle.deletingLastPathComponent().deletingLastPathComponent()
+        let app = contents.deletingLastPathComponent()
+        return bundle.pathExtension == "appex" && contents.lastPathComponent == "Contents" && app.pathExtension == "app" ? app : bundle
+    }
+
+    public static func select(running: [URL], development: URL?, registered: URL?,
                        providerID: String = ComputerConnection.providerID,
                        identify: (URL) -> String? = { Bundle(url: $0)?.bundleIdentifier }) -> URL? {
         // Check every candidate's reported identity, including registered results.

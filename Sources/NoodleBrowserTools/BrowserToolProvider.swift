@@ -14,10 +14,10 @@ public struct BrowserToolProvider: ToolProvider {
         instructions: """
         Start with list and choose an assigned browser by its name and description. Every other tool takes --browser with that ID, and tab tools take --tab from open or tabs; keep the two together. Noodle Browser starts quietly when needed. Where the notes below say "command", read "tool": the options are the same, webmcp list and webmcp call are the tools webmcp-list and webmcp-call, and results arrive as JSON in structuredContent.
 
-        \(MessengerDocumentation.browserToolGuidance)
+        \(BrowserToolGuidance.judgement)
         ## Reference
 
-        \(MessengerDocumentation.browserConventions)
+        \(BrowserToolGuidance.conventions)
         """,
         activation: .whenAssigned("browser"))
     private let transport: Transport
@@ -87,7 +87,7 @@ public struct BrowserToolProvider: ToolProvider {
         if operation.isFileTransfer { required.append(operation == .upload ? "source" : "output") }
         if operation == .present { required.append("conversation") }
         var tool: [String: Any] = [
-            "name": operation.rawValue, "description": MessengerDocumentation.browserGuidance(operation),
+            "name": operation.rawValue, "description": BrowserToolGuidance.tool(operation),
             // The broker's limit sits above the socket's so a slow launch still gets its answer.
             "_meta": ["noodle/timeout": operation.timeout + 30],
             "inputSchema": ["type": "object", "properties": properties, "required": required]]
@@ -119,6 +119,8 @@ public struct BrowserToolProvider: ToolProvider {
                     guard let source = files.first(where: { $0.parameter == "source" }) else { throw BrowserError("Specify --source with a workspace file.") }
                     request.filename = ((options["source"] as? String ?? "") as NSString).lastPathComponent
                     let count = try Self.copy(from: source.handle.fileDescriptor, toNew: payload)
+                    // Staging a large file takes time. Ask Noodle again before it is sent.
+                    try await context.authorize()
                     response = try await transport(request).checked()
                     guard response.byteCount == count else { throw BrowserError("The browser did not confirm the complete upload.") }
                 } else {

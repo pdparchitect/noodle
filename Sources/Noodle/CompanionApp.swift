@@ -2,6 +2,7 @@ import AppKit
 import ComputerBridge
 import AppletBridge
 import BrowserBridge
+import NoodleComputerTools
 
 /// Separately installed apps that extend Noodle. Bundled helpers and harnesses
 /// are managed elsewhere and are not companion apps.

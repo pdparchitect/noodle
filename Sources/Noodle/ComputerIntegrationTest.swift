@@ -1,5 +1,6 @@
 import AppKit
 import ComputerBridge
+import NoodleComputerTools
 import NoodleCore
 import SwiftUI
 
@@ -110,22 +111,40 @@ import SwiftUI
         guard controller.available, let computer = controller.registry.computers.first else {
             throw ComputerBridgeError(controller.failure ?? "No fixture provider.")
         }
+        // The same pieces the app wires together, with the provider pointed at the fixture's
+        // socket instead of running inside the extension against a user's companion.
+        let assignments = ToolAssignmentStore(), registry = ToolProviderRegistry()
+        let staging = socket.deletingLastPathComponent(), team = try ComputerConnection.signingTeam()
+        try registry.register(ComputerToolProvider(stagingRoot: { staging }) { try await ComputerConnection.call($0, socket: socket, team: team) })
+        let host = ToolHostServices.repository(repository, revoked: { kind, id, agent in
+            guard kind == "computer", let revoked = UUID(uuidString: id) else { return }
+            Task { @MainActor in controller.revoke(computer: revoked, agent: agent) }
+        }) { assignments.assignments(for: $0) }
+        let broker = ToolBridgeBroker(registry: registry, host: host) { assignments.assignments(for: $0) }
+        controller.onAssignmentsChange = { assignments.replace("computer", with: $0); broker.synchronizeSkills() }
         try controller.assign([computer.id], to: a.agent); try controller.assign([computer.id], to: b.agent)
         controller.start(agents: [a.agent, b.agent])
+        try broker.start(agents: [a.agent, b.agent].map { ToolBridgeAgent(id: $0.id, workspace: repository.directory(for: $0)) })
+        defer { broker.stop() }
         func cli(_ args: [String], _ agent: AgentRecord = a.agent) async throws -> [String: Any] {
             print("CLI TEST: \(agent.displayName) \(args.first ?? "")")
-            let executable = helpers.appendingPathComponent("computer"), cwd = repository.directory(for: agent)
-            let data = try await Task.detached {
-                let process = Process(), output = Pipe()
-                process.executableURL = executable; process.arguments = args; process.currentDirectoryURL = cwd
-                process.standardOutput = output; process.standardError = output
+            let cwd = repository.directory(for: agent)
+            let executable = cwd.appendingPathComponent(".agents/skills/messenger/messenger")
+            return try await Task.detached {
+                let process = Process(), output = Pipe(), errors = Pipe()
+                process.executableURL = executable; process.arguments = ["tool", "computer"] + args; process.currentDirectoryURL = cwd
+                process.standardOutput = output; process.standardError = errors
                 try process.run()
                 let data = output.fileHandleForReading.readDataToEndOfFile()
+                let failure = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
                 process.waitUntilExit()
-                guard process.terminationStatus == 0 else { throw ComputerBridgeError(String(decoding: data, as: UTF8.self)) }
-                return data
+                // A tool result carries its JSON in structuredContent; a tool error its message in content.
+                let result = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                guard process.terminationStatus == 0, let structured = result?["structuredContent"] as? [String: Any] else {
+                    throw ComputerBridgeError((((result?["content"] as? [[String: Any]])?.first)?["text"] as? String) ?? failure)
+                }
+                return structured
             }.value
-            return try JSONSerialization.jsonObject(with: data) as! [String: Any]
         }
         func expectDenied(_ args: [String], _ agent: AgentRecord) async throws {
             do { _ = try await cli(args, agent) }
@@ -181,9 +200,9 @@ import SwiftUI
             throw ComputerBridgeError("Assigned agents did not share guest files.")
         }
         try await expectDenied(["read"] + terminalA, b.agent)
-        try await expectDenied(["present", "--terminal", idA, "--conversation", b.conversation.id.uuidString], b.agent)
+        try await expectDenied(["present"] + terminalA + ["--conversation", b.conversation.id.uuidString], b.agent)
         try await expectDenied(["present", "--computer", UUID().uuidString, "--terminal", idA, "--conversation", a.conversation.id.uuidString], a.agent)
-        _ = try await cli(["present", "--terminal", idA, "--conversation", a.conversation.id.uuidString, "--message", "Here is the saved terminal preview."])
+        _ = try await cli(["present"] + terminalA + ["--conversation", a.conversation.id.uuidString, "--message", "Here is the saved terminal preview."])
         let attachment = try repository.loadAttachments(conversationID: a.conversation.id).first!
         guard let card = attachment.computer, card.terminalID?.uuidString == idA, card.view == "terminal" else { throw ComputerBridgeError("No typed computer attachment.") }
         if controller.registry.computers.first(where: { $0.id == computer.id })?.hasWebDisplay != true {

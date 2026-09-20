@@ -1,6 +1,7 @@
 import AppKit
 import ComputerBridge
 import Foundation
+import NoodleComputerTools
 import NoodleCore
 import Observation
 import SwiftUI
@@ -15,12 +16,7 @@ import SwiftUI
     @ObservationIgnored private let socket: URL?
     @ObservationIgnored private var readable = true
     @ObservationIgnored private var monitor: Task<Void, Never>?
-    @ObservationIgnored private var bridge: Task<Void, Never>?
-    @ObservationIgnored private let mailboxMonitor = WorkspaceMailboxMonitor()
     @ObservationIgnored private var agents: [AgentRecord] = []
-    @ObservationIgnored private var tokens: [UUID: String] = [:]
-    @ObservationIgnored private var pending: Set<UUID> = []
-    @ObservationIgnored private var claimed: [UUID: Date] = [:]
     @ObservationIgnored private var refreshID = UUID()
     @ObservationIgnored private var launch: Task<Void, Error>?
     @ObservationIgnored private let applicationLookup: @MainActor () -> URL?
@@ -49,26 +45,18 @@ import SwiftUI
         do { registry = try ComputerAssignments.load(root: repository.rootURL) }
         catch { readable = false; failure = "Could not read Computer assignments; they were not changed." }
     }
+    /// Bots reach computers through the Computer tool extension and Noodle's tool broker.
+    /// This controller keeps the assignments, the Settings catalogue, and the clean-up of a
+    /// bot's terminals when its access ends.
     func start(agents: [AgentRecord], monitoring: Bool = true) {
-        mailboxMonitor.reset()
         for removed in self.agents where !agents.contains(where: { $0.id == removed.id }) {
             for id in registry.assigned(to: removed.id) {
                 Task { [weak self] in _ = try? await self?.call(.init(.revoke, computerID: id, agentID: removed.id), launchIfNeeded: false) }
             }
         }
         self.agents = agents
-        tokens = tokens.filter { id, _ in agents.contains { $0.id == id } }
-        do {
-            for agent in agents where tokens[agent.id] == nil {
-                let directory = try ComputerAgentSkill.bridge(workspace: repository.directory(for: agent))
-                let token = UUID().uuidString + UUID().uuidString
-                try MCPBridgeFiles.write(MCPBridgeSession(token: token, processID: getpid()), to: directory.appendingPathComponent("session.json"), workspace: repository.directory(for: agent))
-                tokens[agent.id] = token
-            }
-        } catch { failure = error.localizedDescription }
         guard monitoring else {
             monitor?.cancel(); monitor = nil
-            bridge?.cancel(); bridge = nil
             return
         }
         if monitor == nil {
@@ -77,14 +65,6 @@ import SwiftUI
                 while !Task.isCancelled {
                     await self?.refresh()
                     try? await Task.sleep(for: .seconds(3))
-                }
-            }
-        }
-        if bridge == nil {
-            bridge = Task { [weak self] in
-                while !Task.isCancelled {
-                    self?.scan()
-                    try? await Task.sleep(for: .milliseconds(150))
                 }
             }
         }
@@ -209,6 +189,7 @@ import SwiftUI
         var next = registry; next.agents[agent.id.uuidString] = ids
         try next.save(root: repository.rootURL)
         registry = next // Access is revoked before asynchronous terminal cleanup.
+        publishAssignments()
         for id in removed {
             Task { [weak self] in
                 guard let self, !self.registry.permits(id, agent: agent.id) else { return }
@@ -217,149 +198,22 @@ import SwiftUI
         }
         if synchronizeWorkspace { try repository.synchronizeAgentWorkspace(agent) }
     }
+    /// Receives each agent's assigned computer IDs for the tool broker, now and on every change.
+    var onAssignmentsChange: (([UUID: Set<String>]) -> Void)? { didSet { publishAssignments() } }
+    private func publishAssignments() { onAssignmentsChange?(registry.toolAssignments(readable: readable)) }
+    /// A computer was unassigned while one of the bot's calls was running. Close what it opened.
+    func revoke(computer: UUID, agent: UUID) {
+        Task { [weak self] in
+            guard let self, !self.registry.permits(computer, agent: agent) else { return }
+            _ = try? await self.call(.init(.revoke, computerID: computer, agentID: agent))
+        }
+    }
     func reloadAssignments() throws {
+        defer { publishAssignments() }
         do { registry = try ComputerAssignments.load(root: repository.rootURL); readable = true }
         catch { readable = false; throw error }
     }
-    func scan() {
-        guard mailboxMonitor.hasChanges() else { return }
-        claimed = claimed.filter { Date().timeIntervalSince($0.value) < 700 }
-        for agent in agents {
-            guard !pending.contains(agent.id), let token = tokens[agent.id],
-                  mailboxMonitor.needsScan(workspace: repository.directory(for: agent), path: ".noodle/computer-bridge"),
-                  let directory = try? ComputerAgentSkill.bridge(workspace: repository.directory(for: agent)),
-                  let files = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { continue }
-            for file in files.prefix(512) where file.pathExtension == "request" {
-                guard let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent), claimed[id] == nil else { continue }
-                claimed[id] = Date()
-                let resultURL = directory.appendingPathComponent(id.uuidString.lowercased() + ".response")
-                do {
-                    let envelope = try JSONDecoder().decode(ComputerAgentRequest.self, from: MCPBridgeFiles.read(file, limit: 150_000, workspace: repository.directory(for: agent)))
-                    guard envelope.id == id, envelope.token == token, envelope.expiresAt > Date(),
-                          envelope.expiresAt.timeIntervalSinceNow <= Double(envelope.request.operation.timeout + 5) else { throw ComputerBridgeError("Invalid or expired Computer session.") }
-                    pending.insert(agent.id)
-                    Task { [weak self] in
-                        guard let self else { return }
-                        defer { self.pending.remove(agent.id) }
-                        let response: ComputerResponse
-                        do { response = try await self.perform(envelope, agent: agent) }
-                        catch { response = .init(error: error.localizedDescription) }
-                        try? MCPBridgeFiles.write(response, to: resultURL, workspace: self.repository.directory(for: agent))
-                    }
-                    break
-                } catch { try? MCPBridgeFiles.write(ComputerResponse(error: error.localizedDescription), to: resultURL, workspace: repository.directory(for: agent)) }
-            }
-        }
-    }
-    private func perform(_ envelope: ComputerAgentRequest, agent: AgentRecord) async throws -> ComputerResponse {
-        func checkSession() throws {
-            guard readable, tokens[agent.id] == envelope.token, agents.contains(where: { $0.id == agent.id }) else {
-                throw ComputerBridgeError("Computer access was revoked during the request.")
-            }
-        }
-        try checkSession()
-        var request = envelope.request
-        request.agentID = agent.id // Agent identity is broker-owned, never trusted from CLI JSON.
-        try request.validate()
-        guard ![.revoke, .display, .terminalResolve].contains(request.operation) else { throw ComputerBridgeError("This operation is user-only.") }
-        if request.operation == .list {
-            let response = try await call(.init(.list), authorize: checkSession)
-            var result = ComputerResponse(computers: response.computers?.filter { registry.permits($0.id, agent: agent.id) })
-            result.capabilities = response.capabilities
-            return result
-        }
-        if let conversation = envelope.conversationID {
-            guard request.operation == .preview, envelope.view == nil || ["terminal", "web"].contains(envelope.view!) else {
-                throw ComputerBridgeError("Invalid computer preview request.")
-            }
-            _ = try repository.participantRoster(for: agent.id, conversationID: conversation)
-        }
-        if request.operation == .preview {
-            guard envelope.conversationID != nil else { throw ComputerBridgeError("Specify the conversation for the computer card.") }
-            request.view = envelope.view
-            if request.computerID == nil {
-                // Resolve only the authenticated agent's own session. No output or
-                // credentials are fetched until the resolved assignment is checked.
-                let resolved = try await call(.init(.terminalResolve, agentID: agent.id, terminalID: request.terminalID), authorize: checkSession)
-                request.computerID = resolved.computerID
-            }
-        }
-        guard registry.permits(request.computerID, agent: agent.id) else { throw ComputerBridgeError("This computer is not assigned to you.") }
-        let response: ComputerResponse
-        if request.operation.isFileTransfer {
-            guard let localPath = envelope.localPath else { throw ComputerBridgeError("Specify a local workspace file.") }
-            response = try await transfer(request, localPath: localPath, agent: agent, checkSession: checkSession)
-        } else {
-            guard envelope.localPath == nil else { throw ComputerBridgeError("Local paths require upload or download.") }
-            response = try await call(request) {
-                try checkSession()
-                guard self.registry.permits(request.computerID, agent: agent.id) else {
-                    throw ComputerBridgeError("Computer access was revoked during the request.")
-                }
-            }
-        }
-        guard registry.permits(request.computerID, agent: agent.id), tokens[agent.id] == envelope.token, agents.contains(where: { $0.id == agent.id }) else {
-            _ = try? await call(.init(.revoke, computerID: request.computerID, agentID: agent.id))
-            throw ComputerBridgeError("Computer access was revoked during the request.")
-        }
-        if let conversation = envelope.conversationID,
-           let computer = registry.computers.first(where: { $0.id == request.computerID }) {
-            let text = String(decoding: response.data ?? Data(), as: UTF8.self)
-                .replacingOccurrences(of: "\u{1b}\\[[0-?]*[ -/]*[@-~]", with: "", options: .regularExpression)
-            let view = response.view ?? envelope.view ?? (request.terminalID != nil ? "terminal" : (computer.hasWebDisplay == true ? "web" : "terminal"))
-            guard view != "web" || computer.hasWebDisplay == true else { throw ComputerBridgeError("This computer has no web display.") }
-            let terminal = view == "terminal" ? (response.terminalID ?? request.terminalID) : nil
-            guard view == "web" || terminal != nil else { throw ComputerBridgeError("The provider did not return a terminal session. Update Noodle Computer.") }
-            let card = ComputerCard(computer: computer, agentID: agent.id, terminalID: terminal, terminalPreview: text,
-                view: view, previewImage: view == "web" ? response.previewImage : nil)
-            let attachment = try repository.importAttachment(data: JSONEncoder().encode(card.reference), originalFilename: computer.name + "." + ComputerBuildIdentity.current.fileExtension,
-                into: conversation, mediaType: ComputerCard.mediaType, computer: card)
-            do {
-                _ = try repository.sendAgentMessage(agentID: agent.id, conversationID: conversation,
-                    body: String((envelope.message ?? "Open \(computer.name)").prefix(10_000)), attachmentIDs: [attachment.id])
-            } catch { try? repository.removeAttachment(attachment); throw error }
-        }
-        return response
-    }
-    private func transfer(_ input: ComputerRequest, localPath: String, agent: AgentRecord,
-                          checkSession: () throws -> Void) async throws -> ComputerResponse {
-        func checkAccess() throws {
-            try checkSession()
-            guard registry.permits(input.computerID, agent: agent.id) else {
-                throw ComputerBridgeError("Computer access was revoked during the transfer.")
-            }
-        }
-        // Reject old providers before copying a potentially large local file.
-        let discovery = try await call(.init(.list), authorize: checkAccess)
-        try ComputerCapabilities.requireFileTransfer(discovery.capabilities)
-        try checkAccess()
-        let root = try (socket ?? ComputerConnection.socketURL()).deletingLastPathComponent()
-        var request = input
-        request.transferID = UUID() // Ignore any agent-supplied staging reference.
-        let staging = try ComputerTransferFiles.staging(root: root, id: request.transferID!, create: true)
-        defer { try? FileManager.default.removeItem(at: staging.deletingLastPathComponent()) }
-        let workspace = repository.directory(for: agent)
-        if request.operation == .fileUpload {
-            let count = try await Task.detached {
-                try ComputerWorkspaceFiles.upload(workspace: workspace, path: localPath, to: staging)
-            }.value
-            try checkAccess()
-            let response = try await call(request, authorize: checkAccess)
-            guard response.byteCount == count else { throw ComputerBridgeError("The provider did not confirm the complete upload. Check the guest file before retrying.") }
-            return response
-        }
-        let destination = try ComputerWorkspaceDownload(workspace: workspace, path: localPath)
-        let response = try await call(request, authorize: checkAccess)
-        try checkAccess()
-        guard let count = response.byteCount, count >= 0, count <= ComputerTransferFiles.limit else {
-            throw ComputerBridgeError("The provider returned an invalid download size.")
-        }
-        _ = try await Task.detached { try destination.copy(from: staging, expected: count) }.value
-        try checkAccess()
-        try destination.publish()
-        return response
-    }
-    deinit { monitor?.cancel(); bridge?.cancel() }
+    deinit { monitor?.cancel() }
 }
 
 struct ComputerAssignmentPicker: View {

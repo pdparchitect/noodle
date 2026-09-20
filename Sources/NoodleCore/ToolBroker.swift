@@ -91,15 +91,29 @@ public enum ToolBroker {
                 if !succeeded, file.access == .write { ToolFileArguments.discard(file, workspace: context.workspace) }
             }
         }
-        let result = try await withTimeout(descriptor.timeout ?? defaultTimeout, tool: descriptor.name) {
-            try await provider.call(descriptor.name, arguments: arguments, files: files, context: context)
+        let revoked = ToolProviderError("This \(used.first?.kind ?? "resource") is no longer assigned to this bot. The action may already have happened.")
+        let stillAllowed: @Sendable () -> Bool = { [used] in
+            let latest = current()
+            return used.allSatisfy { latest.assigned($0.id, kind: $0.kind) != nil } && registry.manifests(assignments: latest).contains { $0.id == id }
         }
+        let checked = ToolCallContext(agentID: context.agentID, workspace: context.workspace, assignments: assignments,
+                                      authorize: { [conversation] in
+            guard stillAllowed(), conversation.map({ host.isMember(context.agentID, $0) }) != false else { throw revoked }
+        })
+        let outcome: Result<Data, Error>
+        do {
+            outcome = .success(try await withTimeout(descriptor.timeout ?? defaultTimeout, tool: descriptor.name) {
+                try await provider.call(descriptor.name, arguments: arguments, files: files, context: checked)
+            })
+        } catch { outcome = .failure(error) }
         // A resource unassigned while the call ran must not deliver its result or its files.
+        // This holds whether the provider returned, failed, or stopped at its own checkpoint.
         let latest = current()
-        guard used.allSatisfy({ latest.assigned($0.id, kind: $0.kind) != nil }),
-              registry.manifests(assignments: latest).contains(where: { $0.id == id }) else {
-            throw ToolProviderError("This \(used.first?.kind ?? "resource") is no longer assigned to this bot. The action may already have happened.")
+        guard stillAllowed() else {
+            for resource in used where latest.assigned(resource.id, kind: resource.kind) == nil { host.revoked(resource.kind, resource.id, context.agentID) }
+            throw revoked
         }
+        let result = try outcome.get()
         let filtered = try post(filter(result, descriptor: descriptor, assignments: latest), descriptor: descriptor,
                                 conversation: conversation, agent: context.agentID, host: host)
         succeeded = (try? JSONSerialization.jsonObject(with: filtered) as? [String: Any])?["isError"] as? Bool != true

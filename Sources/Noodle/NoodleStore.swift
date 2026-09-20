@@ -164,10 +164,20 @@ final class NoodleStore {
         messenger = MessengerBroker(repository: self.repository)
         let toolAssignments = ToolAssignmentStore()
         self.toolAssignments = toolAssignments
+        // The broker exists before the controllers, so revocations reach them through this box.
+        let revocations = ToolRevocations()
         tools = ToolBridgeBroker(registry: toolProviders,
-                                 host: .repository(self.repository) { toolAssignments.assignments(for: $0) }) { toolAssignments.assignments(for: $0) }
+                                 host: .repository(self.repository, revoked: { revocations.handle($0, $1, $2) }) { toolAssignments.assignments(for: $0) }) { toolAssignments.assignments(for: $0) }
         mcp = MCPController(repository: self.repository)
         computers = ComputerController(repository: self.repository)
+        computers.onAssignmentsChange = { [toolAssignments, tools] assigned in
+            toolAssignments.replace("computer", with: assigned)
+            tools.synchronizeSkills()
+        }
+        revocations.handler = { [computers] kind, id, agent in
+            guard kind == "computer", let computer = UUID(uuidString: id) else { return }
+            Task { @MainActor in computers.revoke(computer: computer, agent: agent) }
+        }
         browsers = BrowserController(repository: self.repository)
         browsers.onAssignmentsChange = { [toolAssignments, tools] assigned in
             toolAssignments.replace("browser", with: assigned)

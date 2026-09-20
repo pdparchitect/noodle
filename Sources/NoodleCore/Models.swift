@@ -771,9 +771,7 @@ public struct WorkspaceRepository: Sendable {
         try MCPSkillWriter.synchronize(workspace: directory, connections: mcpRegistry.assigned(to: agent.id),
             executable: mcpExecutable.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil })
         BrowserAgentSkill.removeLegacy(workspace: directory)
-        let computerExecutable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("computer")
-        try ComputerAgentSkill.synchronize(workspace: directory, enabled: computerAssigned,
-            executable: computerExecutable.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil })
+        ComputerAgentSkill.removeLegacy(workspace: directory)
         try AppletAgentSkill.synchronize(workspace: directory, enabled: appletEnabled, executable: appletEnabled ? appletExecutable : nil)
         let claudeSkillPaths = try synchronizeClaudeSkillLinks(in: directory)
 
@@ -789,7 +787,7 @@ public struct WorkspaceRepository: Sendable {
                 "CLAUDE.md",
                 ".agents/skills/messenger/SKILL.md",
                 ".agents/skills/messenger/messenger"
-            ] + (computerAssigned ? [".agents/skills/computer/SKILL.md", ".agents/skills/computer/computer", ".agents/skills/computer/.noodle-managed"] : []) + (appletEnabled ? [".agents/skills/applet/SKILL.md", ".agents/skills/applet/noodlet", ".agents/skills/applet/.noodle-managed"] : []) + claudeSkillPaths
+            ] + (appletEnabled ? [".agents/skills/applet/SKILL.md", ".agents/skills/applet/noodlet", ".agents/skills/applet/.noodle-managed"] : []) + claudeSkillPaths
         )
         try agentsFiles.write(manifest, named: "managed-skills.json")
     }

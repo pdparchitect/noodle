@@ -36,6 +36,18 @@ public struct ToolAssignments: Codable, Equatable, Sendable, ExpressibleByDictio
     }
 }
 
+/// Lets the broker report a mid-call revocation to controllers created after it.
+public final class ToolRevocations: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: (@Sendable (String, String, UUID) -> Void)?
+    public init() {}
+    public var handler: (@Sendable (String, String, UUID) -> Void)? {
+        get { lock.withLock { stored } }
+        set { lock.withLock { stored = newValue } }
+    }
+    public func handle(_ kind: String, _ id: String, _ agent: UUID) { handler?(kind, id, agent) }
+}
+
 /// The app's live picture of every bot's assignments, readable from the broker's queue.
 /// Each controller replaces its own kind whenever its registry changes.
 public final class ToolAssignmentStore: @unchecked Sendable {
@@ -78,8 +90,12 @@ public struct ToolHostServices: Sendable {
     public let isMember: @Sendable (_ agent: UUID, _ conversation: UUID) -> Bool
     /// Posts as the bot and returns the new attachment's ID.
     public let post: @Sendable (_ post: ToolPost, _ agent: UUID, _ conversation: UUID) throws -> UUID
-    public init(isMember: @escaping @Sendable (UUID, UUID) -> Bool, post: @escaping @Sendable (ToolPost, UUID, UUID) throws -> UUID) {
-        self.isMember = isMember; self.post = post
+    /// A resource was unassigned while a call used it. The result was withheld; the app can
+    /// now undo what the call may have started, such as closing the bot's terminals.
+    public let revoked: @Sendable (_ kind: String, _ id: String, _ agent: UUID) -> Void
+    public init(isMember: @escaping @Sendable (UUID, UUID) -> Bool, post: @escaping @Sendable (ToolPost, UUID, UUID) throws -> UUID,
+                revoked: @escaping @Sendable (String, String, UUID) -> Void = { _, _, _ in }) {
+        self.isMember = isMember; self.post = post; self.revoked = revoked
     }
     public static let none = ToolHostServices(isMember: { _, _ in false }, post: { _, _, _ in throw ToolProviderError("This Noodle cannot post for tools.") })
 }
@@ -202,8 +218,13 @@ public struct ToolCallContext: Sendable {
     /// The calling bot's assignments, for providers that list or describe resources.
     /// Authorization never depends on a provider reading this; the broker enforces it.
     public let assignments: ToolAssignments
-    public init(agentID: UUID, workspace: URL, assignments: ToolAssignments = .none) {
-        self.agentID = agentID; self.workspace = workspace; self.assignments = assignments
+    /// A checkpoint for slow calls. Ask just before a step that cannot be undone, such as
+    /// sending a command or a staged upload: Noodle answers from the bot's live assignments
+    /// and throws if the call is no longer allowed. The decision is never the provider's.
+    public let authorize: @Sendable () async throws -> Void
+    public init(agentID: UUID, workspace: URL, assignments: ToolAssignments = .none,
+                authorize: @escaping @Sendable () async throws -> Void = {}) {
+        self.agentID = agentID; self.workspace = workspace; self.assignments = assignments; self.authorize = authorize
     }
 }
 
