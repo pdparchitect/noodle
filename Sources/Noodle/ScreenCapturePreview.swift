@@ -135,10 +135,11 @@ struct CaptureShortcut: NSViewRepresentable {
         if model?.phase == .annotating { model?.retake() } else { close() }
     }
     override func sendEvent(_ event: NSEvent) {
-        if event.type == .keyDown, event.keyCode == 51,
-           event.modifierFlags.intersection([.command, .option, .control, .shift, .function]).isEmpty,
+        if event.type == .keyDown, [36, 51, 76].contains(event.keyCode),
+           event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
            let model, model.phase == .loading || model.phase == .live {
-            if !event.isARepeat { model.chooseSources() }
+            // Return follows the one that opened the source; a held key must not capture.
+            if !event.isARepeat { if event.keyCode == 51 { model.chooseSources() } else { model.capture() } }
             return
         }
         super.sendEvent(event)
@@ -331,6 +332,7 @@ struct ScreenCapturePreview: View {
                     Button("Annotate…") { model.annotate() }.disabled(!model.canCapture)
                         .help(KeyboardBindings.shared.help("Annotate Region", for: .annotateRegion))
                     Button("Capture") { model.capture() }.buttonStyle(.borderedProminent).disabled(!model.canCapture)
+                        .help("Capture (↩)")
                 }
             }
         }

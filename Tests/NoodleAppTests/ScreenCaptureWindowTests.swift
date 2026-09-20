@@ -183,6 +183,32 @@ import XCTest
         try await wait { service.feeds.allSatisfy { $0.stops == 1 } }
     }
 
+    func testReturnCapturesLiveFrameOnceAndLeavesLoadingAndAnnotationAlone() async throws {
+        let service = CaptureTestService(); var saves: [(String, AttachmentAnnotation.Region?, String)] = []
+        let c = preview(service) { _, title, region, comment in saves.append((title, region, comment)) }
+        let panel = try XCTUnwrap(c.panel), model = try XCTUnwrap(c.model)
+        model.select(source)
+        panel.sendEvent(key(panel, code: 36, text: "\r", flags: []))
+        XCTAssertEqual(model.phase, .loading); XCTAssertTrue(saves.isEmpty)
+        try await wait { service.feeds.last?.started == true }
+        service.feeds.last?.send(image())
+        try await wait { model.canCapture }
+        c.annotate()
+        panel.sendEvent(key(panel, code: 36, text: "\r", flags: []))
+        XCTAssertEqual(model.phase, .annotating); XCTAssertTrue(saves.isEmpty)
+        model.retake()
+        try await wait { service.feeds.count == 2 && service.feeds[1].started }
+        service.feeds[1].send(image())
+        try await wait { model.canCapture }
+        // Holding the Return that opened the source must not capture it.
+        panel.sendEvent(key(panel, code: 36, text: "\r", flags: [], repeatKey: true))
+        XCTAssertEqual(model.phase, .live); XCTAssertTrue(saves.isEmpty)
+        panel.sendEvent(key(panel, code: 76, text: "\u{3}", flags: .numericPad))
+        XCTAssertEqual(saves.count, 1); XCTAssertEqual(saves.first?.0, source.title)
+        XCTAssertNil(saves.first?.1); XCTAssertEqual(saves.first?.2, "")
+        XCTAssertNil(c.panel); XCTAssertEqual(model.phase, .closed)
+    }
+
     func testKeyboardSaveFailureRetainsAnnotationAndRetryPublishesOnce() async throws {
         let service = CaptureTestService(); var fail = true, saves = 0
         let c = preview(service) { _, _, _, comment in

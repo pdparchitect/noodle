@@ -13,6 +13,7 @@ All notable changes to Noodle are documented here, following
 - Add Settings > Chat > Keep one floating conversation, off by default. When on, floating another conversation closes the open float and takes its exact place and size.
 - Show the bot's or group's picture beside the name in the title of separate and floating conversation windows.
 - Put the caret in the message field whenever a conversation window opens or is brought back, floating or not.
+- Press Return (↩) in a live capture preview to add the frame to your message, so a capture runs from the keyboard: arrows, Return to open a source, Return again to capture.
 
 ### Changed
 
