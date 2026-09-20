@@ -3,17 +3,9 @@ import AppletBridge
 import BrowserBridge
 
 extension MessengerDocumentation {
-    public static var browserCLIHelp: String {
+    /// How browsers behave. Noodle's Browser tool extension sends this to bots as part of its skill.
+    public static var browserConventions: String {
         """
-        browser COMMAND --browser UUID [--tab UUID] [options]
-
-        Share a clickable page-preview card in chat:
-          browser present --browser UUID --tab UUID --conversation UUID [--message TEXT]
-        This captures the page and sends the attachment in one command. Clicking the
-        card opens that page in its Noodle Browser profile; no window opens on send.
-
-        \(BrowserOperation.allCases.map { "\($0.commandName): \(browserGuidance($0))" }.joined(separator: "\n"))
-
         Commands return JSON; errors exit 1. list needs no browser ID. Tab operations
         require the ID returned by open or tabs. Keep the browser and tab IDs together.
         Browser metadata may include description, the user's note on what that
@@ -146,20 +138,10 @@ extension MessengerDocumentation {
         capability or handoff format, check the current skill or CLI --help.
         """
     }
-    public static var browserSkill: String {
+    /// Judgement the tool descriptions cannot carry: how to hand results back, and how to
+    /// behave inside a person's signed-in accounts.
+    public static var browserToolGuidance: String {
         """
-        ---
-        name: browser
-        description: Browse websites in assigned persistent Noodle Browser profiles, work in signed-in accounts, discover and call WebMCP tools, share clickable page-preview cards in chat, inspect pages, run JavaScript, manage history and bookmarks, capture screenshots, and transfer files.
-        ---
-        # Noodle Browser
-
-        Run `./.agents/skills/browser/browser` in this bot's workspace. Noodle must
-        be running and the matching Noodle Browser companion installed. It starts
-        quietly on demand. Start with list and select an assigned browser by ID.
-        Each entry has a name and may have a description written by the user; use
-        them to pick the browser that fits the task, such as the right account.
-
         ## Returning results to the user
 
         Choose the format that fits the user's request:
@@ -177,24 +159,23 @@ extension MessengerDocumentation {
           it in their default browser fits the task. Text alone may also be enough.
 
         Example, using the actual IDs from the task:
-        `./.agents/skills/browser/browser present --browser BROWSER_UUID --tab TAB_UUID --conversation CONVERSATION_UUID --message "Open this page"`
+        `./.agents/skills/messenger/messenger tool browser present --browser BROWSER_UUID --tab TAB_UUID --conversation CONVERSATION_UUID --message "Open this page"`
 
         `present` captures, attaches and sends in one command; a successful result
         includes attachmentID. No separate screenshot or Messenger send is needed.
         The card embeds a saved preview with a working browser link. A live webpage
         does not run inside the chat, but this does not prevent a clickable card.
-        If a capability seems unavailable, reread this skill or run
-        `./.agents/skills/browser/browser --help`
-        before describing a limitation. If an attempted operation fails, report its
+        If a capability seems unavailable, reread this skill or add --help after
+        the tool name before describing a limitation. If an attempted operation fails, report its
         actual error and choose a fallback that still fits the user's request.
 
         ## Browser access
 
-        When a site offers WebMCP tools, `browser webmcp list --browser UUID --tab UUID`
-        discovers its structured actions. Use `webmcp call` with a returned tool ID
+        When a site offers WebMCP tools, `webmcp-list --browser UUID --tab UUID`
+        discovers its structured actions. Use `webmcp-call` with a returned tool ID
         and JSON arguments that match its schema. An empty list means this document
         exposes no tools; ordinary inspection, input and JavaScript remain available.
-        For scripted workflows, use the same tools through `browser eval`, for example:
+        For scripted workflows, use the same tools through `eval`, for example:
         `const tools = await document.modelContext.getTools(); const tool = tools.find(t => t.name === "search"); if (!tool) throw Error("Search tool unavailable"); return await document.modelContext.executeTool(tool, {query: "report"});`
         Check each result before continuing a sequence that changes account state.
 
@@ -212,10 +193,6 @@ extension MessengerDocumentation {
         Check state before retrying an uncertain action to avoid duplicate submissions.
         Downloads and standalone screenshots are workspace artifacts; inspect them
         and attach them through Messenger when those files are the requested result.
-
-        ## Command reference
-
-        \(browserCLIHelp)
         """
     }
 }
@@ -700,88 +677,4 @@ public enum MessengerDocumentation {
         MessengerCommandKind.allCases.map { "- `messenger \($0.usage)` — \($0.guidance)" }.joined(separator: "\n")
     }
 
-    private static func fieldTable(_ fields: [(String, String)]) -> String {
-        "| Field | Meaning |\n| --- | --- |\n" + fields.map { "| `\($0.0)` | \($0.1) |" }.joined(separator: "\n")
-    }
-
-    public static var referenceMarkdown: String {
-        """
-        # Messages and events
-
-        <!-- Generated by NoodleDocumentation from Sources/NoodleCore/MessengerDocumentation.swift. Do not edit by hand. -->
-
-        Regenerate with `swift run --disable-sandbox NoodleDocumentation --write docs/message-reference.md`.
-        Check without writing with `swift run --disable-sandbox NoodleDocumentation --check docs/message-reference.md`.
-
-        Runtime wake notifications tell a bot to check for work. Messenger deliveries carry conversation messages or reaction feedback. Effects are transient UI events. Direct/group is a conversation kind, attachments are message content, and delivery status is not a separate event.
-
-        ## Agent instruction loading
-
-        The bot's `AGENTS.md` (also exposed as `CLAUDE.md`) is entirely generated from its private configuration and Noodle's runtime guidance. Backstory is stored in `agent.json` one level above the workspace and edited through Noodle. Folders shared with the bot in Edit Bot are stored there too and listed under `## Shared folders` with their access and optional description. The generated file warns that all edits will be overwritten during synchronization; no managed-section markers are needed. Agents read `preferences.md` for standing user preferences and use `memory.md` for durable facts and context; Noodle preserves these files. `AGENTS.md` and Codex runtime instructions point to `.agents/skills/messenger/SKILL.md`. The Messenger skill holds the complete generated guidance below; startup instructions do not repeat it.
-
-        When missing or incompatible private model context must be replaced, the runtime appends this recovery guidance to its wake:
-
-        \(recoveredModelContext)
-
-        ### Apple harness and CLI access
-
-        Apple loads the complete workspace `AGENTS.md` and discovers `.agents/skills/*/SKILL.md` on every wake, including resumed sessions. The system instructions include each skill's name, description, and file path, for both Noodle-managed and user-created skills. Full skill bodies remain in their files for the model to read when relevant. A missing or unreadable `AGENTS.md` stops the turn with an error. Apple also includes up to 1,600 characters from `preferences.md`. Newer explicit user requests take precedence over standing preferences.
-
-        Every Apple turn exposes exactly `bash`, `read`, and `write`, including text chat, images, and background events. Bash runs in the bot workspace under its existing access policy. There is no request classifier or dedicated conversation-history or Messenger model tool. Follow the loaded `AGENTS.md` for workspace guidance and assigned tools, then read the corresponding `.agents/skills/*/SKILL.md` and use its shared CLI for Messenger, MCP integrations, Computer, and Applet operations. Tool assignments and broker permissions still apply.
-
-        The Activity window receives display-only Apple `session/update` events for the current session: `tool_call` starts an execution and `tool_call_update` supplies its result, duration, and completed/failed status under the same `toolCallId`. Inputs identify the command or file path; writes show the byte count. Results use bounded previews, retaining the existing saved-output path for larger results. Nonzero command exits, read/write errors, and cancellation are visible. `noodle_activity` updates carry a `title` for model loading, instruction loading, reply recovery, and delivery. These events neither acknowledge messages nor change the model's prompt. System instructions and private reasoning are not streamed to Activity.
-
-        Conversations always resume their saved native Foundation Models sessions. Current instructions and tool definitions are supplied on every wake. On macOS 27, history is summarized and completed tool exchanges are trimmed, with a token budget before every generation. On macOS 26, complete native turns are retained within a bounded history budget. Visible chat is never fabricated into native model response entries; the first session receives a bounded excerpt of earlier user messages as quoted reference. Older messages remain available through the Messenger CLI.
-
-        Pending message IDs and completed model results are saved per conversation and survive interruption. A delivery retry reuses the completed result. A failed generation preserves the transcript, including commands that already completed; tool trimming retains those results when an interrupted turn resumes. Native Apple budgets include additional space for tool-continuation framing. When a current tool sequence fills that budget, its next generation finishes from the existing results with further tool calls disabled; it does not restart the turn. Large tool results are saved in the workspace and returned in pages readable with `read`. Failures never trigger a fresh tool-free retry that could repeat commands or discard the session.
-
-        Ordinary conversation turns use this delivery guidance:
-
-        \(appleConversationInstructions)
-
-        Current image turns supply decoded pixels and compact attachment labels to capable models while retaining the same tools and managed session. Original attachments stay in Noodle; saved native context retains text references and completed replies.
-
-        Background events use the same tools and explicit Messenger CLI sends. Their final model text stays private so heartbeats and notices can remain quiet:
-
-        \(appleRuntimeInstructions)
-
-        ## Events and handling
-
-        \(eventReferences.map(\.markdown).joined(separator: "\n\n"))
-
-        ## Delivery envelope
-
-        Plain `--get-latest` and `--list-messages` return arrays of deliveries. Optional properties may be absent. CLI dates are ISO 8601 strings. UUIDs identify bots, conversations, messages and attachments independently of display names.
-
-        \(fieldTable(deliveryFields))
-
-        ### ChatMessage
-
-        \(fieldTable(messageFields))
-
-        ### Attachment
-
-        \(fieldTable(attachmentFields))
-
-        ## Reading and replying
-
-        \(transportInstructions)
-
-        ## CLI reference
-
-        \(commandMarkdown)
-
-        ## Noodle Browser commands
-
-        \(browserCLIHelp)
-
-        ## Noodle Applet commands
-
-        \(appletCLIHelp)
-
-        ---
-
-        [Storage and Messenger](storage-and-messenger.md) · [Documentation](README.md)
-        """ + "\n"
-    }
 }

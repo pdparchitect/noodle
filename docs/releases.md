@@ -85,8 +85,7 @@ build host cannot report macOS 27 model availability. The main regression suites
 continue on macOS 26; live macOS 27 inference checks require a compatible host.
 
 Automatic app CI skips changes limited to ordinary Markdown, `docs/` assets,
-or `website/`. Changelogs remain release inputs, and direct edits to
-`docs/message-reference.md` still run its generated-documentation check. Source,
+or `website/`. Changelogs remain release inputs. Source,
 test, build, workflow, and version changes continue to run CI, including commits
 that also edit documentation. Manual runs remain available. Website content uses
 its separate deployment workflow; README-only edits also skip that workflow and

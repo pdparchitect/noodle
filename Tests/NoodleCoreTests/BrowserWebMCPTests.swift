@@ -29,10 +29,11 @@ final class BrowserWebMCPTests: XCTestCase {
         XCTAssertEqual(try BrowserOperation.expandingWebMCPCommand(["webmcp", "--help"]), ["--help"])
         XCTAssertThrowsError(try BrowserOperation.expandingWebMCPCommand(["webmcp"]))
         XCTAssertThrowsError(try BrowserOperation.expandingWebMCPCommand(["webmcp", "unknown"]))
-        XCTAssertTrue(MessengerDocumentation.browserCLIHelp.contains("webmcp list:"))
-        XCTAssertTrue(MessengerDocumentation.browserCLIHelp.contains("webmcp call:"))
-        XCTAssertTrue(MessengerDocumentation.browserSkill.contains("document.modelContext.executeTool"))
-        XCTAssertTrue(MessengerDocumentation.browserSkill.contains("needs-user-action"))
+        XCTAssertFalse(MessengerDocumentation.browserGuidance(.webMCPList).isEmpty)
+        XCTAssertFalse(MessengerDocumentation.browserGuidance(.webMCPCall).isEmpty)
+        XCTAssertTrue(MessengerDocumentation.browserToolGuidance.contains("document.modelContext.executeTool"))
+        XCTAssertTrue(MessengerDocumentation.browserConventions.contains("needs-user-action"))
+        XCTAssertFalse(MessengerDocumentation.browserToolGuidance.contains("skills/browser/browser"), "nothing points bots at the removed command")
     }
 
     func testRequestRequiresScopedIdentityAndJSONObjects() throws {

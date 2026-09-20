@@ -16,8 +16,8 @@ final class ToolProviderSkillsTests: XCTestCase {
         func call(_ tool: String, arguments: Data, files: [ToolFile], context: ToolCallContext) async throws -> Data { Data("{}".utf8) }
     }
     private final class Assignments: @unchecked Sendable {
-        private let lock = NSLock(); private var values: Set<String> = []
-        var value: Set<String> { get { lock.withLock { values } } set { lock.withLock { values = newValue } } }
+        private let lock = NSLock(); private var values: ToolAssignments = .none
+        var value: ToolAssignments { get { lock.withLock { values } } set { lock.withLock { values = newValue } } }
     }
 
     private var workspace: URL!
@@ -59,7 +59,7 @@ final class ToolProviderSkillsTests: XCTestCase {
         wait("An always-on provider gets a skill at start.") { skill("vision") != nil }
         XCTAssertNil(skill("browser"))
 
-        assignments.value = ["browser"]
+        assignments.value = ["browser": ["b1"]]
         broker.synchronizeSkills()
         wait("An assigned provider gets a skill.") { skill("browser") != nil }
 
@@ -67,7 +67,7 @@ final class ToolProviderSkillsTests: XCTestCase {
         wait("Discovery after start writes the skill without a restart.") { skill("late") != nil }
 
         registry.unregister("vision")
-        assignments.value = []
+        assignments.value = [:]
         broker.synchronizeSkills()
         wait("Removed and unassigned providers lose their skills.") { skill("vision") == nil && skill("browser") == nil }
         XCTAssertFalse(FileManager.default.fileExists(atPath: workspace.appendingPathComponent(".agents/skills/vision").path))
@@ -86,5 +86,45 @@ final class ToolProviderSkillsTests: XCTestCase {
         registry.unregister("vision")
         wait("Sync ran again.") { skill("other") != nil }
         XCTAssertEqual(skill("vision"), "mine")
+    }
+}
+
+/// Workspaces written by earlier versions carry a hand-written browser skill, its command
+/// link and a request mailbox. They go; a generated skill of the same name stays.
+final class BrowserLegacyCleanupTests: XCTestCase {
+    private var workspace: URL!
+    private var folder: URL { workspace.appendingPathComponent(".agents/skills/browser") }
+
+    override func setUpWithError() throws {
+        workspace = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at: workspace.appendingPathComponent(".noodle/browser-bridge"), withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: workspace.appendingPathComponent(".noodle/browser-bridge/session.json"))
+        try WorkspaceMailbox.synchronizeSkill(workspace: workspace, name: "browser", enabled: true, instructions: "old",
+                                              command: "browser", executable: URL(fileURLWithPath: "/usr/bin/true"))
+    }
+    override func tearDown() { try? FileManager.default.removeItem(at: workspace) }
+
+    func testTheOldSkillItsCommandLinkAndMailboxAreRemoved() {
+        BrowserAgentSkill.removeLegacy(workspace: workspace)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: workspace.appendingPathComponent(".noodle/browser-bridge").path))
+        BrowserAgentSkill.removeLegacy(workspace: workspace)
+    }
+
+    func testAGeneratedSkillKeepsItsTextAndLosesOnlyTheStaleCommandLink() throws {
+        ToolProviderSkills.synchronize(workspace: workspace, providers: [(ToolProviderManifest(id: "browser", title: "Noodle Browser", summary: "Browse."), [])])
+        let generated = try String(contentsOf: folder.appendingPathComponent("SKILL.md"), encoding: .utf8)
+        XCTAssertTrue(generated.contains("messenger tool browser"))
+        BrowserAgentSkill.removeLegacy(workspace: workspace)
+        XCTAssertEqual(try String(contentsOf: folder.appendingPathComponent("SKILL.md"), encoding: .utf8), generated)
+        XCTAssertNil(try? FileManager.default.destinationOfSymbolicLink(atPath: folder.appendingPathComponent("browser").path))
+    }
+
+    func testAUsersOwnBrowserSkillIsLeftAlone() throws {
+        try FileManager.default.removeItem(at: folder)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data("mine".utf8).write(to: folder.appendingPathComponent("SKILL.md"))
+        BrowserAgentSkill.removeLegacy(workspace: workspace)
+        XCTAssertEqual(try String(contentsOf: folder.appendingPathComponent("SKILL.md"), encoding: .utf8), "mine")
     }
 }

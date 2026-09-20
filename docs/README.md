@@ -20,7 +20,6 @@
 - [Contributing](../CONTRIBUTING.md)
 - [Architecture](architecture.md)
 - [Storage and Messenger](storage-and-messenger.md)
-- [Message and command reference](message-reference.md)
 - [Chat effects](chat-effects.md)
 - [Add a tool preset](mcp-connections.md#add-a-catalogue-entry)
 - [Releases](releases.md)

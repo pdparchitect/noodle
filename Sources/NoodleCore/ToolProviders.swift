@@ -22,6 +22,68 @@ public struct ToolActivation: RawRepresentable, Codable, Hashable, Sendable {
     var isValid: Bool { self == .always || !(resource ?? "").isEmpty }
 }
 
+/// What Noodle granted one bot: resource kind (such as `browser`) to the identifiers it may use.
+/// Only the app builds this, from its own stores; nothing in a request can add to it.
+public struct ToolAssignments: Codable, Equatable, Sendable, ExpressibleByDictionaryLiteral {
+    public var resources: [String: Set<String>]
+    public init(_ resources: [String: Set<String>] = [:]) { self.resources = resources }
+    public init(dictionaryLiteral elements: (String, Set<String>)...) { resources = Dictionary(elements) { $0.union($1) } }
+    public static let none = ToolAssignments()
+    public func ids(_ kind: String) -> Set<String> { resources[kind] ?? [] }
+    /// The assigned spelling of `id`, matched without case so UUIDs compare as UUIDs.
+    public func assigned(_ id: String, kind: String) -> String? {
+        id.isEmpty ? nil : ids(kind).first { $0.caseInsensitiveCompare(id) == .orderedSame }
+    }
+}
+
+/// The app's live picture of every bot's assignments, readable from the broker's queue.
+/// Each controller replaces its own kind whenever its registry changes.
+public final class ToolAssignmentStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var kinds: [String: [UUID: Set<String>]] = [:]
+    public init() {}
+    public func replace(_ kind: String, with assigned: [UUID: Set<String>]) {
+        lock.withLock { kinds[kind] = assigned.filter { !$0.value.isEmpty } }
+    }
+    public func assignments(for agent: UUID) -> ToolAssignments {
+        lock.withLock { ToolAssignments(kinds.compactMapValues { $0[agent] }) }
+    }
+}
+
+/// Something a tool asks Noodle to post as the calling bot: one attachment and its message.
+public struct ToolPost: Sendable, Equatable {
+    public static let maximumBytes = 32 * 1_048_576
+    public let message: String?
+    public let filename: String
+    public let mediaType: String
+    public let data: Data
+
+    /// Reads `_meta["noodle/post"]`. Anything malformed is an error, never a partial post.
+    init(_ object: [String: Any]) throws {
+        guard let attachment = object["attachment"] as? [String: Any],
+              let filename = attachment["filename"] as? String, !filename.isEmpty, filename.utf8.count <= 255,
+              !filename.contains("/"), !filename.utf8.contains(0), filename != ".", filename != "..",
+              let mediaType = attachment["mediaType"] as? String, !mediaType.isEmpty, mediaType.utf8.count <= 255,
+              let encoded = attachment["data"] as? String, let data = Data(base64Encoded: encoded), data.count <= Self.maximumBytes else {
+            throw ToolProviderError("The tool returned an attachment Noodle cannot post.")
+        }
+        message = (object["message"] as? String).map { String($0.prefix(10_000)) }
+        self.filename = filename; self.mediaType = mediaType; self.data = data
+    }
+}
+
+/// What only the app can do for a tool. Extensions never receive these; the broker
+/// calls them after its own checks.
+public struct ToolHostServices: Sendable {
+    public let isMember: @Sendable (_ agent: UUID, _ conversation: UUID) -> Bool
+    /// Posts as the bot and returns the new attachment's ID.
+    public let post: @Sendable (_ post: ToolPost, _ agent: UUID, _ conversation: UUID) throws -> UUID
+    public init(isMember: @escaping @Sendable (UUID, UUID) -> Bool, post: @escaping @Sendable (ToolPost, UUID, UUID) throws -> UUID) {
+        self.isMember = isMember; self.post = post
+    }
+    public static let none = ToolHostServices(isMember: { _, _ in false }, post: { _, _, _ in throw ToolProviderError("This Noodle cannot post for tools.") })
+}
+
 /// What a provider declares about itself. Extensions send this as JSON.
 public struct ToolProviderManifest: Codable, Equatable, Sendable, Identifiable {
     public var version = 1
@@ -57,11 +119,34 @@ public struct ToolFileParameter: Equatable, Sendable {
     public init(name: String, access: Access) { self.name = name; self.access = access }
 }
 
+/// A schema property with `"format": "noodle-resource"` names an assigned resource of
+/// `"noodle/kind"`. The broker refuses any value the bot was not assigned.
+public struct ToolResourceParameter: Equatable, Sendable {
+    public let name: String
+    public let kind: String
+    public init(name: String, kind: String) { self.name = name; self.kind = kind }
+}
+
+/// `_meta["noodle/resource-list"]`: the result lists resources of `kind` as objects
+/// with an `id` under `structuredContent[path]`. The broker removes unassigned entries.
+public struct ToolResourceList: Equatable, Sendable {
+    public let kind: String
+    public let path: String
+    public init(kind: String, path: String) { self.kind = kind; self.path = path }
+}
+
 public struct ToolDescriptor: Equatable, Sendable {
     public let name: String
     public let description: String
     public let inputSchema: Data
     public let fileParameters: [ToolFileParameter]
+    public let resourceParameters: [ToolResourceParameter]
+    public let resourceList: ToolResourceList?
+    /// A property with `"format": "noodle-conversation"`. The broker refuses conversations the
+    /// bot is not in, and only such a tool may return something for Noodle to post there.
+    public let conversationParameter: String?
+    /// The schema's `required` names. The broker refuses a call that omits one.
+    public let required: [String]
     /// `_meta["noodle/timeout"]`, clamped to 1–3600 seconds.
     public let timeout: TimeInterval?
     /// MCP `annotations.idempotentHint`. Absent means a timed-out call must not be repeated.
@@ -82,6 +167,23 @@ public struct ToolDescriptor: Equatable, Sendable {
             }
             return ToolFileParameter(name: key, access: access)
         }
+        resourceParameters = try ((schema["properties"] as? [String: Any]) ?? [:]).sorted { $0.key < $1.key }.compactMap { key, value in
+            guard let property = value as? [String: Any], property["format"] as? String == "noodle-resource" else { return nil }
+            guard let kind = property["noodle/kind"] as? String, !kind.isEmpty else {
+                throw ToolProviderError("The \(name) tool does not say which kind of resource \(key) names.")
+            }
+            return ToolResourceParameter(name: key, kind: kind)
+        }
+        required = schema["required"] as? [String] ?? []
+        conversationParameter = ((schema["properties"] as? [String: Any]) ?? [:]).sorted { $0.key < $1.key }
+            .first { ($0.value as? [String: Any])?["format"] as? String == "noodle-conversation" }?.key
+        let listed = (object["_meta"] as? [String: Any])?["noodle/resource-list"] as? [String: Any]
+        resourceList = try listed.map {
+            guard let kind = $0["kind"] as? String, let path = $0["path"] as? String, !kind.isEmpty, !path.isEmpty else {
+                throw ToolProviderError("The \(name) tool has an invalid resource list declaration.")
+            }
+            return ToolResourceList(kind: kind, path: path)
+        }
         timeout = ((object["_meta"] as? [String: Any])?["noodle/timeout"] as? Double).map { min(max($0, 1), 3600) }
         retryable = (object["annotations"] as? [String: Any])?["idempotentHint"] as? Bool ?? false
     }
@@ -97,7 +199,12 @@ public struct ToolDescriptor: Equatable, Sendable {
 public struct ToolCallContext: Sendable {
     public let agentID: UUID
     public let workspace: URL
-    public init(agentID: UUID, workspace: URL) { self.agentID = agentID; self.workspace = workspace }
+    /// The calling bot's assignments, for providers that list or describe resources.
+    /// Authorization never depends on a provider reading this; the broker enforces it.
+    public let assignments: ToolAssignments
+    public init(agentID: UUID, workspace: URL, assignments: ToolAssignments = .none) {
+        self.agentID = agentID; self.workspace = workspace; self.assignments = assignments
+    }
 }
 
 /// An opened workspace file for one declared file parameter.
@@ -122,7 +229,7 @@ public protocol ToolProvider: Sendable {
 }
 
 /// Discovery writes here; brokers and skill generation read. Authorization stays with
-/// the caller: `assignments` are the resource names the host granted this agent.
+/// the caller: `assignments` are the resources the host granted this agent.
 public final class ToolProviderRegistry: @unchecked Sendable {
     private let lock = NSLock()
     private var providers: [String: any ToolProvider] = [:]
@@ -148,18 +255,18 @@ public final class ToolProviderRegistry: @unchecked Sendable {
         lock.withLock { observer }?()
     }
 
-    func active(assignments: Set<String>) -> [any ToolProvider] {
+    func active(assignments: ToolAssignments) -> [any ToolProvider] {
         lock.withLock { Array(providers.values) }.filter { Self.isActive($0.manifest.activation, assignments: assignments) }
             .sorted { $0.manifest.id < $1.manifest.id }
     }
     public func kinds() -> [String: ToolProviderKind] { lock.withLock { providers.mapValues(\.kind) } }
 
-    public func manifests(assignments: Set<String>) -> [ToolProviderManifest] {
+    public func manifests(assignments: ToolAssignments) -> [ToolProviderManifest] {
         lock.withLock { providers.values.map(\.manifest) }
             .filter { Self.isActive($0.activation, assignments: assignments) }.sorted { $0.id < $1.id }
     }
 
-    public func provider(_ id: String, assignments: Set<String>) throws -> any ToolProvider {
+    public func provider(_ id: String, assignments: ToolAssignments) throws -> any ToolProvider {
         guard let provider = lock.withLock({ providers[id] }) else { throw ToolProviderError("There is no tool provider named \(id).") }
         guard Self.isActive(provider.manifest.activation, assignments: assignments) else {
             throw ToolProviderError("The \(id) tools are not assigned to this bot.")
@@ -167,8 +274,8 @@ public final class ToolProviderRegistry: @unchecked Sendable {
         return provider
     }
 
-    static func isActive(_ activation: ToolActivation, assignments: Set<String>) -> Bool {
-        activation == .always || activation.resource.map(assignments.contains) == true
+    static func isActive(_ activation: ToolActivation, assignments: ToolAssignments) -> Bool {
+        activation == .always || activation.resource.map { !assignments.ids($0).isEmpty } == true
     }
 }
 

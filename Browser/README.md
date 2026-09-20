@@ -50,7 +50,7 @@ Agents can send a page back with `browser present --browser UUID --tab UUID --co
 
 Runbar’s **Noodle Browser → Build & Launch Dev** runs `scripts/build-and-launch-browser.sh`, which always builds and opens the isolated Dev app. Quit a running Dev build before replacing it.
 
-The managed command lives at `.agents/skills/browser/browser` in the bot's workspace. Run it with `--help` for the generated command reference. Commands return JSON and errors exit with status 1.
+Bots use browsers through Noodle's tool command, `./.agents/skills/messenger/messenger tool browser TOOL`, shown as `browser` below. Add `--help` after a tool name for its options. Results are JSON; a tool error exits with status 1.
 
 ```sh
 browser list
@@ -70,7 +70,7 @@ browser download --browser BROWSER_UUID --download DOWNLOAD_UUID --output downlo
 browser screenshot --browser BROWSER_UUID --tab TAB_UUID --output screenshot.png
 ```
 
-Use the full managed command path unless your shell already resolves `browser`. Navigation returns immediately; inspect the page or read status to determine readiness. `inspect` returns CSS selectors and frame IDs. JavaScript is an async function body; use `return` for a result. Frame IDs expire on navigation. `show` opens the human window for an explicit handoff.
+Navigation returns immediately; inspect the page or read status to determine readiness. `inspect` returns CSS selectors and frame IDs. JavaScript is an async function body; use `return` for a result. Frame IDs expire on navigation. `show` opens the human window for an explicit handoff.
 
 Each tab has a virtual agent pointer, drawn as a cyan target with a diamond. It appears in the browser, screenshots and page cards. Moving it triggers native WebKit hover and mouse/pointer events while leaving the desktop cursor and application focus alone. Use `move` to reveal hover menus, then inspect or capture the page before selecting the revealed action.
 

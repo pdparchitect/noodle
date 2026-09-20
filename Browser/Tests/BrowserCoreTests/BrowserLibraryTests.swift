@@ -84,6 +84,25 @@ final class BrowserLibraryTests: XCTestCase {
         XCTAssertThrowsError(try BrowserBuildIdentity.development.validateGroup("ABCDEFGHIJ." + BrowserBuildIdentity.production.groupSuffix, team: "ABCDEFGHIJ"))
         XCTAssertThrowsError(try BrowserBuildIdentity.production.validateGroup("ABCDEFGHIJ." + BrowserBuildIdentity.development.groupSuffix, team: "ABCDEFGHIJ"))
     }
+    func testSiblingDiscoveryStartsFromTheAppThatContainsAnExtension() {
+        let app = URL(fileURLWithPath: "/Builds/Noodle Dev.app")
+        XCTAssertEqual(BrowserApplication.containingApplication(of: app).path, app.path)
+        XCTAssertEqual(BrowserApplication.containingApplication(of: app.appendingPathComponent("Contents/Extensions/NoodleBrowserTools.appex")).path, app.path)
+        XCTAssertEqual(BrowserApplication.containingApplication(of: app.appendingPathComponent("Contents/PlugIns/NoodleShare.appex")).path, app.path)
+        let loose = URL(fileURLWithPath: "/tmp/Loose.appex")
+        XCTAssertEqual(BrowserApplication.containingApplication(of: loose).path, loose.path, "an extension outside an app is left alone")
+    }
+    func testOnlyNoodleAndItsBrowserToolExtensionAreSocketClientsPerChannel() {
+        XCTAssertEqual(BrowserBuildIdentity.production.clientIDs, ["com.pdparchitect.noodle", "com.pdparchitect.noodle.tools.browser"])
+        XCTAssertEqual(BrowserBuildIdentity.development.clientIDs, ["com.pdparchitect.noodle.local", "com.pdparchitect.noodle.local.tools.browser"])
+        // The extension resolves its own channel from its signed identifier, as Noodle does.
+        XCTAssertEqual(BrowserBuildIdentity.identify("com.pdparchitect.noodle.tools.browser"), .production)
+        XCTAssertEqual(BrowserBuildIdentity.identify("com.pdparchitect.noodle.local.tools.browser"), .development)
+        for other in ["com.pdparchitect.noodle.tools.vision", "com.pdparchitect.noodle.tools.browser.evil", "com.pdparchitect.noodle.share", "com.pdparchitect.noodle.tools"] {
+            XCTAssertNil(BrowserBuildIdentity.identify(other), other)
+            XCTAssertFalse(BrowserBuildIdentity.allCases.contains { $0.clientIDs.contains(other) }, other)
+        }
+    }
     @MainActor func testHistoryPersistenceSearchPaginationAndIsolation() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

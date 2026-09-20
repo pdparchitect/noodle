@@ -12,8 +12,7 @@ Use effects sparingly and send at most one per conversation every two seconds.
 
 A successful receipt confirms queuing, not display. Retry with the same
 `--request-id <uuid>` to avoid duplicates while the ID remains in the queue.
-Use `--list-effects` for supported names and see the
-[message reference](message-reference.md#effectconfetti) for the full contract.
+Use `--list-effects` for supported names; `messenger --help` has the full contract.
 
 To add an effect, update `ConversationEffectKind`, its guidance in
 `MessengerDocumentation.swift`, and `ConversationEffectsView`. Include a reduced-motion

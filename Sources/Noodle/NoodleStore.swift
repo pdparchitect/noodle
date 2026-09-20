@@ -110,8 +110,9 @@ final class NoodleStore {
     /// Every source of agent tools registers here; `messenger tool` reaches them through `tools`.
     let toolProviders = ToolProviderRegistry()
     let tools: ToolBridgeBroker
-    /// `ToolExtensionDiscovery` on macOS 26 and later; earlier systems have no tool extensions.
-    @ObservationIgnored private var toolExtensions: AnyObject?
+    /// What each bot is assigned, as the tool broker enforces it. Controllers publish into it.
+    @ObservationIgnored private let toolAssignments: ToolAssignmentStore
+    @ObservationIgnored private lazy var toolExtensions = ToolExtensionDiscovery(registry: toolProviders)
     let mcp: MCPController
     let computers: ComputerController
     let browsers: BrowserController
@@ -145,6 +146,7 @@ final class NoodleStore {
                     ? bundledMessenger
                     : Bundle.main.executableURL
             )
+
         }
         if let runtime {
             self.runtime = runtime
@@ -160,11 +162,17 @@ final class NoodleStore {
         transcriptPositions = TranscriptPositionStore(fileURL: self.repository.rootURL.appendingPathComponent("scroll-positions.json"))
         conversationWindows = ConversationWindowRegistry(fileURL: self.repository.rootURL.appendingPathComponent("conversation-windows.json"))
         messenger = MessengerBroker(repository: self.repository)
-        // No provider depends on an assignment yet, so no agent has any.
-        tools = ToolBridgeBroker(registry: toolProviders) { _ in [] }
+        let toolAssignments = ToolAssignmentStore()
+        self.toolAssignments = toolAssignments
+        tools = ToolBridgeBroker(registry: toolProviders,
+                                 host: .repository(self.repository) { toolAssignments.assignments(for: $0) }) { toolAssignments.assignments(for: $0) }
         mcp = MCPController(repository: self.repository)
         computers = ComputerController(repository: self.repository)
         browsers = BrowserController(repository: self.repository)
+        browsers.onAssignmentsChange = { [toolAssignments, tools] assigned in
+            toolAssignments.replace("browser", with: assigned)
+            tools.synchronizeSkills()
+        }
         applets = AppletController(repository: self.repository)
         harnessProfiles = HarnessProfilesController(store: self.repository.harnessProfiles)
         reload()
@@ -229,11 +237,7 @@ final class NoodleStore {
             if connectsServices {
                 try messenger.start(agents: agents)
                 try tools.start(agents: toolAgents)
-                if #available(macOS 26.0, *) {
-                    let discovery = ToolExtensionDiscovery(registry: toolProviders)
-                    discovery.start()
-                    toolExtensions = discovery
-                }
+                toolExtensions.start()
                 mcp.start(agents: agents)
                 computers.start(agents: agents)
                 browsers.start(agents: agents)

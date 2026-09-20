@@ -1,6 +1,6 @@
 # Build and test
 
-Run commands from the repository root. You need macOS 15 or later and full Xcode.
+Run commands from the repository root. You need macOS 26 or later and full Xcode.
 For Noodle Computer, see its [development guide](../Computer/DEVELOPMENT.md).
 
 Install the selected Xcode's Metal Toolchain to package the local-model shaders.
@@ -56,14 +56,13 @@ transferred. See [Applet development and conversion](../Applet/README.md#dev-and
 
 Message/event guidance, the Messenger skill, and CLI help come from
 [`MessengerDocumentation.swift`](../Sources/NoodleCore/MessengerDocumentation.swift).
-After editing it, regenerate the reference and run its tests:
+After editing it, run its tests:
 
 ```sh
-swift run --disable-sandbox NoodleDocumentation --write docs/message-reference.md
 swift test --disable-sandbox --filter MessengerDocumentationTests
 ```
 
-Commit the generated file with the source. Builds check for drift. Keep every
+Keep every
 event's recipients, fields, and handling guidance; update encoding-coverage tests
 when payload fields change.
 

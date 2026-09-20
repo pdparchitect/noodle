@@ -5,7 +5,6 @@ import Observation
 
 /// Noodle's extension point. `scripts/build-app.sh` extracts this definition into
 /// `Contents/Extensions/Noodle.appexpt`; the identifier is `<bundle identifier>.tool`.
-@available(macOS 26.0, *)
 extension AppExtensionPoint {
     @Definition static var noodleTool: AppExtensionPoint {
         Name("tool")
@@ -15,7 +14,6 @@ extension AppExtensionPoint {
 
 /// Keeps the provider registry in step with installed tool extensions. Adding tools
 /// to Noodle means bundling an extension; nothing here names one.
-@available(macOS 26.0, *)
 @MainActor final class ToolExtensionDiscovery {
     private let registry: ToolProviderRegistry
     private var monitor: AppExtensionPoint.Monitor?

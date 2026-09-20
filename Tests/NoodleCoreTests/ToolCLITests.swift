@@ -28,7 +28,7 @@ final class ToolCLITests: XCTestCase {
         try Data("{}".utf8).write(to: layout.configuration)
         let registry = ToolProviderRegistry()
         try registry.register(Shout())
-        broker = ToolBridgeBroker(registry: registry) { _ in [] }
+        broker = ToolBridgeBroker(registry: registry) { _ in .none }
         try broker.start(agents: [ToolBridgeAgent(id: UUID(), workspace: layout.workspace)])
     }
     override func tearDownWithError() throws { broker?.stop(); try? FileManager.default.removeItem(at: root) }

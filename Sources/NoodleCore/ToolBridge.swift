@@ -51,7 +51,8 @@ public struct ToolBridgeAgent: Sendable {
 /// revoked resource stops working without restarting anything.
 public final class ToolBridgeBroker: @unchecked Sendable {
     private let registry: ToolProviderRegistry
-    private let assignments: @Sendable (UUID) -> Set<String>
+    private let assignments: @Sendable (UUID) -> ToolAssignments
+    private let host: ToolHostServices
     private let queue = DispatchQueue(label: "Noodle.tool-broker")
     private var timer: DispatchSourceTimer?
     private var sessions: [UUID: String] = [:]
@@ -60,8 +61,8 @@ public final class ToolBridgeBroker: @unchecked Sendable {
     private var running = 0
     private let mailboxMonitor = WorkspaceMailboxMonitor()
 
-    public init(registry: ToolProviderRegistry, assignments: @escaping @Sendable (UUID) -> Set<String>) {
-        self.registry = registry; self.assignments = assignments
+    public init(registry: ToolProviderRegistry, host: ToolHostServices = .none, assignments: @escaping @Sendable (UUID) -> ToolAssignments) {
+        self.registry = registry; self.assignments = assignments; self.host = host
         registry.onChange { [weak self] in self?.synchronizeSkills() }
     }
     deinit { timer?.cancel() }
@@ -74,8 +75,9 @@ public final class ToolBridgeBroker: @unchecked Sendable {
         Task { [weak self, registry, assignments, queue] in
             for agent in agents {
                 var providers: [(manifest: ToolProviderManifest, tools: [ToolDescriptor])] = []
-                let context = ToolCallContext(agentID: agent.id, workspace: agent.workspace)
-                for provider in registry.active(assignments: assignments(agent.id)) {
+                let granted = assignments(agent.id)
+                let context = ToolCallContext(agentID: agent.id, workspace: agent.workspace, assignments: granted)
+                for provider in registry.active(assignments: granted) {
                     // A provider that cannot list its tools gets no skill rather than a wrong one.
                     guard let list = try? await ToolBroker.withTimeout(30, tool: provider.manifest.id, { try await provider.tools(context: context) }),
                           let tools = try? ToolDescriptor.list(mcp: list) else { continue }
@@ -146,10 +148,10 @@ public final class ToolBridgeBroker: @unchecked Sendable {
                 claimed[id] = request.expiresAt
                 running += 1
                 let context = ToolCallContext(agentID: agent.id, workspace: agent.workspace)
-                Task { [weak self, registry, assignments, queue] in
+                Task { [weak self, registry, assignments, queue, host] in
                     let response: ToolBridgeResponse
                     do {
-                        let result = try await ToolBroker.perform(request, registry: registry, assignments: assignments(agent.id), context: context)
+                        let result = try await ToolBroker.perform(request, registry: registry, assignments: { assignments(agent.id) }, context: context, host: host)
                         response = result.count <= ToolBridgeClient.maxResponseBytes / 4 * 3 - 4096
                             ? ToolBridgeResponse(result: result) : ToolBridgeResponse(error: "The tool result is too large. Ask the tool to write a file instead.")
                     } catch { response = ToolBridgeResponse(error: error.localizedDescription) }

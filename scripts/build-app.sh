@@ -74,7 +74,6 @@ fi
 if [[ "$apple27" == true ]]; then
     zsh "$project_root/scripts/build-mlx-metal.sh" "$apple_bin" >&2
 fi
-"$bin_path/NoodleDocumentation" --check "$project_root/docs/message-reference.md" >&2
 developer_dir="$(xcode-select -p)"
 toolchain_dir="$developer_dir/Toolchains/XcodeDefault.xctoolchain"
 sdk_root="$(xcrun --sdk macosx --show-sdk-path)"
@@ -103,14 +102,22 @@ cp "$project_root/Support/ShareExtension-Info.plist" "$share_extension/Contents/
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$share_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$share_extension/Contents/Info.plist"
 # Tool extensions are discovered through Noodle's extension point, not named in code.
-vision_extension="$contents/Extensions/NoodleVision.appex"
-mkdir -p "$vision_extension/Contents/MacOS"
-cp "$bin_path/NoodleVisionExtension" "$vision_extension/Contents/MacOS/NoodleVisionExtension"
-cp "$project_root/Support/VisionExtension-Info.plist" "$vision_extension/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.vision" "$vision_extension/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :EXAppExtensionAttributes:EXExtensionPointIdentifier $bundle_identifier.tool" "$vision_extension/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$vision_extension/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$vision_extension/Contents/Info.plist"
+vision_tools_extension="$contents/Extensions/NoodleVisionTools.appex"
+mkdir -p "$vision_tools_extension/Contents/MacOS"
+cp "$bin_path/NoodleVisionToolsExtension" "$vision_tools_extension/Contents/MacOS/NoodleVisionToolsExtension"
+cp "$project_root/Support/VisionToolsExtension-Info.plist" "$vision_tools_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.tools.vision" "$vision_tools_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :EXAppExtensionAttributes:EXExtensionPointIdentifier $bundle_identifier.tool" "$vision_tools_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$vision_tools_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$vision_tools_extension/Contents/Info.plist"
+browser_tools_extension="$contents/Extensions/NoodleBrowserTools.appex"
+mkdir -p "$browser_tools_extension/Contents/MacOS"
+cp "$bin_path/NoodleBrowserToolsExtension" "$browser_tools_extension/Contents/MacOS/NoodleBrowserToolsExtension"
+cp "$project_root/Support/BrowserToolsExtension-Info.plist" "$browser_tools_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.tools.browser" "$browser_tools_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :EXAppExtensionAttributes:EXExtensionPointIdentifier $bundle_identifier.tool" "$browser_tools_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$browser_tools_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$browser_tools_extension/Contents/Info.plist"
 cp "$bin_path/Noodle" "$contents/MacOS/Noodle"
 # SwiftPM adds development-only search paths. Keep system and bundle-relative paths.
 otool -l "$contents/MacOS/Noodle" \
@@ -122,7 +129,6 @@ otool -l "$contents/MacOS/Noodle" \
     done
 cp "$bin_path/NoodleMessenger" "$contents/Helpers/messenger"
 cp "$bin_path/NoodleMCPCLI" "$contents/Helpers/mcpshim"
-cp "$bin_path/NoodleBrowserCLI" "$contents/Helpers/browser"
 cp "$bin_path/NoodleComputerCLI" "$contents/Helpers/computer"
 swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-path "$project_root/.build/applet" -c release --product noodlet >&2
 applet_bin="$(swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-path "$project_root/.build/applet" -c release --show-bin-path)"
@@ -215,7 +221,7 @@ zsh "$project_root/scripts/generate-icon.sh" >&2
 xcrun actool "$asset_catalog" \
     --compile "$contents/Resources" \
     --platform macosx \
-    --minimum-deployment-target 15.0 \
+    --minimum-deployment-target 26.0 \
     --app-icon AppIcon \
     --output-partial-info-plist "$build_root/asset-info.plist" >/dev/null
 
@@ -227,10 +233,10 @@ xcrun appintentsmetadataprocessor \
     --sdk-root "$sdk_root" \
     --xcode-version "$xcode_build_version" \
     --platform-family macOS \
-    --deployment-target 15.0 \
+    --deployment-target 26.0 \
     --bundle-identifier "$bundle_identifier" \
     --output "$contents/Resources" \
-    --target-triple "$target_arch-apple-macos15.0" \
+    --target-triple "$target_arch-apple-macos26.0" \
     --binary-file "$bin_path/Noodle" \
     --source-file-list "$intent_source_list" \
     --swift-const-vals-list "$intent_const_values_list" \
@@ -270,8 +276,6 @@ codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/mcpshim"
 codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/computer"
-codesign --force --options runtime "$timestamp_option" \
-    --sign "$signing_identity" "$contents/Helpers/browser"
 applet_cli_identifier="com.pdparchitect.noodle.applet.cli"
 if [[ "$data_container" == development ]]; then applet_cli_identifier="com.pdparchitect.noodle.applet.local.cli"; fi
 codesign --force --options runtime "$timestamp_option" --identifier "$applet_cli_identifier" \
@@ -296,6 +300,9 @@ if [[ "$data_container" == development ]]; then computer_group+=.local; fi
 browser_group="$team_id.com.pdparchitect.noodle.browsers"
 if [[ "$data_container" == development ]]; then browser_group+=.local; fi
 /usr/libexec/PlistBuddy -c "Add :NoodleBrowserGroup string $browser_group" "$contents/Info.plist"
+# The Browser tool extension finds the companion's socket the same way Noodle does.
+/usr/libexec/PlistBuddy -c "Add :NoodleBrowserGroup string $browser_group" "$browser_tools_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :NoodleSigningTeam string $team_id" "$browser_tools_extension/Contents/Info.plist"
 applet_group="$team_id.com.pdparchitect.noodle.applets"
 if [[ "$data_container" == development ]]; then applet_group+=.local; fi
 /usr/libexec/PlistBuddy -c "Add :NoodleAppletGroup string $applet_group" "$contents/Info.plist"
@@ -330,7 +337,13 @@ codesign --force --options runtime "$timestamp_option" \
     --entitlements "$share_entitlements" --sign "$signing_identity" "$share_extension"
 # Tool extensions get the sandbox and nothing else: no groups, network or files.
 codesign --force --options runtime "$timestamp_option" \
-    --entitlements "$project_root/Support/ToolExtension.entitlements" --sign "$signing_identity" "$vision_extension"
+    --entitlements "$project_root/Support/ToolExtension.entitlements" --sign "$signing_identity" "$vision_tools_extension"
+# The one exception: Browser tools also hold the browsers group, and only that group.
+browser_tools_entitlements="$build_root/BrowserToolsExtension.resolved.entitlements"
+cp "$project_root/Support/BrowserToolsExtension.entitlements" "$browser_tools_entitlements"
+/usr/libexec/PlistBuddy -c "Set :com.apple.security.application-groups:0 $browser_group" "$browser_tools_entitlements"
+codesign --force --options runtime "$timestamp_option" \
+    --entitlements "$browser_tools_entitlements" --sign "$signing_identity" "$browser_tools_extension"
 # Sign Sparkle inside-out. These installer components are deliberately outside the
 # host's sandbox so they can replace the signed app; no other app permissions change.
 for component in \

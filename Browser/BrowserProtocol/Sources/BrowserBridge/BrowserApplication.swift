@@ -7,12 +7,19 @@ public enum BrowserApplication {
         let running = NSRunningApplication.runningApplications(withBundleIdentifier: build.providerID)
             .filter { !$0.isTerminated && $0.bundleIdentifier == build.providerID }.compactMap(\.bundleURL)
         let registered = NSWorkspace.shared.urlForApplication(withBundleIdentifier: build.providerID)
-        let sibling = Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent(build.appName + ".app")
+        let sibling = containingApplication(of: Bundle.main.bundleURL).deletingLastPathComponent().appendingPathComponent(build.appName + ".app")
         var known = Dictionary(running.map { ($0.standardizedFileURL.path, build.providerID) }, uniquingKeysWith: { a, _ in a })
         if let registered { known[registered.standardizedFileURL.path] = build.providerID }
         if Bundle(url: sibling)?.bundleIdentifier == build.providerID { known[sibling.standardizedFileURL.path] = build.providerID }
         return select(running: running, sibling: build == .development ? sibling : nil,
                       registered: registered, build: build, identify: { known[$0.standardizedFileURL.path] })
+    }
+    /// Noodle's Browser tool extension runs from inside Noodle.app; a development
+    /// companion sits beside that app, not beside the extension.
+    public static func containingApplication(of bundle: URL) -> URL {
+        let contents = bundle.deletingLastPathComponent().deletingLastPathComponent()
+        let app = contents.deletingLastPathComponent()
+        return bundle.pathExtension == "appex" && contents.lastPathComponent == "Contents" && app.pathExtension == "app" ? app : bundle
     }
     public static func select(running: [URL], sibling: URL?, registered: URL?, build: BrowserBuildIdentity,
                               identify: @escaping (URL) -> String?) -> URL? {

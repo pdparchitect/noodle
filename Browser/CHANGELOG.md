@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Accept connections from Noodle's bundled Browser tool extension as well as from Noodle itself. Both are checked by code signature and build channel, and Noodle still decides which browsers a bot may use.
+
 ### Fixed
 
 - Keep the App Settings button at the end of the toolbar when no browser is selected, instead of beside the sidebar.

@@ -8,7 +8,7 @@ bin_path="$(swift build --disable-sandbox --build-system native --package-path "
 core_objects=("${(@f)$(python3 "$project_root/Tests/core-link-objects.py" "$bin_path")}")
 fixture_app="$project_root/.build/Message Reader Annotation Tests.app"
 mkdir -p "$fixture_app/Contents/MacOS"
-swiftc -parse-as-library -target "$(uname -m)-apple-macosx15.0" -I "$bin_path/Modules" \
+swiftc -parse-as-library -target "$(uname -m)-apple-macosx26.0" -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/KeyboardBindings.swift" \
     "$project_root/Sources/Noodle/AnnotationCommands.swift" \
     "$project_root/Sources/Noodle/AttachmentPreviewController.swift" \

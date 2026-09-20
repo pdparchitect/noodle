@@ -14,8 +14,6 @@ on:
       - 'Applet/CHANGELOG.md'
       - 'Browser/CHANGELOG.md'
       - 'Computer/Images/CHANGELOG.md'
-      # Keep the generated catalogue's drift check on direct reference edits.
-      - 'docs/message-reference.md'
   pull_request:
     paths:
       - '**'
@@ -27,7 +25,6 @@ on:
       - 'Applet/CHANGELOG.md'
       - 'Browser/CHANGELOG.md'
       - 'Computer/Images/CHANGELOG.md'
-      - 'docs/message-reference.md'
   workflow_dispatch:
 
 permissions:

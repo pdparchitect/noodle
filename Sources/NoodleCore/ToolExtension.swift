@@ -4,22 +4,29 @@ import Foundation
 /// as `ToolProvider`; files cross the sandbox boundary as handles, never as paths.
 @objc public protocol ToolExtensionXPC {
     func manifest(reply: @escaping (Data) -> Void)
-    func listTools(agent: String, reply: @escaping (Data?, String?) -> Void)
+    /// `caller` is JSON: `agent` (UUID) and `assignments` (resource kind to identifiers).
+    func listTools(caller: Data, reply: @escaping (Data?, String?) -> Void)
     /// `files[i]` belongs to `parameters[i]`; `writable[i]` tells how it was opened.
     func callTool(_ name: String, arguments: Data, files: [FileHandle], parameters: [String], writable: [Bool],
-                  agent: String, reply: @escaping (Data?, String?) -> Void)
+                  caller: Data, reply: @escaping (Data?, String?) -> Void)
 }
 
 public enum ToolExtensionInterface {
     /// Collections of handles must be allow-listed for NSXPC secure coding on both ends.
     public static func make() -> NSXPCInterface {
         let interface = NSXPCInterface(with: ToolExtensionXPC.self)
-        let selector = #selector(ToolExtensionXPC.callTool(_:arguments:files:parameters:writable:agent:reply:))
+        let selector = #selector(ToolExtensionXPC.callTool(_:arguments:files:parameters:writable:caller:reply:))
         interface.setClasses(NSSet(array: [NSArray.self, FileHandle.self]) as! Set<AnyHashable>, for: selector, argumentIndex: 2, ofReply: false)
         interface.setClasses(NSSet(array: [NSArray.self, NSString.self]) as! Set<AnyHashable>, for: selector, argumentIndex: 3, ofReply: false)
         interface.setClasses(NSSet(array: [NSArray.self, NSNumber.self]) as! Set<AnyHashable>, for: selector, argumentIndex: 4, ofReply: false)
         return interface
     }
+}
+
+struct ToolExtensionCaller: Codable {
+    let agent: UUID
+    let assignments: ToolAssignments
+    init(_ context: ToolCallContext) { agent = context.agentID; assignments = context.assignments }
 }
 
 /// Extension side: exports any `ToolProvider`. An extension is a provider plus
@@ -37,22 +44,24 @@ public final class ToolExtensionService: NSObject, ToolExtensionXPC, @unchecked 
 
     public func manifest(reply: @escaping (Data) -> Void) { reply((try? JSONEncoder().encode(provider.manifest)) ?? Data()) }
 
-    public func listTools(agent: String, reply: @escaping (Data?, String?) -> Void) {
-        respond(reply) { try await self.provider.tools(context: Self.context(agent)) }
+    public func listTools(caller: Data, reply: @escaping (Data?, String?) -> Void) {
+        respond(reply) { try await self.provider.tools(context: Self.context(caller)) }
     }
 
     public func callTool(_ name: String, arguments: Data, files: [FileHandle], parameters: [String], writable: [Bool],
-                         agent: String, reply: @escaping (Data?, String?) -> Void) {
+                         caller: Data, reply: @escaping (Data?, String?) -> Void) {
         respond(reply) {
             guard files.count == parameters.count, files.count == writable.count else { throw ToolProviderError("Mismatched tool files.") }
             let opened = files.indices.map { ToolFile(parameter: parameters[$0], access: writable[$0] ? .write : .read, handle: files[$0]) }
-            return try await self.provider.call(name, arguments: arguments, files: opened, context: Self.context(agent))
+            return try await self.provider.call(name, arguments: arguments, files: opened, context: Self.context(caller))
         }
     }
 
-    /// An extension is sandboxed away from the workspace; it learns only who is calling.
-    private static func context(_ agent: String) -> ToolCallContext {
-        ToolCallContext(agentID: UUID(uuidString: agent) ?? UUID(), workspace: URL(fileURLWithPath: "/"))
+    /// An extension is sandboxed away from the workspace; it learns who is calling and
+    /// what that bot is assigned, never where its files live.
+    private static func context(_ caller: Data) throws -> ToolCallContext {
+        let caller = try JSONDecoder().decode(ToolExtensionCaller.self, from: caller)
+        return ToolCallContext(agentID: caller.agent, workspace: URL(fileURLWithPath: "/"), assignments: caller.assignments)
     }
 
     private func respond(_ reply: @escaping (Data?, String?) -> Void, _ work: @escaping @Sendable () async throws -> Data) {
@@ -97,13 +106,15 @@ public final class ToolExtensionConnection: ToolProvider, @unchecked Sendable {
     deinit { connection?.invalidate() }
 
     public func tools(context: ToolCallContext) async throws -> Data {
-        try await perform { proxy, finish in proxy.listTools(agent: context.agentID.uuidString, reply: finish) }
+        let caller = try JSONEncoder().encode(ToolExtensionCaller(context))
+        return try await perform { proxy, finish in proxy.listTools(caller: caller, reply: finish) }
     }
 
     public func call(_ tool: String, arguments: Data, files: [ToolFile], context: ToolCallContext) async throws -> Data {
-        try await perform { proxy, finish in
+        let caller = try JSONEncoder().encode(ToolExtensionCaller(context))
+        return try await perform { proxy, finish in
             proxy.callTool(tool, arguments: arguments, files: files.map(\.handle), parameters: files.map(\.parameter),
-                           writable: files.map { $0.access == .write }, agent: context.agentID.uuidString, reply: finish)
+                           writable: files.map { $0.access == .write }, caller: caller, reply: finish)
         }
     }
 

@@ -1,6 +1,6 @@
 ---
 name: update-message-catalogue
-description: Procedure for changing Noodle's message/event catalogue or messaging contract. Use when adding or editing a message or event case, its handling guidance, recipients, payload fields or CLI command usage in MessengerDocumentation.swift, or when docs/message-reference.md drifts and a build or test fails on it.
+description: Procedure for changing Noodle's message/event catalogue or messaging contract. Use when adding or editing a message or event case, its handling guidance, recipients, payload fields or CLI command usage in MessengerDocumentation.swift.
 ---
 
 # Message and event documentation
@@ -19,14 +19,13 @@ New cases must include:
 
 ## After changing the catalogue or messaging contract
 
-1. Regenerate the reference:
+1. Run the catalogue tests:
 
    ```sh
-   swift run --disable-sandbox NoodleDocumentation --write docs/message-reference.md
+   swift test --disable-sandbox --filter MessengerDocumentationTests
    ```
 
-2. Include the generated `docs/message-reference.md` in the same change. Do not
-   edit that reference by hand.
-3. Update encoding-coverage tests when payload fields change.
+2. Update encoding-coverage tests when payload fields change.
 
-Builds and tests check for drift.
+There is no generated copy of the catalogue to regenerate. Do not paste its text
+into a guide; link to the source or to `messenger --help`.

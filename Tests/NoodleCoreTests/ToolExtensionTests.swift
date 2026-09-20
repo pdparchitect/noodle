@@ -16,7 +16,8 @@ final class ToolExtensionTests: XCTestCase, NSXPCListenerDelegate {
             let source = try XCTUnwrap(files.first { $0.parameter == "from" }), destination = try XCTUnwrap(files.first { $0.parameter == "to" })
             XCTAssertEqual([source.access, destination.access], [.read, .write])
             try destination.handle.write(contentsOf: source.handle.readToEnd() ?? Data())
-            return try JSONSerialization.data(withJSONObject: ["content": [], "isError": false, "agent": context.agentID.uuidString])
+            return try JSONSerialization.data(withJSONObject: ["content": [], "isError": false, "agent": context.agentID.uuidString,
+                                                                   "assigned": context.assignments.ids("files").sorted()])
         }
     }
 
@@ -43,7 +44,7 @@ final class ToolExtensionTests: XCTestCase, NSXPCListenerDelegate {
         let provider = try await connect()
         XCTAssertEqual(provider.manifest, Files().manifest)
         XCTAssertEqual(provider.kind, .appExtension)
-        let context = ToolCallContext(agentID: UUID(), workspace: root)
+        let context = ToolCallContext(agentID: UUID(), workspace: root, assignments: ["files": ["f2", "f1"]])
         let listed = try await provider.tools(context: context)
         XCTAssertEqual(try ToolDescriptor.list(mcp: listed).map(\.name), ["copy"])
 
@@ -53,6 +54,7 @@ final class ToolExtensionTests: XCTestCase, NSXPCListenerDelegate {
                      ToolFile(parameter: "to", access: .write, handle: try FileHandle(forWritingTo: root.appendingPathComponent("out")))]
         let result = try JSONSerialization.jsonObject(with: try await provider.call("copy", arguments: Data("{}".utf8), files: files, context: context)) as? [String: Any]
         XCTAssertEqual(result?["agent"] as? String, context.agentID.uuidString)
+        XCTAssertEqual(result?["assigned"] as? [String], ["f1", "f2"], "the calling bot's assignments reach the extension")
         XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("out")), Data("payload".utf8))
     }
 
@@ -73,9 +75,9 @@ final class ToolExtensionTests: XCTestCase, NSXPCListenerDelegate {
                 return true
             }
             func manifest(reply: @escaping (Data) -> Void) {}
-            func listTools(agent: String, reply: @escaping (Data?, String?) -> Void) {}
+            func listTools(caller: Data, reply: @escaping (Data?, String?) -> Void) {}
             func callTool(_ name: String, arguments: Data, files: [FileHandle], parameters: [String], writable: [Bool],
-                          agent: String, reply: @escaping (Data?, String?) -> Void) {}
+                          caller: Data, reply: @escaping (Data?, String?) -> Void) {}
         }
         let delegate = Silent()
         silent.delegate = delegate; silent.resume()

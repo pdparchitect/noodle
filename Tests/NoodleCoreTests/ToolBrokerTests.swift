@@ -37,10 +37,10 @@ final class ToolBrokerTests: XCTestCase {
     override func tearDown() { try? FileManager.default.removeItem(at: workspace) }
 
     private func bridge(_ action: ToolBridgeAction, provider: String? = nil, tool: String? = nil, arguments: String? = nil,
-                         directory: String = "", assignments: Set<String> = []) async throws -> NSDictionary {
+                         directory: String = "", assignments: ToolAssignments = [:]) async throws -> NSDictionary {
         let request = ToolBridgeRequest(session: "s", action: action, provider: provider, tool: tool,
                                         arguments: arguments.map { Data($0.utf8) }, currentDirectory: directory)
-        let data = try await ToolBroker.perform(request, registry: registry, assignments: assignments,
+        let data = try await ToolBroker.perform(request, registry: registry, assignments: { assignments },
                                                 context: ToolCallContext(agentID: UUID(), workspace: workspace))
         return try JSONSerialization.jsonObject(with: data) as! NSDictionary
     }
@@ -48,7 +48,7 @@ final class ToolBrokerTests: XCTestCase {
     func testProvidersAndToolsFollowAssignments() async throws {
         let listed = try await bridge(.providers)
         XCTAssertEqual(listed, ["providers": [["id": "vision", "title": "Vision", "summary": "On-device image tools", "kind": "extension"]]])
-        let assigned = try await bridge(.providers, assignments: ["browser"])
+        let assigned = try await bridge(.providers, assignments: ["browser": ["b1"]])
         XCTAssertEqual((assigned["providers"] as? [NSDictionary])?.compactMap { $0["id"] as? String }, ["browser", "vision"])
         let tools = try await bridge(.tools, provider: "vision")
         XCTAssertEqual(((tools["tools"] as? [NSDictionary])?.first)?["name"] as? String, "ocr")

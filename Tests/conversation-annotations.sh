@@ -13,7 +13,7 @@ preview_support=()
 if [[ -f "$project_root/Sources/Noodle/NoodletPreviewAccess.swift" ]]; then
     preview_support+=("$project_root/Sources/Noodle/NoodletPreviewAccess.swift")
 fi
-swiftc -parse-as-library -target "$(uname -m)-apple-macosx15.0" -I "$bin_path/Modules" \
+swiftc -parse-as-library -target "$(uname -m)-apple-macosx26.0" -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/KeyboardBindings.swift" \
     "$project_root/Sources/Noodle/AnnotationCommands.swift" \
     "$project_root/Sources/Noodle/AttachmentPreviewController.swift" \

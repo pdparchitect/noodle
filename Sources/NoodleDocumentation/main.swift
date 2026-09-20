@@ -2,26 +2,19 @@ import Foundation
 import NoodleCore
 import AppletBridge
 
-// Development utility only; never bundled into the application or run by a bot.
+// Build utility only; never bundled into the application or run by a bot. It writes the
+// Applet CLI's help text, which ships as a resource because the CLI is a separate package.
 let arguments = Array(CommandLine.arguments.dropFirst())
-guard arguments.count == 2, ["--write", "--check", "--write-applet-help", "--write-applet-dev-help"].contains(arguments[0]) else {
-    FileHandle.standardError.write(Data("Usage: NoodleDocumentation --write|--check <reference.md>\n".utf8))
+guard arguments.count == 2, ["--write-applet-help", "--write-applet-dev-help"].contains(arguments[0]) else {
+    FileHandle.standardError.write(Data("Usage: NoodleDocumentation --write-applet-help|--write-applet-dev-help <file>\n".utf8))
     exit(2)
 }
 let url = URL(fileURLWithPath: arguments[1])
-let expected = arguments[0].hasPrefix("--write-applet-") ? MessengerDocumentation.appletCLIHelp(for: arguments[0] == "--write-applet-dev-help" ? .development : .production) : MessengerDocumentation.referenceMarkdown
 do {
-    if arguments[0] == "--write" || arguments[0].hasPrefix("--write-applet-") {
-        try expected.write(to: url, atomically: true, encoding: .utf8)
-        FileHandle.standardError.write(Data("Generated \(url.path)\n".utf8))
-    } else {
-        guard try String(contentsOf: url, encoding: .utf8) == expected else {
-            FileHandle.standardError.write(Data("Message reference is out of date. Run: swift run --disable-sandbox NoodleDocumentation --write docs/message-reference.md\n".utf8))
-            exit(1)
-        }
-        print("Message reference is current.")
-    }
+    try MessengerDocumentation.appletCLIHelp(for: arguments[0] == "--write-applet-dev-help" ? .development : .production)
+        .write(to: url, atomically: true, encoding: .utf8)
+    FileHandle.standardError.write(Data("Generated \(url.path)\n".utf8))
 } catch {
-    FileHandle.standardError.write(Data("Message reference: \(error.localizedDescription)\nRun: swift run --disable-sandbox NoodleDocumentation --write docs/message-reference.md\n".utf8))
+    FileHandle.standardError.write(Data("Applet help: \(error.localizedDescription)\n".utf8))
     exit(1)
 }

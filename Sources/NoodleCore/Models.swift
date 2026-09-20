@@ -770,9 +770,7 @@ public struct WorkspaceRepository: Sendable {
         let mcpExecutable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("mcpshim")
         try MCPSkillWriter.synchronize(workspace: directory, connections: mcpRegistry.assigned(to: agent.id),
             executable: mcpExecutable.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil })
-        let browserExecutable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("browser")
-        try BrowserAgentSkill.synchronize(workspace: directory, enabled: browserAssigned,
-            executable: browserExecutable.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil })
+        BrowserAgentSkill.removeLegacy(workspace: directory)
         let computerExecutable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("computer")
         try ComputerAgentSkill.synchronize(workspace: directory, enabled: computerAssigned,
             executable: computerExecutable.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil })
@@ -791,7 +789,7 @@ public struct WorkspaceRepository: Sendable {
                 "CLAUDE.md",
                 ".agents/skills/messenger/SKILL.md",
                 ".agents/skills/messenger/messenger"
-            ] + (browserAssigned ? [".agents/skills/browser/SKILL.md", ".agents/skills/browser/browser", ".agents/skills/browser/.noodle-managed"] : []) + (computerAssigned ? [".agents/skills/computer/SKILL.md", ".agents/skills/computer/computer", ".agents/skills/computer/.noodle-managed"] : []) + (appletEnabled ? [".agents/skills/applet/SKILL.md", ".agents/skills/applet/noodlet", ".agents/skills/applet/.noodle-managed"] : []) + claudeSkillPaths
+            ] + (computerAssigned ? [".agents/skills/computer/SKILL.md", ".agents/skills/computer/computer", ".agents/skills/computer/.noodle-managed"] : []) + (appletEnabled ? [".agents/skills/applet/SKILL.md", ".agents/skills/applet/noodlet", ".agents/skills/applet/.noodle-managed"] : []) + claudeSkillPaths
         )
         try agentsFiles.write(manifest, named: "managed-skills.json")
     }

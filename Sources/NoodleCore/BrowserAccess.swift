@@ -16,27 +16,23 @@ public struct BrowserAssignments: Codable, Sendable {
         return value
     }
     public func save(root: URL) throws { try MCPBridgeFiles.write(self, to: root.appendingPathComponent("browsers.json")) }
-}
-public struct BrowserAgentRequest: Codable, Sendable {
-    public var id = UUID()
-    public var token: String
-    public var request: BrowserRequest
-    public var localPath: String?
-    public var conversationID: UUID?
-    public var message: String?
-    public var expiresAt: Date
-    public init(token: String, request: BrowserRequest, localPath: String? = nil) {
-        self.token = token; self.request = request; self.localPath = localPath
-        expiresAt = Date().addingTimeInterval(Double(request.operation.timeout))
+    /// What the tool broker enforces. A registry that could not be read grants nothing.
+    public func toolAssignments(readable: Bool) -> [UUID: Set<String>] {
+        guard readable else { return [:] }
+        return Dictionary(uniqueKeysWithValues: agents.compactMap { key, ids in UUID(uuidString: key).map { ($0, Set(ids.map(\.uuidString))) } })
     }
 }
 public enum BrowserAgentSkill {
-    public static var instructions: String { MessengerDocumentation.browserSkill }
-    public static func synchronize(workspace: URL, enabled: Bool, executable: URL?) throws {
-        try WorkspaceMailbox.synchronizeSkill(workspace: workspace, name: "browser", enabled: enabled,
-            instructions: instructions, command: "browser", executable: executable)
-    }
-    public static func bridge(workspace: URL) throws -> URL {
-        try WorkspaceMailbox(workspace: workspace, path: ".noodle/browser-bridge", create: true).url
+    /// Bots now reach browsers through `messenger tool browser`. Remove what earlier versions
+    /// wrote: the hand-written skill with its command link, and the request mailbox.
+    public static func removeLegacy(workspace: URL) {
+        if let folder = try? WorkspaceMailbox(workspace: workspace, path: ".agents/skills/browser") {
+            if folder.contains(ToolProviderSkills.marker) { folder.remove("browser") }
+            else { try? WorkspaceMailbox.synchronizeSkill(workspace: workspace, name: "browser", enabled: false, instructions: "", command: "browser", executable: nil) }
+        }
+        if let bridge = try? WorkspaceMailbox(workspace: workspace, path: ".noodle/browser-bridge"), let names = try? bridge.names() {
+            names.forEach(bridge.remove)
+            (try? WorkspaceMailbox(workspace: workspace, path: ".noodle"))?.removeEmptyDirectory("browser-bridge")
+        }
     }
 }

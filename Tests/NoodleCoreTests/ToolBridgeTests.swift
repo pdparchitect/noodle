@@ -21,8 +21,8 @@ final class ToolBridgeTests: XCTestCase {
     private var broker: ToolBridgeBroker!
     private let assignments = Assignments()
     private final class Assignments: @unchecked Sendable {
-        private let lock = NSLock(); private var values: [UUID: Set<String>] = [:]
-        subscript(id: UUID) -> Set<String> { get { lock.withLock { values[id] ?? [] } } set { lock.withLock { values[id] = newValue } } }
+        private let lock = NSLock(); private var values: [UUID: ToolAssignments] = [:]
+        subscript(id: UUID) -> ToolAssignments { get { lock.withLock { values[id] ?? .none } } set { lock.withLock { values[id] = newValue } } }
     }
 
     override func setUpWithError() throws {
@@ -63,9 +63,9 @@ final class ToolBridgeTests: XCTestCase {
 
     func testAssignmentChangesApplyWithoutRestartingTheBroker() throws {
         XCTAssertThrowsError(try request(.tools, provider: "browser"))
-        assignments[caller.id] = ["browser"]
+        assignments[caller.id] = ["browser": ["b1"]]
         XCTAssertNoThrow(try request(.tools, provider: "browser"))
-        assignments[caller.id] = []
+        assignments[caller.id] = [:]
         XCTAssertThrowsError(try request(.tools, provider: "browser"))
     }
 

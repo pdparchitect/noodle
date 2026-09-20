@@ -15,6 +15,6 @@ the author's machine, conversation, or work history.
   test-run transcripts, personal paths, and machine-specific state.
 - Update an existing guide before adding a file. Remove obsolete material and
   repair links when consolidating or deleting documentation.
-- `message-reference.md` is generated from
-  `Sources/NoodleCore/MessengerDocumentation.swift`; update the source and
-  regenerate it instead of editing the reference by hand.
+- Message, event and command guidance lives only in
+  `Sources/NoodleCore/MessengerDocumentation.swift`. Do not copy it into a guide;
+  link to the source or to `messenger --help`.

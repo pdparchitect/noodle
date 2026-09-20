@@ -12,8 +12,9 @@ Background automation must not activate windows or post
 input to the system event stream. New/restored tabs and popups inherit the
 profile's mute setting before navigation.
 
-Keep assignment authorization in Noodle. Only the signed Noodle broker may use
-the companion socket and choose shared transfer IDs. Agent file paths must pass
+Keep assignment authorization in Noodle. Only the signed Noodle broker or its
+bundled Browser tool extension may use the companion socket and choose shared
+transfer IDs; the extension only forwards calls the broker already authorized. Agent file paths must pass
 through the workspace file-transfer boundary, not the browser's filesystem.
 Protocol changes need coordinated broker/CLI handling and generated guidance in
 `Sources/NoodleCore/MessengerDocumentation.swift`.

@@ -1,13 +1,16 @@
 import Foundation
 import Security
 
-/// Exact production/development identities for the companion and Noodle broker.
+/// Exact production/development identities for the companion, the Noodle broker and its Browser tool extension.
 public enum BrowserBuildIdentity: String, CaseIterable, Sendable {
     case production, development
 
     public var providerID: String { "com.pdparchitect.noodle.browser" + suffix }
     public var noodleID: String { "com.pdparchitect.noodle" + suffix }
-    public var clientIDs: [String] { [noodleID] }
+    /// Noodle's bundled Browser tool extension. It forwards calls the Noodle broker has
+    /// already authorized; assignment decisions never move into it.
+    public var toolExtensionID: String { noodleID + ".tools.browser" }
+    public var clientIDs: [String] { [noodleID, toolExtensionID] }
     public var groupSuffix: String { "com.pdparchitect.noodle.browsers" + suffix }
     public var appName: String { "Noodle Browser" + (self == .development ? " Dev" : "") }
     public var urlScheme: String { self == .development ? "noodlebrowser-dev" : "noodlebrowser" }
@@ -16,7 +19,7 @@ public enum BrowserBuildIdentity: String, CaseIterable, Sendable {
     private var suffix: String { self == .development ? ".local" : "" }
 
     public static func identify(_ identifier: String?) -> Self? {
-        allCases.first { [$0.providerID, $0.noodleID].contains(identifier ?? "") }
+        allCases.first { [$0.providerID, $0.noodleID, $0.toolExtensionID].contains(identifier ?? "") }
     }
     public static let processIdentity: Self? = {
         // Paths and request flags cannot select another environment.

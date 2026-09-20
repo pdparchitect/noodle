@@ -28,7 +28,7 @@ or another Mac MDM with
 [package deployment](https://support.apple.com/en-gb/guide/deployment/dep873c25ac4/web),
 so a pilot can grow through your existing device groups and rollout processes.
 
-Noodle runs on macOS 15 or later. Current releases are app ZIPs for IT to package.
+Noodle runs on macOS 26 or later. Current releases are app ZIPs for IT to package.
 Noodle can install external agent providers itself, or use ones your team already
 manages; each signs in with its own account.
 

@@ -24,8 +24,7 @@ flowchart LR
 
 Messenger advances each bot's read positions and excludes its own messages.
 Conversation writes use filesystem locks and atomic replacement so several bots
-can reply safely. See [storage](storage-and-messenger.md) and the
-[message reference](message-reference.md).
+can reply safely. See [storage](storage-and-messenger.md).
 
 ## Harnesses and recovery
 

@@ -332,7 +332,7 @@ class WorkflowTests(unittest.TestCase):
                 'website/assets/noodle.png']
         required = ['VERSION', 'Computer/VERSION', 'Applet/VERSION', 'Browser/VERSION', 'Computer/Images/VERSION',
                     'CHANGELOG.md', 'Computer/CHANGELOG.md', 'Applet/CHANGELOG.md', 'Browser/CHANGELOG.md',
-                    'Computer/Images/CHANGELOG.md', 'docs/message-reference.md',
+                    'Computer/Images/CHANGELOG.md',
                     'Sources/NoodleCore/MessengerDocumentation.swift', 'Package.swift',
                     'Tests/NoodleAppTests/ScreenCaptureTests.swift', 'scripts/build-app.sh',
                     'Support/AppIcon.png', 'Support/update-milestones.json',

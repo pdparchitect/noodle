@@ -57,7 +57,7 @@ window. It does not require additional Accessibility or Screen Recording
 permission. A region is a saved snapshot; it does not track content after
 scrolling or zooming.
 
-Bots receive the comment, source reference, and saved content. For metadata and
-CLI access, see the generated [message reference](message-reference.md).
+Bots receive the comment, source reference, and saved content. The Messenger
+skill in each bot's workspace describes the metadata and CLI access.
 
 [Documentation](README.md)

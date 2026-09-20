@@ -19,16 +19,27 @@ for extension in "$extensions"/*.appex(N); do
     print -r -- "$details" | grep -Eq '^CodeDirectory .*flags=.*runtime' ||
         { print -u2 "${extension:t} must use the hardened runtime"; exit 1; }
     identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$extension/Contents/Info.plist")"
-    [[ "$identifier" == "$bundle_identifier".* ]] || { print -u2 "${extension:t} must be named under $bundle_identifier"; exit 1; }
+    # The .tools. namespace keeps extension identifiers apart from companion apps such as <app>.browser.
+    [[ "$identifier" == "$bundle_identifier".tools.* ]] || { print -u2 "${extension:t} must be named under $bundle_identifier.tools"; exit 1; }
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :EXAppExtensionAttributes:EXExtensionPointIdentifier' "$extension/Contents/Info.plist")" == "$point" ]] ||
         { print -u2 "${extension:t} does not bind to $point"; exit 1; }
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :LSBackgroundOnly' "$extension/Contents/Info.plist")" == true ]] ||
         { print -u2 "${extension:t} must stay out of the Dock"; exit 1; }
     entitlements="$(codesign -d --entitlements :- "$extension" 2>/dev/null | tr -d '[:space:]')"
-    [[ "$(print -r -- "$entitlements" | grep -o '<key>' | wc -l | tr -d '[:space:]')" == 1 ]] ||
-        { print -u2 "${extension:t} must have only the sandbox entitlement"; exit 1; }
     print -r -- "$entitlements" | grep -q '<key>com.apple.security.app-sandbox</key><true/>' ||
         { print -u2 "${extension:t} must be sandboxed"; exit 1; }
+    keys="$(print -r -- "$entitlements" | grep -o '<key>' | wc -l | tr -d '[:space:]')"
+    if [[ "$identifier" == "$bundle_identifier.tools.browser" ]]; then
+        # The only extension with a group, and only the browsers group of this build.
+        group="$(/usr/libexec/PlistBuddy -c 'Print :NoodleBrowserGroup' "$app/Contents/Info.plist")"
+        [[ "$keys" == 2 ]] || { print -u2 "${extension:t} may have only the sandbox and browsers-group entitlements"; exit 1; }
+        print -r -- "$entitlements" | grep -Fq "<key>com.apple.security.application-groups</key><array><string>$group</string></array>" ||
+            { print -u2 "${extension:t} must hold exactly the browsers group"; exit 1; }
+        [[ "$(/usr/libexec/PlistBuddy -c 'Print :NoodleBrowserGroup' "$extension/Contents/Info.plist")" == "$group" ]] ||
+            { print -u2 "${extension:t} names a different browsers group"; exit 1; }
+    else
+        [[ "$keys" == 1 ]] || { print -u2 "${extension:t} must have only the sandbox entitlement"; exit 1; }
+    fi
 done
 (( found > 0 )) || { print -u2 "No tool extensions were bundled"; exit 1; }
-print "Tool extension point, signatures and sandbox-only entitlements verified ($found)"
+print "Tool extension point, signatures and pinned entitlements verified ($found)"

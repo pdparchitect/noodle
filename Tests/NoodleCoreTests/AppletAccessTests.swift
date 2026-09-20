@@ -79,7 +79,6 @@ final class AppletAccessTests: XCTestCase {
             XCTAssertFalse(guidance.isEmpty)
             XCTAssertTrue(MessengerDocumentation.appletCLIHelp.contains(guidance))
             XCTAssertTrue(MessengerDocumentation.appletSkill.contains(guidance))
-            XCTAssertTrue(MessengerDocumentation.referenceMarkdown.contains(guidance))
         }
     }
     func testManagedSkillPreservesCustomSkillAndExposesCorrectHelper() throws {

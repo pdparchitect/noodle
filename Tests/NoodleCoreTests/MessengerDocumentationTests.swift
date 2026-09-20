@@ -16,12 +16,7 @@ final class MessengerDocumentationTests: XCTestCase {
         XCTAssertLessThan(bootstrap.count, MessengerDocumentation.skillInstructions.count / 4)
     }
 
-    func testReferenceIsCurrentAndEveryRuntimeCaseHasGuidance() throws {
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-        let checkedIn = try String(contentsOf: root.appendingPathComponent("docs/message-reference.md"), encoding: .utf8)
-        XCTAssertEqual(checkedIn, MessengerDocumentation.referenceMarkdown,
-            "Regenerate with swift run --disable-sandbox NoodleDocumentation --write docs/message-reference.md")
+    func testEveryRuntimeCaseHasGuidance() throws {
         let entries = MessengerDocumentation.eventReferences
         XCTAssertEqual(Set(entries.map(\.id)).count, entries.count, "Event identifiers must be unique.")
         for entry in entries {
@@ -36,7 +31,6 @@ final class MessengerDocumentationTests: XCTestCase {
             XCTAssertFalse(command.guidance.isEmpty)
             XCTAssertTrue(command.usage.hasPrefix(command.rawValue))
             XCTAssertTrue(MessengerDocumentation.cliHelp.contains(command.usage))
-            XCTAssertTrue(checkedIn.contains(command.usage))
         }
     }
 
@@ -134,7 +128,9 @@ final class MessengerDocumentationTests: XCTestCase {
         try browsers.save(root: root)
         try repository.synchronizeAgentWorkspace(bot.agent)
         let browserSkill = workspace.appendingPathComponent(".agents/skills/browser/SKILL.md")
-        try "Obsolete screenshot-only instructions".write(to: browserSkill, atomically: true, encoding: .utf8)
+        // What an earlier Noodle wrote: a managed hand-written skill with its command link.
+        try WorkspaceMailbox.synchronizeSkill(workspace: workspace, name: "browser", enabled: true,
+            instructions: "Obsolete screenshot-only instructions", command: "browser", executable: URL(fileURLWithPath: "/usr/bin/true"))
         try repository.synchronizeAgentWorkspace(bot.agent)
         let refreshed = try String(contentsOf: guide, encoding: .utf8)
         let skill = try String(contentsOf: workspace.appendingPathComponent(".agents/skills/messenger/SKILL.md"), encoding: .utf8)
@@ -144,7 +140,8 @@ final class MessengerDocumentationTests: XCTestCase {
         XCTAssertFalse(refreshed.contains("Obsolete runtime guidance"))
         XCTAssertTrue(refreshed.contains(MessengerDocumentation.bootstrapInstructions))
         XCTAssertTrue(refreshed.contains(MessengerDocumentation.browserBootstrapInstructions))
-        XCTAssertEqual(try String(contentsOf: browserSkill, encoding: .utf8), MessengerDocumentation.browserSkill)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: browserSkill.path),
+                       "the hand-written browser skill is removed; the Browser tool extension's skill replaces it")
         XCTAssertFalse(refreshed.contains(MessengerDocumentation.skillInstructions))
         XCTAssertFalse(refreshed.contains(MessengerDocumentation.transportInstructions))
         XCTAssertTrue(skill.contains(MessengerDocumentation.skillInstructions))

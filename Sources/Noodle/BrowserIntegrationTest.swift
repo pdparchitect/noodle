@@ -1,5 +1,6 @@
 import AppKit
 import BrowserBridge
+import NoodleBrowserTools
 import NoodleCore
 
 /// Explicit fixture mode, with a fresh repository and an explicitly identified
@@ -19,8 +20,9 @@ import NoodleCore
     static func run() async throws {
         setbuf(stdout, nil)
         let args = CommandLine.arguments
+        // "auto" finds the fixture by name, for hosts that cannot read the companion's container.
         guard let i = args.firstIndex(of: "--browser-fixture"), i+1 < args.count,
-              let browserID = UUID(uuidString: args[i+1]),
+              args[i+1] == "auto" || UUID(uuidString: args[i+1]) != nil,
               let p = args.firstIndex(of: "--browser-fixture-port"), p+1 < args.count,
               let port = Int(args[p+1]), (1...65535).contains(port) else { throw BrowserError("Specify the isolated browser fixture ID and port.") }
         let front = NSWorkspace.shared.frontmostApplication?.processIdentifier
@@ -38,27 +40,42 @@ import NoodleCore
         }
         await controller.refresh()
         guard controller.available, controller.registry.browsers.count == 2,
-              controller.registry.browsers.contains(where: { $0.id == browserID && $0.name == "Smoke authenticated" }) else { throw BrowserError("Signed Browser fixture is not available. Start its isolated smoke server first.") }
+              let browserID = controller.registry.browsers.first(where: { $0.name == "Smoke authenticated" })?.id,
+              args[i+1] == "auto" || UUID(uuidString: args[i+1]) == browserID else { throw BrowserError("Signed Browser fixture is not available. Start its isolated smoke server first.") }
+        // The same pieces the app wires together, with the provider pointed at the fixture's
+        // socket instead of running inside the extension against a user's companion.
+        let assignments = ToolAssignmentStore(), registry = ToolProviderRegistry()
+        let staging = socket.deletingLastPathComponent()
+        try registry.register(BrowserToolProvider(stagingRoot: { staging }) { try await BrowserConnection.call($0, socket: socket, team: team) })
+        let broker = ToolBridgeBroker(registry: registry, host: .repository(repository) { assignments.assignments(for: $0) }) { assignments.assignments(for: $0) }
+        controller.onAssignmentsChange = { assignments.replace("browser", with: $0); broker.synchronizeSkills() }
         try controller.assign([browserID], to: agent)
-        controller.start(agents: [agent]); defer { controller.start(agents: []) }
         let workspace = repository.directory(for: agent)
+        try broker.start(agents: [ToolBridgeAgent(id: agent.id, workspace: workspace)]); defer { broker.stop() }
         func cli(_ args: [String], expectFailure: Bool = false) async throws -> [String: Any] {
             try await Task.detached {
                 let process = Process(), output = Pipe(), errors = Pipe()
-                process.executableURL = workspace.appendingPathComponent(".agents/skills/browser/browser")
-                process.currentDirectoryURL = workspace; process.arguments = args
+                process.executableURL = workspace.appendingPathComponent(".agents/skills/messenger/messenger")
+                // "webmcp list" and "webmcp call" are the tools webmcp-list and webmcp-call.
+                let tool = args[0] == "webmcp" ? ["webmcp-" + args[1]] + args.dropFirst(2) : args
+                process.currentDirectoryURL = workspace; process.arguments = ["tool", "browser"] + tool
                 process.standardOutput = output; process.standardError = errors
                 try process.run()
                 let bytes = output.fileHandleForReading.readDataToEndOfFile()
                 let failure = errors.fileHandleForReading.readDataToEndOfFile()
                 process.waitUntilExit()
+                // A tool result carries its JSON in structuredContent; a tool error its message in content.
+                let result = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any]
+                let message = ((result?["content"] as? [[String: Any]])?.first)?["text"] as? String
                 if expectFailure {
                     guard process.terminationStatus != 0 else { throw BrowserError("Revoked CLI access succeeded.") }
-                    if let json = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] { return json }
-                    return ["error": String(decoding: failure, as: UTF8.self)]
+                    if let structured = result?["structuredContent"] as? [String: Any] { return structured }
+                    return ["error": message ?? String(decoding: failure, as: UTF8.self)]
                 }
-                guard process.terminationStatus == 0 else { throw BrowserError(String(decoding: failure, as: UTF8.self)) }
-                return try JSONSerialization.jsonObject(with: bytes) as! [String: Any]
+                guard process.terminationStatus == 0, let structured = result?["structuredContent"] as? [String: Any] else {
+                    throw BrowserError(message ?? String(decoding: failure, as: UTF8.self))
+                }
+                return structured
             }.value
         }
         let list = try await cli(["list"])
@@ -145,7 +162,7 @@ import NoodleCore
         _ = try await cli(["webmcp", "call"] + tab + ["--tool", echoID, "--args", "[]"], expectFailure: true)
         let invalidSchema = try await cli(["webmcp", "call"] + tab + ["--tool", echoID, "--args", #"{"text":"bad","count":0}"#], expectFailure: true)
         guard ((invalidSchema["value"] as? [String: Any])?["error"] as? [String: Any])?["code"] as? String == "INVALID_ARGUMENTS" else { throw BrowserError("CLI WebMCP error did not preserve its JSON code.") }
-        let mailboxFiles = try FileManager.default.contentsOfDirectory(atPath: BrowserAgentSkill.bridge(workspace: workspace).path)
+        let mailboxFiles = try FileManager.default.contentsOfDirectory(atPath: workspace.appendingPathComponent(ToolBroker.path).path)
         guard !mailboxFiles.contains(where: { $0.hasSuffix(".request") || $0.hasSuffix(".response") }) else { throw BrowserError("Failed WebMCP CLI call left request files behind.") }
         _ = try await cli(["webmcp", "call"] + tab + ["--tool", echoID, "--args-file", "../outside.json"], expectFailure: true)
         print("PASS WebMCP managed CLI discovery, JSON invocation, workspace argument files, structured failure exit and authenticated execution")

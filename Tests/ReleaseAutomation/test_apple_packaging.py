@@ -27,11 +27,12 @@ class ApplePackagingTests(unittest.TestCase):
                 scripts / 'swift-apple.sh': 'printf "%s\\n" "$FIXTURE_BIN"',
                 scripts / 'build-mlx-metal.sh': 'touch "$FIXTURE_METAL_LOG"',
                 binary / 'NoodleAppleAgent': 'case "$1" in --build-capabilities) printf \'{"apple27":%s}\\n\' "$FIXTURE_APPLE27";; --inspect) printf \'{"localModelsSupported":false}\\n\';; *) exit 2;; esac',
-                # Stop the real build before packaging or signing starts.
-                binary / 'NoodleDocumentation': 'exit 99',
             }.items():
                 path.write_text('#!/bin/sh\n' + body + '\n')
                 path.chmod(0o700)
+            # Stop the real build before packaging or signing starts: this is the first
+            # step after the shader decision.
+            (scripts / 'verify-build-sdk.py').write_text('raise SystemExit(99)\n')
             for compiled, required, expected in [('true', '1', 99), ('false', '1', 1), ('false', '0', 99)]:
                 with self.subTest(compiled=compiled, required=required):
                     metal = root / 'metal-built'

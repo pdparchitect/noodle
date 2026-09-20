@@ -7,7 +7,7 @@
 **A workspace for you and your AI agents.**
 
 <p>
-  <img alt="macOS 15+" src="https://img.shields.io/badge/macOS-%E2%89%A515-0a0a0a?style=flat-square&logo=apple&logoColor=white">
+  <img alt="macOS 26+" src="https://img.shields.io/badge/macOS-%E2%89%A526-0a0a0a?style=flat-square&logo=apple&logoColor=white">
   <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-0a0a0a?style=flat-square&logo=swift&logoColor=white">
   <img alt="Persistent agents" src="https://img.shields.io/badge/agents-persistent-0a0a0a?style=flat-square">
   <img alt="Individual and team work" src="https://img.shields.io/badge/work-individual%20%2B%20teams-0a0a0a?style=flat-square">

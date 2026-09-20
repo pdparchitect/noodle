@@ -13,18 +13,18 @@ final class ToolProviderTests: XCTestCase {
         let registry = ToolProviderRegistry()
         try registry.register(Fixture(manifest: .init(id: "vision", title: "Vision", summary: "")))
         try registry.register(Fixture(manifest: .init(id: "browser", title: "Browser", summary: "", activation: .whenAssigned("browser"))))
-        XCTAssertEqual(registry.manifests(assignments: []).map(\.id), ["vision"])
-        XCTAssertEqual(registry.manifests(assignments: ["browser"]).map(\.id), ["browser", "vision"])
-        XCTAssertThrowsError(try registry.provider("browser", assignments: ["computer"]))
-        XCTAssertThrowsError(try registry.provider("missing", assignments: []))
-        XCTAssertNoThrow(try registry.provider("browser", assignments: ["browser"]))
+        XCTAssertEqual(registry.manifests(assignments: [:]).map(\.id), ["vision"])
+        XCTAssertEqual(registry.manifests(assignments: ["browser": ["b1"]]).map(\.id), ["browser", "vision"])
+        XCTAssertThrowsError(try registry.provider("browser", assignments: ["computer": ["c1"]]))
+        XCTAssertThrowsError(try registry.provider("missing", assignments: [:]))
+        XCTAssertNoThrow(try registry.provider("browser", assignments: ["browser": ["b1"]]))
         XCTAssertThrowsError(try registry.register(Fixture(manifest: .init(id: "vision", title: "Again", summary: ""))))
         for id in ["", "Vision", "a/b", "-a", "a-", String(repeating: "a", count: 49)] {
             XCTAssertThrowsError(try registry.register(Fixture(manifest: .init(id: id, title: "T", summary: ""))), id)
         }
         XCTAssertThrowsError(try registry.register(Fixture(manifest: .init(id: "x", title: "T", summary: "", activation: .init(rawValue: "sometimes")))))
         registry.unregister("vision")
-        XCTAssertEqual(registry.manifests(assignments: ["browser"]).map(\.id), ["browser"])
+        XCTAssertEqual(registry.manifests(assignments: ["browser": ["b1"]]).map(\.id), ["browser"])
     }
 
     func testManifestRoundTripsAsPlainJSON() throws {
