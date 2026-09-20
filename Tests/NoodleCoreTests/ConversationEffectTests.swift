@@ -21,7 +21,7 @@ final class ConversationEffectTests: XCTestCase {
         let command = repository.directory(for: bot.agent).appendingPathComponent(".agents/skills/messenger/messenger").path
         let list = MessengerCLI.runDirect(arguments: [command, "--list-effects"], environment: [:])
         XCTAssertEqual(list.exitCode, 0, list.standardError)
-        XCTAssertEqual(try JSONDecoder().decode([String].self, from: Data(list.standardOutput.utf8)), ["confetti", "fireworks"])
+        XCTAssertEqual(try JSONDecoder().decode([String].self, from: Data(list.standardOutput.utf8)), ["confetti", "fireworks", "fire"])
         let id = UUID()
         let arguments = [command, "--effect", "confetti", "--conversation", bot.conversation.id.uuidString,
                          "--request-id", id.uuidString]

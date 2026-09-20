@@ -131,6 +131,13 @@ extension ConversationEffectKind {
                 guidance: """
                 For a rare, major milestone, such as a long task finished or a release shipped, use `--effect fireworks` instead of confetti. It is the louder of the two, so keep confetti for everyday wins. The same delivery, expiry and rate rules apply.
                 """)
+        case .fire:
+            return .init(id: "effect:\(rawValue)",
+                fields: ConversationEffectKind.confetti.reference.fields,
+                recipients: ConversationEffectKind.confetti.reference.recipients,
+                guidance: """
+                When the user is on a hot streak or a result is outstanding, `--effect fire` sets the edges of the chat ablaze for a few seconds. It is praise, never an alarm: do not use it for failures, outages or bad news, where it would read as mockery. The same delivery, expiry and rate rules apply.
+                """)
         }
     }
 }
