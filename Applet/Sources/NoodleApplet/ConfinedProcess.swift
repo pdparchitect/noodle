@@ -70,7 +70,8 @@ private final class NoodletHostConnection: NSObject, NoodletHostClient, @uncheck
   private var processes: [String: ConfinedProcess] = [:]
 
   private func proxy(_ failure: @escaping (Error) -> Void) -> NoodletHostService? {
-    let connection = lock.withLock {
+    // Named apart from the property: older compilers resolve a shadowing name to the local being declared.
+    let active = lock.withLock {
       if let connection { return connection }
       let created = NSXPCConnection(serviceName: Self.service ?? "")
       created.remoteObjectInterface = NSXPCInterface(with: NoodletHostService.self)
@@ -83,7 +84,7 @@ private final class NoodletHostConnection: NSObject, NoodletHostClient, @uncheck
       connection = created
       return created
     }
-    return connection.remoteObjectProxyWithErrorHandler(failure) as? NoodletHostService
+    return active.remoteObjectProxyWithErrorHandler(failure) as? NoodletHostService
   }
   private func lost() {
     let (dropped, orphans) = lock.withLock {
