@@ -24,7 +24,7 @@ struct AppleLocalModelsView: View {
     private let checkSupport: @MainActor () async throws -> Bool
 
     init(checkSupport: @escaping @MainActor () async throws -> Bool = {
-        try await AppleHostProbe().load().localModelsSupported == true
+        try await AppleHostProbe.load().localModelsSupported == true
     }) {
         self.checkSupport = checkSupport
     }

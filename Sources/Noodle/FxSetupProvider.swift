@@ -19,45 +19,13 @@ final class FxSetupProvider: HarnessSetupProviding {
 }
 
 @MainActor
-final class FxModelProbe {
-    private let connection: ExtendedAgentConnection
-    private var continuation: CheckedContinuation<[HarnessModel], Error>?
-    private var timeout: Task<Void, Never>?
-    init() throws { connection = try ExtendedAgentConnection() }
+enum FxModelProbe {
     /// Codex only when the app cannot run it itself: a copy Noodle installed.
-    func load(path: String, provider: HarnessProvider = .fx) async throws -> [HarnessModel] {
-        try await withTaskCancellationHandler {
-            try Task.checkCancellation()
-            return try await withCheckedThrowingContinuation { continuation in
-                self.continuation = continuation
-                connection.onFailure = { [weak self] error in
-                    Task { @MainActor in self?.finish(.failure(HarnessSetupError(error))) }
-                }
-                let reply: (Data?, String?) -> Void = { [weak self] data, error in
-                    Task { @MainActor in
-                        guard let self else { return }
-                        do {
-                            if let error { throw HarnessSetupError(error) }
-                            guard let data else { throw HarnessSetupError("\(provider.displayName) returned no models.") }
-                            self.finish(.success(try JSONDecoder().decode([HarnessModel].self, from: data)))
-                        } catch { self.finish(.failure(error)) }
-                    }
-                }
-                if provider == .codex { connection.codexModels(executablePath: path, reply: reply) }
-                else { connection.fxModels(executablePath: path, reply: reply) }
-                timeout = Task { [weak self] in
-                    try? await Task.sleep(for: .seconds(65))
-                    guard !Task.isCancelled else { return }
-                    self?.finish(.failure(HarnessSetupError("\(provider.displayName) model discovery timed out.")))
-                }
-            }
-        } onCancel: { Task { @MainActor in self.finish(.failure(CancellationError())) } }
-    }
-    private func finish(_ result: Result<[HarnessModel], Error>) {
-        guard let continuation else { return }
-        self.continuation = nil
-        timeout?.cancel()
-        connection.invalidate()
-        continuation.resume(with: result)
+    static func load(path: String, provider: HarnessProvider = .fx) async throws -> [HarnessModel] {
+        try await AgentHostRequest().load(timeout: .seconds(65), noReply: "\(provider.displayName) returned no models.",
+            timedOut: "\(provider.displayName) model discovery timed out.") {
+            if provider == .codex { $0.codexModels(executablePath: path, reply: $1) }
+            else { $0.fxModels(executablePath: path, reply: $1) }
+        }
     }
 }

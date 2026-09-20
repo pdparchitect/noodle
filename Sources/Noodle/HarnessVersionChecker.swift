@@ -10,10 +10,10 @@ import NoodleCore
          now: @escaping @MainActor () -> Date = { Date() }) {
         self.inspect = inspect ?? { installation in
             if installation.provider == .apple {
-                let result = try await AppleHostProbe().load()
+                let result = try await AppleHostProbe.load()
                 return HarnessVersionReport(installedVersion: result.version)
             }
-            return try await HarnessVersionHostProbe().load(installation)
+            return try await HarnessVersionHostProbe.load(installation)
         }
         self.fetch = fetch ?? { try await Self.fetchRelease($0) }
         self.now = now
@@ -75,44 +75,12 @@ private final class ReleaseRedirectPolicy: NSObject, URLSessionTaskDelegate {
     }
 }
 
-@MainActor private final class HarnessVersionHostProbe {
-    private let connection: ExtendedAgentConnection
-    private var continuation: CheckedContinuation<HarnessVersionReport, Error>?
-    private var timeout: Task<Void, Never>?
-    init() throws { connection = try ExtendedAgentConnection() }
-
-    func load(_ installation: HarnessInstallation) async throws -> HarnessVersionReport {
+@MainActor private enum HarnessVersionHostProbe {
+    static func load(_ installation: HarnessInstallation) async throws -> HarnessVersionReport {
         guard let path = installation.executablePath else { throw HarnessSetupError("Install the harness first.") }
-        return try await withTaskCancellationHandler {
-            try Task.checkCancellation()
-            return try await withCheckedThrowingContinuation { continuation in
-                self.continuation = continuation
-                connection.onFailure = { [weak self] _ in
-                    Task { @MainActor in self?.finish(.failure(HarnessSetupError("Could not inspect the harness version."))) }
-                }
-                connection.inspectHarnessVersion(provider: installation.provider, executablePath: path) { [weak self] data, error in
-                    Task { @MainActor in
-                        do {
-                            if let error { throw HarnessSetupError(error) }
-                            guard let data else { throw HarnessSetupError("No version information was returned.") }
-                            self?.finish(.success(try JSONDecoder().decode(HarnessVersionReport.self, from: data)))
-                        } catch { self?.finish(.failure(error)) }
-                    }
-                }
-                timeout = Task { [weak self] in
-                    try? await Task.sleep(for: .seconds(20))
-                    guard !Task.isCancelled else { return }
-                    self?.finish(.failure(HarnessSetupError("Harness version check timed out.")))
-                }
-            }
-        } onCancel: { Task { @MainActor in self.finish(.failure(CancellationError())) } }
-    }
-
-    private func finish(_ result: Result<HarnessVersionReport, Error>) {
-        guard let continuation else { return }
-        self.continuation = nil
-        timeout?.cancel()
-        connection.invalidate()
-        continuation.resume(with: result)
+        return try await AgentHostRequest().load(timeout: .seconds(20), noReply: "No version information was returned.",
+            timedOut: "Harness version check timed out.", disconnected: "Could not inspect the harness version.") {
+            $0.inspectHarnessVersion(provider: installation.provider, executablePath: path, reply: $1)
+        }
     }
 }

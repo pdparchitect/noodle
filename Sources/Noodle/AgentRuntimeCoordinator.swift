@@ -35,9 +35,9 @@ struct HarnessHostInspection {
 
     @MainActor static func load(_ provider: HarnessProvider) async throws -> HarnessHostInspection {
         switch provider {
-        case .grokBuild: return .init(try await GrokHostProbe().load())
-        case .openCode: return .init(try await OpenCodeHostProbe().load())
-        case .muse: return .init(try await MuseHostProbe().load())
+        case .grokBuild: return .init(try await GrokHostProbe.load())
+        case .openCode: return .init(try await OpenCodeHostProbe.load())
+        case .muse: return .init(try await MuseHostProbe.load())
         default: throw HarnessSetupError("\(provider.displayName) is not inspected by the Agent Host.")
         }
     }
@@ -140,7 +140,7 @@ final class AgentRuntimeCoordinator {
             return
         }
         do {
-            let result = try await AppleHostProbe().load()
+            let result = try await AppleHostProbe.load()
             guard !Task.isCancelled else { return }
             modelsByProvider[.apple] = result.models
             capabilityErrors[.apple] = result.unavailableReason
@@ -497,7 +497,7 @@ final class AgentRuntimeCoordinator {
         if let path = availableInstallations.first(where: { $0.provider == .fx })?.executablePath {
             fxCapabilityTask = Task { [weak self] in
                 do {
-                    let models = try await FxModelProbe().load(path: path)
+                    let models = try await FxModelProbe.load(path: path)
                     guard !Task.isCancelled else { return }
                     self?.modelsByProvider[.fx] = models
                     self?.capabilityErrors[.fx] = nil
@@ -534,7 +534,7 @@ final class AgentRuntimeCoordinator {
             // sandbox lets only the Agent Host run it.
             codexCapabilityTask = Task { [weak self] in
                 do {
-                    let models = try await FxModelProbe().load(path: executablePath, provider: .codex)
+                    let models = try await FxModelProbe.load(path: executablePath, provider: .codex)
                     guard !Task.isCancelled else { return }
                     self?.modelsByProvider[.codex] = models
                     self?.capabilityErrors[.codex] = nil

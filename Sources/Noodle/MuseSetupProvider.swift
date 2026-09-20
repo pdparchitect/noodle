@@ -9,7 +9,7 @@ final class MuseSetupProvider: HarnessSetupProviding {
               documentationURL: URL(string: "https://dev.meta.ai/")!)
     }
     func status(for installation: HarnessInstallation) async throws -> HarnessAuthenticationStatus {
-        let result = try await MuseHostProbe().load()
+        let result = try await MuseHostProbe.load()
         return result.authentication ?? .managedExternally
     }
     /// The Agent Host runs Muse Code's own device-code login, as it does for a profile.
@@ -22,42 +22,9 @@ final class MuseSetupProvider: HarnessSetupProviding {
 }
 
 @MainActor
-final class MuseHostProbe {
-    private let connection: ExtendedAgentConnection
-    private var continuation: CheckedContinuation<MuseInspectionResult, Error>?
-    private var timeout: Task<Void, Never>?
-    init() throws { connection = try ExtendedAgentConnection() }
-
-    func load() async throws -> MuseInspectionResult {
-        try await withTaskCancellationHandler {
-            try Task.checkCancellation()
-            return try await withCheckedThrowingContinuation { continuation in
-                self.continuation = continuation
-                connection.onFailure = { [weak self] error in
-                    Task { @MainActor in self?.finish(.failure(HarnessSetupError(error))) }
-                }
-                connection.inspectMuse { [weak self] data, error in
-                    Task { @MainActor in
-                        do {
-                            if let error { throw HarnessSetupError(error) }
-                            guard let data else { throw HarnessSetupError("Muse Code returned no installation information.") }
-                            self?.finish(.success(try JSONDecoder().decode(MuseInspectionResult.self, from: data)))
-                        } catch { self?.finish(.failure(error)) }
-                    }
-                }
-                timeout = Task { [weak self] in
-                    try? await Task.sleep(for: .seconds(40))
-                    guard !Task.isCancelled else { return }
-                    self?.finish(.failure(HarnessSetupError("Muse Code inspection timed out.")))
-                }
-            }
-        } onCancel: { Task { @MainActor in self.finish(.failure(CancellationError())) } }
-    }
-    private func finish(_ result: Result<MuseInspectionResult, Error>) {
-        guard let continuation else { return }
-        self.continuation = nil
-        timeout?.cancel()
-        connection.invalidate()
-        continuation.resume(with: result)
+enum MuseHostProbe {
+    static func load() async throws -> MuseInspectionResult {
+        try await AgentHostRequest().load(timeout: .seconds(40), noReply: "Muse Code returned no installation information.",
+            timedOut: "Muse Code inspection timed out.") { $0.inspectMuse(reply: $1) }
     }
 }

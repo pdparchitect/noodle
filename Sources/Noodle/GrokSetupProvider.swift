@@ -9,7 +9,7 @@ final class GrokSetupProvider: HarnessSetupProviding {
               documentationURL: URL(string: "https://grok.com/build")!)
     }
     func status(for installation: HarnessInstallation) async throws -> HarnessAuthenticationStatus {
-        let result = try await GrokHostProbe().load()
+        let result = try await GrokHostProbe.load()
         return result.authenticated ? .authenticated : .unauthenticated
     }
     /// The Agent Host runs Grok Build's own device-code login, as it does for a profile.
@@ -22,43 +22,9 @@ final class GrokSetupProvider: HarnessSetupProviding {
 }
 
 @MainActor
-final class GrokHostProbe {
-    private let connection: ExtendedAgentConnection
-    private var continuation: CheckedContinuation<GrokInspectionResult, Error>?
-    private var timeout: Task<Void, Never>?
-    init() throws { connection = try ExtendedAgentConnection() }
-
-    func load() async throws -> GrokInspectionResult {
-        try await withTaskCancellationHandler {
-            try Task.checkCancellation()
-            return try await withCheckedThrowingContinuation { continuation in
-                self.continuation = continuation
-                connection.onFailure = { [weak self] error in
-                    Task { @MainActor in self?.finish(.failure(HarnessSetupError(error))) }
-                }
-                connection.inspectGrok { [weak self] data, error in
-                    Task { @MainActor in
-                        do {
-                            if let error { throw HarnessSetupError(error) }
-                            guard let data else { throw HarnessSetupError("Grok Build returned no account information.") }
-                            self?.finish(.success(try JSONDecoder().decode(GrokInspectionResult.self, from: data)))
-                        } catch { self?.finish(.failure(error)) }
-                    }
-                }
-                timeout = Task { [weak self] in
-                    try? await Task.sleep(for: .seconds(50))
-                    guard !Task.isCancelled else { return }
-                    self?.finish(.failure(HarnessSetupError("Grok Build inspection timed out.")))
-                }
-            }
-        } onCancel: { Task { @MainActor in self.finish(.failure(CancellationError())) } }
-    }
-
-    private func finish(_ result: Result<GrokInspectionResult, Error>) {
-        guard let continuation else { return }
-        self.continuation = nil
-        timeout?.cancel()
-        connection.invalidate()
-        continuation.resume(with: result)
+enum GrokHostProbe {
+    static func load() async throws -> GrokInspectionResult {
+        try await AgentHostRequest().load(timeout: .seconds(50), noReply: "Grok Build returned no account information.",
+            timedOut: "Grok Build inspection timed out.") { $0.inspectGrok(reply: $1) }
     }
 }
