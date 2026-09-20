@@ -22,6 +22,7 @@ All notable changes to Noodle are documented here, following
 - Show a reset button beside each changed shortcut in Settings > Keybindings, so one command can return to its default without restoring them all.
 - Accept Option (⌥) alone as the modifier for any shortcut in Settings > Keybindings, such as ⌥Space. Shift alone or no modifier is still rejected.
 - Rename the Settings > Update button to Install Update… once a newer version is found. The app menu keeps Check for Updates….
+- Leave development test fixtures out of the released app, which makes it smaller. They remain in Noodle Dev.
 
 ## [0.21.0] - 2026-09-20
 

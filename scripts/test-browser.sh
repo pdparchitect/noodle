@@ -10,6 +10,10 @@ case "$identity" in
     com.pdparchitect.noodle.browser) broker_identity=com.pdparchitect.noodle ;;
     *) print -u2 'Expected a signed Noodle Browser app.'; exit 1 ;;
 esac
+# The broker and live-demo checks are development hooks; a production bundle has neither.
+if [[ "$identity" == com.pdparchitect.noodle.browser && ( -n "${NOODLE_BROWSER_TEST_NOODLE_APP:-}" || "${NOODLE_BROWSER_TEST_WEBMCP_DEMOS:-0}" == 1 ) ]]; then
+    print -u2 'Use Dev bundles for the Noodle broker and live WebMCP demo checks.'; exit 1
+fi
 smoke_id="$(uuidgen)"
 artifacts="$project_root/.build/browser-verification/$smoke_id"
 mkdir -p "$artifacts"

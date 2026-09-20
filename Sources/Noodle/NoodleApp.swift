@@ -4,6 +4,10 @@ import SwiftUI
 import NoodleCore
 import NoodleSettingsUI
 import UserNotifications
+#if NOODLE_DEV_HOOKS
+import NoodleLaunchChecks
+import os
+#endif
 
 @main
 struct NoodleApp: App {
@@ -11,12 +15,16 @@ struct NoodleApp: App {
     @State private var store: NoodleStore
 
     init() {
-        if CommandLine.arguments.contains("--browser-integration-test") || CommandLine.arguments.contains("--browser-discovery-test") || CommandLine.arguments.contains("--browser-picker-test") {
+        #if NOODLE_DEV_HOOKS
+        // Development builds only. Each hook runs an isolated fixture in place of the app and exits.
+        Logger(subsystem: "com.pdparchitect.noodle", category: "DevelopmentHooks").notice("noodle.development-hooks.enabled")
+        let checks = LaunchChecks.current
+        if checks.contains(DevelopmentHook.browserIntegration) || checks.contains(DevelopmentHook.browserDiscovery) || checks.contains(DevelopmentHook.browserPicker) {
             NSApplication.shared.setActivationPolicy(.accessory)
             Task { @MainActor in
                 do {
-                    if CommandLine.arguments.contains("--browser-picker-test") { try await BrowserPickerIntegrationTest.run() }
-                    else if CommandLine.arguments.contains("--browser-discovery-test") { try await BrowserIntegrationTest.checkDiscovery() }
+                    if checks.contains(DevelopmentHook.browserPicker) { try await BrowserPickerIntegrationTest.run() }
+                    else if checks.contains(DevelopmentHook.browserDiscovery) { try await BrowserIntegrationTest.checkDiscovery() }
                     else { try await BrowserIntegrationTest.run() }
                     Darwin.exit(0)
                 }
@@ -25,7 +33,7 @@ struct NoodleApp: App {
             NSApplication.shared.run()
             Darwin.exit(1)
         }
-        if CommandLine.arguments.contains("--applet-link-test") {
+        if checks.contains(DevelopmentHook.appletLink) {
             NSApplication.shared.setActivationPolicy(.regular)
             Task { @MainActor in
                 do { try await AppletLinkIntegrationTest.run(); Darwin.exit(0) }
@@ -34,13 +42,13 @@ struct NoodleApp: App {
             NSApplication.shared.run()
             Darwin.exit(1)
         }
-        if CommandLine.arguments.contains("--computer-integration-test") || CommandLine.arguments.contains("--computer-discovery-test") || CommandLine.arguments.contains("--computer-picker-test") || CommandLine.arguments.contains("--computer-document-preview-test") {
+        if checks.contains(DevelopmentHook.computerIntegration) || checks.contains(DevelopmentHook.computerDiscovery) || checks.contains(DevelopmentHook.computerPicker) || checks.contains(DevelopmentHook.computerDocumentPreview) {
             NSApplication.shared.setActivationPolicy(.regular)
             Task { @MainActor in
                 do {
-                    if CommandLine.arguments.contains("--computer-document-preview-test") { try await ComputerIntegrationTest.checkDocumentPreview() }
-                    else if CommandLine.arguments.contains("--computer-picker-test") { try await ComputerIntegrationTest.checkPicker() }
-                    else if CommandLine.arguments.contains("--computer-discovery-test") { try await ComputerIntegrationTest.checkDiscovery() }
+                    if checks.contains(DevelopmentHook.computerDocumentPreview) { try await ComputerIntegrationTest.checkDocumentPreview() }
+                    else if checks.contains(DevelopmentHook.computerPicker) { try await ComputerIntegrationTest.checkPicker() }
+                    else if checks.contains(DevelopmentHook.computerDiscovery) { try await ComputerIntegrationTest.checkDiscovery() }
                     else { try await ComputerIntegrationTest.run() }
                     Darwin.exit(0)
                 }
@@ -49,6 +57,7 @@ struct NoodleApp: App {
             NSApplication.shared.run()
             Darwin.exit(1)
         }
+        #endif
         if MessengerCLI.shouldHandle() {
             let result = MessengerCLI.run()
             Self.write(result.standardOutput, to: .standardOutput)
@@ -445,3 +454,24 @@ struct RootView: View {
         }
     }
 }
+
+#if NOODLE_DEV_HOOKS
+/// Launch arguments of the development hooks, as SHA-256 digests; see Shared/LaunchChecks.
+enum DevelopmentHook {
+    static let browserIntegration = "f22bd67a7acd0e93b7c162f86eea51edecdc83e77c08271979f948cba83baeba"  // --browser-integration-test
+    static let browserDiscovery = "34b6fe979b8f12f69dfc931336104e60b624afbfbc5b51b6a9d9b45258053a5a"  // --browser-discovery-test
+    static let browserPicker = "f946359fda142c2c07f5c687991cb154fed6188b0af0ff93f77682b2be08522c"  // --browser-picker-test
+    static let browserFixture = "e9f770aa4729b479fff6881b617e10f26c239e7f577120584352aa6da778c8a4"  // --browser-fixture
+    static let browserFixturePort = "f78b65695a1f841162ebe135f8b6bc3e4a14a05d63b8de0744a5e065be221fa3"  // --browser-fixture-port
+    static let webMCPOnly = "5fadc42340cf84b4331123681e94dffa1e71fa644d48b6dbaeaffca366a28f3d"  // --webmcp-only
+    static let appletLink = "012a5f13ced3119877c3a283ffa96f725fdff5dd554906f7e15d566a0e086e09"  // --applet-link-test
+    static let holdPreview = "e7e80b3aa8d8911329a7cdb1710578c33c494db824ab632362cfa40831d37229"  // --hold-preview
+    static let computerIntegration = "929ce89bfb24c71e826f06240444a3ce0c44ff6108749e68574a2a658fb6e4b0"  // --computer-integration-test
+    static let computerDiscovery = "cb8afdc7be7ca2bbf1fa773ff3e29a701f87b9fa5ff0829f2cee308842592486"  // --computer-discovery-test
+    static let computerPicker = "9eb302341e8dcfc228f18b55db833f42b50920ce005f9aed554f4b7a1ff521af"  // --computer-picker-test
+    static let computerUpdateNotice = "279a6cb632bdc55fe04c2cde06fd18eaa9e3f6c2fdc262a4f749ffe4b39b7f16"  // --computer-update-notice-test
+    static let computerDocumentPreview = "376dcdd0ffa2dca5cf431ccd16a1a02f611c881259e6e50afd5472beb4692681"  // --computer-document-preview-test
+    static let computerDownload = "241600d7fee4a10ff34b7caabd58bd674fe8d13183a01a0e50469b9081eb5585"  // --computer-download-test
+    static let computerWeb = "a15d161557b60e252aff873db33a8a522c76e0fee123068f282b14e5791384d8"  // --computer-web-test
+}
+#endif

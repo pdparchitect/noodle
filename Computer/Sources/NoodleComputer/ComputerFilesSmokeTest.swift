@@ -1,3 +1,4 @@
+#if NOODLE_DEV_HOOKS
 import AppKit
 import ComputerCore
 import CryptoKit
@@ -155,7 +156,7 @@ import Foundation
             try await files.upload(pdf, to: "/workspace/Preview.pdf")
             session.showingFiles = true
             print("FILES FIXTURE: \(root.path)")
-            if !CommandLine.arguments.contains("--keep-test-window") {
+            if !ComputerLaunchCheck.keepsTestWindow {
                 await store.shutdown(); try FileManager.default.removeItem(at: root)
                 print("PASS: disposable file fixture stopped and removed")
             }
@@ -183,3 +184,4 @@ private final class FileExportSmokeCancellation: @unchecked Sendable {
         task?.cancel()
     }
 }
+#endif

@@ -1,6 +1,8 @@
+#if NOODLE_DEV_HOOKS
 import AppKit
 import AppletBridge
 import NoodleCore
+import NoodleLaunchChecks
 import QuickLookUI
 
 /// Explicit signed-app fixture; it never opens the user's repository or starts real agents.
@@ -88,7 +90,7 @@ import QuickLookUI
             throw AppletError("Opening a noodlet displayed Quick Look.")
         }
         print("PASS: attachment opens a visible live noodlet, reuses its window, and responds to interaction without Quick Look")
-        if CommandLine.arguments.contains("--hold-preview") { try await Task.sleep(for: .seconds(30)) }
+        if LaunchChecks.current.contains(DevelopmentHook.holdPreview) { try await Task.sleep(for: .seconds(30)) }
         _ = try await cli(["close"] + shared, agent: participant)
         _ = try await controller.openNoodlet(url)
         let stored = try await cli(["eval", "--text", "return await noodle.storage.get('link-test');"] + shared, agent: participant)
@@ -98,3 +100,4 @@ import QuickLookUI
         print("APPLET LINK INTEGRATION PASSED")
     }
 }
+#endif

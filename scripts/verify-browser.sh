@@ -4,6 +4,10 @@ project_root="${0:A:h:h}"
 app="${1:?Pass the Browser app bundle}"
 codesign --verify --deep --strict "$app"
 zsh "$project_root/scripts/verify-updater.sh" "$app"
+# A development bundle carries development hooks; a production bundle must not.
+if [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" == com.pdparchitect.noodle.browser ]]; then
+    zsh "$project_root/scripts/verify-launch-hooks.sh" "$app"
+fi
 cmp "$project_root/Browser/Support/AppSymbol.svg" "$app/Contents/Resources/AppSymbol.svg"
 entitlements="$(mktemp /tmp/noodle-browser-entitlements.XXXXXX)"
 trap 'rm -f "$entitlements"' EXIT

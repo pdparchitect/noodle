@@ -3,6 +3,7 @@ import BrowserBridge
 import Foundation
 
 extension BrowserSmokeTest {
+    #if NOODLE_DEV_HOOKS
     /// Optional external compatibility smoke. Never uses a real account or
     /// provider key; these public demos perform only local page interactions.
     @MainActor static func verifyPublicWebMCPDemos(_ runtime: BrowserRuntime, browserID: UUID) async throws {
@@ -42,6 +43,7 @@ extension BrowserSmokeTest {
         try require((result["result"] as? String)?.contains("Noodle Test") == true, "Bistro respondWith result missing: \(result)")
         print("PASS public Google Chrome Labs Pizza Maker and Le Petit Bistro demos using the bundled WebMCP runtime")
     }
+    #endif
 
     @MainActor static func verifyWebMCP(_ runtime: BrowserRuntime, browserID: UUID, otherID: UUID, base: String) async throws {
         let tab = try runtime.makeTab(browserID: browserID)

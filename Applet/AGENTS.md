@@ -10,3 +10,9 @@ Protocol/Sources/AppletBridge/AppletGuidance.swift. Noodle writes it into each b
 applet skill and the command prints it for --help; do not copy it anywhere else. Test package validation, single-instance ownership,
 and runtime diagnostics. Verify the signed sandboxed bundle before claiming a
 runtime or capability works.
+
+Launch arguments for verification runs are matched by digest (`AppletLaunchCheck` in
+Sources/NoodleApplet/App.swift, Shared/LaunchChecks), so no name appears in the binary.
+One that the release workflow or RELEASING.md runs against the packaged app stays in every
+build. Any other goes under `#if NOODLE_DEV_HOOKS`, which only development bundles and
+debug builds compile. `scripts/verify-launch-hooks.sh` checks a production bundle.

@@ -2,13 +2,34 @@ import AppKit
 import BrowserBridge
 import BrowserCore
 import SwiftUI
+import NoodleLaunchChecks
 import NoodleSettingsUI
+
+/// Arguments the verification scripts pass, matched by digest so a built app never spells them.
+/// The first group runs against the packaged release; the rest exist only in development builds.
+enum BrowserLaunchCheck {
+    static let smokeTest = "e993ae0c24c07a8fbbfc7133af3285da8860a38ff54f34cfa450a0a70447da36"  // --smoke-test
+    static let smokeID = "40228d5af4c76b8ab44954591d10dff9a19bb92c3f75621b7088024d5f4c4839"  // --smoke-id
+    static let smokePort = "2580591478ab19c1a649d0bc8a13bfd7fe123b4e26ae8462a564cd270bb977b2"  // --smoke-port
+    static let restore = "29bd49f2cf8ab06750943309185695f98124d3b11d0a01431979f8dc6baf16dc"  // --restore
+    static let cleanup = "0688299ae539e90fa3e970dcb3931d6f8b7c1250f826c11fb0cb92b4427874bf"  // --cleanup
+    static let uiTest = "5316570ef39c2b96205d05c38e7ed8c7c68c440f6106cbb7e17bef60f4fc9bc6"  // --browser-ui-test
+    static let uiID = "d568d5018b237dfec793eae362ab6230b7f972be46c7e3cba98c36629dd8b1f2"  // --browser-ui-id
+    static let cleanupUI = "b2d659d99d371e6058b2c204b2ddc6c2427786b23444ae61a445df8e11bbfd21"  // --cleanup-ui
+    #if NOODLE_DEV_HOOKS
+    static let serveSmoke = "c9b403b994c0e9d7b5dbf474828f96652ec5eb519afee0406dfd507b007520b8"  // --serve-smoke
+    static let pointerOnly = "0df638dd046d3d7cf588fdef105209d3416cf68aa66d195c603de43a3e393301"  // --pointer-only
+    static let webMCPDemos = "6710ff36cd45763a3a7719185dd316b603fc3da83bc499df8605db0c66232e93"  // --webmcp-demos
+    static let webMCPOnly = "5fadc42340cf84b4331123681e94dffa1e71fa644d48b6dbaeaffca366a28f3d"  // --webmcp-only
+    #endif
+    static let smoke = LaunchChecks.current.contains(smokeTest), ui = LaunchChecks.current.contains(uiTest)
+}
 
 @main struct NoodleBrowserApp: App {
     @NSApplicationDelegateAdaptor(BrowserAppDelegate.self) private var delegate
     @ObservedObject private var visibility = CompanionAppVisibility.shared
     init() {
-        if CommandLine.arguments.contains("--smoke-test") || CommandLine.arguments.contains("--browser-ui-test") {
+        if BrowserLaunchCheck.smoke || BrowserLaunchCheck.ui {
             NSApplication.shared.setActivationPolicy(.accessory)
         }
     }
@@ -55,11 +76,10 @@ import NoodleSettingsUI
 @MainActor final class BrowserAppDelegate: NSObject, NSApplicationDelegate {
     let library: BrowserLibrary
     override init() {
-        if CommandLine.arguments.contains("--browser-ui-test") {
-            let args = CommandLine.arguments
+        if BrowserLaunchCheck.ui {
             let id: UUID
-            if let index = args.firstIndex(of: "--browser-ui-id") {
-                guard index + 1 < args.count, let value = UUID(uuidString: args[index + 1]) else { exit(1) }
+            if LaunchChecks.current.contains(BrowserLaunchCheck.uiID) {
+                guard let value = LaunchChecks.current.value(after: BrowserLaunchCheck.uiID).flatMap(UUID.init(uuidString:)) else { exit(1) }
                 id = value
             } else { id = UUID() }
             let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -70,7 +90,7 @@ import NoodleSettingsUI
     }
     lazy var runtime = BrowserRuntime(library: library)
     lazy var presentation = BrowserPresentation(library: library, runtime: runtime,
-        defaults: CommandLine.arguments.contains("--browser-ui-test") ? nil : .standard)
+        defaults: BrowserLaunchCheck.ui ? nil : .standard)
     let libraryWindow = BrowserLibraryWindow()
     var openLibrary: (() -> Void)? {
         didSet {
@@ -84,16 +104,19 @@ import NoodleSettingsUI
     private var externalLaunch = false
     func applicationDidFinishLaunching(_ notification: Notification) {
         WindowFocusGuard.shared.start()
-        CompanionAppVisibility.shared.start(permitsDock: !CommandLine.arguments.contains { $0.hasSuffix("-test") })
+        #if NOODLE_DEV_HOOKS
+        NSLog("noodle.development-hooks.enabled")
+        #endif
+        CompanionAppVisibility.shared.start(permitsDock: !BrowserLaunchCheck.smoke && !BrowserLaunchCheck.ui)
         runtime.showBrowser = { [weak self] id in self?.showBrowser(id) }
         runtime.willRemoveBrowser = { [weak self] id in
             guard let self else { return }
             if self.presentation.selection == id { self.presentation.selection = nil }
         }
-        if CommandLine.arguments.contains("--smoke-test") {
+        if BrowserLaunchCheck.smoke {
             Task { await BrowserSmokeTest.runAndExit() }; return
         }
-        if CommandLine.arguments.contains("--browser-ui-test") {
+        if BrowserLaunchCheck.ui {
             Task { await BrowserUITest.runAndExit(delegate: self) }; return
         }
         runtime.startServer()
@@ -102,7 +125,7 @@ import NoodleSettingsUI
         }
     }
     func applicationDidBecomeActive(_ notification: Notification) {
-        guard !CommandLine.arguments.contains("--smoke-test"), !CommandLine.arguments.contains("--browser-ui-test") else { return }
+        guard !BrowserLaunchCheck.smoke, !BrowserLaunchCheck.ui else { return }
         // Match Computer/Applet: quiet provider startup never prompts for updates.
         BrowserUpdater.shared.start()
     }

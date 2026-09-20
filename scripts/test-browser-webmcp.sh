@@ -7,7 +7,8 @@ executable="$app/Contents/MacOS/NoodleBrowser"
 identity="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")"
 case "$identity" in
     com.pdparchitect.noodle.browser.local) broker_identity=com.pdparchitect.noodle.local ;;
-    com.pdparchitect.noodle.browser) broker_identity=com.pdparchitect.noodle ;;
+    # The focused fixture is a development hook; a production bundle does not have it.
+    com.pdparchitect.noodle.browser) print -u2 'Use a Noodle Browser Dev bundle.'; exit 1 ;;
     *) print -u2 'Expected a signed Noodle Browser app.'; exit 1 ;;
 esac
 smoke_id="$(uuidgen)"

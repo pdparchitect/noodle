@@ -256,10 +256,13 @@ contents or credentials. `wake-submitted` means dispatched; `inbox-read` means
 Messenger consumed the inbox. A completed turn does not prove the user's task
 succeeded. Correlation is best effort, and macOS controls retention.
 
-For a debug build with harness detection disabled at startup:
+Development hooks, such as the integration fixtures and the switch below, are
+compiled into Noodle Dev and debug builds only. A release has none, and
+`scripts/verify-launch-hooks.sh` fails packaging if one is found. To start Noodle
+Dev with harness detection disabled:
 
 ```sh
-NOODLE_BUILD_CONFIGURATION=debug scripts/build-app.sh
+scripts/build-app.sh
 NOODLE_SIMULATE_NO_HARNESSES=1 '.build/Noodle Dev.app/Contents/MacOS/Noodle'
 ```
 

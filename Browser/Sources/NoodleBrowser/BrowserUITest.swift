@@ -1,6 +1,7 @@
 import AppKit
 import BrowserBridge
 import BrowserCore
+import NoodleLaunchChecks
 import SwiftUI
 import ScreenCaptureKit
 
@@ -12,7 +13,7 @@ import ScreenCaptureKit
         do {
             let library = delegate.library, presentation = delegate.presentation
             print("BROWSER_UI_ARTIFACTS: \(library.root.path)")
-            if CommandLine.arguments.contains("--cleanup-ui") {
+            if LaunchChecks.current.contains(BrowserLaunchCheck.cleanupUI) {
                 for profile in library.profiles { try await delegate.runtime.removeBrowser(profile.id) }
                 try FileManager.default.removeItem(at: library.root)
                 print("BROWSER_UI_CLEANED"); exit(0)

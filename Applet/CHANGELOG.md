@@ -5,6 +5,7 @@
 ### Changed
 
 - Rename the Settings > Update button to Install Update… once a newer version is found. The app menu keeps Check for Updates….
+- Keep development-only diagnostics out of the released app. Release packaging now verifies that none are present.
 
 ## [0.6.0] - 2026-09-20
 

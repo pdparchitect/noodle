@@ -1,6 +1,7 @@
 import AppKit
 import ComputerCore
 import ComputerDocument
+import NoodleLaunchChecks
 import NoodleWallpaper
 import SwiftUI
 import NoodleSettingsUI
@@ -67,6 +68,52 @@ extension Notification.Name {
   static let newComputer = Self("NoodleComputer.New")
   static let newCustomComputer = Self("NoodleComputer.NewCustom")
   static let newLocalMac = Self("NoodleComputer.NewLocalMac")
+}
+
+/// Launch checks, matched by digest so a built app never names them. Only the first ships in a release;
+/// the rest need a build with `NOODLE_DEV_HOOKS`.
+enum ComputerLaunchCheck {
+  static let updaterUI = "33f8b12621881e80aeaf87bc1d61ef880882e6b5cf0d3a2a1fc3e7ee99b42609"  // --updater-ui-test
+  #if NOODLE_DEV_HOOKS
+  static let keepTestWindow = "64d77565ca3929a74ec3ae6cc4be7ac83d4d31d42b8771dc2daf79002c3e2ec9"  // --keep-test-window
+  static let files = "b476bd153e380b4ef626b592541a784d4a934f00b3da9abd390022616fb25413"  // --files-test
+  static let providerIntegration = "27477bd84260b828a28d305cd92dbea1df662af022a8d9add98293a283e06e74"  // --provider-integration-test
+  static let providerSnapshot = "749fbf076ee2440829bcfa605e5b6740c53e8e7ff999769c1f838b89a446af69"  // --provider-snapshot-test
+  static let providerWeb = "70eac07c23a968505aa890ef1e999b627996fb64cdf94365d67f933c5010df9e"  // --provider-web-test
+  static let libraryLayout = "0b5e4c1010bd557a80ea521c33f0befb7c4ad203aef42c3897d23cf0a2752950"  // --library-layout-test
+  static let emptyLibrary = "e7f8ebc7c2f3a51e13267fc9acb404fd6c13d067256a888246a6fdc0dd318c08"  // --empty-library-test
+  static let appearancePreview = "234940ef2db5871ab2be6d23dcc4ba7d7ea65cda9729e93c29172f74b01afcd5"  // --appearance-preview
+  static let customContainer = "cf28db7e8067efcc2df95e488cbc87ef78cf3ff6b98e93e7e66df1a5dcb8737c"  // --custom-container-test
+  static let localMacCreationPreview = "55cd0e40b54036764c3278c167f0de3b46a84abbf604e2669cdb1f9d40549875"  // --localmac-creation-preview
+  static let creationForm = "003908a56a80c8ecc27c41d1cbdfdddc0711263d1a64ea862af09978140a5db6"  // --creation-form-test
+  static let desktopSmoke = "cd0fe779f3182dbfeaab29ec25187cc9e460f3feaaee07d10e3c5d92a38d9365"  // --desktop-smoke-test
+  static let downloadProgress = "fe8db07e2c84c36e200adba9cf030a79e2ffb337f46d9be773ce9b44416067c7"  // --download-progress-test
+  static let linuxBoot = "fab92a2ac3952a0a9097d0d5cf8589ce610487db7f1f97f1995513b9a5883876"  // --linux-boot-test
+  static let configuration = "cd7ab844a5c0dad4ac41d0324b14251ed995c74ebaad8bf5410abfbf6669656c"  // --configuration-test
+  static let overlayUI = "abd5eb336517172b6564e631fb381ad18580e176d5624fba7d036b975cc1d5ed"  // --overlay-ui-test
+  static let latestImages = "a0899d5327b8553fa41ef0d6326a2d0d859b2ef46923cfb4f15eefaa4d531d06"  // --latest-images-test
+  static let overlay = "093126f40abeca909f38764a45026f341ab650542637529e04ac147aa8ad39b3"  // --overlay-test
+  static let selfTest = "eaf0760032ad43d55e3bbcf4d5153069c67652bdeb968530d47be859a94ef5df"  // --self-test
+  static let offline = "aff7d00b56394f5a96dca22be6856e0950b37524abb5b2ef434d27981a0586f1"  // --offline
+  /// A failure of any of these ends the process with an error instead of showing it in the window.
+  static let exitOnFailure = [
+    customContainer, updaterUI, emptyLibrary, libraryLayout, providerIntegration, creationForm,
+    localMacCreationPreview, desktopSmoke, selfTest, overlay, latestImages, configuration, downloadProgress
+  ]
+  static var keepsTestWindow: Bool { requested(keepTestWindow) }
+  /// Every check that runs in place of the app; the rest only modify one of these.
+  private static let verificationRuns = [
+    updaterUI, files, providerIntegration, providerSnapshot, providerWeb, libraryLayout, emptyLibrary,
+    appearancePreview, customContainer, localMacCreationPreview, creationForm, desktopSmoke, downloadProgress,
+    linuxBoot, configuration, overlayUI, latestImages, overlay, selfTest
+  ]
+  #else
+  static let exitOnFailure = [updaterUI]
+  static let keepsTestWindow = false
+  private static let verificationRuns = [updaterUI]
+  #endif
+  static var isVerificationRun: Bool { verificationRuns.contains(where: requested) }
+  static func requested(_ digest: String) -> Bool { LaunchChecks.current.contains(digest) }
 }
 
 @MainActor final class ComputerAppDelegate: NSObject, NSApplicationDelegate {
@@ -140,20 +187,24 @@ extension Notification.Name {
   }
   func applicationDidFinishLaunching(_ notification: Notification) {
     WindowFocusGuard.shared.start()
-    CompanionAppVisibility.shared.start(permitsDock: !CommandLine.arguments.contains {
-      $0.hasSuffix("-test") || $0.hasSuffix("-preview")
-    })
+    CompanionAppVisibility.shared.start(permitsDock: !ComputerLaunchCheck.isVerificationRun)
+    #if NOODLE_DEV_HOOKS
+    // scripts/verify-launch-hooks.sh rejects a release that carries this marker.
+    NSLog("noodle.development-hooks.enabled")
+    #endif
     guard CommandLine.arguments.contains("--noodle-background") else { return }
     // Also cover Launch Services reopening a previously registered single-window
     // app. This affects only this process; an explicit later open unhides it.
     if !openedDocument { NSApp.hide(nil) }
-    if CommandLine.arguments.contains("--provider-integration-test") {
+    #if NOODLE_DEV_HOOKS
+    if ComputerLaunchCheck.requested(ComputerLaunchCheck.providerIntegration) {
       Task {
         do { try await ComputerSmokeTest.checkProvider(); NSApp.terminate(nil) }
         catch { fputs("PROVIDER TEST FAILED: \(error.localizedDescription)\n", stderr); exit(1) }
       }
       return
     }
+    #endif
     // The provider can own the library without creating a SwiftUI window.
     do { _ = try Self.loadLibrary() }
     catch { fputs("Computer provider: \(error.localizedDescription)\n", stderr) }
@@ -206,15 +257,17 @@ struct ComputerRootView: View {
     .task {
       guard store == nil, startupError == nil else { return }
       do {
-        if CommandLine.arguments.contains("--files-test") {
+        #if NOODLE_DEV_HOOKS
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.files) {
           let model = try await ComputerFilesSmokeTest.run()
           store = model; ComputerAppDelegate.store = model
-          if !CommandLine.arguments.contains("--keep-test-window") { NSApplication.shared.terminate(nil) }
+          if !ComputerLaunchCheck.keepsTestWindow { NSApplication.shared.terminate(nil) }
           return
         }
-        if CommandLine.arguments.contains("--updater-ui-test") {
+        #endif
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.updaterUI) {
           try await ComputerSmokeTest.checkUpdaterUI()
-          if !CommandLine.arguments.contains("--keep-test-window") { NSApplication.shared.terminate(nil) }
+          if !ComputerLaunchCheck.keepsTestWindow { NSApplication.shared.terminate(nil) }
           return
         }
         if CommandLine.arguments.contains("--noodle-background") {
@@ -222,107 +275,98 @@ struct ComputerRootView: View {
           // this view may first be created by a later explicit Open from Noodle.
           // Launch restoration must never run a second provider/fixture through
           // the view. The app delegate owns background initialization.
-          guard !CommandLine.arguments.contains("--provider-integration-test") else { return }
+          #if NOODLE_DEV_HOOKS
+          guard !ComputerLaunchCheck.requested(ComputerLaunchCheck.providerIntegration) else { return }
+          #endif
           store = try ComputerAppDelegate.loadLibrary()
           return
         }
-        if CommandLine.arguments.contains("--provider-integration-test") {
+        #if NOODLE_DEV_HOOKS
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.providerIntegration) {
           try await ComputerSmokeTest.checkProvider()
           NSApplication.shared.terminate(nil)
           return
         }
-        if CommandLine.arguments.contains("--library-layout-test") {
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.libraryLayout) {
           try await ComputerSmokeTest.checkLibraryLayout()
           NSApplication.shared.terminate(nil)
           return
         }
-        if CommandLine.arguments.contains("--empty-library-test") {
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.emptyLibrary) {
           try await ComputerSmokeTest.checkEmptyLibraryBackground()
           NSApplication.shared.terminate(nil)
           return
         }
-        if CommandLine.arguments.contains("--appearance-preview") {
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.appearancePreview) {
           try await ComputerSmokeTest.checkAppearancePreview()
           NSApplication.shared.terminate(nil)
           return
         }
-        if CommandLine.arguments.contains("--custom-container-test") {
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.customContainer) {
           try await ComputerSmokeTest.checkCustomContainer()
           NSApplication.shared.terminate(nil)
           return
         }
-        if CommandLine.arguments.contains("--localmac-creation-preview") {
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.localMacCreationPreview) {
           try await LocalMacCreationPreview.run()
           NSApplication.shared.terminate(nil)
           return
         }
-        if CommandLine.arguments.contains("--creation-form-test") {
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.creationForm) {
           try await ComputerSmokeTest.checkCreationForm()
           NSApplication.shared.terminate(nil)
           return
         }
-        if CommandLine.arguments.contains("--desktop-smoke-test") {
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.desktopSmoke) {
           try await ComputerSmokeTest.checkDesktop()
           NSApplication.shared.terminate(nil)
           return
         }
-        if CommandLine.arguments.contains("--download-progress-test") {
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.downloadProgress) {
           try await ComputerSmokeTest.checkDownloadProgressAndCancellation()
           NSApplication.shared.terminate(nil)
           return
         }
-        if CommandLine.arguments.contains("--linux-boot-test") {
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.linuxBoot) {
           let model = try await ComputerSmokeTest.linuxBootFixture()
           store = model
           ComputerAppDelegate.store = model
           return
         }
-        if CommandLine.arguments.contains("--configuration-test") {
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.configuration) {
           try await ComputerSmokeTest.checkMacConfiguration()
           NSApplication.shared.terminate(nil)
           return
         }
-        if CommandLine.arguments.contains("--overlay-ui-test") {
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.overlayUI) {
           let model = try ComputerOverlaySmokeTest.makeUIStore()
           store = model
           ComputerAppDelegate.store = model
           NSApp.activate()
           return
         }
-        if CommandLine.arguments.contains("--latest-images-test") {
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.latestImages) {
           try await ComputerOverlaySmokeTest.checkLatestTemplates()
           NSApplication.shared.terminate(nil)
           return
         }
-        if CommandLine.arguments.contains("--overlay-test") {
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.overlay) {
           try await ComputerOverlaySmokeTest.run()
           NSApplication.shared.terminate(nil)
           return
         }
-        if CommandLine.arguments.contains("--self-test") {
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.selfTest) {
           try await ComputerSmokeTest.run(
-            networkEnabled: !CommandLine.arguments.contains("--offline"))
+            networkEnabled: !ComputerLaunchCheck.requested(ComputerLaunchCheck.offline))
           NSApplication.shared.terminate(nil)
           return
         }
+        #endif
         let model = try ComputerAppDelegate.loadLibrary()
         store = model
       } catch {
         startupError = error.localizedDescription
-        if CommandLine.arguments.contains("--custom-container-test")
-          || CommandLine.arguments.contains("--updater-ui-test")
-          || CommandLine.arguments.contains("--empty-library-test")
-          || CommandLine.arguments.contains("--library-layout-test")
-          || CommandLine.arguments.contains("--provider-integration-test")
-          || CommandLine.arguments.contains("--creation-form-test")
-          || CommandLine.arguments.contains("--localmac-creation-preview")
-          || CommandLine.arguments.contains("--desktop-smoke-test")
-          || CommandLine.arguments.contains("--self-test")
-          || CommandLine.arguments.contains("--overlay-test")
-          || CommandLine.arguments.contains("--latest-images-test")
-          || CommandLine.arguments.contains("--configuration-test")
-          || CommandLine.arguments.contains("--download-progress-test")
-        {
+        if ComputerLaunchCheck.exitOnFailure.contains(where: ComputerLaunchCheck.requested) {
           fputs("COMPUTER SELF-TEST FAILED: \(error.localizedDescription)\n", stderr)
           exit(1)
         }

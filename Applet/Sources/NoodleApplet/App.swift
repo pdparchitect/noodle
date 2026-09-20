@@ -1,6 +1,7 @@
 import AppKit
 import AppletBridge
 import AppletCore
+import NoodleLaunchChecks
 import NoodleWallpaper
 import SwiftUI
 import NoodleSettingsUI
@@ -18,7 +19,7 @@ import OSLog
         .frame(minWidth: 850, minHeight: 580)
         .preferredColorScheme(.dark)
         .task {
-          if CommandLine.arguments.contains("--updater-ui-test") {
+          if LaunchChecks.current.contains(AppletLaunchCheck.updaterUI) {
             do {
               try await AppletUITest.run()
               NSApp.terminate(nil)
@@ -65,6 +66,19 @@ enum AppletLinks {
   static let repository = URL(string: "https://github.com/pdparchitect/noodle")!
 }
 
+/// Launch arguments that verification runs pass, matched by digest; see Shared/LaunchChecks.
+enum AppletLaunchCheck {
+  static let updaterUI = "33f8b12621881e80aeaf87bc1d61ef880882e6b5cf0d3a2a1fc3e7ee99b42609"  // --updater-ui-test
+  static let rendering = "52ea2badcdd8b0ad5e3cb36f6052f7b70ed61e6923b77abfe07ccde40e3cb2b0"  // --rendering-test
+  static let backgroundLaunchUI = "cf13d7cc0216ca2633f6bec3a325fd72f51397f0bfbd6639a35dcf4af8750c02"  // --background-launch-ui-test
+  #if NOODLE_DEV_HOOKS
+  static let launchCapture = "7de812b196feeb9c1ee78b09d6d8006ad9eea78abeef8e10377234f723754799"  // --launch-check
+  #endif
+  static var isVerificationRun: Bool {
+    [updaterUI, rendering, backgroundLaunchUI].contains(where: LaunchChecks.current.contains)
+  }
+}
+
 private struct AppletMenu: View {
   @ObservedObject var library: AppletLibrary
   @ObservedObject var runtime: AppletRuntime
@@ -109,10 +123,14 @@ private struct AppletMenu: View {
   }
   func applicationDidFinishLaunching(_ notification: Notification) {
     WindowFocusGuard.shared.start()
-    CompanionAppVisibility.shared.start(permitsDock: !CommandLine.arguments.contains { $0.hasSuffix("-test") })
+    CompanionAppVisibility.shared.start(permitsDock: !AppletLaunchCheck.isVerificationRun)
     let defaultLaunch = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true
     launchLog.notice("Provider launched; default app launch: \(defaultLaunch)")
-    if CommandLine.arguments.contains("--rendering-test") {
+    #if NOODLE_DEV_HOOKS
+    // scripts/verify-launch-hooks.sh refuses a release that carries this marker.
+    launchLog.notice("noodle.development-hooks.enabled")
+    #endif
+    if LaunchChecks.current.contains(AppletLaunchCheck.rendering) {
       Task { @MainActor in
         do {
           try await AppletRenderingTest.run()
@@ -122,7 +140,7 @@ private struct AppletMenu: View {
           exit(1)
         }
       }
-    } else if CommandLine.arguments.contains("--background-launch-ui-test") {
+    } else if LaunchChecks.current.contains(AppletLaunchCheck.backgroundLaunchUI) {
       Task { @MainActor in
         do {
           try await AppletUITest.runBackgroundLaunch()
@@ -132,7 +150,7 @@ private struct AppletMenu: View {
           exit(1)
         }
       }
-    } else if CommandLine.arguments.contains("--updater-ui-test") {
+    } else if LaunchChecks.current.contains(AppletLaunchCheck.updaterUI) {
       Task { @MainActor in
         try? await Task.sleep(for: .milliseconds(250))
         reopenLibrary()
@@ -148,13 +166,15 @@ private struct AppletMenu: View {
       }
     }
     if CommandLine.arguments.contains("--noodle-background") { NSApp.hide(nil) }
-    if CommandLine.arguments.contains("--launch-check") {
+    #if NOODLE_DEV_HOOKS
+    if LaunchChecks.current.contains(AppletLaunchCheck.launchCapture) {
       Task { @MainActor in
         try? await Task.sleep(for: .seconds(2))
         AppletUITest.captureLaunch(isDefault: notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool,
           external: self.openedExternalItem)
       }
     }
+    #endif
   }
 
   func reopenLibrary() {

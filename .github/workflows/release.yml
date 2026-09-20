@@ -97,6 +97,8 @@ jobs:
         run: swift test --disable-sandbox --package-path Shared/Wallpaper --scratch-path .build/wallpaper
       - name: Test settings window behavior
         run: swift test --disable-sandbox --package-path Shared/SettingsUI --scratch-path .build/settings-ui
+      - name: Test launch check matching
+        run: swift test --disable-sandbox --package-path Shared/LaunchChecks --scratch-path .build/launch-checks
       - name: Test Noodle and Computer integration
         id: tests
         env:

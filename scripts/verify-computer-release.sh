@@ -8,6 +8,8 @@ bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info")"
 codesign --verify --deep --strict "$app"
 cmp "$project_root/Computer/Support/AppSymbol.svg" "$app/Contents/Resources/AppSymbol.svg"
 zsh "$project_root/scripts/verify-updater.sh" "$app"
+# Development and test bundles carry development launch checks; a production bundle must not.
+if [[ "$bundle" == com.pdparchitect.noodle.computer ]]; then zsh "$project_root/scripts/verify-launch-hooks.sh" "$app"; fi
 entitlements="$(mktemp /tmp/computer-entitlements.XXXXXX)"
 trap 'rm -f "$entitlements"' EXIT
 codesign -d --entitlements :- "$app" > "$entitlements" 2>/dev/null

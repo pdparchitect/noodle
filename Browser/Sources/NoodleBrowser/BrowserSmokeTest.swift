@@ -1,6 +1,7 @@
 import AppKit
 import BrowserBridge
 import BrowserCore
+import NoodleLaunchChecks
 import WebKit
 import SwiftUI
 
@@ -22,19 +23,22 @@ import SwiftUI
             let packagedResources = Bundle.main.resourceURL?.appendingPathComponent("NoodleBrowser_NoodleBrowser.bundle")
             try require(BrowserResources.bundle.bundleURL.resolvingSymlinksInPath().path == packagedResources?.resolvingSymlinksInPath().path,
                         "Browser scripts must load from the packaged app, not the build directory")
-            let args = CommandLine.arguments
-            func arg(_ name: String) throws -> String {
-                guard let i = args.firstIndex(of: name), i+1 < args.count else { throw BrowserError("Missing smoke argument " + name) }
-                return args[i+1]
-            }
-            guard let id = UUID(uuidString: try arg("--smoke-id")), let port = Int(try arg("--smoke-port")), (1...65535).contains(port) else { throw BrowserError("Invalid smoke fixture.") }
-            let restore = args.contains("--restore")
+            let checks = LaunchChecks.current
+            guard let id = checks.value(after: BrowserLaunchCheck.smokeID).flatMap(UUID.init(uuidString:)),
+                  let port = checks.value(after: BrowserLaunchCheck.smokePort).flatMap(Int.init), (1...65535).contains(port) else { throw BrowserError("Invalid smoke fixture.") }
+            let restore = checks.contains(BrowserLaunchCheck.restore)
             let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("BrowserSmoke/" + id.uuidString)
             let library = BrowserLibrary(root: root)
             let transfers = root.appendingPathComponent("Transfers")
             try FileManager.default.createDirectory(at: transfers, withIntermediateDirectories: true)
-            let runtime = BrowserRuntime(library: library, transferRoot: args.contains("--serve-smoke") ? nil : transfers)
-            if args.contains("--serve-smoke") {
+            #if NOODLE_DEV_HOOKS
+            let serve = checks.contains(BrowserLaunchCheck.serveSmoke)
+            #else
+            let serve = false
+            #endif
+            let runtime = BrowserRuntime(library: library, transferRoot: serve ? nil : transfers)
+            #if NOODLE_DEV_HOOKS
+            if serve {
                 try require(library.profiles.count == 2, "Run the smoke fixture before serving it")
                 let socket = try BrowserConnection.socketURL().deletingLastPathComponent().appendingPathComponent("t.sock")
                 runtime.startServer(socket: socket)
@@ -43,10 +47,11 @@ import SwiftUI
                 for _ in 0..<900 { try await Task.sleep(for: .seconds(1)) }
                 runtime.shutdown(); exit(0)
             }
+            #endif
             let focus = BrowserFocusProbe()
             defer { focus.stop() }
             let base = "http://127.0.0.1:\(port)"
-            if args.contains("--cleanup") {
+            if checks.contains(BrowserLaunchCheck.cleanup) {
                 for profile in library.profiles { try await runtime.removeBrowser(profile.id) }
                 try FileManager.default.removeItem(at: root)
                 print("BROWSER_SMOKE_CLEANED"); exit(0)
@@ -73,11 +78,13 @@ import SwiftUI
             } else {
                 try require(library.profiles.isEmpty, "Use a fresh smoke UUID")
                 let profile = try library.create(name: "Smoke authenticated"), other = try library.create(name: "Smoke isolated")
-                if args.contains("--pointer-only") {
+                #if NOODLE_DEV_HOOKS
+                if checks.contains(BrowserLaunchCheck.pointerOnly) {
                     try await BrowserPointerSmokeTest.run(runtime: runtime, browserID: profile.id, base: base, root: root)
                     runtime.shutdown()
                     print("BROWSER_POINTER_OK"); fflush(stdout); exit(0)
                 }
+                #endif
                 func open(_ id: UUID) async throws -> BrowserTab {
                     var request = BrowserRequest(.open, browserID: id); request.url = base
                     let response = try await runtime.perform(request)
@@ -100,11 +107,13 @@ import SwiftUI
                 _ = try await tab.evaluate("return await new Promise((resolve,reject)=>{const r=indexedDB.open('noodle-fixture',1);r.onupgradeneeded=()=>r.result.createObjectStore('values');r.onerror=()=>reject(r.error);r.onsuccess=()=>{const db=r.result,tx=db.transaction('values','readwrite');tx.objectStore('values').put('saved','state');tx.oncomplete=()=>{db.close();resolve(true)};tx.onerror=()=>reject(tx.error)}});")
                 print("PASS DOM inspection, iframe, fill, native click, authenticated request, profile isolation, IndexedDB write")
                 try await verifyWebMCP(runtime, browserID: profile.id, otherID: other.id, base: base)
-                if args.contains("--webmcp-demos") { try await verifyPublicWebMCPDemos(runtime, browserID: profile.id) }
-                if args.contains("--webmcp-only") {
+                #if NOODLE_DEV_HOOKS
+                if checks.contains(BrowserLaunchCheck.webMCPDemos) { try await verifyPublicWebMCPDemos(runtime, browserID: profile.id) }
+                if checks.contains(BrowserLaunchCheck.webMCPOnly) {
                     runtime.shutdown()
                     print("BROWSER_WEBMCP_OK"); fflush(stdout); exit(0)
                 }
+                #endif
                 try await BrowserPointerSmokeTest.run(runtime: runtime, browserID: profile.id, base: base, root: root)
                 fill.target = "#key"; fill.text = "keys"; _ = try await runtime.perform(fill)
                 try tab.press("Enter")

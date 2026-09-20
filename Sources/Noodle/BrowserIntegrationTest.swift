@@ -1,7 +1,9 @@
+#if NOODLE_DEV_HOOKS
 import AppKit
 import BrowserBridge
 import NoodleBrowserTools
 import NoodleCore
+import NoodleLaunchChecks
 
 /// Explicit fixture mode, with a fresh repository and an explicitly identified
 /// fake browser. Does not load the user's Noodle workspace or launch agents.
@@ -19,12 +21,12 @@ import NoodleCore
     }
     static func run() async throws {
         setbuf(stdout, nil)
-        let args = CommandLine.arguments
+        let checks = LaunchChecks.current
         // "auto" finds the fixture by name, for hosts that cannot read the companion's container.
-        guard let i = args.firstIndex(of: "--browser-fixture"), i+1 < args.count,
-              args[i+1] == "auto" || UUID(uuidString: args[i+1]) != nil,
-              let p = args.firstIndex(of: "--browser-fixture-port"), p+1 < args.count,
-              let port = Int(args[p+1]), (1...65535).contains(port) else { throw BrowserError("Specify the isolated browser fixture ID and port.") }
+        guard let fixture = checks.value(after: DevelopmentHook.browserFixture),
+              fixture == "auto" || UUID(uuidString: fixture) != nil,
+              let port = checks.value(after: DevelopmentHook.browserFixturePort).flatMap({ Int($0) }),
+              (1...65535).contains(port) else { throw BrowserError("Specify the isolated browser fixture ID and port.") }
         let front = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("BrowserBroker-" + UUID().uuidString)
         let helpers = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers")
@@ -41,7 +43,7 @@ import NoodleCore
         await controller.refresh()
         guard controller.available, controller.registry.browsers.count == 2,
               let browserID = controller.registry.browsers.first(where: { $0.name == "Smoke authenticated" })?.id,
-              args[i+1] == "auto" || UUID(uuidString: args[i+1]) == browserID else { throw BrowserError("Signed Browser fixture is not available. Start its isolated smoke server first.") }
+              fixture == "auto" || UUID(uuidString: fixture) == browserID else { throw BrowserError("Signed Browser fixture is not available. Start its isolated smoke server first.") }
         // The same pieces the app wires together, with the provider pointed at the fixture's
         // socket instead of running inside the extension against a user's companion.
         let assignments = ToolAssignmentStore(), registry = ToolProviderRegistry()
@@ -93,7 +95,7 @@ import NoodleCore
         guard ready else { throw BrowserError("Browser fixture page did not load.") }
         let auth = try await cli(["eval"] + tab + ["--text", "return (await (await fetch('/auth-state')).json()).authenticated;"])
         guard auth["value"] as? Bool == true else { throw BrowserError("Broker tab did not share the signed-in profile.") }
-        if !args.contains("--webmcp-only") {
+        if !checks.contains(DevelopmentHook.webMCPOnly) {
             let moved = try await cli(["move"] + tab + ["--target", "#click"])
             guard (moved["pointer"] as? [String: Any])?["visible"] as? Bool == true else { throw BrowserError("CLI pointer state missing.") }
             let hovered = try await cli(["eval"] + tab + ["--text", "return document.querySelector('#click').matches(':hover');"])
@@ -175,10 +177,11 @@ import NoodleCore
         _ = try await cli(["webmcp", "list"] + tab, expectFailure: true)
         _ = try await cli(["webmcp", "call"] + tab + ["--tool", echoID], expectFailure: true)
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == front else { throw BrowserError("Broker operations stole focus.") }
-        if args.contains("--webmcp-only") {
+        if checks.contains(DevelopmentHook.webMCPOnly) {
             print("BROWSER WEBMCP INTEGRATION PASSED: signed peers, managed CLI, assignments/revocation, argument files, authenticated execution, close tab, unchanged focus")
         } else {
             print("BROWSER INTEGRATION PASSED: signed peers, managed CLI, assignments/revocation, authenticated tab, history/bookmarks, uploads/downloads, screenshot, browser preview attachment, WebMCP, close tab, unchanged focus")
         }
     }
 }
+#endif

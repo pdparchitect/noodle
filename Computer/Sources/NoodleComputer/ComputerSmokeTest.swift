@@ -37,15 +37,16 @@ import WebKit
         print("SETTINGS SNAPSHOT: \(snapshot.path)")
     }
 
+    #if NOODLE_DEV_HOOKS
     static func checkProvider() async throws {
         setbuf(stdout, nil)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("NoodleProvider-Test-\(UUID().uuidString)")
         let store = try ComputerStore(root: root)
         defer { try? FileManager.default.removeItem(at: root) }
-        let snapshotTest = CommandLine.arguments.contains("--provider-snapshot-test")
+        let snapshotTest = ComputerLaunchCheck.requested(ComputerLaunchCheck.providerSnapshot)
         var computer = (snapshotTest ? ComputerTemplate.desktop : .shell).makeComputer(name: "Isolated Provider Test")
         computer.networkEnabled = snapshotTest
-        if CommandLine.arguments.contains("--provider-web-test") {
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.providerWeb) {
             computer.customImage = true; computer.webPort = 8080; computer.networkEnabled = true
         }
         print("PROVIDER TEST: preparing isolated \(snapshotTest ? "desktop snapshot" : "Alpine shell")")
@@ -1000,4 +1001,5 @@ import WebKit
             "COMPUTER SELF-TEST PASSED: boot, guest execution, restart persistence, library reload, EFI configuration; network tests \(networkEnabled ? "passed" : "not requested")"
         )
     }
+    #endif
 }

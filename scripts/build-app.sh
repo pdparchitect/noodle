@@ -13,12 +13,16 @@ case "$data_container" in
         bundle_identifier="com.pdparchitect.noodle.local"
         url_scheme="noodle-dev"
         google_callback_scheme="com.googleusercontent.apps.183234845746-9homesnd85b490uj2ak37rpk0svtveap"
+        # Package.swift reads this in every build below, so the development bundle keeps its hooks.
+        export NOODLE_DEV_HOOKS=1
         ;;
     production)
         app_name="Noodle"
         bundle_identifier="com.pdparchitect.noodle"
         url_scheme="noodle"
         google_callback_scheme="com.googleusercontent.apps.183234845746-flond96hao8g0cll1boruegemodo9fe5"
+        # A production bundle never has development hooks, whatever the calling shell exports.
+        unset NOODLE_DEV_HOOKS
         ;;
     *)
         print -u2 "NOODLE_DATA_CONTAINER must be development or production."

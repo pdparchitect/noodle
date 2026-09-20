@@ -8,6 +8,8 @@ bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info")"
 codesign --verify --deep --strict "$app"
 cmp "$project_root/Applet/Support/AppSymbol.svg" "$app/Contents/Resources/AppSymbol.svg"
 zsh "$project_root/scripts/verify-updater.sh" "$app"
+# A development bundle carries development hooks; a production bundle must not.
+if [[ "$bundle" == com.pdparchitect.noodle.applet ]]; then zsh "$project_root/scripts/verify-launch-hooks.sh" "$app"; fi
 entitlements="$(mktemp /tmp/applet-entitlements.XXXXXX)"
 preview_entitlements="$(mktemp /tmp/applet-preview-entitlements.XXXXXX)"
 host_entitlements="$(mktemp /tmp/applet-host-entitlements.XXXXXX)"

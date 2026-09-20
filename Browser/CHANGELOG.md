@@ -5,6 +5,7 @@
 ### Changed
 
 - Rename the Settings > Update button to Install Update… once a newer version is found. The app menu keeps Check for Updates….
+- Leave development-only test modes out of released builds. The checks that release preparation runs against the packaged app are no longer named in it.
 
 ## [0.3.0] - 2026-09-20
 

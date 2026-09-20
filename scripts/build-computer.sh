@@ -32,6 +32,12 @@ if [[ "${NOODLE_COMPUTER_TEST_BUILD:-0}" == 1 ]]; then
     computer_group_suffix="com.pdparchitect.noodle.computers.tests"
     document_suffix="-tests"
 fi
+# Development-only launch checks are compiled into development and test bundles, never a production one.
+if [[ "$data_container" == development || "${NOODLE_COMPUTER_TEST_BUILD:-0}" == 1 ]]; then
+    export NOODLE_DEV_HOOKS=1
+elif [[ "${NOODLE_DEV_HOOKS:-0}" == 1 ]]; then
+    print -u2 'Production Computer bundles cannot include development launch checks.'; exit 1
+fi
 document_extension="noodlecomputer$document_suffix"
 content_type="com.pdparchitect.noodle.computer-reference$document_suffix"
 kernel="$package/Resources/Runtime/vmlinux-arm64"

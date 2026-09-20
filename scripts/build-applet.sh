@@ -16,6 +16,9 @@ version="$(tr -d '[:space:]' < "$package/VERSION")"
 if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == 1 && ( "$configuration" != release || "$data_container" != production ) ]]; then
     print -u2 'Public releases require the optimized production Applet identity.'; exit 1
 fi
+# Applet/Package.swift reads this. A development bundle keeps its development hooks;
+# a production bundle never has them, whatever the calling shell exports.
+if [[ "$data_container" == development ]]; then export NOODLE_DEV_HOOKS=1; else unset NOODLE_DEV_HOOKS; fi
 # Swift Build records the macOS 15 deployment target as the linked SDK, which selects
 # legacy AppKit and SwiftUI behavior. Build like Noodle, with the selected Xcode's SDK.
 applet_swift() {

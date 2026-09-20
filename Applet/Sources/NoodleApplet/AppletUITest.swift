@@ -56,6 +56,7 @@ import AppletCore
         print("PASS: background requests preserve existing creation windows")
     }
 
+    #if NOODLE_DEV_HOOKS
     /// Opt-in observation for real Launch Services app/URL launches. No window actions.
     static func captureLaunch(isDefault: Bool?, external: Bool) {
         let windows = NSApp.windows.filter(\.isVisible).map {
@@ -66,6 +67,7 @@ import AppletCore
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-applet-launch-check.json")
         try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: file, options: .atomic)
     }
+    #endif
     private static func attribute(_ node: NSObject, _ key: NSAccessibility.Attribute) -> Any? {
         if let value = node.accessibilityAttributeValue(key) { return value }
         let names: [NSAccessibility.Attribute: String] = [.children: "accessibilityChildren", .title: "accessibilityTitle",

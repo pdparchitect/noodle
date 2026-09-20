@@ -70,6 +70,10 @@ zsh scripts/verify-applet-release.sh '.build/Noodle Applet.app'
 zsh Applet/scripts/test-background-launch.sh
 ```
 
+`verify-applet-release.sh` also runs `scripts/verify-launch-hooks.sh` on a production
+bundle: it carries no development hooks and names no launch check. The two launch checks
+above are compiled into every build and matched by digest, so they run against the release.
+
 Quit Applet before the launch checks. The sandboxed sender test verifies a real
 cold launch, repeated background requests, and an explicit library open. It refuses
 to interrupt an existing instance. Pass `--legacy` to reproduce the previous

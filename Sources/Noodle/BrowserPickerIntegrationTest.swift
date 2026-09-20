@@ -1,3 +1,4 @@
+#if NOODLE_DEV_HOOKS
 import AppKit
 import BrowserBridge
 import ComputerBridge
@@ -58,3 +59,4 @@ import SwiftUI
         print("BROWSER PICKER SNAPSHOT: \(output.path)")
     }
 }
+#endif

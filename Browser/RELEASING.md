@@ -67,7 +67,9 @@ zsh scripts/test-browser-ui.sh '.build/Noodle Browser Dev.app'
 ```
 
 The signed browser fixtures use disposable profiles and a local fake site. Release
-preparation runs them against the production bundle before uploading any assets.
+preparation runs them against the production bundle before uploading any assets,
+after `scripts/verify-launch-hooks.sh` confirms it carries no development hooks and
+spells no launch check.
 The UI fixture opens its own test window. Local checks do not replace CI
 notarization and distribution checks.
 

@@ -3,6 +3,11 @@
 import PackageDescription
 import Foundation
 
+/// Development hooks are compiled into debug builds, and into any build made with NOODLE_DEV_HOOKS=1.
+/// A release has none; scripts/verify-launch-hooks.sh checks.
+let developmentHooks: [SwiftSetting] = [.define("NOODLE_DEV_HOOKS", .when(configuration: .debug))]
+    + (Context.environment["NOODLE_DEV_HOOKS"] == "1" ? [.define("NOODLE_DEV_HOOKS")] : [])
+
 /// The three targets of a tool in Tools/NAME: its provider, the extension that hosts it and its tests.
 /// See Tools/AGENTS.md.
 func tool(_ name: String, dependencies: [Target.Dependency] = []) -> [Target] {
@@ -32,6 +37,7 @@ let package = Package(
         .executable(name: "NoodleMessenger", targets: ["NoodleMessenger"])
     ],
     dependencies: [
+        .package(path: "Shared/LaunchChecks"),
         .package(path: "Shared/SettingsUI"),
         .package(path: "Shared/Wallpaper"),
         .package(path: "Computer/Bridge"),
@@ -55,7 +61,8 @@ let package = Package(
         .executableTarget(name: "NoodleAppleAgent", dependencies: ["NoodleAppleRuntime", "NoodleCore"],
             linkerSettings: [.unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist",
                                          "-Xlinker", "Support/AppleAgent-Info.plist"])]),
-        .target(name: "NoodleCore", dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper")]),
+        .target(name: "NoodleCore", dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper")],
+            swiftSettings: developmentHooks),
         .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "MCP", package: "swift-sdk")]),
         .target(name: "NoodleToolScripting", dependencies: ["NoodleCore"]),
         .target(name: "NoodleSharing", dependencies: ["NoodleCore"]),
@@ -67,14 +74,14 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleBrowserTools", "NoodleComputerTools", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", "NoodleAudioCapture", .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge")],
+            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleBrowserTools", "NoodleComputerTools", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",
                     "-Xfrontend", "-const-gather-protocols-file",
                     "-Xfrontend", "Support/AppIntentsProtocols.json"
                 ])
-            ],
+            ] + developmentHooks,
             linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
         .executableTarget(

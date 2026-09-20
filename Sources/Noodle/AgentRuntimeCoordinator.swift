@@ -366,7 +366,7 @@ final class AgentRuntimeCoordinator {
     }
 
     func checkExternalInstallation(_ provider: HarnessProvider) async {
-        #if DEBUG
+        #if NOODLE_DEV_HOOKS
         discovery.checkExternalInstallationDuringSimulation(provider)
         #endif
         await refreshInstallations()

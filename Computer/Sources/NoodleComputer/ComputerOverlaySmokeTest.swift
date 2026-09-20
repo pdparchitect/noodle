@@ -1,3 +1,4 @@
+#if NOODLE_DEV_HOOKS
 import AppKit
 import ComputerCore
 import Containerization
@@ -182,3 +183,4 @@ import Foundation
         } catch { try? await pod.stop(); throw error }
     }
 }
+#endif

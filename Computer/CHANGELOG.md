@@ -6,6 +6,7 @@
 
 - Rename the Settings > Update button to Install Update… once a newer version is found. The app menu keeps Check for Updates….
 - Show the full name, Noodle Computer, in the menu bar, like the other Noodle apps.
+- Release builds no longer include the launch checks that only development builds use, making the app smaller.
 
 ## [0.11.0] - 2026-09-20
 

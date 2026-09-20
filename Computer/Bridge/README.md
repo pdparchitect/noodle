@@ -124,7 +124,8 @@ swift test --disable-sandbox --filter ComputerAgentFilesTests
 ```
 
 For guest integration, use the matching Noodle Computer Dev and Noodle Dev
-builds. Launch the signed Computer executable with
+builds; production bundles do not contain these checks. Launch the signed
+Computer executable with
 `--noodle-background --provider-integration-test`. After `PROVIDER TEST READY`,
 launch the signed Noodle executable with `--computer-integration-test`.
 These use temporary libraries and test assignment, binary and empty-file

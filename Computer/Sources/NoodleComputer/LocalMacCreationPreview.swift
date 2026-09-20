@@ -1,3 +1,4 @@
+#if NOODLE_DEV_HOOKS
 import AppKit
 import ComputerCore
 import SwiftUI
@@ -38,3 +39,4 @@ import SwiftUI
         print("Local Mac creation preview: " + output.path)
     }
 }
+#endif

@@ -1,5 +1,6 @@
 import AppletBridge
 import AppletCore
+import NoodleLaunchChecks
 import XCTest
 @testable import NoodleApplet
 
@@ -24,5 +25,15 @@ import XCTest
         XCTAssertEqual(response.errorCode, "environment-mismatch")
         XCTAssertTrue(library.entries.isEmpty)
         XCTAssertTrue(runtime.sessions.isEmpty)
+    }
+
+    /// Each digest must match the argument named beside it in App.swift.
+    func testLaunchCheckDigestsMatchTheirArguments() {
+        XCTAssertEqual(AppletLaunchCheck.updaterUI, LaunchChecks.digest("--updater-ui-test"))
+        XCTAssertEqual(AppletLaunchCheck.rendering, LaunchChecks.digest("--rendering-test"))
+        XCTAssertEqual(AppletLaunchCheck.backgroundLaunchUI, LaunchChecks.digest("--background-launch-ui-test"))
+        #if NOODLE_DEV_HOOKS
+        XCTAssertEqual(AppletLaunchCheck.launchCapture, LaunchChecks.digest("--launch-check"))
+        #endif
     }
 }

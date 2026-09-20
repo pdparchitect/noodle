@@ -17,6 +17,9 @@ case "$data_container" in
     production) bundle_identifier="com.pdparchitect.noodle.browser"; app_name="Noodle Browser"; group_suffix="com.pdparchitect.noodle.browsers"; scheme="noodlebrowser" ;;
     *) print -u2 'NOODLE_BROWSER_DATA_CONTAINER must be development or production.'; exit 1 ;;
 esac
+# Browser/Package.swift reads this. A development bundle keeps its development hooks;
+# a production bundle never has them, whatever the calling shell exports.
+if [[ "$data_container" == development ]]; then export NOODLE_DEV_HOOKS=1; else unset NOODLE_DEV_HOOKS; fi
 version="$(tr -d '[:space:]' < "$package/VERSION")"
 [[ "$version" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' ]] || { print -u2 'Invalid Browser/VERSION'; exit 1; }
 mkdir -p "$build_root/module-cache"

@@ -70,6 +70,7 @@ fi
 zsh "$project_root/scripts/verify-updater.sh" "$app"
 zsh "$project_root/scripts/verify-agent-host.sh" "$app"
 zsh "$project_root/scripts/verify-tool-extensions.sh" "$app"
+zsh "$project_root/scripts/verify-launch-hooks.sh" "$app"
 
 helper_entitlements="$(codesign -d --entitlements :- "$app/Contents/Helpers/messenger" 2>/dev/null)"
 if print -r -- "$helper_entitlements" | grep -q '<key>'; then

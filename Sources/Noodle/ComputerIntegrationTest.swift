@@ -1,7 +1,9 @@
+#if NOODLE_DEV_HOOKS
 import AppKit
 import ComputerBridge
 import NoodleComputerTools
 import NoodleCore
+import NoodleLaunchChecks
 import SwiftUI
 
 /// Explicit opt-in fixture, before NoodleStore creation: never opens the real
@@ -9,7 +11,7 @@ import SwiftUI
 @MainActor enum ComputerIntegrationTest {
     /// UI-only fixture: no real agents, assignments, provider or guest operations.
     static func checkPicker() async throws {
-        if CommandLine.arguments.contains("--computer-update-notice-test") {
+        if LaunchChecks.current.contains(DevelopmentHook.computerUpdateNotice) {
             try await checkUpdateNotice()
             return
         }
@@ -30,7 +32,7 @@ import SwiftUI
         let emptyRepository = WorkspaceRepository(rootURL: emptyRoot)
         try emptyRepository.prepare()
         let emptyController = ComputerController(repository: emptyRepository, socket: emptyRoot.appendingPathComponent("offline.sock"),
-            applicationLookup: CommandLine.arguments.contains("--computer-download-test") ? { nil } : {
+            applicationLookup: LaunchChecks.current.contains(DevelopmentHook.computerDownload) ? { nil } : {
                 NSWorkspace.shared.urlForApplication(withBundleIdentifier: ComputerConnection.providerID)
             })
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 420),
@@ -219,7 +221,7 @@ import SwiftUI
         _ = try await cli(["read"] + terminalA)
         print("PASS: discovery, two assignments, separate PTYs, shared guest files, CLI input/read/resize, typed card, membership checks and revocation")
 
-        if CommandLine.arguments.contains("--computer-web-test") {
+        if LaunchChecks.current.contains(DevelopmentHook.computerWeb) {
             _ = try await cli(["write"] + terminalA + ["--text", "apk add --no-cache busybox-extras && printf '__HTTP_%s__\\n' READY"])
             var httpReady = false
             for _ in 0..<60 {
@@ -274,3 +276,4 @@ private struct ComputerPickerFixture: View {
         }
     }
 }
+#endif

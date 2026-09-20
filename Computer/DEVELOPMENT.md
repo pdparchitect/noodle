@@ -117,6 +117,9 @@ NOODLE_COMPUTER_TEST_BUILD=1 zsh scripts/build-computer.sh
 ```
 
 Fixtures use temporary libraries. Some download images and start real guests.
+They are compiled only into development and test bundles, which `build-computer.sh`
+builds with `NOODLE_DEV_HOOKS=1`, and into debug builds. A production bundle has none of
+them; `scripts/verify-launch-hooks.sh` checks that.
 Run only the checks relevant to your change:
 
 | Flag | Checks |

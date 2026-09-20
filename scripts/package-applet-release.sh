@@ -29,6 +29,7 @@ app="$(zsh "$project_root/scripts/build-applet.sh")"
 codesign --verify --deep --strict "$app"
 codesign -dv --verbose=4 "$app" 2>&1 | grep -q '^Authority=Developer ID Application:'
 zsh "$project_root/scripts/verify-applet-release.sh" "$app"
+zsh "$project_root/scripts/verify-launch-hooks.sh" "$app"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$staging/notary.zip"
 xcrun notarytool submit "$staging/notary.zip" --key "$APPLE_API_KEY_PATH" \
     --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" --wait

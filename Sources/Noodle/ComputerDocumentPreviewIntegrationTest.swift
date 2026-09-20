@@ -1,3 +1,4 @@
+#if NOODLE_DEV_HOOKS
 import AppKit
 import ComputerBridge
 import NoodleCore
@@ -85,3 +86,4 @@ extension ComputerIntegrationTest {
         print("DOCUMENT PREVIEW PASSED: \(opens) repeated opens, 18 item selections, 6 closes; no runtime or user workspace")
     }
 }
+#endif

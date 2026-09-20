@@ -146,7 +146,7 @@ public struct HarnessDiscovery: Sendable {
     private let standaloneOpenCodeURL: URL
     private let standaloneMuseURL: URL
     private let managedHarnesses: ManagedHarnessStore?
-    #if DEBUG
+    #if NOODLE_DEV_HOOKS
     private let simulateNoHarnesses: Bool
     private var externalInstallChecks: Set<HarnessProvider> = []
     #endif
@@ -159,7 +159,7 @@ public struct HarnessDiscovery: Sendable {
         managedHarnesses: ManagedHarnessStore? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
-        #if DEBUG
+        #if NOODLE_DEV_HOOKS
         simulateNoHarnesses = environment["NOODLE_SIMULATE_NO_HARNESSES"] == "1"
         #endif
         self.applicationsDirectory = applicationsDirectory.standardizedFileURL
@@ -183,7 +183,7 @@ public struct HarnessDiscovery: Sendable {
     }
 
     public func allowsHostDiscovery(for provider: HarnessProvider) -> Bool {
-        #if DEBUG
+        #if NOODLE_DEV_HOOKS
         return !simulateNoHarnesses || externalInstallChecks.contains(provider)
         #else
         return true
@@ -191,7 +191,7 @@ public struct HarnessDiscovery: Sendable {
     }
 
     public func discover(_ provider: HarnessProvider) -> HarnessInstallation {
-        #if DEBUG
+        #if NOODLE_DEV_HOOKS
         // Keep the override at discovery so startup, Settings, and refresh agree.
         if simulateNoHarnesses {
             // Noodle's own copy stays visible: simulation is how its install flow is exercised.
@@ -216,7 +216,7 @@ public struct HarnessDiscovery: Sendable {
         }
     }
 
-    #if DEBUG
+    #if NOODLE_DEV_HOOKS
     /// Explicitly checking a completed external install never enables app-bundled fallbacks.
     public mutating func checkExternalInstallationDuringSimulation(_ provider: HarnessProvider) {
         externalInstallChecks.insert(provider)

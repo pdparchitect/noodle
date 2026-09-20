@@ -2,6 +2,10 @@
 import PackageDescription
 // The provider and Noodle share the versioned Computer/Bridge protocol.
 
+// Development-only launch checks are compiled into debug builds, and into release builds that ask for them.
+var appSettings: [SwiftSetting] = [.define("NOODLE_DEV_HOOKS", .when(configuration: .debug))]
+if Context.environment["NOODLE_DEV_HOOKS"] == "1" { appSettings.append(.define("NOODLE_DEV_HOOKS")) }
+
 let package = Package(
     name: "NoodleComputer",
     platforms: [.macOS("26.0")],
@@ -9,6 +13,7 @@ let package = Package(
         .executable(name: "ComputerPreviewExtension", targets: ["ComputerPreviewExtension"]),
         .executable(name: "ComputerThumbnailExtension", targets: ["ComputerThumbnailExtension"])],
     dependencies: [
+        .package(path: "../Shared/LaunchChecks"),
         .package(path: "../Shared/SettingsUI"),
         .package(path: "../Shared/Wallpaper"),
         .package(path: "Bridge"),
@@ -22,6 +27,7 @@ let package = Package(
         .target(name: "ComputerCore", dependencies: [.product(name: "NoodleWallpaperCore", package: "Wallpaper")], resources: [.process("Resources")]),
         .executableTarget(name: "NoodleComputer", dependencies: [
             "ComputerCore",
+            .product(name: "NoodleLaunchChecks", package: "LaunchChecks"),
             .product(name: "NoodleSettingsUI", package: "SettingsUI"),
             .product(name: "ComputerDocument", package: "Presentation"),
             .product(name: "NoodleWallpaper", package: "Wallpaper"),
@@ -33,7 +39,7 @@ let package = Package(
             .product(name: "ContainerizationEXT4", package: "containerization"),
             .product(name: "ContainerizationExtras", package: "containerization"),
             .product(name: "ContainerizationOCI", package: "containerization")
-        ]),
+        ], swiftSettings: appSettings),
         .executableTarget(name: "ComputerPreviewExtension", dependencies: [.product(name: "ComputerDocument", package: "Presentation")],
             swiftSettings: [.unsafeFlags(["-parse-as-library", "-application-extension"])],
             linkerSettings: [.unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]),

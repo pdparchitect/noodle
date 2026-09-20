@@ -70,6 +70,11 @@ zsh scripts/verify-computer-release.sh '.build/Noodle Computer Dev.app'
 '.build/Noodle Computer Dev.app/Contents/MacOS/NoodleComputer' --updater-ui-test
 ```
 
+The release workflow runs the same `--updater-ui-test` against the packaged app. It is
+the only launch check a production bundle contains, matched by digest rather than by
+name; every other check needs a development or test bundle.
+`scripts/verify-launch-hooks.sh` rejects a production bundle that carries any of them.
+
 For isolated updater UI checks, build with `NOODLE_COMPUTER_TEST_BUILD=1` and
 `NOODLE_COMPUTER_TEST_UPDATES=1`. The latter is rejected for production bundles.
 Check controls without installing updates or restarting the user's computers.
