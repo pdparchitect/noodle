@@ -5,6 +5,7 @@ struct AgentAccessSettingsView: View {
     @Environment(NoodleStore.self) private var store
     @State private var showsAccessInfo = false
     @State private var showsAppsInfo = false
+    @State private var confirming: AccessConfirmation?
     private let accessColumnWidth: CGFloat = 100
     private let appsColumnWidth: CGFloat = 64
 
@@ -39,9 +40,13 @@ struct AgentAccessSettingsView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
 
                             Toggle(isOn: Binding(
-                                get: { store.runtime.accessConfiguration.isExtended(for: agent) },
+                                get: { store.runtime.accessConfiguration.isExtended(for: agent) || confirming == .init(agent: agent, kind: .unrestricted) },
                                 set: { enabled in
-                                    store.runtime.setExtendedAccess(enabled, agent: agent, repository: store.repository)
+                                    if enabled {
+                                        confirming = .init(agent: agent, kind: .unrestricted)
+                                    } else {
+                                        store.runtime.setExtendedAccess(false, agent: agent, repository: store.repository)
+                                    }
                                 }
                             )) {
                                 Text(agent.displayName)
@@ -54,8 +59,14 @@ struct AgentAccessSettingsView: View {
 
                             if provider?.supportsAccountApps == true {
                                 Toggle(isOn: Binding(
-                                    get: { store.runtime.accessConfiguration.appsEnabled(for: agent) },
-                                    set: { store.runtime.setAppsEnabled($0, agent: agent, repository: store.repository) }
+                                    get: { store.runtime.accessConfiguration.appsEnabled(for: agent) || confirming == .init(agent: agent, kind: .apps) },
+                                    set: { enabled in
+                                        if enabled {
+                                            confirming = .init(agent: agent, kind: .apps)
+                                        } else {
+                                            store.runtime.setAppsEnabled(false, agent: agent, repository: store.repository)
+                                        }
+                                    }
                                 )) { Text("Apps") }
                                 .labelsHidden()
                                 .controlSize(.mini)
@@ -95,6 +106,40 @@ struct AgentAccessSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .confirmationDialog(confirming?.title ?? "", isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
+                            titleVisibility: .visible, presenting: confirming) { request in
+            Button(request.kind == .unrestricted ? "Allow Unrestricted Access" : "Allow Apps") {
+                switch request.kind {
+                case .unrestricted: store.runtime.setExtendedAccess(true, agent: request.agent, repository: store.repository)
+                case .apps: store.runtime.setAppsEnabled(true, agent: request.agent, repository: store.repository)
+                }
+                confirming = nil
+            }
+            Button("Cancel", role: .cancel) { confirming = nil }
+        } message: { request in
+            Text(request.message)
+        }
+    }
+}
+
+private struct AccessConfirmation: Equatable {
+    enum Kind { case unrestricted, apps }
+    let agent: AgentRecord
+    let kind: Kind
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.agent.id == rhs.agent.id && lhs.kind == rhs.kind }
+
+    var title: String {
+        kind == .unrestricted ? "Allow Unrestricted Access for \(agent.displayName)?" : "Allow Apps for \(agent.displayName)?"
+    }
+
+    var message: String {
+        switch kind {
+        case .unrestricted:
+            "\(agent.displayName) will be able to read and change files and use services beyond its private workspace, with the access available to your Mac account. This restarts the bot."
+        case .apps:
+            "\(agent.displayName) will be able to use apps connected to your \(AgentAppsInfo.account(for: HarnessProvider(rawValue: agent.harnessIdentifier ?? ""))) account, such as Gmail, Google Drive, and Calendar, with the permissions you granted there. This restarts the bot."
+        }
     }
 }
 
@@ -168,7 +213,9 @@ private struct AgentAppsStatusLabel: View {
 private struct AgentAppsInfo: View {
     let provider: HarnessProvider?
 
-    private var account: String {
+    private var account: String { Self.account(for: provider) }
+
+    static func account(for provider: HarnessProvider?) -> String {
         switch provider {
         case .codex: "ChatGPT"
         case .claudeCode: "Claude.ai"

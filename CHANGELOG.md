@@ -14,6 +14,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Ask for confirmation before turning on Unrestricted access or Apps for a bot in Settings > Sandbox. Turning either off still applies at once.
 - Show a reset button beside each changed shortcut in Settings > Keybindings, so one command can return to its default without restoring them all.
 - Accept Option (⌥) alone as the modifier for any shortcut in Settings > Keybindings, such as ⌥Space. Shift alone or no modifier is still rejected.
 - Rename the Settings > Update button to Install Update… once a newer version is found. The app menu keeps Check for Updates….

@@ -8,7 +8,8 @@
 
 Change any bot's access in **Settings → Sandbox**. Click the **Unrestricted**
 heading or a bot's **restricted** or **unrestricted** label to see what that mode
-allows. All harnesses use the bot's
+allows. Turning on **Unrestricted** or **Apps** asks for confirmation first;
+turning either off does not. All harnesses use the bot's
 saved access preference. Previous required Claude/FX/Grok/Muse grants do not
 override that preference. Editing `agent.json` alone never grants unrestricted access.
 

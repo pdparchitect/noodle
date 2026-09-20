@@ -19,6 +19,7 @@ import NoodleCore
         try snapshot(settings, name: "sandbox-defaults")
 
         try await flip("Ada, account apps", in: settings)
+        try await confirm("Allow Apps for Ada?", with: "Allow Apps", in: window)
         try await wait { f.runtime.runtime.accessConfiguration.appsEnabled(for: f.a) && !f.runtime.runtime.changingAccess.contains(f.a.id) }
         XCTAssertFalse(f.runtime.runtime.accessConfiguration.isExtended(for: f.a))
         XCTAssertTrue(try XCTUnwrap(f.runtime.factory.processes.last).launch.appsEnabled)
@@ -27,6 +28,7 @@ import NoodleCore
         try snapshot(settings, name: "sandbox-restricted-apps")
 
         try await flip("Ada, unrestricted access", in: settings)
+        try await confirm("Allow Unrestricted Access for Ada?", with: "Allow Unrestricted Access", in: window)
         try await wait { f.runtime.runtime.accessConfiguration.isExtended(for: f.a) && !f.runtime.runtime.changingAccess.contains(f.a.id) }
         _ = try await control("unrestricted", in: settings)
         XCTAssertTrue(f.runtime.runtime.accessConfiguration.appsEnabled(for: f.a))
@@ -57,6 +59,33 @@ import NoodleCore
         window.close()
     }
 
+    func testTurningAccessOnAsksFirstAndTurningItOffDoesNot() async throws {
+        let f = try fixture()
+        let settings = host(AgentAccessSettingsView().environment(f.store))
+        let window = try XCTUnwrap(settings.window)
+        let configuration = { f.runtime.runtime.accessConfiguration }
+        let settled = { !f.runtime.runtime.changingAccess.contains(f.a.id) }
+        for (name, title, allow, isOn) in [
+            ("Ada, unrestricted access", "Allow Unrestricted Access for Ada?", "Allow Unrestricted Access", { configuration().isExtended(for: f.a) }),
+            ("Ada, account apps", "Allow Apps for Ada?", "Allow Apps", { configuration().appsEnabled(for: f.a) })
+        ] {
+            try await flip(name, in: settings)
+            try await confirm(title, with: "Cancel", in: window)
+            XCTAssertFalse(isOn(), "Cancel must leave \(name) off")
+            let cancelled = try await control(name, in: settings)
+            try await wait { self.attribute(cancelled, .value) as? Int == 0 }
+
+            try await flip(name, in: settings)
+            XCTAssertFalse(isOn(), "\(name) must stay off until it is confirmed")
+            try await confirm(title, with: allow, in: window)
+            try await wait { isOn() && settled() }
+
+            try await flip(name, in: settings)
+            try await wait { !isOn() && settled() }
+            XCTAssertTrue(window.sheets.isEmpty, "Turning \(name) off must not ask")
+        }
+    }
+
     func testUnsupportedHarnessHasNoAppsSwitch() async throws {
         let f = try fixture()
         _ = try f.repository.updateAgent(f.a, displayName: f.a.displayName,
@@ -75,6 +104,14 @@ import NoodleCore
         view.cacheDisplay(in: view.bounds, to: bitmap)
         try bitmap.representation(using: .png, properties: [:])?.write(
             to: URL(fileURLWithPath: directory).appendingPathComponent("\(name).png"))
+    }
+
+    private func confirm(_ title: String, with button: String, in window: NSWindow) async throws {
+        try await wait { !window.sheets.isEmpty }
+        let content = try XCTUnwrap(window.sheets.first?.contentView)
+        _ = try await control(title, in: content)
+        press(try await control(button, in: content))
+        try await wait { window.sheets.isEmpty }
     }
 
     private func flip(_ name: String, in view: NSView) async throws {
