@@ -198,6 +198,8 @@ jobs:
       - name: Test Browser
         run: swift test --disable-sandbox --package-path Browser --scratch-path .build/browser
 
+  # Each preparation waits only for its own product's tests, so a companion is not signed
+  # behind Noodle's long suite. The tag job below still requires every selected test.
   prepare-noodle:
     needs: [versions, checks, test-noodle, test-noodle-macos27, test-bridge]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.noodle == 'true'
@@ -205,13 +207,13 @@ jobs:
     secrets: inherit
 
   prepare-computer:
-    needs: [versions, checks, test-noodle, test-computer, test-bridge]
+    needs: [versions, checks, test-computer, test-bridge]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.computer == 'true'
     uses: ./.github/workflows/computer-release.yml
     secrets: inherit
 
   prepare-applet:
-    needs: [versions, checks, test-noodle, test-applet, test-bridge]
+    needs: [versions, checks, test-applet]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.applet == 'true'
     uses: ./.github/workflows/applet-release.yml
     secrets: inherit
@@ -222,7 +224,7 @@ jobs:
     uses: ./.github/workflows/computer-images.yml
 
   prepare-browser:
-    needs: [versions, checks, test-noodle, test-browser, test-bridge]
+    needs: [versions, checks, test-browser]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.browser == 'true'
     uses: ./.github/workflows/browser-release.yml
     secrets: inherit

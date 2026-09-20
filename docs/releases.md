@@ -64,6 +64,8 @@ automation or interactive desktop. Existing output is never overwritten.
 ## What CI does
 
 All selected products must pass tests and preparation before any tag is created.
+Each product's preparation starts as soon as its own tests pass, in parallel with the
+other suites.
 App preparation includes signing, notarization, stapling, Gatekeeper, and Sparkle
 verification. Image preparation builds and tests both ARM64 images. Tests are
 scoped by product; Computer, Applet, and Browser releases also run Noodle integration coverage.

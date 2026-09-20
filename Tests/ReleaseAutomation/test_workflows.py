@@ -165,6 +165,23 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotIn('NOODLE_TEST_APPLE_MODEL', tests['env'])
         self.assertIn('test-noodle-macos27', self.jobs['prepare-noodle']['needs'])
 
+    def test_preparation_waits_only_for_its_own_products_tests(self):
+        # Signing and notarizing a companion must not queue behind Noodle's long suite.
+        # The tag job still requires every selected test, so nothing ships early.
+        expected = {
+            'prepare-noodle': ['versions', 'checks', 'test-noodle', 'test-noodle-macos27', 'test-bridge'],
+            'prepare-computer': ['versions', 'checks', 'test-computer', 'test-bridge'],
+            'prepare-applet': ['versions', 'checks', 'test-applet'],
+            'prepare-browser': ['versions', 'checks', 'test-browser'],
+            'prepare-images': ['versions', 'checks'],
+        }
+        for job, needs in expected.items():
+            self.assertEqual(self.jobs[job]['needs'], needs, job)
+        for job in expected:
+            self.assertIn(job, self.jobs['tag']['needs'])
+        for test in ['test-noodle', 'test-noodle-macos27', 'test-computer', 'test-applet', 'test-browser', 'test-bridge']:
+            self.assertIn(test, self.jobs['tag']['needs'])
+
     def test_selected_test_failures_block_tagging(self):
         for product in ['noodle', 'computer', 'applet', 'browser', 'bridge', 'noodle-macos27']:
             for result in ['failure', 'cancelled', 'skipped']:
