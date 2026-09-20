@@ -133,7 +133,8 @@ try:
         broken = package(directory, 'Broken', 'swift', 'import SwiftUI\nstruct Noodlet: View { var body: some View { DefinitelyMissing() } }')
         bad = call('build', broken, success=False)
         failed_id = track(bad)
-        assert 'DefinitelyMissing' in call('logs', '--session', failed_id)['text']
+        diagnostics = call('logs', '--session', failed_id)['text']
+        assert 'DefinitelyMissing' in diagnostics, diagnostics
         print('PASS native compiler diagnostics and session recovery', flush=True)
 
         # Probe containment using a harmless file that this test owns outside the app container.

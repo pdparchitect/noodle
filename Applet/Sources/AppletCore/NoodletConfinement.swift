@@ -49,7 +49,8 @@ public enum NoodletConfinement {
     var rules = [
       "(version 1)", "(deny default)", "(import \"system.sb\")", "(allow process-fork)",
       "(allow signal (target same-sandbox))", "(allow sysctl-read)",
-      "(allow process-exec (literal \"/usr/bin/env\") (subpath \(quoted(toolchain))))",
+      // Resolved like the reads below: /Applications/Xcode.app is a link wherever Xcode is selected by version.
+      "(allow process-exec (literal \"/usr/bin/env\") (subpath \(quoted(path(toolchain)))))",
       "(allow file-read-metadata)",
       "(allow file-read* file-map-executable\n  "
         + reads.map { "(subpath \(quoted(path($0))))" }.joined(separator: "\n  ") + ")",

@@ -21,6 +21,32 @@ final class NoodletConfinementTests: XCTestCase {
         XCTAssertEqual(process.environment, ["HOME": "/x"])
     }
 
+    /// Seatbelt matches resolved paths, and an Xcode selected by version is reached through a link.
+    func testCompilerMayRunFromAToolchainReachedThroughALink() throws {
+        guard let installed = NoodletConfinement.toolchains.sorted(by: { $0.key < $1.key }).first(where: { FileManager.default.isExecutableFile(atPath: $0.value) }) else {
+            throw XCTSkip("No Apple Swift compiler is installed.")
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let link = root.appendingPathComponent("Developer")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: URL(fileURLWithPath: installed.key))
+
+        let profile = NoodletConfinement.profile(launch(root), toolchain: link.path)
+        let resolved = NoodletConfinement.path(installed.key)
+        XCTAssertTrue(profile.contains("(allow process-exec (literal \"/usr/bin/env\") (subpath \"\(resolved)\"))"), profile)
+
+        // The rule has to hold in the real sandbox too, not only read well.
+        let process = Process(), output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
+        process.arguments = ["-p", profile, "/usr/bin/env", link.path + installed.value.dropFirst(installed.key.count), "-version"]
+        process.standardOutput = output; process.standardError = output
+        try process.run(); process.waitUntilExit()
+        let text = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        XCTAssertEqual(process.terminationStatus, 0, text)
+        XCTAssertTrue(text.contains("Swift version"), text)
+    }
+
     func testDevicesFollowGrantedPermissions() {
         let root = URL(fileURLWithPath: "/tmp/applet")
         var request = launch(root)
