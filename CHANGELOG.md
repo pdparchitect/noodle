@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-09-20
+
 ### Added
 
 - Give every bot on-device image tools: `messenger tool vision ocr`, `classify` and `barcodes` read text, labels, barcodes and QR codes from an image in the bot's workspace, so models that cannot see images can still use them. The tools run in a sandboxed extension with no network or file access; Noodle opens the image for it.

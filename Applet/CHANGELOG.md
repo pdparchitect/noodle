@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-20
+
 ### Security
 
 - Confine native Swift noodlets to their own files. They compile and run under a deny-by-default sandbox that reaches only their package, data directory and a private home directory, so a noodlet can no longer read other noodlets, Applet's storage, its Keychain secrets or anything else on the Mac. A new `NoodletHost.xpc` service applies it, because App Sandbox refuses nested sandboxes.
