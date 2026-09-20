@@ -37,6 +37,21 @@ import NoodleCore
         XCTAssertFalse(hasControl("Checking for updates…", in: view))
     }
 
+    func testSignInSharesTheRowOfTheOtherHarnessButtons() async throws {
+        let f = try fixture()
+        let installation = HarnessInstallation(provider: .codex, executablePath: "/fixtures/codex")
+        HarnessPresentationCache.save([.codex: .init(installation: installation, authentication: .unauthenticated,
+            version: .init(installedVersion: "0.153.4"))], to: f.runtime.defaults)
+        let setup = HarnessSetupController(providers: [:], defaults: f.runtime.defaults)
+        let view = host(HarnessInstallationRow(installation: installation, liveInstallation: installation,
+            isRefreshing: false, setup: setup, install: {}).environment(f.store))
+        let frame = { (node: NSObject) in (node.value(forKey: "accessibilityFrame") as? NSValue)?.rectValue }
+        let profilesButton = try await control("Profiles…", in: view), signInButton = try await control("Sign In…", in: view)
+        let profiles = try XCTUnwrap(frame(profilesButton)), signIn = try XCTUnwrap(frame(signInButton))
+        XCTAssertEqual(profiles.midY, signIn.midY, accuracy: 1)
+        XCTAssertGreaterThan(signIn.minX, profiles.maxX)
+    }
+
     func testReconnectingAgentsShowElapsedTimeAndKickWithFailureTakingHeaderPriority() async throws {
         let f = try fixture(), first = try f.runtime.start(f.a), second = try f.runtime.start(f.b)
         let installed = HarnessInstallation(provider: .codex, executablePath: "/fixtures/codex")

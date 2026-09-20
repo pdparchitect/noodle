@@ -478,9 +478,13 @@ struct HarnessInstallationRow: View {
                 if installation.isAvailable {
                     versionDetails
                 }
-                if id == .apple {
-                    Button("Local Models…") { showsLocalModels = true }
-                        .sheet(isPresented: $showsLocalModels) { AppleLocalModelsView().noodleSheetSizing(animated: true) }
+                if needsSignIn, setup.authentication[id] == .managedExternally {
+                    Text("Could not determine the saved sign-in status.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                actionButtons
+                if installation.isAvailable {
+                    updateGuide
                 }
                 if let activity = setup.activity[id] {
                     HStack {
@@ -525,15 +529,6 @@ struct HarnessInstallationRow: View {
                         } else {
                             Button("Install…") { showsInstallationGuide = true }
                         }
-                    } else if setup.authentication[id] == .unauthenticated || setup.authentication[id] == .managedExternally {
-                        if setup.authentication[id] == .managedExternally {
-                            Text("Could not determine the saved sign-in status.")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                        Button("Sign In…") {
-                            if let liveInstallation, liveInstallation.isAvailable { setup.signIn(liveInstallation) }
-                        }
-                            .disabled(isRefreshing || liveInstallation?.isAvailable != true)
                     }
                 }
             }
@@ -633,10 +628,24 @@ struct HarnessInstallationRow: View {
                 Text(error).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             }
         }
-        let managed = setup.isManaged(installation)
-        if id.supportsProfiles || version?.updateAvailable == true || managed {
+    }
+
+    /// Sign In is offered once nothing else is in progress for an installed harness.
+    private var needsSignIn: Bool {
+        guard setup.challenges[id] == nil, setup.activity[id] == nil,
+              installation.isAvailable || setup.snapshots[id] == nil else { return false }
+        return setup.authentication[id] == .unauthenticated || setup.authentication[id] == .managedExternally
+    }
+
+    /// Every button of the row shares one line.
+    @ViewBuilder private var actionButtons: some View {
+        let version = setup.snapshots[id]?.version
+        let available = installation.isAvailable
+        let managed = available && setup.isManaged(installation)
+        let updateAvailable = available && version?.updateAvailable == true
+        if (available && id.supportsProfiles) || updateAvailable || managed || id == .apple || needsSignIn {
             HStack {
-                if id.supportsProfiles {
+                if available, id.supportsProfiles {
                     Button("Profiles…") { showsProfiles = true }
                         .sheet(isPresented: $showsProfiles) {
                             HarnessProfilesView(installation: liveInstallation ?? installation)
@@ -644,7 +653,7 @@ struct HarnessInstallationRow: View {
                                 .noodleSheetSizing(animated: true)
                         }
                 }
-                if version?.updateAvailable == true {
+                if updateAvailable {
                     if managed {
                         Button("Update") { setup.install(id, runtime: store.runtime) }
                             .disabled(setup.activity[id] != nil)
@@ -667,9 +676,23 @@ struct HarnessInstallationRow: View {
                             Text("Bots that use \(id.displayName) stop working until it is installed again. Your sign-in is kept.")
                         }
                 }
+                if id == .apple {
+                    Button("Local Models…") { showsLocalModels = true }
+                        .sheet(isPresented: $showsLocalModels) { AppleLocalModelsView().noodleSheetSizing(animated: true) }
+                }
+                if needsSignIn {
+                    Button("Sign In…") {
+                        if let liveInstallation, liveInstallation.isAvailable { setup.signIn(liveInstallation) }
+                    }
+                        .disabled(isRefreshing || liveInstallation?.isAvailable != true)
+                }
             }
         }
-        if version?.updateAvailable == true, showsUpdateGuide, !managed {
+    }
+
+    @ViewBuilder private var updateGuide: some View {
+        let version = setup.snapshots[id]?.version
+        if version?.updateAvailable == true, showsUpdateGuide, !setup.isManaged(installation) {
             let guide = HarnessVersionPolicy.updateGuide(for: installation)
             Text(guide.instructions).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let command = guide.command {

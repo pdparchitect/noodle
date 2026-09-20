@@ -45,6 +45,7 @@ All notable changes to Noodle are documented here, following
 - List a local model whose stored information is damaged as Unreadable Model in Local Models so its weights can be removed; it previously disappeared from the list while staying on disk.
 - Stop restricted FX bots from logging a "skill discovery warning" on their first prompt. FX reported every account folder above the workspace that the sandbox hides, such as `~/.claude/skills`, as bot output. Noodle now leaves those out of the activity log and still shows problems with the bot's own skills.
 - Limit the height of the affected-bots list that opens from a harness's status in Settings > Harness and scroll it when many bots need a kick; it previously grew past the screen with no way to reach the bots at the bottom.
+- Keep each harness's buttons on one line in Settings > Harness. Sign In previously sat on its own line below Profiles, Update and Remove.
 
 ## [0.20.0] - 2026-09-19
 
