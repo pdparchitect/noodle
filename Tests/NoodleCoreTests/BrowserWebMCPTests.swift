@@ -23,17 +23,12 @@ final class BrowserWebMCPTests: XCTestCase {
         }
     }
 
-    func testNamespacedCommandsAndGeneratedGuidance() throws {
+    func testNamespacedCommands() throws {
         XCTAssertEqual(try BrowserOperation.expandingWebMCPCommand(["webmcp", "list", "--browser", "id"]), ["webmcp-list", "--browser", "id"])
         XCTAssertEqual(try BrowserOperation.expandingWebMCPCommand(["webmcp", "call", "--tool", "id"]), ["webmcp-call", "--tool", "id"])
         XCTAssertEqual(try BrowserOperation.expandingWebMCPCommand(["webmcp", "--help"]), ["--help"])
         XCTAssertThrowsError(try BrowserOperation.expandingWebMCPCommand(["webmcp"]))
         XCTAssertThrowsError(try BrowserOperation.expandingWebMCPCommand(["webmcp", "unknown"]))
-        XCTAssertFalse(MessengerDocumentation.browserGuidance(.webMCPList).isEmpty)
-        XCTAssertFalse(MessengerDocumentation.browserGuidance(.webMCPCall).isEmpty)
-        XCTAssertTrue(MessengerDocumentation.browserToolGuidance.contains("document.modelContext.executeTool"))
-        XCTAssertTrue(MessengerDocumentation.browserConventions.contains("needs-user-action"))
-        XCTAssertFalse(MessengerDocumentation.browserToolGuidance.contains("skills/browser/browser"), "nothing points bots at the removed command")
     }
 
     func testRequestRequiresScopedIdentityAndJSONObjects() throws {

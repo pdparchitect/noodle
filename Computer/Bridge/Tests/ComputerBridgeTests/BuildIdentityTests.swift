@@ -32,6 +32,21 @@ final class BuildIdentityTests: XCTestCase {
         XCTAssertNil(ComputerBuildIdentity.identify(nil))
     }
 
+    func testNoodlesComputerToolExtensionIsAClientAndTheSamePrincipalAsNoodle() {
+        XCTAssertEqual(ComputerBuildIdentity.production.clientIDs, ["com.pdparchitect.noodle", "com.pdparchitect.noodle.tools.computer"])
+        XCTAssertEqual(ComputerBuildIdentity.development.clientIDs, ["com.pdparchitect.noodle.local", "com.pdparchitect.noodle.local.tools.computer"])
+        XCTAssertEqual(ComputerBuildIdentity.identify("com.pdparchitect.noodle.local.tools.computer"), .development)
+        // Terminals belong to a bot, not to whichever Noodle process opened them: Noodle must
+        // be able to revoke a terminal its tool extension opened.
+        for build in ComputerBuildIdentity.allCases {
+            for client in build.clientIDs { XCTAssertEqual(ComputerBuildIdentity.principal(for: client), build.clientIDs[0], client) }
+        }
+        XCTAssertEqual(ComputerBuildIdentity.principal(for: "com.example.other"), "com.example.other")
+        for other in ["com.pdparchitect.noodle.tools.browser", "com.pdparchitect.noodle.tools.computer.evil", "com.pdparchitect.noodle.tools"] {
+            XCTAssertNil(ComputerBuildIdentity.identify(other), other)
+        }
+    }
+
     func testMispackagedLocalAppCannotUseProductionSocket() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".app")
         let contents = root.appendingPathComponent("Contents")

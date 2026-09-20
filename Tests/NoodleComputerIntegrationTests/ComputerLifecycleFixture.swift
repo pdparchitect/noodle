@@ -1,5 +1,6 @@
 import ComputerBridge
 import Foundation
+import NoodleComputerTools
 import NoodleCore
 import XCTest
 @testable import Noodle
@@ -52,6 +53,11 @@ import XCTest
     let b: AgentRecord
     let provider = LifecycleComputerProvider()
     let controller: ComputerController
+    /// The same pieces the app wires together: the controller publishes assignments, the
+    /// broker enforces them, and the provider forwards to the (fake) companion.
+    let assignments = ToolAssignmentStore()
+    let registry = ToolProviderRegistry()
+    private(set) var host = ToolHostServices.none
     init() throws {
         repository = WorkspaceRepository(rootURL: root)
         try repository.prepare()
@@ -62,6 +68,13 @@ import XCTest
         let provider = provider
         controller = ComputerController(repository: repository, socket: providerRoot.appendingPathComponent("fixture.sock"),
             applicationLookup: { nil }, connection: { try await provider.respond($0) })
+        try registry.register(ComputerToolProvider(stagingRoot: { providerRoot }) { try await provider.respond($0) })
+        let assignments = assignments, controller = controller
+        controller.onAssignmentsChange = { assignments.replace("computer", with: $0) }
+        host = .repository(repository, revoked: { kind, id, agent in
+            guard kind == "computer", let computer = UUID(uuidString: id) else { return }
+            Task { @MainActor in controller.revoke(computer: computer, agent: agent) }
+        }) { assignments.assignments(for: $0) }
     }
     func prepare() async throws {
         await controller.refresh()
@@ -74,17 +87,45 @@ import XCTest
         if operation == .terminalWrite { request.data = Data("fixture command\n".utf8) }
         return request
     }
-    func send(_ request: ComputerRequest, agent: AgentRecord? = nil, edit: (inout ComputerAgentRequest) -> Void = { _ in }) throws -> URL {
+    /// Sends what a bot's `messenger tool computer ...` call becomes, and records the outcome
+    /// where the old mailbox response used to appear.
+    func send(_ request: ComputerRequest, agent: AgentRecord? = nil, localPath: String? = nil) throws -> URL {
         let agent = agent ?? a
-        let bridge = try ComputerAgentSkill.bridge(workspace: repository.directory(for: agent))
-        let session = try JSONDecoder().decode(MCPBridgeSession.self, from: Data(contentsOf: bridge.appendingPathComponent("session.json")))
-        var envelope = ComputerAgentRequest(token: session.token, request: request)
-        edit(&envelope)
-        let stem = bridge.appendingPathComponent(envelope.id.uuidString.lowercased())
-        try WorkspaceMailbox(workspace: repository.directory(for: agent), path: ".noodle/computer-bridge")
-            .write(envelope, named: stem.lastPathComponent + ".request")
-        controller.scan()
-        return stem.appendingPathExtension("response")
+        let names: [ComputerOperation: String] = [.list: "list", .start: "start", .terminalOpen: "open", .terminalRead: "read",
+            .terminalWrite: "write", .terminalResize: "resize", .terminalClose: "close", .preview: "present", .fileUpload: "upload", .fileDownload: "download"]
+        var arguments: [String: Any] = [:]
+        arguments["computer"] = request.computerID?.uuidString
+        if !request.operation.isFileTransfer { arguments["terminal"] = request.terminalID?.uuidString }
+        // A forged owner in the arguments must be ignored; the broker's context names the bot.
+        arguments["agentID"] = request.agentID?.uuidString
+        if request.operation == .terminalWrite { arguments["base64"] = request.data?.base64EncodedString() }
+        if request.operation.isFileTransfer {
+            arguments[request.operation == .fileUpload ? "destination" : "source"] = request.path
+            arguments[request.operation == .fileUpload ? "source" : "destination"] = localPath
+        }
+        let output = root.appendingPathComponent("responses/\(UUID().uuidString).response")
+        try FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let call = ToolBridgeRequest(session: "fixture", action: .call, provider: "computer", tool: names[request.operation],
+                                     arguments: try JSONSerialization.data(withJSONObject: arguments))
+        let registry = registry, assignments = assignments, host = host
+        let context = ToolCallContext(agentID: agent.id, workspace: repository.directory(for: agent))
+        Task.detached {
+            var response = ComputerResponse()
+            do {
+                let data = try await ToolBroker.perform(call, registry: registry, assignments: { assignments.assignments(for: agent.id) }, context: context, host: host)
+                let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+                if result["isError"] as? Bool == true {
+                    response.error = ((result["content"] as? [[String: Any]])?.first)?["text"] as? String ?? "Tool error"
+                } else if var structured = result["structuredContent"] as? [String: Any] {
+                    if let text = structured.removeValue(forKey: "text") as? String { structured["data"] = Data(text.utf8).base64EncodedString() }
+                    structured["localPath"] = nil
+                    structured["version"] = 1 // Bots never see the protocol version; the response type requires it.
+                    response = try JSONDecoder().decode(ComputerResponse.self, from: JSONSerialization.data(withJSONObject: structured))
+                }
+            } catch { response.error = error.localizedDescription }
+            try? JSONEncoder().encode(response).write(to: output, options: .atomic)
+        }
+        return output
     }
     func response(_ url: URL, file: StaticString = #filePath, line: UInt = #line) async throws -> ComputerResponse {
         try await wait(file: file, line: line) { FileManager.default.fileExists(atPath: url.path) }
@@ -94,9 +135,6 @@ import XCTest
         let deadline = ContinuousClock.now.advanced(by: .seconds(3))
         while !predicate() {
             guard ContinuousClock.now < deadline else { XCTFail("Computer fixture timed out", file: file, line: line); throw CancellationError() }
-            // Monitoring is disabled to keep provider handshakes under test control.
-            // Pump the broker here: send() can scan before the vnode event arrives.
-            controller.scan()
             try await Task.sleep(for: .milliseconds(2))
         }
     }

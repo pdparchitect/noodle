@@ -39,7 +39,6 @@ let package = Package(
             linkerSettings: [.unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist",
                                          "-Xlinker", "Support/AppleAgent-Info.plist"])]),
         .target(name: "NoodleCore", dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper")]),
-        .executableTarget(name: "NoodleComputerCLI", dependencies: ["NoodleCore", .product(name: "ComputerBridge", package: "Bridge")]),
         .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "MCP", package: "swift-sdk")]),
         .target(name: "NoodleMCPScripting", dependencies: ["NoodleCore"]),
         .executableTarget(name: "NoodleMCPCLI", dependencies: ["NoodleCore", "NoodleMCPScripting"]),
@@ -47,6 +46,13 @@ let package = Package(
         .target(name: "NoodleSharing", dependencies: ["NoodleCore"]),
         .target(name: "NoodleVisionTools", dependencies: ["NoodleCore"]),
         .target(name: "NoodleBrowserTools", dependencies: ["NoodleCore", .product(name: "BrowserBridge", package: "BrowserProtocol")]),
+        .target(name: "NoodleComputerTools", dependencies: ["NoodleCore", .product(name: "ComputerBridge", package: "Bridge")]),
+        .executableTarget(
+            name: "NoodleComputerToolsExtension",
+            dependencies: ["NoodleCore", "NoodleComputerTools"],
+            swiftSettings: [.unsafeFlags(["-parse-as-library", "-application-extension"])],
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]
+        ),
         .executableTarget(
             name: "NoodleBrowserToolsExtension",
             dependencies: ["NoodleCore", "NoodleBrowserTools"],
@@ -67,7 +73,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleBrowserTools", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", "NoodleAudioCapture", .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge")],
+            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleBrowserTools", "NoodleComputerTools", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", "NoodleAudioCapture", .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",
@@ -95,13 +101,14 @@ let package = Package(
         ),
         .testTarget(
             name: "NoodleComputerIntegrationTests",
-            dependencies: ["Noodle", "NoodleCore", .product(name: "ComputerBridge", package: "Bridge")]
+            dependencies: ["Noodle", "NoodleCore", "NoodleComputerTools", .product(name: "ComputerBridge", package: "Bridge")]
         ),
         .testTarget(
             name: "NoodleSharingTests",
             dependencies: ["NoodleSharing", "NoodleCore"]
         ),
         .testTarget(name: "NoodleVisionToolsTests", dependencies: ["NoodleVisionTools", "NoodleCore"]),
+        .testTarget(name: "NoodleComputerToolsTests", dependencies: ["NoodleComputerTools", "NoodleCore", .product(name: "ComputerBridge", package: "Bridge")]),
         .testTarget(name: "NoodleBrowserToolsTests", dependencies: ["NoodleBrowserTools", "NoodleCore", .product(name: "BrowserBridge", package: "BrowserProtocol")]),
         .testTarget(name: "NoodleMCPScriptingTests", dependencies: ["NoodleMCPScripting", "NoodleCore"]),
         .testTarget(

@@ -41,13 +41,20 @@ final class AppleLiveTests: XCTestCase {
             modelDirectory: URL(fileURLWithPath: modelPath), nativeHistory: true, promptTimeout: 600,
             assignedComputer: UUID(uuidString: computer),
             configure: { workspace in
-                let skill = workspace.appendingPathComponent(".agents/skills/computer")
-                // A synthetic Computer provider: the real model must discover
-                // IDs, send the guest command, then read its observed output.
+                // The skill Noodle generates from the Computer tool extension, without the app running.
+                let tools = try ToolDescriptor.list(mcp: Data(#"{"tools":[{"name":"list"},{"name":"open","inputSchema":{"type":"object","required":["computer"],"properties":{"computer":{"type":"string"}}}},{"name":"write","inputSchema":{"type":"object","required":["computer","terminal"],"properties":{"computer":{"type":"string"},"terminal":{"type":"string"},"text":{"type":"string"}}}},{"name":"read","inputSchema":{"type":"object","required":["computer","terminal"],"properties":{"computer":{"type":"string"},"terminal":{"type":"string"},"offset":{"type":"integer"}}}}]}"#.utf8))
+                ToolProviderSkills.synchronize(workspace: workspace, providers: [(ToolProviderManifest(id: "computer", title: "Noodle Computer",
+                    summary: "Run commands, transfer files and share previews in the computers assigned to this bot.",
+                    instructions: "Use list, then start if the assigned computer is stopped, and open to get a terminalID. write sends text followed by Enter; read returns the output.", activation: .whenAssigned("computer")), tools)])
+                let skill = workspace.appendingPathComponent(".agents/skills/messenger")
+                // A synthetic Computer provider behind `messenger tool computer`: the real model
+                // must discover IDs, send the guest command, then read its observed output.
                 // No production computer or conversation is touched.
                 let script = """
                 #!/bin/bash
                 set -eu
+                [ "$1" = tool ] && [ "$2" = computer ] || exit 2
+                shift 2
                 printf '%s\\n' "$*" >> computer-calls.txt
                 operation="$1"; shift
                 computer=''; terminal=''; command=''
@@ -76,7 +83,7 @@ final class AppleLiveTests: XCTestCase {
                   *) exit 2 ;;
                 esac
                 """
-                let cli = skill.appendingPathComponent("computer")
+                let cli = skill.appendingPathComponent("messenger")
                 // Replace a generated CLI link without writing through it.
                 try? FileManager.default.removeItem(at: cli)
                 try Data(script.utf8).write(to: cli)
@@ -89,7 +96,7 @@ final class AppleLiveTests: XCTestCase {
                     if case .instructions = entry { return entry.description }; return nil
                 }.joined(separator: "\n")
                 XCTAssertTrue(instructions.contains("<name>computer</name>"))
-                XCTAssertTrue(instructions.contains("Run commands in guest terminals"))
+                XCTAssertTrue(instructions.contains("Run commands, transfer files"))
                 XCTAssertFalse(instructions.contains("A write acknowledgement only confirms input was sent"),
                                "Discover the skill through metadata, not a Computer-specific prompt recipe")
                 let modelCalls = transcript.flatMap { entry -> [Transcript.ToolCall] in
@@ -109,7 +116,7 @@ final class AppleLiveTests: XCTestCase {
                 XCTAssertTrue(guestCommand.contains("/workspace/check.txt"))
                 for call in modelCalls where call.arguments.jsonString.contains("/workspace/check.txt") {
                     XCTAssertEqual(call.toolName, "bash")
-                    XCTAssertTrue(call.arguments.jsonString.contains(".agents/skills/computer/computer write"),
+                    XCTAssertTrue(call.arguments.jsonString.contains("messenger tool computer write"),
                                   "Guest paths must not be executed as local workspace commands")
                 }
             }

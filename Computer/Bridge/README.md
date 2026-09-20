@@ -12,14 +12,18 @@ follow the same pairing. Signed test fixtures use a third, isolated group.
 ## Requests and access
 
 ```text
-Bot → Computer CLI → Noodle broker → Computer provider → Guest
+Bot → messenger tool computer → Noodle tool broker → Computer tool extension → Computer provider → Guest
 ```
 
 The shared protocol lives in this package. Apps authenticate each other over a
 private Unix socket in their scoped App Group. Compatibility depends on protocol
 versions and capabilities, so app release numbers do not need to match.
 
-Noodle owns bot assignments and checks them for every request. Each bot can start
+Noodle owns bot assignments. Its tool broker checks the computer named in every call
+before the bundled Computer tool extension sees it, answers the extension's checkpoint
+again immediately before a command or staged upload is sent, and withholds the result
+of a call whose computer was unassigned meanwhile. The extension only forwards; it
+and Noodle are one owner of a bot's terminals, so Noodle can close what it opened. Each bot can start
 an assigned computer and open, read, write, resize, or close its own terminal
 sessions. It cannot stop/delete the computer or access another bot's terminal.
 Files and services inside a shared computer are shared by design.
@@ -27,8 +31,8 @@ Files and services inside a shared computer are shared by design.
 ## Transfer files
 
 ```sh
-./.agents/skills/computer/computer upload --computer COMPUTER_ID --source wallpaper.png --destination /workspace/wallpaper.png
-./.agents/skills/computer/computer download --computer COMPUTER_ID --source /workspace/result.zip --destination output/result.zip
+./.agents/skills/messenger/messenger tool computer upload --computer COMPUTER_ID --source wallpaper.png --destination /workspace/wallpaper.png
+./.agents/skills/messenger/messenger tool computer download --computer COMPUTER_ID --source /workspace/result.zip --destination output/result.zip
 ```
 
 Transfers preserve exact bytes without opening a terminal. Local paths resolve
@@ -50,10 +54,10 @@ Open Noodle Computer from the notice and choose **Check for Updates…** in its 
 menu. The notice clears when the refreshed provider supports transfers; existing
 terminals and displays remain usable while the update is pending.
 
-The broker assigns a fresh transfer UUID and stages the payload in the apps'
+The Computer tool extension assigns a fresh transfer UUID and stages the payload in the apps'
 existing private App Group. Only the UUID and guest path cross the authenticated
 socket; agents cannot select provider host paths. The provider streams bytes
-through its bundled guest helper. The broker removes staging after success or
+through its bundled guest helper. The extension removes staging after success or
 failure and expires crash leftovers after one hour. Downloads are published
 atomically only after a complete copy and a fresh assignment check. Transfers
 time out after ten minutes; an upload with an uncertain result is never retried
@@ -68,8 +72,8 @@ are not hard isolation against a bot with autonomous host access.
 Run the assigned Computer CLI from the bot's workspace:
 
 ```sh
-./.agents/skills/computer/computer present --terminal SESSION_ID --conversation CHAT_ID
-./.agents/skills/computer/computer present --computer COMPUTER_ID --conversation CHAT_ID
+./.agents/skills/messenger/messenger tool computer present --computer COMPUTER_ID --terminal SESSION_ID --conversation CHAT_ID
+./.agents/skills/messenger/messenger tool computer present --computer COMPUTER_ID --conversation CHAT_ID
 ```
 
 The first captures a saved preview of the specified terminal. The second captures
@@ -123,14 +127,15 @@ For guest integration, use the matching Noodle Computer Dev and Noodle Dev
 builds. Launch the signed Computer executable with
 `--noodle-background --provider-integration-test`. After `PROVIDER TEST READY`,
 launch the signed Noodle executable with `--computer-integration-test`.
-These use temporary libraries and test assignment, binary and empty-file CLI
-transfers, overwrite/path errors, terminals, revocation, and cards.
+These use temporary libraries and test assignment, binary and empty-file
+transfers through `messenger tool computer`, overwrite/path errors, terminals, revocation, and cards.
 The provider cleans up after completion or ten minutes.
 
 The broker suite also runs under the ordinary root `swift test` and CI. It uses
 real workspace IPC, file I/O and assignment checks with a controlled provider
 connection to test interrupted uploads/downloads, revocation during a transfer,
-concurrent agents, forged envelopes, incorrect byte counts and older providers.
+concurrent agents, forged owners and staging IDs, incorrect byte counts and older
+providers. Request files and sessions are covered by the tool bridge's own tests.
 Concurrent IPC reader/writer tests also check that scanners only see complete
 JSON messages, and that publication never follows a destination symlink.
 These tests require no signing identity or running guest. The signed guest

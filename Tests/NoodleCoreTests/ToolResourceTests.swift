@@ -9,6 +9,8 @@ final class ToolResourceTests: XCTestCase {
         let manifest = ToolProviderManifest(id: "browser", title: "Browser", summary: "", activation: .whenAssigned("browser"))
         var received: [Data] = []
         var duringCall: (() -> Void)?
+        var checkpoint = false
+        var pastCheckpoint = 0
         func tools(context: ToolCallContext) async throws -> Data {
             Data("""
             {"tools":[
@@ -23,6 +25,7 @@ final class ToolResourceTests: XCTestCase {
         func call(_ tool: String, arguments: Data, files: [ToolFile], context: ToolCallContext) async throws -> Data {
             received.append(arguments)
             duringCall?()
+            if checkpoint { try await context.authorize(); pastCheckpoint += 1 }
             for file in files where file.access == .write { try file.handle.write(contentsOf: Data("page".utf8)) }
             if tool == "list" {
                 return Data(#"{"content":[{"type":"text","text":"MINE and SECRET"}],"isError":false,"structuredContent":{"browsers":[{"id":"mine","name":"Work"},{"id":"secret","name":"Bank"},{"name":"no id"}]}}"#.utf8)
@@ -104,6 +107,16 @@ final class ToolResourceTests: XCTestCase {
         do { _ = try await call("open", #"{"browser":"mine","output":"page.html"}"#); XCTFail("Expected the result to be withheld.") }
         catch { XCTAssertTrue(error.localizedDescription.contains("no longer assigned"), error.localizedDescription) }
         XCTAssertFalse(FileManager.default.fileExists(atPath: workspace.appendingPathComponent("page.html").path))
+    }
+
+    func testAProviderCanAskNoodleAtACheckpointAndARevocationStopsItBeforeTheIrreversibleStep() async throws {
+        provider.checkpoint = true
+        _ = try await call("open", #"{"browser":"mine"}"#)
+        XCTAssertEqual(provider.pastCheckpoint, 1, "still assigned: the provider continues")
+        provider.duringCall = { [assigned] in assigned.value = [:] }
+        do { _ = try await call("open", #"{"browser":"mine"}"#); XCTFail("Expected a refusal.") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("no longer assigned"), error.localizedDescription) }
+        XCTAssertEqual(provider.pastCheckpoint, 1, "revoked before the checkpoint: the irreversible step never ran")
     }
 
     func testAssignmentsCrossTheExtensionBoundaryForProvidersThatFilterThemselves() throws {

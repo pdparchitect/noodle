@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Accept connections from Noodle's bundled Computer tool extension as well as from Noodle itself. Both are checked by code signature and build channel and count as the same owner of a bot's terminals, so Noodle can still close them when access ends. Noodle still decides which computers a bot may use.
+
 ## [0.10.0] - 2026-09-19
 
 ### Fixed

@@ -12,7 +12,8 @@ final class ToolExtensionTests: XCTestCase, NSXPCListenerDelegate {
             Data(#"{"tools":[{"name":"copy","inputSchema":{"type":"object","properties":{"from":{"type":"string","format":"noodle-file"},"to":{"type":"string","format":"noodle-file","noodle/access":"write"}}}}]}"#.utf8)
         }
         func call(_ tool: String, arguments: Data, files: [ToolFile], context: ToolCallContext) async throws -> Data {
-            guard tool == "copy" else { throw ToolProviderError("Unknown tool \(tool).") }
+            guard tool == "copy" || tool == "checked-copy" else { throw ToolProviderError("Unknown tool \(tool).") }
+            if tool == "checked-copy" { try await context.authorize() }
             let source = try XCTUnwrap(files.first { $0.parameter == "from" }), destination = try XCTUnwrap(files.first { $0.parameter == "to" })
             XCTAssertEqual([source.access, destination.access], [.read, .write])
             try destination.handle.write(contentsOf: source.handle.readToEnd() ?? Data())
@@ -21,6 +22,11 @@ final class ToolExtensionTests: XCTestCase, NSXPCListenerDelegate {
         }
     }
 
+    private final class Flag: @unchecked Sendable {
+        private let lock = NSLock(); private var stored: Bool
+        init(_ value: Bool) { stored = value }
+        var value: Bool { get { lock.withLock { stored } } set { lock.withLock { stored = newValue } } }
+    }
     private let listener = NSXPCListener.anonymous()
     private var root: URL!
 
@@ -56,6 +62,25 @@ final class ToolExtensionTests: XCTestCase, NSXPCListenerDelegate {
         XCTAssertEqual(result?["agent"] as? String, context.agentID.uuidString)
         XCTAssertEqual(result?["assigned"] as? [String], ["f1", "f2"], "the calling bot's assignments reach the extension")
         XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("out")), Data("payload".utf8))
+    }
+
+    func testAnExtensionsCheckpointIsAnsweredByNoodleAcrossTheConnection() async throws {
+        let provider = try await connect()
+        let allowed = Flag(true)
+        func copy(_ name: String) async throws {
+            try Data("payload".utf8).write(to: root.appendingPathComponent("in"))
+            FileManager.default.createFile(atPath: root.appendingPathComponent(name).path, contents: nil)
+            let files = [ToolFile(parameter: "from", access: .read, handle: try FileHandle(forReadingFrom: root.appendingPathComponent("in"))),
+                         ToolFile(parameter: "to", access: .write, handle: try FileHandle(forWritingTo: root.appendingPathComponent(name)))]
+            let context = ToolCallContext(agentID: UUID(), workspace: root, authorize: { if !allowed.value { throw ToolProviderError("This file is no longer assigned to this bot.") } })
+            _ = try await provider.call("checked-copy", arguments: Data("{}".utf8), files: files, context: context)
+        }
+        try await copy("allowed")
+        XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("allowed")), Data("payload".utf8))
+        allowed.value = false
+        do { try await copy("denied"); XCTFail("Expected a refusal.") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("no longer assigned"), error.localizedDescription) }
+        XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("denied")), Data(), "the extension stopped before writing")
     }
 
     func testProviderErrorsArriveAsErrorsAndTheConnectionSurvives() async throws {

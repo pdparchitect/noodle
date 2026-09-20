@@ -183,6 +183,15 @@ final class BrowserToolProviderTests: XCTestCase {
         XCTAssertEqual((status["structuredContent"] as? [String: Any])?["text"] as? String, "Plain status text", "other tools keep text as text")
     }
 
+    func testTheSkillCarriesTheBrowserGuidanceFromThisModule() {
+        let instructions = provider.manifest.instructions
+        XCTAssertTrue(instructions.contains("document.modelContext.executeTool"))
+        XCTAssertTrue(instructions.contains("needs-user-action"))
+        XCTAssertTrue(instructions.contains("messenger tool browser present"))
+        XCTAssertFalse(instructions.contains("skills/browser/browser"), "nothing points bots at the removed command")
+        for operation in BrowserOperation.allCases { XCTAssertFalse(BrowserToolGuidance.tool(operation).isEmpty, operation.rawValue) }
+    }
+
     func testScriptsAndWebMCPArgumentsCanComeFromWorkspaceFiles() async throws {
         try Data("return document.title".utf8).write(to: workspace.appendingPathComponent("title.js"))
         _ = try await call("eval", ["browser": mine.uuidString, "tab": tab.uuidString, "file": "title.js"])

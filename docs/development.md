@@ -110,7 +110,7 @@ message delivery, runtime recovery, access controls, and offline audio handling.
 They do not require provider accounts or perform live model requests. Native
 harness initialization checks skip when their harness is not installed.
 
-`BridgeCLISandboxTests` requires signed Messenger, MCP, Computer, and Applet
+`BridgeCLISandboxTests` requires signed Messenger, MCP, and Applet
 helpers. Use the fixture and environment variable above to require those checks;
 without them, a local run may skip the tests if no development app is available.
 The fixture does not launch the GUI or contact remote services. The smoke suite

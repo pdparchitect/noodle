@@ -7,7 +7,7 @@ helpers="$application/Contents/Helpers"
 # Build the production CLI targets, without the UI's signing identity, app
 # groups, or XPC authentication. These helpers receive the production Seatbelt
 # profile from the test process, exactly as they do from the Agent Host.
-for product in NoodleMessenger NoodleMCPCLI NoodleComputerCLI; do
+for product in NoodleMessenger NoodleMCPCLI; do
     swift build --disable-sandbox --package-path "$project_root" --product "$product" >&2
 done
 bin_path="$(swift build --disable-sandbox --package-path "$project_root" --show-bin-path)"
@@ -18,9 +18,8 @@ applet_bin="$(swift build --disable-sandbox --package-path "$project_root/Applet
 mkdir -p "$helpers"
 cp "$bin_path/NoodleMessenger" "$helpers/messenger"
 cp "$bin_path/NoodleMCPCLI" "$helpers/mcpshim"
-cp "$bin_path/NoodleComputerCLI" "$helpers/computer"
 cp "$applet_bin/noodlet" "$helpers/noodlet"
-for helper in messenger mcpshim computer noodlet; do
+for helper in messenger mcpshim noodlet; do
     signing_options=()
     # Applet derives its environment from the executable's signing identifier,
     # including when the managed CLI runs outside its app bundle.

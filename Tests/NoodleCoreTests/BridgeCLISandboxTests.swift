@@ -197,8 +197,14 @@ final class BridgeCLISandboxTests: XCTestCase {
         try check(helper: "mcpshim", bridge: "mcp", arguments: ["eval", "mcp.tools()", "--raw"],
             response: Data(), exitCode: 1, expectsRequest: false, expectedError: "Unknown or repeated script option")
     }
-    func testComputerCanUseWorkspaceBrokerWithoutNetworkOrSignalPermission() throws {
-        try check(helper: "computer", bridge: "computer", arguments: ["list"], response: Data("{\"computers\":[]}".utf8), expected: "{\"computers\":[]}")
+    /// Browsers, computers and every tool extension reach bots through this one path.
+    func testMessengerToolCanUseWorkspaceBrokerWithoutNetworkOrSignalPermission() throws {
+        let reply = try JSONEncoder().encode(ToolBridgeResponse(result: Data("{\"providers\":[]}".utf8)))
+        try check(helper: "messenger", bridge: "tool", arguments: ["tool"], response: reply, expected: "{\"providers\":[]}",
+                  inspectRequest: { data in
+                      let request = try JSONDecoder().decode(ToolBridgeRequest.self, from: data)
+                      XCTAssertEqual(request.action, .providers)
+                  })
     }
     func testAppletCanUseWorkspaceBrokerWithoutNetworkOrSignalPermission() throws {
         try check(helper: "noodlet", bridge: "applet", arguments: ["list"], response: Data("{\"version\":1,\"items\":[]}".utf8), expected: "{\"version\":1,\"items\":[]}")
@@ -252,7 +258,7 @@ final class BridgeCLISandboxTests: XCTestCase {
             let index = answered.count
             answered.insert(request)
             XCTAssertTrue(expectsRequest, "Invalid input must fail before dispatch")
-            XCTAssertEqual(object[bridge == "mcp" || bridge == "messenger" ? "session" : "token"] as? String, token)
+            XCTAssertEqual(object[["mcp", "messenger", "tool"].contains(bridge) ? "session" : "token"] as? String, token)
             do { try inspectRequest(data) } catch { XCTFail("Invalid request: \(error)") }
             do {
                 let reply = try responseForRequest?(data, index) ?? response
@@ -264,7 +270,7 @@ final class BridgeCLISandboxTests: XCTestCase {
         defer { timer.cancel() }
         let process = Process(), output = Pipe(), errors = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
-        let context = bridge == "messenger" ? ["--agent-directory", workspace.path] : []
+        let context = helper == "messenger" ? ["--agent-directory", workspace.path] : []
         process.arguments = ["-p", AppleAgentSandbox.profile(application: application, workspace: workspace), invocation.path] + context + arguments
         process.currentDirectoryURL = workspace
         let temporary = try WorkspaceMailbox(workspace: workspace, path: ".noodle/tmp", create: true).url

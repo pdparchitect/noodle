@@ -30,7 +30,7 @@ import WebKit
     }
     private func handle(_ request: ComputerRequest, peer: String) async throws -> ComputerResponse {
         guard let store else { throw ComputerBridgeError("Computer is closing.") }
-        let owner = peer + ":" + (request.agentID?.uuidString ?? "human")
+        let owner = ComputerBuildIdentity.principal(for: peer) + ":" + (request.agentID?.uuidString ?? "human")
         if request.operation == .terminalResolve {
             if let id = request.terminalID, let terminal = localTerminals[id], terminal.owner == owner,
                store.sessions.contains(where: { $0.id == terminal.computer && $0.localMac === terminal.runtime && $0.phase == .running }) {

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>CFBundleDisplayName</key><string>Noodle Computer Tools</string>
+    <key>CFBundleName</key><string>Noodle Computer Tools</string>
+    <key>CFBundleIdentifier</key><string>com.pdparchitect.noodle.tools.computer</string>
+    <key>CFBundleExecutable</key><string>NoodleComputerToolsExtension</string>
+    <key>CFBundlePackageType</key><string>XPC!</string>
+    <key>CFBundleShortVersionString</key><string>0.3.0</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>LSMinimumSystemVersion</key><string>26.0</string>
+    <key>LSBackgroundOnly</key><true/>
+    <key>EXAppExtensionAttributes</key><dict>
+        <key>EXExtensionPointIdentifier</key><string>com.pdparchitect.noodle.tool</string>
+    </dict>
+</dict></plist>

@@ -12,12 +12,20 @@ public enum ComputerBuildIdentity: String, CaseIterable, Sendable {
         case .testing: "com.pdparchitect.noodle.computer.tests"
         }
     }
+    /// Noodle, then its bundled Computer tool extension. The extension forwards calls the
+    /// Noodle broker already authorized; assignment decisions never move into it.
     public var clientIDs: [String] {
-        switch self {
-        case .production: ["com.pdparchitect.noodle"]
-        case .development: ["com.pdparchitect.noodle.local"]
-        case .testing: ["com.pdparchitect.noodle.integration"]
+        let noodle = switch self {
+        case .production: "com.pdparchitect.noodle"
+        case .development: "com.pdparchitect.noodle.local"
+        case .testing: "com.pdparchitect.noodle.integration"
         }
+        return [noodle, noodle + ".tools.computer"]
+    }
+    /// Every Noodle client of one channel is the same owner of a bot's terminals, so
+    /// Noodle can revoke what its tool extension opened.
+    public static func principal(for clientID: String) -> String {
+        allCases.first { $0.clientIDs.contains(clientID) }?.clientIDs[0] ?? clientID
     }
     public var appName: String {
         switch self {

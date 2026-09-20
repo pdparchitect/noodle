@@ -1,11 +1,12 @@
 import ComputerBridge
 import Foundation
+import NoodleComputerTools
 import NoodleCore
 import XCTest
 @testable import Noodle
 
-/// Real broker, workspace IPC, assignments and file I/O, with only the signed
-/// provider connection replaced. Gates make revocation/concurrency deterministic.
+/// Real tool broker, Computer tool provider, assignments and file I/O, with only the signed
+/// provider connection replaced. Sessions and request files belong to ToolBridgeTests. Gates make revocation/concurrency deterministic.
 @MainActor final class ComputerBrokerTransferTests: XCTestCase {
     private func fixture(blocked: Bool = false, failure: String? = nil,
                          count: Int64? = nil, supportsTransfers: Bool = true) async throws -> Fixture {
@@ -22,16 +23,18 @@ import XCTest
             applicationLookup: { nil }, connection: { try await provider.respond($0) })
         await controller.refresh()
         let computer = try XCTUnwrap(controller.registry.computers.first)
+        let assignments = ToolAssignmentStore(), registry = ToolProviderRegistry()
+        try registry.register(ComputerToolProvider(stagingRoot: { group }) { try await provider.respond($0) })
+        controller.onAssignmentsChange = { assignments.replace("computer", with: $0) }
         try controller.assign([computer.id], to: a)
         try controller.assign([computer.id], to: b)
-        controller.start(agents: [a, b])
+        controller.start(agents: [a, b], monitoring: false)
         addTeardownBlock {
             await provider.release()
-            await MainActor.run { controller.start(agents: []) }
             try? FileManager.default.removeItem(at: root)
         }
         return Fixture(root: root, group: group, repository: repository, controller: controller,
-                       provider: provider, computer: computer.id, a: a, b: b)
+                       provider: provider, computer: computer.id, a: a, b: b, assignments: assignments, registry: registry)
     }
 
     func testRevocationWhileProviderIsTransferringNeverPublishesDownload() async throws {
@@ -41,7 +44,7 @@ import XCTest
         try f.controller.assign([], to: f.a)
         await f.provider.release()
         let response = try await sent.response()
-        XCTAssertTrue(response.error?.contains("revoked") == true)
+        XCTAssertTrue(response.error?.contains("no longer assigned") == true, response.error ?? "success")
         XCTAssertFalse(FileManager.default.fileExists(atPath: f.local(f.a, "result.bin").path))
         try f.assertNoStaging()
     }
@@ -82,12 +85,9 @@ import XCTest
         let bytes = Data([255, 0, 64, 128])
         try bytes.write(to: f.local(f.a, "source.bin"))
         let forged = UUID()
-        let upload = try f.send(agent: f.a, operation: .fileUpload, localPath: "source.bin") {
-            $0.request.agentID = f.b.id; $0.request.transferID = forged
-        }
-        let download = try f.send(agent: f.b) {
-            $0.request.agentID = f.a.id; $0.request.transferID = forged
-        }
+        let upload = try f.send(agent: f.a, operation: .fileUpload, localPath: "source.bin",
+                                forged: ["agentID": f.b.id.uuidString, "transferID": forged.uuidString])
+        let download = try f.send(agent: f.b, forged: ["agentID": f.a.id.uuidString, "transferID": forged.uuidString])
         try await f.waitForTransfers(2)
         let transfers = await f.provider.transfers
         XCTAssertEqual(Set(transfers.compactMap(\.transferID)).count, 2)
@@ -108,7 +108,8 @@ import XCTest
         XCTAssertTrue(f.controller.needsFileTransferUpdate)
         XCTAssertTrue(f.controller.available)
         XCTAssertNil(f.controller.failure)
-        let sent = try f.send(agent: f.a, operation: .fileUpload, localPath: "missing.bin")
+        try Data([1]).write(to: f.local(f.a, "source.bin"))
+        let sent = try f.send(agent: f.a, operation: .fileUpload, localPath: "source.bin")
         let response = try await sent.response()
         XCTAssertEqual(response.error, "Update Noodle Computer to upload and download files.")
         let terminal = try f.send(agent: f.a, operation: .terminalOpen, localPath: nil)
@@ -129,24 +130,16 @@ import XCTest
         }
     }
 
-    func testBrokerRejectsForgedEnvelopesAndPathsWithoutTrustingCLIValidation() async throws {
+    func testBrokerRejectsUnassignedComputersAndUnsafePathsBeforeAnythingIsStaged() async throws {
         let f = try await fixture()
         let outside = f.root.appendingPathComponent("outside")
         try Data([42]).write(to: outside)
         try FileManager.default.createSymbolicLink(at: f.local(f.a, "link"), withDestinationURL: outside)
-        let edits: [(inout ComputerAgentRequest) -> Void] = [
-            { $0.token = "forged" },
-            { $0.expiresAt = .distantPast },
-            { $0.request.computerID = UUID() },
-            { $0.localPath = nil },
-            { $0.localPath = outside.path },
-            { $0.localPath = "../outside" },
-            { $0.localPath = "link" }
-        ]
-        for edit in edits {
-            let sent = try f.send(agent: f.a, operation: .fileUpload, localPath: "source.bin", edit: edit)
+        let attempts: [(computer: UUID?, path: String?)] = [(UUID(), "source.bin"), (nil, nil), (nil, outside.path), (nil, "../outside"), (nil, "link")]
+        for attempt in attempts {
+            let sent = try f.send(agent: f.a, operation: .fileUpload, localPath: attempt.path, computer: attempt.computer)
             let response = try await sent.response()
-            XCTAssertNotNil(response.error)
+            XCTAssertNotNil(response.error, "\(attempt)")
             try f.assertNoStaging()
         }
         XCTAssertEqual(try Data(contentsOf: outside), Data([42]))
@@ -164,22 +157,44 @@ import XCTest
     let computer: UUID
     let a: AgentRecord
     let b: AgentRecord
+    let assignments: ToolAssignmentStore
+    let registry: ToolProviderRegistry
 
     func local(_ agent: AgentRecord, _ path: String) -> URL { repository.directory(for: agent).appendingPathComponent(path) }
 
+    /// What a bot's `messenger tool computer ...` call becomes, with the outcome recorded
+    /// where the old mailbox response used to appear.
     func send(agent: AgentRecord, operation: ComputerOperation = .fileDownload, localPath: String? = "result.bin",
-              edit: (inout ComputerAgentRequest) -> Void = { _ in }) throws -> SentRequest {
-        let directory = try ComputerAgentSkill.bridge(workspace: repository.directory(for: agent))
-        let session = try JSONDecoder().decode(MCPBridgeSession.self, from: Data(contentsOf: directory.appendingPathComponent("session.json")))
-        var request = ComputerRequest(operation, computerID: computer)
-        if operation.isFileTransfer { request.path = "/workspace/file.bin" }
-        var envelope = ComputerAgentRequest(token: session.token, request: request)
-        envelope.localPath = localPath
-        edit(&envelope)
-        let stem = directory.appendingPathComponent(envelope.id.uuidString.lowercased())
-        try WorkspaceMailbox(workspace: repository.directory(for: agent), path: ".noodle/computer-bridge")
-            .write(envelope, named: stem.lastPathComponent + ".request")
-        return SentRequest(url: stem.appendingPathExtension("response"))
+              computer other: UUID? = nil, forged: [String: Any] = [:]) throws -> SentRequest {
+        // Anything a bot adds to its arguments, such as an owner or a staging ID, must be ignored.
+        var arguments: [String: Any] = forged.merging(["computer": (other ?? computer).uuidString]) { $1 }
+        if operation.isFileTransfer {
+            arguments[operation == .fileUpload ? "destination" : "source"] = "/workspace/file.bin"
+            arguments[operation == .fileUpload ? "source" : "destination"] = localPath
+        }
+        let names: [ComputerOperation: String] = [.fileUpload: "upload", .fileDownload: "download", .terminalOpen: "open"]
+        let call = ToolBridgeRequest(session: "fixture", action: .call, provider: "computer", tool: names[operation],
+                                     arguments: try JSONSerialization.data(withJSONObject: arguments))
+        let output = root.appendingPathComponent("responses/\(UUID().uuidString).response")
+        try FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let registry = registry, assignments = assignments
+        let context = ToolCallContext(agentID: agent.id, workspace: repository.directory(for: agent))
+        Task.detached {
+            var response = ComputerResponse()
+            do {
+                let data = try await ToolBroker.perform(call, registry: registry, assignments: { assignments.assignments(for: agent.id) }, context: context)
+                let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+                if result["isError"] as? Bool == true {
+                    response.error = ((result["content"] as? [[String: Any]])?.first)?["text"] as? String ?? "Tool error"
+                } else if var structured = result["structuredContent"] as? [String: Any] {
+                    structured["localPath"] = nil
+                    structured["version"] = 1 // Bots never see the protocol version; the response type requires it.
+                    response = try JSONDecoder().decode(ComputerResponse.self, from: JSONSerialization.data(withJSONObject: structured))
+                }
+            } catch { response.error = error.localizedDescription }
+            try? JSONEncoder().encode(response).write(to: output, options: .atomic)
+        }
+        return SentRequest(url: output)
     }
 
     func waitForTransfers(_ count: Int) async throws {

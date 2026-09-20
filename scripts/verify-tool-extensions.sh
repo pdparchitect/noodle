@@ -29,14 +29,19 @@ for extension in "$extensions"/*.appex(N); do
     print -r -- "$entitlements" | grep -q '<key>com.apple.security.app-sandbox</key><true/>' ||
         { print -u2 "${extension:t} must be sandboxed"; exit 1; }
     keys="$(print -r -- "$entitlements" | grep -o '<key>' | wc -l | tr -d '[:space:]')"
-    if [[ "$identifier" == "$bundle_identifier.tools.browser" ]]; then
-        # The only extension with a group, and only the browsers group of this build.
-        group="$(/usr/libexec/PlistBuddy -c 'Print :NoodleBrowserGroup' "$app/Contents/Info.plist")"
-        [[ "$keys" == 2 ]] || { print -u2 "${extension:t} may have only the sandbox and browsers-group entitlements"; exit 1; }
+    case "$identifier" in
+        "$bundle_identifier.tools.browser") group_key=NoodleBrowserGroup ;;
+        "$bundle_identifier.tools.computer") group_key=NoodleComputerGroup ;;
+        *) group_key='' ;;
+    esac
+    if [[ -n "$group_key" ]]; then
+        # Only these extensions have a group, and only their own companion's group for this build.
+        group="$(/usr/libexec/PlistBuddy -c "Print :$group_key" "$app/Contents/Info.plist")"
+        [[ "$keys" == 2 ]] || { print -u2 "${extension:t} may have only the sandbox and its companion-group entitlements"; exit 1; }
         print -r -- "$entitlements" | grep -Fq "<key>com.apple.security.application-groups</key><array><string>$group</string></array>" ||
-            { print -u2 "${extension:t} must hold exactly the browsers group"; exit 1; }
-        [[ "$(/usr/libexec/PlistBuddy -c 'Print :NoodleBrowserGroup' "$extension/Contents/Info.plist")" == "$group" ]] ||
-            { print -u2 "${extension:t} names a different browsers group"; exit 1; }
+            { print -u2 "${extension:t} must hold exactly its companion's group"; exit 1; }
+        [[ "$(/usr/libexec/PlistBuddy -c "Print :$group_key" "$extension/Contents/Info.plist")" == "$group" ]] ||
+            { print -u2 "${extension:t} names a different companion group"; exit 1; }
     else
         [[ "$keys" == 1 ]] || { print -u2 "${extension:t} must have only the sandbox entitlement"; exit 1; }
     fi

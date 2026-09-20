@@ -91,7 +91,7 @@ final class ComputerTransferTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("staging").path))
     }
 
-    func testCLILocalPathResolutionAndTransferDeadline() throws {
+    func testLocalPathResolutionAndTransferDeadline() throws {
         let root = try directory().resolvingSymlinksInPath()
         XCTAssertEqual(try ComputerWorkspaceFiles.relativePath("a.bin", currentDirectory: root, workspace: root), "a.bin")
         XCTAssertEqual(try ComputerWorkspaceFiles.relativePath("b.bin", currentDirectory: root.appendingPathComponent("sub"), workspace: root), "sub/b.bin")
@@ -99,12 +99,6 @@ final class ComputerTransferTests: XCTestCase {
         for path in ["/etc/passwd", "../escape", "link/../file", ""] {
             XCTAssertThrowsError(try ComputerWorkspaceFiles.relativePath(path, currentDirectory: root, workspace: root))
         }
-        var request = ComputerAgentRequest(token: "fixture", request: .init(.fileUpload))
-        request.localPath = "sub/binary.dat"
-        let encoded = try JSONEncoder().encode(request)
-        let fields = try JSONSerialization.jsonObject(with: encoded) as! [String: Any]
-        XCTAssertEqual(fields["localPath"] as? String, request.localPath)
-        XCTAssertEqual(try JSONDecoder().decode(ComputerAgentRequest.self, from: encoded).localPath, request.localPath)
-        XCTAssertGreaterThan(request.expiresAt.timeIntervalSinceNow, 590)
+        XCTAssertEqual(ComputerOperation.fileUpload.timeout, 600, "transfers keep their ten-minute limit")
     }
 }

@@ -118,6 +118,14 @@ cp "$project_root/Support/BrowserToolsExtension-Info.plist" "$browser_tools_exte
 /usr/libexec/PlistBuddy -c "Set :EXAppExtensionAttributes:EXExtensionPointIdentifier $bundle_identifier.tool" "$browser_tools_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$browser_tools_extension/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$browser_tools_extension/Contents/Info.plist"
+computer_tools_extension="$contents/Extensions/NoodleComputerTools.appex"
+mkdir -p "$computer_tools_extension/Contents/MacOS"
+cp "$bin_path/NoodleComputerToolsExtension" "$computer_tools_extension/Contents/MacOS/NoodleComputerToolsExtension"
+cp "$project_root/Support/ComputerToolsExtension-Info.plist" "$computer_tools_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier.tools.computer" "$computer_tools_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :EXAppExtensionAttributes:EXExtensionPointIdentifier $bundle_identifier.tool" "$computer_tools_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$computer_tools_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$computer_tools_extension/Contents/Info.plist"
 cp "$bin_path/Noodle" "$contents/MacOS/Noodle"
 # SwiftPM adds development-only search paths. Keep system and bundle-relative paths.
 otool -l "$contents/MacOS/Noodle" \
@@ -129,7 +137,6 @@ otool -l "$contents/MacOS/Noodle" \
     done
 cp "$bin_path/NoodleMessenger" "$contents/Helpers/messenger"
 cp "$bin_path/NoodleMCPCLI" "$contents/Helpers/mcpshim"
-cp "$bin_path/NoodleComputerCLI" "$contents/Helpers/computer"
 swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-path "$project_root/.build/applet" -c release --product noodlet >&2
 applet_bin="$(swift build --disable-sandbox --package-path "$project_root/Applet" --scratch-path "$project_root/.build/applet" -c release --show-bin-path)"
 cp "$applet_bin/noodlet" "$contents/Helpers/noodlet"
@@ -274,8 +281,6 @@ codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/messenger"
 codesign --force --options runtime "$timestamp_option" \
     --sign "$signing_identity" "$contents/Helpers/mcpshim"
-codesign --force --options runtime "$timestamp_option" \
-    --sign "$signing_identity" "$contents/Helpers/computer"
 applet_cli_identifier="com.pdparchitect.noodle.applet.cli"
 if [[ "$data_container" == development ]]; then applet_cli_identifier="com.pdparchitect.noodle.applet.local.cli"; fi
 codesign --force --options runtime "$timestamp_option" --identifier "$applet_cli_identifier" \
@@ -307,6 +312,8 @@ applet_group="$team_id.com.pdparchitect.noodle.applets"
 if [[ "$data_container" == development ]]; then applet_group+=.local; fi
 /usr/libexec/PlistBuddy -c "Add :NoodleAppletGroup string $applet_group" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :NoodleComputerGroup string $computer_group" "$contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :NoodleComputerGroup string $computer_group" "$computer_tools_extension/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :NoodleSigningTeam string $team_id" "$computer_tools_extension/Contents/Info.plist"
 for file in "$contents/Info.plist" "$agent_host/Contents/Info.plist"; do
     /usr/libexec/PlistBuddy -c "Add :NoodleSigningTeam string $team_id" "$file"
     /usr/libexec/PlistBuddy -c "Add :NoodleApplicationIdentifier string $bundle_identifier" "$file"
@@ -338,7 +345,12 @@ codesign --force --options runtime "$timestamp_option" \
 # Tool extensions get the sandbox and nothing else: no groups, network or files.
 codesign --force --options runtime "$timestamp_option" \
     --entitlements "$project_root/Support/ToolExtension.entitlements" --sign "$signing_identity" "$vision_tools_extension"
-# The one exception: Browser tools also hold the browsers group, and only that group.
+# The exceptions: Browser and Computer tools each also hold their companion's group, and only that group.
+computer_tools_entitlements="$build_root/ComputerToolsExtension.resolved.entitlements"
+cp "$project_root/Support/ComputerToolsExtension.entitlements" "$computer_tools_entitlements"
+/usr/libexec/PlistBuddy -c "Set :com.apple.security.application-groups:0 $computer_group" "$computer_tools_entitlements"
+codesign --force --options runtime "$timestamp_option" \
+    --entitlements "$computer_tools_entitlements" --sign "$signing_identity" "$computer_tools_extension"
 browser_tools_entitlements="$build_root/BrowserToolsExtension.resolved.entitlements"
 cp "$project_root/Support/BrowserToolsExtension.entitlements" "$browser_tools_entitlements"
 /usr/libexec/PlistBuddy -c "Set :com.apple.security.application-groups:0 $browser_group" "$browser_tools_entitlements"

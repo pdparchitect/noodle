@@ -22,19 +22,6 @@ import XCTest
         XCTAssertEqual(f.provider.count(.terminalWrite), 0)
     }
 
-    func testAgentRemovedDuringHandshakeNeverDispatchesTerminalWrite() async throws {
-        let f = try await fixture()
-        f.provider.blockedOperation = .list
-        let sent = try f.send(f.request(.terminalWrite))
-        try await f.wait { f.provider.blocked != nil }
-        f.controller.start(agents: [f.b], monitoring: false)
-        f.provider.blocked?.finish(.success(f.provider.response(.list)))
-        let response = try await f.response(sent)
-        XCTAssertNotNil(response.error)
-        XCTAssertNil(response.data)
-        XCTAssertEqual(f.provider.count(.terminalWrite), 0)
-    }
-
     func testRevokedReadResponseDoesNotExposeTerminalData() async throws {
         let f = try await fixture()
         f.provider.blockedOperation = .terminalRead
@@ -48,33 +35,20 @@ import XCTest
     }
 
     func testTransfersRevokedDuringDispatchHandshakeNeverReachProvider() async throws {
-        try await assertTransfersRejectedDuringHandshake(replaceSession: false)
-    }
-
-    func testTransfersFromRetiredSessionNeverReachProviderAfterRestart() async throws {
-        try await assertTransfersRejectedDuringHandshake(replaceSession: true)
-    }
-
-    private func assertTransfersRejectedDuringHandshake(replaceSession: Bool) async throws {
         for operation in [ComputerOperation.fileUpload, .fileDownload] {
             let f = try await fixture()
             let workspace = f.repository.directory(for: f.a)
             try Data([42]).write(to: workspace.appendingPathComponent("source.bin"))
-            // The transfer checks capabilities before staging, then performs a
-            // second handshake immediately before sending the actual command.
+            // The provider checks capabilities before staging, then performs a second handshake
+            // and asks Noodle again immediately before sending the actual command.
             f.provider.blockedListNumber = f.provider.count(.list) + 2
             var request = f.request(operation); request.path = "/workspace/fixture.bin"; request.terminalID = nil
-            let sent = try f.send(request) { $0.localPath = operation == .fileUpload ? "source.bin" : "result.bin" }
+            let sent = try f.send(request, localPath: operation == .fileUpload ? "source.bin" : "result.bin")
             try await f.wait { f.provider.blocked != nil }
-            if replaceSession {
-                f.controller.start(agents: [f.b], monitoring: false)
-                f.controller.start(agents: [f.a, f.b], monitoring: false)
-            } else {
-                try f.controller.assign([], to: f.a)
-            }
+            try f.controller.assign([], to: f.a)
             f.provider.blocked?.finish(.success(f.provider.response(.list)))
             let response = try await f.response(sent)
-            XCTAssertTrue(response.error?.contains("revoked") == true, "\(operation): \(response.error ?? "success")")
+            XCTAssertTrue(response.error?.contains("no longer assigned") == true, "\(operation): \(response.error ?? "success")")
             XCTAssertEqual(f.provider.count(operation), 0, "Revoked \(operation) was dispatched")
             XCTAssertFalse(FileManager.default.fileExists(atPath: workspace.appendingPathComponent("result.bin").path))
             let staging = f.root.appendingPathComponent("provider/file-transfers")
@@ -82,28 +56,24 @@ import XCTest
         }
     }
 
-    func testCatalogueFromRetiredSessionIsWithheldAfterRemovalOrRestart() async throws {
-        for restart in [false, true] {
-            let f = try await fixture()
-            f.provider.blockedOperation = .list
-            let sent = try f.send(.init(.list))
-            try await f.wait { f.provider.blocked != nil }
-            f.controller.start(agents: [f.b], monitoring: false)
-            if restart { f.controller.start(agents: [f.a, f.b], monitoring: false) }
-            f.provider.blocked?.finish(.success(f.provider.response(.list)))
-            let response = try await f.response(sent)
-            XCTAssertNotNil(response.error)
-            XCTAssertNil(response.computers)
-        }
+    func testCatalogueIsWithheldWhenTheLastAssignmentIsRemovedWhileItLoads() async throws {
+        let f = try await fixture()
+        f.provider.blockedOperation = .list
+        let sent = try f.send(.init(.list))
+        try await f.wait { f.provider.blocked != nil }
+        try f.controller.assign([], to: f.a)
+        f.provider.blocked?.finish(.success(f.provider.response(.list)))
+        let response = try await f.response(sent)
+        XCTAssertNotNil(response.error)
+        XCTAssertNil(response.computers)
     }
 
-    func testUncertainTerminalWriteIsNotRetriedOrReplayedByAnotherScan() async throws {
+    func testUncertainTerminalWriteIsNotRetried() async throws {
         let f = try await fixture()
         f.provider.errorOperation = .terminalWrite
         let sent = try f.send(f.request(.terminalWrite))
         let response = try await f.response(sent)
         XCTAssertTrue(response.error?.contains("after dispatch") == true)
-        f.controller.scan()
         let next = try f.send(f.request(.terminalRead)); _ = try await f.response(next)
         XCTAssertEqual(f.provider.count(.terminalWrite), 1)
         XCTAssertEqual(f.provider.count(.terminalRead), 1)
@@ -164,25 +134,10 @@ import XCTest
         let sent = try f.send(request); let response = try await f.response(sent)
         XCTAssertNil(response.error)
         XCTAssertEqual(f.provider.requests.last { $0.operation == .terminalRead }?.agentID, f.a.id)
+        // A bot with no assigned computer has no computer tools at all.
         let list = try f.send(.init(.list), agent: f.b)
         let catalogue = try await f.response(list)
-        XCTAssertEqual(catalogue.computers?.count, 0)
-        XCTAssertNotNil(catalogue.capabilities)
-    }
-
-    func testFailedBridgeSessionWriteCanBeRetriedOnNextStart() async throws {
-        let f = try await fixture()
-        f.controller.start(agents: [], monitoring: false)
-        let bridge = try ComputerAgentSkill.bridge(workspace: f.repository.directory(for: f.a))
-        let session = bridge.appendingPathComponent("session.json")
-        try FileManager.default.removeItem(at: session)
-        try FileManager.default.createDirectory(at: session, withIntermediateDirectories: false)
-        f.controller.start(agents: [f.a], monitoring: false)
-        XCTAssertNotNil(f.controller.failure)
-        try FileManager.default.removeItem(at: session)
-        f.controller.start(agents: [f.a], monitoring: false)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: session.path))
-        let sent = try f.send(f.request(.terminalRead)); let response = try await f.response(sent)
-        XCTAssertNil(response.error)
+        XCTAssertTrue(catalogue.error?.contains("not assigned") == true, catalogue.error ?? "success")
+        XCTAssertNil(catalogue.computers)
     }
 }
