@@ -34,6 +34,21 @@ final class MessengerDocumentationTests: XCTestCase {
         }
     }
 
+    /// The shared rules once, then one line per effect saying when to use it.
+    func testEffectRulesAreStatedOnceAndEachEffectOnlySaysWhenToUseIt() {
+        let rules = MessengerDocumentation.effectInstructions
+        for text in [MessengerDocumentation.skillInstructions, MessengerDocumentation.cliHelp] {
+            XCTAssertEqual(text.components(separatedBy: rules).count - 1, 1)
+            XCTAssertEqual(text.components(separatedBy: "--request-id <uuid>` when retrying").count - 1, 1)
+        }
+        for kind in ConversationEffectKind.allCases {
+            let guidance = kind.reference.guidance
+            XCTAssertTrue(guidance.contains("`--effect \(kind.rawValue)`"), kind.rawValue)
+            XCTAssertFalse(guidance.contains("--request-id"), kind.rawValue)
+            XCTAssertLessThan(guidance.count, 200, kind.rawValue)
+        }
+    }
+
     func testEncodedDeliveryAndMessageFieldsAreDocumented() throws {
         let botID = UUID()
         let conversation = BotConversation(displayName: "Team", kind: .group, participantIDs: [botID])
