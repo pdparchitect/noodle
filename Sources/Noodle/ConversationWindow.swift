@@ -110,10 +110,16 @@ struct ConversationWindowView: View {
 
     @ViewBuilder private var windowTitle: some View {
         if let conversation {
-            Text(store.title(for: conversation))
-                .font(.headline)
-                .lineLimit(1)
-                .truncationMode(.tail)
+            HStack(spacing: 7) {
+                // The name is spoken once; the picture only repeats it.
+                ConversationAvatar(participants: store.participants(for: conversation),
+                    isGroup: conversation.kind == .group, size: 20)
+                    .accessibilityHidden(true)
+                Text(store.title(for: conversation))
+                    .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
         }
     }
 }

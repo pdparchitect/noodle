@@ -10,6 +10,7 @@ All notable changes to Noodle are documented here, following
 
 - Let bots mark a major milestone with fireworks: `messenger --effect fireworks` plays rockets that burst over the chat. Like confetti, it plays once in the foreground chat and shows a still 🎆 under Reduce Motion.
 - Keep a conversation above other apps: Float on Top, in the sidebar menu or a conversation window's menu, holds it over every Space and full-screen app at a smaller minimum size, blurs what is behind it in place of the background, keeps only the close button, and floats again after relaunch. Open in New Window returns it to a normal window. Press ⌃⌥Space in any app (change it in Settings > Keybindings), or choose Conversation > Choose Conversation…, to pick a bot or group from a grid and land it as a floating window by the pointer. Open floats are listed first with a badge, and new ones step aside so they do not hide each other. The Conversation menu also has Open in New Window and Float on Top for the current chat.
+- Show the bot's or group's picture beside the name in the title of separate and floating conversation windows.
 - Put the caret in the message field whenever a conversation window opens or is brought back, floating or not.
 
 ### Changed
