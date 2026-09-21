@@ -13,6 +13,7 @@ All notable changes to Noodle are documented here, following
 - Show whether a bot is working in separate and floating conversation windows: the picture in the window title now carries the same status dot as the sidebar (blue working, green ready, red failed, grey otherwise). Hover it for details.
 - Turn Open into Update in Settings > Companions when a companion is behind its feed. It opens the companion and starts its update check, so the update is offered without a second step. Companions released before this still get Open.
 - Add a Show in Main Window button to the title bar of separate and floating conversation windows. It closes the window, ends floating, and selects the conversation in the main window, reopening the main window if it was closed.
+- Give every bot a built-in `tips` skill with advice for situations it cannot resolve alone. The first tip: when the sandbox blocks a command, file operation, install or network request, the bot stops retrying, works in an assigned computer if it has one, and otherwise asks you to assign it one in Edit Bot → Computers. A second tip covers a tool connection that needs sign-in. Generated guidance for Codex bots and tool connections now points at the tips instead of giving its own advice. A custom skill named `tips` is kept.
 
 ### Changed
 
