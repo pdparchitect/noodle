@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "title": "Clara works the sales pipeline",
+  "clock": "10:30",
+  "settings": {
+    "Noodle.firstBotSetup.dismissed": true,
+    "Noodle.composer.showBotDescriptions": true
+  },
+  "harnesses": {
+    "claude-code": { "models": "builtin" }
+  },
+  "agents": [
+    { "key": "clara", "name": "Clara", "harness": "claude-code", "model": "opus", "effort": "high",
+      "description": "New business: leads, proposals and follow-ups",
+      "backstory": "You run new business for a small consultancy. You know every open conversation, and you never send a follow-up that gives the reader nothing.",
+      "avatar": { "image": "assets/clara.jpg" },
+      "autoReplies": ["Sent. I will tell you the moment they reply.", "Drafted and waiting in your outbox."] },
+    { "key": "ada", "name": "Ada", "harness": "claude-code", "model": "haiku",
+      "description": "Bookkeeping: invoices out, payments in", "avatar": { "image": "assets/ada.jpg" } },
+    { "key": "kira", "name": "Kira", "harness": "claude-code", "model": "sonnet",
+      "description": "Writes the proposals and the case studies", "avatar": { "image": "assets/kira.jpg" } }
+  ],
+  "conversations": [
+    { "key": "clara", "direct": "clara", "background": { "preset": "sunset" },
+      "messages": [
+        { "at": "-1d 09:05", "from": "user", "text": "Clara, I have been heads-down on delivery for three weeks. Where is the pipeline?" },
+        { "key": "pipeline", "at": "-1d 09:12", "from": "clara",
+          "text": "Here it is: **£41,500 open** across four conversations, plus one invoice that is late. Two of them need you this week.",
+          "attachments": [ { "file": "assets/pipeline.png" } ] },
+        { "at": "-1d 09:14", "from": "clara",
+          "text": "What I would do, in order:\n\n1. Send the cycle-hire co-op their contract today. That is money already won.\n2. Answer the harbour museum. They asked a question on Tuesday and nobody replied.\n3. Nudge the bakery group with something useful, not \"just checking in\"." },
+        { "at": "10:20", "from": "user", "text": "Ouch on the museum. What did they ask?" },
+        { "at": "10:22", "from": "clara",
+          "text": "Whether the price includes training their front-of-house team. It does: two sessions, and it is on page four of the proposal. I have drafted a reply that quotes that line, so it reads as clarity and not as a concession.",
+          "reactions": [ { "from": "user", "emoji": "🙏" } ] }
+      ] },
+    { "key": "newbiz",
+      "group": { "name": "New business", "description": "Pipeline, proposals and getting paid", "members": ["clara", "kira", "ada"] },
+      "messages": [
+        { "at": "-2d 11:00", "from": "kira", "text": "The case study for the cycle-hire co-op is drafted: 600 words, one chart, and their quote at the top. Clara, it should help with the bakery." },
+        { "at": "-2d 11:04", "from": "clara", "text": "It will. Second sites are exactly what the bakery group is worried about. I will use it." },
+        { "at": "-1d 08:50", "from": "ada", "text": "Invoice 2041 is fourteen days late, £3,200. Second reminder sent this morning, politely." }
+      ] },
+    { "key": "kira", "direct": "kira",
+      "messages": [
+        { "at": "-1d 15:10", "from": "kira", "text": "The school trust proposal is outlined. I need your day rate for the workshop before I can finish the pricing page." }
+      ] },
+    { "key": "ada", "direct": "ada",
+      "messages": [
+        { "at": "-3d 09:30", "from": "ada", "text": "September invoicing is out: six invoices, £21,400 in total. Five are already paid." }
+      ] }
+  ],
+  "present": {
+    "window": { "size": [1240, 860], "origin": [100, 70] },
+    "select": "clara",
+    "draft": "Send it. And write me the bakery nudge."
+  },
+  "timeline": [
+    { "capture": "01-the-pipeline" },
+    { "waitFor": "userMessage", "agent": "clara" },
+    { "agent": "clara", "status": { "phase": "working", "detail": "Writing to the bakery group" } },
+    { "wait": 0.6, "agent": "clara",
+      "toolCall": { "title": "Reading the thread", "input": "clients/bakery-group/thread.md",
+        "output": "Last reply 16 days ago. They mentioned opening a fourth shop in March.", "exit": 0, "duration": 1.1 } },
+    { "wait": 0.6, "agent": "clara",
+      "reply": { "key": "nudge",
+        "text": "The museum reply is sent.\n\nFor the bakery, this is the nudge:\n\n*You mentioned the fourth shop opens in March. In case it helps, here is the short case study from when the cycle-hire co-op opened their second site: what they had live on day one, and what could wait. No strings; it made me think of you.*\n\nIt gives them something, it shows you listened about March, and it asks for nothing. Shall I send it from you?" } },
+    { "agent": "clara", "status": { "phase": "ready" } },
+    { "wait": 1.2, "agent": "ada", "in": "newbiz",
+      "reply": { "text": "Invoice 2041 was paid this morning, £3,200. September is now fully collected." } },
+    { "capture": "02-the-nudge" }
+  ]
+}

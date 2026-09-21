@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "title": "A team of bots runs launch week",
+  "clock": "16:45",
+  "settings": {
+    "Noodle.firstBotSetup.dismissed": true,
+    "Noodle.composer.showBotDescriptions": true
+  },
+  "harnesses": {
+    "claude-code": { "models": "builtin" },
+    "codex": { "models": [
+      { "id": "gpt-5.2-codex", "name": "GPT-5.2 Codex", "description": "Tuned for long coding tasks.",
+        "efforts": ["low", "medium", "high"], "defaultEffort": "medium", "default": true } ] }
+  },
+  "agents": [
+    { "key": "sonia", "name": "Sonia", "harness": "claude-code", "model": "opus", "effort": "high",
+      "description": "Go-to-market lead: positioning, pricing and the plan", "avatar": { "image": "assets/sonia.jpg" } },
+    { "key": "kira", "name": "Kira", "harness": "claude-code", "model": "sonnet",
+      "description": "Copywriter: headlines, emails and the landing page", "avatar": { "image": "assets/kira.jpg" } },
+    { "key": "mara", "name": "Mara", "harness": "codex", "model": "gpt-5.2-codex", "effort": "medium",
+      "description": "Designs and builds the landing page and the launch film", "avatar": { "image": "assets/mara.jpg" } },
+    { "key": "andre", "name": "Andre", "harness": "claude-code", "model": "sonnet",
+      "description": "Analyst: sign-ups, funnels and what actually worked",
+      "backstory": "You read the numbers and say plainly what they mean. You never call a result before the sample supports it.",
+      "avatar": { "image": "assets/andre.jpg" },
+      "autoReplies": ["Give me ten minutes with the data.", "Updated. The dashboard has the new cut."] }
+  ],
+  "conversations": [
+    { "key": "launch",
+      "group": { "name": "Launch week", "description": "Almanac 2.0: one message, one page, one number", "members": ["sonia", "kira", "mara", "andre"] },
+      "messages": [
+        { "at": "-3d 09:10", "from": "user",
+          "text": "Almanac 2.0 ships Thursday. Sonia owns the plan. I want one message, one page, and one number we all watch." },
+        { "key": "plan", "at": "-3d 09:25", "from": "sonia",
+          "text": "The message: **plan your whole growing year in ten minutes**. The audience is people with their first garden, not experts. The number is trial starts. Here is the week; everything hangs off Thursday at 9am.",
+          "attachments": [ { "file": "assets/launch-calendar.png" } ],
+          "reactions": [ { "from": "user", "emoji": "👍" } ] },
+        { "at": "-2d 14:02", "from": "kira",
+          "text": "Two headlines worth testing, both on Sonia's message:\n\n- **A.** Your growing year, planned in ten minutes.\n- **B.** Know what to plant this weekend.\n\nA is the promise. B is what it feels like on a Saturday morning. I honestly do not know which wins, so let's find out." },
+        { "key": "page", "at": "-1d 15:40", "from": "mara",
+          "text": "The landing page is on staging with both headlines behind an even split. The hero shows the year view filling in: six seconds, no sound needed.",
+          "attachments": [ { "file": "assets/landing-page.png" } ],
+          "reactions": [ { "from": "kira", "emoji": "😍" }, { "from": "sonia", "emoji": "👏" } ] },
+        { "at": "09:01", "from": "user", "text": "We are live.", "reactions": [ { "from": "mara", "emoji": "🚀" }, { "from": "kira", "emoji": "🚀" } ] },
+        { "at": "12:30", "from": "andre",
+          "text": "Three and a half hours in: 1,210 visits and 93 trial starts, which is 7.7%. The newsletter is the best source by a distance. The social posts bring visits that do not convert yet." }
+      ] },
+    { "key": "sonia", "direct": "sonia",
+      "messages": [
+        { "at": "-1d 10:15", "from": "sonia", "text": "On pricing: keep the annual plan as the default. It is already 62% of revenue, and launch week is not the time to test it." }
+      ] },
+    { "key": "kira", "direct": "kira", "unread": true,
+      "messages": [
+        { "at": "16:20", "from": "kira", "text": "Tomorrow's email is in your drafts. The subject line is 38 characters, so it will not be cut off on a phone." }
+      ] },
+    { "key": "mara", "direct": "mara",
+      "messages": [
+        { "at": "-1d 17:05", "from": "mara", "text": "The launch film is exported in three cuts: 6, 15 and 30 seconds. The six-second one loops cleanly for the page." }
+      ] },
+    { "key": "andre", "direct": "andre",
+      "messages": [
+        { "at": "-1d 18:30", "from": "andre", "text": "The launch dashboard is ready: visits, trial starts and source, refreshed every ten minutes." }
+      ] }
+  ],
+  "present": {
+    "window": { "size": [1240, 860], "origin": [100, 70] },
+    "select": "launch",
+    "draft": "Andre, which headline is winning? And where do we push tomorrow?"
+  },
+  "timeline": [
+    { "capture": "01-launch-day" },
+    { "waitFor": "userMessage", "agent": "andre" },
+    { "agent": "andre", "status": { "phase": "working", "detail": "Reading the headline test" } },
+    { "wait": 0.6, "agent": "andre",
+      "toolCall": { "title": "Querying sign-ups", "input": "analytics/launch-day.sql",
+        "output": "A  1,012 visits   60 trials   5.9%\nB  1,006 visits   95 trials   9.4%\np = 0.004", "exit": 0, "duration": 1.6 } },
+    { "wait": 0.6, "agent": "andre", "in": "launch",
+      "reply": { "key": "winner",
+        "text": "B is winning, and clearly: **9.4% against 5.9%**. With a thousand visitors on each side, that is not noise.\n\n\"Know what to plant this weekend\" beats the ten-minute promise because it is about this Saturday, not the whole year.\n\nFor tomorrow: put everyone on headline B, and send the second email to the 3,100 people who opened the first one and did not click.",
+        "attachments": [ { "file": "assets/headline-test.png" } ] } },
+    { "agent": "andre", "status": { "phase": "ready" } },
+    { "wait": 1.2, "agent": "kira", "in": "launch",
+      "reply": { "text": "On it. I will rewrite tomorrow's email around this weekend, and keep the ten-minute line as the subheading so we do not lose it." } },
+    { "wait": 0.8, "agent": "mara", "in": "launch", "react": { "message": "winner", "emoji": "🙌" } },
+    { "wait": 0.6, "agent": "mara", "in": "launch",
+      "reply": { "text": "Headline B is live for everyone. It took one line, and the split is switched off." } },
+    { "capture": "02-headline-b-wins" }
+  ]
+}
