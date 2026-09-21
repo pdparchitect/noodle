@@ -65,6 +65,25 @@ final class RestrictedHarnessStorageTests: XCTestCase {
         XCTAssertFalse(destination.contains(".credentials.json"))
     }
 
+    func testClaudeLoginIsReadThroughTheSecurityToolThatOwnsTheItem() throws {
+        // Claude Code writes the item with /usr/bin/security, so only that tool
+        // stays trusted across token refreshes. A direct read prompts every time.
+        var calls: [[String]] = []
+        func read(_ status: Int32, _ output: String) throws -> Data? {
+            try RestrictedHarnessStorage.readSecret(service: "Claude Code-credentials", account: "someone") { arguments in
+                calls.append(arguments)
+                return (status, Data(output.utf8))
+            }
+        }
+        XCTAssertEqual(try read(0, "{\"claudeAiOauth\":{}}\n"), Data(#"{"claudeAiOauth":{}}"#.utf8))
+        XCTAssertEqual(calls, [["find-generic-password", "-s", "Claude Code-credentials", "-a", "someone", "-w"]])
+        // The tool prints hex when the stored bytes are not plain text.
+        XCTAssertEqual(try read(0, "7b22c3a9227d\n"), Data(#"{"é"}"#.utf8))
+        XCTAssertNil(try read(44, ""))
+        XCTAssertThrowsError(try read(36, ""))
+        XCTAssertThrowsError(try read(0, ""))
+    }
+
     func testClaudeRedirectedCredentialDestinationIsRejectedBeforeLookup() throws {
         let (home, workspace, other) = try fixture()
         let privateHome = try WorkspaceMailbox(workspace: workspace, path: ".noodle/home", create: true)

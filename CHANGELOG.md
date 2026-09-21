@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Stop macOS asking for the login keychain password every time a restricted Claude Code bot starts, even after Always Allow. Noodle Agent Host now reads the `Claude Code-credentials` item the way Claude Code does, which needs no prompt.
+
 ## [0.22.0] - 2026-09-21
 
 ### Added

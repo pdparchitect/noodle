@@ -100,6 +100,49 @@ public enum RestrictedHarnessStorage {
     }
 
     public static func readSecret(service: String, account: String) throws -> Data? {
+        try readSecret(service: service, account: account, tool: securityTool)
+    }
+
+    static func readSecret(service: String, account: String,
+                           tool: ([String]) throws -> (status: Int32, output: Data)) throws -> Data? {
+        // Claude Code writes its item with /usr/bin/security on every token
+        // refresh, which leaves only that tool trusted. A direct read would ask
+        // for the login password each time, even after Always Allow.
+        guard service == "Claude Code-credentials" else { return try readKeychainItem(service: service, account: account) }
+        let result = try tool(["find-generic-password", "-s", service, "-a", account, "-w"])
+        if result.status == 44 { return nil }
+        var text = String(decoding: result.output, as: UTF8.self)
+        if text.hasSuffix("\n") { text.removeLast() }
+        guard result.status == 0, !text.isEmpty, result.output.count <= 2_097_152 else {
+            throw HarnessSetupError("macOS did not allow Noodle Agent Host to read the harness login (\(result.status)). Unlock the login keychain, then retry startup.")
+        }
+        // The tool prints hex when the stored bytes are not plain text.
+        if text.count.isMultiple(of: 2), text.allSatisfy(\.isHexDigit) {
+            var bytes = Data(), index = text.startIndex
+            while index < text.endIndex {
+                let next = text.index(index, offsetBy: 2)
+                bytes.append(UInt8(text[index..<next], radix: 16)!)
+                index = next
+            }
+            return bytes
+        }
+        return Data(text.utf8)
+    }
+
+    private static func securityTool(_ arguments: [String]) throws -> (status: Int32, output: Data) {
+        let process = Process(), output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = arguments
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return (process.terminationStatus, data)
+    }
+
+    private static func readKeychainItem(service: String, account: String) throws -> Data? {
         // Exact provider item only. Never enumerate Keychain or permit a prompt
         // during background startup. Access denial leaves the sandbox closed.
         let context = LAContext(); context.interactionNotAllowed = true
