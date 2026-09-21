@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "title": "A bot that needs attention",
+  "clock": "16:05",
+  "settings": {
+    "Noodle.firstBotSetup.dismissed": true
+  },
+  "harnesses": {
+    "claude-code": { "models": "builtin" },
+    "grok-build": { "models": [
+      { "id": "grok-code", "name": "Grok Code", "description": "Quick edits and short tasks.", "default": true } ] },
+    "opencode": { "models": [
+      { "id": "local/coder-large", "name": "Coder Large", "description": "Runs through a local provider.", "default": true } ] }
+  },
+  "agents": [
+    { "key": "chloe", "name": "Chloe", "harness": "claude-code", "model": "opus", "effort": "high",
+      "description": "Personal assistant for the diary, travel and errands", "avatar": { "image": "assets/chloe.jpg" } },
+    { "key": "rex", "name": "Rex", "harness": "grok-build", "model": "grok-code",
+      "description": "Triages incoming bug reports", "avatar": { "symbol": "ladybug.fill", "colour": 4 },
+      "status": { "phase": "failed", "failure": "usageLimit",
+        "detail": "Grok Build's usage limit has been reached. Once usage is available again, right-click the bot and choose Kick to resume. Unfinished work is preserved." } },
+    { "key": "sol", "name": "Sol", "harness": "opencode", "model": "local/coder-large",
+      "description": "Keeps an eye on the numbers", "avatar": { "image": "assets/sol.jpg" } }
+  ],
+  "conversations": [
+    { "key": "rex", "direct": "rex", "background": { "preset": "dusk" },
+      "messages": [
+        { "at": "15:20", "from": "user", "text": "Three new reports came in overnight. Can you sort them by how many people they affect?" },
+        { "at": "15:26", "from": "rex",
+          "text": "Sorted:\n\n1. **Export fails on large files** affects everyone on the team plan.\n2. **Dark mode flicker** affects one browser.\n3. **Typo on the billing page** is cosmetic.\n\nI have started on the first one." },
+        { "at": "15:58", "from": "user", "text": "Any progress on the export bug?", "delivery": "failed" }
+      ] },
+    { "key": "chloe", "direct": "chloe",
+      "messages": [
+        { "at": "09:32", "from": "chloe", "text": "Your 3pm is now a call, so you can take it from home." }
+      ] },
+    { "key": "sol", "direct": "sol",
+      "messages": [
+        { "at": "12:40", "from": "sol", "text": "Weekly numbers are ready whenever you want them." }
+      ] }
+  ],
+  "present": {
+    "window": { "size": [1160, 810], "origin": [120, 90] },
+    "select": "rex"
+  },
+  "timeline": [
+    { "capture": "01-usage-limit" },
+    { "waitFor": "key" },
+    { "agent": "sol", "status": { "phase": "failed", "failure": "authenticationRequired",
+        "detail": "OpenCode needs you to sign in. Run opencode auth login in Terminal, then retry." } },
+    { "in": "sol", "say": { "text": "Send me the weekly numbers, please." } },
+    { "wait": 0.5, "present": { "select": "sol" } },
+    { "capture": "02-sign-in-needed" }
+  ]
+}

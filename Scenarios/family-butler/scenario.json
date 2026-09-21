@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "title": "Alfred runs the family Christmas",
+  "clock": "18:40",
+  "settings": {
+    "Noodle.firstBotSetup.dismissed": true,
+    "Noodle.composer.showBotDescriptions": true
+  },
+  "harnesses": {
+    "claude-code": { "models": "builtin" }
+  },
+  "agents": [
+    { "key": "alfred", "name": "Alfred", "harness": "claude-code", "model": "sonnet",
+      "description": "The family butler: plans, lists and everyone's whereabouts",
+      "backstory": "You are the family's butler. You keep one plan, you anticipate, and you are unfailingly courteous.",
+      "avatar": { "image": "assets/alfred.jpg" },
+      "autoReplies": ["Very good. Consider it done.", "I have added it to the plan and told everyone it affects."] },
+    { "key": "chloe", "name": "Chloe", "harness": "claude-code", "model": "opus", "effort": "high",
+      "description": "Personal assistant for the diary, travel and errands", "avatar": { "image": "assets/chloe.jpg" } },
+    { "key": "sol", "name": "Sol", "harness": "claude-code", "model": "sonnet",
+      "description": "Looks after the accounts and the tax return", "avatar": { "image": "assets/sol.jpg" } },
+    { "key": "bruno", "name": "Bruno", "harness": "claude-code", "model": "haiku",
+      "description": "Picks the film for family movie night", "avatar": { "image": "assets/bruno.jpg" } },
+    { "key": "coach", "name": "Coach", "harness": "claude-code", "model": "sonnet",
+      "description": "Keeps the whole family moving", "avatar": { "image": "assets/coach.jpg" } }
+  ],
+  "conversations": [
+    { "key": "alfred", "direct": "alfred", "background": { "preset": "forest" },
+      "messages": [
+        { "at": "-1d 19:12", "from": "user",
+          "text": "Alfred, we are hosting Christmas this year. Eleven of us, with my parents and my sister's family staying over. Can you take charge of the plan?" },
+        { "at": "-1d 19:15", "from": "alfred",
+          "text": "With pleasure. I will keep one plan for the whole week and update it as things change, so nobody has to remember anything.\n\nThree things I need from you first:\n\n1. Does anyone have dietary needs?\n2. Who sleeps where?\n3. What budget should I hold us to?" },
+        { "at": "-1d 19:21", "from": "user",
+          "text": "Dad is vegetarian now and Maya is allergic to nuts. Grandparents get the guest room, the cousins can have the playroom. Let's keep food and gifts under £900." },
+        { "key": "week", "at": "08:05", "from": "alfred",
+          "text": "Here is the week as it stands. The food delivery is booked for the morning of the 22nd, the turkey is ordered for collection on the 23rd, and the tree comes this Saturday so the children can decorate it before school breaks up.",
+          "attachments": [ { "file": "assets/christmas-week.png" } ],
+          "reactions": [ { "from": "user", "emoji": "🎄" } ] },
+        { "at": "08:06", "from": "alfred",
+          "text": "Dinner is timed backwards from sitting down at 3pm. There is a mushroom wellington for your father, and nothing on the menu contains nuts, so Maya can eat everything on the table without asking.",
+          "attachments": [ { "file": "assets/christmas-dinner.pdf" } ] },
+        { "at": "12:30", "from": "user", "text": "This is brilliant. Where are we on the budget?" },
+        { "at": "12:33", "from": "alfred",
+          "text": "Sol has the running total: **£612 of the £900**. The turkey and the tree are paid for, and the big food shop is the last large item. I have asked him to warn us both if anything takes us past £800." }
+      ] },
+    { "key": "christmas",
+      "group": { "name": "Christmas at ours", "description": "Guests, food, gifts and the budget", "members": ["alfred", "chloe", "sol"] },
+      "messages": [
+        { "at": "-1d 20:10", "from": "user",
+          "text": "Christmas is at ours this year and Alfred is running the plan. Chloe, please protect the diary. Sol, hold us to £900 for food and gifts." },
+        { "at": "-1d 20:12", "from": "alfred", "text": "Understood. I will post the week here once the deliveries are confirmed." },
+        { "at": "-1d 20:14", "from": "chloe", "text": "I have blocked the 22nd to the 2nd and declined the two meetings that had landed on the 23rd." },
+        { "at": "-1d 21:30", "from": "sol", "text": "Running total: £612 of the £900. The turkey and the tree are paid for; the big food shop is the last large item." }
+      ] },
+    { "key": "bruno", "direct": "bruno", "unread": true,
+      "messages": [
+        { "at": "17:48", "from": "bruno",
+          "text": "Friday film night, three picks that work for a six-year-old and a teenager at once: the penguin heist, the one with the robot in the junkyard, or the old musical Grandma always asks for. The robot one is 94 minutes, which matters on a school night." }
+      ] },
+    { "key": "coach", "direct": "coach",
+      "messages": [
+        { "at": "07:05", "from": "coach", "text": "Saturday's family 5k: everyone is on track. Maya ran her longest yet on Tuesday. Rest day today, all of you." }
+      ] },
+    { "key": "chloe", "direct": "chloe",
+      "messages": [
+        { "at": "-1d 17:40", "from": "chloe", "text": "School carol concert is in the diary for the 23rd at 2pm. I moved your call so you can be there." }
+      ] },
+    { "key": "sol", "direct": "sol",
+      "messages": [
+        { "at": "-2d 16:20", "from": "sol", "text": "September is reconciled. You are £240 under budget for the month, mostly because the car insurance renewal came in lower." }
+      ] }
+  ],
+  "present": {
+    "window": { "size": [1240, 860], "origin": [100, 70] },
+    "select": "alfred",
+    "draft": "Can you sort Secret Santa for the adults? £25 limit, and nobody should draw their own partner."
+  },
+  "timeline": [
+    { "capture": "01-the-plan" },
+    { "waitFor": "userMessage", "agent": "alfred" },
+    { "agent": "alfred", "status": { "phase": "working", "detail": "Drawing the Secret Santa names" } },
+    { "wait": 0.6, "agent": "alfred",
+      "toolCall": { "title": "Updating the plan", "input": "household/christmas/secret-santa.md",
+        "output": "6 adults, 6 pairs drawn. No one drew their partner. Limit £25.", "exit": 0, "duration": 1.2 } },
+    { "wait": 0.6, "agent": "alfred",
+      "reply": { "key": "santa",
+        "text": "Done. I drew the names for the six adults and sent each of them theirs privately, so not even you know who has whom. Nobody drew their own partner, and the limit is £25.\n\nI will remind everyone a week before. Shall I also keep a quiet list of what each person is hoping for, so nobody ends up with three scarves?" } },
+    { "agent": "alfred", "status": { "phase": "ready" } },
+    { "wait": 1.2, "agent": "sol", "in": "christmas",
+      "reply": { "text": "Noted from Alfred: Secret Santa is six gifts at £25. I am tracking that £150 separately, so the £900 for food and family gifts is untouched." } },
+    { "capture": "02-secret-santa" }
+  ]
+}

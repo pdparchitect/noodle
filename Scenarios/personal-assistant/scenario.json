@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "title": "Chloe organises the day",
+  "clock": "08:20",
+  "settings": {
+    "Noodle.firstBotSetup.dismissed": true,
+    "Noodle.composer.showBotDescriptions": true
+  },
+  "harnesses": {
+    "claude-code": { "models": "builtin" }
+  },
+  "agents": [
+    { "key": "chloe", "name": "Chloe", "harness": "claude-code", "model": "opus", "effort": "high",
+      "description": "Personal assistant for the diary, travel and errands",
+      "backstory": "You are a personal assistant. You handle what you can, and bring only the decisions that need a person.",
+      "avatar": { "image": "assets/chloe.jpg" },
+      "autoReplies": ["Done, and it is in the diary.", "Leave it with me. I will confirm once it is booked."] },
+    { "key": "kai", "name": "Kai", "harness": "claude-code", "model": "sonnet",
+      "description": "Travel: flights, trains, hotels and the fine print", "avatar": { "image": "assets/kai.jpg" } },
+    { "key": "clara", "name": "Clara", "harness": "claude-code", "model": "opus", "effort": "medium",
+      "description": "Chief of staff: clients, proposals and follow-ups", "avatar": { "image": "assets/clara.jpg" } },
+    { "key": "alfred", "name": "Alfred", "harness": "claude-code", "model": "sonnet",
+      "description": "The family butler: plans, lists and everyone's whereabouts", "avatar": { "image": "assets/alfred.jpg" } }
+  ],
+  "conversations": [
+    { "key": "chloe", "direct": "chloe", "background": { "preset": "ocean" },
+      "messages": [
+        { "key": "today", "at": "07:30", "from": "chloe",
+          "text": "Good morning. Here is today. Three things need you: the design review at 10, the contract that has to be signed before 1pm, and a call to your mother about Saturday. Everything else I have moved or handled.",
+          "attachments": [ { "file": "assets/today.png" } ] },
+        { "at": "07:31", "from": "chloe",
+          "text": "**Handled overnight**\n\n- Renewed the car insurance: same cover, £38 less than last year.\n- Booked the boiler service for Tuesday morning; Alfred will be in.\n- Sent the school the signed trip form.\n- Booked the trattoria your mother liked last year for Saturday, six people at 7pm. They know it is a birthday.",
+          "reactions": [ { "from": "user", "emoji": "🙌" } ] },
+        { "at": "07:52", "from": "user", "text": "You are a star. What should I get Mum? She says she doesn't want anything, obviously." },
+        { "at": "07:58", "from": "chloe",
+          "text": "Two ideas, both arrive by Friday:\n\n1. **A framed print of the harbour** where she grew up, from the photo you took in June. £64 framed, and it is the one she keeps mentioning.\n2. **A year of the garden magazine** she borrows from her neighbour, with the first issue gift-wrapped. £45.\n\nThe print is the one she will not expect." }
+      ] },
+    { "key": "lisbon",
+      "group": { "name": "Lisbon offsite", "description": "Three days with the team in October", "members": ["chloe", "kai"] },
+      "messages": [
+        { "at": "-1d 16:02", "from": "user", "text": "The offsite is on: Lisbon, Tuesday to Thursday, eight of us. Kai, find travel. Chloe, clear the diary around it." },
+        { "at": "-1d 16:20", "from": "kai",
+          "text": "Best option is the 07:10 out on Tuesday and the 19:45 back on Thursday. Everyone fits on one booking and the fare is held until 6pm tomorrow. The hotel is a ten-minute walk from the venue, breakfast included." },
+        { "at": "-1d 16:31", "from": "chloe", "text": "Diary is clear for all three days. I moved the board prep to Monday and told Clara you are out of reach on Wednesday afternoon." }
+      ] },
+    { "key": "clara", "direct": "clara", "unread": true,
+      "messages": [
+        { "at": "08:02", "from": "clara", "text": "The proposal for the harbour museum is ready for your read. Two numbers need your sign-off before it goes at noon; I have highlighted both." }
+      ] },
+    { "key": "kai", "direct": "kai",
+      "messages": [
+        { "at": "-1d 16:45", "from": "kai", "text": "You are in 4C both ways, aisle, as usual. Your passport is valid until 2031, so nothing to renew." }
+      ] },
+    { "key": "alfred", "direct": "alfred",
+      "messages": [
+        { "at": "-1d 18:05", "from": "alfred", "text": "The boiler service is Tuesday at 9. I will be in for the engineer, so you need not rearrange anything." }
+      ] }
+  ],
+  "present": {
+    "window": { "size": [1240, 860], "origin": [100, 70] },
+    "select": "chloe",
+    "draft": "Go with the print. And find me something to do on Sunday morning, just me."
+  },
+  "timeline": [
+    { "capture": "01-morning-brief" },
+    { "waitFor": "userMessage", "agent": "chloe" },
+    { "agent": "chloe", "status": { "phase": "working", "detail": "Ordering the print and checking Sunday" } },
+    { "wait": 0.6, "agent": "chloe",
+      "toolCall": { "title": "Checking the diary", "input": "diary/this-week.md", "output": "Sunday is free until 1pm. Forecast: dry, 14°C.", "exit": 0, "duration": 0.9 } },
+    { "wait": 0.6, "agent": "chloe",
+      "reply": { "key": "sunday",
+        "text": "The print is ordered: oak frame, delivered Friday, with a card in your words for you to approve tonight.\n\nSunday is yours until 1pm and the forecast is dry. Three ideas:\n\n1. **The river loop** you saved in the spring. Eight miles, and the café at the halfway point opens at 9.\n2. **A swim at the lido.** The lanes are quiet before ten and I can book the 8:30 slot.\n3. **The photography exhibition** at the city gallery, which closes next week.\n\nTell me which and I will block the morning so nothing lands on it." } },
+    { "agent": "chloe", "status": { "phase": "ready" } },
+    { "wait": 1.2, "agent": "kai", "in": "lisbon",
+      "reply": { "text": "Flights are booked for all eight, seats together in rows 4 and 5. Boarding passes will be in everyone's inbox on Monday." } },
+    { "capture": "02-sunday-ideas" }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "title": "Sol prepares the tax return",
+  "clock": "16:10",
+  "settings": {
+    "Noodle.firstBotSetup.dismissed": true,
+    "Noodle.composer.showBotDescriptions": true
+  },
+  "harnesses": {
+    "claude-code": { "models": "builtin" }
+  },
+  "agents": [
+    { "key": "sol", "name": "Sol", "harness": "claude-code", "model": "sonnet",
+      "description": "Looks after the accounts and the tax return",
+      "backstory": "You keep the household and business accounts. You are exact, you show your working, and you never submit anything without approval.",
+      "avatar": { "image": "assets/sol.jpg" },
+      "autoReplies": ["Noted. I have updated the draft.", "Filed. The summary now reflects it."] },
+    { "key": "tony", "name": "Tony", "harness": "claude-code", "model": "sonnet",
+      "description": "Negotiates bills, renewals and subscriptions", "avatar": { "image": "assets/tony.jpg" } },
+    { "key": "ada", "name": "Ada", "harness": "claude-code", "model": "haiku",
+      "description": "Bookkeeping: invoices out, payments in", "avatar": { "image": "assets/ada.jpg" } }
+  ],
+  "conversations": [
+    { "key": "sol", "direct": "sol",
+      "messages": [
+        { "at": "-2d 09:40", "from": "user", "text": "Sol, can you get a head start on my self-assessment this year? Everything is in the accounts folder." },
+        { "at": "-2d 09:44", "from": "sol",
+          "text": "Yes. I will reconcile the statements first, then draft the return and tell you exactly what is missing. Nothing gets submitted without you." },
+        { "key": "quarters", "at": "-1d 17:02", "from": "sol",
+          "text": "The whole tax year is reconciled: 412 transactions, of which 9 I could not categorise on my own. Income was steady across the year, and you put something into the tax pot every quarter.",
+          "attachments": [ { "file": "assets/tax-year-by-quarter.png" } ] },
+        { "key": "draft", "at": "15:48", "from": "sol",
+          "text": "Draft figures for 2025–26:\n\n- Income from self-employment: **£84,300**\n- Allowable expenses: **£19,750**\n- Taxable profit: **£64,550**\n- Estimated tax and National Insurance: **£15,800**\n\nYou have £14,200 set aside, so you are about £1,600 short. At the current monthly transfer the pot covers it by December, well before the January deadline.",
+          "attachments": [ { "file": "assets/tax-summary-2025-26.pdf" } ] },
+        { "at": "15:50", "from": "sol",
+          "text": "Two things lower the bill. You have not claimed for working from home since March, which is about £310, and the laptop from October qualifies in full. Both are in the draft, flagged for you to confirm.",
+          "reactions": [ { "from": "user", "emoji": "👏" } ] }
+      ] },
+    { "key": "move",
+      "group": { "name": "House move fund", "description": "Deposit and moving costs by next summer", "members": ["sol", "tony"] },
+      "messages": [
+        { "at": "-3d 10:15", "from": "user", "text": "We want £25,000 for the move by June. Sol, tell us where we are. Tony, find money we are wasting." },
+        { "at": "-3d 10:22", "from": "sol", "text": "You are at **£18,400**. At the current £650 a month you reach £24,250 by June, so you are £750 short unless something changes." },
+        { "at": "-3d 11:40", "from": "tony", "text": "Found £96 a month so far: two streaming services nobody has opened since spring, and a phone plan with four times the data you use. That closes the gap with room to spare." }
+      ] },
+    { "key": "ada", "direct": "ada", "unread": true,
+      "messages": [
+        { "at": "15:20", "from": "ada", "text": "Invoice 2041 is fourteen days overdue, £3,200. I sent the second reminder this morning, politely. The other five from September are all paid." }
+      ] },
+    { "key": "tony", "direct": "tony",
+      "messages": [
+        { "at": "-1d 12:10", "from": "tony", "text": "Home insurance renewal came in at £412. I got it to £327 with the same cover by quoting two competitors back at them. Want me to take it?" }
+      ] }
+  ],
+  "present": {
+    "window": { "size": [1240, 860], "origin": [100, 70] },
+    "select": "sol",
+    "draft": "Good catch on the laptop. Are any receipts missing?"
+  },
+  "timeline": [
+    { "capture": "01-draft-return" },
+    { "waitFor": "userMessage", "agent": "sol" },
+    { "agent": "sol", "status": { "phase": "working", "detail": "Matching receipts to expenses" } },
+    { "wait": 0.6, "agent": "sol",
+      "toolCall": { "title": "Matching receipts", "input": "accounts/2025-26/expenses.csv", "output": "187 of 193 expenses have a receipt. 6 missing, £212.40 in total.", "exit": 0, "duration": 1.4 } },
+    { "wait": 0.6, "agent": "sol",
+      "reply": { "key": "receipts",
+        "text": "Six are missing, all small, £212 in total: four train tickets from May, one software subscription and one client lunch.\n\nThe train operator lets me download the tickets again, so I will fetch those now. The other two need you: forward me the two invoice emails and I will file them against the right expenses." } },
+    { "agent": "sol", "status": { "phase": "ready" } },
+    { "wait": 1.2, "agent": "tony",
+      "reply": { "text": "Broadband is renewed at £27 a month, down from £41, same speed. That is £168 a year, and I have pointed it at the house move fund." } },
+    { "capture": "02-missing-receipts" }
+  ]
+}

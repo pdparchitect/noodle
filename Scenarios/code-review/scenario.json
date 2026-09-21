@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "title": "Wren tracks down a slow launch",
+  "clock": "11:25",
+  "settings": {
+    "Noodle.firstBotSetup.dismissed": true,
+    "Noodle.composer.showBotDescriptions": true
+  },
+  "harnesses": {
+    "claude-code": { "models": "builtin" },
+    "codex": { "models": [
+      { "id": "gpt-5.2-codex", "name": "GPT-5.2 Codex", "description": "Tuned for long coding tasks.",
+        "efforts": ["low", "medium", "high"], "defaultEffort": "medium", "default": true } ] },
+    "grok-build": { "models": [
+      { "id": "grok-code", "name": "Grok Code", "description": "Quick edits and short tasks.", "default": true } ] },
+    "opencode": { "models": [
+      { "id": "local/coder-large", "name": "Coder Large", "description": "Runs through a local provider.", "default": true } ] }
+  },
+  "agents": [
+    { "key": "wren", "name": "Wren", "harness": "codex", "model": "gpt-5.2-codex", "effort": "high",
+      "description": "Builds features, reviews code and chases bugs",
+      "backstory": "You are a careful engineer. You measure before you change anything and you leave a test behind every fix.",
+      "avatar": { "image": "assets/wren.jpg" },
+      "autoReplies": ["On it. I will post the diff when the tests pass.", "Pushed. The suite is green."] },
+    { "key": "victor", "name": "Victor", "harness": "claude-code", "model": "opus", "effort": "high",
+      "description": "Reviews every pull request before it merges", "avatar": { "image": "assets/victor.jpg" } },
+    { "key": "mila", "name": "Mila", "harness": "grok-build", "model": "grok-code",
+      "description": "QA: reproduces bugs and writes the test plans", "avatar": { "image": "assets/mila.jpg" } },
+    { "key": "ivan", "name": "Ivan", "harness": "opencode", "model": "local/coder-large",
+      "description": "Infrastructure: builds, CI and releases", "avatar": { "image": "assets/ivan.jpg" } }
+  ],
+  "conversations": [
+    { "key": "wren", "direct": "wren",
+      "messages": [
+        { "at": "10:02", "from": "user", "text": "Cold launch feels slow since last week's release. Can you find out why and fix it?" },
+        { "at": "10:04", "from": "wren", "text": "On it. I will profile a cold launch of the release build first, so we fix the real cause and not a guess." },
+        { "key": "cause", "at": "10:41", "from": "wren",
+          "text": "Found it. The thumbnail cache is rebuilt on the main thread at every launch, because the version check compares a string with a number and never matches:\n\n```swift\nif cache.version != String(schemaVersion) { rebuild() }   // always true\n```\n\nThat rebuild is 1.5 s of the 2.1 s launch." },
+        { "at": "10:43", "from": "user", "text": "Ouch. Fix it, and add a test so it can't come back." },
+        { "key": "fixed", "at": "11:20", "from": "wren",
+          "text": "Done, on `fix/cold-launch`:\n\n- the version is compared as a number\n- a rebuild that is really needed now happens off the main thread\n- a new test fails if launch ever rebuilds an up-to-date cache\n\nCold launch is back to 0.58 s, a little better than before the regression.",
+          "attachments": [ { "file": "assets/cold-launch.png" } ],
+          "reactions": [ { "from": "user", "emoji": "🚀" } ] }
+      ] },
+    { "key": "release",
+      "group": { "name": "Release 2.4.1", "description": "The cold launch fix and nothing else", "members": ["wren", "victor", "mila", "ivan"] },
+      "messages": [
+        { "at": "09:48", "from": "mila",
+          "text": "Reproduced on three machines. Cold launch is 2.1 s on 2.4.0 against 0.6 s on 2.3.1, and it does not happen on a warm launch. Steps and timings are in the test plan." },
+        { "at": "09:55", "from": "user", "text": "Thanks Mila. Wren is on it. Ivan, can we ship a point release this week if the fix is small?" },
+        { "at": "09:58", "from": "ivan", "text": "Yes. The nightly is green, so I can cut 2.4.1 within the hour of the fix merging. I will keep the release branch frozen until then." },
+        { "at": "10:06", "from": "victor", "text": "Send the pull request my way when it is up. I will look at the threading first." }
+      ] },
+    { "key": "victor", "direct": "victor",
+      "messages": [
+        { "at": "-1d 15:30", "from": "victor", "text": "Approved the settings migration with one note: the fallback path has no test. Not blocking, but worth an hour." }
+      ] },
+    { "key": "mila", "direct": "mila",
+      "messages": [
+        { "at": "-1d 17:10", "from": "mila", "text": "Test plan for 2.4 is done: 46 cases, 44 pass. The two failures are both the slow launch." }
+      ] },
+    { "key": "ivan", "direct": "ivan",
+      "messages": [
+        { "at": "-2d 09:15", "from": "ivan", "text": "CI is 4 minutes faster since I split the UI tests into their own job. Nothing else changed." }
+      ] }
+  ],
+  "present": {
+    "window": { "size": [1240, 860], "origin": [100, 70] },
+    "select": "wren",
+    "draft": "Lovely. Run the whole suite and open the pull request.",
+    "windows": [ { "activity": "wren" } ]
+  },
+  "timeline": [
+    { "capture": "01-found-and-fixed" },
+    { "waitFor": "userMessage", "agent": "wren" },
+    { "agent": "wren", "status": { "phase": "working", "detail": "Running the test suite" } },
+    { "wait": 0.5, "agent": "wren",
+      "toolCall": { "input": "swift test", "output": "Executed 1284 tests, with 0 failures (0 unexpected) in 96.2 seconds", "exit": 0, "duration": 2.0 } },
+    { "agent": "wren", "stream": { "text": "All 1,284 tests pass, including the new cache test. Pushing the branch and opening the pull request.", "chunk": 10, "interval": 0.05 } },
+    { "wait": 0.4, "agent": "wren",
+      "toolCall": { "input": "git push -u origin fix/cold-launch", "output": "branch 'fix/cold-launch' set up to track 'origin/fix/cold-launch'", "exit": 0, "duration": 1.0 } },
+    { "wait": 0.5, "agent": "wren",
+      "reply": { "key": "pr",
+        "text": "All 1,284 tests pass and the pull request is open: **Fix the cold launch regression**. It is 41 lines, most of them the new test.\n\nI have asked you for the review. Once it is merged I will watch the launch time on the next nightly and tell you if it moves." } },
+    { "agent": "wren", "status": { "phase": "ready" } },
+    { "wait": 1.2, "agent": "victor", "in": "release",
+      "reply": { "key": "pr-note", "text": "Reviewing Wren's pull request now. The threading change looks right at first read; I will finish within the half hour." } },
+    { "wait": 0.8, "agent": "ivan", "in": "release", "react": { "message": "pr-note", "emoji": "🚢" } },
+    { "capture": "02-pull-request" }
+  ]
+}

@@ -216,8 +216,8 @@ is a folder in `Scenarios/`; [its README](../Scenarios/README.md) describes the 
 
 ```sh
 zsh scripts/scenario.sh                      # open the picker
-zsh scripts/scenario.sh group-review         # open one scenario
-zsh scripts/scenario.sh --shots group-review # play it and save its shots
+zsh scripts/scenario.sh family-butler        # open one scenario
+zsh scripts/scenario.sh --shots family-butler # play it and save its shots
 zsh scripts/scenario.sh --shots --all
 ```
 

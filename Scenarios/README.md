@@ -6,7 +6,7 @@ them exists only in development builds.
 
 ```
 Scenarios/
-  group-review/
+  family-butler/
     scenario.json     what to show and what happens
     assets/           avatars, attachments and wallpapers the JSON names
     root/             optional files laid over the seeded workspace as they are
@@ -17,7 +17,7 @@ Scenarios/
 
 ```sh
 zsh scripts/scenario.sh                 # the picker
-zsh scripts/scenario.sh group-review    # one scenario; Return in the terminal is Next Step
+zsh scripts/scenario.sh family-butler   # one scenario; Return in the terminal is Next Step
 zsh scripts/scenario.sh --shots --all   # save every capture step of every scenario
 ```
 
