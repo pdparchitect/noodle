@@ -497,6 +497,7 @@ private struct ConversationTranscript: View {
                     previewAttachment: previewAttachment,
                     showAgentProfile: showAgentProfile
                 )
+                .transition(MessageBubble.insertion(for: message))
                 .id(TranscriptScrollTarget.message(message.id))
             }
         }

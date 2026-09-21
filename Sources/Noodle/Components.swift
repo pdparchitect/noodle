@@ -186,6 +186,18 @@ struct MessageBubble: View {
 
     var body: some View {
         let _ = TranscriptRenderProbe.bubbleBody()
+        // Keep this one plain container. A lazy stack builds every row up front, loading the
+        // whole conversation at once, when a row's body is a bare if/else (to count its views)
+        // or carries a transition (to read it). The transcript applies `insertion` instead.
+        VStack(spacing: 0) { row }
+    }
+
+    static func insertion(for message: ChatMessage) -> AnyTransition {
+        if case .system = message.author { return .opacity }
+        return .move(edge: .bottom).combined(with: .opacity)
+    }
+
+    @ViewBuilder private var row: some View {
         let attachments = store.attachments(for: message)
         if isSystem {
             HStack {
@@ -199,7 +211,6 @@ struct MessageBubble: View {
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
                 Spacer(minLength: 80)
             }
-            .transition(.opacity)
         } else {
         HStack(alignment: .bottom, spacing: 8) {
             if isUser { Spacer(minLength: 120) }
@@ -273,7 +284,6 @@ struct MessageBubble: View {
         .sheet(item: $transcriptAttachment) { attachment in
             if let voice = attachment.voice { VoiceTranscriptSheet(voice: voice).noodleSheetSizing() }
         }
-        .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 

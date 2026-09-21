@@ -246,8 +246,8 @@ import NoodleCore
         XCTAssertFalse(store.draft(for: bot.conversation.id).isEmpty)
     }
 
-    /// A mounted chat with twelve linked messages; `body` runs once the first layout has settled.
-    private func withLinkedChat(_ body: (NoodleStore, WorkspaceRepository, (agent: AgentRecord, conversation: BotConversation), NSWindow) async throws -> Void) async throws {
+    /// A mounted chat of linked messages; `body` runs once the first layout has settled.
+    private func withLinkedChat(messages count: Int = 12, _ body: (NoodleStore, WorkspaceRepository, (agent: AgentRecord, conversation: BotConversation), NSWindow) async throws -> Void) async throws {
         let timeout = watchdog()
         defer { timeout.cancel() }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("transcript-typing-\(UUID())")
@@ -255,7 +255,7 @@ import NoodleCore
         let repository = WorkspaceRepository(rootURL: root)
         try repository.prepare()
         let bot = try repository.createAgent(named: "Typing Bot")
-        for index in 0..<12 {
+        for index in 0..<count {
             try repository.append(ChatMessage(conversationID: bot.conversation.id,
                 author: index.isMultiple(of: 2) ? .user : .agent(bot.agent.id),
                 body: "Message **\(index)** with a link https://example.com/\(UUID())", delivery: .delivered))
@@ -273,6 +273,15 @@ import NoodleCore
         defer { window.close(); window.contentView = nil }
         try await settle()
         try await body(store, repository, (bot.agent, bot.conversation), window)
+    }
+
+    func testOpeningALongConversationBuildsOnlyTheRowsNearTheViewport() async throws {
+        let rendered = TranscriptRenderProbe.bubbleBodies
+        try await withLinkedChat(messages: 400) { _, _, _, _ in
+            let built = TranscriptRenderProbe.bubbleBodies - rendered
+            XCTAssertGreaterThan(built, 0, "The transcript must have rendered its rows")
+            XCTAssertLessThan(built, 120, "Opening a 400-message conversation built \(built) rows")
+        }
     }
 
     func testReevaluatedTranscriptRowsDoNotDetectTheirLinksAgain() async throws {
@@ -403,3 +412,4 @@ private struct FullTranscriptLayoutFixture: View {
         }
     }
 }
+
