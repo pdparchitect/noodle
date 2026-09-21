@@ -133,6 +133,10 @@ final class AgentRuntimeCoordinator {
     /// What the Agent Host last reported, which outranks the app's own discovery.
     private var hostInstallations: [HarnessProvider: HarnessInstallation] = [:]
     private var appleCapabilityTask: Task<Void, Never>?
+    #if NOODLE_DEV_HOOKS
+    /// A scenario lists its own models, so its stub harnesses are never run to ask; see Scenario.swift.
+    var scriptedModels: [HarnessProvider: [HarnessModel]]?
+    #endif
 
     private func refreshAppleCapabilities() async {
         guard discovery.discover(.apple).isAvailable else {
@@ -487,6 +491,9 @@ final class AgentRuntimeCoordinator {
 
     func refreshCapabilities() {
         installations = discoveredInstallations()
+        #if NOODLE_DEV_HOOKS
+        if let scriptedModels { modelsByProvider = scriptedModels; return }
+        #endif
         appleCapabilityTask?.cancel()
         appleCapabilityTask = Task { [weak self] in await self?.refreshAppleCapabilities() }
         for provider in HarnessHostInspection.providers {

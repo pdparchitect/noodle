@@ -208,6 +208,36 @@ configuration. For annotation storage and delivery:
 swift test --disable-sandbox --filter 'AttachmentAnnotationTests|MessengerDocumentationTests|ConversationDraftsTests'
 ```
 
+## Scenarios
+
+A scenario opens the real app in a prepared state for screenshots: bots, conversations,
+attachments, wallpapers and statuses, with scripted bots in place of harnesses. Each one
+is a folder in `Scenarios/`; [its README](../Scenarios/README.md) describes the format.
+
+```sh
+zsh scripts/scenario.sh                      # open the picker
+zsh scripts/scenario.sh group-review         # open one scenario
+zsh scripts/scenario.sh --shots group-review # play it and save its shots
+zsh scripts/scenario.sh --shots --all
+```
+
+The script derives `.build/Noodle Scenarios.app` from the development build. That bundle
+has its own identifier, container and preferences, may read `Scenarios/`, and has no
+network, account, group or helper entitlement; every launch starts from an empty
+workspace. The loader is compiled only under `NOODLE_DEV_HOOKS` and runs only in that
+bundle, so it never touches the data of another Noodle.
+
+Once the bundle is open, the Scenarios menu switches scenario, reloads the current one
+after an edit to its files, and advances a timeline that waits for a key (Next Step).
+Launched with a name, the terminal stays attached and Return does the same. `--shots`
+saves each `capture` step to `Scenarios/NAME/shots/`, which Git ignores; it runs from a
+terminal with Screen Recording permission. `--no-build` reuses the development build
+already in `.build`, `--debug` builds the debug configuration, and `--shadow` keeps the
+window shadow.
+
+`swift test --disable-sandbox --filter ScenarioTests` loads, seeds and plays every folder
+in `Scenarios/` without opening a window.
+
 ## Build and test local models
 
 The MLX Foundation Models adapter is pinned to an upstream revision because its

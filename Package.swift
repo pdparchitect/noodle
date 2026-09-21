@@ -98,7 +98,8 @@ let package = Package(
         ),
         .testTarget(
             name: "NoodleAppTests",
-            dependencies: ["Noodle", "NoodleCore", "NoodleMCP", "NoodleAudioCapture"]
+            dependencies: ["Noodle", "NoodleCore", "NoodleMCP", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks")],
+            swiftSettings: developmentHooks
         ),
         .testTarget(
             name: "NoodleComputerIntegrationTests",

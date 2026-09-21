@@ -6,3 +6,4 @@ dist/
 *.xcuserstate
 *.profraw
 *.profdata
+Scenarios/*/shots/

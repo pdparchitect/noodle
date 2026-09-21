@@ -57,6 +57,11 @@ struct NoodleApp: App {
             NSApplication.shared.run()
             Darwin.exit(1)
         }
+        // The scenarios bundle opens a scripted store and never the app's own data; see Scenario.swift.
+        if let store = ScenarioSession.launch(checks) {
+            _store = State(initialValue: store)
+            return
+        }
         #endif
         if MessengerCLI.shouldHandle() {
             let result = MessengerCLI.run()
@@ -112,6 +117,9 @@ struct NoodleApp: App {
             }, floatOnTop: {
                 if let id = store.conversationWindows.conversationID(in: NSApp.keyWindow) { store.floatConversation(id) }
             })
+            #if NOODLE_DEV_HOOKS
+            ScenarioCommands()
+            #endif
         }
 
         WindowGroup("Conversation", id: "conversation", for: UUID.self) { $conversationID in
@@ -153,7 +161,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NoodleStore.active?.updateDockBadge()
         NSApp.servicesProvider = services
         NSUpdateDynamicServices()
+        #if NOODLE_DEV_HOOKS
+        // A new bundle identifier would ask for notification permission over the screenshot.
+        if ScenarioSession.active == nil { NoodleNotifications.configure(delegate: self) }
+        #else
         NoodleNotifications.configure(delegate: self)
+        #endif
         // A migration milestone must finish before Sparkle can offer its successor.
         if NoodleStore.active?.storageReady == true { AppUpdater.shared.start() }
         // A force quit mid-download leaves partial weights that nothing lists.
@@ -473,5 +486,8 @@ enum DevelopmentHook {
     static let computerDocumentPreview = "376dcdd0ffa2dca5cf431ccd16a1a02f611c881259e6e50afd5472beb4692681"  // --computer-document-preview-test
     static let computerDownload = "241600d7fee4a10ff34b7caabd58bd674fe8d13183a01a0e50469b9081eb5585"  // --computer-download-test
     static let computerWeb = "a15d161557b60e252aff873db33a8a522c76e0fee123068f282b14e5791384d8"  // --computer-web-test
+    static let scenario = "fc882b0401601368259a54b753ab1714b761d5cf88bf2069356700f6a2fd580e"  // --scenario
+    static let scenarioShots = "f3e02727157d7ee04aee89ffe9c56c9f6790cd3294e3a21443d0962f2ed639ff"  // --scenario-shots
+    static let scenarioPicker = "41998b9aaaa37cb4b3f6a1fc5666714235669efe3190d47bf71511e4f57cc517"  // --scenario-picker
 }
 #endif
