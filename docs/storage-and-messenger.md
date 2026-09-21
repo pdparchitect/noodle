@@ -16,7 +16,7 @@ Noodle/
 │       ├── memory.md
 │       ├── preferences.md
 │       ├── .noodle/           # Inbox positions, diagnostics, tool bridges
-│       └── .agents/skills/    # Messenger, assigned tools, custom skills
+│       └── .agents/skills/    # Messenger, tips, assigned tools, custom skills
 └── Conversations/<chat-uuid>/
     ├── conversation.json
     ├── messages.json

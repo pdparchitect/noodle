@@ -284,6 +284,7 @@ public struct WorkspaceRepository: Sendable {
         workspaceFiles.remove("instructions.md")
         try workspaceFiles.symlink("CLAUDE.md", destination: "AGENTS.md")
         try AppletAgentSkill.synchronize(workspace: directory, enabled: appletEnabled, executable: appletEnabled ? appletExecutable : nil)
+        try AgentTips.synchronize(workspace: directory)
         _ = try synchronizeClaudeSkillLinks(in: directory)
 
         try messengerFiles.writeData(Data(Self.messengerSkill.utf8), named: "SKILL.md")
