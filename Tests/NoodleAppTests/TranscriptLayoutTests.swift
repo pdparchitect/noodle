@@ -246,7 +246,8 @@ import NoodleCore
         XCTAssertFalse(store.draft(for: bot.conversation.id).isEmpty)
     }
 
-    func testTypingInTheComposerDoesNotReevaluateTranscriptRows() async throws {
+    /// A mounted chat with twelve linked messages; `body` runs once the first layout has settled.
+    private func withLinkedChat(_ body: (NoodleStore, WorkspaceRepository, (agent: AgentRecord, conversation: BotConversation), NSWindow) async throws -> Void) async throws {
         let timeout = watchdog()
         defer { timeout.cancel() }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("transcript-typing-\(UUID())")
@@ -257,7 +258,7 @@ import NoodleCore
         for index in 0..<12 {
             try repository.append(ChatMessage(conversationID: bot.conversation.id,
                 author: index.isMultiple(of: 2) ? .user : .agent(bot.agent.id),
-                body: "Message **\(index)** with a link https://example.com/\(index)", delivery: .delivered))
+                body: "Message **\(index)** with a link https://example.com/\(UUID())", delivery: .delivered))
         }
         let suite = "transcript-typing-\(UUID())"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -271,6 +272,25 @@ import NoodleCore
         let window = window(FullTranscriptLayoutFixture(store: store))
         defer { window.close(); window.contentView = nil }
         try await settle()
+        try await body(store, repository, (bot.agent, bot.conversation), window)
+    }
+
+    func testReevaluatedTranscriptRowsDoNotDetectTheirLinksAgain() async throws {
+        try await withLinkedChat { store, repository, bot, _ in
+            let scanned = TranscriptRenderProbe.linkScans, rendered = TranscriptRenderProbe.bubbleBodies
+            XCTAssertGreaterThan(scanned, 0, "The rows must have looked for a link to preview")
+            try repository.append(ChatMessage(conversationID: bot.conversation.id, author: .agent(bot.agent.id),
+                body: "A reply without a link", delivery: .delivered))
+            store.refreshTranscripts()
+            try await settle()
+            XCTAssertGreaterThan(TranscriptRenderProbe.bubbleBodies, rendered + 1, "The new message must re-evaluate rows")
+            XCTAssertLessThanOrEqual(TranscriptRenderProbe.linkScans - scanned, 2,
+                "Only the new message may be scanned for links")
+        }
+    }
+
+    func testTypingInTheComposerDoesNotReevaluateTranscriptRows() async throws {
+        try await withLinkedChat { store, _, bot, window in
         func editor(in view: NSView?) -> ComposerTextView? {
             if let editor = view as? ComposerTextView { return editor }
             return view?.subviews.lazy.compactMap { editor(in: $0) }.first
@@ -289,6 +309,7 @@ import NoodleCore
         XCTAssertEqual(store.draft(for: bot.conversation.id), "Hello there")
         XCTAssertEqual(TranscriptRenderProbe.bubbleBodies, rendered,
             "Typing re-evaluated \(TranscriptRenderProbe.bubbleBodies - rendered) transcript rows")
+        }
     }
 
     private func findScroll(_ view: NSView) -> NSScrollView? {

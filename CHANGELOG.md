@@ -13,6 +13,7 @@ All notable changes to Noodle are documented here, following
 ### Fixed
 
 - Keep typing in the message field responsive in long conversations. Each keystroke used to redraw every visible message.
+- Stop searching every visible message for a link again whenever the conversation redraws, such as when a message arrives or while scrolling.
 
 ## [0.23.0] - 2026-09-21
 
