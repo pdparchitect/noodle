@@ -112,14 +112,16 @@ struct ConversationWindowView: View {
         if let conversation {
             HStack(spacing: 7) {
                 // The name is spoken once; the picture only repeats it.
-                ConversationAvatar(participants: store.participants(for: conversation),
-                    isGroup: conversation.kind == .group, size: 20)
+                // The dot is the only sign of life here: these windows have no sidebar row.
+                ConversationStatusAvatar(conversation: conversation, size: 20, dotSize: 7, ringWidth: 1.5)
                     .accessibilityHidden(true)
                 Text(store.title(for: conversation))
                     .font(.headline)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityValue(store.runtimeHelp(for: conversation))
         }
     }
 }

@@ -166,19 +166,9 @@ private struct ConversationRow: View {
         }
     }
 
-    private var runtimeColor: Color {
-        let phases = store.participants(for: conversation).map { store.runtime.snapshot(for: $0.id).phase }
-        if phases.contains(.working) { return .blue }
-        if phases.contains(.failed) { return .red }
-        if !phases.isEmpty, phases.allSatisfy({ $0 == .ready }) { return .green }
-        return .gray
-    }
+    private var runtimeColor: Color { store.runtimeStatus(for: conversation).color }
 
-    private var runtimeHelp: String {
-        return store.participants(for: conversation).map { agent in
-            "\(agent.displayName): \(store.runtime.snapshot(for: agent.id).detail)"
-        }.joined(separator: "\n")
-    }
+    private var runtimeHelp: String { store.runtimeHelp(for: conversation) }
 
     private var accessibilityLabel: String {
         let unread = store.hasUnreadMessages(in: conversation) ? "Unread, " : ""

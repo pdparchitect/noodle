@@ -58,6 +58,66 @@ struct ConversationAvatar: View {
     }
 }
 
+/// One status for a whole conversation: a working bot wins, then a failed one, then all ready.
+enum ConversationRuntimeStatus: Equatable {
+    case working, failed, ready, idle
+
+    init(phases: [AgentRuntimePhase]) {
+        if phases.contains(.working) { self = .working }
+        else if phases.contains(.failed) { self = .failed }
+        else if !phases.isEmpty, phases.allSatisfy({ $0 == .ready }) { self = .ready }
+        else { self = .idle }
+    }
+
+    var color: Color {
+        switch self {
+        case .working: .blue
+        case .failed: .red
+        case .ready: .green
+        case .idle: .gray
+        }
+    }
+}
+
+extension NoodleStore {
+    func runtimeStatus(for conversation: BotConversation) -> ConversationRuntimeStatus {
+        ConversationRuntimeStatus(phases: participants(for: conversation).map { runtime.snapshot(for: $0.id).phase })
+    }
+
+    func runtimeHelp(for conversation: BotConversation) -> String {
+        participants(for: conversation).map { agent in
+            "\(agent.displayName): \(runtime.snapshot(for: agent.id).detail)"
+        }.joined(separator: "\n")
+    }
+}
+
+/// A conversation picture with its runtime dot. The ring is cut out of the picture,
+/// so it reads the same over a wallpaper, a vibrant panel or a list row.
+struct ConversationStatusAvatar: View {
+    @Environment(NoodleStore.self) private var store
+    let conversation: BotConversation
+    let size: CGFloat
+    let dotSize: CGFloat
+    var ringWidth: CGFloat = 2
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            ConversationAvatar(participants: store.participants(for: conversation),
+                isGroup: conversation.kind == .group, size: size)
+            // Opaque, or the cut leaves a ghost of the picture behind.
+            Circle().fill(.black)
+                .frame(width: dotSize + ringWidth * 2, height: dotSize + ringWidth * 2)
+                .offset(x: ringWidth, y: ringWidth)
+                .blendMode(.destinationOut)
+        }
+        .compositingGroup()
+        .overlay(alignment: .bottomTrailing) {
+            Circle().fill(store.runtimeStatus(for: conversation).color).frame(width: dotSize, height: dotSize)
+        }
+        .help(store.runtimeHelp(for: conversation))
+    }
+}
+
 struct MessageBubble: View {
     @Environment(NoodleStore.self) private var store
     @AppStorage(ChatAttachmentLayout.defaultsKey) private var attachmentLayout = ChatAttachmentLayout.defaultValue.rawValue

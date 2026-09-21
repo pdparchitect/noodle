@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Show whether a bot is working in separate and floating conversation windows: the picture in the window title now carries the same status dot as the sidebar (blue working, green ready, red failed, grey otherwise). Hover it for details.
+
 ### Fixed
 
 - Stop macOS asking for the login keychain password every time a restricted Claude Code bot starts, even after Always Allow. Noodle Agent Host now reads the `Claude Code-credentials` item the way Claude Code does, which needs no prompt.
