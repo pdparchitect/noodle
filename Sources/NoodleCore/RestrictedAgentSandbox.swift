@@ -15,6 +15,7 @@ public enum RestrictedAgentSandbox {
         case .grokBuild: name = ".grok"
         case .muse: name = ".config/muse"
         case .openCode: name = ".local/share/opencode"
+        case .antigravity: name = ".gemini/antigravity-cli"
         default: throw HarnessSetupError("Unsupported restricted harness account.")
         }
         let directory = home.appendingPathComponent(name, isDirectory: true)
@@ -38,9 +39,9 @@ public enum RestrictedAgentSandbox {
         let base = profile(workspace: workspace,
             executablePaths: [executable.path], application: application,
             readFiles: Array(Set(readFiles)).sorted(), folders: folders)
-        guard provider == .openCode else { return base }
-        // V2's native ACP implementation starts a password-authenticated server
-        // on 127.0.0.1. Only that verified executable can listen; tools cannot.
+        guard provider == .openCode || provider == .antigravity else { return base }
+        // OpenCode v2's ACP implementation and Antigravity's language server each
+        // listen on 127.0.0.1. Only that verified executable can listen; tools cannot.
         // Seatbelt's "localhost" token also matches this machine's LAN addresses,
         // so it must not be described as an OS-enforced loopback-only boundary.
         return base + """
@@ -75,6 +76,8 @@ public enum RestrictedAgentSandbox {
             return ["HOME": privateHome.path, "GROK_SANDBOX": "off"]
         case .openCode:
             return OpenCodeStorage.environment(workspace: workspace)
+        case .antigravity:
+            return ["HOME": privateHome.path, "AGY_CLI_DISABLE_AUTO_UPDATE": "true"]
         case .muse:
             let storage = workspace.appendingPathComponent(".noodle/muse")
             return ["HOME": privateHome.path, "XDG_CONFIG_HOME": privateHome.appendingPathComponent(".config").path,

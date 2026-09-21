@@ -142,7 +142,7 @@ consume model usage. Run them separately from the account-free suite.
 
 | Check | Command |
 | --- | --- |
-| Harness install from the vendor | `NOODLE_TEST_HARNESS_INSTALL=fx,codex,claude-code,grok-build,muse,opencode swift test --disable-sandbox --filter ManagedHarnessTests` downloads real releases into a temporary folder and runs each one's `--version`; no account is used |
+| Harness install from the vendor | `NOODLE_TEST_HARNESS_INSTALL=fx,codex,claude-code,grok-build,muse,opencode,antigravity swift test --disable-sandbox --filter ManagedHarnessTests` downloads real releases into a temporary folder and runs each one's `--version`; no account is used |
 | Restricted ACP Messenger and resume | `NOODLE_TEST_RESTRICTED_ACP=1 swift test --disable-sandbox --filter RestrictedACPLiveTests` |
 | Restricted Muse | `NOODLE_TEST_MUSE_RESTRICTED=1 zsh Tests/muse-live.sh` |
 | Unrestricted Muse | `NOODLE_TEST_MUSE_LIVE=1 zsh Tests/muse-live.sh` |

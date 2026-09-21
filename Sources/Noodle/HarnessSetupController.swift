@@ -53,7 +53,8 @@ final class HarnessSetupController {
             .fx: FxSetupProvider(),
             .grokBuild: GrokSetupProvider(),
             .muse: MuseSetupProvider(),
-            .openCode: OpenCodeSetupProvider()
+            .openCode: OpenCodeSetupProvider(),
+            .antigravity: AntigravitySetupProvider()
         ]
     }
 

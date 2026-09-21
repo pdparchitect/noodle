@@ -1,7 +1,7 @@
 # Harness setup
 
 A harness is the agent program Noodle runs for each bot. Noodle supports Codex,
-Claude Code, Vercel FX, Grok Build, Muse Code, and OpenCode v2, using your existing account,
+Claude Code, Vercel FX, Grok Build, Muse Code, OpenCode v2, and Google Antigravity, using your existing account,
 plus the experimental bundled Apple Intelligence harness running on device.
 
 The first time you open Noodle with no bots, **Set Up Your First Bot** lists the
@@ -35,6 +35,7 @@ To install a harness yourself:
 | Grok Build | **Sign In…** in Noodle, or `grok login` in Terminal |
 | Muse Code | **Sign In…** in Noodle, or `muse login` in Terminal |
 | OpenCode v2 | Works without an account on OpenCode's free models. For your own providers run `opencode auth login` in Terminal; for a copy Noodle installed, **Sign In…** shows the full command to paste. |
+| Antigravity | Run `agy` in Terminal and follow its Google sign-in. For a copy Noodle installed, **Sign In…** shows the full command to paste. |
 | Apple Intelligence | Bundled with Noodle; enable Apple Intelligence in System Settings on a supported Mac running macOS 26 or later. No separate install or sign-in. |
 
 Once a harness is detected, create a bot and select its model and, where available,
@@ -49,10 +50,12 @@ explains the scope and how it differs from Noodle's assigned tools.
 
 ## Profiles
 
-Codex, Grok Build, and Muse Code can each be signed in to several accounts at
+Codex, Grok Build, Muse Code, and Antigravity can each be signed in to several accounts at
 once. Under the harness in **Settings → Harness**, choose **Profiles…**, then
 **Add Profile…**, name it, and choose **Sign In…** beside it. Noodle shows the
-harness's device code and a button for its sign-in page. Choose the profile for a
+harness's device code and a button for its sign-in page. Antigravity has no
+device code: Noodle shows a command to paste into Terminal, which signs that
+profile in; then choose **Check Again**. Choose the profile for a
 bot in **Edit Bot → Harness → Profile**; the row appears once that harness has a
 profile. **System** is the default and is the harness login already on this Mac,
 shared with its CLI and other apps.
@@ -66,11 +69,12 @@ there, not in the Keychain:
 | Codex | `CODEX_HOME` | |
 | Grok Build | `GROK_HOME` | Grok sign-ins expire after seven days; sign the profile in again from **Profiles…**. |
 | Muse Code | `XDG_CONFIG_HOME`, with `TBH_CREDENTIAL_BACKEND=file` | A Muse version that still saves the sign-in to its shared Keychain item is reported as an error, because that login would not be separate. |
+| Antigravity | `HOME` | Antigravity has no setting for its folder, so the profile is a whole separate home. An unrestricted bot on a profile therefore does not see files in your own home folder by their usual `~` paths, such as `~/.gitconfig` or `~/.ssh`. |
 
 A restricted bot receives a copy of its profile's login, as it does from System,
 and never the System Keychain login. An unrestricted bot on a profile uses the
 profile's folder for the harness's configuration, so settings in `~/.codex`,
-`~/.grok`, or `~/.config/muse` do not apply to it, and a Codex thread starts
+`~/.grok`, `~/.config/muse`, or `~/.gemini` do not apply to it, and a Codex thread starts
 again when the profile changes. The model list in the bot editor comes from the
 System login. Deleting a profile removes its login from Noodle and returns its
 bots to System. Claude Code, FX, OpenCode, and Apple Intelligence use the System
@@ -98,6 +102,24 @@ configured in the bot workspace's `opencode.json`. Environment-only credentials 
 storage paths are not used for restricted bots. Models that do not require a
 provider login can also be used.
 
+## Antigravity
+
+Install the native CLI using [Google's installer](https://antigravity.google/docs/cli/install):
+
+```sh
+curl -fsSL https://antigravity.google/cli/install.sh | bash
+agy
+```
+
+Noodle verifies the Google-signed binary at `~/.local/bin/agy`. Models come from
+`agy models`; reasoning effort is part of each model's name, so there is no
+separate effort setting.
+
+Antigravity cannot ask for tool approvals when it runs without a terminal, so
+Noodle starts it with approvals off. A restricted bot is still confined by macOS
+to its workspace. Antigravity also cannot be interrupted mid-turn: an urgent
+message is handled as soon as the current turn ends.
+
 ## Harnesses installed by Noodle
 
 Noodle installs a harness only when this Mac does not already have it, and keeps
@@ -118,8 +140,8 @@ it in its own storage, outside your home folder and your shell's `PATH`.
 - **Remove…** deletes Noodle's copy. Bots on that harness stop working until it
   is installed again, by Noodle or by you.
 - **Verification.** Claude Code, Codex and Muse Code downloads are checked against
-  the provider's published SHA-256, and OpenCode's against the npm registry's
-  SHA-512. Vercel and xAI publish none for FX and Grok Build. Every download must carry the provider's Apple code
+  the provider's published SHA-256, and OpenCode's and Antigravity's against the
+  SHA-512 published by the npm registry and by Google. Vercel and xAI publish none for FX and Grok Build. Every download must carry the provider's Apple code
   signature before it can run; see [Architecture](architecture.md#installed-harnesses).
 
 Muse Code's own installer adds a shell launcher that updates itself. Noodle

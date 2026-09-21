@@ -70,7 +70,7 @@ messages that do not exist all fail, in the tests and in the picker.
 | `clock` | `"HH:mm"` today, the time the scenario opens at. Without it, the time of launch. Messages sent while it runs are stamped with the clock plus the time elapsed. |
 | `appearance` | `"dark"` or left out. Noodle has no light appearance. |
 | `settings` | Preferences by their defaults key: `chatAttachmentLayout`, `BotNameStyle`, `Noodle.firstBotSetup.dismissed`, `Noodle.composer.showBotDescriptions`, `Noodle.floatingConversations.keepsOne`, `Noodle.linkPreview.timeoutSeconds`. Message delivery is always `queue`. |
-| `harnesses` | The harnesses that look installed, by identifier: `claude-code`, `codex`, `fx`, `grok-build`, `muse`, `opencode`. `models` is `"builtin"` for Claude Code or the list the harness would report. Nothing is installed or run. |
+| `harnesses` | The harnesses that look installed, by identifier: `claude-code`, `codex`, `fx`, `grok-build`, `muse`, `opencode`, `antigravity`. `models` is `"builtin"` for Claude Code or the list the harness would report. Nothing is installed or run. |
 
 ### Times
 

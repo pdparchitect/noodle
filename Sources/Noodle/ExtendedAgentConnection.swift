@@ -89,6 +89,11 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
         proxy()?.startRestrictedMuse(agentID: agentID.uuidString, executablePath: executablePath,
                                      modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier, withReply: reply)
     }
+    func startRestrictedAntigravity(agentID: UUID, executablePath: String, conversationID: UUID?, modelIdentifier: String?,
+                                    reply: @escaping (Int32, String?) -> Void) {
+        proxy()?.startRestrictedAntigravity(agentID: agentID.uuidString, executablePath: executablePath,
+            conversationID: conversationID?.uuidString, modelIdentifier: modelIdentifier, withReply: reply)
+    }
     func write(_ data: Data) { proxy()?.write(data) }
     func stop(reply: @escaping (Bool) -> Void) {
         stopping = true
@@ -154,6 +159,9 @@ final class ExtendedAgentConnection: NSObject, AgentHostClient {
     }
     func inspectMuse(reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.inspectMuse(withReply: reply)
+    }
+    func inspectAntigravity(reply: @escaping (Data?, String?) -> Void) {
+        proxy(failure: { reply(nil, $0) })?.inspectAntigravity(withReply: reply)
     }
     func publishHarness(_ staged: StagedHarness, reply: @escaping (String?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.publishHarness(harnessIdentifier: staged.provider.rawValue, version: staged.version,

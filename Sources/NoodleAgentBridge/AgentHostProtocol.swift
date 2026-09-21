@@ -44,6 +44,8 @@ public enum AgentHostIdentity {
                             withReply reply: @escaping (Int32, String?) -> Void)
     func startRestrictedMuse(agentID: String, executablePath: String, modelIdentifier: String?, effortIdentifier: String?,
                              withReply reply: @escaping (Int32, String?) -> Void)
+    func startRestrictedAntigravity(agentID: String, executablePath: String, conversationID: String?, modelIdentifier: String?,
+                                    withReply reply: @escaping (Int32, String?) -> Void)
     func start(
         harnessIdentifier: String,
         agentID: String,
@@ -79,6 +81,7 @@ public enum AgentHostIdentity {
     func inspectGrok(withReply reply: @escaping (Data?, String?) -> Void)
     func inspectOpenCode(withReply reply: @escaping (Data?, String?) -> Void)
     func inspectMuse(withReply reply: @escaping (Data?, String?) -> Void)
+    func inspectAntigravity(withReply reply: @escaping (Data?, String?) -> Void)
     func inspectHarnessVersion(harnessIdentifier: String, executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
     /// The app names a download it staged in Noodle's storage. The host derives
     /// the folder, checks the vendor's signature, and replies with the executable.

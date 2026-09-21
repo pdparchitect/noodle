@@ -53,6 +53,11 @@ struct AgentRuntimeLaunch {
                 extendedAccess: extendedAccess, appsEnabled: appsEnabled, recoverInterruptedWork: recoverInterruptedWork,
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
                 onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) }, onActivity: onActivity)
+        case .antigravity:
+            return AntigravityAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
+                extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
+                onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
+                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) }, onActivity: onActivity)
         case .claudeCode:
             return ClaudeAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
                 extendedAccess: extendedAccess, appsEnabled: appsEnabled, recoverInterruptedWork: recoverInterruptedWork,

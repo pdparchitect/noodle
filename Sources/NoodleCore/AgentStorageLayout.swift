@@ -26,6 +26,7 @@ public struct AgentStorageLayout: Sendable {
         case .grokBuild: prefix = "grok"
         case .muse: prefix = "muse"
         case .openCode: prefix = "opencode"
+        case .antigravity: prefix = "antigravity"
         }
         return runtime.appendingPathComponent("\(prefix)-runtime\(extendedAccess ? "-extended" : "").json")
     }

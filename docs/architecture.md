@@ -34,6 +34,7 @@ Drivers share a `start`, `stop`, and `notify` interface:
 | --- | --- |
 | Codex | App Server |
 | Claude Code | stream-json |
+| Antigravity | Antigravity's own stream-json |
 | FX, Grok Build, OpenCode v2 | ACP |
 | Muse Code | MSP |
 | Apple Intelligence | ACP through the bundled `NoodleAppleAgent` helper |
@@ -66,7 +67,7 @@ the backstory for every wake, including chat turns without workspace tools.
 Backstory lives in `agent.json`. Noodle never recovers it from generated Markdown.
 
 The signed Agent Host applies a dedicated filesystem sandbox before starting
-restricted Codex, FX, Grok Build, Muse Code, OpenCode, or Apple. Each can read only its own
+restricted Codex, FX, Grok Build, Muse Code, OpenCode, Antigravity, or Apple. Each can read only its own
 bot package alongside required system/application files, and write its workspace;
 parent configuration and runtime state stay read-only. Folders shared in Edit Bot
 are read from the bot's `agent.json` by Agent Host and added to that profile. Cloud harness homes and
@@ -146,7 +147,7 @@ regular files from the caller's workspace, without following symlinks.
 ### Harness storage and sign-in
 
 Cloud harnesses have a private home at `workspace/.noodle/home`. Codex, Claude, FX,
-Grok, Muse, and OpenCode store their own configuration, sessions, and caches
+Grok, Muse, OpenCode, and Antigravity store their own configuration, sessions, and caches
 there; Muse's data, state, and runtime directories remain under
 `workspace/.noodle/muse`. Agent Host seeds only login material from the existing
 provider sign-in. It does not copy standalone conversations, global skills,
@@ -164,7 +165,7 @@ vendor's own sign-in address. A profile's login is its files alone: the host
 never reads a Keychain item on a profile's behalf. A restricted bot's sandbox
 cannot read the profiles folder, and shared folders cannot overlap it.
 
-For Claude, FX, and Muse Keychain-backed sign-ins, the host requests only the
+For Claude, FX, Muse, and Antigravity Keychain-backed sign-ins, the host requests only the
 exact provider credential item, without prompting. The harness receives a private
 file credential store and has no access to the login Keychain or shared account
 folder. If macOS denies that item, startup fails with a Keychain-access error.
@@ -201,6 +202,15 @@ private credentials are preserved until the source login changes, which replaces
 the private credential rows without touching sessions. Unsupported credential
 schemas fail closed. Global executable configuration and MCP credentials are not
 imported.
+
+Antigravity runs as one stream-json process per conversation and saves the
+conversation identifier the CLI reports, which is also what it resumes. Its
+language server listens on `127.0.0.1`; as for OpenCode, the listener permission
+applies only to the verified executable. Headless Antigravity denies every tool
+it would otherwise ask about, so it is started with approvals off, and its own
+updater is disabled for a restricted bot and for a copy Noodle installed. A
+profile is a separate `HOME`, which also puts the user's Keychain out of reach,
+so the CLI keeps that login in a file inside the profile.
 
 Muse starts its verified native binary directly, without the self-updating shell
 launcher. Agent Host applies the outer sandbox before running `serve`; Muse's
@@ -268,7 +278,7 @@ both with its fixed environment, returns only the sign-in state or the model
 catalogue, and forwards a device code only for OpenAI's own sign-in page. Grok
 Build and Muse Code sign in to the system account the same way a profile does:
 the host runs the harness's own device-code login and forwards only a code for
-xAI's or Meta's own page. The host's Grok Build, Muse Code and OpenCode
+xAI's or Meta's own page. The host's Grok Build, Muse Code, OpenCode and Antigravity
 inspections look at the vendor's location first and at Noodle's verified copy
 only when that is absent.
 

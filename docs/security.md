@@ -3,7 +3,7 @@
 ## Choose a bot's access
 
 Every harness starts restricted: Codex, Claude Code, FX, Grok Build, Muse Code,
-OpenCode v2, and Apple Intelligence. Unrestricted access is optional and set for
+OpenCode v2, Antigravity, and Apple Intelligence. Unrestricted access is optional and set for
 each bot.
 
 Change a bot's access in **Settings → Sandbox**. Click the **Unrestricted**
@@ -62,7 +62,7 @@ other conversations, global skills, hooks, and MCP configuration stay behind.
   shared, and the provider may ask you to sign in again when it rotates a login.
 - A backup or copy of a bot's folder includes its sign-in. Treat it as a
   credential.
-- A Codex, Grok Build, or Muse Code bot can use a
+- A Codex, Grok Build, Muse Code, or Antigravity bot can use a
   [profile](harness-setup.md#profiles) in place of the system sign-in. A
   restricted bot cannot read other profiles.
 - Where a harness keeps its sign-in in the Keychain, Noodle reads that one item

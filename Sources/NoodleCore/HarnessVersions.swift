@@ -82,11 +82,13 @@ public enum HarnessVersionPolicy {
         case .grokBuild: return ["stdio", "--no-leader"]
         case .muse: return ["serve", "schema"]
         case .openCode: return ["acp", "api", "auth", "--standalone"]
+        case .antigravity: return ["--input-format", "--output-format", "--conversation", "--dangerously-skip-permissions"]
         }
     }
 
     public static func hasUsage(provider: HarnessProvider, help: String) -> Bool {
         help.lowercased().contains("usage:") || (provider == .openCode && help.contains("USAGE"))
+            || (provider == .antigravity && help.contains("Usage of "))
     }
 
     public static func compatibilityIssue(provider: HarnessProvider, help: String) -> String? {
@@ -129,6 +131,8 @@ public enum HarnessVersionPolicy {
         case .grokBuild: address = "https://x.ai/cli/stable"
         case .muse: address = "https://api.meta.ai/muse-code/channels/muse-stable"
         case .openCode: address = "https://opencode.ai/update/api/latest/cli/npm"
+        // The manifest Google's installer and the CLI's own updater read.
+        case .antigravity: address = "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/darwin_arm64.json"
         }
         return URL(string: address)
     }
@@ -151,6 +155,10 @@ public enum HarnessVersionPolicy {
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   object["channel"] as? String == "muse-stable", object["state"] as? String == "public",
                   let version = object["version"] as? String, MuseExecutableTrust.validVersion(version) else { return nil }
+            value = version
+        } else if provider == .antigravity {
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let version = object["version"] as? String else { return nil }
             value = version
         } else { value = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) }
         let normalized = value.hasPrefix("v") ? String(value.dropFirst()) : value
@@ -184,6 +192,9 @@ public enum HarnessVersionPolicy {
         case .muse:
             command = "curl -fsSL https://dev.meta.ai/install.sh | bash"
             link = "https://dev.meta.ai/"
+        case .antigravity:
+            command = "agy update"
+            link = "https://antigravity.google/docs/cli/install"
         }
         return .init(command: command,
             instructions: "Run this command in Terminal, then choose Check Again. Updates follow the provider’s configured release channel; managed or pinned installs may intentionally remain on an older version. Existing bot processes keep their running version until restarted.",

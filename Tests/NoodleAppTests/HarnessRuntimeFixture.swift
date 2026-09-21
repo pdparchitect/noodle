@@ -83,6 +83,14 @@ import XCTest
             makeConnection: { wire.replacement ?? wire }, sleep: { [clock] in try await clock.sleep($0) })
         processes.append(p); return p
     }
+    func antigravity(_ wire: HarnessWire, extended: Bool = true) -> AntigravityAgentProcess {
+        let p = AntigravityAgentProcess(agent: agent(.antigravity), executableURL: root, workspaceURL: workspace,
+            extendedAccess: extended, recoverInterruptedWork: false,
+            onSnapshot: { _ in }, onHeartbeat: { [weak self] in self?.heartbeats += 1 },
+            onUnexpectedTermination: { [weak self] _, detail, recovery in self?.failures.append((detail, recovery)) },
+            makeConnection: { wire.replacement ?? wire }, sleep: { [clock] in try await clock.sleep($0) })
+        processes.append(p); return p
+    }
     private func agent(_ provider: HarnessProvider) -> AgentRecord {
         .init(displayName: "Fixture bot", harnessIdentifier: provider.rawValue, modelIdentifier: provider == .openCode ? "test/fixture-model" : "fixture-model", reasoningEffort: "high")
     }

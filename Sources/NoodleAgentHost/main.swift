@@ -32,6 +32,7 @@ private enum HostPaths {
         case .grokBuild: return try GrokExecutableTrust.executable(at: path, home: home)
         case .muse: return try MuseExecutableTrust.executable(at: path, home: home)
         case .openCode: return try OpenCodeExecutableTrust.executable(at: path, home: home)
+        case .antigravity: return try AntigravityExecutableTrust.executable(at: path, home: home)
         }
     }
 
@@ -147,6 +148,14 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
             if let model { strings += ["--model", model] }
             if let effort { strings += ["--reasoning-effort", effort] }
             strings += ["stdio"]
+        case .antigravity:
+            guard effort == nil else { throw HostError("Unsupported Antigravity effort.") }
+            // Noodle updates the copy it installed; the CLI updating itself would replace it unverified.
+            if HostPaths.managedHarnesses.manages(HarnessInstallation(provider: provider, executablePath: CommandLine.arguments[3])) {
+                setenv("AGY_CLI_DISABLE_AUTO_UPDATE", "true", 1)
+            }
+            strings = [executable.path] + (try AntigravityProtocol.launchArguments(
+                conversationID: resumeSession ? sessionID : nil, model: model))
         case .claudeCode:
             // Noodle updates the copy it installed. Claude Code updating itself would
             // install a second one into the user's home and retire this one.
@@ -188,7 +197,7 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
                 profile = RestrictedAgentSandbox.profile(workspace: workspace, repository: repository,
                     codexHome: codexHome, executableDirectory: executable.deletingLastPathComponent().deletingLastPathComponent(),
                     application: HostPaths.application, temporary: temporary, folders: folders)
-            case .claudeCode, .fx, .grokBuild, .muse, .openCode:
+            case .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity:
                 profile = try RestrictedAgentSandbox.profile(provider: provider, workspace: workspace, repository: repository,
                     home: HostPaths.home, executable: executable, application: HostPaths.application, temporary: temporary,
                     folders: folders)
@@ -196,7 +205,8 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
             setenv("TMPDIR", temporary.path, 1)
             setenv("TMPPREFIX", temporary.appendingPathComponent("zsh").path, 1)
             setenv("CODEX_HOME", codexHome.path, 1)
-            if provider == .claudeCode || provider == .fx || provider == .grokBuild || provider == .muse || provider == .openCode {
+            if provider == .claudeCode || provider == .fx || provider == .grokBuild || provider == .muse || provider == .openCode
+                || provider == .antigravity {
                 for (key, value) in try RestrictedAgentSandbox.environment(provider: provider, home: HostPaths.home, workspace: workspace) {
                     setenv(key, value, 1)
                 }
@@ -306,6 +316,13 @@ private final class HostSession: NSObject, AgentHostService {
         startRuntime(harnessIdentifier: HarnessProvider.muse.rawValue, agentID: agentID, executablePath: executablePath,
                      sessionID: nil, resumeSession: false, modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier,
                      restricted: true, reply: reply)
+    }
+
+    func startRestrictedAntigravity(agentID: String, executablePath: String, conversationID: String?, modelIdentifier: String?,
+                                    withReply reply: @escaping (Int32, String?) -> Void) {
+        startRuntime(harnessIdentifier: HarnessProvider.antigravity.rawValue, agentID: agentID, executablePath: executablePath,
+                     sessionID: conversationID, resumeSession: conversationID != nil, modelIdentifier: modelIdentifier,
+                     effortIdentifier: nil, restricted: true, reply: reply)
     }
 
     private func startRuntime(harnessIdentifier: String, agentID: String, executablePath: String,
@@ -481,6 +498,16 @@ private final class HostSession: NSObject, AgentHostService {
         }
     }
 
+    func inspectAntigravity(withReply reply: @escaping (Data?, String?) -> Void) {
+        queue.async {
+            do {
+                let result = try AntigravityInspection.inspect(home: HostPaths.home, environment: self.accountEnvironment,
+                                                               managed: HostPaths.managedExecutable(.antigravity))
+                reply(try JSONEncoder().encode(result), nil)
+            } catch { reply(nil, error.localizedDescription) }
+        }
+    }
+
     func checkAuthentication(
         harnessIdentifier: String,
         executablePath: String,
@@ -614,7 +641,9 @@ private final class HostSession: NSObject, AgentHostService {
         let profiles = HostPaths.profiles
         let profile = try profiles.validated(id)
         let provider = profile.provider
-        guard HarnessProfileLogin.arguments(provider) != nil else { throw HostError("This harness does not support this sign-in flow.") }
+        guard HarnessProfileLogin.arguments(provider) != nil || provider == .antigravity else {
+            throw HostError("This harness does not support this sign-in flow.")
+        }
         let executable = try HostPaths.executable(executablePath, provider: provider)
         let environment = accountEnvironment.merging(profiles.environment(profile)) { _, profile in profile }
         return ProfileAccount(provider: provider, executable: executable, environment: environment) {
@@ -627,6 +656,8 @@ private final class HostSession: NSObject, AgentHostService {
                     throw HostError("This Muse Code version saved the sign-in to the shared Keychain item, so it cannot be kept as a separate profile.")
                 }
                 return MuseAuthentication.inspect(home: HostPaths.home, environment: environment) == .authenticated
+            case .antigravity:
+                return try AntigravityInspection.authenticated(executable: executable, environment: environment)
             default: throw HostError("This harness does not support this sign-in flow.")
             }
         }

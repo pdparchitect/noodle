@@ -7,6 +7,7 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
     case grokBuild = "grok-build"
     case muse
     case openCode = "opencode"
+    case antigravity
     case apple
 
     public var id: String { rawValue }
@@ -18,12 +19,12 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
     /// Whether the Agent Host can apply a separate restricted runtime policy.
     public var supportsRestrictedAccess: Bool {
         switch self {
-        case .apple, .codex, .claudeCode, .fx, .grokBuild, .muse, .openCode: return true
+        case .apple, .codex, .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity: return true
         }
     }
 
     /// Harnesses whose whole login lives in one relocatable configuration home.
-    public var supportsProfiles: Bool { self == .codex || self == .grokBuild || self == .muse }
+    public var supportsProfiles: Bool { self == .codex || self == .grokBuild || self == .muse || self == .antigravity }
 
     public var displayName: String {
         switch self {
@@ -34,6 +35,7 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
         case .grokBuild: return "Grok Build"
         case .muse: return "Muse Code"
         case .openCode: return "OpenCode"
+        case .antigravity: return "Antigravity"
         }
     }
 
@@ -145,6 +147,7 @@ public struct HarnessDiscovery: Sendable {
     private let standaloneGrokURL: URL
     private let standaloneOpenCodeURL: URL
     private let standaloneMuseURL: URL
+    private let standaloneAntigravityURL: URL
     private let managedHarnesses: ManagedHarnessStore?
     #if NOODLE_DEV_HOOKS
     private let simulateNoHarnesses: Bool
@@ -171,6 +174,7 @@ public struct HarnessDiscovery: Sendable {
         self.standaloneGrokURL = homeDirectory.appendingPathComponent(".grok/bin/grok")
         self.standaloneOpenCodeURL = homeDirectory.appendingPathComponent(".opencode/bin/opencode")
         self.standaloneMuseURL = homeDirectory.appendingPathComponent(".local/bin/muse")
+        self.standaloneAntigravityURL = homeDirectory.appendingPathComponent(".local/bin/agy")
         self.executableSearchDirectories = executableSearchDirectories ?? [
             homeDirectory.appendingPathComponent(".local/bin", isDirectory: true),
             URL(fileURLWithPath: "/opt/homebrew/bin", isDirectory: true),
@@ -231,7 +235,7 @@ public struct HarnessDiscovery: Sendable {
                 applicationsDirectory.appendingPathComponent("ChatGPT.app/Contents/Resources/codex"),
                 applicationsDirectory.appendingPathComponent("Codex.app/Contents/Resources/codex")
             ]
-        case .claudeCode, .fx, .grokBuild, .muse, .openCode:
+        case .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity:
             return standaloneCandidates(for: provider)
         }
     }
@@ -250,6 +254,7 @@ public struct HarnessDiscovery: Sendable {
         case .grokBuild: return [standaloneGrokURL]
         case .muse: return [standaloneMuseURL]
         case .openCode: return [standaloneOpenCodeURL]
+        case .antigravity: return [standaloneAntigravityURL]
         }
     }
 

@@ -107,6 +107,7 @@ final class HarnessProfilesController {
         switch profile.provider {
         case .codex: CodexAccountProvider(codexHome: store.accountHome(profile), profile: profile.id)
         case .grokBuild, .muse: HostProfileSetupProvider(profile: profile)
+        case .antigravity: HostProfileSetupProvider(profile: profile, loginHome: store.loginHome(profile))
         default: nil
         }
     }
@@ -123,16 +124,22 @@ extension CodexAccountProvider: HarnessProfileAccount {}
 
 /// Grok Build and Muse Code sign in through the Agent Host, which resolves the
 /// profile's folder itself and runs the harness's own device-code login.
+/// Antigravity has no such login: the host checks the profile, and the user
+/// signs in from Terminal with the profile's home, given here as `loginHome`.
 @MainActor private final class HostProfileSetupProvider: HarnessProfileAccount {
     private let profile: HarnessProfile
-    init(profile: HarnessProfile) { self.profile = profile }
+    private let loginHome: URL?
+    init(profile: HarnessProfile, loginHome: URL? = nil) { self.profile = profile; self.loginHome = loginHome }
 
     func status(for installation: HarnessInstallation) async throws -> HarnessAuthenticationStatus {
         try await run(installation, signIn: false, onChallenge: nil)
     }
     func signIn(for installation: HarnessInstallation,
                 onChallenge: @escaping @MainActor (HarnessSignInChallenge) -> Void) async throws -> HarnessAuthenticationStatus {
-        try await run(installation, signIn: true, onChallenge: onChallenge)
+        if let loginHome {
+            throw HarnessSetupError("Run \(AntigravitySetupProvider.command(for: installation, home: loginHome)) in Terminal, complete sign-in, then choose Check Again here.")
+        }
+        return try await run(installation, signIn: true, onChallenge: onChallenge)
     }
     private func run(_ installation: HarnessInstallation, signIn: Bool,
                      onChallenge: (@MainActor (HarnessSignInChallenge) -> Void)?) async throws -> HarnessAuthenticationStatus {

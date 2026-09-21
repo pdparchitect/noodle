@@ -104,6 +104,9 @@ public struct HarnessProfileStore: Sendable {
             // Muse otherwise keeps every login in one Keychain item per user.
             ["XDG_CONFIG_HOME": loginHome(profile).appendingPathComponent(".config", isDirectory: true).path,
              "TBH_CREDENTIAL_BACKEND": "file"]
+        // Antigravity has no setting for its folder. A different home also puts the
+        // user's Keychain out of reach, so the CLI keeps this login in a file here.
+        case .antigravity: ["HOME": loginHome(profile).path]
         default: [:]
         }
     }
@@ -148,6 +151,7 @@ public struct HarnessProfileStore: Sendable {
         switch provider {
         case .grokBuild: ".grok"
         case .muse: ".config/muse"
+        case .antigravity: ".gemini/antigravity-cli"
         default: ".codex"
         }
     }

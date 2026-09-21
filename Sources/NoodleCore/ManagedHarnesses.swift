@@ -213,6 +213,9 @@ public struct HarnessDistribution: Sendable {
     let expectation: @Sendable (Release, Data) -> Expectation?
     /// The vendor's pinned signature, for the executable and anything it launches from its package.
     let verify: @Sendable (_ package: URL, _ executable: URL) throws -> Void
+    /// For a vendor whose release pointer names the download itself instead of a
+    /// version to build the address from. Nil from it means no usable release.
+    var artifact: (@Sendable (Data) -> String?)? = nil
 
     func allows(_ url: URL) -> Bool {
         guard url.scheme == "https", url.user == nil, url.password == nil,
@@ -223,7 +226,7 @@ public struct HarnessDistribution: Sendable {
     func release(from data: Data) -> Release? {
         guard let text = version(data), let version = HarnessVersion(text)?.text else { return nil }
         let addresses = addresses(version)
-        guard let artifact = URL(string: addresses.artifact) else { return nil }
+        guard let artifact = URL(string: artifact.map { $0(data) ?? "" } ?? addresses.artifact) else { return nil }
         return Release(version: version, artifact: artifact, checksums: addresses.checksums.flatMap(URL.init(string:)))
     }
 
@@ -258,6 +261,7 @@ extension HarnessDistribution {
         case .grokBuild: self = .grokBuild
         case .muse: self = .muse
         case .openCode: self = .openCode
+        case .antigravity: self = .antigravity
         case .apple: return nil
         }
     }

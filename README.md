@@ -39,6 +39,7 @@ Agents run on the [harness](docs/harness-setup.md) you choose, using your existi
   <img alt="Grok Build" src="https://img.shields.io/badge/Grok%20Build-e11d48?style=flat-square">
   <img alt="Muse Code" src="https://img.shields.io/badge/Muse%20Code-0866ff?style=flat-square">
   <img alt="OpenCode v2" src="https://img.shields.io/badge/OpenCode%20v2-eab308?style=flat-square">
+  <img alt="Antigravity" src="https://img.shields.io/badge/Antigravity-4285f4?style=flat-square">
   <img alt="Apple Intelligence, on device" src="https://img.shields.io/badge/Apple%20Intelligence-on%20device-a855f7?style=flat-square">
 </p>
 

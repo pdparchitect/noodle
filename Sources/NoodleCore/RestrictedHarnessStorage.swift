@@ -21,6 +21,7 @@ public enum RestrictedHarnessStorage {
         case .fx: accountPath = ".fx"
         case .grokBuild: accountPath = ".grok"
         case .muse: accountPath = ".config/muse"
+        case .antigravity: accountPath = ".gemini/antigravity-cli"
         default: throw HarnessSetupError("Unsupported restricted harness storage.")
         }
         let destination = try WorkspaceMailbox(workspace: workspace, path: ".noodle/home/" + accountPath, create: true)
@@ -91,6 +92,12 @@ public enum RestrictedHarnessStorage {
             meta["storage"] = "file"
             auth["providers"] = ["meta": meta]
             try seed(JSONSerialization.data(withJSONObject: auth, options: [.sortedKeys]), name: "auth.json")
+        case .antigravity:
+            // The CLI keeps its login in this Keychain item, or in this file when the
+            // Keychain is out of reach, as it is for a profile and inside the sandbox.
+            guard let data = try secret("gemini", "antigravity").flatMap(AntigravityProtocol.fileLogin)
+                    ?? sourceData("antigravity-oauth-token") else { throw missing(provider) }
+            try seed(data, name: "antigravity-oauth-token")
         default: break
         }
     }
@@ -105,10 +112,10 @@ public enum RestrictedHarnessStorage {
 
     static func readSecret(service: String, account: String,
                            tool: ([String]) throws -> (status: Int32, output: Data)) throws -> Data? {
-        // Claude Code writes its item with /usr/bin/security on every token
-        // refresh, which leaves only that tool trusted. A direct read would ask
-        // for the login password each time, even after Always Allow.
-        guard service == "Claude Code-credentials" else { return try readKeychainItem(service: service, account: account) }
+        // Claude Code and Antigravity write their items with /usr/bin/security,
+        // which leaves only that tool trusted. A direct read would ask for the
+        // login password each time, even after Always Allow.
+        guard service == "Claude Code-credentials" || service == "gemini" else { return try readKeychainItem(service: service, account: account) }
         let result = try tool(["find-generic-password", "-s", service, "-a", account, "-w"])
         if result.status == 44 { return nil }
         var text = String(decoding: result.output, as: UTF8.self)

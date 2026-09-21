@@ -13,6 +13,7 @@ swiftc -parse-as-library -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/ClaudeAgentProcess.swift" \
     "$project_root/Sources/Noodle/ACPAgentProcess.swift" \
     "$project_root/Sources/Noodle/MuseAgentProcess.swift" \
+    "$project_root/Sources/Noodle/AntigravityAgentProcess.swift" \
     "$project_root/Sources/Noodle/MessageDeliveryClassifier.swift" \
     "$project_root/Sources/Noodle/MessageDeliveryRouter.swift" \
     "$project_root/Tests/message-delivery.swift" \

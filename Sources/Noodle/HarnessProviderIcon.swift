@@ -28,6 +28,8 @@ struct HarnessProviderIcon: View {
             "MuseHarness"
         case .openCode:
             "OpenCodeHarness"
+        case .antigravity:
+            "AntigravityHarness"
         }
     }
 }

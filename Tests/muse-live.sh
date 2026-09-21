@@ -7,6 +7,7 @@ core_objects=("${(@f)$(python3 "$project_root/Tests/core-link-objects.py" "$bin_
 swiftc -parse-as-library -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/RuntimeShutdown.swift" \
     "$project_root/Sources/Noodle/MuseAgentProcess.swift" \
+    "$project_root/Sources/Noodle/AntigravityAgentProcess.swift" \
     "$project_root/Tests/muse-live.swift" \
     "${core_objects[@]}" \
     -o "$project_root/.build/MuseLiveChecks"

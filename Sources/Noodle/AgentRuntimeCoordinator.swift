@@ -31,13 +31,19 @@ struct HarnessHostInspection {
             capabilityError: result.executablePath == nil ? "Muse Code is not installed" : nil)
     }
 
-    static let providers: [HarnessProvider] = [.openCode, .grokBuild, .muse]
+    init(_ result: AntigravityInspectionResult) {
+        self.init(executablePath: result.executablePath, models: result.models,
+            capabilityError: result.executablePath == nil ? "Antigravity is not installed" : (result.authenticated ? nil : "Run agy in Terminal to sign in, then check again."))
+    }
+
+    static let providers: [HarnessProvider] = [.openCode, .grokBuild, .muse, .antigravity]
 
     @MainActor static func load(_ provider: HarnessProvider) async throws -> HarnessHostInspection {
         switch provider {
         case .grokBuild: return .init(try await GrokHostProbe.load())
         case .openCode: return .init(try await OpenCodeHostProbe.load())
         case .muse: return .init(try await MuseHostProbe.load())
+        case .antigravity: return .init(try await AntigravityHostProbe.load())
         default: throw HarnessSetupError("\(provider.displayName) is not inspected by the Agent Host.")
         }
     }

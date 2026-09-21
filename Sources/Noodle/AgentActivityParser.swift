@@ -9,6 +9,7 @@ enum AgentActivityParser {
         case .codex: return items(message)
         case .muse: return muse(message)
         case .claudeCode: return claude(message)
+        case .antigravity: return antigravity(message)
         case .fx, .grokBuild, .apple, .openCode: return acp(message, provider: provider)
         }
     }
@@ -131,6 +132,31 @@ enum AgentActivityParser {
                 return "[\(entry["status"] as? String ?? "pending")] \(text)"
             }
             return textEvent("Plan", entries.joined(separator: "\n"), stream: "plan")
+        default: return []
+        }
+    }
+
+    /// Step updates carry text deltas and, for a tool, its name, input and outcome.
+    private static func antigravity(_ message: [String: Any]) -> [AgentActivityEvent] {
+        guard message["event"] as? String == "step_update", let step = message["step_update"] as? [String: Any],
+              let type = step["step_type"] as? String, let index = step["step_index"] as? Int else { return [] }
+        let stream = (step["conversation_id"] as? String ?? "") + ":\(index)"
+        switch type {
+        case "agent_response":
+            return textEvent("Output", step["text_delta"], stream: stream, appending: true)
+        case "tool":
+            let info = step["tool_info"] as? [String: Any] ?? [:]
+            let name = step["tool_name"] as? String ?? info["name"] as? String ?? "Tool"
+            switch step["state"] as? String {
+            case "ACTIVE":
+                return [.init(title: "\(name): started", detail: info["parameters"].map(render) ?? "", streamID: stream + ":started")]
+            case "ERROR":
+                let failure = (info["error"] as? [String: Any])?["message"] as? String ?? ""
+                return [.init(title: "\(name): failed", detail: failure, streamID: stream + ":failed")]
+            default:
+                return [.init(title: "\(name): completed", streamID: stream + ":completed")]
+                    + textEvent("Tool output", info["output"], stream: stream + ":output")
+            }
         default: return []
         }
     }
