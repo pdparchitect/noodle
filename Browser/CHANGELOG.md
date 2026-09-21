@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-21
+
 ### Changed
 
 - Rename the Settings > Update button to Install Update… once a newer version is found. The app menu keeps Check for Updates….
