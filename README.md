@@ -28,9 +28,19 @@
 </p>
 
 Give an agent a task, or bring several into a group to work toward a shared goal.
-Each agent keeps its own workspace and backstory. Noodle runs Codex, Claude Code,
-FX, Grok Build, Muse Code, or OpenCode v2 using your existing account. The experimental Apple
-Intelligence harness runs on device on supported Macs with macOS 26 or later.
+Each agent keeps its own workspace and backstory.
+
+Agents run on the [harness](docs/harness-setup.md) you choose, using your existing account:
+
+<p>
+  <img alt="Codex" src="https://img.shields.io/badge/Codex-10a37f?style=flat-square">
+  <img alt="Claude Code" src="https://img.shields.io/badge/Claude%20Code-d97757?style=flat-square">
+  <img alt="FX" src="https://img.shields.io/badge/FX-0a0a0a?style=flat-square">
+  <img alt="Grok Build" src="https://img.shields.io/badge/Grok%20Build-e11d48?style=flat-square">
+  <img alt="Muse Code" src="https://img.shields.io/badge/Muse%20Code-0866ff?style=flat-square">
+  <img alt="OpenCode v2" src="https://img.shields.io/badge/OpenCode%20v2-eab308?style=flat-square">
+  <img alt="Apple Intelligence, on device, experimental" src="https://img.shields.io/badge/Apple%20Intelligence-on%20device%20%C2%B7%20experimental-a855f7?style=flat-square">
+</p>
 
 ## Download
 
@@ -51,7 +61,7 @@ Noodle Computer, Noodle Applet, and Noodle Browser are optional companions and a
 2. Create a bot, choose its harness, and describe its role in the backstory.
 3. Give it a task and the files or context it needs. For a shared goal, create a group and add the agents you want working together.
 
-All harnesses, including Claude Code, start with restricted access. Optional
+All harnesses start with restricted access. Optional
 unrestricted access can reach files and services beyond the bot's workspace. See
 [how the sandbox works, its strengths, and its limitations](docs/security.md).
 
