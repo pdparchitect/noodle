@@ -104,6 +104,25 @@ final class ComputerTests: XCTestCase {
         XCTAssertNoThrow(try Computer(name: "My Linux", kind: .linux).validate())
     }
 
+    func testDescriptionsAreTrimmedBoundedAndPersist() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = try ComputerLibrary(root: root)
+        var computer = Computer(name: "Build box", kind: .linux)
+        computer.description = "  Release builds only.\n"
+        try FileManager.default.createDirectory(at: library.stagingDirectory(for: computer.id), withIntermediateDirectories: true)
+        XCTAssertEqual(try library.commit(computer).description, "Release builds only.")
+        computer.description = String(repeating: "a", count: Computer.maximumDescriptionLength + 1)
+        XCTAssertThrowsError(try library.save(computer))
+        XCTAssertEqual(try ComputerLibrary(root: root).load().first?.description, "Release builds only.")
+        computer.description = " \n "
+        XCTAssertNil(try library.save(computer).description)
+        // Records written before descriptions existed decode without one.
+        let data = try Data(contentsOf: library.directory(for: computer.id).appendingPathComponent("computer.json"))
+        XCTAssertNil((try JSONSerialization.jsonObject(with: data) as? [String: Any])?["description"])
+        XCTAssertNil(try JSONDecoder().decode(Computer.self, from: data).description)
+    }
+
     func testResourceValidation() {
         XCTAssertThrowsError(try Computer(name: "Mac", kind: .macOS, cpuCount: 1).validate())
         XCTAssertThrowsError(try Computer(name: "Mac", kind: .macOS, memoryGiB: 2).validate())

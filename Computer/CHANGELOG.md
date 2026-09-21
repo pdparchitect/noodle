@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add an optional description of up to 500 characters to each computer in its editor. Assigned bots see it alongside the name when choosing a computer, and preview cards leave it out.
+
 ## [0.12.0] - 2026-09-21
 
 ### Changed

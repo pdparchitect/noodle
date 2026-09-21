@@ -86,6 +86,21 @@ final class ComputerToolProviderTests: XCTestCase {
         XCTAssertEqual(tools.first { $0.name == "present" }?.conversationParameter, "conversation")
     }
 
+    func testListCarriesTheDescriptionAndPresentedCardsDoNot() async throws {
+        let conversation = UUID()
+        transport.respond = { [mine, terminal] request, _ in
+            if request.operation == .list { return ComputerResponse(computers: [RemoteComputer(id: mine, name: "Build box", description: "Release builds only.", kind: "Shell", state: "Running", symbol: "terminal", hasWebDisplay: false)]) }
+            var response = ComputerResponse(terminalID: terminal, data: Data("ok".utf8)); response.view = "terminal"; return response
+        }
+        let listed = try await call("list", [:])
+        XCTAssertTrue(String(describing: listed["structuredContent"]).contains("Release builds only."))
+        _ = try await call("present", ["computer": mine.uuidString, "terminal": terminal.uuidString, "conversation": conversation.uuidString], conversations: [conversation])
+        let post = try XCTUnwrap(posts.values.first)
+        XCTAssertFalse(String(decoding: post.post.data, as: UTF8.self).contains("Release builds only."), "every conversation member can read a card")
+        XCTAssertTrue(provider.manifest.instructions.contains("choose by name, kind and description"))
+        XCTAssertTrue(ComputerToolGuidance.tool("list").contains("description"))
+    }
+
     func testTheSkillCarriesTheComputerGuidanceFromThisModule() {
         let instructions = provider.manifest.instructions
         XCTAssertTrue(instructions.contains("present --computer COMPUTER_ID --terminal"))

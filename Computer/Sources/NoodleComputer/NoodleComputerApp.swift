@@ -761,6 +761,7 @@ struct EditComputerView: View {
   @ObservedObject var session: ComputerSession
   @Environment(\.dismiss) private var dismiss
   @State private var name = ""
+  @State private var description = ""
   @State private var deleting = false
   @State private var forceStopping = false
   @State private var updating = false
@@ -775,14 +776,15 @@ struct EditComputerView: View {
         Text("Edit Computer").font(.headline).foregroundStyle(.primary)
         Spacer()
         Button("Save") {
-          store.rename(session, name: name, appearance: appearance)
+          store.rename(session, name: name, description: description, appearance: appearance)
           dismiss()
         }
         .keyboardShortcut(.defaultAction)
         .foregroundStyle(.blue)
         .disabled(
           name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || name.count > 100 || name.contains(where: \.isNewline))
+            || name.count > 100 || name.contains(where: \.isNewline)
+            || description.trimmingCharacters(in: .whitespacesAndNewlines).count > Computer.maximumDescriptionLength)
       }.buttonStyle(.plain).padding(20)
       Divider()
       VStack(alignment: .leading, spacing: 18) {
@@ -790,6 +792,8 @@ struct EditComputerView: View {
           ComputerIconButton(appearance: $appearance, symbol: session.computer.displaySymbol)
           TextField("Computer name", text: $name).textFieldStyle(.roundedBorder).lineLimit(1)
         }
+        TextField("Description", text: $description, axis: .vertical).textFieldStyle(.roundedBorder).lineLimit(2...3)
+          .help("Tells assigned bots what this computer is for")
         VStack(alignment: .leading, spacing: 12) {
           LabeledContent("Computer", value: session.computer.displayType)
           Divider()
@@ -832,7 +836,10 @@ struct EditComputerView: View {
     }
     .frame(width: 520).noodleSheetSizing()
     .computerImageUpdateConfirmation(store: store, session: session, isPresented: $updating)
-    .onAppear { name = session.computer.name; appearance = session.computer.appearance ?? .init() }
+    .onAppear {
+      name = session.computer.name; description = session.computer.description ?? ""
+      appearance = session.computer.appearance ?? .init()
+    }
     .alert(session.computer.kind == .localMac ? "Delete \(session.computer.name) and its account?" : "Move \(session.computer.name) to Trash?", isPresented: $deleting) {
       Button("Cancel", role: .cancel) {}
       Button(session.computer.kind == .localMac ? "Delete Account" : "Move to Trash", role: .destructive) {

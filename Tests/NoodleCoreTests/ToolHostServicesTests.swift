@@ -65,6 +65,17 @@ final class ToolHostServicesTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(ComputerReference.self, from: Data(contentsOf: repository.attachmentFileURL(attachment))), attachment.computer?.reference)
         XCTAssertThrowsError(try computers.post(try card(unassigned), agent.id, conversation.id))
         XCTAssertThrowsError(try host.post(try card(assigned), agent.id, conversation.id), "assigned as a browser is not assigned as a computer")
+
+        // A tool that sends the computer's private description anyway never gets it into the conversation.
+        var fields = try XCTUnwrap(JSONSerialization.jsonObject(with: try card(assigned).data) as? [String: Any])
+        var described = try XCTUnwrap(fields["computer"] as? [String: Any])
+        described["description"] = "Release builds only."
+        fields["computer"] = described
+        let leaked = try computers.post(try ToolPost(["attachment": ["filename": "Build box.noodlecomputer", "mediaType": ComputerCard.mediaType,
+            "data": try JSONSerialization.data(withJSONObject: fields).base64EncodedString()]]), agent.id, conversation.id)
+        let stored = try XCTUnwrap(repository.loadAttachments(conversationID: conversation.id).first { $0.id == leaked })
+        XCTAssertNil(stored.computer?.computer.description)
+        XCTAssertFalse(String(decoding: try Data(contentsOf: repository.attachmentFileURL(stored)), as: UTF8.self).contains("Release builds only."))
     }
 
     func testOrdinaryFilesPostWithoutACardAndReservedNoodleTypesAreRefused() throws {

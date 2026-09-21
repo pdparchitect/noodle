@@ -8,16 +8,19 @@ public struct ComputerBridgeError: LocalizedError, Sendable {
 }
 
 public struct RemoteComputer: Codable, Hashable, Identifiable, Sendable {
+    public static let maximumDescriptionLength = 500
     public var id: UUID
     public var name: String
+    /// What the user keeps this computer for; tells an agent which assigned computer fits a task.
+    public var description: String?
     public var kind: String
     public var state: String
     public var symbol: String
     public var colour: Int
     public var icon: Data?
     public var hasWebDisplay: Bool?
-    public init(id: UUID, name: String, kind: String, state: String, symbol: String, colour: Int = 0, icon: Data? = nil, hasWebDisplay: Bool? = nil) {
-        self.id = id; self.name = name; self.kind = kind; self.state = state
+    public init(id: UUID, name: String, description: String? = nil, kind: String, state: String, symbol: String, colour: Int = 0, icon: Data? = nil, hasWebDisplay: Bool? = nil) {
+        self.id = id; self.name = name; self.description = description; self.kind = kind; self.state = state
         self.symbol = symbol; self.colour = colour; self.icon = icon
         self.hasWebDisplay = hasWebDisplay
     }
@@ -166,6 +169,8 @@ public struct ComputerReference: Codable, Hashable, Sendable {
     public init(computer: RemoteComputer, terminalID: UUID? = nil, capturedAt: Date = Date(),
                 terminalPreview: String, view: String? = nil, previewImage: Data? = nil) {
         self.computer = computer; self.terminalID = terminalID; self.capturedAt = capturedAt
+        // Every conversation member can read a card; the description is for assigned agents.
+        self.computer.description = nil
         self.terminalPreview = String(terminalPreview.suffix(2000)); self.view = view; self.previewImage = previewImage
     }
 }
@@ -189,6 +194,7 @@ public struct ComputerCard: Codable, Hashable, Sendable {
     }
     public init(computer: RemoteComputer, agentID: UUID, terminalID: UUID? = nil, terminalPreview: String, view: String? = nil, previewImage: Data? = nil) {
         self.computer = computer; self.agentID = agentID; self.terminalID = terminalID
+        self.computer.description = nil
         self.capturedAt = Date(); self.terminalPreview = String(terminalPreview.suffix(2000))
         self.view = view; self.previewImage = previewImage
     }

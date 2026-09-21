@@ -53,8 +53,12 @@ public struct Computer: Codable, Identifiable, Equatable, Sendable {
     }
     public var displayType: String { isCustomContainer ? "Custom Container" : template?.name ?? kind.title }
     public var displaySymbol: String { isCustomContainer ? "shippingbox" : template?.symbol ?? kind.symbol }
+    public static let maximumDescriptionLength = 500
     public var id: UUID
     public var name: String
+    /// What the user keeps this computer for; assigned bots see it. Optional, so records
+    /// written before descriptions existed decode without it.
+    public var description: String?
     public var kind: ComputerKind
     public var cpuCount: Int
     public var memoryGiB: Int
@@ -93,6 +97,9 @@ public struct Computer: Codable, Identifiable, Equatable, Sendable {
         try appearance?.validate()
         guard !name.isEmpty, name.count <= 100, !name.contains(where: \.isNewline) else {
             throw ComputerError("Use a single-line name between 1 and 100 characters.")
+        }
+        guard (description?.trimmingCharacters(in: .whitespacesAndNewlines).count ?? 0) <= Self.maximumDescriptionLength else {
+            throw ComputerError("Enter a computer description of at most \(Self.maximumDescriptionLength) characters.")
         }
         guard (1...32).contains(cpuCount), (1...128).contains(memoryGiB), (4...2048).contains(diskGiB) else {
             throw ComputerError("CPU, memory, or disk size is outside the supported range.")
@@ -177,6 +184,8 @@ public struct ComputerLibrary: Sendable {
 
     private static func write(_ computer: Computer, to directory: URL) throws -> Computer {
         var computer = computer
+        let description = computer.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        computer.description = description?.isEmpty == false ? description : nil
         var importedURL: URL?
         do {
             if let file = computer.appearance?.backgroundFile {

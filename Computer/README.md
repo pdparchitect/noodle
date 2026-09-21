@@ -82,8 +82,13 @@ Right-click to rename, duplicate, or permanently delete a file or empty folder.
 
 ## Customize and update
 
-Edit a computer to change its icon, background, and terminal colours. Backgrounds
-support images, animated HEIC, and muted looping video.
+Edit a computer to change its name, description, icon, background, and terminal
+colours. Backgrounds support images, animated HEIC, and muted looping video.
+
+The optional description (up to 500 characters) says what the computer is for,
+such as which project it builds. Assigned bots receive it with the name from
+`computer list` and use it to choose the right computer. It is left out of
+preview cards, which every conversation member can read.
 
 Choose **Update** from the computer's context menu or editor to fetch its latest
 image. The computer stops during the update and restarts afterward. Your files

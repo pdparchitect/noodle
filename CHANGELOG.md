@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Give each Noodle Computer an optional description of what it is for. Assigned bots receive it with the computer's name from `computer list` so they choose the right computer; the bot editor's computer picker shows and searches it. Preview cards never include it.
 - Add Google Antigravity as a harness. Noodle finds `agy` at `~/.local/bin/agy` or installs it from Google, checking the published SHA-512 and Google's signature, lists its models, and runs restricted and unrestricted bots that resume their conversation. Sign in by running `agy` in Terminal. Antigravity supports profiles, each a separate home with its own sign-in. An urgent message waits for the current turn to end, because Antigravity cannot be interrupted.
 - Show whether a bot is working in separate and floating conversation windows: the picture in the window title now carries the same status dot as the sidebar (blue working, green ready, red failed, grey otherwise). Hover it for details.
 - Add a Show in Main Window button to the title bar of separate and floating conversation windows. It closes the window, ends floating, and selects the conversation in the main window, reopening the main window if it was closed.

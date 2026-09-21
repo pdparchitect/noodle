@@ -52,7 +52,7 @@ import WebKit
             var response = ComputerResponse(computers: store.sessions.filter { $0.computer.kind == .container || $0.computer.kind == .localMac }.map { session in
                 let appearance = session.computer.appearance
                 let icon = appearance?.iconImage
-                return RemoteComputer(id: session.id, name: session.computer.name, kind: session.computer.displayType,
+                return RemoteComputer(id: session.id, name: session.computer.name, description: session.computer.description, kind: session.computer.displayType,
                     state: session.phase.label, symbol: appearance?.iconSymbol ?? session.computer.displaySymbol,
                     colour: appearance?.iconColour ?? 0, icon: (icon?.count ?? 0) <= 65_536 ? icon : nil,
                     hasWebDisplay: session.desktop != nil || session.computer.kind == .localMac)

@@ -226,7 +226,7 @@ struct ComputerAssignmentPicker: View {
         CompanionAssignmentPicker(title: "Computers", noun: "computer", symbol: "desktopcomputer",
             items: controller.registry.computers.map {
                 CompanionAssignmentItem(id: $0.id, name: $0.name, state: controller.available ? $0.state : "Unavailable",
-                    symbol: $0.symbol, colour: $0.colour, icon: $0.icon)
+                    symbol: $0.symbol, colour: $0.colour, icon: $0.icon, detail: $0.description)
             }, selectedIDs: $selectedIDs, createPrompt: createPrompt, openLibraryButton: openLibraryButton,
             notice: updateNotice, failure: controller.failure)
         .task { await controller.refresh(launchIfNeeded: true) }

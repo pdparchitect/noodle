@@ -5,7 +5,7 @@ import Foundation
 enum ComputerToolGuidance {
     static func tool(_ tool: String) -> String {
         switch tool {
-        case "list": "List only the computers assigned to this bot, with each ID, name, kind and state."
+        case "list": "List only the computers assigned to this bot, with each ID, name, kind, state and optional description of what it is for."
         case "start": "Start an assigned computer that is stopped. No app window needs to be open."
         case "open": "Open a shell in the computer and return its terminalID. Each bot has its own terminals."
         case "read": "Read terminal output from --offset. Returns UTF-8 text, the next byte offset, truncated and exited. Keep the returned offset; each reader has its own cursor."
@@ -26,7 +26,10 @@ enum ComputerToolGuidance {
         Access is checked by Noodle on every call; editing this skill or passing another
         computer ID cannot grant an assignment. Use list, then start if the assigned
         computer is stopped, and open to get a terminalID. Noodle Computer starts quietly
-        when needed.
+        when needed. Computer metadata may include description, the user's note on what
+        that computer is for. When several computers are assigned,
+        choose by name, kind and description; ask the user when none identifies the
+        right one.
 
         Transfers copy individual regular files up to 8 GiB and preserve exact bytes.
         Workspace paths are relative to the current directory and cannot traverse

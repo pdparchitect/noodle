@@ -669,9 +669,10 @@ enum ComputerDisplayMode: String {
         } catch { self.error = error.localizedDescription }
     }
 
-    func rename(_ session: ComputerSession, name: String, appearance: ComputerAppearance? = nil) {
+    func rename(_ session: ComputerSession, name: String, description: String? = nil, appearance: ComputerAppearance? = nil) {
         var computer = session.computer
         computer.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let description { computer.description = description }
         if let appearance { computer.appearance = appearance }
         do {
             session.computer = try library.save(computer)

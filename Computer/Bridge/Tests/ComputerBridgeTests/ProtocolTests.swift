@@ -20,6 +20,17 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(ComputerReference.self, from: data), card.reference)
         XCTAssertEqual(try JSONDecoder().decode(ComputerReference.self, from: JSONEncoder().encode(card)), card.reference)
     }
+    func testDescriptionsReachTheCatalogueAndStayOutOfCards() throws {
+        let computer = RemoteComputer(id: UUID(), name: "Build box", description: "Release builds only.", kind: "Shell", state: "Running", symbol: "terminal")
+        XCTAssertEqual(try JSONDecoder().decode(RemoteComputer.self, from: JSONEncoder().encode(computer)).description, "Release builds only.")
+        let legacy = try JSONSerialization.data(withJSONObject: ["id": UUID().uuidString, "name": "Old", "kind": "Shell", "state": "Stopped", "symbol": "terminal", "colour": 0])
+        XCTAssertNil(try JSONDecoder().decode(RemoteComputer.self, from: legacy).description)
+        // Every conversation member can read a card; the description is for assigned agents.
+        XCTAssertNil(ComputerReference(computer: computer, terminalPreview: "").computer.description)
+        let card = ComputerCard(computer: computer, agentID: UUID(), terminalPreview: "")
+        XCTAssertNil(card.computer.description)
+        XCTAssertNil(card.reference.computer.description)
+    }
     func testTransferCapabilityIsOptionalForExistingOperations() throws {
         var legacy = ComputerCapabilities()
         legacy.features.remove("file-transfer-v1")
