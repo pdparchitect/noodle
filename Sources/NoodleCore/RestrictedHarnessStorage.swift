@@ -113,9 +113,12 @@ public enum RestrictedHarnessStorage {
     static func readSecret(service: String, account: String,
                            tool: ([String]) throws -> (status: Int32, output: Data)) throws -> Data? {
         // Claude Code and Antigravity write their items with /usr/bin/security,
-        // which leaves only that tool trusted. A direct read would ask for the
-        // login password each time, even after Always Allow.
-        guard service == "Claude Code-credentials" || service == "gemini" else { return try readKeychainItem(service: service, account: account) }
+        // which leaves only that tool trusted. FX recreates its items on token
+        // refresh, which drops Always Allow. A direct read would ask for the
+        // login password each time.
+        guard ["Claude Code-credentials", "gemini", "FX_OAUTH_SESSION_V1", "FX_AI_GATEWAY_API_KEY"].contains(service) else {
+            return try readKeychainItem(service: service, account: account)
+        }
         let result = try tool(["find-generic-password", "-s", service, "-a", account, "-w"])
         if result.status == 44 { return nil }
         var text = String(decoding: result.output, as: UTF8.self)

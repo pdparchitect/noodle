@@ -84,6 +84,20 @@ final class RestrictedHarnessStorageTests: XCTestCase {
         XCTAssertThrowsError(try read(0, ""))
     }
 
+    func testFXLoginIsReadThroughTheSecurityToolThatOwnsTheItem() throws {
+        // FX recreates its items on token refresh, which drops any Always Allow
+        // given to the host. The security tool stays trusted.
+        for service in ["FX_OAUTH_SESSION_V1", "FX_AI_GATEWAY_API_KEY"] {
+            var calls: [[String]] = []
+            let data = try RestrictedHarnessStorage.readSecret(service: service, account: "someone") { arguments in
+                calls.append(arguments)
+                return (0, Data("{\"session\":1}\n".utf8))
+            }
+            XCTAssertEqual(data, Data(#"{"session":1}"#.utf8))
+            XCTAssertEqual(calls, [["find-generic-password", "-s", service, "-a", "someone", "-w"]])
+        }
+    }
+
     func testClaudeRedirectedCredentialDestinationIsRejectedBeforeLookup() throws {
         let (home, workspace, other) = try fixture()
         let privateHome = try WorkspaceMailbox(workspace: workspace, path: ".noodle/home", create: true)

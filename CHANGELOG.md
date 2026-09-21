@@ -12,6 +12,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Stop asking for the login keychain password when a restricted FX bot starts. FX recreates its login item when it refreshes, which dropped Always Allow each time.
 - Keep typing in the message field responsive in long conversations. Each keystroke used to redraw every visible message.
 - Stop searching every visible message for a link again whenever the conversation redraws, such as when a message arrives or while scrolling.
 
