@@ -460,6 +460,10 @@ public struct WorkspaceRepository: Sendable {
 
         This directory is the bot's persistent workspace. The Backstory section above is this bot's user-authored instructions. Noodle manages the runtime section, Messenger core skill, and assigned MCP connection skills; unrelated skills under `.agents/skills` belong to this bot and are left untouched.
 
+        ## Sandbox
+
+        Noodle can run this bot inside a macOS sandbox. Then only this workspace, its conversations, temporary files and the read-and-write folders under Shared folders are writable, and anything else can be denied. Never try to get around a denial.
+
         ## Preferences and memory
 
         Read `preferences.md` at the start of each session and reread it after changes. Apply it as this bot's standing user preferences, such as tone, formatting, and working style; newer explicit user requests take precedence. When the user asks you to remember a preference, update `preferences.md`. Use `memory.md` for durable facts, decisions, and ongoing context. Noodle creates `preferences.md` with only a heading if missing and preserves both files during workspace synchronization; keep persistent notes there, not in generated instructions.

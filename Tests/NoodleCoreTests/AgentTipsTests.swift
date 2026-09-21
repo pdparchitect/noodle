@@ -42,6 +42,10 @@ final class AgentTipsTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: skill, encoding: .utf8), AgentTips.skill)
         let instructions = try String(contentsOf: workspace.appendingPathComponent("AGENTS.md"), encoding: .utf8)
         XCTAssertFalse(instructions.contains("tips"))
+        let sandbox = try XCTUnwrap(instructions.components(separatedBy: "## Sandbox\n\n").dropFirst().first?.components(separatedBy: "\n\n").first)
+        XCTAssertTrue(sandbox.contains("Shared folders"))
+        XCTAssertTrue(sandbox.contains("denied"))
+        XCTAssertLessThan(sandbox.count, 400)
     }
 
     func testUserSkillWithTheSameNameIsKept() throws {

@@ -37,6 +37,16 @@ import XCTest
         }
     }
 
+    func testCodexGetsNoGuidanceOtherHarnessesLack() async throws {
+        for extended in [false, true] {
+            let f = try fixture(), wire = HarnessWire(), p = f.codex(wire, extended: extended)
+            p.start(); try await f.openCodex(wire)
+            let params = try XCTUnwrap(wire.last("thread/start")["params"] as? [String: Any])
+            XCTAssertEqual(params["developerInstructions"] as? String, MessengerDocumentation.bootstrapInstructions)
+            p.stop()
+        }
+    }
+
     func testAppsSelectionReachesNewAndResumedRuntimesInBothAccessModes() async throws {
         for extended in [false, true] {
             let f = try fixture()

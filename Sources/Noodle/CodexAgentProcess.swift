@@ -462,7 +462,7 @@ final class CodexAgentProcess: AgentRuntimeProcess {
             "approvalPolicy": extendedAccess ? "on-request" : "never",
             "sandbox": "workspace-write",
             "serviceName": "noodle",
-            "developerInstructions": Self.developerInstructions + "\n" + accessInstructions
+            "developerInstructions": Self.developerInstructions
         ]
         if let model = configuration.modelIdentifier { params["model"] = model }
 
@@ -611,13 +611,6 @@ final class CodexAgentProcess: AgentRuntimeProcess {
     }
 
     private static var developerInstructions: String { MessengerDocumentation.bootstrapInstructions }
-
-    private var accessInstructions: String {
-        let mode = extendedAccess
-            ? "This bot has unrestricted access. Noodle resolves supported runtime permission requests automatically, so continue without asking the user to approve routine commands, file operations, or tool confirmations. Ask the user only when required information or a consequential product decision is missing. Never change your own access mode."
-            : "This bot is in restricted mode inside a dedicated macOS filesystem sandbox. Its workspace, conversations, Codex account/session directory, temporary files, and any read-and-write folders listed under Shared folders in AGENTS.md are writable; its configuration and Noodle-owned runtime state are outside that writable boundary. Browser/computer-control runtimes may be unavailable. Do not try to bypass the sandbox; explain the limitation and direct the user to Settings → Sandbox if the task requires unrestricted access."
-        return mode + " Do not promise browser or connected-tool access merely because a tool is listed. Verify the relevant capability with a safe check before claiming it works; report the actual failure when it does not."
-    }
 
     private static let runtimeVersion = 9
 }
