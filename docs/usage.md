@@ -56,8 +56,8 @@ Conversation Info menu. Drag its header to move it. Closing it ends floating, an
 Press ⌃⌥Space in any app, or choose **Conversation → Choose Conversation…**, to
 pick a bot or group from a grid. Type to filter, move with the arrow keys, press
 Return to choose and Escape to cancel. Conversations that are already floating
-come first and carry a badge, so the grid also switches between them. The
-conversation lands as a floating window by the pointer, or where you last left
+come first and carry a badge, so the grid also switches between them. A blue dot
+before a name marks unread messages. The conversation lands as a floating window by the pointer, or where you last left
 its window, stepped aside from any float already there, with the caret in its
 message field. Capture and
 annotations work there as in any chat window, so you can share what is on screen

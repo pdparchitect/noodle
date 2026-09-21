@@ -11,6 +11,18 @@ struct AgentPickerItem: Identifiable, Equatable {
     let lastActivity: Date
     /// Already open as a floating window.
     let isFloating: Bool
+    var hasUnread = false
+
+    var accessibilityValue: String {
+        [hasUnread ? "Unread" : nil, isFloating ? "Floating" : nil].compactMap { $0 }.joined(separator: ", ")
+    }
+
+    @MainActor static func items(in store: NoodleStore, floating: Set<UUID>) -> [Self] {
+        store.conversations.map {
+            Self(id: $0.id, title: store.title(for: $0), lastActivity: $0.updatedAt, isFloating: floating.contains($0.id),
+                hasUnread: store.hasUnreadMessages(in: $0))
+        }
+    }
 
     /// Open floats come first, so the grid doubles as a switcher between them.
     static func visible(_ items: [Self], filter: String) -> [Self] {
@@ -190,10 +202,7 @@ enum AgentPickerLayout {
     func show() {
         guard let store = NoodleStore.active, store.storageReady else { return }
         FloatingConversations.shared.retain(Set(store.conversations.map(\.id)))
-        let open = FloatingConversationPanels.shared.openIDs
-        model.present(store.conversations.map {
-            AgentPickerItem(id: $0.id, title: store.title(for: $0), lastActivity: $0.updatedAt, isFloating: open.contains($0.id))
-        })
+        model.present(AgentPickerItem.items(in: store, floating: FloatingConversationPanels.shared.openIDs))
         let panel = self.panel ?? makePanel()
         self.panel = panel
         // A fresh view is laid out for these items before it is shown, so no frame of the previous grid appears.
@@ -340,10 +349,19 @@ private struct AgentPickerView: View {
                             .help("Floating")
                     }
                 }
-            Text(item.title)
-                .font(.system(size: 12.5, weight: .medium))
-                .lineLimit(1)
-                .truncationMode(.tail)
+            HStack(spacing: 5) {
+                if item.hasUnread {
+                    // The sidebar's unread dot.
+                    Circle()
+                        .fill(Color.blue)
+                        .frame(width: 8, height: 8)
+                        .help("Unread")
+                }
+                Text(item.title)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
         }
         .padding(.horizontal, 6)
         .frame(maxWidth: .infinity)
@@ -352,7 +370,7 @@ private struct AgentPickerView: View {
             in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityElement(children: .combine)
-        .accessibilityValue(item.isFloating ? "Floating" : "")
+        .accessibilityValue(item.accessibilityValue)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
 }

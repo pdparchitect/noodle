@@ -137,6 +137,22 @@ import XCTest
         XCTAssertTrue(f.store.hasUnreadMessages(in: f.directA))
     }
 
+    func testConversationPickerMarksUnreadAndFloatingConversations() throws {
+        let f = try fixture()
+        try f.repository.append(ChatMessage(conversationID: f.directB.id, author: .agent(f.b.id), body: "New reply", delivery: .delivered))
+        f.store.refreshTranscripts()
+        let items = AgentPickerItem.items(in: f.store, floating: [f.directA.id])
+        XCTAssertEqual(Set(items.map(\.id)), Set(f.store.conversations.map(\.id)))
+        let a = try XCTUnwrap(items.first { $0.id == f.directA.id }), b = try XCTUnwrap(items.first { $0.id == f.directB.id })
+        XCTAssertEqual([a.isFloating, a.hasUnread], [true, false])
+        XCTAssertEqual([b.isFloating, b.hasUnread], [false, true])
+        XCTAssertEqual(b.title, f.store.title(for: f.directB))
+        XCTAssertEqual(b.accessibilityValue, "Unread")
+        XCTAssertEqual(a.accessibilityValue, "Floating")
+        f.store.markConversationRead(f.directB.id)
+        XCTAssertEqual(AgentPickerItem.items(in: f.store, floating: []).filter(\.hasUnread), [])
+    }
+
     func testInteractingWithAnAlreadyReadConversationDoesNotInvalidateUnreadObservers() throws {
         let f = try fixture()
         withObservationTracking {

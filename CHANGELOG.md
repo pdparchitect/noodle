@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Show which conversations have unread messages in the conversation picker: a blue dot before the name, the same dot as the sidebar.
+
 ## [0.23.0] - 2026-09-21
 
 ### Added
