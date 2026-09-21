@@ -4,6 +4,10 @@ public enum AppletLaunch {
     /// Launch Services preserves URLs from sandboxed callers, unlike launch arguments.
     /// This URL starts the provider without opening a creation.
     public static var backgroundURL: URL { URL(string: AppletBuildIdentity.current.urlScheme + "://provider/start")! }
+    /// Opens the catalogue and has the app check for updates.
+    public static func updateCheckURL(for build: AppletBuildIdentity = .current) -> URL {
+        URL(string: build.urlScheme + "://updates/check")!
+    }
 
     @discardableResult
     public static func openInBackground(at applicationURL: URL) async throws -> NSRunningApplication {

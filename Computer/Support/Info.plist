@@ -17,6 +17,13 @@
         <key>NSAllowsLocalNetworking</key><true/>
     </dict>
     <key>NSPrincipalClass</key><string>NSApplication</string>
+    <key>CFBundleURLTypes</key>
+    <array><dict>
+        <key>CFBundleURLName</key><string>com.pdparchitect.noodle.computer.link</string>
+        <key>CFBundleURLSchemes</key><array><string>noodlecomputer</string></array>
+        <key>CFBundleTypeRole</key><string>Viewer</string>
+    </dict></array>
+    <key>NoodleAcceptsUpdateCheck</key><true/>
     <key>SUFeedURL</key><string>https://github.com/pdparchitect/noodle/releases/download/computer-latest/appcast.xml</string>
     <key>SUPublicEDKey</key><string>1ZT5NrPiDPaQ54iHGSI1a9JIn6kTrmjQvzZRBA9f/sk=</string>
     <key>SURequireSignedFeed</key><true/>

@@ -78,4 +78,11 @@ final class BuildIdentityTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: destination.appendingPathComponent("index.html")), Data("edited copy".utf8))
         XCTAssertThrowsError(try NoodletPackage.convert(from: source.url, to: source.url))
     }
+    func testUpdateCheckURLStaysInItsBuildChannelAndIsNotANoodletLink() {
+        for build in AppletBuildIdentity.allCases {
+            let url = AppletLaunch.updateCheckURL(for: build)
+            XCTAssertEqual(url.absoluteString, build.urlScheme + "://updates/check")
+            XCTAssertNil(NoodletLink.id(in: url))
+        }
+    }
 }

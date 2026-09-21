@@ -54,6 +54,7 @@ struct CompanionAppsSettingsView: View {
 
     private func companionRow(_ app: CompanionApp) -> some View {
         let installation = installations[app]
+        let updates = app.updateCheckURL(for: installation, update: updateChecker.updates[app]) != nil
         return HStack(alignment: .top, spacing: 12) {
             Image(systemName: app.systemImage)
                 .font(.system(size: 24))
@@ -89,13 +90,14 @@ struct CompanionAppsSettingsView: View {
                     }
                     .font(.caption).foregroundStyle(.secondary)
                     Spacer()
-                    Button(opening == app ? "Opening…" : installation == nil ? "Install" : "Open") {
+                    Button(opening == app ? "Opening…" : installation == nil ? "Install" : updates ? "Update" : "Open") {
                         open(app)
                     }
                     .buttonStyle(.link)
                     .disabled(opening != nil)
-                    .accessibilityLabel(installation == nil ? "Install \(app.name)" : "Open \(app.name)")
-                    .help(installation == nil ? "Open the \(app.name) download page" : "Open \(app.name)")
+                    .accessibilityLabel(installation == nil ? "Install \(app.name)" : updates ? "Update \(app.name)" : "Open \(app.name)")
+                    .help(installation == nil ? "Open the \(app.name) download page"
+                          : updates ? "Open \(app.name) and check for updates" : "Open \(app.name)")
                 }
             }
         }
@@ -112,10 +114,18 @@ struct CompanionAppsSettingsView: View {
     private func open(_ app: CompanionApp) {
         refresh()
         let installed = installations[app] != nil
+        let updateCheck = app.updateCheckURL(for: installations[app], update: updateChecker.updates[app])
         opening = app
         Task { @MainActor in
             defer { opening = nil; refresh() }
             do {
+                if let updateCheck, let installation = installations[app] {
+                    let configuration = NSWorkspace.OpenConfiguration(); configuration.activates = true
+                    configuration.allowsRunningApplicationSubstitution = false
+                    _ = try await NSWorkspace.shared.open([updateCheck], withApplicationAt: installation.applicationURL,
+                                                          configuration: configuration)
+                    return
+                }
                 switch app {
                 case .browser:
                     if installed { try await store.browsers.openLibrary() }

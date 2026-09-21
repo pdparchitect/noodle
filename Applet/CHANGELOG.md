@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Check for updates when Noodle's Settings > Companions asks: its Update action opens Applet and starts the check.
+
 ## [0.7.0] - 2026-09-21
 
 ### Changed

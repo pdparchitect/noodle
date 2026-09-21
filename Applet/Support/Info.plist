@@ -75,6 +75,8 @@
 			</dict>
 		</dict>
 	</array>
+	<key>NoodleAcceptsUpdateCheck</key>
+	<true/>
 	<key>SUFeedURL</key>
 	<string>https://github.com/pdparchitect/noodle/releases/download/applet-latest/appcast.xml</string>
 	<key>SUPublicEDKey</key>

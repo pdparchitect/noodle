@@ -59,6 +59,16 @@ enum CompanionApp: String, CaseIterable, Identifiable {
         }
     }
 
+    /// The URL that opens a companion which is behind and has it check for updates.
+    func updateCheckURL(for installation: CompanionAppInstallation?, update: CompanionRelease?) -> URL? {
+        guard update != nil, installation?.acceptsUpdateCheck == true else { return nil }
+        switch self {
+        case .browser: return BrowserLaunch.updateCheckURL()
+        case .computer: return ComputerLaunch.updateCheckURL()
+        case .applet: return AppletLaunch.updateCheckURL()
+        }
+    }
+
     @MainActor static func installedApps() -> [Self: CompanionAppInstallation] {
         var result: [Self: CompanionAppInstallation] = [:]
         for app in allCases {
@@ -83,6 +93,8 @@ struct CompanionAppInstallation: Equatable {
     let buildVersion: String?
     let feedURL: URL?
     let updatesEnabled: Bool
+    /// Whether the companion handles its update check URL.
+    let acceptsUpdateCheck: Bool
 
     init?(applicationURL: URL) {
         var isDirectory: ObjCBool = false
@@ -102,5 +114,6 @@ struct CompanionAppInstallation: Equatable {
         buildVersion = string("CFBundleVersion")
         feedURL = string("SUFeedURL").flatMap(URL.init(string:))
         updatesEnabled = info?["NoodleUpdatesEnabled"] as? Bool == true
+        acceptsUpdateCheck = info?["NoodleAcceptsUpdateCheck"] as? Bool == true
     }
 }

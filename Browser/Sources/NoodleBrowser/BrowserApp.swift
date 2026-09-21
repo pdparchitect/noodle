@@ -133,6 +133,11 @@ enum BrowserLaunchCheck {
         externalLaunch = true
         for url in urls {
             if url == BrowserLaunch.backgroundURL { continue }
+            if url == BrowserLaunch.updateCheckURL() {
+                reopenLibrary()
+                BrowserUpdater.shared.start(); BrowserUpdater.shared.check()
+                continue
+            }
             if url.isFileURL {
                 do {
                     let reference = try BrowserReference.read(url)

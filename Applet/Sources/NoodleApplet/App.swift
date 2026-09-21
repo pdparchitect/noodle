@@ -110,7 +110,15 @@ private struct AppletMenu: View {
 }
 
 @MainActor final class AppletDelegate: NSObject, NSApplicationDelegate {
-  var openLibrary: (() -> Void)?
+  var openLibrary: (() -> Void)? {
+    didSet {
+      if needsLibrary, openLibrary != nil {
+        needsLibrary = false
+        DispatchQueue.main.async { [weak self] in self?.reopenLibrary() }
+      }
+    }
+  }
+  private var needsLibrary = false
   let library = AppletLibrary()
   lazy var background = AppletBackgroundStore(root: library.root)
   lazy var runtime = AppletRuntime(library: library)
@@ -181,8 +189,11 @@ private struct AppletMenu: View {
     launchLog.notice("Opening catalogue")
     if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "library" }) {
       window.makeKeyAndOrderFront(nil)
+    } else if let openLibrary {
+      openLibrary()
     } else {
-      openLibrary?()
+      // A launch by URL arrives before the scene provides the window action.
+      needsLibrary = true
     }
     NSApp.unhide(nil)
     NSApp.activate(ignoringOtherApps: true)
@@ -202,6 +213,13 @@ private struct AppletMenu: View {
       // Receiving it is enough: applicationDidFinishLaunching starts the server.
       if url == AppletLaunch.backgroundURL {
         launchLog.notice("Received background provider URL")
+        continue
+      }
+      if url == AppletLaunch.updateCheckURL() {
+        launchLog.notice("Received update check URL")
+        reopenLibrary()
+        AppletUpdater.shared.start()
+        AppletUpdater.shared.check()
         continue
       }
       do {

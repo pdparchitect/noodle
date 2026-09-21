@@ -40,6 +40,7 @@ public enum ComputerBuildIdentity: String, CaseIterable, Sendable {
     public var fileExtension: String {
         "noodlecomputer" + (self == .production ? "" : self == .development ? "-dev" : "-tests")
     }
+    public var urlScheme: String { fileExtension }
     public var contentType: String {
         "com.pdparchitect.noodle.computer-reference" + (self == .production ? "" : self == .development ? "-dev" : "-tests")
     }

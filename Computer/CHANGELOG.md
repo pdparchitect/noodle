@@ -4,6 +4,7 @@
 
 ### Added
 
+- Check for updates when Noodle's Settings > Companions asks: its Update action opens Computer and starts the check. Computer now owns the `noodlecomputer` URL scheme for this.
 - Add an optional description of up to 500 characters to each computer in its editor. Assigned bots see it alongside the name when choosing a computer, and preview cards leave it out.
 
 ## [0.12.0] - 2026-09-21

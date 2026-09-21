@@ -271,4 +271,9 @@ final class BrowserLibraryTests: XCTestCase {
         var response = BrowserResponse(); response.pointer = .init(x: 42, y: 80, visible: true, pressed: true)
         XCTAssertEqual(try JSONDecoder().decode(BrowserResponse.self, from: JSONEncoder().encode(response)).pointer, response.pointer)
     }
+    func testUpdateCheckURLStaysInItsBuildChannelAndIsNotABrowserLink() {
+        XCTAssertEqual(BrowserLaunch.updateCheckURL(for: .production).absoluteString, "noodlebrowser://updates/check")
+        XCTAssertEqual(BrowserLaunch.updateCheckURL(for: .development).absoluteString, "noodlebrowser-dev://updates/check")
+        XCTAssertNil(BrowserLaunch.updateCheckURL(for: .production).host.flatMap(UUID.init(uuidString:)))
+    }
 }

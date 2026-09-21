@@ -1,4 +1,5 @@
 import AppKit
+import ComputerBridge
 import ComputerCore
 import ComputerDocument
 import NoodleLaunchChecks
@@ -136,6 +137,13 @@ enum ComputerLaunchCheck {
   private var documentStarts: [UUID: Task<Void, Never>] = [:]
   func application(_ application: NSApplication, open urls: [URL]) {
     for url in urls {
+      if url == ComputerLaunch.updateCheckURL() {
+        openedDocument = true
+        reopenLibrary()
+        ComputerUpdater.shared.start()
+        ComputerUpdater.shared.check()
+        continue
+      }
       do {
         let card = try ComputerReferenceDocument.read(url)
         let store = try Self.loadLibrary()

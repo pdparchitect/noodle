@@ -81,6 +81,8 @@ cp "$package/Support/Info.plist" "$app/Contents/Info.plist"
 # Keep the menu's short name separate from the app's Finder/display name.
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $app_name" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $app_name" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLName $bundle_identifier.link" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 $document_extension" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDocumentTypes:0:LSItemContentTypes:0 $content_type" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDocumentTypes:0:CFBundleTypeName $app_name Reference" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :UTExportedTypeDeclarations:0:UTTypeIdentifier $content_type" "$app/Contents/Info.plist"

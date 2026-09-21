@@ -1,3 +1,4 @@
+import ComputerBridge
 import Sparkle
 import XCTest
 @testable import NoodleComputer
@@ -15,5 +16,11 @@ import XCTest
         let updater = ComputerUpdater()
         updater.probeForUpdate()
         XCTAssertNil(updater.availableVersion)
+    }
+
+    func testUpdateCheckURLStaysInItsBuildChannel() {
+        XCTAssertEqual(ComputerLaunch.updateCheckURL(for: .production).absoluteString, "noodlecomputer://updates/check")
+        XCTAssertEqual(ComputerLaunch.updateCheckURL(for: .development).absoluteString, "noodlecomputer-dev://updates/check")
+        XCTAssertEqual(ComputerLaunch.updateCheckURL(for: .testing).absoluteString, "noodlecomputer-tests://updates/check")
     }
 }
