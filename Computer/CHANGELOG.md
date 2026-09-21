@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-21
+
 ### Added
 
 - Check for updates when Noodle's Settings > Companions asks: its Update action opens Computer and starts the check. Computer now owns the `noodlecomputer` URL scheme for this.

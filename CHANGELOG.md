@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-09-21
+
 ### Added
 
 - Give each Noodle Computer an optional description of what it is for. Assigned bots receive it with the computer's name from `computer list` so they choose the right computer; the bot editor's computer picker shows and searches it. Preview cards never include it.

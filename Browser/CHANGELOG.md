@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-21
+
 ### Added
 
 - Check for updates when Noodle's Settings > Companions asks: its Update action opens Browser and starts the check.
