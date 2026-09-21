@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - Show whether a bot is working in separate and floating conversation windows: the picture in the window title now carries the same status dot as the sidebar (blue working, green ready, red failed, grey otherwise). Hover it for details.
+- Add a Show in Main Window button to the title bar of separate and floating conversation windows. It closes the window, ends floating, and selects the conversation in the main window, reopening the main window if it was closed.
 
 ### Fixed
 

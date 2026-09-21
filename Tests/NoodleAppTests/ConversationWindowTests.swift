@@ -310,6 +310,56 @@ import NoodleCore
         return window
     }
 
+    func testReturningAPopoutSelectsItInTheMainWindowAndClosesItsOwnWindow() throws {
+        let (store, bot, group) = try fixture()
+        store.selectedConversationID = group.id
+        let main = mount(group.id, in: store.conversationWindows, isMain: true)
+        let popout = mount(bot.id, in: store.conversationWindows)
+        popout.orderFront(nil)
+        store.returnConversationToMainWindow(bot.id)
+        XCTAssertEqual(store.selectedConversationID, bot.id)
+        XCTAssertFalse(popout.isVisible)
+        XCTAssertFalse(store.conversationWindows.focus(bot.id, separateOnly: true))
+        XCTAssertTrue(main.isVisible)
+        main.close()
+    }
+
+    func testReturningAFloatingPanelEndsFloatingModeAndReopensAClosedMainWindow() throws {
+        let (store, bot, _) = try fixture()
+        var reopened = 0
+        store.conversationWindows.openMainWindow = { reopened += 1 }
+        let floating = FloatingConversations.shared
+        let panel = FloatingConversationPanels.shared.show(bot.id, frame: NSRect(x: 0, y: 0, width: 420, height: 560)) { _ in }
+        addTeardownBlock { @MainActor in panel.close(); floating.set(false, for: bot.id) }
+        store.returnConversationToMainWindow(bot.id)
+        XCTAssertEqual(store.selectedConversationID, bot.id)
+        XCTAssertNil(FloatingConversationPanels.shared.panel(for: bot.id))
+        XCTAssertFalse(floating.contains(bot.id))
+        XCTAssertEqual(reopened, 1, "With the main window closed, returning must open it again")
+    }
+
+    func testFloatingPanelAndSeparateWindowBothCarryTheReturnButtonInTheirTitlebar() async throws {
+        let (store, bot, _) = try fixture()
+        func labels(floating: Bool) async throws -> [String] {
+            let window: NSWindow = floating
+                ? FloatingConversationPanel.make(frame: NSRect(x: 0, y: 0, width: 420, height: 560))
+                : NSWindow(contentRect: .init(x: 0, y: 0, width: 620, height: 510),
+                    styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: ConversationWindowView(conversationID: bot.id,
+                isFloatingPanel: floating).environment(store))
+            window.orderFront(nil)
+            defer { window.close() }
+            for _ in 0..<100 where window.toolbar?.items.contains(where: { $0.label == "Show in Main Window" }) != true {
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            return window.toolbar?.items.map(\.label) ?? []
+        }
+        let floating = try await labels(floating: true), separate = try await labels(floating: false)
+        XCTAssertTrue(floating.contains("Show in Main Window"), "\(floating)")
+        XCTAssertTrue(separate.contains("Show in Main Window"), "\(separate)")
+    }
+
     func testOpenWindowsAndMovedFramesSurviveWithoutTerminationCallback() throws {
         let file = sessionURL(), first = UUID(), second = UUID(), mainOnly = UUID()
         let registry = ConversationWindowRegistry(fileURL: file)

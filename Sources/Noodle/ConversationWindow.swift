@@ -71,6 +71,15 @@ struct ConversationWindowView: View {
                 .sharedBackgroundVisibility(.hidden)
 
             ToolbarItem(placement: .primaryAction) {
+                if conversation != nil {
+                    Button { store.returnConversationToMainWindow(conversationID) } label: {
+                        Label("Show in Main Window", systemImage: "pip.exit")
+                    }
+                    .help("Show in Main Window")
+                }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
                 if let conversation, !isFloatingPanel {
                     Menu {
                         if conversation.kind == .direct, let agent = store.participants(for: conversation).first {
@@ -151,6 +160,8 @@ struct ConversationErrorAlert: ViewModifier {
     private var hasRestoredWindows = false
     private(set) var isTerminating = false
     private var openSeparateWindow: ((UUID) -> Void)?
+    /// A panel is outside every scene, so the main scene leaves its opener here.
+    var openMainWindow: (() -> Void)?
 
     init(fileURL: URL? = nil) {
         session = ConversationWindowSession(fileURL: fileURL)
@@ -261,6 +272,12 @@ struct ConversationErrorAlert: ViewModifier {
 
     func focusMainWindow() {
         if let window = hosts.allObjects.first(where: \.isMainWindow)?.window { show(window) }
+    }
+
+    /// Raises the main window, opening it again if it was closed.
+    func showMainWindow() {
+        if let window = hosts.allObjects.first(where: { $0.isMainWindow && !$0.isClosed })?.window { show(window) }
+        else { openMainWindow?() }
     }
 
     private func show(_ window: NSWindow) {

@@ -31,6 +31,11 @@ Messages, unsent text, attachments, and conversation details update in both
 places. Each window scrolls independently. Closing a window keeps the conversation
 and its draft available in Noodle.
 
+The picture in a separate or floating window's title carries the bot's status
+dot: blue while it works, green when ready, red after a failure. Click **Show in
+Main Window** in the title bar to close the window and continue the conversation
+in the main window.
+
 ## Float a conversation over other apps
 
 Right-click a bot or group in the sidebar and choose **Float on Top** to open it

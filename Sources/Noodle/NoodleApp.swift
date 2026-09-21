@@ -287,6 +287,7 @@ struct RootView: View {
         }
         .task(id: store.storageReady) {
             guard store.storageReady else { return }
+            store.conversationWindows.openMainWindow = { openWindow(id: "main") }
             store.conversationWindows.restoreWindows { id in
                 // A conversation left floating comes back as a panel, not a scene window.
                 if FloatingConversations.shared.contains(id) { store.floatConversation(id) }

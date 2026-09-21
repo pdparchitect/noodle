@@ -59,6 +59,16 @@ extension NoodleStore {
         FloatingConversationPanels.shared.close(id)
         conversationWindows.present(id)
     }
+
+    /// Shows the conversation in the main window and closes its separate window or floating panel.
+    func returnConversationToMainWindow(_ id: UUID) {
+        guard conversations.contains(where: { $0.id == id }) else { return }
+        selectedConversationID = id
+        // The main window comes forward first, so the app never passes through having no window.
+        conversationWindows.showMainWindow()
+        FloatingConversationPanels.shared.close(id)
+        _ = conversationWindows.closeSeparateWindow(id)
+    }
 }
 
 /// One floating panel per conversation. The panels host the same view as a separate window.
