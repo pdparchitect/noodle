@@ -13,6 +13,10 @@ All notable changes to Noodle are documented here, following
 - Show whether a bot is working in separate and floating conversation windows: the picture in the window title now carries the same status dot as the sidebar (blue working, green ready, red failed, grey otherwise). Hover it for details.
 - Add a Show in Main Window button to the title bar of separate and floating conversation windows. It closes the window, ends floating, and selects the conversation in the main window, reopening the main window if it was closed.
 
+### Changed
+
+- Show the actions of each row in Settings > Harness (Profiles, Update, Remove, Local Models, Sign In), Settings > Tools (Connect, Edit, Remove) and Settings > Companions (Open, Install) as links instead of buttons, without the trailing ellipsis, so the lists take less room.
+
 ### Fixed
 
 - Stop macOS asking for the login keychain password every time a restricted Claude Code bot starts, even after Always Allow. Noodle Agent Host now reads the `Claude Code-credentials` item the way Claude Code does, which needs no prompt.

@@ -32,7 +32,7 @@ import NoodleCore
         await setup.refreshVersions([installation], forceLatest: true)
         view.rootView = row(false)
         _ = try await control("Update available — 0.154.0", in: view)
-        _ = try await control("Update Instructions…", in: view)
+        _ = try await control("Update Instructions", in: view)
         XCTAssertFalse(hasControl(error, in: view))
         XCTAssertFalse(hasControl("Checking for updates…", in: view))
     }
@@ -46,7 +46,7 @@ import NoodleCore
         let view = host(HarnessInstallationRow(installation: installation, liveInstallation: installation,
             isRefreshing: false, setup: setup, install: {}).environment(f.store))
         let frame = { (node: NSObject) in (node.value(forKey: "accessibilityFrame") as? NSValue)?.rectValue }
-        let profilesButton = try await control("Profiles…", in: view), signInButton = try await control("Sign In…", in: view)
+        let profilesButton = try await control("Profiles", in: view), signInButton = try await control("Sign In", in: view)
         let profiles = try XCTUnwrap(frame(profilesButton)), signIn = try XCTUnwrap(frame(signInButton))
         XCTAssertEqual(profiles.midY, signIn.midY, accuracy: 1)
         XCTAssertGreaterThan(signIn.minX, profiles.maxX)

@@ -75,25 +75,28 @@ struct CompanionAppsSettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack {
-                    if let installation {
-                        Text(installation.version.map { "Version \($0)" } ?? "Version unavailable")
-                            .textSelection(.enabled)
-                        if let update = updateChecker.updates[app] {
-                            Text("Update available — \(update.displayVersion)").foregroundStyle(.orange)
+                    Group {
+                        if let installation {
+                            Text(installation.version.map { "Version \($0)" } ?? "Version unavailable")
+                                .textSelection(.enabled)
+                            if let update = updateChecker.updates[app] {
+                                Text("Update available — \(update.displayVersion)").foregroundStyle(.orange)
+                            }
+                        } else {
+                            Text(app.requirements)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                    } else {
-                        Text(app.requirements)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
+                    .font(.caption).foregroundStyle(.secondary)
                     Spacer()
-                    Button(opening == app ? "Opening…" : installation == nil ? "Install…" : "Open") {
+                    Button(opening == app ? "Opening…" : installation == nil ? "Install" : "Open") {
                         open(app)
                     }
+                    .buttonStyle(.link)
                     .disabled(opening != nil)
                     .accessibilityLabel(installation == nil ? "Install \(app.name)" : "Open \(app.name)")
                     .help(installation == nil ? "Open the \(app.name) download page" : "Open \(app.name)")
                 }
-                .font(.caption).foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 4)

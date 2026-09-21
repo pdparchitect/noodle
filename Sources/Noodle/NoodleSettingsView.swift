@@ -649,9 +649,10 @@ struct HarnessInstallationRow: View {
         let managed = available && setup.isManaged(installation)
         let updateAvailable = available && version?.updateAvailable == true
         if (available && id.supportsProfiles) || updateAvailable || managed || id == .apple || needsSignIn {
-            HStack {
+            HStack(spacing: 12) {
                 if available, id.supportsProfiles {
-                    Button("Profiles…") { showsProfiles = true }
+                    Button("Profiles") { showsProfiles = true }
+                        .buttonStyle(.link)
                         .sheet(isPresented: $showsProfiles) {
                             HarnessProfilesView(installation: liveInstallation ?? installation)
                                 .environment(store)
@@ -661,13 +662,16 @@ struct HarnessInstallationRow: View {
                 if updateAvailable {
                     if managed {
                         Button("Update") { setup.install(id, runtime: store.runtime) }
+                            .buttonStyle(.link)
                             .disabled(setup.activity[id] != nil)
                     } else {
-                        Button("Update Instructions…") { showsUpdateGuide.toggle() }
+                        Button("Update Instructions") { showsUpdateGuide.toggle() }
+                            .buttonStyle(.link)
                     }
                 }
                 if managed {
-                    Button("Remove…") { confirmsRemoval = true }
+                    Button("Remove") { confirmsRemoval = true }
+                        .buttonStyle(.link)
                         .disabled(setup.activity[id] != nil)
                         .confirmationDialog("Remove \(id.displayName)?", isPresented: $confirmsRemoval) {
                             Button("Remove", role: .destructive) {
@@ -682,13 +686,15 @@ struct HarnessInstallationRow: View {
                         }
                 }
                 if id == .apple {
-                    Button("Local Models…") { showsLocalModels = true }
+                    Button("Local Models") { showsLocalModels = true }
+                        .buttonStyle(.link)
                         .sheet(isPresented: $showsLocalModels) { AppleLocalModelsView().noodleSheetSizing(animated: true) }
                 }
                 if needsSignIn {
-                    Button("Sign In…") {
+                    Button("Sign In") {
                         if let liveInstallation, liveInstallation.isAvailable { setup.signIn(liveInstallation) }
                     }
+                        .buttonStyle(.link)
                         .disabled(isRefreshing || liveInstallation?.isAvailable != true)
                 }
             }

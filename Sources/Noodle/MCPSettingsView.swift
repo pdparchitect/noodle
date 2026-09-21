@@ -33,19 +33,23 @@ struct MCPSettingsView: View {
                                 if let error = store.mcp.errors[connection.id] {
                                     Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
                                 }
-                                HStack {
-                                    Button(store.mcp.connected.contains(connection.id) ? "Reconnect…" : "Connect…") { store.mcp.connect(connection) }
+                                HStack(spacing: 12) {
+                                    Button(store.mcp.connected.contains(connection.id) ? "Reconnect" : "Connect") { store.mcp.connect(connection) }
+                                        .buttonStyle(.link)
                                         .disabled(store.mcp.signingIn != nil)
-                                    Button("Edit…") { editing = connection }
-                                    Button("Remove…") { removing = connection }
+                                    Button("Edit") { editing = connection }
+                                        .buttonStyle(.link)
+                                    Button("Remove") { removing = connection }
+                                        .buttonStyle(.link)
                                     if store.mcp.signingIn == connection.id {
                                         Spacer(minLength: 4)
                                         ProgressView().controlSize(.mini)
                                             .frame(width: 12, height: 12)
                                             .accessibilityLabel("Signing in")
                                         Button("Cancel") { store.mcp.cancelSignIn() }
+                                            .controlSize(.small)
                                     }
-                                }.controlSize(.small).padding(.top, 3)
+                                }.padding(.top, 3)
                             }
                         }.padding(14)
                         if connection.id != store.mcp.registry.connections.last?.id { Divider().padding(.leading, 58) }
