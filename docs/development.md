@@ -54,9 +54,8 @@ transferred. See [Applet development and conversion](../Applet/README.md#dev-and
 
 ## Documentation changes
 
-Message/event guidance, the Messenger skill, and CLI help come from
-[`MessengerDocumentation.swift`](../Sources/NoodleCore/MessengerDocumentation.swift).
-After editing it, run its tests:
+Message/event guidance, the Messenger skill, and CLI help come from the message
+catalogue in NoodleCore. After editing it, run its tests:
 
 ```sh
 swift test --disable-sandbox --filter MessengerDocumentationTests

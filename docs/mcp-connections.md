@@ -52,16 +52,15 @@ can further restrict access.
 
 ## Add a catalogue entry
 
-Add the endpoint, description, instructions and icon name to
-[`ToolCatalog.swift`](../Sources/NoodleCore/ToolCatalog.swift). Set maturity to
+Add the endpoint, description, instructions and icon name to the tool catalogue
+in NoodleCore. Set maturity to
 `.experimental` for a badge and placement at the end of the list. Bundle its `.icon`
 in `Support/ToolIcons` and record the update URL in [SOURCES.md](../Support/ToolIcons/SOURCES.md).
 Set `MCPToolConfiguration.oauth` for a fixed public client; leave it unset for discovery
 and registration. Configuration is matched by exact endpoint; the OAuth engine stays generic.
 
-Google's shared native clients live in
-[`ToolOAuthConfigurations.swift`](../Sources/NoodleCore/ToolOAuthConfigurations.swift).
-Keep their reversed-ID callback schemes in `Support/Info.plist` and `scripts/build-app.sh`
+Google's shared native clients are defined with NoodleCore's other OAuth
+configurations. Keep their reversed-ID callback schemes in `Support/Info.plist` and `scripts/build-app.sh`
 in sync. In the Google Cloud project that owns the clients, enable each product
 and MCP API and declare the consent scopes. Follow Google's setup guides for [Gmail](https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server),
 [Docs](https://developers.google.com/workspace/docs/api/guides/configure-mcp-server),

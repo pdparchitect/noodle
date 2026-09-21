@@ -120,7 +120,7 @@ it in its own storage, outside your home folder and your shell's `PATH`.
 - **Verification.** Claude Code, Codex and Muse Code downloads are checked against
   the provider's published SHA-256, and OpenCode's against the npm registry's
   SHA-512. Vercel and xAI publish none for FX and Grok Build. Every download must carry the provider's Apple code
-  signature before it can run; see [Agent access and privacy](security.md#implementation-boundary).
+  signature before it can run; see [Architecture](architecture.md#installed-harnesses).
 
 Muse Code's own installer adds a shell launcher that updates itself. Noodle
 installs the native executable alone, which is the only part it ever runs.

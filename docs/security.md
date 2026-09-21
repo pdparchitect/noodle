@@ -2,207 +2,127 @@
 
 ## Choose a bot's access
 
-| Harness | Access in Noodle |
-| --- | --- |
-| Codex, Claude Code, FX, Grok Build, Muse Code, OpenCode v2, Apple Intelligence | Restricted by default; unrestricted access is optional |
+Every harness starts restricted: Codex, Claude Code, FX, Grok Build, Muse Code,
+OpenCode v2, and Apple Intelligence. Unrestricted access is optional and set for
+each bot.
 
-Change any bot's access in **Settings → Sandbox**. Click the **Unrestricted**
+Change a bot's access in **Settings → Sandbox**. Click the **Unrestricted**
 heading or a bot's **restricted** or **unrestricted** label to see what that mode
 allows. Turning on **Unrestricted** or **Apps** asks for confirmation first;
-turning either off does not. All harnesses use the bot's
-saved access preference. Previous required Claude/FX/Grok/Muse grants do not
-override that preference. Editing `agent.json` alone never grants unrestricted access.
+turning either off does not. Changing access restarts the bot and keeps its
+conversation.
 
-## How restricted mode works
+## Restricted access
 
-Noodle uses two separate macOS boundaries. The app stays in App Sandbox. A signed
-launch broker, `NoodleAgentHost.xpc`, runs outside that app sandbox and validates
-the calling app, harness executable, and bot workspace. For restricted runs it
-applies a deny-by-default Seatbelt policy before executing the harness. The
-policy permits fixed paths and system services derived by the host; callers
-cannot supply their own permissions. If validation or policy application fails,
-startup fails instead of falling back to unrestricted access.
+A restricted bot works inside its own workspace. macOS enforces the limit on the
+harness and on every command it runs, so it holds even when a model runs an
+unexpected command or follows misleading instructions. A tool approval cannot
+widen it. If Noodle cannot apply the restriction, the bot does not start.
 
-Shell commands and other child processes inherit the harness's OS restrictions.
-An automatically accepted tool approval cannot add filesystem permissions to
-that policy. The restrictions therefore apply even when a model issues an
-unexpected command or follows misleading instructions.
+A restricted bot can:
 
-Each restricted bot can read its own `Agents/<uuid>` package and write only
-inside that package's `workspace`. Its `agent.json`, layout metadata, and
-Noodle-owned `runtime` remain read-only. Other bots' packages, the shared
-conversation store, Noodle preferences, and unrelated personal files are outside
-the content-read and write boundary. System libraries, the signed app/harness
-installation, and required system services remain available.
+- read and write files in its workspace
+- use the folders you share with it
+- read and send messages in the conversations it belongs to
+- use the tools, computers, and browsers you assign to it
+- reach the internet, except Apple Intelligence, which runs on device
 
-Edit Bot → Harness → Folders shares chosen folders outside the workspace with one bot,
-each as Read & Write or Read Only and with an optional description. The list is
-stored in that bot's `agent.json`, which the bot cannot write. Agent Host reads
-it at launch, not from the app's request, and refuses the whole disk, any folder
-that contains or lies inside Noodle's own storage, and links that resolve
-there. A folder nested inside another read-and-write shared folder is covered
-by that folder and never resolved on its own, and a missing folder is skipped.
-Saving restarts the bot, because a running sandbox cannot be widened. Shared
-folders and descriptions are listed in the generated `AGENTS.md`. Sharing a
-folder exposes everything in it to the bot's model provider and tools; FX and
-OpenCode can also list the names in that folder's parent directories.
+It cannot:
 
-Conversation access goes through the Messenger CLI and an app-side broker.
-Noodle must be running. The broker derives bot identity from the registered
-workspace and a per-bot session token, then checks conversation membership. A CLI
-flag, forged bot ID, or edited skill cannot grant another bot's access. The CLI
-has no direct conversation-file fallback. Attachment reads return copies under
-`workspace/.noodle/messenger-attachments`; local attachment sends can import only
-regular files from the caller's workspace, without following symlinks.
+- read your personal files, other bots' files, or Noodle's settings and saved
+  conversations
+- change its own name, backstory, access, or shared folders
+- use your Keychain
+- start a server that accepts connections
 
-Cloud harnesses have a private home at `workspace/.noodle/home`. Codex, Claude, FX, Grok,
-Muse, and OpenCode store their own configuration, sessions, and caches there; Muse's data,
-state, and runtime directories remain under `workspace/.noodle/muse`. The trusted
-Agent Host seeds only login material from the existing provider sign-in. It does
-not copy standalone conversations, global skills, hooks, or MCP configuration.
-FX also receives its selected provider/model settings. Native installations stay
-read-only.
+### Shared folders
 
-A Codex, Grok Build, or Muse Code bot can select a [profile](harness-setup.md#profiles)
-in place of the system login. The selection is a private field in the bot's
-`agent.json`. The app never sends a path, environment, or command: Agent Host
-reads the field at launch, resolves it to `HarnessProfiles/<uuid>/home` in
-Noodle's storage, and refuses a profile that is missing, redirected through a
-link, or made for another harness, so a bot never starts under a different
-account by accident. Profile sign-in and status checks name the profile by
-identifier only; the host derives the harness, the folder, and the fixed login
-command from it, and forwards only a device code whose page is the vendor's own
-sign-in address. A profile's login is its files alone: the host never reads a
-Keychain item on a profile's behalf. A restricted bot's sandbox cannot read the
-profiles folder, and shared folders cannot overlap it.
+**Edit Bot → Harness → Folders** shares folders outside the workspace with one
+bot, each as **Read & Write** or **Read Only** and with an optional description
+of what it is for. Noodle refuses the whole disk and any folder that overlaps its
+own storage. Saving restarts the bot.
 
-For Claude, FX, and Muse Keychain-backed sign-ins, the host requests only the exact
-provider credential item, without prompting. The harness receives a private file
-credential store and has no access to the login Keychain or shared account
-folder. If macOS denies that item, startup fails with a Keychain-access error;
-it does not widen the sandbox. FX's TLS implementation still reads the system
-certificate store at `/Library/Keychains/System.keychain`.
+Sharing a folder exposes everything in it to the bot's model provider and tools.
+FX and OpenCode can also see the names of items in that folder's parent folders.
 
-Each bot keeps credentials it refreshes. The host replaces them when the source
-login changes, and never writes the bot's credentials back to the shared login.
-Bot-package backups and copies now include these private login files and should
-be treated as credentials. These are copies of the same provider login, so provider-side identity, quotas,
-and revocation remain shared; they are not separate provider accounts. Provider
-refresh-token rotation can require signing in again. Existing native Codex
-sessions stored in the former shared account may need a fresh model context;
-Noodle's conversation history remains available through Messenger.
+### Conversations
 
-Workspace mailboxes, attachment copies, and managed instructions/skills use
-anchored directory handles. Replacing a writable parent directory with a symlink
-cannot redirect a privileged app operation into another bot's files.
+Bots reach conversations only through Noodle, which must be running. Noodle
+checks who is asking and whether that bot belongs to the conversation on every
+request, so a bot cannot pose as another bot. Attachments arrive as copies in the
+bot's workspace, and a bot can attach only files from its own workspace.
 
-FX uses ACP ask mode and Noodle grants only the
-offered allow-once action for the current session. Grok uses a dedicated
-`--no-leader` process with its inner sandbox disabled because Agent Host has
-already applied the mandatory outer policy. These tool approvals cannot widen
-the OS sandbox. Cancelled turns and stale-session requests are denied.
+### Sign-ins
 
-OpenCode v2 uses a private ACP process and its own authenticated loopback server.
-The listener permission applies only to the verified OpenCode executable; shell
-tools cannot listen on network ports. The native v2 server binds `127.0.0.1`.
-Seatbelt cannot enforce the IP address for incoming connections, so this binding
-relies on the verified native implementation. The app gains no new entitlements,
-and server descendants inherit the same workspace restrictions. ACP permissions accept only the offered
-allow-once choice for the current session. Client filesystem and terminal services
-remain disabled. Automatic updates and filesystem watchers are disabled.
-Project discovery outside the workspace is disabled; the bot's managed `AGENTS.md`
-and skills are linked into its private OpenCode configuration. Optional provider
-settings come only from its private config and the workspace's `opencode.json`.
+Each restricted bot gets a private copy of your harness sign-in, with its own
+settings, sessions, and caches. Noodle copies the sign-in only: the harness's
+other conversations, global skills, hooks, and MCP configuration stay behind.
 
-The host reads only saved API-key and OAuth credential rows from OpenCode’s standard
-v2 database. It never copies that database or its conversations. Database creation
-and credential writes run under the bot’s restricted OS policy, including during
-account/model inspection in a temporary workspace. Refreshed private credentials
-are preserved until the source login changes. A changed source login replaces the
-private credential rows without touching sessions. Unsupported credential schemas
-fail closed. Global executable configuration and MCP credentials are not imported.
+- The copies are the same account. Identity, quotas, billing, and revocation are
+  shared, and the provider may ask you to sign in again when it rotates a login.
+- A backup or copy of a bot's folder includes its sign-in. Treat it as a
+  credential.
+- A Codex, Grok Build, or Muse Code bot can use a
+  [profile](harness-setup.md#profiles) in place of the system sign-in. A
+  restricted bot cannot read other profiles.
+- Where a harness keeps its sign-in in the Keychain, Noodle reads that one item
+  for the bot. If macOS denies it, the bot fails to start with a Keychain-access
+  error; its access is not widened.
 
-Muse starts its verified native binary directly, without the self-updating shell
-launcher. Agent Host applies the outer sandbox before running `serve`; Muse's
-inner shell sandbox is disabled to avoid nesting Seatbelt policies. MSP tool
-approvals select only the offered once-only choice for the current session and
-stage, and cannot grant new filesystem access.
+## Unrestricted access
 
-Claude uses its normal stream-json runtime and tools. Agent Host explicitly sets
-`sandbox.enabled=false` for restricted launches: Noodle's outer policy covers
-native Read/Edit/Write tools, Bash, and child processes. `CLAUDE_CONFIG_DIR` points
-to the bot's private `.claude` directory, and `CLAUDE_CODE_TMPDIR` keeps Claude's
-internal temporary files inside the workspace. The host seeds only `claudeAiOauth`
-from the standard `Claude Code-credentials` Keychain item for the current user,
-or the native `.claude/.credentials.json` fallback when that item is absent.
-Settings, hooks, MCP logins, and global history are not imported. Restricted and
-unrestricted sessions have separate pointers; switching access does not resume the
-other mode's native session.
+An unrestricted bot runs as your Mac user. It can reach files, signed-in
+services, and browser sessions beyond its workspace, subject to macOS and tool
+permissions.
 
-Unrestricted mode runs as your
-Mac user outside Noodle's app sandbox. It can reach files, signed-in services, and
-browser sessions beyond the bot's workspace, subject to macOS and tool permissions.
-Noodle accepts supported tool approvals automatically under the bot's saved
-access mode. There are no per-action approval or question forms in chat.
-Structured runtime question requests receive an empty response immediately.
-Unknown requests and tool forms requiring user-entered data are declined
-without inventing answers or consent.
+Turning unrestricted access off does not undo completed actions, stop apps the
+bot left running, or revoke macOS privacy permissions. Revoke those in System
+Settings.
 
-Changing access restarts the bot. Turning unrestricted access off does not undo
-completed actions, stop detached applications, or revoke macOS privacy permissions.
-Revoke those separately in System Settings.
+## Approvals
 
-## Strengths
+Noodle does not show per-action approval or question forms in chat. It accepts a
+harness's tool approvals automatically, within the bot's access. Requests that
+need an answer typed by you are declined; Noodle never invents an answer or
+consent.
 
-- **Enforced by macOS:** file restrictions apply before harness startup and to
-  its child processes, independently of the model's instructions or approvals.
-- **Protects files outside the allowed roots:** direct writes to bot
-  configuration, Noodle runtime state, and unrelated personal files are denied.
-  Ordinary link, rename, and replacement attempts do not grant access outside
-  the policy. Unrelated personal file contents are also denied.
-- **Per-bot storage and authorized conversations:** other bots’ files and raw
-  conversation JSON are denied. The app checks membership and tool assignments
-  before releasing data or performing a request.
-- **A controlled launch boundary:** the host verifies executable identity and
-  accepts only supported launch options. Restricted runs cannot request a wider
-  policy, and enabling another restricted harness does not require broader app
-  entitlements.
+## What restricted access protects
+
+- **Enforced by macOS.** File limits apply before the harness starts and to
+  every process it launches, whatever the model is told or approves.
+- **Your files stay private.** Personal files, the bot's own configuration, and
+  Noodle's storage cannot be read or changed. Links, renames, and replaced
+  folders do not get around this.
+- **Bots stay apart.** A bot cannot read another bot's files or saved
+  conversations. Noodle checks membership and assignments before releasing data
+  or acting on a request.
+- **Only genuine harnesses run.** Noodle checks the provider's signature on a
+  harness before starting it, and a restricted bot cannot ask for wider access.
 
 ## Limitations
 
-- **Allowed files remain writable.** A bot can damage or delete data inside its
-  writable workspace, including its private harness storage. The
-  sandbox does not validate the meaning of edits or provide rollback.
-- **Authorized data is still shared.** Members of a conversation can retrieve
-  its messages and attachments through Messenger. Copies already delivered to
-  a workspace are not erased when membership is removed. Bots using the same
-  provider login share that provider account's permissions and billing.
-- **Cloud harness networking is open outbound.** Codex, Claude Code, FX, Grok Build, and Muse
-  Code are not limited to a list of model-provider domains. Readable data can be
-  sent to remote services, and the policy does not block outbound LAN access.
-  Connections to localhost are allowed. The current profiles deny starting
-  listening sockets, including localhost servers.
-  Restricted Apple denies direct outbound networking and runs its default
-  model on device. Separately assigned tools and computers have their own
-  permissions; the local filesystem policy does not restrict actions they
-  perform on a bot's behalf.
-- **File metadata is less restricted than contents.** The profiles generally
-  allow metadata queries, so file existence and attributes can be visible even
-  when contents cannot be read. FX also needs exact directory-entry reads along
-  its workspace ancestors for native skill discovery; these can expose sibling
-  names, but do not grant sibling file contents.
-- **Some tools will fail inside the boundary.** Dependencies, caches, global
-  skills, services, or files outside the allowed paths may be unavailable.
-  Harness updates can introduce new requirements. A tool approval does not fix
-  an OS permission denial; broader access requires the bot's unrestricted setting.
-- **This is a native process sandbox.** It does not provide a separate operating
-  system or set CPU, memory, disk-use, or model-spending quotas. It relies on the
-  macOS sandbox and Noodle's trusted launch and tool brokers. Signature checks
-  identify code; they do not establish that its behavior is harmless.
-- **Process arguments are not confidential.** Restricted cloud and Apple
-  profiles do not reliably prevent reading another same-user process's command
-  arguments on macOS 27. Keep credentials out of command arguments; workspace
-  filesystem isolation does not protect them.
+- **Allowed files remain writable.** A bot can damage or delete anything in its
+  workspace and Read & Write folders. There is no review of edits and no
+  rollback.
+- **Shared data stays shared.** Members of a conversation can retrieve its
+  messages and attachments. Copies already delivered to a workspace are not
+  erased when a member is removed. Bots using the same sign-in share that
+  account's permissions and billing.
+- **Outbound networking is open.** Cloud harnesses are not limited to their
+  provider's domains. Anything a bot can read can be sent to a remote service,
+  including on your local network. Assigned tools, computers, and browsers have
+  their own permissions; the file limits do not apply to what they do for a bot.
+- **File names are less private than contents.** A bot may be able to see that a
+  file exists, and its size and dates, without being able to read it.
+- **Some tools fail when restricted.** Dependencies, caches, global skills, or
+  services outside the allowed folders may be unavailable, and a harness update
+  can add new requirements. A tool approval does not fix this; share the folder
+  or make the bot unrestricted.
+- **It is not a virtual machine.** There are no CPU, memory, disk, or spending
+  limits. A signature check identifies a harness; it does not make its behavior
+  harmless.
+- **Command arguments are not private.** Other processes on your Mac may be able
+  to read them. Keep credentials out of command arguments.
 
 ## Account apps
 
@@ -210,17 +130,14 @@ The **Apps** switch in **Settings → Sandbox** lets a Codex bot use apps connec
 to its ChatGPT account, or a Claude Code bot use connectors from Claude.ai. Click
 the **Apps** heading or a bot's **apps** status to see the explanation.
 
-Apps are off by default, including for existing bots. The preference is saved
-separately for each bot and harness: enabling Codex apps does not enable Claude
-connectors when that bot switches harnesses. Unsupported harnesses show a dash.
-Unrestricted access and Noodle-assigned tools have separate settings.
+Apps are off by default. The preference is saved separately for each bot and
+harness: enabling Codex apps does not enable Claude connectors when that bot
+switches harnesses. Unsupported harnesses show a dash. Unrestricted access and
+Noodle-assigned tools have separate settings.
 
-Changing Apps restarts the bot, retaining its conversation. Revocation is saved
-before shutdown; a grant is saved only once the previous runtime has stopped.
-Codex receives an explicit `apps` feature override at launch; Claude receives
-`disableClaudeAiConnectors` in its launch settings. Noodle does not edit either
-harness's global configuration. Provider or administrator restrictions still
-apply when Apps is on. Setup and model-discovery probes run with apps disabled.
+Changing Apps restarts the bot and keeps its conversation. Noodle does not edit
+either harness's global configuration, and provider or administrator
+restrictions still apply when Apps is on.
 
 This switch controls those account apps, not every remote tool or network
 request. Apps use the permissions granted in the provider account. Turning Apps
@@ -230,35 +147,27 @@ account permissions in ChatGPT or Claude.ai.
 
 ## Connected tools
 
-Assigning a tool lets the bot use the permissions you granted during provider
-sign-in. Noodle does not ask again for each tool call. OAuth credentials stay in
-the macOS Keychain and are not written to bot skills or request files.
+Assigning a [tool](mcp-connections.md) lets the bot use the permissions you
+granted during sign-in. Noodle does not ask again for each call. Tool sign-ins
+stay in the macOS Keychain and are never written to the bot's files.
 
-`messenger tool` saves binary results under `workspace/.noodle/tool-attachments` without
-overwriting existing files. For tool connections, `@file` inputs can read only regular
-workspace files, rejecting symlinks, hard links, and traversal. Resource links require an
-explicit read; returned links are never followed automatically. A tool connection is a
-remote server: Noodle removes anything it sends that imitates Noodle's own tool markers,
-so it cannot have workspace files opened for it or have anything posted into a conversation.
+A tool connection is a remote server. It can receive only workspace files the
+bot chooses to send, and it cannot open workspace files or post into a
+conversation on its own. Files a tool returns are saved in the workspace without
+overwriting existing ones.
 
 Removing an assignment blocks future calls; a call already sent may still finish.
-Removing the connection deletes its local credentials. To revoke the provider's
-grant too, use that provider's connected-app settings. An unrestricted bot's wider
-system access means workspace assignment checks are not a hard isolation boundary.
+Removing the connection deletes its sign-in from this Mac. To revoke the
+provider's grant too, use that provider's connected-app settings. An unrestricted
+bot's wider access means assignments are not a hard boundary for it.
 
-Applet requests are checked against the current bot session and conversation
-membership before dispatch, again after companion startup waits, and before any
-result is released. Removing and re-adding a bot does not reactivate requests
-from its previous session. Revoked callers receive neither success payloads nor
-provider diagnostics. An operation already dispatched to Applet may still finish;
-these checks do not undo its effects or erase files previously delivered.
+## Noodlets
 
-A noodlet a bot writes does not widen that bot's file access. HTML noodlets read
-only their package and data directory. Native Swift noodlets compile and run under
-a deny-by-default profile applied by Applet's `NoodletHost.xpc`, limited to their
-build, their data directory and a private home directory. Neither kind can read
-the user's files, another noodlet, Applet's storage or the Keychain. A file
-reaches a noodlet only when the user picks it in a dialog Applet presents.
+A noodlet a bot writes in [Noodle Applet](../Applet/README.md) does not widen
+that bot's access. A noodlet can read only its own files and saved data. It
+cannot read your files, another noodlet, or the Keychain; a file reaches it only
+when you pick it in a dialog. Removing a bot from a conversation stops its
+requests to shared noodlets, though one already running may still finish.
 
 ## Files, recording, and computers
 
@@ -274,82 +183,10 @@ folders or sharing the host clipboard. Bots assigned to the same computer share
 its files and services, with separate terminal sessions. Networking can reach your
 LAN; Shell computers can have networking disabled.
 
-## Implementation boundary
+## How it is built
 
-The Noodle app stays sandboxed. Harnesses run through the signed
-`NoodleAgentHost.xpc`, which validates Noodle's identity, the vendor-signed harness,
-and a fixed set of launch options. Restricted Codex, Claude Code, FX, Grok Build, Muse Code, and Apple receive their filesystem
-policy before the harness executable starts; failure to apply it prevents
-startup. The host accepts no caller-supplied sandbox profile, arbitrary command,
-or writable roots. Unrestricted harnesses use the separate authorized launch path.
-The host runs as the current user, never root. App and helper entitlements are
-unchanged by bot isolation.
-
-A harness [installed by Noodle](harness-setup.md#harnesses-installed-by-noodle) lives in
-`Harnesses/<harness>/<version>` in Noodle's storage. The sandboxed app downloads
-the provider's release over HTTPS from a fixed list of the provider's own hosts,
-following redirects on the same host only, checks the published SHA-256 where the
-provider has one, and unpacks it into a staging folder. macOS quarantines what a
-sandboxed app writes, so nothing the app stages can run. The app then names the
-harness, version, and staging identifier to Agent Host, never a path. The host
-derives the folder, refuses entries that link outside it, verifies the same pinned
-vendor signature it requires of a native installation (for Codex, its bundled
-tools too), and only then lifts the quarantine and moves the release into place. A
-download that fails any check is deleted. At every launch the host validates the
-path again: it must be exactly a version folder of that harness, reached without
-links, and correctly signed. A compromised app can therefore install only genuine
-vendor-signed releases, though it could choose an older one. The App Sandbox
-refuses the app execute access to everything in its own container, so only the
-host can ever run a harness installed this way. That includes the two things the
-app otherwise runs a Codex installation for itself: the account check and
-sign-in, and the model list. For a Codex the app cannot execute, the host runs
-both with its fixed environment, returns only the sign-in state or the model
-catalogue, and forwards a device code only for OpenAI's own sign-in page. Grok
-Build and Muse Code sign in to the system account the same way a profile does:
-the host runs the harness's own device-code login and forwards only a code for
-xAI's or Meta's own page. The host's Grok Build, Muse Code and OpenCode
-inspections look at the vendor's location first and at Noodle's verified copy
-only when that is absent.
-
-The built-in `NoodleAppleAgent` is verified against this app's exact helper path,
-signing team, and helper identifier. It has no extra entitlements and does not
-inherit the app sandbox. Agent Host applies its own deny-by-default policy before
-execution: system and own-bot package reads, workspace writes,
-read-only model-availability and global preferences, and the Apple model-manager
-service. Outbound network and unrelated user files are denied. Its initial
-Default model runs on device through Foundation Models. The existing per-bot
-unrestricted setting enables broader user-level access through the same authorized
-launch path as other harnesses. The app's entitlements remain unchanged.
-
-On macOS 27, `IOSurfaceRootUserClient` access permits image-buffer allocation.
-The `com.apple.MTLCompilerService` Mach service and `AGXDeviceUserClient` GPU
-interface permit Core Image to render the attachment pixels and MLX to run
-local inference. Metal can read and write only the helper's
-`com.pdparchitect.noodle.apple-agent` subdirectory in the Darwin user cache;
-other applications' caches are not granted. This is needed for macOS 27's
-binary-archive bookkeeping. Selecting an imported MLX model adds read-only access to that
-model's private folder. Imported
-weights receive no executable-mapping grant. Model imports copy regular data
-files through the app's existing user-selected read access; the helper cannot
-download weights or change the model library in restricted mode. MLX code and
-Metal shaders ship inside the signed app, and resource bundles are signed before
-the app is sealed. The helper has no additional code-signing entitlements.
-Current image attachments can be supplied directly to a capable Apple model;
-private cloud inference is not enabled.
-
-Sparkle's signed installer runs outside the sandbox to replace the app during updates.
-
-The policies are implemented in
-[`RestrictedAgentSandbox.swift`](../Sources/NoodleCore/RestrictedAgentSandbox.swift)
-and [`AppleHarness.swift`](../Sources/NoodleCore/AppleHarness.swift). Login seeding is
-in [`RestrictedHarnessStorage.swift`](../Sources/NoodleCore/RestrictedHarnessStorage.swift),
-conversation authorization is in [`MessengerBridge.swift`](../Sources/NoodleCore/MessengerBridge.swift),
-and workspace I/O is anchored by [`WorkspaceMailbox.swift`](../Sources/NoodleCore/WorkspaceMailbox.swift), with launch
-enforcement in [`NoodleAgentHost`](../Sources/NoodleAgentHost/main.swift).
-[Development](development.md) describes the real-process filesystem boundary
-tests, offline initialization checks, opt-in live Messenger/resume checks, and
-signed-bundle verification. Those checks exercise specific allowed and denied
-operations; they are not an exhaustive security audit. See
-[architecture](architecture.md) for the surrounding process boundaries.
+[Architecture](architecture.md#sandbox-and-launch-boundary) describes the launch
+boundary, the sandbox policy for each harness, and how Noodle verifies the
+harnesses it installs.
 
 [Documentation](README.md)

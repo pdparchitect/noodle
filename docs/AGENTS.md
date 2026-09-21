@@ -17,4 +17,6 @@ the author's machine, conversation, or work history.
   repair links when consolidating or deleting documentation.
 - Message, event and command guidance lives only in
   `Sources/NoodleCore/MessengerDocumentation.swift`. Do not copy it into a guide;
-  link to the source or to `messenger --help`.
+  point to `messenger --help`.
+- Write prose a person can read. Do not name or link source files; describe what
+  the code does and which part of Noodle does it.

@@ -57,6 +57,6 @@ copied into the conversation. Links include a `url` and a local `.webloc` bookma
 the bookmark is not the page content. Delivered files have an `absolutePath`.
 
 Use Messenger to change conversations; do not edit their JSON files directly.
-Commands, fields and event handling are described by `messenger --help` and the Messenger skill in each bot's workspace, both generated from [`MessengerDocumentation.swift`](../Sources/NoodleCore/MessengerDocumentation.swift).
+Commands, fields and event handling are described by `messenger --help` and the Messenger skill in each bot's workspace, both generated from Noodle's message catalogue.
 
 [Documentation](README.md)

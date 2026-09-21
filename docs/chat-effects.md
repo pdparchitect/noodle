@@ -14,8 +14,8 @@ A successful receipt confirms queuing, not display. Retry with the same
 `--request-id <uuid>` to avoid duplicates while the ID remains in the queue.
 Use `--list-effects` for supported names; `messenger --help` has the full contract.
 
-To add an effect, update `ConversationEffectKind`, its guidance in
-`MessengerDocumentation.swift`, and `ConversationEffectsView`. Include a reduced-motion
-alternative, regenerate the reference, and run `ConversationEffectTests`.
+To add an effect, add its kind, its guidance in the message catalogue, and its
+animation in the conversation effects view. Include a reduced-motion alternative
+and run `ConversationEffectTests`.
 
 [Documentation](README.md)
