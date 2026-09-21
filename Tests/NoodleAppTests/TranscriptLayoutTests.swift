@@ -246,6 +246,51 @@ import NoodleCore
         XCTAssertFalse(store.draft(for: bot.conversation.id).isEmpty)
     }
 
+    func testTypingInTheComposerDoesNotReevaluateTranscriptRows() async throws {
+        let timeout = watchdog()
+        defer { timeout.cancel() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("transcript-typing-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = WorkspaceRepository(rootURL: root)
+        try repository.prepare()
+        let bot = try repository.createAgent(named: "Typing Bot")
+        for index in 0..<12 {
+            try repository.append(ChatMessage(conversationID: bot.conversation.id,
+                author: index.isMultiple(of: 2) ? .user : .agent(bot.agent.id),
+                body: "Message **\(index)** with a link https://example.com/\(index)", delivery: .delivered))
+        }
+        let suite = "transcript-typing-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let runtime = AgentRuntimeCoordinator(discovery: HarnessDiscovery(homeDirectory: root,
+            applicationsDirectory: root, executableSearchDirectories: [], applicationBundleURL: root), defaults: defaults)
+        let store = NoodleStore(repository: repository, runtime: runtime, connectsServices: false)
+        defer { store.stopMonitoring() }
+        XCTAssertTrue(store.storageReady, store.errorMessage ?? "Storage failed")
+        store.selectedConversationID = bot.conversation.id
+        let window = window(FullTranscriptLayoutFixture(store: store))
+        defer { window.close(); window.contentView = nil }
+        try await settle()
+        func editor(in view: NSView?) -> ComposerTextView? {
+            if let editor = view as? ComposerTextView { return editor }
+            return view?.subviews.lazy.compactMap { editor(in: $0) }.first
+        }
+        let composer = try XCTUnwrap(editor(in: window.contentView))
+        // The first character swaps the send control; later ones change only the draft.
+        composer.insertText("H", replacementRange: composer.selectedRange())
+        try await settle()
+        let rendered = TranscriptRenderProbe.bubbleBodies
+        XCTAssertGreaterThan(rendered, 0, "The transcript must have rendered its rows")
+        for character in "ello there" {
+            composer.insertText(String(character), replacementRange: composer.selectedRange())
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try await settle()
+        XCTAssertEqual(store.draft(for: bot.conversation.id), "Hello there")
+        XCTAssertEqual(TranscriptRenderProbe.bubbleBodies, rendered,
+            "Typing re-evaluated \(TranscriptRenderProbe.bubbleBodies - rendered) transcript rows")
+    }
+
     private func findScroll(_ view: NSView) -> NSScrollView? {
         if let scroll = view as? NSScrollView { return scroll }
         return view.subviews.lazy.compactMap { self.findScroll($0) }.first

@@ -10,6 +10,10 @@ All notable changes to Noodle are documented here, following
 
 - Show which conversations have unread messages in the conversation picker: a blue dot before the name, the same dot as the sidebar.
 
+### Fixed
+
+- Keep typing in the message field responsive in long conversations. Each keystroke used to redraw every visible message.
+
 ## [0.23.0] - 2026-09-21
 
 ### Added

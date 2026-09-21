@@ -202,31 +202,14 @@ struct ChatView: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 7) {
-            if !store.pendingAttachments(for: conversation.id).isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 7) {
-                        ForEach(store.pendingAttachments(for: conversation.id)) { attachment in
-                            PendingAttachmentChip(
-                                attachment: attachment,
-                                preview: { showPreview(attachment) },
-                                remove: { store.removePendingAttachment(attachment) }
-                            )
-                        }
-                    }
-                }
-                .padding(.leading, composerControlHeight + composerControlSpacing)
-            }
+            PendingAttachmentStrip(conversationID: conversation.id,
+                leadingInset: composerControlHeight + composerControlSpacing, preview: showPreview)
 
             composerControls
         }
         .onDisappear {
             nameCompletion.detach()
         }
-    }
-
-    private var cannotSend: Bool {
-        store.draft(for: conversation.id).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            store.pendingAttachments(for: conversation.id).isEmpty
     }
 
     @ViewBuilder private var composerControls: some View {
@@ -297,63 +280,9 @@ struct ChatView: View {
     }
 
     private func composerInputContents(microphoneAction: (() -> Void)? = nil) -> some View {
-        ZStack(alignment: .bottomTrailing) {
-            ScrollableChatComposer(
-                text: Binding(
-                    get: { store.draft(for: conversation.id) },
-                    set: { store.setDraft($0, for: conversation.id) }
-                ),
-                isFocused: $composerFocused,
-                conversationID: conversation.id,
-                placeholder: composerPrompt,
-                agents: store.agents,
-                preferredIDs: Set(conversation.participantIDs),
-                separatesPreferredAgents: conversation.kind == .group,
-                completion: nameCompletion,
-                submit: { store.sendDraft(to: conversation.id) },
-                focusSidebar: focusSidebar,
-                pasteAttachments: { store.importAttachmentsFromPasteboard(into: conversation.id, pasteboard: $0) },
-                dropFiles: { urls in
-                    urls.forEach { store.importAttachment(from: $0, into: conversation.id) }
-                }
-            )
-            .padding(.leading, 12)
-            .padding(.trailing, composerSendControlWidth + 14 + (microphoneAction == nil ? 0 : 31))
-            .padding(.vertical, 6)
-            .frame(minHeight: composerControlHeight, alignment: .center)
-
-            HStack(spacing: 4) {
-            if let microphoneAction {
-                Button(action: microphoneAction) {
-                    Image(systemName: "mic")
-                        .font(.system(size: 16))
-                        .frame(width: 27, height: composerControlHeight)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(KeyboardBindings.shared.help("Record Voice Message", for: .recordVoice))
-                .accessibilityLabel("Record voice message")
-            }
-            if cannotSend {
-                Image(systemName: "arrow.up.circle")
-                    .font(.system(size: 22))
-                    .foregroundStyle(.tertiary)
-                    .frame(width: composerSendControlWidth, height: composerControlHeight)
-                    .padding(.trailing, 7)
-            } else {
-                Button(action: { store.sendDraft(to: conversation.id) }) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 23))
-                        .foregroundStyle(Color.accentColor)
-                        .frame(width: composerSendControlWidth, height: composerControlHeight)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .padding(.trailing, 7)
-                .help("Send Message")
-            }
-            }
-        }
+        ComposerDraftInput(conversation: conversation, isFocused: $composerFocused, placeholder: composerPrompt,
+            completion: nameCompletion, focusSidebar: focusSidebar, microphoneAction: microphoneAction,
+            controlHeight: composerControlHeight, sendControlWidth: composerSendControlWidth)
     }
 
     private func showPreview(_ attachment: ConversationAttachment) {
@@ -430,6 +359,110 @@ struct ChatView: View {
     private var composerSendControlWidth: CGFloat { 27 }
     private var composerCornerRadius: CGFloat { composerControlHeight / 2 }
 
+}
+
+// The draft is read in these views' own bodies, so that typing re-evaluates the
+// composer alone and leaves the transcript beside it untouched.
+private struct PendingAttachmentStrip: View {
+    @Environment(NoodleStore.self) private var store
+    let conversationID: UUID
+    let leadingInset: CGFloat
+    let preview: (ConversationAttachment) -> Void
+
+    var body: some View {
+        let attachments = store.pendingAttachments(for: conversationID)
+        if !attachments.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 7) {
+                    ForEach(attachments) { attachment in
+                        PendingAttachmentChip(
+                            attachment: attachment,
+                            preview: { preview(attachment) },
+                            remove: { store.removePendingAttachment(attachment) }
+                        )
+                    }
+                }
+            }
+            .padding(.leading, leadingInset)
+        }
+    }
+}
+
+private struct ComposerDraftInput: View {
+    @Environment(NoodleStore.self) private var store
+    let conversation: BotConversation
+    @Binding var isFocused: Bool
+    let placeholder: String
+    let completion: ComposerNameCompletion
+    let focusSidebar: (() -> Void)?
+    let microphoneAction: (() -> Void)?
+    let controlHeight: CGFloat
+    let sendControlWidth: CGFloat
+
+    private var cannotSend: Bool {
+        store.draft(for: conversation.id).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            store.pendingAttachments(for: conversation.id).isEmpty
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            ScrollableChatComposer(
+                text: Binding(
+                    get: { store.draft(for: conversation.id) },
+                    set: { store.setDraft($0, for: conversation.id) }
+                ),
+                isFocused: $isFocused,
+                conversationID: conversation.id,
+                placeholder: placeholder,
+                agents: store.agents,
+                preferredIDs: Set(conversation.participantIDs),
+                separatesPreferredAgents: conversation.kind == .group,
+                completion: completion,
+                submit: { store.sendDraft(to: conversation.id) },
+                focusSidebar: focusSidebar,
+                pasteAttachments: { store.importAttachmentsFromPasteboard(into: conversation.id, pasteboard: $0) },
+                dropFiles: { urls in
+                    urls.forEach { store.importAttachment(from: $0, into: conversation.id) }
+                }
+            )
+            .padding(.leading, 12)
+            .padding(.trailing, sendControlWidth + 14 + (microphoneAction == nil ? 0 : 31))
+            .padding(.vertical, 6)
+            .frame(minHeight: controlHeight, alignment: .center)
+
+            HStack(spacing: 4) {
+            if let microphoneAction {
+                Button(action: microphoneAction) {
+                    Image(systemName: "mic")
+                        .font(.system(size: 16))
+                        .frame(width: 27, height: controlHeight)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(KeyboardBindings.shared.help("Record Voice Message", for: .recordVoice))
+                .accessibilityLabel("Record voice message")
+            }
+            if cannotSend {
+                Image(systemName: "arrow.up.circle")
+                    .font(.system(size: 22))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: sendControlWidth, height: controlHeight)
+                    .padding(.trailing, 7)
+            } else {
+                Button(action: { store.sendDraft(to: conversation.id) }) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 23))
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: sendControlWidth, height: controlHeight)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 7)
+                .help("Send Message")
+            }
+            }
+        }
+    }
 }
 
 private struct ConversationTranscript: View {

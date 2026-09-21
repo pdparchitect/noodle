@@ -118,6 +118,16 @@ struct ConversationStatusAvatar: View {
     }
 }
 
+/// Counts message row evaluations so tests can prove that typing leaves the transcript alone.
+@MainActor enum TranscriptRenderProbe {
+    private(set) static var bubbleBodies = 0
+    static func bubbleBody() {
+        #if DEBUG
+        bubbleBodies += 1
+        #endif
+    }
+}
+
 struct MessageBubble: View {
     @Environment(NoodleStore.self) private var store
     @AppStorage(ChatAttachmentLayout.defaultsKey) private var attachmentLayout = ChatAttachmentLayout.defaultValue.rawValue
@@ -142,6 +152,7 @@ struct MessageBubble: View {
     }
 
     var body: some View {
+        let _ = TranscriptRenderProbe.bubbleBody()
         let attachments = store.attachments(for: message)
         if isSystem {
             HStack {
