@@ -65,11 +65,21 @@ import NoodleCore
         start(provider: .muse, agentID: agentID, executablePath: executablePath,
               modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier, reply: reply)
     }
+    func startRestrictedAntigravity(agentID: UUID, executablePath: String, conversationID: UUID?, modelIdentifier: String?,
+                                    reply: @escaping (Int32, String?) -> Void) {
+        start(provider: .antigravity, agentID: agentID, executablePath: executablePath,
+              sessionID: conversationID, modelIdentifier: modelIdentifier, reply: reply)
+    }
     func write(_ data: Data) {
         let object = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
         if object["type"] as? String == "user" {
             prompts += 1
             emit(["type": "system", "subtype": "init", "session_id": session])
+            return
+        }
+        if object["event"] as? String == "user" {
+            prompts += 1
+            emit(["event": "init", "conversation_id": session])
             return
         }
         if object["type"] as? String == "control_request" {
@@ -151,6 +161,8 @@ import NoodleCore
             emit(["method": "turn/completed", "params": ["sessionId": session, "turnId": turnID ?? turn, "terminal": "completed"]])
         case .claudeCode:
             emit(["type": "result", "session_id": session, "is_error": false])
+        case .antigravity:
+            emit(["event": "result", "result": ["conversation_id": session, "status": "SUCCESS", "response": "done\n"]])
         case .apple, .fx, .grokBuild, .openCode:
             emit(["id": promptID!, "result": ["stopReason": cancelled ? "cancelled" : "end_turn"]])
         }
@@ -200,6 +212,10 @@ import NoodleCore
                 onUnexpectedTermination: { _, _, _ in })
         case .muse:
             process = MuseAgentProcess(agent: agent, executableURL: executable, workspaceURL: workspace,
+                extendedAccess: true, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
+                onUnexpectedTermination: { _, _, _ in })
+        case .antigravity:
+            process = AntigravityAgentProcess(agent: agent, executableURL: executable, workspaceURL: workspace,
                 extendedAccess: true, recoverInterruptedWork: false, onSnapshot: { _ in }, onHeartbeat: {},
                 onUnexpectedTermination: { _, _, _ in })
         case .apple, .fx, .grokBuild, .openCode:
@@ -297,6 +313,14 @@ import NoodleCore
                 wire.complete()
                 await eventually { process.canReceiveHeartbeat }
                 precondition(wire.prompts == 2, "Accepted steering must not cause a duplicate wake")
+            } else if provider == .antigravity {
+                // The stream has no interrupt, so an urgent message waits for the turn to end.
+                await settle()
+                precondition(wire.prompts == 2 && wire.steers == 0 && wire.cancels == 0, "Urgent must wait for the turn")
+                wire.complete()
+                await eventually { wire.prompts == 3 }
+                wire.complete()
+                await eventually { process.canReceiveHeartbeat }
             } else {
                 await eventually { wire.cancels == 1 }
                 precondition(wire.prompts == 2, "Drain the interrupted turn before sending its replacement")
