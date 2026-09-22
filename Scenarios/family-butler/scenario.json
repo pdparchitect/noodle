@@ -77,7 +77,8 @@
   },
   "timeline": [
     { "capture": "01-the-plan" },
-    { "wait": 1.2, "in": "alfred",
+    { "wait": 0.8, "focus": "composer" },
+    { "wait": 1.1, "in": "alfred",
       "type": { "text": "Can you sort Secret Santa for the adults? £25 limit, and nobody should draw their own partner." } },
     { "wait": 0.8, "agent": "alfred", "status": { "phase": "working", "detail": "Drawing the Secret Santa names" } },
     { "wait": 0.6, "agent": "alfred",

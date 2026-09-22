@@ -248,6 +248,8 @@ struct Scenario: Codable {
         var stream: Stream?
         var toolCall: ToolCall?
         var error: String?
+        /// What the recording should move in on: "composer", "transcript" or "none".
+        var focus: String?
         var waitFor: Wait?
         var present: Presentation?
         var capture: String?
@@ -290,7 +292,7 @@ struct Scenario: Codable {
 
         var actions: Int {
             [status != nil, reply != nil, say != nil, type != nil, react != nil, stream != nil, toolCall != nil, error != nil,
-             waitFor != nil, present != nil, capture != nil].filter { $0 }.count
+             focus != nil, waitFor != nil, present != nil, capture != nil].filter { $0 }.count
         }
     }
 }
@@ -303,6 +305,9 @@ struct ScenarioError: LocalizedError {
 // MARK: - Load and validate
 
 extension Scenario {
+    /// What a recording can move in on.
+    static let focusRegions: Set<String> = ["composer", "transcript", "none"]
+
     static let settingsTabs: [String: NoodleSettingsTab] = [
         "general": .general, "chat": .chat, "harnesses": .harnesses, "mcps": .mcps, "heartbeats": .heartbeats,
         "sandbox": .sandbox, "keybindings": .keybindings, "permissions": .permissions, "companions": .companions, "updates": .updates
@@ -552,6 +557,8 @@ extension Scenario {
                 try require(MessageReaction.isValidEmoji(react.emoji), "\"\(react.emoji)\" is not a single emoji.")
             }
             try require(step.stream.map { ($0.chunk ?? 1) > 0 && ($0.interval ?? 0) >= 0 } ?? true, "\(name) streams in chunks of at least one character.")
+            try require(step.focus.map { Self.focusRegions.contains($0) } ?? true,
+                        "\(name): focus is \(Self.focusRegions.sorted().joined(separator: ", ")).")
             try require(step.capture.map { !$0.isEmpty && !$0.contains("/") && !$0.contains(" ") } ?? true, "\(name): a shot name has no spaces or slashes.")
             try check(step.present, initial: false)
         }
@@ -811,6 +818,8 @@ extension Scenario {
     /// Plays the titles around the timeline; tests replace it to watch the order without a window.
     var playFilm: (@MainActor (Scenario.Film.Stage) async throws -> Void)?
     private var filmStage: ScenarioFilmStage?
+    /// What the recording is moving in on, so typing can keep the picture with it.
+    private var focusRegion: String?
     private var processes: [UUID: ScenarioAgentProcess] = [:]
     private var started: Set<UUID> = []
     private var arrivals: [UUID: Int] = [:]
@@ -982,11 +991,20 @@ extension Scenario {
                 typed.append(character)
                 store.setDraft(typed, for: conversation.id)
                 cue("key")
+                // The picture keeps up with the writing, letter by letter and at one
+                // speed: eased steps would make it pulse rather than travel.
+                if focusRegion == "composer" { cueFocus("composer", over: 0.15, steady: true) }
                 // Keys land unevenly. Evenly spaced ones beat like a rotor once they have a sound.
                 try await sleep(.seconds((typing.interval ?? 0.075) * Double.random(in: 0.55...1.65)))
             }
+            // The picture pulls back as the hand reaches for Return, so the message
+            // lands with the whole window in view.
+            if focusRegion != nil {
+                focusRegion = nil
+                cueFocus("none", over: 0.5, steady: false)
+            }
             // A beat with the whole message on screen, as a hand pauses before Return.
-            try await sleep(.seconds(0.4))
+            try await sleep(.seconds(0.55))
             cue("enter")
             let date = now
             let message = try repository.sendUserMessage(conversationID: conversation.id, body: typing.text,
@@ -1018,6 +1036,10 @@ extension Scenario {
             if let exit = call.exit { log.record(.init(title: "Command completed (exit \(exit))", detail: call.input, streamID: id), at: now) }
             if let output = call.output { log.record(.init(title: "Tool output", detail: output, streamID: id + ":output"), at: now) }
         }
+        if let region = step.focus {
+            focusRegion = region == "none" ? nil : region
+            cueFocus(region, over: 0.9, steady: false)
+        }
         if let error = step.error { store.errorMessage = error }
         if let present = step.present {
             apply(present)
@@ -1045,6 +1067,48 @@ extension Scenario {
     private func icon(_ intro: Scenario.Film.Intro?) -> NSImage? {
         guard let path = intro?.icon, let url = try? scenario.asset(path) else { return nil }
         return NSImage(contentsOf: url)
+    }
+
+    /// Tells whoever is recording what to move in on, as a box inside the recorded area
+    /// with its origin at the top left. The move itself is made afterwards, on the film.
+    private func cueFocus(_ region: String, over move: Double, steady: Bool) {
+        guard takesShots, let window = mainWindow else { return }
+        let area = filmStage.map(\.frame) ?? window.frame
+        guard !area.isEmpty else { return }
+        var box = area
+        if region != "none" {
+            guard let wanted = focusBox(region, in: window) else { return }
+            // Kept inside the window: the margin around it belongs to the stage, and
+            // moving in on that would show black.
+            box = ScenarioSupport.fit(wanted, shapedLike: area, inside: window.frame)
+        }
+        let line = [box.minX - area.minX, area.maxY - box.maxY, box.width, box.height]
+            .map { String(Int($0.rounded())) }.joined(separator: ",")
+        write("SCENARIO FOCUS \(line) \(move) \(steady ? "steady" : "eased") \(Date().timeIntervalSince1970)")
+    }
+
+    /// The conversation column, taken from the split view rather than by hunting for a
+    /// view: the sidebar holds a scroller of its own and is easily mistaken for it.
+    private func focusBox(_ region: String, in window: NSWindow) -> NSRect? {
+        let item = ScenarioSupport.splitController(in: window.contentView)?.splitViewItems.first
+        let sidebar = item?.isCollapsed == true ? 0 : (item?.viewController.view.frame.width ?? 0)
+        let column = NSRect(x: window.frame.minX + sidebar, y: window.frame.minY,
+                            width: window.frame.width - sidebar, height: window.frame.height)
+        switch region {
+        case "composer":
+            // The composer and the last of the conversation above it, held around
+            // whatever is being written so the picture follows the words.
+            let band = NSRect(x: column.minX, y: column.minY, width: column.width, height: column.height * 0.52)
+            let width = column.width * 0.78
+            guard let text = ScenarioSupport.firstView(in: window.contentView, matching: { $0 is ComposerTextView }) as? NSTextView else {
+                return band
+            }
+            let caret = text.firstRect(forCharacterRange: NSRange(location: text.string.utf16.count, length: 0), actualRange: nil)
+            guard caret.midX > 0 else { return band }
+            return NSRect(x: caret.midX - width / 2, y: band.minY, width: width, height: band.height)
+        case "transcript": return column
+        default: return nil
+        }
     }
 
     /// Tells whoever is recording that something just made a noise, and when. Only a
@@ -1492,6 +1556,31 @@ enum ScenarioSupport {
         let rect = rect(frame), screen = screen
         return [rect.minX, rect.minY, rect.width, rect.height, screen.minX, screen.minY, screen.width, screen.height]
             .map { String(Int($0)) }.joined(separator: " ") + " "
+    }
+
+    /// Grows `box` to the shape of `like` and keeps it within `bounds`, so a move in on
+    /// it never stretches the picture and never reaches past what it is allowed to show.
+    static func fit(_ box: NSRect, shapedLike like: NSRect, inside bounds: NSRect) -> NSRect {
+        let shape = like.width / like.height
+        var width = box.width, height = box.height
+        if width / height > shape { height = width / shape } else { width = height * shape }
+        if width > bounds.width { width = bounds.width; height = width / shape }
+        if height > bounds.height { height = bounds.height; width = height * shape }
+        let x = min(max(box.midX - width / 2, bounds.minX), bounds.maxX - width)
+        let y = min(max(box.midY - height / 2, bounds.minY), bounds.maxY - height)
+        return NSRect(x: x, y: y, width: width, height: height)
+    }
+
+    /// The first view anywhere under `view` that matches, breadth first.
+    static func firstView(in view: NSView?, matching: (NSView) -> Bool) -> NSView? {
+        guard let view else { return nil }
+        var pending = [view]
+        while !pending.isEmpty {
+            let next = pending.removeFirst()
+            if matching(next) { return next }
+            pending.append(contentsOf: next.subviews)
+        }
+        return nil
     }
 
     static func splitController(in view: NSView?) -> NSSplitViewController? {

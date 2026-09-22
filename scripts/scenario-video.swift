@@ -123,6 +123,59 @@ func write(_ samples: [Float], rate: Double, to url: URL) throws {
     try file.write(from: buffer)
 }
 
+/// Grows `box` to the shape of `whole` and keeps it inside, so the picture is never
+/// stretched and never reaches past its own edge.
+func fit(_ box: CGRect, into whole: CGRect) -> CGRect {
+    let shape = whole.width / whole.height
+    var width = box.width, height = box.height
+    if width / height > shape { height = width / shape } else { width = height * shape }
+    width = min(width, whole.width); height = min(height, whole.height)
+    var x = box.midX - width / 2, y = box.midY - height / 2
+    x = min(max(x, whole.minX), whole.maxX - width)
+    y = min(max(y, whole.minY), whole.maxY - height)
+    return CGRect(x: x, y: y, width: width, height: height)
+}
+
+/// One move of the picture: where it ends up, how long it takes, and whether it is
+/// keeping up with something moving or going somewhere and stopping.
+struct Move {
+    let at: Double
+    let box: CGRect
+    let seconds: Double
+    let steady: Bool
+    /// Where the picture actually is when this move starts, filled in afterwards so an
+    /// interrupted move carries on from where it got to rather than jumping back.
+    var from: CGRect = .zero
+}
+
+func blend(_ from: CGRect, _ to: CGRect, _ amount: Double) -> CGRect {
+    CGRect(x: from.minX + (to.minX - from.minX) * amount,
+           y: from.minY + (to.minY - from.minY) * amount,
+           width: from.width + (to.width - from.width) * amount,
+           height: from.height + (to.height - from.height) * amount)
+}
+
+/// Where the picture is looking at `time`.
+///
+/// Going somewhere is eased from wherever it started and then held. Keeping up with
+/// something moving runs to the next box over the real time between them, so the picture
+/// travels at the speed the thing does; when the next move is not a follow, it holds
+/// still instead, and the move after it eases away from there.
+func framing(_ moves: [Move], at time: Double) -> CGRect {
+    var index = 0
+    for candidate in moves.indices where time >= moves[candidate].at { index = candidate }
+    let move = moves[index]
+    guard index > 0 else { return move.box }
+    if move.steady {
+        guard index + 1 < moves.count, moves[index + 1].steady else { return move.box }
+        let next = moves[index + 1]
+        let span = max(0.001, next.at - move.at)
+        return blend(move.box, next.box, min(1, max(0, (time - move.at) / span)))
+    }
+    let progress = min(1, max(0, (time - move.at) / max(0.01, move.seconds)))
+    return blend(move.from, move.box, progress * progress * (3 - 2 * progress))
+}
+
 let semaphore = DispatchSemaphore(value: 0)
 Task {
     do {
@@ -188,6 +241,81 @@ Task {
             _ = try FileManager.default.replaceItemAt(movie, withItemAt: finished)
             print("\(cues.count) keystrokes in \(movie.path)")
 
+        case "zoom":
+            guard arguments.count == 5 else { fail("usage: scenario-video.swift zoom MOVIE FOCUS STOPPED-AT") }
+            let movie = URL(fileURLWithPath: arguments[2])
+            guard let stopped = Double(arguments[4]) else { fail("\(arguments[4]) is not a time") }
+            let asset = AVURLAsset(url: movie)
+            let duration = try await asset.load(.duration)
+            let seconds = CMTimeGetSeconds(duration)
+            guard let track = try await asset.loadTracks(withMediaType: .video).first else { fail("no video") }
+            let natural = try await track.load(.naturalSize).applying(try await track.load(.preferredTransform))
+            let size = CGSize(width: abs(natural.width), height: abs(natural.height))
+            let whole = CGRect(origin: .zero, size: size)
+            let started = stopped - seconds
+
+            // Each line is a box to move in on, with its origin at the top left of the
+            // picture, and the moment the film asked for it.
+            var keys: [Move] = [Move(at: 0, box: whole, seconds: 0.9, steady: false, from: whole)]
+            for line in (try String(contentsOf: URL(fileURLWithPath: arguments[3]), encoding: .utf8)).split(separator: "\n") {
+                let fields = line.split(separator: " ")
+                guard fields.count == 4, let move = Double(fields[1]), let at = Double(fields[3]) else { continue }
+                let numbers = fields[0].split(separator: ",").compactMap { Double($0) }
+                guard numbers.count == 4 else { continue }
+                // Flip to the picture's own bottom-left origin, then widen to its shape.
+                let asked = CGRect(x: numbers[0], y: size.height - numbers[1] - numbers[3], width: numbers[2], height: numbers[3])
+                keys.append(Move(at: max(0, at - started), box: fit(asked, into: whole),
+                                 seconds: move, steady: fields[2] == "steady"))
+            }
+            guard keys.count > 1 else { print("nothing to move in on"); semaphore.signal(); return }
+            keys.sort { $0.at < $1.at }
+
+            // A caret advances in uneven jumps: a letter at a time, wider for a w than
+            // an i, and at a hand's irregular pace. Averaging each tracking box with its
+            // neighbours turns that into a glide without losing where it travels to.
+            keys = keys.map { key in
+                guard key.steady else { return key }
+                let near = keys.filter { $0.steady && abs($0.at - key.at) <= 0.3 }
+                guard near.count > 1 else { return key }
+                let total = near.reduce(CGRect.zero) {
+                    CGRect(x: $0.minX + $1.box.minX, y: $0.minY + $1.box.minY,
+                           width: $0.width + $1.box.width, height: $0.height + $1.box.height)
+                }
+                let count = CGFloat(near.count)
+                return Move(at: key.at, box: CGRect(x: total.minX / count, y: total.minY / count,
+                                                    width: total.width / count, height: total.height / count),
+                            seconds: key.seconds, steady: true)
+            }
+            // Each move starts from wherever the last one had got to.
+            for index in keys.indices.dropFirst() {
+                keys[index].from = framing(Array(keys[0..<index]), at: keys[index].at)
+            }
+
+            let composition = try await AVMutableVideoComposition.videoComposition(with: asset) { request in
+                let box = framing(keys, at: CMTimeGetSeconds(request.compositionTime))
+                let scale = size.width / box.width
+                let move = CGAffineTransform(translationX: -box.minX, y: -box.minY)
+                    .concatenating(CGAffineTransform(scaleX: scale, y: scale))
+                request.finish(with: request.sourceImage.transformed(by: move).cropped(to: whole), context: nil)
+            }
+            composition.renderSize = size
+            // A screen recording only lays down a frame when something changes, and a
+            // filtered composition follows the source's timing unless told not to, so
+            // left alone the move steps along at whatever rate the screen happened to
+            // change. Unpinned, it is paced properly.
+            composition.sourceTrackIDForFrameTiming = kCMPersistentTrackID_Invalid
+            composition.frameDuration = CMTime(value: 1, timescale: 60)
+            guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else {
+                fail("could not start an export")
+            }
+            export.videoComposition = composition
+            let moved = movie.deletingLastPathComponent()
+                .appendingPathComponent("\(movie.deletingPathExtension().lastPathComponent)-zoom.mov")
+            try? FileManager.default.removeItem(at: moved)
+            try await export.export(to: moved, as: .mov)
+            _ = try FileManager.default.replaceItemAt(movie, withItemAt: moved)
+            print("\(keys.count - 1) moves in \(movie.path)")
+
         case "frame":
             guard arguments.count == 6 else { fail("usage: scenario-video.swift frame INPUT OUTPUT W:H black|white") }
             let input = URL(fileURLWithPath: arguments[2]), output = URL(fileURLWithPath: arguments[3])
@@ -223,6 +351,8 @@ Task {
                 request.finish(with: placed.composited(over: background), context: nil)
             }
             composition.renderSize = canvas
+            composition.sourceTrackIDForFrameTiming = kCMPersistentTrackID_Invalid
+            composition.frameDuration = CMTime(value: 1, timescale: 60)
 
             guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else {
                 fail("could not start an export")
@@ -256,7 +386,7 @@ Task {
             print(String(format: "%d keys over %.1fs in %@", count, at, arguments[2]))
 
         default:
-            fail("\(mode) is not frame, sound or preview")
+            fail("\(mode) is not frame, sound, zoom or preview")
         }
         semaphore.signal()
     } catch {

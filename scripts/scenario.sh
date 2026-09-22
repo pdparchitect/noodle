@@ -17,6 +17,7 @@ usage() {
     print -u2 '  --shots     play the timeline and save each capture step to Scenarios/NAME/shots/'
     print -u2 '  --video     play the film and record it to Scenarios/NAME/recordings/NAME.mov'
     print -u2 '  --ratio W:H also write that shape as an .mp4, once per ratio (16:9, 9:16, 1:1, 4:5)'
+    print -u2 '  --silent    leave the sound off the recording'
     print -u2 '  --shadow    keep the window shadow in those shots'
     print -u2 '  --all       every scenario in turn'
     print -u2 '  --no-build  derive the bundle from the Noodle Dev.app already in .build'
@@ -24,7 +25,7 @@ usage() {
     exit 1
 }
 
-build=true shots=false record=false shadow=false all=false
+build=true shots=false record=false shadow=false all=false silent=false
 selections=() ratios=() expect_ratio=false
 for argument in "$@"; do
     if [[ "$expect_ratio" == true ]]; then
@@ -34,6 +35,7 @@ for argument in "$@"; do
         --no-build) build=false ;;
         --debug) export NOODLE_BUILD_CONFIGURATION=debug ;;
         --shots) shots=true ;;
+        --silent) silent=true ;;
         --video) record=true ;;
         --ratio) expect_ratio=true; record=true ;;
         --ratio=*) ratios+=("${argument#--ratio=}"); record=true ;;
@@ -196,7 +198,7 @@ for folder in "${folders[@]}"; do
     taken=0
     recorder= stopped=
     movie="$folder/recordings/${folder:t}.mov"
-    cues="$(mktemp)"
+    cues="$(mktemp)" focus="$(mktemp)"
     # The flag goes last: AppKit reads arguments in pairs, and would take what follows it for its value.
     coproc "$executable" --scenario "$folder" "${locale[@]}" --scenario-shots
     app_pid=$!
@@ -207,6 +209,10 @@ for folder in "${folders[@]}"; do
         # The app reports every sound it makes, with the time, for the track laid down below.
         if [[ "$line" == "SCENARIO SOUND "* ]]; then
             print -r -- "${line#SCENARIO SOUND }" >> "$cues"
+            continue
+        fi
+        if [[ "$line" == "SCENARIO FOCUS "* ]]; then
+            print -r -- "${line#SCENARIO FOCUS }" >> "$focus"
             continue
         fi
         print -r -- "$line"
@@ -262,7 +268,8 @@ for folder in "${folders[@]}"; do
     if [[ "$record" == true ]]; then
         if [[ -s "$movie" ]]; then
             print "Recorded $movie"
-            [[ ! -s "$cues" || -z "$stopped" ]] || "$video_tool" sound "$movie" "$cues" "$stopped"
+            [[ -z "$stopped" || ! -s "$focus" ]] || "$video_tool" zoom "$movie" "$focus" "$stopped"
+            [[ "$silent" == true || -z "$stopped" || ! -s "$cues" ]] || "$video_tool" sound "$movie" "$cues" "$stopped"
             # The padding matches the film's own backdrop, so the frame reads as one surface.
             # A picture or video behind the app still pads out to a flat colour.
             background="$(python3 -c 'import json,sys
@@ -275,5 +282,5 @@ print(value if value in ("black", "white") else "black")' "$folder/scenario.json
             print -u2 "Nothing was recorded."
         fi
     fi
-    rm -f "$cues"
+    rm -f "$cues" "$focus"
 done
