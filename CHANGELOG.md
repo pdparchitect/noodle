@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-09-22
+
 ### Changed
 
 - Offer OpenAI, Anthropic, Meta and xAI as tiles in Set Up Your First Bot, with their harness and its state on this Mac. The other harnesses are listed under Other, which opens by itself when one of them is the best choice.

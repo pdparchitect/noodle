@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-22
+
 ### Fixed
 
 - Record a noodlet at 30 fps, evenly. Capture used to pause a fixed interval after each frame, so the time the screenshot itself took came off the frame rate: recordings ran at about ten uneven frames a second and looked choppy. A noodlet that cannot be captured that fast now holds each frame for a whole number of frames instead of drifting.
