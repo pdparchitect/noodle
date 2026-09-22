@@ -20,7 +20,8 @@ Scenarios/
 zsh scripts/scenario.sh                 # the picker
 zsh scripts/scenario.sh family-butler   # one scenario; Return in the terminal is Next Step
 zsh scripts/scenario.sh --shots --all   # save every capture step of every scenario
-zsh scripts/scenario.sh --record family-butler   # play it and record the window as a movie
+zsh scripts/scenario.sh --video family-butler    # record the film as a movie
+zsh scripts/scenario.sh --video --ratio 9:16 --ratio 1:1 family-butler
 ```
 
 The script builds `.build/Noodle Scenarios.app`, a copy of the development app with its
@@ -41,11 +42,15 @@ quits at the end of the timeline. It needs a terminal with Screen Recording perm
 During a capture run `waitFor: key` does not stop, and `waitFor: userMessage` sends the
 draft in the composer.
 
-`--record` plays the timeline the same way and records the main window with
-`screencapture -v` into `recordings/NAME.mov`, from the moment the window is up until the
-timeline ends. A timeline meant for a recording types its own messages with `type` and
-paces itself with `wait`, so nothing stops for a key. Sheets open over the main window
-are in the picture; windows from `present.windows` are not unless they overlap it.
+`--video` plays it the same way and records with `screencapture -v` into
+`recordings/NAME.mov`. A timeline meant for a recording types its own messages with
+`type` and paces itself with `wait`, so nothing stops for a key. Sheets open over the
+main window are in the picture; windows from `present.windows` are not unless they
+overlap it.
+
+`--ratio W:H`, which can be given more than once, also writes `recordings/NAME-WxH.mp4`:
+the same recording centred on the same background, grown to that shape for wherever it
+is going. Nothing is cropped, and nothing is scaled up past the size it was recorded at.
 
 `swift test --disable-sandbox --filter ScenarioTests` loads, seeds and plays every
 folder here. Unknown keys, missing assets and references to bots, conversations or
@@ -186,6 +191,32 @@ Steps run in order once the window is up. A step does one thing, after an option
 | `{ "waitFor": "key" }` | Waits for Scenarios > Next Step, or Return in the terminal. |
 | `{ "present": { … } }` | Changes the presentation. |
 | `{ "capture": "02-replied" }` | With `--shots`, saves the main window as `shots/02-replied.png`. Otherwise nothing. |
+
+## film
+
+A film wraps the timeline in titles, so the same scenario always opens and closes the
+same way. It also gives the recording a stage: the window is centred on screen with a
+margin of solid colour around it, which is what `--video` records, so the picture never
+shows the desktop and never runs to the edges.
+
+```json
+"film": {
+  "background": "black",
+  "intro": { "title": "Christmas, handled", "subtitle": "Alfred keeps the plan." },
+  "outro": { "tagline": "A workspace for you and your AI agents." }
+}
+```
+
+- `background` is `"black"` or `"white"`. The titles are written in the other one.
+- `intro` opens on a solid card, writes its title and subtitle, then fades into the app.
+  Without a `title` it uses the scenario's own.
+- `outro` comes up over the app at the end and writes the Noodle wordmark, one stroke at
+  a time, with `tagline` underneath. A recording ends there; in the app the card fades
+  and gives the window back.
+- Either may set `hold`, the seconds to stay on the finished card. The rest of the
+  timing is fixed, so every film has the same rhythm.
+
+Leave `film` out and the scenario plays on its own, with no stage and no titles.
 
 ## root/
 

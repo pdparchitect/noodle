@@ -90,5 +90,11 @@
     { "wait": 1.2, "agent": "sol", "in": "christmas",
       "reply": { "text": "Noted from Alfred: Secret Santa is six gifts at £25. I am tracking that £150 separately, so the £900 for food and family gifts is untouched." } },
     { "capture": "02-secret-santa" }
-  ]
+  ],
+  "film": {
+    "background": "black",
+    "intro": { "title": "Christmas, handled",
+      "subtitle": "Alfred keeps the plan for eleven people. Sol watches the budget." },
+    "outro": { "tagline": "A workspace for you and your AI agents." }
+  }
 }

@@ -19,11 +19,12 @@ struct Scenario: Codable {
     var conversations: [Conversation]?
     var present: Presentation?
     var timeline: [Step]?
+    var film: Film?
     /// Where `scenario.json` was read; asset paths are relative to it.
     var folder = URL(fileURLWithPath: "/")
 
     private enum CodingKeys: String, CodingKey {
-        case version, title, clock, appearance, settings, harnesses, agents, conversations, present, timeline
+        case version, title, clock, appearance, settings, harnesses, agents, conversations, present, timeline, film
     }
 
     enum Setting: Codable, Equatable {
@@ -194,6 +195,30 @@ struct Scenario: Codable {
         }
     }
 
+    /// Titles around the scenario, so a recording opens and closes the same way every time.
+    struct Film: Codable {
+        /// The solid colour behind the app and under the titles: "black" or "white".
+        var background: String?
+        var intro: Intro?
+        var outro: Outro?
+
+        struct Intro: Codable {
+            /// Defaults to the scenario's own title.
+            var title: String?
+            var subtitle: String?
+            /// Seconds to stay on the finished card. Default 1.4.
+            var hold: Double?
+        }
+
+        struct Outro: Codable {
+            var tagline: String?
+            /// Seconds to stay on the finished wordmark. Default 1.6.
+            var hold: Double?
+        }
+
+        enum Stage { case intro, outro }
+    }
+
     struct Step: Codable {
         var wait: Double?
         var agent: String?
@@ -327,6 +352,13 @@ extension Scenario {
         try require(version == 1, "Scenario version \(version) is not supported.")
         try require(appearance == nil || appearance == "dark", "Noodle is dark only: appearance must be \"dark\" or left out.")
         _ = try ScenarioSupport.start(clock, now: Date())
+        if let film {
+            try require(["black", "white"].contains(film.background ?? "black"), "film.background is \"black\" or \"white\".")
+            for (label, text) in [("intro.title", film.intro?.title), ("intro.subtitle", film.intro?.subtitle), ("outro.tagline", film.outro?.tagline)] {
+                try require(text.map { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? true, "film.\(label) has no text.")
+            }
+            try require((film.intro?.hold ?? 0) >= 0 && (film.outro?.hold ?? 0) >= 0, "A film holds for a negative time.")
+        }
         for key in (settings ?? [:]).keys {
             try require(Self.preferenceKeys.contains(key), "\"\(key)\" is not a preference a scenario can set.")
         }
@@ -705,6 +737,9 @@ extension Scenario {
     var isWaitingForKey: Bool { !keyWaiters.isEmpty }
     /// A capture run: scripts/scenario.sh photographs each `capture` step and nobody is at the keyboard.
     var takesShots = false
+    /// Plays the titles around the timeline; tests replace it to watch the order without a window.
+    var playFilm: (@MainActor (Scenario.Film.Stage) async throws -> Void)?
+    private var filmStage: ScenarioFilmStage?
     private var processes: [UUID: ScenarioAgentProcess] = [:]
     private var started: Set<UUID> = []
     private var arrivals: [UUID: Int] = [:]
@@ -782,10 +817,44 @@ extension Scenario {
 
     func play() async throws {
         defer { timelineEnded = true }
+        try await play(.intro)
         for step in scenario.timeline ?? [] {
             if let wait = step.wait, wait > 0 { try await sleep(.seconds(wait)) }
             guard try await perform(step) else { return }
         }
+        try await play(.outro)
+    }
+
+    /// The titles. Their timings are fixed so every film opens and closes alike; a
+    /// scenario chooses only the words and how long the finished card stays up.
+    private func play(_ stage: Scenario.Film.Stage) async throws {
+        guard let film = scenario.film else { return }
+        if let playFilm { try await playFilm(stage); return }
+        let card: ScenarioFilmModel.Card?, written: Double
+        switch stage {
+        case .intro:
+            card = film.intro.map { .intro(title: $0.title ?? scenario.title, subtitle: $0.subtitle) }
+            written = 1.6 + (film.intro?.hold ?? 1.4)
+        case .outro:
+            card = film.outro.map { .outro(tagline: $0.tagline) }
+            written = 3.3 + (film.outro?.hold ?? 1.6)
+        }
+        guard let card else {
+            if stage == .outro { filmStage?.finish() }
+            return
+        }
+        // The opening card is already up, from before the recorder started; presenting it
+        // again only makes sure it is in front of the window it covers.
+        filmStage?.present(card)
+        // A frame with the card in its starting state, so its animations have something to run from.
+        try await sleep(.milliseconds(60))
+        filmStage?.model.written = true
+        try await sleep(.seconds(written))
+        // A recording ends on the wordmark; someone watching in the app gets their window back.
+        if stage == .outro, takesShots { return }
+        filmStage?.model.leaving = true
+        try await sleep(.seconds(0.9))
+        if stage == .intro { filmStage?.dismissCard() } else { filmStage?.finish() }
     }
 
     /// False when the timeline cannot go on.
@@ -904,9 +973,10 @@ extension Scenario {
         return true
     }
 
-    /// The main window on screen as `screencapture -R` takes it: x, y from the top left, width, height.
+    /// What `screencapture -R` should take: the film's stage if there is one, otherwise the
+    /// main window. As x, y from the top left, width, height.
     private var mainWindowRegion: String? {
-        guard let frame = mainWindow?.frame else { return nil }
+        guard let frame = filmStage.map(\.frame) ?? mainWindow?.frame, !frame.isEmpty else { return nil }
         return "\(Int(frame.minX)),\(Int(ScenarioSupport.screen.maxY - frame.maxY)),\(Int(frame.width)),\(Int(frame.height))"
     }
 
@@ -972,6 +1042,14 @@ extension Scenario {
         if initial {
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
+        }
+        if let film = scenario.film {
+            let opening = film.intro.map { ScenarioFilmModel.Card.intro(title: $0.title ?? scenario.title, subtitle: $0.subtitle) }
+            let stage = filmStage ?? ScenarioFilmStage(film: film, opening: opening)
+            filmStage = stage
+            stage.attach(to: window)
+            if let opening { stage.present(opening) }
+            if takesShots { stage.hidePointer() }
         }
     }
 

@@ -11,10 +11,12 @@ bundle_identifier="com.pdparchitect.noodle.scenarios"
 entitlements="$build_root/NoodleScenarios.entitlements"
 
 usage() {
-    print -u2 'Usage: scripts/scenario.sh [--no-build] [--debug] [--shots] [--record] [--shadow] [--all] [name|path]'
+    print -u2 'Usage: scripts/scenario.sh [--no-build] [--debug] [--shots] [--video] [--ratio W:H]'
+    print -u2 '                            [--shadow] [--all] [name|path]'
     print -u2 '  no name     open the picker'
     print -u2 '  --shots     play the timeline and save each capture step to Scenarios/NAME/shots/'
-    print -u2 '  --record    play the timeline and record the main window to Scenarios/NAME/recordings/NAME.mov'
+    print -u2 '  --video     play the film and record it to Scenarios/NAME/recordings/NAME.mov'
+    print -u2 '  --ratio W:H also write that shape as an .mp4, once per ratio (16:9, 9:16, 1:1, 4:5)'
     print -u2 '  --shadow    keep the window shadow in those shots'
     print -u2 '  --all       every scenario in turn'
     print -u2 '  --no-build  derive the bundle from the Noodle Dev.app already in .build'
@@ -23,25 +25,34 @@ usage() {
 }
 
 build=true shots=false record=false shadow=false all=false
-selections=()
+selections=() ratios=() expect_ratio=false
 for argument in "$@"; do
+    if [[ "$expect_ratio" == true ]]; then
+        ratios+=("$argument"); expect_ratio=false; continue
+    fi
     case "$argument" in
         --no-build) build=false ;;
         --debug) export NOODLE_BUILD_CONFIGURATION=debug ;;
         --shots) shots=true ;;
-        --record) record=true ;;
+        --video) record=true ;;
+        --ratio) expect_ratio=true; record=true ;;
+        --ratio=*) ratios+=("${argument#--ratio=}"); record=true ;;
         --shadow) shadow=true ;;
         --all) all=true ;;
         -*) usage ;;
         *) selections+=("$argument") ;;
     esac
 done
+[[ "$expect_ratio" == false ]] || usage
+for ratio in "${ratios[@]}"; do
+    [[ "$ratio" == <->:<-> ]] || { print -u2 "$ratio is not an aspect ratio like 16:9."; exit 1; }
+done
 if [[ "$all" == true ]]; then
     [[ ${#selections} == 0 ]] || usage
     for file in "$scenarios"/*/scenario.json(N); do selections+=("${file:h}"); done
 fi
 [[ ${#selections} -le 1 || "$all" == true ]] || usage
-[[ "$shots" == false && "$record" == false || ${#selections} -gt 0 ]] || { print -u2 '--shots and --record need a scenario, or --all.'; exit 1; }
+[[ "$shots" == false && "$record" == false || ${#selections} -gt 0 ]] || { print -u2 '--shots and --video need a scenario, or --all.'; exit 1; }
 
 folders=()
 for selection in "${selections[@]}"; do
@@ -113,6 +124,14 @@ codesign --force --options runtime --timestamp=none --entitlements "$entitlement
 codesign --verify --strict "$app"
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" == "$bundle_identifier" ]]
 
+video_tool="$build_root/scenario-video"
+if [[ ${#ratios} -gt 0 ]]; then
+    if [[ ! -x "$video_tool" || "$project_root/scripts/scenario-video.swift" -nt "$video_tool" ]]; then
+        zsh "$project_root/scripts/swift-apple.sh" build --product Noodle >/dev/null 2>&1 || true
+        xcrun swiftc -O "$project_root/scripts/scenario-video.swift" -o "$video_tool"
+    fi
+fi
+
 executable="$contents/MacOS/Noodle"
 # The scenario argument keeps the terminal attached: Return does what Scenarios > Next Step does.
 locale=(-AppleLocale en_US -AppleLanguages '(en)')
@@ -153,7 +172,8 @@ for folder in "${folders[@]}"; do
                         # Needs Screen Recording permission for the terminal running this script.
                         screencapture -v -R "$region" "$movie" </dev/null &
                         recorder=$!
-                        sleep 1.5
+                        # Long enough for the recorder to be running before the film starts.
+                        sleep 0.8
                     fi
                 fi
                 print -p ""
@@ -189,6 +209,15 @@ for folder in "${folders[@]}"; do
     trap - EXIT
     [[ "$shots" == false ]] || print "$taken shots in $folder/shots"
     if [[ "$record" == true ]]; then
-        if [[ -s "$movie" ]]; then print "Recorded $movie"; else print -u2 "Nothing was recorded."; fi
+        if [[ -s "$movie" ]]; then
+            print "Recorded $movie"
+            # The padding matches the film's own backdrop, so the frame reads as one surface.
+            background="$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("film") or {}).get("background") or "black")' "$folder/scenario.json")"
+            for ratio in "${ratios[@]}"; do
+                "$video_tool" "$movie" "$folder/recordings/${folder:t}-${ratio/:/x}.mp4" "$ratio" "$background"
+            done
+        else
+            print -u2 "Nothing was recorded."
+        fi
     fi
 done
