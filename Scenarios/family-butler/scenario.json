@@ -93,8 +93,8 @@
   ],
   "film": {
     "background": "black",
-    "intro": { "title": "Christmas, handled.\nEleven people, one plan.",
-      "subtitle": "Alfred keeps the plan. Sol watches the budget." },
+    "intro": { "title": "Christmas, handled",
+      "subtitle": "Alfred keeps the plan for eleven people. Sol watches the budget." },
     "outro": { "tagline": "A workspace for you and your AI agents." }
   }
 }
