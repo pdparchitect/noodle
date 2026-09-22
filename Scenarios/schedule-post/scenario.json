@@ -1,0 +1,123 @@
+{
+  "version": 1,
+  "title": "Scheduling a post",
+  "clock": "06:40",
+  "settings": { "Noodle.firstBotSetup.dismissed": true },
+  "harnesses": { "claude-code": { "models": "builtin" } },
+  "agents": [
+    {
+      "key": "clara",
+      "name": "Clara",
+      "harness": "claude-code",
+      "model": "opus",
+      "effort": "high",
+      "description": "Runs the shop's accounts: posts, stories and the replies that come back",
+      "backstory": "You run a neighbourhood sourdough bakery's social accounts through a signed-in browser. You post when people are deciding where to get breakfast, not when a queue says so, and you say plainly what you are about to publish before it goes out.",
+      "avatar": { "image": "cast/clara.jpg" },
+      "autoReplies": ["Scheduled."]
+    },
+    {
+      "key": "kira",
+      "name": "Kira",
+      "harness": "claude-code",
+      "model": "sonnet",
+      "description": "Watches the shop inbox: orders, collections and the ones that need a person",
+      "avatar": { "image": "cast/kira.jpg" }
+    },
+    {
+      "key": "tony",
+      "name": "Tony",
+      "harness": "claude-code",
+      "model": "sonnet",
+      "description": "Keeps flour, butter and the standing orders on track with suppliers",
+      "avatar": { "image": "cast/tony.jpg" }
+    }
+  ],
+  "conversations": [
+    {
+      "key": "kira",
+      "direct": "kira",
+      "unread": true,
+      "messages": [
+        {
+          "at": "06:05",
+          "from": "kira",
+          "text": "Nine collection orders for Saturday already, and two people have asked whether the walnut loaf is back. It is on the board for Saturday, so I have told them yes."
+        }
+      ]
+    },
+    {
+      "key": "tony",
+      "direct": "tony",
+      "messages": [
+        {
+          "at": "-1d 15:20",
+          "from": "tony",
+          "text": "The mill has held its price for another month. I have put the usual four sacks on the standing order for Thursday."
+        }
+      ]
+    },
+    {
+      "key": "clara",
+      "direct": "clara",
+      "background": { "image": "https://images.pexels.com/photos/38959004/pexels-photo-38959004.jpeg" },
+      "messages": [
+        {
+          "at": "-1d 17:10",
+          "from": "user",
+          "text": "Saturday is the walnut loaf again. I want people to see it before they decide where they are going for breakfast."
+        },
+        {
+          "at": "-1d 17:14",
+          "from": "clara",
+          "text": "Then it wants to be out early on Saturday, not Friday night. The last two Saturdays, everything posted before eight sold through by eleven; the Friday evening ones did nothing. Film the trays coming out and send it to me, and I will put it in that window."
+        }
+      ]
+    }
+  ],
+  "present": { "select": "clara", "sidebar": "visible", "window": { "size": [1360, 980] } },
+  "timeline": [
+    { "capture": "01-before" },
+    { "wait": 1.2, "focus": "composer" },
+    {
+      "wait": 0.6,
+      "present": { "select": "clara", "draftAttachments": ["assets/morning-bake.mp4"] }
+    },
+    {
+      "wait": 1.0,
+      "in": "clara",
+      "type": { "key": "ask", "text": "Trays came out at six. Put it up Saturday, early." }
+    },
+    { "wait": 0.8, "agent": "clara", "status": { "phase": "working", "detail": "Opening the shop's account in the browser" } },
+    {
+      "wait": 0.7,
+      "agent": "clara",
+      "toolCall": {
+        "title": "Noodle Browser",
+        "input": "messenger tool browser -- open instagram.com/create --media morning-bake.mp4 --schedule \"Sat 07:15\"",
+        "output": "scheduled · Sat 27 Sep, 07:15 · draft saved",
+        "exit": 0,
+        "duration": 2.1
+      }
+    },
+    {
+      "wait": 0.6,
+      "agent": "clara",
+      "reply": {
+        "key": "confirm",
+        "text": "Scheduled for Saturday at 07:15, so it lands while people are still deciding.\n\nIt goes out as: \"Walnut loaf is back. Out of the oven at six, on the shelf until it goes.\" The clip runs five seconds and opens on the full tray, which is the frame that shows in the feed before anyone taps.\n\nNothing is public until Saturday. Tell me to move it or change the words any time before then and I will."
+      }
+    },
+    { "agent": "clara", "status": { "phase": "ready" } },
+    { "wait": 1.4, "capture": "02-scheduled" }
+  ],
+  "film": {
+    "background": "https://www.pexels.com/download/video/5930359/",
+    "intro": {
+      "icon": "cast/clara.jpg",
+      "title": "Scheduled, not posted",
+      "subtitle": "Hand it the clip and say when. It waits."
+    },
+    "outro": { "tagline": "A workspace for you and your AI agents." }
+  }
+}

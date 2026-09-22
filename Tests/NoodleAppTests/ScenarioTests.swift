@@ -316,6 +316,55 @@ import XCTest
         XCTAssertEqual(session.runtime.snapshot(for: try XCTUnwrap(session.seeded.agents["ada"]).id).phase, .ready)
     }
 
+    /// A scenario shows a file being put in the composer and then sent, the way someone would do
+    /// it. What is in the composer has to go with the message and leave the composer empty, or the
+    /// attachment is both sent and still sitting there.
+    func testTypingSendsWhatIsAlreadyInTheComposerAndLeavesItEmpty() async throws {
+        let folder = try directory()
+        try FileManager.default.createDirectory(
+            at: folder.appendingPathComponent("assets"), withIntermediateDirectories: true)
+        try Data("clip".utf8).write(to: folder.appendingPathComponent("assets/clip.mp4"))
+        let timeline = """
+            [ { "present": { "select": "ada", "draftAttachments": ["assets/clip.mp4"] } },
+              { "in": "ada", "type": { "text": "Schedule this for tomorrow.", "interval": 0.001 } } ]
+            """
+        let scenario = try Scenario.load(
+            from: try fixture(timeline: timeline, extra: "\"present\": { \"select\": \"ada\" },", in: folder))
+        let session = try session(scenario)
+        let conversation = try XCTUnwrap(session.seeded.conversations["ada"])
+        session.store.startAgents()
+        try await session.play()
+
+        let sent = try XCTUnwrap(session.repository.loadMessages(conversationID: conversation.id).last)
+        XCTAssertEqual(sent.body, "Schedule this for tomorrow.")
+        XCTAssertEqual(sent.attachmentIDs?.count, 1, "The clip in the composer was not sent")
+        XCTAssertTrue(
+            session.store.pendingAttachments(for: conversation.id).isEmpty,
+            "The clip is still sitting in the composer after it was sent")
+        XCTAssertEqual(
+            session.store.draft(for: conversation.id), "",
+            "The typed message is still sitting in the composer after it was sent")
+    }
+
+    /// Nobody is meant to be at the keyboard during a capture run, but a stray key or click lands
+    /// in the app and is recorded: a half-typed word in the composer, a menu open over the film.
+    /// An automated run takes the keyboard and mouse away from whoever is passing by.
+    @MainActor func testACaptureRunTakesTheKeyboardAndMouseAwayFromTheApp() throws {
+        let session = try session(try Scenario.load(from: try fixture()))
+        XCTAssertFalse(session.blocksInput, "An ordinary run is meant to be driven by hand")
+
+        session.takesShots = true
+        XCTAssertTrue(session.blocksInput)
+        for type in [NSEvent.EventType.keyDown, .keyUp, .flagsChanged, .leftMouseDown, .rightMouseDown, .scrollWheel] {
+            XCTAssertTrue(
+                ScenarioSession.unwantedInput.contains(NSEvent.EventTypeMask(rawValue: 1 << UInt64(type.rawValue))),
+                "\(type) still reaches the app while it is being filmed")
+        }
+
+        session.takesShots = false
+        XCTAssertFalse(session.blocksInput, "The keyboard comes back when the run is not automated")
+    }
+
     func testNextStepResumesATimelinePausedForAKey() async throws {
         let timeline = "[ { \"waitFor\": \"key\" }, { \"agent\": \"ada\", \"reply\": { \"text\": \"All 42 parser tests pass.\" } } ]"
         let session = try session(try Scenario.load(from: try fixture(timeline: timeline)))

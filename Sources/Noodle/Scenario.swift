@@ -846,7 +846,32 @@ extension Scenario {
     /// The timeline is stopped at `waitFor: key` until Next Step or a line from the terminal.
     var isWaitingForKey: Bool { !keyWaiters.isEmpty }
     /// A capture run: scripts/scenario.sh photographs each `capture` step and nobody is at the keyboard.
-    var takesShots = false
+    var takesShots = false {
+        didSet {
+            guard takesShots != oldValue else { return }
+            // A key or click from whoever is passing the machine lands in the app and is filmed:
+            // half a word in the composer, a menu open over the picture. An automated run is
+            // driven from the timeline alone, so nothing else may reach it.
+            if takesShots {
+                inputMonitor = NSEvent.addLocalMonitorForEvents(matching: Self.unwantedInput) { _ in nil }
+            } else if let inputMonitor {
+                NSEvent.removeMonitor(inputMonitor)
+                self.inputMonitor = nil
+            }
+        }
+    }
+
+    /// What a capture run takes away from the app: everything a person could do to it by hand.
+    static let unwantedInput: NSEvent.EventTypeMask = [
+        .keyDown, .keyUp, .flagsChanged,
+        .leftMouseDown, .leftMouseUp, .leftMouseDragged,
+        .rightMouseDown, .rightMouseUp, .rightMouseDragged,
+        .otherMouseDown, .otherMouseUp, .otherMouseDragged,
+        .scrollWheel, .magnify, .swipe, .rotate,
+    ]
+    private var inputMonitor: Any?
+    /// Whether the keyboard and mouse have been taken away from the app.
+    var blocksInput: Bool { inputMonitor != nil }
     /// Marks a sound for the recording's track; tests replace it to count keystrokes.
     var soundCue: (@MainActor (String) -> Void)?
     /// Plays the titles around the timeline; tests replace it to watch the order without a window.
@@ -1041,9 +1066,14 @@ extension Scenario {
             try await sleep(.seconds(0.55))
             cue("enter")
             let date = now
+            // Whatever the scenario put in the composer goes with the message, the way pressing
+            // Return does, so a film can show a file being attached and then sent.
+            let staged = store.pendingAttachments(for: conversation.id).map(\.id)
+            let named = try scenario.importAttachments(
+                typing.attachments, into: conversation.id, repository: repository, now: date)
             let message = try repository.sendUserMessage(conversationID: conversation.id, body: typing.text,
-                attachmentIDs: try scenario.importAttachments(typing.attachments, into: conversation.id, repository: repository, now: date), now: date)
-            store.setDraft("", for: conversation.id)
+                attachmentIDs: staged + named, now: date)
+            store.clearDraft(for: conversation.id)
             remember(message, as: typing.key)
             store.refreshTranscripts()
             runtime.notify(store.participants(for: conversation), repository: repository)
@@ -1257,7 +1287,9 @@ extension Scenario {
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
         }
-        if let film = scenario.film {
+        // Only when the app first appears. A later presentation that set the film up again would
+        // put the opening card back and leave the app concealed behind it for the rest of the film.
+        if initial, let film = scenario.film {
             let opening = film.intro.map { ScenarioFilmModel.Card.intro(kicker: $0.kicker, title: $0.title ?? scenario.title, subtitle: $0.subtitle, icon: icon($0)) }
             let stage = filmStage ?? ScenarioFilmStage(film: film, opening: opening,
                                                        media: film.media.flatMap { try? scenario.media($0) })

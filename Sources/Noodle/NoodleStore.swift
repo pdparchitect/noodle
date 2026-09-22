@@ -74,6 +74,11 @@ final class NoodleStore {
         drafts[conversationID].text = text
         markConversationRead(conversationID)
     }
+
+    /// Empties the composer, both what was written and what was attached to it.
+    func clearDraft(for conversationID: UUID) {
+        drafts.clear(conversationID)
+    }
     var creationSheet: CreationSheet?
     var showsFirstBotSetup = false
     var selectedSettingsTab: NoodleSettingsTab = .general

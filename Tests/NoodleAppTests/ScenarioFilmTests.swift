@@ -167,6 +167,34 @@ import XCTest
         XCTAssertEqual(played.last?.1, 1, "The outro runs after the last step")
     }
 
+    /// The intro card hides the app until the titles are done. A presentation later in the
+    /// timeline used to set the film up again, which put the card back and left the app hidden
+    /// behind it: everything after that step recorded as black.
+    @MainActor func testAPresentationPartWayThroughDoesNotHideTheAppBehindTheIntroAgain() async throws {
+        let film = "{ \"intro\": { \"title\": \"A morning with Ada\" }, \"outro\": { \"tagline\": \"Bots that live in a chat.\" } }"
+        let session = try session(try scenario(film: film))
+
+        // The stage attaches to the app's main window, which only exists while it is running.
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.title = NoodleAppIdentity.name
+        window.contentViewController = NSViewController()
+        window.contentViewController?.view = NSView(frame: window.contentRect(forFrameRect: window.frame))
+        // The stage keeps hold of it, so closing must not also release it.
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+
+        await session.arrangeWindows(.init(), initial: true)
+        XCTAssertEqual(window.alphaValue, 0, "The intro card covers the app to begin with")
+
+        // The titles have run and the app has come up out of the backdrop; a step that presents
+        // something after that must leave it up.
+        window.alphaValue = 1
+        await session.arrangeWindows(.init(draft: "Here is the cut."), initial: false)
+        XCTAssertEqual(window.alphaValue, 1, "The app was hidden again part way through the timeline")
+    }
+
     func testAScenarioWithoutAFilmPlaysNoTitles() async throws {
         let folder = try directory()
         let json = """
