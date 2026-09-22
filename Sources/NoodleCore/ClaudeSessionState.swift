@@ -58,3 +58,13 @@ public struct ClaudeSessionState {
         return true
     }
 }
+
+public enum ClaudeProtocol {
+    /// Claude Code reports an expired or missing login as a failed turn, not as
+    /// an exit, so the text is the only signal that restarting cannot help.
+    public static func isAuthenticationFailure(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return ["failed to authenticate", "oauth session expired", "not logged in", "please run /login",
+                "invalid api key", "authentication_error"].contains(where: lower.contains)
+    }
+}

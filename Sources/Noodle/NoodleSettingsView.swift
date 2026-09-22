@@ -695,7 +695,9 @@ struct HarnessInstallationRow: View {
                         if let liveInstallation, liveInstallation.isAvailable { setup.signIn(liveInstallation) }
                     }
                         .buttonStyle(.link)
-                        .disabled(isRefreshing || liveInstallation?.isAvailable != true)
+                        // Only this harness's own check matters; version lookups and the
+                        // other harnesses' checks would otherwise keep the link disabled.
+                        .disabled(setup.checking.contains(id) || liveInstallation?.isAvailable != true)
                 }
             }
         }

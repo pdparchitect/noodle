@@ -292,6 +292,13 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
             return
         }
         guard turnIsActive else { return }
+        let failed = message["is_error"] as? Bool == true
+        let detail = failed ? (message["result"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) : nil
+        if let detail, ClaudeProtocol.isAuthenticationFailure(detail) {
+            // The unfinished turn stays recorded, so signing in and Kick resumes it.
+            pauseForSignIn()
+            return
+        }
         do { try turnRecovery.finish() }
         catch {
             update(.failed, "Could not record finished Claude work: \(error.localizedDescription)")
@@ -301,11 +308,8 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
         let wasInterrupted = interruptRequested
         interruptRequested = false
         if interruptRequestID == nil { interruptTimeout?.cancel() }
-        let failed = message["is_error"] as? Bool == true
         trace.finish(wasInterrupted ? .turnInterrupted : (failed ? .turnFailed : .turnCompleted))
         if failed {
-            let detail = (message["result"] as? String)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
             update(.ready, detail.flatMap { $0.isEmpty ? nil : "Claude Code ready — \(String($0.prefix(240)))" } ?? "Claude Code ready — last task failed")
         } else {
             update(.ready, "Claude Code ready")
@@ -314,34 +318,48 @@ final class ClaudeAgentProcess: AgentRuntimeProcess {
     }
 
     private func didTerminate(status: Int32) {
-        let detail = lastErrorText ?? "Claude Code exited with status \(status)"
-        reportUnexpectedTermination(detail)
+        if let lastErrorText, ClaudeProtocol.isAuthenticationFailure(lastErrorText) { pauseForSignIn(); return }
+        reportUnexpectedTermination(lastErrorText ?? "Claude Code exited with status \(status)")
+    }
+
+    /// Restarting cannot sign the user in. Stay paused for an explicit retry.
+    private func pauseForSignIn() {
+        guard !intentionallyStopped, !terminationReported else { return }
+        trace.finish(.turnFailed)
+        disconnect()
+        update(.failed, "Claude Code needs you to sign in. Open Harness settings and sign in, then retry.",
+               failure: .authenticationRequired)
     }
 
     private func reportUnexpectedTermination(_ detail: String) {
         let detail = HarnessVersionPolicy.startupIssue(provider: .claudeCode, text: detail) ?? detail
         guard !intentionallyStopped, !terminationReported else { return }
         trace.finish(.runtimeDisconnected)
+        let needsRecovery = hasInterruptedWork
+        disconnect()
+        update(.failed, detail)
+        onUnexpectedTermination(self, detail, needsRecovery)
+    }
+
+    private func disconnect() {
         connectionID = nil
         startupTimeout?.cancel()
-        terminationReported = true
         interruptTimeout?.cancel()
-        let needsRecovery = hasInterruptedWork
+        terminationReported = true
         running = false
         turnIsActive = false
         processIdentifier = nil
         connection?.invalidate()
         connection = nil
-        update(.failed, detail)
-        onUnexpectedTermination(self, detail, needsRecovery)
     }
 
-    private func update(_ phase: AgentRuntimePhase, _ detail: String) {
+    private func update(_ phase: AgentRuntimePhase, _ detail: String, failure: AgentRuntimeFailure? = nil) {
         snapshot = AgentRuntimeSnapshot(
             agentID: configuration.id,
             phase: phase,
             detail: detail,
-            processIdentifier: processIdentifier
+            processIdentifier: processIdentifier,
+            failure: failure
         )
         onSnapshot(snapshot)
     }

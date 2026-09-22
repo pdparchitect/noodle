@@ -52,6 +52,33 @@ import NoodleCore
         XCTAssertGreaterThan(signIn.minX, profiles.maxX)
     }
 
+    func testSignInStaysEnabledWhileOtherHarnessesRefresh() async throws {
+        let f = try fixture()
+        let installation = HarnessInstallation(provider: .claudeCode, executablePath: "/fixtures/claude")
+        HarnessPresentationCache.save([.claudeCode: .init(installation: installation, authentication: .unauthenticated,
+            version: .init(installedVersion: "2.1.278"))], to: f.runtime.defaults)
+        let provider = StalledSetupProvider()
+        addTeardownBlock { @MainActor in provider.gate.resolve(.failure(CancellationError())) }
+        let setup = HarnessSetupController(providers: [.claudeCode: provider], defaults: f.runtime.defaults)
+        let row = { (refreshing: Bool) in
+            HarnessInstallationRow(installation: installation, liveInstallation: installation,
+                isRefreshing: refreshing, setup: setup, install: {}).environment(f.store)
+        }
+        // Version lookups and the other harnesses' checks must not lock this row's Sign In.
+        let view = host(row(true))
+        let idle = try await control("Sign In", in: view)
+        XCTAssertTrue(enabled(idle))
+        // Its own sign-in check may still flip the row to signed in.
+        let check = Task { await setup.refresh([installation]) }
+        try await wait { setup.checking.contains(.claudeCode) }
+        view.rootView = row(false)
+        let signIn = try await control("Sign In", in: view)
+        try await wait { !self.enabled(signIn) }
+        provider.gate.resolve(.success(.unauthenticated))
+        await check.value
+        try await wait { self.enabled(signIn) }
+    }
+
     func testReconnectingAgentsShowElapsedTimeAndKickWithFailureTakingHeaderPriority() async throws {
         let f = try fixture(), first = try f.runtime.start(f.a), second = try f.runtime.start(f.b)
         let installed = HarnessInstallation(provider: .codex, executablePath: "/fixtures/codex")
@@ -90,4 +117,11 @@ import NoodleCore
         try await wait { issues.window?.isVisible != true }
         window.close()
     }
+}
+
+@MainActor private final class StalledSetupProvider: HarnessSetupProviding {
+    let installationGuide = HarnessInstallationGuide(command: nil, instructions: "Fixture instructions", documentationURL: URL(string: "https://example.invalid/setup")!)
+    let gate = RoutingGate<HarnessAuthenticationStatus>()
+    func status(for installation: HarnessInstallation) async throws -> HarnessAuthenticationStatus { try await gate.value() }
+    func signIn(for installation: HarnessInstallation, onChallenge: @escaping @MainActor (HarnessSignInChallenge) -> Void) async throws -> HarnessAuthenticationStatus { .authenticated }
 }

@@ -151,6 +151,20 @@ import XCTest
         XCTAssertEqual(f.failures.first?.1, true)
     }
 
+    func testExpiredSignInPausesForSignInAndKeepsTheTurn() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.claude(wire)
+        try await ready(f, wire, p); try confirm(wire)
+        p.notify(); try await f.wait { wire.count("user") == 1 }
+        wire.emit(["type": "result", "subtype": "error_during_execution", "is_error": true,
+            "session_id": try XCTUnwrap(wire.launches.last?.2).uuidString,
+            "result": "Failed to authenticate: OAuth session expired and could not be refreshed"])
+        try await f.wait { p.snapshot.phase == .failed }
+        XCTAssertEqual(p.snapshot.failure, .authenticationRequired)
+        XCTAssertTrue(p.hasInterruptedWork)
+        XCTAssertFalse(p.isAlive)
+        XCTAssertTrue(f.failures.isEmpty, "Restarting cannot sign the user in")
+    }
+
     func testRestartWaitsForStopConfirmationAndIgnoresDuplicateReply() async throws {
         let f = try fixture(), wire = HarnessWire(), p = f.claude(wire)
         try await ready(f, wire, p)

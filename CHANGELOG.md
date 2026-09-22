@@ -14,6 +14,11 @@ All notable changes to Noodle are documented here, following
 
 - Add Perplexity to the tool catalogue in Settings > Tools > Add Tools. Sign-in uses Perplexity's browser OAuth, and bots get web search with sources.
 
+### Fixed
+
+- Keep Sign In usable in Settings > Harness while other harnesses or version lookups are still being checked. It waits only for that harness's own sign-in check.
+- Pause a Claude Code bot for sign-in when its login has expired, instead of reporting it ready and retrying every heartbeat. The harness shows Needs attention, and Kick resumes the unfinished turn after signing in.
+
 ## [0.23.1] - 2026-09-21
 
 ### Added
