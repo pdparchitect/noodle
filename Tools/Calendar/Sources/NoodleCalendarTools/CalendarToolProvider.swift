@@ -179,36 +179,19 @@ public struct CalendarToolProvider: ToolProvider {
 
     // MARK: Dates
 
-    private static let formatters: [ISO8601DateFormatter] = {
-        let exact = ISO8601DateFormatter(); exact.formatOptions = [.withInternetDateTime]
-        let fractional = ISO8601DateFormatter(); fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return [exact, fractional]
-    }()
-
     /// ISO 8601, or, without a zone, the same wall clock this Mac shows. A plain date is
     /// the start of that day here, which is what an all-day entry means to the person.
     static func date(_ options: [String: Any], _ name: String, allDay: Bool) throws -> Date? {
-        guard let raw = (options[name] as? String)?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else { return nil }
-        if let date = formatters.compactMap({ $0.date(from: raw) }).first { return date }
-        let local = DateFormatter()
-        local.locale = Locale(identifier: "en_US_POSIX")
-        local.timeZone = TimeZone.current
-        for format in ["yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd"] {
-            local.dateFormat = format
-            if let date = local.date(from: raw) { return date }
+        guard let raw = options[name] as? String, !raw.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        guard let parsed = ToolDates.parse(raw) else {
+            throw ToolProviderError("--\(name) must be a date such as 2027-02-01T10:00:00Z\(allDay ? " or 2027-02-01" : "").")
         }
-        throw ToolProviderError("--\(name) must be a date such as 2027-02-01T10:00:00Z\(allDay ? " or 2027-02-01" : "").")
+        return parsed.date
     }
-
-    private static let output: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter(); formatter.formatOptions = [.withInternetDateTime]
-        formatter.timeZone = TimeZone.current
-        return formatter
-    }()
 
     // MARK: Results
 
-    private static func describe(_ calendar: CalendarRecord) -> [String: Any] {
+    private static func describe(_ calendar: EventKitList) -> [String: Any] {
         var described: [String: Any] = ["id": calendar.id, "title": calendar.title, "source": calendar.source, "writable": calendar.writable]
         if let colour = calendar.colour { described["colour"] = colour }
         return described
@@ -216,7 +199,7 @@ public struct CalendarToolProvider: ToolProvider {
 
     private static func describe(_ event: CalendarEventRecord) -> [String: Any] {
         var described: [String: Any] = ["id": event.id, "calendar": event.calendarID, "title": event.title,
-                                        "start": output.string(from: event.start), "end": output.string(from: event.end),
+                                        "start": ToolDates.string(event.start), "end": ToolDates.string(event.end),
                                         "allDay": event.isAllDay, "recurring": event.isRecurring]
         if let location = event.location, !location.isEmpty { described["location"] = location }
         if let notes = event.notes, !notes.isEmpty { described["notes"] = notes }
@@ -225,7 +208,7 @@ public struct CalendarToolProvider: ToolProvider {
     }
 
     private static func line(_ event: CalendarEventRecord) -> String {
-        let when = event.isAllDay ? String(output.string(from: event.start).prefix(10)) : output.string(from: event.start)
+        let when = ToolDates.string(event.start, hasTime: !event.isAllDay)
         return [when, event.title, event.location].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 

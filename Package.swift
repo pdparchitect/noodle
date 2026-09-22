@@ -86,7 +86,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge")],
+            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleRemindersTools", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",
@@ -132,6 +132,7 @@ let package = Package(
 
 package.targets += tool("Vision")
     + builtInTool("Calendar")
+    + builtInTool("Reminders")
     + tool("Browser", dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol")])
     + tool("Computer", dependencies: [.product(name: "ComputerBridge", package: "Bridge")])
 

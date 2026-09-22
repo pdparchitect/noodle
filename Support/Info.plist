@@ -40,6 +40,8 @@
     <string>Record voice messages you choose to send in your conversations. Speech is transcribed on this Mac.</string>
     <key>NSCalendarsFullAccessUsageDescription</key>
     <string>Let the bots you assign a calendar read and change that calendar. No bot sees a calendar you have not assigned.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>Let the bots you assign a reminder list read and change that list. No bot sees a list you have not assigned.</string>
     <key>SUFeedURL</key>
     <string>https://github.com/pdparchitect/noodle/releases/latest/download/appcast.xml</string>
     <key>SUPublicEDKey</key>

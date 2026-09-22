@@ -35,7 +35,7 @@ public struct CalendarEventDraft: Sendable, Equatable {
 
 /// The calendars themselves. Noodle implements this with EventKit; tests use their own.
 public protocol CalendarStore: Sendable {
-    func calendars() async throws -> [CalendarRecord]
+    func calendars() async throws -> [EventKitList]
     func events(in calendar: String, from: Date, to: Date, query: String?, limit: Int) async throws -> [CalendarEventRecord]
     func event(_ id: String) async throws -> CalendarEventRecord?
     func create(in calendar: String, draft: CalendarEventDraft) async throws -> CalendarEventRecord

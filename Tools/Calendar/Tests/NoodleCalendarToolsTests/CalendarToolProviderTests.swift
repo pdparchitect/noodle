@@ -3,9 +3,9 @@ import XCTest
 @testable import NoodleCalendarTools
 
 final class CalendarToolProviderTests: XCTestCase {
-    private let work = CalendarRecord(id: "11111111-1111-1111-1111-111111111111", title: "Work", source: "iCloud", writable: true)
-    private let family = CalendarRecord(id: "22222222-2222-2222-2222-222222222222", title: "Family", source: "iCloud", writable: true)
-    private let holidays = CalendarRecord(id: "33333333-3333-3333-3333-333333333333", title: "UK Holidays", source: "Subscribed", writable: false)
+    private let work = EventKitList(id: "11111111-1111-1111-1111-111111111111", title: "Work", source: "iCloud", writable: true)
+    private let family = EventKitList(id: "22222222-2222-2222-2222-222222222222", title: "Family", source: "iCloud", writable: true)
+    private let holidays = EventKitList(id: "33333333-3333-3333-3333-333333333333", title: "UK Holidays", source: "Subscribed", writable: false)
     private let agent = UUID()
     private var store: FakeCalendars!
     private var provider: CalendarToolProvider!
@@ -14,14 +14,14 @@ final class CalendarToolProviderTests: XCTestCase {
     /// Stands in for EventKit so these tests need no calendar access, no account and no UI.
     private final class FakeCalendars: CalendarStore, @unchecked Sendable {
         private let lock = NSLock()
-        private var state: (calendars: [CalendarRecord], events: [CalendarEventRecord]) = ([], [])
+        private var state: (calendars: [EventKitList], events: [CalendarEventRecord]) = ([], [])
         private(set) var queries: [(calendar: String, from: Date, to: Date, query: String?, limit: Int)] = []
         private(set) var created: [(calendar: String, draft: CalendarEventDraft)] = []
         private(set) var updated: [(id: String, draft: CalendarEventDraft, span: CalendarSpan)] = []
         private(set) var deleted: [(id: String, span: CalendarSpan)] = []
 
-        init(calendars: [CalendarRecord], events: [CalendarEventRecord]) { state = (calendars, events) }
-        func calendars() async throws -> [CalendarRecord] { lock.withLock { state.calendars } }
+        init(calendars: [EventKitList], events: [CalendarEventRecord]) { state = (calendars, events) }
+        func calendars() async throws -> [EventKitList] { lock.withLock { state.calendars } }
         func events(in calendar: String, from: Date, to: Date, query: String?, limit: Int) async throws -> [CalendarEventRecord] {
             lock.withLock {
                 queries.append((calendar, from, to, query, limit))

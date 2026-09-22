@@ -3,6 +3,7 @@ import Foundation
 import Observation
 import NoodleCalendarTools
 import NoodleCore
+import NoodleRemindersTools
 import UniformTypeIdentifiers
 
 private struct TranscriptSnapshot: Sendable {
@@ -116,7 +117,8 @@ final class NoodleStore {
     let mcp: MCPController
     let computers: ComputerController
     let browsers: BrowserController
-    let calendars: CalendarController
+    let calendars: EventKitController
+    let reminders: EventKitController
     let applets: AppletController
     let harnessProfiles: HarnessProfilesController
     let runtime: AgentRuntimeCoordinator
@@ -189,14 +191,19 @@ final class NoodleStore {
             toolAssignments.replace("browser", with: assigned)
             tools.synchronizeSkills()
         }
-        calendars = CalendarController(repository: self.repository)
-        calendars.onAssignmentsChange = { [toolAssignments, tools] assigned in
-            toolAssignments.replace("calendar", with: assigned)
-            tools.synchronizeSkills()
+        // Calendar and Reminders are the providers Noodle hosts itself: macOS grants this
+        // access to the app the person sees, never to a tool extension. See Tools/AGENTS.md.
+        let calendarStore = EventKitCalendarStore(), reminderStore = EventKitReminderStore()
+        calendars = EventKitController(repository: self.repository, kind: .calendar) { try await calendarStore.calendars() }
+        reminders = EventKitController(repository: self.repository, kind: .reminderList) { try await reminderStore.lists() }
+        for controller in [calendars, reminders] {
+            controller.onAssignmentsChange = { [toolAssignments, tools, kind = controller.kind] assigned in
+                toolAssignments.replace(kind.rawValue, with: assigned)
+                tools.synchronizeSkills()
+            }
         }
-        // Calendar is the one provider Noodle hosts itself: macOS grants calendar access
-        // to the app the person sees, never to a tool extension. See Tools/AGENTS.md.
-        try? toolProviders.register(CalendarToolProvider(store: calendars.toolStore))
+        try? toolProviders.register(CalendarToolProvider(store: calendarStore))
+        try? toolProviders.register(ReminderToolProvider(store: reminderStore))
         applets = AppletController(repository: self.repository)
         harnessProfiles = HarnessProfilesController(store: self.repository.harnessProfiles)
         reload()
@@ -331,6 +338,7 @@ final class NoodleStore {
         computerIDs: Set<UUID> = [],
         browserIDs: Set<UUID> = [],
         calendarIDs: Set<String> = [],
+        reminderListIDs: Set<String> = [],
         folders: [AgentFolder] = [],
         harnessProfile: UUID? = nil
     ) -> Bool {
@@ -345,6 +353,7 @@ final class NoodleStore {
             try computers.validate(computerIDs)
             try browsers.validate(browserIDs)
             try calendars.validate(calendarIDs)
+            try reminders.validate(reminderListIDs)
             checkpoint = try AgentSettingsCheckpoint(repository: repository)
             let result = try repository.createAgent(
                 named: name, harnessIdentifier: harnessIdentifier,
@@ -361,12 +370,13 @@ final class NoodleStore {
             try computers.assign(computerIDs, to: result.agent, synchronizeWorkspace: false)
             try browsers.assign(browserIDs, to: result.agent, synchronizeWorkspace: false)
             try calendars.assign(calendarIDs, to: result.agent, synchronizeWorkspace: false)
+            try reminders.assign(reminderListIDs, to: result.agent, synchronizeWorkspace: false)
             try repository.synchronizeAgentWorkspace(result.agent)
         } catch {
             var detail = error.localizedDescription
             do {
                 try checkpoint?.restore()
-                try mcp.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments(); try calendars.reloadAssignments()
+                try mcp.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments(); try calendars.reloadAssignments(); try reminders.reloadAssignments()
                 if let created {
                     try repository.deleteConversation(id: created.conversation.id)
                     try FileManager.default.removeItem(at: repository.storage(for: created.agent.id).package)
@@ -406,6 +416,7 @@ final class NoodleStore {
         computerIDs: Set<UUID>? = nil,
         browserIDs: Set<UUID>? = nil,
         calendarIDs: Set<String>? = nil,
+        reminderListIDs: Set<String>? = nil,
         folders: [AgentFolder]? = nil,
         harnessProfile: UUID?? = nil
     ) -> Bool {
@@ -418,6 +429,7 @@ final class NoodleStore {
             if let computerIDs { try computers.validate(computerIDs) }
             if let browserIDs { try browsers.validate(browserIDs) }
             if let calendarIDs { try calendars.validate(calendarIDs) }
+            if let reminderListIDs { try reminders.validate(reminderListIDs) }
             previousBackstory = try repository.loadAgentBackstory(agent)
             checkpoint = try AgentSettingsCheckpoint(repository: repository, agent: agent, conversations: conversations)
             updated = try repository.updateAgent(
@@ -442,13 +454,14 @@ final class NoodleStore {
             if let computerIDs { try computers.assign(computerIDs, to: updated, synchronizeWorkspace: false) }
             if let browserIDs { try browsers.assign(browserIDs, to: updated, synchronizeWorkspace: false) }
             if let calendarIDs { try calendars.assign(calendarIDs, to: updated, synchronizeWorkspace: false) }
+            if let reminderListIDs { try reminders.assign(reminderListIDs, to: updated, synchronizeWorkspace: false) }
             try repository.synchronizeAgentWorkspace(updated)
         } catch {
             var detail = error.localizedDescription
             if let checkpoint {
                 do {
                     try checkpoint.restore()
-                    try mcp.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments(); try calendars.reloadAssignments()
+                    try mcp.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments(); try calendars.reloadAssignments(); try reminders.reloadAssignments()
                     // Generated skills derive from the restored settings. A damaged
                     // workspace may still need repair before it can be synchronized.
                     try repository.synchronizeAgentWorkspace(agent)

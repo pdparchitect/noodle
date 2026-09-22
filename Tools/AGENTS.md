@@ -3,11 +3,13 @@
 The tools Noodle gives its bots. Each folder here is one bundled ExtensionKit
 extension that Noodle discovers at launch; nothing in the app names them.
 
-`Tools/Calendar` is the exception: it has no extension. macOS grants calendar access
-to the app a person sees and never to a background extension, which was measured
-before the tool was written, so its provider is `ToolProviderKind.builtIn` and runs
-inside Noodle. Build a tool this way only when a permission makes an extension
-impossible; the extension is the default, and the provider contract is the same.
+`Tools/Calendar` and `Tools/Reminders` are the exceptions: they have no extension.
+macOS grants this access to the app a person sees and never to a background extension,
+which was measured before the tools were written, so their providers are
+`ToolProviderKind.builtIn` and run inside Noodle. Build a tool this way only when a
+permission makes an extension impossible; the extension is the default, and the
+provider contract is the same. Both share `EventKitAssignments` in `NoodleCore` and one
+`EventKitController` in `Sources/Noodle`, so a third EventKit tool adds a kind, not a copy.
 
 `Tools/Browser` and `Tools/Computer` are the bot-facing tools. The apps they
 drive live in `/Browser` and `/Computer` and are separate products with their

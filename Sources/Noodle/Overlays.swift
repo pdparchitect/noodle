@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 import NoodleCore
 
 enum BotEditorTab: String, CaseIterable {
-    case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers", browsers = "Browsers", calendars = "Calendars"
+    case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers", browsers = "Browsers", calendars = "Calendars", reminders = "Reminders"
 }
 
 private struct BotEditorTabPicker: View {
@@ -52,6 +52,7 @@ struct NewBotSheet: View {
     @State private var computerIDs: Set<UUID> = []
     @State private var browserIDs: Set<UUID> = []
     @State private var calendarIDs: Set<String> = []
+    @State private var reminderListIDs: Set<String> = []
     @State private var folders: [AgentFolder] = []
     @State private var selectedProfileID: UUID?
     @State private var selectedTab = BotEditorTab.general
@@ -142,7 +143,9 @@ struct NewBotSheet: View {
                 case .computers:
                     ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
                 case .calendars:
-                    CalendarAssignmentPicker(controller: store.calendars, selectedIDs: $calendarIDs)
+                    EventKitAssignmentPicker(controller: store.calendars, selectedIDs: $calendarIDs)
+                case .reminders:
+                    EventKitAssignmentPicker(controller: store.reminders, selectedIDs: $reminderListIDs)
                 }
                 if selectedTab != .runtime {
                     HarnessExperimentalWarning(provider: HarnessProvider(rawValue: selectedHarnessIdentifier))
@@ -204,7 +207,7 @@ struct NewBotSheet: View {
             publicDescription: publicDescription,
             backstory: backstory,
             mcpConnectionIDs: mcpConnectionIDs,
-            computerIDs: computerIDs, browserIDs: browserIDs, calendarIDs: calendarIDs, folders: folders,
+            computerIDs: computerIDs, browserIDs: browserIDs, calendarIDs: calendarIDs, reminderListIDs: reminderListIDs, folders: folders,
             harnessProfile: selectedProfileID
         )
     }
@@ -254,6 +257,7 @@ struct EditBotSheet: View {
     @State private var computerIDs: Set<UUID> = []
     @State private var browserIDs: Set<UUID> = []
     @State private var calendarIDs: Set<String> = []
+    @State private var reminderListIDs: Set<String> = []
     @State private var folders: [AgentFolder] = []
     @State private var selectedProfileID: UUID?
     @State private var confirmingDeletion = false
@@ -351,7 +355,9 @@ struct EditBotSheet: View {
                 case .computers:
                     ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
                 case .calendars:
-                    CalendarAssignmentPicker(controller: store.calendars, selectedIDs: $calendarIDs)
+                    EventKitAssignmentPicker(controller: store.calendars, selectedIDs: $calendarIDs)
+                case .reminders:
+                    EventKitAssignmentPicker(controller: store.reminders, selectedIDs: $reminderListIDs)
                 }
             }
             .padding(20)
@@ -364,6 +370,7 @@ struct EditBotSheet: View {
             computerIDs = store.computers.selectedIDs(for: agent)
             browserIDs = store.browsers.selectedIDs(for: agent)
             calendarIDs = store.calendars.selectedIDs(for: agent)
+            reminderListIDs = store.reminders.selectedIDs(for: agent)
             folders = store.folders(for: agent)
             selectedProfileID = store.harnessProfile(for: agent)
             if selectedHarnessIdentifier.isEmpty {
@@ -433,7 +440,7 @@ struct EditBotSheet: View {
                 publicDescription: publicDescription,
                 backstory: backstory,
                 mcpConnectionIDs: mcpConnectionIDs,
-                computerIDs: computerIDs, browserIDs: browserIDs, calendarIDs: calendarIDs, folders: folders,
+                computerIDs: computerIDs, browserIDs: browserIDs, calendarIDs: calendarIDs, reminderListIDs: reminderListIDs, folders: folders,
                 harnessProfile: .some(selectedProfileID)
             )
         }) {
