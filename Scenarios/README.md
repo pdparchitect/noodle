@@ -11,6 +11,7 @@ Scenarios/
     assets/           avatars, attachments and wallpapers the JSON names
     root/             optional files laid over the seeded workspace as they are
     shots/            capture output, ignored by Git
+    recordings/       recorded output, ignored by Git
 ```
 
 ## Run one
@@ -19,6 +20,7 @@ Scenarios/
 zsh scripts/scenario.sh                 # the picker
 zsh scripts/scenario.sh family-butler   # one scenario; Return in the terminal is Next Step
 zsh scripts/scenario.sh --shots --all   # save every capture step of every scenario
+zsh scripts/scenario.sh --record family-butler   # play it and record the window as a movie
 ```
 
 The script builds `.build/Noodle Scenarios.app`, a copy of the development app with its
@@ -38,6 +40,12 @@ photographs the main window with `screencapture` into `shots/NAME.png`, and the 
 quits at the end of the timeline. It needs a terminal with Screen Recording permission.
 During a capture run `waitFor: key` does not stop, and `waitFor: userMessage` sends the
 draft in the composer.
+
+`--record` plays the timeline the same way and records the main window with
+`screencapture -v` into `recordings/NAME.mov`, from the moment the window is up until the
+timeline ends. A timeline meant for a recording types its own messages with `type` and
+paces itself with `wait`, so nothing stops for a key. Sheets open over the main window
+are in the picture; windows from `present.windows` are not unless they overlap it.
 
 `swift test --disable-sandbox --filter ScenarioTests` loads, seeds and plays every
 folder here. Unknown keys, missing assets and references to bots, conversations or
@@ -169,6 +177,7 @@ Steps run in order once the window is up. A step does one thing, after an option
 | `{ "agent": "juno", "status": { … } }` | The bot's status changes. |
 | `{ "agent": "juno", "in": "launch", "reply": { "key": "build", "text": "…", "attachments": [ … ] } }` | The bot sends a message, which arrives as any reply does: unread marker, Dock badge, transition. `in` defaults to the bot's direct conversation. |
 | `{ "in": "launch", "say": { "text": "…" } }` | You send a message. A running bot fetches it, which turns Sent into Delivered. |
+| `{ "in": "launch", "type": { "key": "ask", "text": "…", "interval": 0.04 } }` | You type the message into the composer a character at a time, pause, and send it. The conversation must be the one on screen. |
 | `{ "agent": "wren", "react": { "message": "build", "emoji": "🚀" } }` | A reaction from the bot, or from you without `agent`. `"remove": true` takes it away. |
 | `{ "agent": "juno", "stream": { "text": "…", "chunk": 12, "interval": 0.05 } }` | Output appears piece by piece in the bot's Activity window. |
 | `{ "agent": "juno", "toolCall": { "input": "swift test", "output": "…", "exit": 0, "duration": 1.5 } }` | A command runs and completes in the Activity window. `title` replaces Running command. |

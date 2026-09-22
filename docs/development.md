@@ -218,6 +218,7 @@ zsh scripts/scenario.sh                      # open the picker
 zsh scripts/scenario.sh family-butler        # open one scenario
 zsh scripts/scenario.sh --shots family-butler # play it and save its shots
 zsh scripts/scenario.sh --shots --all
+zsh scripts/scenario.sh --record family-butler # play it and record the window
 ```
 
 The script derives `.build/Noodle Scenarios.app` from the development build. That bundle
@@ -229,8 +230,9 @@ bundle, so it never touches the data of another Noodle.
 Once the bundle is open, the Scenarios menu switches scenario, reloads the current one
 after an edit to its files, and advances a timeline that waits for a key (Next Step).
 Launched with a name, the terminal stays attached and Return does the same. `--shots`
-saves each `capture` step to `Scenarios/NAME/shots/`, which Git ignores; it runs from a
-terminal with Screen Recording permission. `--no-build` reuses the development build
+saves each `capture` step to `Scenarios/NAME/shots/`, and `--record` records the main
+window through the timeline to `Scenarios/NAME/recordings/`; Git ignores both, and both
+run from a terminal with Screen Recording permission. `--no-build` reuses the development build
 already in `.build`, `--debug` builds the debug configuration, and `--shadow` keeps the
 window shadow.
 

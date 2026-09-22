@@ -73,13 +73,13 @@
   ],
   "present": {
     "window": { "size": [1240, 860], "origin": [100, 70] },
-    "select": "alfred",
-    "draft": "Can you sort Secret Santa for the adults? £25 limit, and nobody should draw their own partner."
+    "select": "alfred"
   },
   "timeline": [
     { "capture": "01-the-plan" },
-    { "waitFor": "userMessage", "agent": "alfred" },
-    { "agent": "alfred", "status": { "phase": "working", "detail": "Drawing the Secret Santa names" } },
+    { "wait": 1.2, "in": "alfred",
+      "type": { "text": "Can you sort Secret Santa for the adults? £25 limit, and nobody should draw their own partner." } },
+    { "wait": 0.8, "agent": "alfred", "status": { "phase": "working", "detail": "Drawing the Secret Santa names" } },
     { "wait": 0.6, "agent": "alfred",
       "toolCall": { "title": "Updating the plan", "input": "household/christmas/secret-santa.md",
         "output": "6 adults, 6 pairs drawn. No one drew their partner. Limit £25.", "exit": 0, "duration": 1.2 } },

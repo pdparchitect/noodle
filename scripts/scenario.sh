@@ -1,6 +1,6 @@
 #!/bin/zsh
-# Opens Noodle in a screenshot scenario from Scenarios/, in a bundle of its own that cannot reach
-# the network, an account or any other Noodle's data. See Scenarios/README.md.
+# Opens Noodle in a scenario from Scenarios/, in a bundle of its own that cannot reach the network,
+# an account or any other Noodle's data, and can photograph or record it. See Scenarios/README.md.
 set -euo pipefail
 
 project_root="${0:A:h:h}"
@@ -11,9 +11,10 @@ bundle_identifier="com.pdparchitect.noodle.scenarios"
 entitlements="$build_root/NoodleScenarios.entitlements"
 
 usage() {
-    print -u2 'Usage: scripts/scenario.sh [--no-build] [--debug] [--shots] [--shadow] [--all] [name|path]'
+    print -u2 'Usage: scripts/scenario.sh [--no-build] [--debug] [--shots] [--record] [--shadow] [--all] [name|path]'
     print -u2 '  no name     open the picker'
     print -u2 '  --shots     play the timeline and save each capture step to Scenarios/NAME/shots/'
+    print -u2 '  --record    play the timeline and record the main window to Scenarios/NAME/recordings/NAME.mov'
     print -u2 '  --shadow    keep the window shadow in those shots'
     print -u2 '  --all       every scenario in turn'
     print -u2 '  --no-build  derive the bundle from the Noodle Dev.app already in .build'
@@ -21,13 +22,14 @@ usage() {
     exit 1
 }
 
-build=true shots=false shadow=false all=false
+build=true shots=false record=false shadow=false all=false
 selections=()
 for argument in "$@"; do
     case "$argument" in
         --no-build) build=false ;;
         --debug) export NOODLE_BUILD_CONFIGURATION=debug ;;
         --shots) shots=true ;;
+        --record) record=true ;;
         --shadow) shadow=true ;;
         --all) all=true ;;
         -*) usage ;;
@@ -39,7 +41,7 @@ if [[ "$all" == true ]]; then
     for file in "$scenarios"/*/scenario.json(N); do selections+=("${file:h}"); done
 fi
 [[ ${#selections} -le 1 || "$all" == true ]] || usage
-[[ "$shots" == false || ${#selections} -gt 0 ]] || { print -u2 '--shots needs a scenario, or --all.'; exit 1; }
+[[ "$shots" == false && "$record" == false || ${#selections} -gt 0 ]] || { print -u2 '--shots and --record need a scenario, or --all.'; exit 1; }
 
 folders=()
 for selection in "${selections[@]}"; do
@@ -122,35 +124,71 @@ if [[ ${#folders} == 0 ]]; then
 fi
 
 for folder in "${folders[@]}"; do
-    if [[ "$shots" == false ]]; then
+    if [[ "$shots" == false && "$record" == false ]]; then
         "$executable" --scenario "$folder" "${locale[@]}"
         continue
     fi
-    mkdir -p "$folder/shots"
+    [[ "$shots" == false ]] || mkdir -p "$folder/shots"
+    [[ "$record" == false ]] || mkdir -p "$folder/recordings"
     taken=0
+    recorder=
+    movie="$folder/recordings/${folder:t}.mov"
     # The flag goes last: AppKit reads arguments in pairs, and would take what follows it for its value.
     coproc "$executable" --scenario "$folder" "${locale[@]}" --scenario-shots
     app_pid=$!
-    trap 'kill "$app_pid" 2>/dev/null || true' EXIT
+    trap 'kill "$app_pid" 2>/dev/null || true; [[ -z "$recorder" ]] || kill -INT "$recorder" 2>/dev/null || true' EXIT
+    # The app waits for an empty line after READY, each SHOT and DONE, so the recorder is rolling
+    # before the timeline plays and has stopped before the window closes.
     while IFS= read -r -p line; do
         print -r -- "$line"
         case "$line" in
-            "SCENARIO SHOT "*)
-                fields=(${=line})
-                capture_options=(-x)
-                [[ "$shadow" == true ]] || capture_options+=(-o)
-                # Needs Screen Recording permission for the terminal running this script.
-                if screencapture "${capture_options[@]}" -l "${fields[4]#id=}" "$folder/shots/${fields[3]}.png"; then
-                    taken=$((taken + 1))
-                else
-                    print -u2 "Could not capture ${fields[3]}."
+            "SCENARIO READY "*)
+                if [[ "$record" == true ]]; then
+                    fields=(${=line})
+                    region="${fields[3]#rect=}"
+                    if [[ "$region" == none ]]; then
+                        print -u2 "There is no main window to record."
+                    else
+                        rm -f "$movie"
+                        # Needs Screen Recording permission for the terminal running this script.
+                        screencapture -v -R "$region" "$movie" </dev/null &
+                        recorder=$!
+                        sleep 1.5
+                    fi
                 fi
                 print -p ""
                 ;;
-            "SCENARIO DONE") break ;;
+            "SCENARIO SHOT "*)
+                if [[ "$shots" == true ]]; then
+                    fields=(${=line})
+                    capture_options=(-x)
+                    [[ "$shadow" == true ]] || capture_options+=(-o)
+                    # Needs Screen Recording permission for the terminal running this script.
+                    if screencapture "${capture_options[@]}" -l "${fields[4]#id=}" "$folder/shots/${fields[3]}.png"; then
+                        taken=$((taken + 1))
+                    else
+                        print -u2 "Could not capture ${fields[3]}."
+                    fi
+                fi
+                print -p ""
+                ;;
+            "SCENARIO DONE")
+                if [[ -n "$recorder" ]]; then
+                    # Let the last change settle on screen before the recording ends.
+                    sleep 1
+                    kill -INT "$recorder" 2>/dev/null || true
+                    wait "$recorder" 2>/dev/null || true
+                    recorder=
+                fi
+                print -p ""
+                break
+                ;;
         esac
     done
-    wait "$app_pid"
+    wait "$app_pid" || true
     trap - EXIT
-    print "$taken shots in $folder/shots"
+    [[ "$shots" == false ]] || print "$taken shots in $folder/shots"
+    if [[ "$record" == true ]]; then
+        if [[ -s "$movie" ]]; then print "Recorded $movie"; else print -u2 "Nothing was recorded."; fi
+    fi
 done

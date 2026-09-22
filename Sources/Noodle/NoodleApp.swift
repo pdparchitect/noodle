@@ -340,9 +340,10 @@ struct RootView: View {
 
         return NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(focusComposer: { composerFocusRequest = UUID() }, focusRequest: sidebarFocusRequest)
-                .navigationSplitViewColumnWidth(min: 280, ideal: 326, max: 380)
                 .toolbar(removing: sidebarOwnsToolbar ? .sidebarToggle : nil)
                 .toolbar { sidebarToolbar }
+                // Last: a toolbar(removing:) applied after it swallows the column width, even one removing nothing.
+                .navigationSplitViewColumnWidth(min: 280, ideal: 326, max: 380)
         } detail: {
             if let conversation = store.selectedConversation {
                 ChatView(conversation: conversation, attachmentPreview: attachmentPreview, composerFocusRequest: composerFocusRequest, focusSidebar: {

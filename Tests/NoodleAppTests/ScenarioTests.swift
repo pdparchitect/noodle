@@ -151,7 +151,9 @@ import XCTest
             let timeline = scenario.timeline ?? []
             XCTAssertEqual(shots, timeline.compactMap(\.capture), name)
             XCTAssertEqual(typed, timeline.filter { $0.waitFor == .userMessage }.count, name)
-            let expected = entries.reduce(0) { $0 + ($1.messages?.count ?? 0) } + timeline.filter { $0.reply != nil || $0.say != nil }.count + typed
+            let seededMessages = entries.reduce(0) { $0 + ($1.messages?.count ?? 0) }
+            let sent = timeline.filter { $0.reply != nil || $0.say != nil || $0.type != nil }.count
+            let expected = seededMessages + sent + typed
             let saved = try store.conversations.reduce(0) { $0 + (try store.repository.loadMessages(conversationID: $1.id).count) }
             XCTAssertEqual(saved, expected, "\(name): messages after the timeline")
             XCTAssertEqual(store.messagesByConversation.values.reduce(0) { $0 + $1.count }, expected, "\(name): the store shows what was saved")
@@ -245,6 +247,27 @@ import XCTest
         XCTAssertEqual(try session.repository.loadMessages(conversationID: rex.id).last?.delivery, .queued)
         XCTAssertEqual(try session.repository.loadMessages(conversationID: ada.id).last?.delivery, .delivered)
         XCTAssertEqual(try session.repository.loadMessages(conversationID: ada.id).count, 3, "The timeline speaks for the bots until it ends")
+    }
+
+    func testATypeStepTypesIntoTheComposerAndThenSends() async throws {
+        let timeline = """
+        [ { "in": "ada", "type": { "key": "ship", "text": "Ship it.", "interval": 0.02 } },
+          { "agent": "ada", "react": { "message": "ship", "emoji": "👍" } } ]
+        """
+        let session = try session(try Scenario.load(from: try fixture(timeline: timeline)))
+        let conversation = try XCTUnwrap(session.seeded.conversations["ada"])
+        let store = try XCTUnwrap(session.store)
+        var drafts: [String] = []
+        session.sleep = { _ in drafts.append(store.draft(for: conversation.id)); await Task.yield() }
+        store.startAgents()
+        try await session.play()
+        XCTAssertEqual(Array(drafts.prefix(3)), ["S", "Sh", "Shi"], "The draft grows a character at a time")
+        XCTAssertEqual(drafts.last, "Ship it.", "The whole message is on screen before it is sent")
+        let messages = try session.repository.loadMessages(conversationID: conversation.id)
+        XCTAssertEqual(messages.last?.body, "Ship it.")
+        XCTAssertEqual(messages.last?.delivery, .delivered)
+        XCTAssertEqual(messages.last?.reactions?.map(\.emoji), ["👍"], "A later step can name the typed message")
+        XCTAssertEqual(store.draft(for: conversation.id), "", "The composer is empty once the message is sent")
     }
 
     func testAutoRepliesAnswerOnceTheTimelineHasFinished() async throws {

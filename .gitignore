@@ -7,3 +7,4 @@ dist/
 *.profraw
 *.profdata
 Scenarios/*/shots/
+Scenarios/*/recordings/

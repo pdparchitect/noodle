@@ -516,6 +516,32 @@ import NoodleCore
         XCTAssertTrue(try f.repository.loadUnreadConversationIDs().isEmpty)
     }
 
+    func testTheSidebarOpensAtItsIntendedWidth() async throws {
+        let f = try fixture()
+        f.store.selectedConversationID = f.directA.id
+        let root = host(RootView().environment(f.store))
+        let window = try XCTUnwrap(root.window)
+        window.setContentSize(NSSize(width: 1160, height: 810))
+        window.orderFront(nil)
+        try await wait { self.elements(root).contains { $0 is ComposerTextView } }
+        var sidebar: NSSplitViewItem?
+        try await wait {
+            root.layoutSubtreeIfNeeded()
+            sidebar = self.splitController(in: root)?.splitViewItems.first
+            return sidebar != nil
+        }
+        let item = try XCTUnwrap(sidebar)
+        XCTAssertEqual(item.minimumThickness, 280, "The sidebar's narrowest width is the app's, not the system's")
+        XCTAssertEqual(item.maximumThickness, 380)
+        XCTAssertEqual(item.viewController.view.frame.width, 326, "The sidebar opens at its ideal width")
+    }
+
+    private func splitController(in view: NSView?) -> NSSplitViewController? {
+        guard let view else { return nil }
+        if let controller = view.nextResponder as? NSSplitViewController { return controller }
+        return view.subviews.lazy.compactMap { self.splitController(in: $0) }.first
+    }
+
     func testMainWindowMountsReadTrackingAndClearsUnreadOnInput() async throws {
         let f = try fixture()
         f.store.selectedConversationID = f.directA.id

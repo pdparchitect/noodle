@@ -201,6 +201,7 @@ struct Scenario: Codable {
         var status: Status?
         var reply: Content?
         var say: Content?
+        var type: Typing?
         var react: React?
         var stream: Stream?
         var toolCall: ToolCall?
@@ -215,6 +216,14 @@ struct Scenario: Codable {
             var key: String?
             var text: String
             var attachments: [Attachment]?
+        }
+
+        /// A message typed into the composer a character at a time, then sent.
+        struct Typing: Codable {
+            var key: String?
+            var text: String
+            var attachments: [Attachment]?
+            var interval: Double?
         }
 
         struct React: Codable {
@@ -238,7 +247,7 @@ struct Scenario: Codable {
         }
 
         var actions: Int {
-            [status != nil, reply != nil, say != nil, react != nil, stream != nil, toolCall != nil, error != nil,
+            [status != nil, reply != nil, say != nil, type != nil, react != nil, stream != nil, toolCall != nil, error != nil,
              waitFor != nil, present != nil, capture != nil].filter { $0 }.count
         }
     }
@@ -442,16 +451,18 @@ extension Scenario {
             if let key = step.in { try require(members[key] != nil, "\(name) names the conversation \"\(key)\", which does not exist.") }
             let needsAgent = step.status != nil || step.reply != nil || step.stream != nil || step.toolCall != nil || step.waitFor == .userMessage
             try require(!needsAgent || step.agent != nil, "\(name) needs a bot.")
-            try require(step.say == nil || step.in != nil, "\(name) needs the conversation to speak in.")
+            try require(step.say == nil && step.type == nil || step.in != nil, "\(name) needs the conversation to speak in.")
             if let agent = step.agent, let key = step.in, step.reply != nil || step.react != nil {
                 try require(members[key]?.contains(agent) == true, "\(name): \(agent) is not in \(key).")
             }
             try Self.check(step.status, of: name)
-            for content in [step.reply, step.say].compactMap({ $0 }) {
+            let typing = step.type.map { Step.Content(key: $0.key, text: $0.text, attachments: $0.attachments) }
+            for content in [step.reply, step.say, typing].compactMap({ $0 }) {
                 try register(content.key)
                 try require(!content.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "\(name) has no text.")
                 try check(content.attachments)
             }
+            try require((step.type?.interval ?? 0) >= 0, "\(name) types at a negative interval.")
             if let react = step.react {
                 try require(messageKeys.contains(react.message), "\(name) reacts to \"\(react.message)\", which no earlier message is called.")
                 try require(MessageReaction.isValidEmoji(react.emoji), "\"\(react.emoji)\" is not a single emoji.")
@@ -799,6 +810,23 @@ extension Scenario {
             store.refreshTranscripts()
             runtime.notify(store.participants(for: conversation), repository: repository)
         }
+        if let typing = step.type, let conversation {
+            var typed = ""
+            for character in typing.text {
+                typed.append(character)
+                store.setDraft(typed, for: conversation.id)
+                try await sleep(.seconds(typing.interval ?? 0.04))
+            }
+            // A beat with the whole message on screen, as a hand pauses before Return.
+            try await sleep(.seconds(0.4))
+            let date = now
+            let message = try repository.sendUserMessage(conversationID: conversation.id, body: typing.text,
+                attachmentIDs: try scenario.importAttachments(typing.attachments, into: conversation.id, repository: repository, now: date), now: date)
+            store.setDraft("", for: conversation.id)
+            remember(message, as: typing.key)
+            store.refreshTranscripts()
+            runtime.notify(store.participants(for: conversation), repository: repository)
+        }
         if let react = step.react, let message = messages[react.message] {
             try repository.setReaction(conversationID: message.conversationID, messageID: message.id,
                 author: agent.map { .agent($0.id) } ?? .user, emoji: react.emoji, present: react.remove != true, now: now)
@@ -869,12 +897,31 @@ extension Scenario {
             guard takesShots, !terminalEnded else { break }
             // Let the last change settle on screen before it is photographed.
             try? await Task.sleep(for: .milliseconds(700))
-            guard let window = mainWindow else { break }
-            let frame = window.frame
-            write("SCENARIO SHOT \(name) id=\(window.windowNumber) rect=\(Int(frame.minX)),\(Int(ScenarioSupport.screen.maxY - frame.maxY)),\(Int(frame.width)),\(Int(frame.height))")
+            guard let window = mainWindow, let region = mainWindowRegion else { break }
+            write("SCENARIO SHOT \(name) id=\(window.windowNumber) rect=\(region)")
             await withCheckedContinuation { shotWaiters.append($0) }
         }
         return true
+    }
+
+    /// The main window on screen as `screencapture -R` takes it: x, y from the top left, width, height.
+    private var mainWindowRegion: String? {
+        guard let frame = mainWindow?.frame else { return nil }
+        return "\(Int(frame.minX)),\(Int(ScenarioSupport.screen.maxY - frame.maxY)),\(Int(frame.width)),\(Int(frame.height))"
+    }
+
+    /// Ends a capture run. The script answers once its recorder has stopped, so the window is still up on the last frame.
+    func announceDone() async {
+        write("SCENARIO DONE")
+        guard !terminalEnded else { return }
+        await withCheckedContinuation { shotWaiters.append($0) }
+    }
+
+    /// Tells the script the window is up and where. A capture run waits for the answer, so a recording can start first.
+    func announceReady() async {
+        write("SCENARIO READY rect=\(mainWindowRegion ?? "none") \(scenario.title)")
+        guard takesShots, !terminalEnded else { return }
+        await withCheckedContinuation { shotWaiters.append($0) }
     }
 
     // MARK: Presentation
@@ -1046,10 +1093,10 @@ extension ScenarioSession {
                 session.store.startMonitoring()
                 Task { @MainActor in
                     await session.arrangeWindows(session.scenario.present ?? .init(), initial: true)
-                    session.write("SCENARIO READY \(session.scenario.title)")
+                    await session.announceReady()
                     do { try await session.play() } catch { fail(error.localizedDescription) }
                     if session.takesShots {
-                        session.write("SCENARIO DONE")
+                        await session.announceDone()
                         NSApp.terminate(nil)
                     }
                 }
