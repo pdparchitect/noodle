@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "title": "Opus 5.5 at work in Noodle",
+  "clock": "09:12",
+  "settings": { "Noodle.firstBotSetup.dismissed": true },
+  "harnesses": {
+    "claude-code": { "models": [
+      { "id": "opus-5.5", "name": "Opus 5.5", "description": "The newest Claude model", "default": true } ] }
+  },
+  "agents": [
+    { "key": "claude", "name": "Claude", "harness": "claude-code", "model": "opus-5.5",
+      "description": "Works in the repository: reads it, changes it, runs the tests",
+      "backstory": "You work in this repository. You keep your own notes, you finish what you start, and you say what you actually did.",
+      "avatar": { "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b0/Claude_AI_symbol.svg/1280px-Claude_AI_symbol.svg.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail" },
+      "autoReplies": ["On it.", "Done. I have left the numbers in the test so it cannot quietly regress."] },
+    { "key": "iris", "name": "Iris", "harness": "claude-code", "model": "opus-5.5",
+      "description": "Reads every change before anyone else has to",
+      "avatar": { "symbol": "eyeglasses", "colour": 3 } },
+    { "key": "pico", "name": "Pico", "harness": "claude-code", "model": "opus-5.5",
+      "description": "Watches the build, the deploys and the error rate",
+      "avatar": { "symbol": "bolt.horizontal", "colour": 5 } }
+  ],
+  "conversations": [
+    { "key": "iris", "direct": "iris", "unread": true,
+      "messages": [
+        { "at": "08:05", "from": "iris",
+          "text": "Two changes waiting on you. The importer branch is clean; the other one widens a public type and I would rather you looked at it yourself." } ] },
+    { "key": "pico", "direct": "pico",
+      "messages": [
+        { "at": "07:30", "from": "pico",
+          "text": "Last night's build is green and the error rate has not moved. Nothing needs you." } ] },
+    { "key": "claude", "direct": "claude",
+      "messages": [
+        { "at": "-2d 09:15", "from": "user",
+          "text": "Here is the repository. The importer is the thing I care about: it takes the best part of an hour on the big files and nobody here knows why." },
+        { "at": "-2d 09:18", "from": "claude",
+          "text": "I have it. I will read the importer and the fixtures before I change anything, and tell you what I find." },
+        { "at": "-2d 11:40", "from": "claude",
+          "text": "It reads and parses the header again for every single row. On the 2.3 GB export that is 4.1 million times. The rest of it is reasonable." },
+        { "at": "-2d 11:52", "from": "user",
+          "text": "Fix it. Keep the old reader until we have finished migrating." },
+        { "at": "-1d 17:20", "from": "user",
+          "text": "We are putting you on Opus 5.5 from today. Same repository, same workspace, same notes." },
+        { "at": "-1d 17:21", "from": "claude",
+          "text": "Understood. I still have the branch, the failing importer test and Friday's notes, so I will carry on from there." },
+        { "at": "08:40", "from": "claude",
+          "text": "Overnight: the importer reads both the old format and the new one. The old reader is still in place behind a flag, so nothing breaks while we migrate.\n\n412 tests pass. The two that failed were asserting the old header behaviour, and I changed the tests rather than the code, because the old behaviour was the bug." }
+      ] }
+  ],
+  "present": {
+    "window": { "size": [1240, 860] },
+    "select": "claude"
+  },
+  "timeline": [
+    { "capture": "01-this-morning" },
+    { "wait": 1.4, "in": "claude",
+      "type": { "text": "How long does it take on the biggest customer file we have?" } },
+    { "wait": 0.8, "agent": "claude", "status": { "phase": "working", "detail": "Running the importer on the 2.3 GB export" } },
+    { "wait": 0.6, "agent": "claude",
+      "toolCall": { "input": "swift run importer --profile fixtures/acme-2.3gb.ndjson",
+        "output": "read 2.3 GB in 4m11s (previously 51m18s)", "exit": 0, "duration": 1.4 } },
+    { "wait": 0.6, "agent": "claude",
+      "reply": { "key": "timing",
+        "text": "Four minutes eleven, against fifty-one on the old reader.\n\nAlmost all of it was re-reading the same header for every row. It reads it once now and keeps it. I put the timing in the test suite with a ceiling, so it cannot quietly regress." } },
+    { "agent": "claude", "status": { "phase": "ready" } },
+    { "wait": 1.0, "react": { "message": "timing", "emoji": "🚀" } },
+    { "capture": "02-answered" }
+  ],
+  "film": {
+    "background": "https://www.pexels.com/download/video/13350215/",
+    "intro": { "icon": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b0/Claude_AI_symbol.svg/1280px-Claude_AI_symbol.svg.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail",
+      "title": "Opus 5.5",
+      "subtitle": "The next generation of frontier AI." },
+    "outro": { "tagline": "A workspace for you and your AI agents." }
+  }
+}

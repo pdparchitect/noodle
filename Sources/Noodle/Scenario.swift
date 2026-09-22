@@ -408,7 +408,7 @@ extension Scenario {
                 try require(text.map { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? true, "film.\(label) has no text.")
             }
             try require((film.intro?.hold ?? 0) >= 0 && (film.outro?.hold ?? 0) >= 0, "A film holds for a negative time.")
-            if let icon = film.intro?.icon { _ = try asset(icon) }
+            if let icon = film.intro?.icon { _ = try media(icon) }
         }
         for key in (settings ?? [:]).keys {
             try require(Self.preferenceKeys.contains(key), "\"\(key)\" is not a preference a scenario can set.")
@@ -437,7 +437,7 @@ extension Scenario {
                     try require(model.supportedEfforts.contains { $0.id == effort }, "\(identifier) has no effort \"\(effort)\".")
                 }
             }
-            if let image = agent.avatar?.image { _ = try asset(image) }
+            if let image = agent.avatar?.image { _ = try media(image) }
             try Self.check(agent.status, of: agent.key)
         }
 
@@ -449,7 +449,7 @@ extension Scenario {
         func check(_ attachments: [Attachment]?) throws {
             for attachment in attachments ?? [] {
                 try require((attachment.file == nil) != (attachment.link == nil), "An attachment is either a file or a link.")
-                if let file = attachment.file { _ = try asset(file) }
+                if let file = attachment.file { _ = try media(file) }
                 if let link = attachment.link {
                     try require(URL(string: link).flatMap { MessageLink.publicWebURL(from: $0, preservingFragment: true) } != nil,
                                 "\"\(link)\" is not a public web link.")
@@ -504,7 +504,7 @@ extension Scenario {
             }
             if let key = present.sheet?.groupInfo { try require(conversations.first { $0.key == key }?.group != nil, "\(key) is not a group.") }
             try require(present.draft == nil && present.draftAttachments == nil || present.select != nil, "A draft needs present.select.")
-            for path in present.draftAttachments ?? [] { _ = try asset(path) }
+            for path in present.draftAttachments ?? [] { _ = try media(path) }
             for (key, position) in present.scroll ?? [:] {
                 try require(position == "bottom" || conversations.first { $0.key == key }?.messages?.contains { $0.key == position } == true,
                             "present.scroll.\(key) is \"bottom\" or the key of a message in that conversation.")
@@ -627,7 +627,7 @@ extension Scenario {
             if let link = attachment.link, let url = URL(string: link) {
                 return try repository.importLinkAttachment(url, into: conversationID, now: now).id
             }
-            let url = try asset(attachment.file ?? "")
+            let url = try media(attachment.file ?? "")
             let mediaType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
             return try repository.importAttachment(from: url, into: conversationID, mediaType: mediaType, now: now).id
         }
@@ -662,7 +662,7 @@ extension Scenario {
             let result = try repository.createAgent(named: agent.name, harnessIdentifier: agent.harness,
                 modelIdentifier: agent.model, reasoningEffort: agent.effort, publicDescription: agent.description,
                 avatarSymbolName: agent.avatar?.symbol, avatarColorIndex: agent.avatar?.colour ?? index,
-                avatarImageData: try agent.avatar?.image.map { try Data(contentsOf: asset($0)) },
+                avatarImageData: try agent.avatar?.image.map { try Data(contentsOf: media($0)) },
                 backstory: agent.backstory ?? "", now: created.addingTimeInterval(Double(index) * 60))
             seeded.agents[agent.key] = result.agent
             seeded.directs[agent.key] = result.conversation
@@ -1065,8 +1065,9 @@ extension Scenario {
 
     /// The picture an opening card brings up, if it names one.
     private func icon(_ intro: Scenario.Film.Intro?) -> NSImage? {
-        guard let path = intro?.icon, let url = try? scenario.asset(path) else { return nil }
-        return NSImage(contentsOf: url)
+        guard let path = intro?.icon, let url = try? scenario.media(path),
+              let image = NSImage(contentsOf: url) else { return nil }
+        return ScenarioSupport.roomAround(image)
     }
 
     /// Tells whoever is recording what to move in on, as a box inside the recorded area
@@ -1181,7 +1182,7 @@ extension Scenario {
         if let id = store.selectedConversationID {
             if let draft = present.draft { store.setDraft(draft, for: id) }
             for path in present.draftAttachments ?? [] {
-                if let url = try? scenario.asset(path) { store.importAttachment(from: url, into: id) }
+                if let url = try? scenario.media(path) { store.importAttachment(from: url, into: id) }
             }
         }
         guard let sheet = present.sheet else { return }
@@ -1569,6 +1570,30 @@ enum ScenarioSupport {
         let x = min(max(box.midX - width / 2, bounds.minX), bounds.maxX - width)
         let y = min(max(box.midY - height / 2, bounds.minY), bounds.maxY - height)
         return NSRect(x: x, y: y, width: width, height: height)
+    }
+
+    /// A mark drawn to its own edges is sliced by the circle it is shown in, so one is
+    /// given room around it. A photograph is left alone: it is meant to fill the circle.
+    static func roomAround(_ image: NSImage) -> NSImage {
+        guard let data = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: data),
+              bitmap.hasAlpha, bitmap.pixelsWide > 8, bitmap.pixelsHigh > 8 else { return image }
+        var clear = 0, counted = 0
+        for step in 0..<64 {
+            let alongX = bitmap.pixelsWide * step / 64, alongY = bitmap.pixelsHigh * step / 64
+            for point in [(alongX, 0), (alongX, bitmap.pixelsHigh - 1), (0, alongY), (bitmap.pixelsWide - 1, alongY)] {
+                counted += 1
+                if (bitmap.colorAt(x: point.0, y: point.1)?.alphaComponent ?? 1) < 0.1 { clear += 1 }
+            }
+        }
+        guard counted > 0, Double(clear) / Double(counted) > 0.8 else { return image }
+
+        let side = max(image.size.width, image.size.height) / 0.66
+        let canvas = NSImage(size: NSSize(width: side, height: side))
+        canvas.lockFocus()
+        image.draw(in: NSRect(x: (side - image.size.width) / 2, y: (side - image.size.height) / 2,
+                              width: image.size.width, height: image.size.height))
+        canvas.unlockFocus()
+        return canvas
     }
 
     /// The first view anywhere under `view` that matches, breadth first.
