@@ -321,6 +321,50 @@ import NoodleCore
         }
     }
 
+    func testAddingAReactionDoesNotResizeItsTranscriptRow() async throws {
+        let timeout = watchdog()
+        defer { timeout.cancel() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("transcript-reaction-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = WorkspaceRepository(rootURL: root)
+        try repository.prepare()
+        let bot = try repository.createAgent(named: "Reaction Bot")
+        let file = try imageFile(width: 640, height: 480)
+        let saved = try repository.importAttachment(from: file, into: bot.conversation.id, mediaType: "image/png")
+        try repository.append(ChatMessage(conversationID: bot.conversation.id, author: .user,
+            body: "A message someone is about to react to", delivery: .delivered))
+        try repository.append(ChatMessage(conversationID: bot.conversation.id, author: .agent(bot.agent.id),
+            body: "A reply with a screenshot", delivery: .delivered, attachmentIDs: [saved.id]))
+        let suite = "transcript-reaction-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let runtime = AgentRuntimeCoordinator(discovery: HarnessDiscovery(homeDirectory: root,
+            applicationsDirectory: root, executableSearchDirectories: [], applicationBundleURL: root), defaults: defaults)
+        let store = NoodleStore(repository: repository, runtime: runtime, connectsServices: false)
+        defer { store.stopMonitoring() }
+        XCTAssertTrue(store.storageReady, store.errorMessage ?? "Storage failed")
+        for message in store.messages(for: bot.conversation) {
+            let model = ReactionLayoutModel()
+            let window = window(ReactionLayoutFixture(store: store, conversation: bot.conversation,
+                messageID: message.id, model: model))
+            defer { window.close(); window.contentView = nil }
+            try await settle()
+            let plainHeight = model.height
+            XCTAssertGreaterThan(plainHeight, 0)
+            let kind = (message.attachmentIDs ?? []).isEmpty ? "text" : "attachment"
+            store.toggleReaction("\u{2764}\u{FE0F}", on: message)
+            try await settle()
+            XCTAssertTrue(store.messages(for: bot.conversation).contains { $0.id == message.id && !($0.reactions ?? []).isEmpty },
+                "The reaction must have been saved")
+            XCTAssertEqual(model.height, plainHeight, accuracy: 0.5,
+                "Reacting to a \(kind) message resized its row by \(model.height - plainHeight)pt")
+            store.removeReaction("\u{2764}\u{FE0F}", on: message)
+            try await settle()
+            XCTAssertEqual(model.height, plainHeight, accuracy: 0.5,
+                "Removing the reaction from a \(kind) message resized its row")
+        }
+    }
+
     private func findScroll(_ view: NSView) -> NSScrollView? {
         if let scroll = view as? NSScrollView { return scroll }
         return view.subviews.lazy.compactMap { self.findScroll($0) }.first
@@ -413,3 +457,23 @@ private struct FullTranscriptLayoutFixture: View {
     }
 }
 
+@MainActor private final class ReactionLayoutModel: ObservableObject {
+    var height: CGFloat = 0
+}
+
+private struct ReactionLayoutFixture: View {
+    let store: NoodleStore
+    let conversation: BotConversation
+    let messageID: UUID
+    @ObservedObject var model: ReactionLayoutModel
+    @State private var selectedAttachmentID: UUID?
+    var body: some View {
+        if let message = store.messages(for: conversation).first(where: { $0.id == messageID }) {
+            MessageBubble(message: message, hasConversationBackground: false,
+                selectedAttachmentID: $selectedAttachmentID, previewAttachment: { _ in }, showAgentProfile: nil)
+                .environment(store)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { model.height = $0 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+    }
+}

@@ -25,6 +25,12 @@ private final class TranscriptViewportRecorder {
     init(_ viewport: TranscriptViewport) { self.viewport = viewport }
 }
 
+/// Layout figures the transcript and its rows share.
+enum TranscriptMetrics {
+    /// The gap between transcript rows.
+    static let rowSpacing: CGFloat = 10
+}
+
 /// The native transcript scroll container, also exercised by the resize fixture.
 /// Message IDs let SwiftUI retain the reading position when rows reflow, without
 /// corrective scrolling from geometry callbacks (which can cause layout loops).
@@ -64,7 +70,7 @@ struct TranscriptScrollView<Content: View>: View {
 
     var body: some View {
         ScrollView(.vertical) {
-            LazyVStack(spacing: 10) {
+            LazyVStack(spacing: TranscriptMetrics.rowSpacing) {
                 content
                 // Clearance above the overlaid composer, not an anchor message.
                 Color.clear.frame(height: bottomOverlayHeight + 20)

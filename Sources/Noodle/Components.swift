@@ -184,12 +184,20 @@ struct MessageBubble: View {
         return false
     }
 
+    /// How far a reaction badge hangs above the top of what it marks.
+    private static let reactionOverhang: CGFloat = 12
+    /// The gap between a bubble and the rows below it inside one message.
+    private static let contentSpacing: CGFloat = 3
+
     var body: some View {
         let _ = TranscriptRenderProbe.bubbleBody()
         // Keep this one plain container. A lazy stack builds every row up front, loading the
         // whole conversation at once, when a row's body is a bare if/else (to count its views)
         // or carries a transition (to read it). The transcript applies `insertion` instead.
         VStack(spacing: 0) { row }
+            // Every row keeps the badge's clearance, reactions or not, so reacting never moves
+            // a message. The transcript's row gap covers all but these few points of it.
+            .padding(.top, Self.reactionOverhang - TranscriptMetrics.rowSpacing)
     }
 
     static func insertion(for message: ChatMessage) -> AnyTransition {
@@ -236,8 +244,8 @@ struct MessageBubble: View {
                 }
             }
 
-            VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
-                if !(message.body == VoiceMessage.messageBody && !attachments.isEmpty && attachments.allSatisfy { $0.voice != nil }) {
+            VStack(alignment: isUser ? .trailing : .leading, spacing: Self.contentSpacing) {
+                if showsTextBubble(attachments: attachments) {
                 MessageText(message: message)
                     .foregroundStyle(.white)
                     .padding(.horizontal, 13)
@@ -249,7 +257,6 @@ struct MessageBubble: View {
                     .overlay(alignment: .topTrailing) {
                         if attachments.isEmpty { cornerReactions }
                     }
-                    .padding(.top, hasReactions && attachments.isEmpty ? 12 : 0)
                 }
 
                 if let linkPreviewURL, !attachments.contains(where: {
@@ -265,7 +272,10 @@ struct MessageBubble: View {
                         attachmentPreview(attachment)
                     }
                     .overlay(alignment: .topTrailing) { cornerReactions }
-                    .padding(.top, hasReactions ? 12 : 0)
+                    // Badges mark the attachments here, below the bubble, so they need the
+                    // clearance the stack's own spacing does not already give them.
+                    .padding(.top, showsTextBubble(attachments: attachments)
+                        ? Self.reactionOverhang - Self.contentSpacing : 0)
                 }
 
                 if isUser {
@@ -320,11 +330,16 @@ struct MessageBubble: View {
 
     private var hasReactions: Bool { !(message.reactions ?? []).isEmpty }
 
+    /// A voice message with nothing but its recordings shows no bubble of its own.
+    private func showsTextBubble(attachments: [ConversationAttachment]) -> Bool {
+        !(message.body == VoiceMessage.messageBody && !attachments.isEmpty && attachments.allSatisfy { $0.voice != nil })
+    }
+
     @ViewBuilder private var cornerReactions: some View {
         if hasReactions {
             reactionBadges
                 .fixedSize(horizontal: true, vertical: false)
-                .offset(x: 5, y: -12)
+                .offset(x: 5, y: -Self.reactionOverhang)
         }
     }
 

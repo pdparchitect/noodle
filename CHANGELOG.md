@@ -21,6 +21,7 @@ All notable changes to Noodle are documented here, following
 - Open the sidebar at its intended width. It came up at the narrowest width the system allows, with bot names cut short, until it was dragged wider.
 - Keep Sign In usable in Settings > Harness while other harnesses or version lookups are still being checked. It waits only for that harness's own sign-in check.
 - Pause a Claude Code bot for sign-in when its login has expired, instead of reporting it ready and retrying every heartbeat. The harness shows Needs attention, and Kick resumes the unfinished turn after signing in.
+- Keep a message still when a reaction lands on it. The transcript now always leaves room for the badges, so a message no longer jumps down as one appears or disappears.
 
 ## [0.23.1] - 2026-09-21
 
