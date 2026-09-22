@@ -357,7 +357,7 @@ import AppletCore
             return try await session.snapshot()
           }, duration: request.duration ?? 30)
         session.recording = recording
-        session.log.append("recording", "Started capture (silent MP4, up to 12 fps).")
+        session.log.append("recording", "Started capture (silent MP4, 30 fps).")
         var response = status(session)
         response.text =
           "Recording started. Call record stop to finalize and retrieve the MP4."

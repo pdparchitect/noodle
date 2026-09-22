@@ -413,8 +413,10 @@ clicks, drags, keys, and focused text controls; native scroll injection is not y
 implemented.
 Snapshots capture WebKit content, ordinary native views, and SpriteKit scenes;
 arbitrary Metal, video, and embedded web surfaces can need a specific renderer.
-Recordings are silent H.264 MP4 at up to 12 fps, bounded to 60 seconds. They capture
-only noodlet content and do not request Screen Recording or Accessibility access.
+Recordings are silent H.264 MP4 at 30 fps, bounded to 60 seconds. A noodlet that
+cannot be captured that fast holds each frame for a whole number of them, so playback
+stays even. They capture only noodlet content and do not request Screen Recording or
+Accessibility access.
 For hidden SpriteKit scenes, capture advances the scene's `update` callback.
 
 ### Hidden HTML animation checks
