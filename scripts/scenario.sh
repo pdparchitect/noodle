@@ -54,6 +54,49 @@ fi
 [[ ${#selections} -le 1 || "$all" == true ]] || usage
 [[ "$shots" == false && "$record" == false || ${#selections} -gt 0 ]] || { print -u2 '--shots and --video need a scenario, or --all.'; exit 1; }
 
+# Anything a scenario names by web address is fetched here, beside it, before the app
+# starts: the bundle has no network of its own. Git ignores the folder.
+fetch_media() {
+    python3 - "$1" <<'PYTHON'
+import hashlib, json, subprocess, sys, urllib.parse
+from pathlib import Path
+
+folder = Path(sys.argv[1])
+cache = folder / ".cache"
+def addresses(node):
+    if isinstance(node, dict):
+        for value in node.values(): yield from addresses(value)
+    elif isinstance(node, list):
+        for value in node: yield from addresses(value)
+    elif isinstance(node, str) and node.startswith(("http://", "https://")):
+        yield node
+
+TYPES = {"video/mp4": ".mp4", "video/quicktime": ".mov", "video/x-m4v": ".m4v",
+         "image/jpeg": ".jpg", "image/png": ".png", "image/heic": ".heic", "image/heif": ".heif"}
+
+wanted = sorted(set(addresses(json.loads((folder / "scenario.json").read_text()))))
+for address in wanted:
+    stem = hashlib.sha256(address.encode()).hexdigest()[:16]
+    if cache.exists() and any(f.name.startswith(stem) for f in cache.iterdir()):
+        continue
+    cache.mkdir(parents=True, exist_ok=True)
+    print(f"Fetching {address}")
+    partial = cache / (stem + ".part")
+    content_type = subprocess.run(
+        ["curl", "--fail", "--location", "--silent", "--show-error", "--max-time", "600",
+         "-o", str(partial), "-w", "%{content_type}", address],
+        check=True, capture_output=True, text=True).stdout.split(";")[0].strip().lower()
+    # The address usually says what it is; when it does not, the server does.
+    suffix = Path(urllib.parse.urlparse(address).path).suffix.lower()
+    if suffix not in TYPES.values():
+        suffix = TYPES.get(content_type, "")
+    if not suffix:
+        partial.unlink(missing_ok=True)
+        raise SystemExit(f"{address} served {content_type or 'nothing'}, which is not a picture or a video")
+    partial.rename(cache / (stem + suffix))
+PYTHON
+}
+
 folders=()
 for selection in "${selections[@]}"; do
     folder="$selection"
@@ -147,6 +190,7 @@ for folder in "${folders[@]}"; do
         "$executable" --scenario "$folder" "${locale[@]}"
         continue
     fi
+    fetch_media "$folder"
     [[ "$shots" == false ]] || mkdir -p "$folder/shots"
     [[ "$record" == false ]] || mkdir -p "$folder/recordings"
     taken=0
@@ -220,7 +264,10 @@ for folder in "${folders[@]}"; do
             print "Recorded $movie"
             [[ ! -s "$cues" || -z "$stopped" ]] || "$video_tool" sound "$movie" "$cues" "$stopped"
             # The padding matches the film's own backdrop, so the frame reads as one surface.
-            background="$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("film") or {}).get("background") or "black")' "$folder/scenario.json")"
+            # A picture or video behind the app still pads out to a flat colour.
+            background="$(python3 -c 'import json,sys
+value = (json.load(open(sys.argv[1])).get("film") or {}).get("background") or "black"
+print(value if value in ("black", "white") else "black")' "$folder/scenario.json")"
             for ratio in "${ratios[@]}"; do
                 "$video_tool" frame "$movie" "$folder/recordings/${folder:t}-${ratio/:/x}.mp4" "$ratio" "$background"
             done

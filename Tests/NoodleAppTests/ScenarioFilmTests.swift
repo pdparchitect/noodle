@@ -250,6 +250,69 @@ import XCTest
                              "A picture that is not there must not load")
     }
 
+    // MARK: Backgrounds
+
+    func testTheScriptAndTheAppAgreeOnWhereAFetchedFileLands() {
+        let address = "https://example.com/clips/earth-spinning.mp4"
+        XCTAssertEqual(Scenario.cacheStem(for: address), "78773c13121f0e4b",
+                       "The script names downloads the same way; changing this strands every cache")
+        XCTAssertEqual(Scenario.cacheStem(for: "https://www.pexels.com/download/video/854261/"), "1b4292543e292d4e")
+        XCTAssertTrue(Scenario.isRemote(address))
+        XCTAssertFalse(Scenario.isRemote("assets/earth.mp4"))
+    }
+
+    func testAWebAddressThatWasNeverFetchedSaysSo() throws {
+        let folder = try directory()
+        let json = """
+        { "version": 1, "title": "Fixture", "harnesses": { "claude-code": { "models": "builtin" } },
+          "agents": [ { "key": "ada", "name": "Ada", "harness": "claude-code", "model": "opus" } ],
+          "conversations": [ { "key": "ada", "direct": "ada",
+            "background": { "video": "https://example.com/earth.mp4" } } ] }
+        """
+        try Data(json.utf8).write(to: folder.appendingPathComponent("scenario.json"))
+        XCTAssertThrowsError(try Scenario.load(from: folder)) { error in
+            XCTAssertTrue(error.localizedDescription.contains("has not been fetched"),
+                          "The app has no network, so it must say who does: \(error.localizedDescription)")
+        }
+    }
+
+    func testAWallpaperVideoIsSeededAsOneRatherThanAsAPicture() throws {
+        let folder = try directory()
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("assets"), withIntermediateDirectories: true)
+        // Not a playable movie, but the seeder trusts a scenario's own files.
+        try Data("not really a movie".utf8).write(to: folder.appendingPathComponent("assets/earth.mp4"))
+        let json = """
+        { "version": 1, "title": "Fixture", "harnesses": { "claude-code": { "models": "builtin" } },
+          "agents": [ { "key": "ada", "name": "Ada", "harness": "claude-code", "model": "opus" } ],
+          "conversations": [ { "key": "ada", "direct": "ada", "background": { "video": "assets/earth.mp4" } } ] }
+        """
+        try Data(json.utf8).write(to: folder.appendingPathComponent("scenario.json"))
+        let session = try session(try Scenario.load(from: folder))
+        let conversation = try XCTUnwrap(session.seeded.conversations["ada"])
+        let background = try session.repository.loadBackground(conversationID: conversation.id)
+        XCTAssertEqual(background.mediaKind, .video, "A wallpaper that moves must be kept as a video")
+        let file = try XCTUnwrap(session.repository.backgroundImageURL(background, conversationID: conversation.id))
+        XCTAssertEqual(file.pathExtension, "mp4")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path), "The media is copied into the workspace")
+    }
+
+    func testAFilmBackgroundIsEitherAColourOrSomethingToPlay() throws {
+        XCTAssertNil(try scenario(film: "{ \"background\": \"black\" }").film?.media)
+        XCTAssertNil(try scenario(film: "{ \"background\": \"white\" }").film?.media)
+        XCTAssertTrue(try scenario(film: "{ \"background\": \"white\" }").film?.isLight == true)
+        XCTAssertThrowsError(try scenario(film: "{ \"background\": \"assets/missing.mp4\" }"),
+                             "A backdrop that is not there must not load")
+    }
+
+    func testAMovingBackgroundRunsUnderTheTitlesRatherThanBeingCoveredUp() {
+        let plain = ScenarioFilmModel(onLight: false)
+        XCTAssertEqual(plain.scrim, 1, "With nothing behind it, a card is solid")
+
+        let over = ScenarioFilmModel(onLight: false, hasMedia: true)
+        XCTAssertLessThan(over.scrim, 1, "A card over a background lets it through for the whole film")
+        XCTAssertGreaterThan(over.scrim, 0.4, "Enough of it stays for the words to read")
+    }
+
     // MARK: Rendering
 
     /// A coverage mask of `path` over `box` in design units, at one point per pixel.

@@ -1,5 +1,6 @@
 #if NOODLE_DEV_HOOKS
 import AppKit
+import CryptoKit
 import Darwin
 import NoodleCore
 import NoodleLaunchChecks
@@ -134,7 +135,10 @@ struct Scenario: Codable {
 
         struct Background: Codable {
             var preset: ConversationBackgroundPreset?
+            /// An asset in the scenario folder, or a web address fetched into `.cache/`.
             var image: String?
+            /// The same, for a wallpaper that moves.
+            var video: String?
         }
     }
 
@@ -197,7 +201,8 @@ struct Scenario: Codable {
 
     /// Titles around the scenario, so a recording opens and closes the same way every time.
     struct Film: Codable {
-        /// The solid colour behind the app and under the titles: "black" or "white".
+        /// What is behind the app and under the titles: "black", "white", or a picture
+        /// or video, named as an asset in the scenario folder or as a web address.
         var background: String?
         var intro: Intro?
         var outro: Outro?
@@ -222,6 +227,13 @@ struct Scenario: Codable {
         }
 
         enum Stage { case intro, outro }
+
+        var isLight: Bool { background == "white" }
+        /// The picture or video behind everything, if the background is not just a colour.
+        var media: String? {
+            let value = background ?? "black"
+            return ["black", "white"].contains(value) ? nil : value
+        }
     }
 
     struct Step: Codable {
@@ -330,6 +342,33 @@ extension Scenario {
         }
     }
 
+    /// A picture or video a scenario names: an asset in its own folder, or a web address
+    /// that scripts/scenario.sh has fetched into `.cache/` beside it. The bundle has no
+    /// network of its own, so nothing is ever downloaded from in here.
+    func media(_ value: String) throws -> URL {
+        guard Self.isRemote(value) else { return try asset(value) }
+        // Found by name, not by extension: a web address need not end in one, so the
+        // script works out what the file is and the app takes whatever it left.
+        let stem = Self.cacheStem(for: value)
+        let cache = folder.appendingPathComponent(".cache", isDirectory: true)
+        let found = (try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil))?
+            .first { $0.lastPathComponent.hasPrefix(stem) }
+        guard let found else {
+            throw ScenarioError("\(value) has not been fetched yet. scripts/scenario.sh downloads it into .cache/.")
+        }
+        return found
+    }
+
+    static func isRemote(_ value: String) -> Bool {
+        value.hasPrefix("https://") || value.hasPrefix("http://")
+    }
+
+    /// What a fetched address is called on disk, before its extension. The script names
+    /// downloads the same way, so changing this strands every cache.
+    static func cacheStem(for address: String) -> String {
+        String(SHA256.hash(data: Data(address.utf8)).map { String(format: "%02x", $0) }.joined().prefix(16))
+    }
+
     func asset(_ path: String) throws -> URL {
         let url = folder.appendingPathComponent(path).standardizedFileURL
         guard url.path.hasPrefix(folder.path + "/"), FileManager.default.fileExists(atPath: url.path) else {
@@ -358,7 +397,7 @@ extension Scenario {
         try require(appearance == nil || appearance == "dark", "Noodle is dark only: appearance must be \"dark\" or left out.")
         _ = try ScenarioSupport.start(clock, now: Date())
         if let film {
-            try require(["black", "white"].contains(film.background ?? "black"), "film.background is \"black\" or \"white\".")
+            if let backdrop = film.media { _ = try media(backdrop) }
             for (label, text) in [("intro.kicker", film.intro?.kicker), ("intro.title", film.intro?.title),
                                   ("intro.subtitle", film.intro?.subtitle), ("outro.tagline", film.outro?.tagline)] {
                 try require(text.map { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? true, "film.\(label) has no text.")
@@ -422,8 +461,14 @@ extension Scenario {
             try require(!participants.isEmpty && participants.isSubset(of: agents.map(\.key)), "\(conversation.key) names a bot that does not exist.")
             members[conversation.key] = participants
             if let background = conversation.background {
-                try require((background.preset == nil) != (background.image == nil), "A background is either a preset or an image.")
-                if let image = background.image { _ = try asset(image) }
+                let named = [background.preset != nil, background.image != nil, background.video != nil].filter { $0 }
+                try require(named.count == 1, "A background is a preset, an image or a video.")
+                if let image = background.image { _ = try media(image) }
+                if let video = background.video {
+                    let file = try media(video)
+                    try require(["mp4", "m4v", "mov"].contains(file.pathExtension.lowercased()),
+                                "A background video is an mp4, m4v or mov, and \(file.lastPathComponent) is not.")
+                }
             }
             var previous = Date.distantPast
             for message in conversation.messages ?? [] {
@@ -510,6 +555,20 @@ extension Scenario {
             try require(step.capture.map { !$0.isEmpty && !$0.contains("/") && !$0.contains(" ") } ?? true, "\(name): a shot name has no spaces or slashes.")
             try check(step.present, initial: false)
         }
+    }
+
+    /// Lays a moving wallpaper into the workspace the way the app would, without the
+    /// picker's checks: a scenario's own files are already trusted.
+    static func seedBackground(video url: URL, conversationID: UUID, repository: WorkspaceRepository) throws {
+        let background = ConversationBackground(imageFilename: "\(UUID().uuidString.lowercased()).\(url.pathExtension.lowercased())",
+                                                mediaKind: .video)
+        guard let target = repository.backgroundImageURL(background, conversationID: conversationID) else {
+            throw ScenarioError("\(url.lastPathComponent) is not a wallpaper the app can keep.")
+        }
+        try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: url, to: target)
+        let metadata = repository.conversationDirectory(id: conversationID).appendingPathComponent("background.json")
+        try JSONEncoder().encode(background).write(to: metadata, options: .atomic)
     }
 
     private static func check(_ status: Status?, of owner: String) throws {
@@ -631,7 +690,10 @@ extension Scenario {
             try repository.updateConversation(conversation)
             if let preset = entry.background?.preset { try repository.setBackground(conversationID: conversation.id, preset: preset) }
             if let image = entry.background?.image {
-                try repository.setBackground(conversationID: conversation.id, imageData: Data(contentsOf: asset(image)))
+                try repository.setBackground(conversationID: conversation.id, imageData: Data(contentsOf: media(image)))
+            }
+            if let video = entry.background?.video {
+                try Self.seedBackground(video: try media(video), conversationID: conversation.id, repository: repository)
             }
             if entry.unread == true { unread.insert(conversation.id) }
             seeded.conversations[entry.key] = conversation
@@ -858,7 +920,15 @@ extension Scenario {
         // A frame with the card in its starting state, so its animations have something to run from.
         try await sleep(.milliseconds(60))
         filmStage?.model.written = true
-        try await sleep(.seconds(written))
+        var remaining = written
+        if stage == .outro, filmStage?.model.hasMedia == true {
+            // Let the veil settle over the app, then take the app away and leave the
+            // background playing behind the wordmark.
+            try await sleep(.seconds(0.85))
+            filmStage?.conceal()
+            remaining -= 0.85
+        }
+        try await sleep(.seconds(max(0, remaining)))
         // A recording ends on the wordmark; someone watching in the app gets their window back.
         if stage == .outro, takesShots { return }
         guard stage == .intro else {
@@ -871,6 +941,11 @@ extension Scenario {
         // Never a dissolve of one into the other.
         filmStage?.model.emptying = true
         try await sleep(.seconds(0.6))
+        if filmStage?.model.hasMedia == true {
+            // The veil lifts and the background plays alone before the app arrives.
+            filmStage?.model.leaving = true
+            try await sleep(.seconds(0.7))
+        }
         filmStage?.conceal()
         filmStage?.dismissCard()
         try await sleep(.seconds(0.35))
@@ -1084,10 +1159,16 @@ extension Scenario {
         }
         if let film = scenario.film {
             let opening = film.intro.map { ScenarioFilmModel.Card.intro(kicker: $0.kicker, title: $0.title ?? scenario.title, subtitle: $0.subtitle, icon: icon($0)) }
-            let stage = filmStage ?? ScenarioFilmStage(film: film, opening: opening)
+            let stage = filmStage ?? ScenarioFilmStage(film: film, opening: opening,
+                                                       media: film.media.flatMap { try? scenario.media($0) })
             filmStage = stage
             stage.attach(to: window)
-            if let opening { stage.present(opening) }
+            if let opening {
+                stage.present(opening)
+                // The card owns the screen from the first frame, so the app never shows
+                // through a background that the titles only veil.
+                stage.conceal()
+            }
             if takesShots { stage.hidePointer() }
         }
     }

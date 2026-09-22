@@ -8,3 +8,4 @@ dist/
 *.profdata
 Scenarios/*/shots/
 Scenarios/*/recordings/
+Scenarios/*/.cache/

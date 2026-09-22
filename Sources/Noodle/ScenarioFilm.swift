@@ -1,4 +1,5 @@
 #if NOODLE_DEV_HOOKS
+import AVFoundation
 import AppKit
 import SwiftUI
 
@@ -162,8 +163,17 @@ struct NoodleWordmark: Shape {
     /// Set to fade the card away and let the app back through.
     var leaving = false
     let onLight: Bool
+    /// Whether a picture or video is playing behind everything, titles included.
+    let hasMedia: Bool
 
-    init(onLight: Bool) { self.onLight = onLight }
+    init(onLight: Bool, hasMedia: Bool = false) {
+        self.onLight = onLight
+        self.hasMedia = hasMedia
+    }
+
+    /// How solid a card is. Over a moving background it thins to a veil, so the
+    /// background runs through the whole film instead of being covered up for the titles.
+    var scrim: Double { hasMedia ? 0.62 : 1 }
 
     /// The film opens on its title, so that card is solid the moment it is up; the
     /// closing one comes over the app and has to fade in.
@@ -179,7 +189,7 @@ struct NoodleWordmark: Shape {
     /// Whether the words on the card are up.
     var lettering: Bool { written && !emptying }
 
-    var background: Color { onLight ? .white : .black }
+    var background: Color { (onLight ? Color.white : Color.black).opacity(scrim) }
     /// Plain ink on a plain card: white on black, black on white, with no tint of its own.
     var ink: Color { onLight ? .black : .white }
     var text: Color { ink }
@@ -328,9 +338,16 @@ private struct RisesIn: ViewModifier {
 
     /// `opening` is set before the card is built, so the film's first frame is already
     /// solid rather than fading up from the app behind it.
-    init(film: Scenario.Film, opening: ScenarioFilmModel.Card?) {
-        model = ScenarioFilmModel(onLight: film.background == "white")
+    /// A picture or video to lay behind the app instead of a plain colour.
+    private let backdropMedia: URL?
+    private var player: AVQueuePlayer?
+    private var looper: AVPlayerLooper?
+    private var playerLayer: AVPlayerLayer?
+
+    init(film: Scenario.Film, opening: ScenarioFilmModel.Card?, media: URL?) {
+        model = ScenarioFilmModel(onLight: film.isLight, hasMedia: media != nil)
         model.card = opening
+        backdropMedia = media
     }
 
     /// The margin around a window of this size, as a share of its shorter side.
@@ -355,6 +372,7 @@ private struct RisesIn: ViewModifier {
         let backdrop = self.backdrop ?? makeWindow(opaque: true)
         backdrop.setFrame(frame, display: false)
         backdrop.backgroundColor = model.onLight ? .white : .black
+        layBackdropMedia(in: backdrop)
         // Below the app's own window but, being one of its windows, still over every
         // other app's, so a recording shows the stage and never the desk behind it.
         backdrop.order(.below, relativeTo: window.windowNumber)
@@ -377,6 +395,35 @@ private struct RisesIn: ViewModifier {
         model.leaving = false
         overlay?.setFrame(frame, display: false)
         overlay?.orderFront(nil)
+    }
+
+    /// Puts the picture or video behind the app, filling the stage and losing whatever
+    /// falls outside it. A video loops and is silent: the film's own track is added later.
+    private func layBackdropMedia(in window: NSWindow) {
+        guard let backdropMedia else { return }
+        let host = window.contentView ?? NSView(frame: frame)
+        host.wantsLayer = true
+        window.contentView = host
+        if let playerLayer {
+            playerLayer.frame = host.bounds
+            return
+        }
+        if ["mp4", "m4v", "mov"].contains(backdropMedia.pathExtension.lowercased()) {
+            let player = AVQueuePlayer()
+            player.isMuted = true
+            looper = AVPlayerLooper(player: player, templateItem: AVPlayerItem(url: backdropMedia))
+            let layer = AVPlayerLayer(player: player)
+            layer.videoGravity = .resizeAspectFill
+            layer.frame = host.bounds
+            layer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+            host.layer?.addSublayer(layer)
+            player.play()
+            self.player = player
+            playerLayer = layer
+        } else if let image = NSImage(contentsOf: backdropMedia) {
+            host.layer?.contents = image
+            host.layer?.contentsGravity = .resizeAspectFill
+        }
     }
 
     /// Takes the app out of sight, so an emptied card can come down to nothing.
@@ -407,6 +454,11 @@ private struct RisesIn: ViewModifier {
     }
 
     func finish() {
+        player?.pause()
+        player = nil
+        looper = nil
+        playerLayer?.removeFromSuperlayer()
+        playerLayer = nil
         overlay?.orderOut(nil)
         overlay?.contentView = nil
         overlay = nil

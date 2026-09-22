@@ -12,6 +12,7 @@ Scenarios/
     root/             optional files laid over the seeded workspace as they are
     shots/            capture output, ignored by Git
     recordings/       recorded output, ignored by Git
+    .cache/           anything fetched from the web, ignored by Git
 ```
 
 ## Run one
@@ -212,7 +213,8 @@ shows the desktop and never runs to the edges.
 }
 ```
 
-- `background` is `"black"` or `"white"`. The titles are written in the other one.
+- `background` is `"black"`, `"white"`, or a picture or video to lay behind the app,
+  named as an asset or as a web address. A video loops, silently, and fills the stage.
 - `intro` opens on a solid card, writes its title and subtitle, then fades into the app.
   Without a `title` it uses the scenario's own. A newline in the title breaks the line
   where you want it; the lines are set close together, so keep them short. An optional
@@ -224,6 +226,24 @@ shows the desktop and never runs to the edges.
   timing is fixed, so every film has the same rhythm.
 
 Leave `film` out and the scenario plays on its own, with no stage and no titles.
+
+## Pictures and video
+
+Anywhere a scenario names a picture or a video, it can give a web address instead of a
+file in `assets/`. The script fetches it into `.cache/` before the app starts, names it
+after the address, and works out from the server what kind of file it is. The bundle has
+no network of its own and never downloads anything, so a scenario whose media has not
+been fetched refuses to load and says so. Nothing large has to live in the repository.
+
+A conversation background is a `preset`, an `image` or a `video`, and the last two take
+either form:
+
+```json
+"background": { "video": "https://www.pexels.com/download/video/854261/" }
+"background": { "image": "assets/wallpaper.jpg" }
+```
+
+Video backgrounds are an app feature, so what the film records is the real thing.
 
 ## root/
 

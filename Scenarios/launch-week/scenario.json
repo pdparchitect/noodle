@@ -27,6 +27,7 @@
   ],
   "conversations": [
     { "key": "launch",
+      "background": { "video": "https://www.pexels.com/download/video/854261/" },
       "group": { "name": "Launch week", "description": "Almanac 2.0: one message, one page, one number", "members": ["sonia", "kira", "mara", "andre"] },
       "messages": [
         { "at": "-3d 09:10", "from": "user",
@@ -66,6 +67,12 @@
     "window": { "size": [1240, 860], "origin": [100, 70] },
     "select": "launch",
     "draft": "Andre, which headline is winning? And where do we push tomorrow?"
+  },
+  "film": {
+    "background": "https://www.pexels.com/download/video/854261/",
+    "intro": { "title": "Launch week, run by bots",
+      "subtitle": "One message, one page, one number the whole team watches." },
+    "outro": { "tagline": "A workspace for you and your AI agents." }
   },
   "timeline": [
     { "capture": "01-launch-day" },

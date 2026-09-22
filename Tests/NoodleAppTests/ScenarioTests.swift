@@ -109,7 +109,9 @@ import XCTest
                 XCTAssertEqual(conversation.updatedAt, messages.last?.createdAt ?? conversation.updatedAt, "\(name): \(entry.key) sorts by its last message")
                 let background = store.background(for: conversation)
                 XCTAssertEqual(background.preset, entry.background?.preset, "\(name): \(entry.key)")
-                XCTAssertEqual(background.imageFilename != nil, entry.background?.image != nil, "\(name): \(entry.key)")
+                let media = entry.background?.image ?? entry.background?.video
+                XCTAssertEqual(background.imageFilename != nil, media != nil, "\(name): \(entry.key)")
+                XCTAssertEqual(background.mediaKind == .video, entry.background?.video != nil, "\(name): \(entry.key) keeps what it was given")
                 if background.imageFilename != nil {
                     let url = try XCTUnwrap(store.repository.backgroundImageURL(background, conversationID: conversation.id))
                     XCTAssertTrue(FileManager.default.fileExists(atPath: url.path), "\(name): \(entry.key)")
