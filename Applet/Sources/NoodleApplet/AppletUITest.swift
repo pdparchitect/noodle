@@ -87,6 +87,28 @@ import AppletCore
         }
         return result
     }
+    /// Reads the frames until they stop moving, so the toolbar is measured once it has finished
+    /// rearranging. A fixed pause after pressing a button is a race with the sidebar animation:
+    /// a loaded machine takes longer than the pause and the old layout is read as the new one.
+    /// Gives up after `attempts` and returns what it last saw, because the toolbar legitimately
+    /// drops items when the window is too narrow for them and those never arrive.
+    static func settle(
+        attempts: Int = 60, expecting: Int, sleep: (Duration) async -> Void = { try? await Task.sleep(for: $0) },
+        frames: () -> [CGRect]
+    ) async -> [CGRect] {
+        var last: [CGRect] = [], stable = 0
+        for attempt in 0..<attempts {
+            if attempt > 0 { await sleep(.milliseconds(100)) }
+            let current = frames()
+            stable = current == last && !current.isEmpty ? stable + 1 : 0
+            last = current
+            // Two readings the same is enough once everything expected is on screen; while
+            // something is still missing, keep looking in case it is on its way.
+            if stable >= 1, current.count >= expecting { return current }
+        }
+        return last
+    }
+
     /// Open Noodlet follows the sidebar toggle inside the sidebar's toolbar section. Both leave
     /// with the sidebar, where the system toggle and the detail toolbar's Open Noodlet return.
     private static func verifySidebarToolbar(_ window: NSWindow) async throws {
@@ -118,16 +140,22 @@ import AppletCore
                 typealias Press = @convention(c) (AnyObject, Selector) -> Bool
                 _ = unsafeBitCast(toggle.method(for: perform), to: Press.self)(toggle, perform)
             } else { toggle.accessibilityPerformAction(.press) }
-            try await Task.sleep(for: .milliseconds(600))
+        }
+        // Both the toggle and Open Noodlet, once the toolbar has stopped rearranging.
+        func settled(_ labels: [String]) async -> [CGRect] {
+            await settle(expecting: labels.count) { frames(labels) }
         }
         // An aborted run can leave a collapsed sidebar persisted; start expanded.
-        if !frames(["Show Sidebar"]).isEmpty { try await press("Show Sidebar") }
+        if !frames(["Show Sidebar"]).isEmpty {
+            try await press("Show Sidebar")
+            _ = await settled(["Hide Sidebar", "Open Noodlet"])
+        }
         let ordered: ([CGRect]) -> Bool = { zip($0, $0.dropFirst()).allSatisfy { $0.maxX < $1.minX } }
-        let expanded = frames(["Hide Sidebar", "Open Noodlet"])
+        let expanded = await settled(["Hide Sidebar", "Open Noodlet"])
         try await press("Hide Sidebar")
-        let collapsed = frames(["Show Sidebar", "Open Noodlet"])
+        let collapsed = await settled(["Show Sidebar", "Open Noodlet"])
         try await press("Show Sidebar")
-        let restored = frames(["Hide Sidebar", "Open Noodlet"])
+        let restored = await settled(["Hide Sidebar", "Open Noodlet"])
         print("APPLET_UI_SIDEBAR_TOOLBAR: expanded=\(expanded) collapsed=\(collapsed) restored=\(restored)")
         // The toolbar drops Open Noodlet while there is no room for it; the toggle must
         // always be there, and Open Noodlet must follow it whenever it is shown.
