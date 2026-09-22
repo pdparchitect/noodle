@@ -15,7 +15,7 @@ let mode = arguments[1]
 
 /// Typing sits under the picture, not over it: loud enough to hear, quiet enough that
 /// nobody reaches for the volume.
-let level: Float = 0.14
+let level: Float = 0.09
 
 /// Brings the loudest moment to `level`, so a track is never a surprise.
 func quieten(_ samples: inout [Float]) {
@@ -54,11 +54,15 @@ struct Resonator {
 /// 3 kHz doing most of the work, a little mid body, and the low thud of the case under
 /// it, each a pinprick of noise ringing a resonance. The tap is short and the thud
 /// quiet, because the other way round is a thump rather than a click.
-func strike(into samples: inout [Float], at start: Int, rate: Double) {
-    let gain = Float.random(in: 0.55...0.8)
-    var tap = Resonator(frequency: Double.random(in: 3400...4200), decay: 0.0018, rate: rate)
+/// `big` is the key that sends the message: a wider keycap, so it is pitched lower and
+/// lands harder than the letters before it.
+func strike(into samples: inout [Float], at start: Int, rate: Double, big: Bool = false) {
+    let gain = Float.random(in: 0.55...0.8) * (big ? 1.4 : 1)
+    var tap = Resonator(frequency: big ? Double.random(in: 1900...2300) : Double.random(in: 3400...4200),
+                        decay: big ? 0.0026 : 0.0018, rate: rate)
     var body = Resonator(frequency: Double.random(in: 1300...1700), decay: 0.0025, rate: rate)
-    var thud = Resonator(frequency: Double.random(in: 130...175), decay: 0.012, rate: rate)
+    var thud = Resonator(frequency: big ? Double.random(in: 100...135) : Double.random(in: 130...175),
+                         decay: big ? 0.018 : 0.012, rate: rate)
     // A key is struck twice: the tap, then the quieter knock as it bottoms out.
     let bottomsOut = Int(Double.random(in: 0.006...0.011) * rate)
     var drift: Float = 0, bright: Float = 0, brighter: Float = 0
@@ -75,7 +79,7 @@ func strike(into samples: inout [Float], at start: Int, rate: Double) {
         bright += 0.45 * (excitement - bright)
         brighter += 0.45 * (bright - brighter)
         var value = tap.next(excitement) + body.next(excitement) * 0.05
-            + thud.next(excitement) * 0.018 + brighter * 1.0
+            + thud.next(excitement) * (big ? 0.055 : 0.018) + brighter * (big ? 0.7 : 1.0)
         // Only the rumble below hearing is taken out; the thud of the case stays.
         drift += 0.006 * (value - drift)
         samples[at] += (value - drift) * gain
@@ -83,7 +87,8 @@ func strike(into samples: inout [Float], at start: Int, rate: Double) {
 }
 
 /// A message landing: two soft partials a fifth apart, the second a beat behind the
-/// first. Tonal where a keystroke is not, so the two never sound like each other.
+/// first. Tonal where a keystroke is not, so the two never sound like each other, and
+/// set below the typing so it never startles.
 func chime(into samples: inout [Float], at start: Int, rate: Double) {
     for (frequency, delay, weight) in [(784.0, 0.0, Float(1)), (1176.0, 0.055, Float(0.62))] {
         let offset = Int(delay * rate)
@@ -96,7 +101,7 @@ func chime(into samples: inout [Float], at start: Int, rate: Double) {
             let fade = Float(exp(-time / 0.08))
             let tone = Float(sin(2 * .pi * frequency * time))
                 + Float(sin(4 * .pi * frequency * time)) * 0.1
-            samples[at] += tone * attack * fade * weight * 0.55
+            samples[at] += tone * attack * fade * weight * 0.20
         }
     }
 }
@@ -146,8 +151,11 @@ Task {
             var samples = [Float](repeating: 0, count: Int(seconds * rate) + Int(rate * 0.4))
             for (name, at) in cues {
                 let index = Int(at * rate)
-                if name == "reply" { chime(into: &samples, at: index, rate: rate) }
-                else { strike(into: &samples, at: index, rate: rate) }
+                switch name {
+                case "reply": chime(into: &samples, at: index, rate: rate)
+                case "enter": strike(into: &samples, at: index, rate: rate, big: true)
+                default: strike(into: &samples, at: index, rate: rate)
+                }
             }
             quieten(&samples)
 
@@ -235,10 +243,14 @@ Task {
                 strike(into: &samples, at: Int(at * rate), rate: rate)
                 at += interval * Double.random(in: 0.55...1.65)
             }
-            // The reply that follows, so both sounds can be judged together.
+            // The key that sends it, then the reply, so every sound can be judged together.
+            at += 0.25
+            strike(into: &samples, at: Int(at * rate), rate: rate, big: true)
             at += 0.7
             chime(into: &samples, at: Int(at * rate), rate: rate)
-            at += 0.5
+            at += 0.45
+            // No dead air on the end: it is there to be listened to.
+            samples = Array(samples.prefix(Int(at * rate)))
             quieten(&samples)
             try write(samples, rate: rate, to: URL(fileURLWithPath: arguments[2]))
             print(String(format: "%d keys over %.1fs in %@", count, at, arguments[2]))

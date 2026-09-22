@@ -156,6 +156,9 @@ struct NoodleWordmark: Shape {
     var card: Card?
     /// Set once the card is on screen, which starts every animation in it.
     var written = false
+    /// Set to take the words off a card that stays up, so the film goes to nothing
+    /// before the app appears rather than dissolving into it.
+    var emptying = false
     /// Set to fade the card away and let the app back through.
     var leaving = false
     let onLight: Bool
@@ -172,6 +175,9 @@ struct NoodleWordmark: Shape {
         case nil: return false
         }
     }
+
+    /// Whether the words on the card are up.
+    var lettering: Bool { written && !emptying }
 
     var background: Color { onLight ? .white : .black }
     /// Plain ink on a plain card: white on black, black on white, with no tint of its own.
@@ -231,6 +237,8 @@ struct ScenarioFilmView: View {
                 }
             }
         }
+        .opacity(model.lettering ? 1 : 0)
+        .animation(.easeInOut(duration: 0.45), value: model.lettering)
     }
 
     private func words(_ kicker: String?, _ title: String, _ subtitle: String?, height: CGFloat) -> some View {
@@ -316,6 +324,7 @@ private struct RisesIn: ViewModifier {
     private(set) var frame: NSRect = .zero
     private var backdrop: NSWindow?
     private var overlay: NSWindow?
+    private weak var staged: NSWindow?
 
     /// `opening` is set before the card is built, so the film's first frame is already
     /// solid rather than fading up from the app behind it.
@@ -342,6 +351,7 @@ private struct RisesIn: ViewModifier {
         window.setFrameOrigin(CGPoint(x: (frame.midX - window.frame.width / 2).rounded(),
                                       y: (frame.midY - window.frame.height / 2).rounded()))
 
+        staged = window
         let backdrop = self.backdrop ?? makeWindow(opaque: true)
         backdrop.setFrame(frame, display: false)
         backdrop.backgroundColor = model.onLight ? .white : .black
@@ -363,9 +373,23 @@ private struct RisesIn: ViewModifier {
     func present(_ card: ScenarioFilmModel.Card) {
         model.card = card
         model.written = false
+        model.emptying = false
         model.leaving = false
         overlay?.setFrame(frame, display: false)
         overlay?.orderFront(nil)
+    }
+
+    /// Takes the app out of sight, so an emptied card can come down to nothing.
+    func conceal() { staged?.alphaValue = 0 }
+
+    /// Brings the app up out of the backdrop.
+    func reveal(over seconds: Double) {
+        guard let window = staged, window.alphaValue < 1 else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = seconds
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            window.animator().alphaValue = 1
+        }
     }
 
     /// Parks the pointer off the stage, so an unattended recording has no cursor in it.

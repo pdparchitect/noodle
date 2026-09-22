@@ -861,9 +861,21 @@ extension Scenario {
         try await sleep(.seconds(written))
         // A recording ends on the wordmark; someone watching in the app gets their window back.
         if stage == .outro, takesShots { return }
-        filmStage?.model.leaving = true
-        try await sleep(.seconds(0.9))
-        if stage == .intro { filmStage?.dismissCard() } else { filmStage?.finish() }
+        guard stage == .intro else {
+            filmStage?.model.leaving = true
+            try await sleep(.seconds(0.9))
+            filmStage?.finish()
+            return
+        }
+        // The words go, the card holds on nothing, and only then does the app come up.
+        // Never a dissolve of one into the other.
+        filmStage?.model.emptying = true
+        try await sleep(.seconds(0.6))
+        filmStage?.conceal()
+        filmStage?.dismissCard()
+        try await sleep(.seconds(0.35))
+        filmStage?.reveal(over: 0.55)
+        try await sleep(.seconds(0.6))
     }
 
     /// False when the timeline cannot go on.
@@ -900,6 +912,7 @@ extension Scenario {
             }
             // A beat with the whole message on screen, as a hand pauses before Return.
             try await sleep(.seconds(0.4))
+            cue("enter")
             let date = now
             let message = try repository.sendUserMessage(conversationID: conversation.id, body: typing.text,
                 attachmentIDs: try scenario.importAttachments(typing.attachments, into: conversation.id, repository: repository, now: date), now: date)

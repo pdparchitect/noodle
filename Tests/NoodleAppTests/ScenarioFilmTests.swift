@@ -98,6 +98,18 @@ import XCTest
         XCTAssertTrue(model.covering)
     }
 
+    func testTheOpeningCardEmptiesBeforeItLetsTheWindowThrough() {
+        let model = ScenarioFilmModel(onLight: false)
+        model.card = .intro(kicker: nil, title: "Christmas, handled", subtitle: nil, icon: nil)
+        model.written = true
+        XCTAssertTrue(model.covering)
+        XCTAssertTrue(model.lettering, "The words are up while the card is held")
+
+        model.emptying = true
+        XCTAssertFalse(model.lettering, "The words go first")
+        XCTAssertTrue(model.covering, "The card stays solid, so the app is never dissolved into")
+    }
+
     // MARK: The film
 
     func testTheFilmPlaysItsTitlesAroundTheTimeline() async throws {
@@ -172,7 +184,8 @@ import XCTest
         session.takesShots = true
         session.store.startAgents()
         try await session.play()
-        XCTAssertEqual(cues, Array(repeating: "key", count: 8), "One keystroke each for \"Ship it.\"")
+        XCTAssertEqual(cues, Array(repeating: "key", count: 8) + ["enter"],
+                       "One keystroke each for \"Ship it.\", then the key that sends it")
     }
 
     func testAReplyCuesASoundOfItsOwn() async throws {
@@ -186,7 +199,7 @@ import XCTest
         session.takesShots = true
         session.store.startAgents()
         try await session.play()
-        XCTAssertEqual(cues, ["key", "key", "reply"], "A message landing sounds unlike a keystroke")
+        XCTAssertEqual(cues, ["key", "key", "enter", "reply"], "A message landing sounds unlike a keystroke")
     }
 
     func testTypingIsSilentWhenNobodyIsRecording() async throws {
