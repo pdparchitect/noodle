@@ -48,6 +48,10 @@ draft in the composer.
 main window are in the picture; windows from `present.windows` are not unless they
 overlap it.
 
+A `type` step is given a sound track: the app reports each keystroke with the time it
+happened, and the script lays a key click on the recording at each one. Nothing is
+captured from the microphone or from what the Mac is playing.
+
 `--ratio W:H`, which can be given more than once, also writes `recordings/NAME-WxH.mp4`:
 the same recording centred on the same background, grown to that shape for wherever it
 is going. Nothing is cropped, and nothing is scaled up past the size it was recorded at.

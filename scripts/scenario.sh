@@ -125,7 +125,7 @@ codesign --verify --strict "$app"
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" == "$bundle_identifier" ]]
 
 video_tool="$build_root/scenario-video"
-if [[ ${#ratios} -gt 0 ]]; then
+if [[ "$record" == true ]]; then
     if [[ ! -x "$video_tool" || "$project_root/scripts/scenario-video.swift" -nt "$video_tool" ]]; then
         zsh "$project_root/scripts/swift-apple.sh" build --product Noodle >/dev/null 2>&1 || true
         xcrun swiftc -O "$project_root/scripts/scenario-video.swift" -o "$video_tool"
@@ -150,8 +150,9 @@ for folder in "${folders[@]}"; do
     [[ "$shots" == false ]] || mkdir -p "$folder/shots"
     [[ "$record" == false ]] || mkdir -p "$folder/recordings"
     taken=0
-    recorder=
+    recorder= stopped=
     movie="$folder/recordings/${folder:t}.mov"
+    cues="$(mktemp)"
     # The flag goes last: AppKit reads arguments in pairs, and would take what follows it for its value.
     coproc "$executable" --scenario "$folder" "${locale[@]}" --scenario-shots
     app_pid=$!
@@ -159,6 +160,11 @@ for folder in "${folders[@]}"; do
     # The app waits for an empty line after READY, each SHOT and DONE, so the recorder is rolling
     # before the timeline plays and has stopped before the window closes.
     while IFS= read -r -p line; do
+        # The app reports every sound it makes, with the time, for the track laid down below.
+        if [[ "$line" == "SCENARIO SOUND "* ]]; then
+            print -r -- "${line#SCENARIO SOUND }" >> "$cues"
+            continue
+        fi
         print -r -- "$line"
         case "$line" in
             "SCENARIO READY "*)
@@ -196,6 +202,7 @@ for folder in "${folders[@]}"; do
                 if [[ -n "$recorder" ]]; then
                     # Let the last change settle on screen before the recording ends.
                     sleep 1
+                    stopped="$(python3 -c 'import time; print(time.time())')"
                     kill -INT "$recorder" 2>/dev/null || true
                     wait "$recorder" 2>/dev/null || true
                     recorder=
@@ -211,13 +218,15 @@ for folder in "${folders[@]}"; do
     if [[ "$record" == true ]]; then
         if [[ -s "$movie" ]]; then
             print "Recorded $movie"
+            [[ ! -s "$cues" || -z "$stopped" ]] || "$video_tool" sound "$movie" "$cues" "$stopped"
             # The padding matches the film's own backdrop, so the frame reads as one surface.
             background="$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("film") or {}).get("background") or "black")' "$folder/scenario.json")"
             for ratio in "${ratios[@]}"; do
-                "$video_tool" "$movie" "$folder/recordings/${folder:t}-${ratio/:/x}.mp4" "$ratio" "$background"
+                "$video_tool" frame "$movie" "$folder/recordings/${folder:t}-${ratio/:/x}.mp4" "$ratio" "$background"
             done
         else
             print -u2 "Nothing was recorded."
         fi
     fi
+    rm -f "$cues"
 done

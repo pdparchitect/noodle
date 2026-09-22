@@ -203,6 +203,9 @@ struct Scenario: Codable {
         var outro: Outro?
 
         struct Intro: Codable {
+            /// A picture to bring up under the title, shown in a circle. Any asset in the
+            /// scenario folder, so it can be a bot's own avatar or anything else.
+            var icon: String?
             /// The small line above the title, for what this is a scenario of.
             var kicker: String?
             /// Defaults to the scenario's own title.
@@ -361,6 +364,7 @@ extension Scenario {
                 try require(text.map { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? true, "film.\(label) has no text.")
             }
             try require((film.intro?.hold ?? 0) >= 0 && (film.outro?.hold ?? 0) >= 0, "A film holds for a negative time.")
+            if let icon = film.intro?.icon { _ = try asset(icon) }
         }
         for key in (settings ?? [:]).keys {
             try require(Self.preferenceKeys.contains(key), "\"\(key)\" is not a preference a scenario can set.")
@@ -740,6 +744,8 @@ extension Scenario {
     var isWaitingForKey: Bool { !keyWaiters.isEmpty }
     /// A capture run: scripts/scenario.sh photographs each `capture` step and nobody is at the keyboard.
     var takesShots = false
+    /// Marks a sound for the recording's track; tests replace it to count keystrokes.
+    var soundCue: (@MainActor (String) -> Void)?
     /// Plays the titles around the timeline; tests replace it to watch the order without a window.
     var playFilm: (@MainActor (Scenario.Film.Stage) async throws -> Void)?
     private var filmStage: ScenarioFilmStage?
@@ -836,7 +842,7 @@ extension Scenario {
         let card: ScenarioFilmModel.Card?, written: Double
         switch stage {
         case .intro:
-            card = film.intro.map { .intro(kicker: $0.kicker, title: $0.title ?? scenario.title, subtitle: $0.subtitle) }
+            card = film.intro.map { .intro(kicker: $0.kicker, title: $0.title ?? scenario.title, subtitle: $0.subtitle, icon: icon(film.intro)) }
             written = 1.6 + (film.intro?.hold ?? 1.4)
         case .outro:
             card = film.outro.map { .outro(tagline: $0.tagline) }
@@ -873,6 +879,7 @@ extension Scenario {
                 attachmentIDs: try scenario.importAttachments(reply.attachments, into: conversation.id, repository: repository, now: date), now: date)
             remember(message, as: reply.key)
             store.refreshTranscripts()
+            cue("reply")
         }
         if let say = step.say, let conversation {
             let date = now
@@ -887,7 +894,9 @@ extension Scenario {
             for character in typing.text {
                 typed.append(character)
                 store.setDraft(typed, for: conversation.id)
-                try await sleep(.seconds(typing.interval ?? 0.04))
+                cue("key")
+                // Keys land unevenly. Evenly spaced ones beat like a rotor once they have a sound.
+                try await sleep(.seconds((typing.interval ?? 0.075) * Double.random(in: 0.55...1.65)))
             }
             // A beat with the whole message on screen, as a hand pauses before Return.
             try await sleep(.seconds(0.4))
@@ -942,6 +951,20 @@ extension Scenario {
         }
         if let shot = step.capture { return await answer(.shot(shot)) }
         return true
+    }
+
+    /// The picture an opening card brings up, if it names one.
+    private func icon(_ intro: Scenario.Film.Intro?) -> NSImage? {
+        guard let path = intro?.icon, let url = try? scenario.asset(path) else { return nil }
+        return NSImage(contentsOf: url)
+    }
+
+    /// Tells whoever is recording that something just made a noise, and when. Only a
+    /// capture run has a sound track to put it on.
+    private func cue(_ name: String) {
+        guard takesShots else { return }
+        if let soundCue { soundCue(name); return }
+        write("SCENARIO SOUND \(name) \(Date().timeIntervalSince1970)")
     }
 
     private var messages: [String: ChatMessage] { seeded.messages.merging(liveMessages) { $1 } }
@@ -1047,7 +1070,7 @@ extension Scenario {
             window.makeKeyAndOrderFront(nil)
         }
         if let film = scenario.film {
-            let opening = film.intro.map { ScenarioFilmModel.Card.intro(kicker: $0.kicker, title: $0.title ?? scenario.title, subtitle: $0.subtitle) }
+            let opening = film.intro.map { ScenarioFilmModel.Card.intro(kicker: $0.kicker, title: $0.title ?? scenario.title, subtitle: $0.subtitle, icon: icon($0)) }
             let stage = filmStage ?? ScenarioFilmStage(film: film, opening: opening)
             filmStage = stage
             stage.attach(to: window)

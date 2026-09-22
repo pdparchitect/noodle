@@ -149,7 +149,7 @@ struct NoodleWordmark: Shape {
 /// What the film shows over the app, and the state its animations run from.
 @MainActor @Observable final class ScenarioFilmModel {
     enum Card: Equatable {
-        case intro(kicker: String?, title: String, subtitle: String?)
+        case intro(kicker: String?, title: String, subtitle: String?, icon: NSImage?)
         case outro(tagline: String?)
     }
 
@@ -189,7 +189,8 @@ struct ScenarioFilmView: View {
             ZStack {
                 model.background
                 switch model.card {
-                case .intro(let kicker, let title, let subtitle): intro(kicker, title, subtitle, height: height)
+                case .intro(let kicker, let title, let subtitle, let icon):
+                    intro(kicker, title, subtitle, icon, height: height)
                 case .outro(let tagline): outro(tagline, size: geometry.size)
                 case nil: Color.clear
                 }
@@ -211,7 +212,28 @@ struct ScenarioFilmView: View {
 
     /// Set the way Apple sets a page like this: a small line above, the title tight and
     /// slightly closed up, and a quieter line under it.
-    private func intro(_ kicker: String?, _ title: String, _ subtitle: String?, height: CGFloat) -> some View {
+    private func intro(_ kicker: String?, _ title: String, _ subtitle: String?, _ icon: NSImage?, height: CGFloat) -> some View {
+        ZStack {
+            words(kicker, title, subtitle, height: height)
+            if let icon {
+                VStack {
+                    Spacer()
+                    Image(nsImage: icon)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: height * 0.13, height: height * 0.13)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(model.ink.opacity(0.16), lineWidth: max(1, height * 0.002)))
+                        .scaleEffect(model.written ? 1 : 0.7)
+                        .opacity(model.written ? 1 : 0)
+                        .animation(.spring(response: 0.6, dampingFraction: 0.62).delay(0.95), value: model.written)
+                        .padding(.bottom, height * 0.22)
+                }
+            }
+        }
+    }
+
+    private func words(_ kicker: String?, _ title: String, _ subtitle: String?, height: CGFloat) -> some View {
         let headline = height * 0.078
         let above = headline * 0.44, below = headline * 0.36
         return VStack(spacing: 0) {

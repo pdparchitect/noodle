@@ -86,7 +86,7 @@ import XCTest
         let model = ScenarioFilmModel(onLight: false)
         XCTAssertFalse(model.covering, "Nothing covers the app until a card is up")
 
-        model.card = .intro(kicker: "Noodle", title: "A morning with Ada", subtitle: nil)
+        model.card = .intro(kicker: "Noodle", title: "A morning with Ada", subtitle: nil, icon: nil)
         XCTAssertTrue(model.covering, "The film opens on its title, so that card is solid at once")
         model.leaving = true
         XCTAssertFalse(model.covering)
@@ -162,6 +162,79 @@ import XCTest
         let natural = font.ascender - font.descender + font.leading
         XCTAssertEqual(natural + spacing, multiple * size, accuracy: 0.01)
         XCTAssertLessThan(spacing, 0, "1.08 is tighter than the font's own line height")
+    }
+
+    func testTypingCuesOneSoundPerCharacterInARecording() async throws {
+        let timeline = "[ { \"in\": \"ada\", \"type\": { \"text\": \"Ship it.\" } } ]"
+        let session = try session(try scenario(film: "{ }", timeline: timeline))
+        var cues: [String] = []
+        session.soundCue = { cues.append($0) }
+        session.takesShots = true
+        session.store.startAgents()
+        try await session.play()
+        XCTAssertEqual(cues, Array(repeating: "key", count: 8), "One keystroke each for \"Ship it.\"")
+    }
+
+    func testAReplyCuesASoundOfItsOwn() async throws {
+        let timeline = """
+        [ { "in": "ada", "type": { "text": "Go" } },
+          { "agent": "ada", "reply": { "text": "All 42 parser tests pass." } } ]
+        """
+        let session = try session(try scenario(film: "{ }", timeline: timeline))
+        var cues: [String] = []
+        session.soundCue = { cues.append($0) }
+        session.takesShots = true
+        session.store.startAgents()
+        try await session.play()
+        XCTAssertEqual(cues, ["key", "key", "reply"], "A message landing sounds unlike a keystroke")
+    }
+
+    func testTypingIsSilentWhenNobodyIsRecording() async throws {
+        let timeline = "[ { \"in\": \"ada\", \"type\": { \"text\": \"Ship it.\" } } ]"
+        let session = try session(try scenario(film: "{ }", timeline: timeline))
+        var cues: [String] = []
+        session.soundCue = { cues.append($0) }
+        session.store.startAgents()
+        try await session.play()
+        XCTAssertTrue(cues.isEmpty, "Only a recording needs a sound track")
+    }
+
+    func testTypingIsNotMetronomic() async throws {
+        let timeline = "[ { \"in\": \"ada\", \"type\": { \"text\": \"Ship it when the tests pass\", \"interval\": 0.05 } } ]"
+        let session = try session(try scenario(film: "{ }", timeline: timeline))
+        var waits: [Double] = []
+        session.sleep = { duration in
+            waits.append(Double(duration.components.seconds) + Double(duration.components.attoseconds) * 1e-18)
+            await Task.yield()
+        }
+        session.store.startAgents()
+        try await session.play()
+
+        let keys = waits.dropLast()
+        XCTAssertEqual(keys.count, 27, "One wait per character")
+        XCTAssertGreaterThan(Set(keys).count, 10, "Evenly spaced keys beat like a rotor, so they must vary")
+        let average = keys.reduce(0, +) / Double(keys.count)
+        XCTAssertEqual(average, 0.05, accuracy: 0.02, "The asked-for interval is still the pace")
+        XCTAssertGreaterThan(keys.min() ?? 0, 0, "No character arrives instantly")
+    }
+
+    func testAnIntroCanBringUpAPicture() throws {
+        let folder = try directory()
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("assets"), withIntermediateDirectories: true)
+        let picture = folder.appendingPathComponent("assets/face.png")
+        let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 8, pixelsHigh: 8, bitsPerSample: 8,
+            samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: picture)
+
+        let json = """
+        { "version": 1, "title": "Fixture", "harnesses": { "claude-code": { "models": "builtin" } },
+          "agents": [ { "key": "ada", "name": "Ada", "harness": "claude-code", "model": "opus" } ],
+          "film": { "intro": { "icon": "assets/face.png", "title": "A morning with Ada" } } }
+        """
+        try Data(json.utf8).write(to: folder.appendingPathComponent("scenario.json"))
+        XCTAssertEqual(try Scenario.load(from: folder).film?.intro?.icon, "assets/face.png")
+        XCTAssertThrowsError(try scenario(film: "{ \"intro\": { \"icon\": \"assets/missing.png\" } }"),
+                             "A picture that is not there must not load")
     }
 
     // MARK: Rendering
