@@ -4,8 +4,9 @@ A harness is the agent program Noodle runs for each bot. Noodle supports Codex,
 Claude Code, Vercel FX, Grok Build, Muse Code, OpenCode v2, and Google Antigravity, using your existing account,
 plus the experimental bundled Apple Intelligence harness running on device.
 
-The first time you open Noodle with no bots, **Set Up Your First Bot** lists the
-harnesses with their state on this Mac. Choose one and **Continue**: Noodle
+The first time you open Noodle with no bots, **Set Up Your First Bot** offers
+OpenAI, Anthropic, Meta and xAI, each with its harness and its state on this Mac;
+**Other** lists the rest. Choose one and **Continue**: Noodle
 installs it if needed, signs you in, and asks for the bot's name. **Not Now**
 closes it; the empty window keeps a **Set Up Your First Bot** button, and
 **Help → Set Up a Bot…** opens it at any time. Everything

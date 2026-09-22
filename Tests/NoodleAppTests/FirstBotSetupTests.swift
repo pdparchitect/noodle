@@ -70,6 +70,33 @@ import XCTest
         XCTAssertFalse(setup.canContinue)
     }
 
+    func testFourVendorsAreFeaturedAndTheRestWaitUnderOther() {
+        XCTAssertEqual(FirstBotSetup.featured, [.codex, .claudeCode, .muse, .grokBuild])
+        XCTAssertEqual(FirstBotSetup.others, [.fx, .openCode, .antigravity, .apple])
+        XCTAssertEqual(Set(FirstBotSetup.featured + FirstBotSetup.others), Set(HarnessProvider.allCases), "Every harness is offered.")
+    }
+
+    func testOtherOpensWhenTheBestCandidateOrTheChoiceIsNotFeatured() async throws {
+        let fresh = FirstBotSetup(setup: controller, runtime: runtime)
+        XCTAssertFalse(fresh.showsOthers, "Codex is featured.")
+        fresh.chosen = .fx
+        XCTAssertTrue(fresh.showsOthers)
+        fresh.chosen = .codex
+        XCTAssertFalse(fresh.showsOthers)
+        fresh.othersRevealed = true
+        XCTAssertTrue(fresh.showsOthers, "Opened by hand, it stays open with a featured choice.")
+        fresh.othersRevealed = false
+        fresh.chosen = .apple
+        XCTAssertTrue(fresh.showsOthers, "Closing it cannot hide the selection.")
+
+        fx.signedIn = true
+        try await installer.install(.fx) { _ in }
+        await controller.refreshAll(runtime)
+        let ready = FirstBotSetup(setup: controller, runtime: runtime)
+        XCTAssertEqual(ready.preferred, .fx)
+        XCTAssertTrue(ready.showsOthers, "The ready harness is shown selected, so its section is open.")
+    }
+
     func testAHarnessThatIsReadyGoesStraightToNamingTheBot() async throws {
         fx.signedIn = true
         try await installer.install(.fx) { _ in }

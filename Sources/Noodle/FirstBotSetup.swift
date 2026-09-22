@@ -12,9 +12,15 @@ final class FirstBotSetup {
 
     static let dismissedKey = "Noodle.firstBotSetup.dismissed"
 
+    /// The vendors offered as tiles; every other harness waits under Other.
+    static let featured: [HarnessProvider] = [.codex, .claudeCode, .muse, .grokBuild]
+    static let others = HarnessProvider.allCases.filter { !featured.contains($0) }
+
     private(set) var step = Step.harness
     /// The user's own choice; until then the best candidate is shown selected.
     var chosen: HarnessProvider?
+    /// Other opened by hand; it also opens on its own to show a selection it holds.
+    var othersRevealed = false
     private let setup: HarnessSetupController
     private let runtime: AgentRuntimeCoordinator
 
@@ -24,6 +30,8 @@ final class FirstBotSetup {
     }
 
     var selection: HarnessProvider { chosen ?? preferred }
+
+    var showsOthers: Bool { othersRevealed || Self.others.contains(selection) }
 
     func installation(_ id: HarnessProvider) -> HarnessInstallation? {
         runtime.installations.first { $0.provider == id && $0.isAvailable }

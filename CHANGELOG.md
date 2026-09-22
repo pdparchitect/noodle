@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- Offer OpenAI, Anthropic, Meta and xAI as tiles in Set Up Your First Bot, with their harness and its state on this Mac. The other harnesses are listed under Other, which opens by itself when one of them is the best choice.
+
 ### Added
 
 - Add Perplexity to the tool catalogue in Settings > Tools > Add Tools. Sign-in uses Perplexity's browser OAuth, and bots get web search with sources.

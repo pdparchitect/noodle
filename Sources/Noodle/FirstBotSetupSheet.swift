@@ -29,7 +29,7 @@ struct FirstBotSetupSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 520)
+        .frame(width: 640)
         .task { await setup.refreshAll(store.runtime) }
         .onChange(of: model.readiness(id)) { _, _ in model.advanceIfReady() }
         .onChange(of: model.step) { _, step in
@@ -65,8 +65,69 @@ struct FirstBotSetupSheet: View {
     }
 
     private var harnessStep: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                ForEach(FirstBotSetup.featured) { provider in
+                    tile(for: provider)
+                }
+            }
+            Button { model.othersRevealed.toggle() } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(model.showsOthers ? 90 : 0))
+                        .accessibilityHidden(true)
+                    Text("Other").font(.subheadline.weight(.medium))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(model.showsOthers ? .isSelected : [])
+            .animation(.easeInOut(duration: 0.15), value: model.showsOthers)
+            if model.showsOthers { harnessList }
+        }
+    }
+
+    private func tile(for provider: HarnessProvider) -> some View {
+        Button { model.chosen = provider } label: {
+            VStack(spacing: 8) {
+                HarnessProviderIcon(provider: provider)
+                    .foregroundStyle(provider == id ? Color.accentColor : .secondary)
+                    .frame(width: 36, height: 36)
+                    .accessibilityHidden(true)
+                VStack(spacing: 2) {
+                    Text(vendorName(provider)).font(.headline)
+                    Text(provider.displayName).font(.caption).foregroundStyle(.secondary)
+                }
+                status(for: provider)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .contentShape(Rectangle())
+            .background(provider == id ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.04),
+                        in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(provider == id ? Color.accentColor.opacity(0.6) : .clear, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(vendorName(provider)), \(provider.displayName)")
+        .accessibilityAddTraits(provider == id ? .isSelected : [])
+    }
+
+    private func vendorName(_ provider: HarnessProvider) -> String {
+        switch provider {
+        case .codex: "OpenAI"
+        case .claudeCode: "Anthropic"
+        case .muse: "Meta"
+        case .grokBuild: "xAI"
+        case .fx, .openCode, .antigravity, .apple: provider.displayName
+        }
+    }
+
+    private var harnessList: some View {
         VStack(spacing: 2) {
-            ForEach(HarnessProvider.allCases) { provider in
+            ForEach(FirstBotSetup.others) { provider in
                 Button { model.chosen = provider } label: {
                     HStack(spacing: 12) {
                         HarnessProviderIcon(provider: provider)
