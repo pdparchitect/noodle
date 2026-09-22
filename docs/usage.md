@@ -104,11 +104,11 @@ Add them in **Settings → Tools**, then assign them in the bot's **Tools** tab.
 Add a [Noodle Computer](../Computer/README.md) in its **Computers** tab to give it
 a Linux workspace. Several agents can share a computer to work on the same files.
 
-The **Calendars** and **Reminders** tabs give a bot the calendars and reminder lists
-on this Mac you select. It can read them and add, change and delete entries in them;
-anything you leave unselected stays invisible to it. macOS asks for access the first
-time you open each tab — calendars and reminders are separate permissions — and you
-can withdraw either in System Settings.
+The **Tools** tab also assigns the calendars and reminder lists on this Mac. A bot can
+read the ones you give it and add, change and delete entries in them; anything you
+leave unassigned stays invisible to it. macOS asks for access the first time —
+calendars and reminders are separate permissions — and you can withdraw either in
+System Settings.
 
 ## Heartbeats
 

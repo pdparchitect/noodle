@@ -12,8 +12,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
-- Give bots the calendars on this Mac. Bot editor > Calendars assigns the calendars a bot may use, and it can then list them, read events, and create, change and delete events in those calendars only. Noodle asks for calendar access the first time you open the tab.
-- Give bots the reminder lists on this Mac. Bot editor > Reminders assigns the lists a bot may use, and it can then read what is due, add reminders, tick them off and delete them in those lists only. Calendars and reminders are granted separately, by macOS and in Noodle.
+- Give bots the calendars and reminder lists on this Mac. The bot editor's Tools tab assigns them beside tool connections: a bot can read what it was given, and create, change and delete events and reminders in those calendars and lists only. Noodle asks macOS for access the first time, separately for calendars and for reminders.
 - Add Perplexity to the tool catalogue in Settings > Tools > Add Tools. Sign-in uses Perplexity's browser OAuth, and bots get web search with sources.
 
 ### Fixed

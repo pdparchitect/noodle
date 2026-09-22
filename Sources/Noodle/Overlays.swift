@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 import NoodleCore
 
 enum BotEditorTab: String, CaseIterable {
-    case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers", browsers = "Browsers", calendars = "Calendars", reminders = "Reminders"
+    case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers", browsers = "Browsers"
 }
 
 private struct BotEditorTabPicker: View {
@@ -53,6 +53,7 @@ struct NewBotSheet: View {
     @State private var browserIDs: Set<UUID> = []
     @State private var calendarIDs: Set<String> = []
     @State private var reminderListIDs: Set<String> = []
+    @State private var builtInTools: Set<EventKitAssignments.Kind> = []
     @State private var folders: [AgentFolder] = []
     @State private var selectedProfileID: UUID?
     @State private var selectedTab = BotEditorTab.general
@@ -137,15 +138,14 @@ struct NewBotSheet: View {
                     )
                     BotFolderPicker(folders: $folders)
                 case .mcp:
-                    MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs)
+                    MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs,
+                                        calendars: store.calendars, reminders: store.reminders,
+                                        calendarIDs: $calendarIDs, reminderIDs: $reminderListIDs,
+                                        builtIn: $builtInTools)
                 case .browsers:
                     BrowserAssignmentPicker(controller: store.browsers, selectedIDs: $browserIDs)
                 case .computers:
                     ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
-                case .calendars:
-                    EventKitAssignmentPicker(controller: store.calendars, selectedIDs: $calendarIDs)
-                case .reminders:
-                    EventKitAssignmentPicker(controller: store.reminders, selectedIDs: $reminderListIDs)
                 }
                 if selectedTab != .runtime {
                     HarnessExperimentalWarning(provider: HarnessProvider(rawValue: selectedHarnessIdentifier))
@@ -258,6 +258,7 @@ struct EditBotSheet: View {
     @State private var browserIDs: Set<UUID> = []
     @State private var calendarIDs: Set<String> = []
     @State private var reminderListIDs: Set<String> = []
+    @State private var builtInTools: Set<EventKitAssignments.Kind> = []
     @State private var folders: [AgentFolder] = []
     @State private var selectedProfileID: UUID?
     @State private var confirmingDeletion = false
@@ -349,15 +350,14 @@ struct EditBotSheet: View {
                         .font(.caption).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .mcp:
-                    MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs)
+                    MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs,
+                                        calendars: store.calendars, reminders: store.reminders,
+                                        calendarIDs: $calendarIDs, reminderIDs: $reminderListIDs,
+                                        builtIn: $builtInTools)
                 case .browsers:
                     BrowserAssignmentPicker(controller: store.browsers, selectedIDs: $browserIDs)
                 case .computers:
                     ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
-                case .calendars:
-                    EventKitAssignmentPicker(controller: store.calendars, selectedIDs: $calendarIDs)
-                case .reminders:
-                    EventKitAssignmentPicker(controller: store.reminders, selectedIDs: $reminderListIDs)
                 }
             }
             .padding(20)
@@ -371,6 +371,9 @@ struct EditBotSheet: View {
             browserIDs = store.browsers.selectedIDs(for: agent)
             calendarIDs = store.calendars.selectedIDs(for: agent)
             reminderListIDs = store.reminders.selectedIDs(for: agent)
+            builtInTools = Set(EventKitAssignments.Kind.allCases.filter {
+                !($0 == .calendar ? calendarIDs : reminderListIDs).isEmpty
+            })
             folders = store.folders(for: agent)
             selectedProfileID = store.harnessProfile(for: agent)
             if selectedHarnessIdentifier.isEmpty {

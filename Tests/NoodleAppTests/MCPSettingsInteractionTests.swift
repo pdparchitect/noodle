@@ -14,6 +14,12 @@ import NoodleCore
         return f
     }
 
+    /// Noodle's built-in tools share the assignment list. These tests are about
+    /// connections, so the controllers are real but list nothing.
+    private func eventKit(_ f: MCPControllerFixture, kind: EventKitAssignments.Kind) -> EventKitController {
+        EventKitController(repository: f.repository, kind: kind) { [] }
+    }
+
     func testNewConnectionRequiresNameAndURLAndRejectsInvalidEndpoints() async throws {
         let f = try mcpFixture()
         let editor = host(MCPEditor(controller: f.controller,
@@ -150,7 +156,9 @@ import NoodleCore
         try await wait { selection.ids == [first.id, second.id] }
         try await wait { !self.hasControl("Personal", in: chooser) }
         press(try await control("Done", in: chooser)); XCTAssertEqual(selection.done, 1)
-        let picker = host(MCPAssignmentPicker(controller: f.controller, selectedIDs: selection.idsBinding))
+        let picker = host(MCPAssignmentPicker(controller: f.controller, selectedIDs: selection.idsBinding,
+            calendars: eventKit(f, kind: .calendar), reminders: eventKit(f, kind: .reminderList),
+            calendarIDs: .constant([]), reminderIDs: .constant([]), builtIn: .constant([])))
         let window = try XCTUnwrap(picker.window)
         func confirmation() async throws -> NSView {
             press(try await control("Remove Work from this bot", in: picker))
@@ -176,8 +184,13 @@ import NoodleCore
             search: selection.searchBinding, onNewTool: { newTool += 1 }, onDone: {}))
         _ = try await control("No saved connections. Choose New Tool to add one.", in: chooser)
         press(try await control("New Tool…", in: chooser)); XCTAssertEqual(newTool, 1)
-        let picker = host(MCPAssignmentPicker(controller: f.controller, selectedIDs: selection.idsBinding))
-        _ = try await control("No tool connections assigned", in: picker)
+        let picker = host(MCPAssignmentPicker(controller: f.controller, selectedIDs: selection.idsBinding,
+            calendars: eventKit(f, kind: .calendar), reminders: eventKit(f, kind: .reminderList),
+            calendarIDs: .constant([]), reminderIDs: .constant([]), builtIn: .constant([])))
+        // With nothing assigned the list is one button that opens the chooser.
+        let empty = try await control("Add tools to this bot", in: picker)
+        XCTAssertTrue(enabled(empty))
+        XCTAssertFalse(hasControl("Remove", in: picker), "Nothing is assigned, so nothing can be removed")
         XCTAssertTrue(f.controller.registry.connections.isEmpty)
     }
 

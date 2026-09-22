@@ -319,7 +319,8 @@ enum EventKitColour {
     /// Keeps the catalogue shown in Settings in step with what is on this Mac.
     func refresh() async {
         access = status()
-        guard access == .granted else { return }
+        // Access the person has not given is a state the picker explains, never a failure.
+        guard access == .granted else { failure = nil; return }
         do {
             let lists = try await lister()
             guard readable, registry.lists != lists else { return }
@@ -336,84 +337,107 @@ enum EventKitColour {
     }
 }
 
-struct EventKitAssignmentPicker: View {
+/// Noodle's own tools carry the same weight in a list as a connection's app icon.
+struct EventKitToolIcon: View {
+    let symbol: String
+    let size: CGFloat
+    var body: some View {
+        RoundedRectangle(cornerRadius: size * 0.22)
+            .fill(.tint.opacity(0.18))
+            .overlay {
+                Image(systemName: symbol).font(.system(size: size * 0.62, weight: .medium)).foregroundStyle(.tint)
+            }
+            .frame(width: size, height: size)
+    }
+}
+
+/// Calendars and Reminders are tools a bot is given like any other. The row carries the
+/// scope: which calendars or lists, chosen behind its own button.
+struct EventKitToolRow: View {
     let controller: EventKitController
     @Binding var selectedIDs: Set<String>
+    let onRemove: () -> Void
+    @State private var showingScope = false
 
-    private var lists: [EventKitList] { controller.registry.lists.sorted { $0.title < $1.title } }
     private var isCalendar: Bool { controller.kind == .calendar }
-    private var title: String { isCalendar ? "Calendars" : "Reminder Lists" }
+    var title: String { isCalendar ? "Calendar" : "Reminders" }
     private var symbol: String { isCalendar ? "calendar" : "checklist" }
-    private var privacyPane: String { isCalendar ? "Calendars" : "Reminders" }
+    private var chosen: [EventKitList] {
+        controller.registry.lists.filter { selectedIDs.contains($0.id) }.sorted { $0.title < $1.title }
+    }
+    /// What the row says under its name: the chosen lists, or what is in the way.
+    private var summary: String {
+        switch controller.access {
+        case .denied: "No access — choose \(title) in System Settings"
+        case .notDetermined: "Allow access to choose \(controller.kind.noun)s"
+        case nil: "Checking access…"
+        case .granted where chosen.isEmpty: "No \(controller.kind.noun)s chosen yet"
+        case .granted: chosen.map(\.title).joined(separator: ", ")
+        }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(.caption.weight(.semibold))
-            switch controller.access {
-            case nil:
-                message("Checking access…", detail: "")
-            case .granted where lists.isEmpty:
-                message(isCalendar ? "No calendars on this Mac yet." : "No reminder lists on this Mac yet.",
-                        detail: isCalendar ? "Add one in Calendar, then come back." : "Add one in Reminders, then come back.")
-            case .granted:
-                Text("This bot can read and change the \(controller.kind.noun)s you select here, and no others.")
-                    .font(.caption).foregroundStyle(.secondary)
-                ScrollView {
-                    VStack(spacing: 0) {
-                        ForEach(lists) { list in row(list) }
-                    }
-                }
-            case .notDetermined:
-                message("Noodle has not asked for your \(privacyPane.lowercased()) yet.",
-                        detail: "Allowing access lets you give a bot the \(controller.kind.noun)s you choose.") {
-                    Button(controller.requesting ? "Asking…" : "Allow \(privacyPane) Access…") {
-                        Task { await controller.requestAccess() }
-                    }.disabled(controller.requesting)
-                }
-            case .denied:
-                message("Noodle does not have access to your \(privacyPane.lowercased()).",
-                        detail: "Turn on \(privacyPane) for Noodle in System Settings, then come back.") {
-                    Button("Open Privacy Settings") { controller.openPrivacySettings() }
-                }
+        HStack(spacing: 10) {
+            EventKitToolIcon(symbol: symbol, size: 26)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).lineLimit(1)
+                Text(summary).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
-            if let failure = controller.failure {
-                Text(failure).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
-            }
+            Spacer()
+            Button { showingScope = true } label: { Image(systemName: "ellipsis.circle").foregroundStyle(.secondary) }
+                .buttonStyle(.plain)
+                .help("Choose which \(controller.kind.noun)s this bot may use")
+                .popover(isPresented: $showingScope, arrowEdge: .bottom) { scope }
+            Button(action: onRemove) { Image(systemName: "minus.circle.fill").foregroundStyle(.secondary) }
+                .buttonStyle(.plain).help("Remove \(title) from this bot")
         }
-        .frame(minHeight: 220, alignment: .top)
+        .padding(8)
         .task { await controller.refresh() }
     }
 
-    private func row(_ list: EventKitList) -> some View {
-        Toggle(isOn: Binding(
-            get: { selectedIDs.contains(list.id) },
-            set: { selected in
-                if selected { selectedIDs.insert(list.id) } else { selectedIDs.remove(list.id) }
-            }
-        )) {
-            HStack(spacing: 8) {
-                Image(systemName: "circle.fill").font(.system(size: 9)).foregroundStyle(EventKitColour.colour(list.colour))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(list.title)
-                    Text(list.writable ? list.source : "\(list.source) · read-only")
-                        .font(.caption).foregroundStyle(.secondary)
+    @ViewBuilder private var scope: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            switch controller.access {
+            case .granted where controller.registry.lists.isEmpty:
+                Text("No \(controller.kind.noun)s on this Mac yet.").foregroundStyle(.secondary)
+            case .granted:
+                Text("This bot may use:").font(.caption).foregroundStyle(.secondary)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(controller.registry.lists.sorted { $0.title < $1.title }) { list in
+                            Toggle(isOn: Binding(
+                                get: { selectedIDs.contains(list.id) },
+                                set: { on in
+                                    if on { selectedIDs.insert(list.id) } else { selectedIDs.remove(list.id) }
+                                }
+                            )) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "circle.fill").font(.system(size: 9))
+                                        .foregroundStyle(EventKitColour.colour(list.colour))
+                                    Text(list.title)
+                                    if !list.writable {
+                                        Text("read-only").font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                            }.toggleStyle(.checkbox)
+                        }
+                    }
                 }
+            case .notDetermined:
+                Text("Noodle needs access to this Mac's \(title.lowercased()) before you can choose.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Button { Task { await controller.requestAccess() } } label: {
+                    Label(controller.requesting ? "Asking…" : "Allow Access…", systemImage: "lock.open")
+                }.disabled(controller.requesting)
+            case .denied:
+                Text("Turn \(title) on for Noodle in System Settings, then come back.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Button { controller.openPrivacySettings() } label: { Label("Open Settings…", systemImage: "gear") }
+            case nil:
+                Text("Checking access…").foregroundStyle(.secondary)
             }
-        }
-        .toggleStyle(.checkbox)
-        .padding(.vertical, 4)
-    }
-
-    @ViewBuilder private func message(_ title: String, detail: String, @ViewBuilder action: () -> some View = { EmptyView() }) -> some View {
-        VStack(spacing: 10) {
-            Image(systemName: symbol).font(.largeTitle)
-            Text(title)
-            if !detail.isEmpty { Text(detail).font(.caption).multilineTextAlignment(.center) }
-            action()
-        }
-        .foregroundStyle(.secondary)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
-        .padding(.horizontal, 12)
+            Spacer(minLength: 0)
+            HStack { Spacer(); Button("Done") { showingScope = false } }
+        }.padding(14).frame(width: 260, height: 240)
     }
 }

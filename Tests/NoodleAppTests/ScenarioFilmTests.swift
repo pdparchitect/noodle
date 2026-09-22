@@ -110,6 +110,44 @@ import XCTest
         XCTAssertTrue(model.covering, "The card stays solid, so the app is never dissolved into")
     }
 
+    /// The wordmark the film writes, as an SVG path: the same stroke, in the same grid.
+    private static func wordmarkPathData() -> String {
+        func number(_ value: CGFloat) -> String {
+            let rounded = (value * 100).rounded() / 100
+            return rounded == rounded.rounded() ? String(Int(rounded)) : String(format: "%g", rounded)
+        }
+        func point(_ p: CGPoint) -> String { "\(number(p.x)),\(number(p.y))" }
+        var parts: [String] = []
+        NoodleWordmark.skeleton.applyWithBlock { element in
+            let points = element.pointee.points
+            switch element.pointee.type {
+            case .moveToPoint: parts.append("M\(point(points[0]))")
+            case .addLineToPoint: parts.append("L\(point(points[0]))")
+            case .addCurveToPoint: parts.append("C\(point(points[0])) \(point(points[1])) \(point(points[2]))")
+            case .addQuadCurveToPoint: parts.append("Q\(point(points[0])) \(point(points[1]))")
+            case .closeSubpath: parts.append("Z")
+            @unknown default: break
+            }
+        }
+        return parts.joined(separator: " ")
+    }
+
+    /// The wordmark is kept as a drawing too, so it can be used outside a film. It is the
+    /// same stroke the film writes, so the two must never drift apart.
+    func testTheWordmarkDrawingMatchesWhatTheFilmWrites() throws {
+        let file = Self.projectRoot.appendingPathComponent("Support/AppWordmark.svg")
+        let expected = Self.wordmarkPathData()
+        guard let svg = try? String(contentsOf: file, encoding: .utf8) else {
+            XCTFail("Support/AppWordmark.svg is missing. Its path is:\n\(expected)")
+            return
+        }
+        XCTAssertTrue(svg.contains(expected), "Support/AppWordmark.svg has drifted. Its path should be:\n\(expected)")
+        XCTAssertTrue(svg.contains("stroke-width=\"\(Int(NoodleWordmark.pen))\""), "The pen must match the film's")
+        let box = NoodleWordmark.bounds
+        XCTAssertTrue(svg.contains("viewBox=\"\(Int(box.minX)) \(Int(box.minY)) \(Int(box.width)) \(Int(box.height))\""),
+                      "The box must be the stroke's own")
+    }
+
     // MARK: The film
 
     func testTheFilmPlaysItsTitlesAroundTheTimeline() async throws {

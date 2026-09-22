@@ -22,6 +22,8 @@ public struct EventKitAssignments: Codable, Sendable {
         public var file: String { self == .calendar ? "calendars.json" : "reminders.json" }
         /// What a person is told they are giving away.
         public var noun: String { self == .calendar ? "calendar" : "reminder list" }
+        /// How the tool is named in the bot editor's tool list.
+        public var toolName: String { self == .calendar ? "Calendar" : "Reminders" }
     }
     public var version = 1
     public var lists: [EventKitList] = []
