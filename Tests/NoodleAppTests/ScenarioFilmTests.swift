@@ -86,7 +86,7 @@ import XCTest
         let model = ScenarioFilmModel(onLight: false)
         XCTAssertFalse(model.covering, "Nothing covers the app until a card is up")
 
-        model.card = .intro(title: "A morning with Ada", subtitle: nil)
+        model.card = .intro(kicker: "Noodle", title: "A morning with Ada", subtitle: nil)
         XCTAssertTrue(model.covering, "The film opens on its title, so that card is solid at once")
         model.leaving = true
         XCTAssertFalse(model.covering)
@@ -145,6 +145,23 @@ import XCTest
             XCTAssertThrowsError(try scenario(film: film), "A film with \(reason) must not load")
         }
         XCTAssertNoThrow(try scenario(film: "{ \"background\": \"white\", \"outro\": { \"hold\": 0 } }"))
+    }
+
+    func testAnIntroCanCarryASmallLineAboveItsTitle() throws {
+        let scenario = try scenario(film: "{ \"intro\": { \"kicker\": \"Noodle\", \"title\": \"Christmas, handled\" } }")
+        XCTAssertEqual(scenario.film?.intro?.kicker, "Noodle")
+        XCTAssertThrowsError(try self.scenario(film: "{ \"intro\": { \"kicker\": \" \" } }"), "A blank line must not load")
+    }
+
+    /// Text stacks lay out frame to frame, so matching a web page's line-height means
+    /// taking the difference out of the spacing between them.
+    func testTightLeadingMatchesTheAskedForLineHeight() {
+        let size: CGFloat = 48, multiple: CGFloat = 1.0835
+        let spacing = ScenarioFilmView.leading(size: size, weight: .semibold, multiple: multiple)
+        let font = NSFont.systemFont(ofSize: size, weight: .semibold)
+        let natural = font.ascender - font.descender + font.leading
+        XCTAssertEqual(natural + spacing, multiple * size, accuracy: 0.01)
+        XCTAssertLessThan(spacing, 0, "1.08 is tighter than the font's own line height")
     }
 
     // MARK: Rendering

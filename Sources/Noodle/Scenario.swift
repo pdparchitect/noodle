@@ -203,6 +203,8 @@ struct Scenario: Codable {
         var outro: Outro?
 
         struct Intro: Codable {
+            /// The small line above the title, for what this is a scenario of.
+            var kicker: String?
             /// Defaults to the scenario's own title.
             var title: String?
             var subtitle: String?
@@ -354,7 +356,8 @@ extension Scenario {
         _ = try ScenarioSupport.start(clock, now: Date())
         if let film {
             try require(["black", "white"].contains(film.background ?? "black"), "film.background is \"black\" or \"white\".")
-            for (label, text) in [("intro.title", film.intro?.title), ("intro.subtitle", film.intro?.subtitle), ("outro.tagline", film.outro?.tagline)] {
+            for (label, text) in [("intro.kicker", film.intro?.kicker), ("intro.title", film.intro?.title),
+                                  ("intro.subtitle", film.intro?.subtitle), ("outro.tagline", film.outro?.tagline)] {
                 try require(text.map { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? true, "film.\(label) has no text.")
             }
             try require((film.intro?.hold ?? 0) >= 0 && (film.outro?.hold ?? 0) >= 0, "A film holds for a negative time.")
@@ -833,7 +836,7 @@ extension Scenario {
         let card: ScenarioFilmModel.Card?, written: Double
         switch stage {
         case .intro:
-            card = film.intro.map { .intro(title: $0.title ?? scenario.title, subtitle: $0.subtitle) }
+            card = film.intro.map { .intro(kicker: $0.kicker, title: $0.title ?? scenario.title, subtitle: $0.subtitle) }
             written = 1.6 + (film.intro?.hold ?? 1.4)
         case .outro:
             card = film.outro.map { .outro(tagline: $0.tagline) }
@@ -1044,7 +1047,7 @@ extension Scenario {
             window.makeKeyAndOrderFront(nil)
         }
         if let film = scenario.film {
-            let opening = film.intro.map { ScenarioFilmModel.Card.intro(title: $0.title ?? scenario.title, subtitle: $0.subtitle) }
+            let opening = film.intro.map { ScenarioFilmModel.Card.intro(kicker: $0.kicker, title: $0.title ?? scenario.title, subtitle: $0.subtitle) }
             let stage = filmStage ?? ScenarioFilmStage(film: film, opening: opening)
             filmStage = stage
             stage.attach(to: window)

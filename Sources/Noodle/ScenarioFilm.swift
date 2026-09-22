@@ -149,7 +149,7 @@ struct NoodleWordmark: Shape {
 /// What the film shows over the app, and the state its animations run from.
 @MainActor @Observable final class ScenarioFilmModel {
     enum Card: Equatable {
-        case intro(title: String, subtitle: String?)
+        case intro(kicker: String?, title: String, subtitle: String?)
         case outro(tagline: String?)
     }
 
@@ -189,7 +189,7 @@ struct ScenarioFilmView: View {
             ZStack {
                 model.background
                 switch model.card {
-                case .intro(let title, let subtitle): intro(title, subtitle, height: height)
+                case .intro(let kicker, let title, let subtitle): intro(kicker, title, subtitle, height: height)
                 case .outro(let tagline): outro(tagline, size: geometry.size)
                 case nil: Color.clear
                 }
@@ -201,26 +201,49 @@ struct ScenarioFilmView: View {
         .ignoresSafeArea()
     }
 
-    private func intro(_ title: String, _ subtitle: String?, height: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: height * 0.032) {
-            Text(title)
-                .font(.system(size: height * 0.082, weight: .semibold, design: .rounded))
-                .foregroundStyle(model.text)
-                .opacity(model.written ? 1 : 0)
-                .offset(y: model.written ? 0 : height * 0.035)
-                .animation(.easeOut(duration: 0.75).delay(0.25), value: model.written)
+    /// The spacing that leaves `multiple` of the size between baselines. A stack lays
+    /// text out frame by frame, so a line height tighter than the font's own has to come
+    /// out of the spacing between them.
+    static func leading(size: CGFloat, weight: NSFont.Weight, multiple: CGFloat) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: size, weight: weight)
+        return multiple * size - (font.ascender - font.descender + font.leading)
+    }
+
+    /// Set the way Apple sets a page like this: a small line above, the title tight and
+    /// slightly closed up, and a quieter line under it.
+    private func intro(_ kicker: String?, _ title: String, _ subtitle: String?, height: CGFloat) -> some View {
+        let headline = height * 0.078
+        let above = headline * 0.44, below = headline * 0.36
+        return VStack(spacing: 0) {
+            if let kicker {
+                Text(kicker)
+                    .font(.system(size: above, weight: .semibold))
+                    .tracking(above * 0.011)
+                    .foregroundStyle(model.text)
+                    .padding(.bottom, headline * 0.3)
+                    .modifier(RisesIn(written: model.written, by: height * 0.02, delay: 0.2))
+            }
+            VStack(spacing: Self.leading(size: headline, weight: .semibold, multiple: 1.0835)) {
+                ForEach(Array(title.split(separator: "\n").enumerated()), id: \.offset) { _, line in
+                    Text(String(line))
+                }
+            }
+            .font(.system(size: headline, weight: .semibold))
+            .tracking(headline * -0.003)
+            .foregroundStyle(model.text)
+            .modifier(RisesIn(written: model.written, by: height * 0.03, delay: 0.35))
             if let subtitle {
                 Text(subtitle)
-                    .font(.system(size: height * 0.038, weight: .regular, design: .rounded))
-                    .foregroundStyle(model.text.opacity(0.62))
-                    .opacity(model.written ? 1 : 0)
-                    .offset(y: model.written ? 0 : height * 0.025)
-                    .animation(.easeOut(duration: 0.7).delay(0.6), value: model.written)
+                    .font(.system(size: below, weight: .regular))
+                    .tracking(below * -0.022)
+                    .foregroundStyle(model.text.opacity(0.58))
+                    .padding(.top, headline * 0.45)
+                    .modifier(RisesIn(written: model.written, by: height * 0.02, delay: 0.62))
             }
         }
-        .multilineTextAlignment(.leading)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .padding(.horizontal, height * 0.14)
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, height * 0.1)
     }
 
     private func outro(_ tagline: String?, size: CGSize) -> some View {
@@ -233,14 +256,30 @@ struct ScenarioFilmView: View {
                 .frame(width: markSize.width, height: markSize.height)
                 .animation(.easeInOut(duration: 2.1).delay(0.55), value: model.written)
             if let tagline {
+                let size = size.height * 0.036
                 Text(tagline)
-                    .font(.system(size: size.height * 0.036, weight: .regular, design: .rounded))
-                    .foregroundStyle(model.text.opacity(0.62))
+                    .font(.system(size: size, weight: .regular))
+                    .tracking(size * -0.022)
+                    .foregroundStyle(model.text.opacity(0.58))
                     .opacity(model.written ? 1 : 0)
                     .animation(.easeOut(duration: 0.7).delay(2.5), value: model.written)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Fades a line up into place once the card is written.
+private struct RisesIn: ViewModifier {
+    let written: Bool
+    let by: CGFloat
+    let delay: Double
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(written ? 1 : 0)
+            .offset(y: written ? 0 : by)
+            .animation(.easeOut(duration: 0.75).delay(delay), value: written)
     }
 }
 

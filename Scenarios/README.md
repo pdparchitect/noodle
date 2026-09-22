@@ -202,14 +202,17 @@ shows the desktop and never runs to the edges.
 ```json
 "film": {
   "background": "black",
-  "intro": { "title": "Christmas, handled", "subtitle": "Alfred keeps the plan." },
+  "intro": { "title": "Christmas, handled.\nEleven people, one plan.",
+             "subtitle": "Alfred keeps the plan. Sol watches the budget." },
   "outro": { "tagline": "A workspace for you and your AI agents." }
 }
 ```
 
 - `background` is `"black"` or `"white"`. The titles are written in the other one.
 - `intro` opens on a solid card, writes its title and subtitle, then fades into the app.
-  Without a `title` it uses the scenario's own.
+  Without a `title` it uses the scenario's own. A newline in the title breaks the line
+  where you want it; the lines are set close together, so keep them short. An optional
+  `kicker` puts a small line above the title.
 - `outro` comes up over the app at the end and writes the Noodle wordmark, one stroke at
   a time, with `tagline` underneath. A recording ends there; in the app the card fades
   and gives the window back.
