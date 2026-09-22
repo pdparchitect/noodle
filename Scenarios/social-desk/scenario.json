@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "title": "A social desk run by bots",
+  "clock": "08:05",
+  "settings": { "Noodle.firstBotSetup.dismissed": true },
+  "harnesses": {
+    "claude-code": { "models": "builtin" }
+  },
+  "agents": [
+    { "key": "echo", "name": "Echo", "harness": "claude-code", "model": "opus", "effort": "high",
+      "description": "Runs the accounts: writes, posts and watches what happens after",
+      "backstory": "You run the company's social accounts through a signed-in browser. You write in the house voice, you post when it is the right moment rather than when a queue says so, and you never post something you would have to explain afterwards.",
+      "avatar": { "symbol": "megaphone", "colour": 1 },
+      "autoReplies": ["Posting now.", "Held. I will tell you what happens."] },
+    { "key": "poppy", "name": "Poppy", "harness": "claude-code", "model": "sonnet",
+      "description": "Makes the cards, screenshots and short clips",
+      "avatar": { "symbol": "paintbrush.pointed", "colour": 4 } },
+    { "key": "wren", "name": "Wren", "harness": "claude-code", "model": "sonnet",
+      "description": "Reads every reply and mention, and says which ones need a person",
+      "avatar": { "symbol": "tray.full", "colour": 7 } }
+  ],
+  "conversations": [
+    { "key": "poppy", "direct": "poppy", "unread": true,
+      "messages": [
+        { "at": "07:52", "from": "poppy",
+          "text": "Three cards for the follow-up, same grid as the launch set. The middle one is the only place the number is big enough to read on a phone." } ] },
+    { "key": "wren", "direct": "wren",
+      "messages": [
+        { "at": "07:20", "from": "wren",
+          "text": "Sixty-one replies overnight. Fifty-eight are people asking when Windows is coming, two are bug reports I have sent to the tracker, and one is from someone with 40k followers who wants to do a walkthrough. That last one is the only one that needs you." } ] },
+    { "key": "echo", "direct": "echo",
+      "messages": [
+        { "at": "-2d 10:15", "from": "user",
+          "text": "You have the accounts in the browser now. Run this week yourself: the Tuesday post, the launch thread on Thursday, and whatever the replies ask for." },
+        { "at": "-2d 10:18", "from": "echo",
+          "text": "I have @noodleapp on X and the company page on LinkedIn, both signed in. I will write everything here first and post once you have seen it." },
+        { "at": "-1d 16:40", "from": "echo",
+          "text": "Thursday's thread is written: six posts, the first one carries the demo, the rest answer the questions people asked last time.\n\nTuesday's is a short one about how long the app stays open without a reload." },
+        { "at": "07:40", "from": "echo",
+          "text": "The thread went up at 06:00 and it is moving: 41,000 views, 180 reposts, 24 replies in the first two hours.\n\nI did not post the Tuesday one. A competitor had a two hour outage at 02:00 and a line about staying up for weeks would have read as a dig at them while people were still waiting to get back in. I have rewritten it without the comparison and it is ready when you are." }
+      ] }
+  ],
+  "present": {
+    "window": { "size": [1240, 860] },
+    "select": "echo"
+  },
+  "timeline": [
+    { "capture": "01-overnight" },
+    { "wait": 1.4, "in": "echo",
+      "type": { "text": "Good call on holding it. What is the thread actually doing now?" } },
+    { "wait": 0.8, "agent": "echo", "status": { "phase": "working", "detail": "Reading the thread in the browser" } },
+    { "wait": 0.6, "agent": "echo",
+      "toolCall": { "title": "Noodle Browser", "input": "messenger tool browser -- open x.com/noodleapp/status/1 --read replies",
+        "output": "68,400 views · 310 reposts · 47 replies · 19 quote posts", "exit": 0, "duration": 1.5 } },
+    { "wait": 0.6, "agent": "echo",
+      "reply": { "key": "state",
+        "text": "68,400 views and still climbing, so it has not peaked. The replies have moved on from the demo to one question: whether it keeps working when the machine sleeps.\n\nThat is worth answering while people are still reading, so I would post the answer as a reply on the thread rather than saving it for Tuesday. Poppy has the card. Shall I?" } },
+    { "agent": "echo", "status": { "phase": "ready" } },
+    { "wait": 1.2, "react": { "message": "state", "emoji": "👍" } },
+    { "wait": 0.8, "agent": "echo", "status": { "phase": "working", "detail": "Posting the reply" } },
+    { "wait": 0.6, "agent": "echo",
+      "toolCall": { "title": "Noodle Browser", "input": "messenger tool browser -- post x.com/compose/reply --media cards/sleep-card.png",
+        "output": "posted · x.com/noodleapp/status/2", "exit": 0, "duration": 1.3 } },
+    { "wait": 0.5, "agent": "echo",
+      "reply": { "text": "Up. I will watch it for an hour and tell you if the question changes again." } },
+    { "agent": "echo", "status": { "phase": "ready" } },
+    { "capture": "02-posted" }
+  ],
+  "film": {
+    "background": "black",
+    "intro": { "title": "Social, handled",
+      "subtitle": "Agents that post, read the room, and know when not to." },
+    "outro": { "tagline": "A workspace for you and your AI agents." }
+  }
+}

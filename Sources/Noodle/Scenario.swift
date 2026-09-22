@@ -303,7 +303,14 @@ struct Scenario: Codable {
 
 struct ScenarioError: LocalizedError {
     let errorDescription: String?
-    init(_ description: String) { errorDescription = description }
+    /// The scenario is sound but names media that scripts/scenario.sh has not fetched yet. A
+    /// fresh checkout has none of it, so this is a scenario waiting for the script rather than a
+    /// mistake in it.
+    let needsFetch: Bool
+    init(_ description: String, needsFetch: Bool = false) {
+        errorDescription = description
+        self.needsFetch = needsFetch
+    }
 }
 
 // MARK: - Load and validate
@@ -371,7 +378,9 @@ extension Scenario {
         let found = (try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil))?
             .first { $0.lastPathComponent.hasPrefix(stem) }
         guard let found else {
-            throw ScenarioError("\(value) has not been fetched yet. scripts/scenario.sh downloads it beside the scenarios.")
+            throw ScenarioError(
+                "\(value) has not been fetched yet. scripts/scenario.sh downloads it beside the scenarios.",
+                needsFetch: true)
         }
         return found
     }
@@ -1299,6 +1308,8 @@ extension ScenarioSession {
         let folder: URL
         let title: String
         let error: String?
+        /// Its media has not been fetched yet; the scenario itself is sound.
+        var needsFetch: Bool = false
         var id: String { name }
     }
 
@@ -1321,7 +1332,10 @@ extension ScenarioSession {
             do { return Listing(name: name, folder: folder.standardizedFileURL, title: try Scenario.load(from: folder).title, error: nil) }
             catch {
                 let title = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["title"] as? String
-                return Listing(name: name, folder: folder.standardizedFileURL, title: title ?? name, error: error.localizedDescription)
+                return Listing(
+                    name: name, folder: folder.standardizedFileURL, title: title ?? name,
+                    error: error.localizedDescription,
+                    needsFetch: (error as? ScenarioError)?.needsFetch == true)
             }
         }
     }

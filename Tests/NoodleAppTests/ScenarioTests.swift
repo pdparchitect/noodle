@@ -63,6 +63,12 @@ import XCTest
         XCTAssertTrue(condition(), "Timed out waiting until \(what)")
     }
 
+    /// The scenario, or nothing when it is only waiting for scripts/scenario.sh to fetch media.
+    private func loaded(_ folder: URL) throws -> Scenario? {
+        do { return try Scenario.load(from: folder) } catch let error as ScenarioError
+            where error.needsFetch { return nil }
+    }
+
     func testEveryScenarioFolderLoadsSeedsAndPlays() async throws {
         // A folder is a scenario when it holds one. The others beside them, the shared
         // cast and the cache of what has been fetched, are not.
@@ -73,7 +79,9 @@ import XCTest
 
         for folder in folders {
             let name = folder.lastPathComponent
-            let scenario = try Scenario.load(from: folder)
+            // Media named by web address is only in the ignored cache scripts/scenario.sh fills,
+            // so a fresh checkout plays the scenarios that do not wait on it.
+            guard let scenario = try loaded(folder) else { continue }
             let session = try session(scenario)
             let store = try XCTUnwrap(session.store), seeded = session.seeded
             XCTAssertTrue(store.storageReady, name)
@@ -167,6 +175,26 @@ import XCTest
                 XCTAssertEqual(store.runtime.snapshot(for: try XCTUnwrap(seeded.agents[entry.key]).id).phase, last.phase, "\(name): \(entry.key) after the timeline")
             }
             XCTAssertEqual(store.errorMessage, timeline.last { $0.error != nil }?.error, name)
+        }
+    }
+
+    /// Media a scenario names by web address lives in an ignored cache that only
+    /// scripts/scenario.sh fills, so a fresh checkout has none of it. That is a scenario waiting
+    /// to be fetched, not a broken one, and it has to be told apart from a real mistake.
+    func testAScenarioWaitingToBeFetchedIsNotABrokenOne() throws {
+        let folder = try fixture(extra: "\"film\": { \"background\": \"https://example.com/video/1/\" },")
+        XCTAssertThrowsError(try Scenario.load(from: folder)) {
+            XCTAssertTrue(try! XCTUnwrap($0 as? ScenarioError).needsFetch, $0.localizedDescription)
+        }
+        let listing = try XCTUnwrap(
+            ScenarioSession.listings(in: folder.deletingLastPathComponent())
+                .first { $0.folder == folder.standardizedFileURL })
+        XCTAssertTrue(listing.needsFetch)
+        XCTAssertEqual(listing.title, "Fixture")
+
+        // A genuine mistake stays a plain error.
+        XCTAssertThrowsError(try Scenario.load(from: try fixture(extra: "\"clok\": \"10:00\","))) {
+            XCTAssertFalse(try! XCTUnwrap($0 as? ScenarioError).needsFetch, $0.localizedDescription)
         }
     }
 
@@ -396,7 +424,9 @@ import XCTest
         let folders = try FileManager.default.contentsOfDirectory(atPath: Self.scenariosRoot.path)
             .filter { FileManager.default.fileExists(atPath: Self.scenariosRoot.appendingPathComponent("\($0)/scenario.json").path) }
         XCTAssertEqual(shipped.map(\.name), folders.sorted())
-        for listing in shipped { XCTAssertNil(listing.error, listing.name) }
+        for listing in shipped where !listing.needsFetch {
+            XCTAssertNil(listing.error, listing.name)
+        }
     }
 }
 #endif
