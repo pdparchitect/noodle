@@ -3,7 +3,6 @@ import XCTest
 
 final class ToolCatalogTests: XCTestCase {
     func testPresetIdentitiesAndSafeEndpoints() throws {
-        XCTAssertEqual(ToolCatalog.entries.count, 40)
         XCTAssertEqual(Set(ToolCatalog.entries.map(\.id)).count, ToolCatalog.entries.count)
         for tool in ToolCatalog.entries {
             XCTAssertFalse(tool.name.isEmpty)

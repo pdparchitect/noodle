@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Add Perplexity to the tool catalogue in Settings > Tools > Add Tools. Sign-in uses Perplexity's browser OAuth, and bots get web search with sources.
+
 ## [0.23.1] - 2026-09-21
 
 ### Added
