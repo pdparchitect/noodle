@@ -14,7 +14,7 @@ import AppletBridge
     /// Frames are timed on a grid of this many slots per second, so playback is even. A noodlet
     /// that cannot be captured this fast lands on every second or third slot instead, which stays
     /// even and keeps the recording in real time.
-    static let framesPerSecond: Int32 = 30
+    nonisolated static let framesPerSecond: Int32 = 30
     init(url: URL, size: CGSize) throws {
         self.url = url
         self.size = CGSize(width: Int(size.width) / 2 * 2, height: Int(size.height) / 2 * 2)
@@ -62,12 +62,9 @@ import AppletBridge
                 do {
                     let image = try await snapshot()
                     try await append(image, at: CMTime(value: slot, timescale: Self.framesPerSecond))
-                    // Waiting a fixed interval after each capture would let the cost of the
-                    // snapshot set the frame rate. Take the next slot that has not passed yet and
-                    // wait only for what is left of it.
-                    let now = Self.seconds(clock.now - start)
-                    slot = max(slot + 1, Int64(now * rate) + 1)
-                    let remaining = Double(slot) / rate - now
+                    let elapsed = Self.seconds(clock.now - start)
+                    slot = Self.slot(after: slot, elapsed: elapsed)
+                    let remaining = Double(slot) / rate - elapsed
                     if remaining > 0 { try await Task.sleep(for: .seconds(remaining)) }
                 } catch is CancellationError { break } catch {
                     failure = error
@@ -79,14 +76,24 @@ import AppletBridge
     private static func seconds(_ duration: Duration) -> Double {
         Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
     }
+    /// The slot to capture next, given how long the recording has been running. Waiting a fixed
+    /// interval after each capture would add the cost of the snapshot to every frame and set the
+    /// rate by it. Taking the next slot that has not passed keeps the grid even and the recording
+    /// in real time however slow the capture is.
+    nonisolated static func slot(after slot: Int64, elapsed: Double) -> Int64 {
+        max(slot + 1, Int64(elapsed * Double(framesPerSecond)) + 1)
+    }
     private func append(_ image: NSImage, at time: CMTime) async throws {
-        // Skipping the frame outright would tear a hole in the grid; the encoder only ever needs a
-        // moment to catch up, and waiting for it must not block the noodlet being captured.
+        // The encoder usually needs only a moment to catch up, and waiting for it must not block
+        // the noodlet being captured. Waiting longer than a frame would cost more than the frame
+        // is worth, so an encoder that stays behind loses this slot and the next capture takes a
+        // later one, which keeps the grid even.
         var waited = 0
-        while !input.isReadyForMoreMediaData, waited < 50 {
-            try await Task.sleep(for: .milliseconds(2))
+        while !input.isReadyForMoreMediaData, waited < 10 {
+            try await Task.sleep(for: .milliseconds(3))
             waited += 1
         }
+        guard input.isReadyForMoreMediaData else { return }
         var buffer: CVPixelBuffer?
         guard let pool = adaptor.pixelBufferPool,
             CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer) == kCVReturnSuccess, let buffer,

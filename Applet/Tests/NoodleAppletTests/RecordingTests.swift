@@ -42,24 +42,37 @@ final class RecordingTests: XCTestCase {
         return times.sorted { $0.seconds < $1.seconds }
     }
 
-    /// The recorder used to sleep a fixed interval *after* each capture, so a slow noodlet pushed
-    /// the real rate far below the advertised one and the video looked choppy.
-    @MainActor func testCaptureRateIsNotReducedByTheCostOfEachSnapshot() async throws {
-        let times = try await record(snapshotCost: .milliseconds(20), duration: 1.0)
-        XCTAssertGreaterThanOrEqual(
-            times.count, 20, "A 20 ms snapshot must not hold the recording below 20 fps.")
+    /// The recorder used to sleep a fixed interval *after* each capture, so the cost of the
+    /// snapshot came off the frame rate and a 20 ms capture recorded at about ten uneven frames a
+    /// second. Waiting for the remainder of the slot instead is arithmetic, not a matter of how
+    /// fast the machine running this test is.
+    func testTheCostOfASnapshotDoesNotComeOffTheFrameRate() {
+        let rate = Int64(AppletRecording.framesPerSecond)
+        // A capture well inside one frame keeps every slot.
+        for slot in Int64(0)..<10 {
+            let elapsed = Double(slot) / Double(rate) + 0.020
+            XCTAssertEqual(AppletRecording.slot(after: slot, elapsed: elapsed), slot + 1)
+        }
+        // One that overruns skips to the next slot that has not passed, rather than falling
+        // further behind on every frame.
+        XCTAssertEqual(AppletRecording.slot(after: 0, elapsed: 0.050), 2)
+        XCTAssertEqual(AppletRecording.slot(after: 2, elapsed: 0.117), 4)
+        // A capture slower than the whole recording still advances.
+        XCTAssertGreaterThan(AppletRecording.slot(after: 5, elapsed: 0.0), 5)
     }
 
-    /// Frames have to land on an even grid: irregular presentation times judder on playback even
-    /// when the average rate is high enough.
-    @MainActor func testFramesLandOnAnEvenGrid() async throws {
+    /// Frames have to land on the frame grid: irregular presentation times judder on playback even
+    /// when the average rate is high enough. Timestamps used to come from the clock, so they never
+    /// did. How many frames a machine manages varies; where each one lands does not.
+    @MainActor func testEveryFrameLandsOnTheFrameGrid() async throws {
         let times = try await record(snapshotCost: .milliseconds(5), duration: 1.0)
-        let gaps = zip(times.dropFirst(), times).map { $0.seconds - $1.seconds }
-        let nominal = try XCTUnwrap(gaps.min())
-        for gap in gaps {
+        XCTAssertFalse(times.isEmpty)
+        for time in times {
+            let slots = time.seconds * Double(AppletRecording.framesPerSecond)
             XCTAssertEqual(
-                gap / nominal, (gap / nominal).rounded(), accuracy: 0.2,
-                "A frame arrived off the grid: \(gaps)")
+                slots, slots.rounded(), accuracy: 0.001,
+                "A frame is \(time.value)/\(time.timescale), which is not a whole frame.")
         }
+        XCTAssertEqual(Set(times.map(\.seconds)).count, times.count, "A frame time repeats.")
     }
 }
