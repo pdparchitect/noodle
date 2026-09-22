@@ -6,13 +6,15 @@ them exists only in development builds.
 
 ```
 Scenarios/
+  cast/             faces and wallpapers more than one scenario uses
+  .cache/           anything fetched from the web, ignored by Git
   family-butler/
     scenario.json     what to show and what happens
     assets/           avatars, attachments and wallpapers the JSON names
     root/             optional files laid over the seeded workspace as they are
     shots/            capture output, ignored by Git
     recordings/       recorded output, ignored by Git
-    .cache/           anything fetched from the web, ignored by Git
+
 ```
 
 ## Run one
@@ -230,11 +232,16 @@ Leave `film` out and the scenario plays on its own, with no stage and no titles.
 
 ## Pictures and video
 
-Anywhere a scenario names a picture or a video, it can give a web address instead of a
-file in `assets/`. The script fetches it into `.cache/` before the app starts, names it
-after the address, and works out from the server what kind of file it is. The bundle has
-no network of its own and never downloads anything, so a scenario whose media has not
-been fetched refuses to load and says so. Nothing large has to live in the repository.
+A scenario's own pictures live in its `assets/`. Anything more than one of them uses
+lives in `cast/` beside them and is named `cast/sol.jpg`, so a face is changed in one
+place rather than in four copies.
+
+Anywhere a scenario names a picture or a video it can give a web address instead. The
+script fetches it into the `.cache` beside the scenarios before the app starts, names it
+after the address, and works out from the server what kind of file it is. Two scenarios
+naming the same thing therefore share one copy. The bundle has no network of its own and
+never downloads anything, so a scenario whose media has not been fetched refuses to load
+and says so. Nothing large has to live in the repository.
 
 A conversation background is a `preset`, an `image` or a `video`, and the last two take
 either form:

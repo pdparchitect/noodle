@@ -13,12 +13,12 @@
     { "key": "alfred", "name": "Alfred", "harness": "claude-code", "model": "sonnet",
       "description": "The family butler: plans, lists and everyone's whereabouts",
       "backstory": "You are the family's butler. You keep one plan, you anticipate, and you are unfailingly courteous.",
-      "avatar": { "image": "assets/alfred.jpg" },
+      "avatar": { "image": "cast/alfred.jpg" },
       "autoReplies": ["Very good. Consider it done.", "I have added it to the plan and told everyone it affects."] },
     { "key": "chloe", "name": "Chloe", "harness": "claude-code", "model": "opus", "effort": "high",
-      "description": "Personal assistant for the diary, travel and errands", "avatar": { "image": "assets/chloe.jpg" } },
+      "description": "Personal assistant for the diary, travel and errands", "avatar": { "image": "cast/chloe.jpg" } },
     { "key": "sol", "name": "Sol", "harness": "claude-code", "model": "sonnet",
-      "description": "Looks after the accounts and the tax return", "avatar": { "image": "assets/sol.jpg" } },
+      "description": "Looks after the accounts and the tax return", "avatar": { "image": "cast/sol.jpg" } },
     { "key": "bruno", "name": "Bruno", "harness": "claude-code", "model": "haiku",
       "description": "Picks the film for family movie night", "avatar": { "image": "assets/bruno.jpg" } },
     { "key": "coach", "name": "Coach", "harness": "claude-code", "model": "sonnet",
@@ -94,7 +94,7 @@
   ],
   "film": {
     "background": "black",
-    "intro": { "icon": "assets/alfred.jpg", "title": "Christmas, handled",
+    "intro": { "icon": "cast/alfred.jpg", "title": "Christmas, handled",
       "subtitle": "Alfred keeps the plan for eleven people. Sol watches the budget." },
     "outro": { "tagline": "A workspace for you and your AI agents." }
   }

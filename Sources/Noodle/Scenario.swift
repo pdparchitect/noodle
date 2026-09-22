@@ -354,18 +354,24 @@ extension Scenario {
     }
 
     /// A picture or video a scenario names: an asset in its own folder, or a web address
-    /// that scripts/scenario.sh has fetched into `.cache/` beside it. The bundle has no
-    /// network of its own, so nothing is ever downloaded from in here.
+    /// that scripts/scenario.sh has fetched into the `.cache` beside the scenarios. The
+    /// bundle has no network of its own, so nothing is ever downloaded from in here.
     func media(_ value: String) throws -> URL {
-        guard Self.isRemote(value) else { return try asset(value) }
-        // Found by name, not by extension: a web address need not end in one, so the
-        // script works out what the file is and the app takes whatever it left.
+        guard Self.isRemote(value) else {
+            // Faces and wallpapers that several scenarios share live beside them, so a
+            // change to one is a change everywhere rather than in four copies.
+            guard value.hasPrefix(Self.castFolder + "/") else { return try asset(value) }
+            return try file(value, under: folder.deletingLastPathComponent())
+        }
+        // One cache for all of them: the name is the address, so two scenarios naming the
+        // same thing share the one copy. Found by name rather than by extension, because a
+        // web address need not end in one and the script works out what it is.
         let stem = Self.cacheStem(for: value)
-        let cache = folder.appendingPathComponent(".cache", isDirectory: true)
+        let cache = folder.deletingLastPathComponent().appendingPathComponent(".cache", isDirectory: true)
         let found = (try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil))?
             .first { $0.lastPathComponent.hasPrefix(stem) }
         guard let found else {
-            throw ScenarioError("\(value) has not been fetched yet. scripts/scenario.sh downloads it into .cache/.")
+            throw ScenarioError("\(value) has not been fetched yet. scripts/scenario.sh downloads it beside the scenarios.")
         }
         return found
     }
@@ -380,9 +386,16 @@ extension Scenario {
         String(SHA256.hash(data: Data(address.utf8)).map { String(format: "%02x", $0) }.joined().prefix(16))
     }
 
-    func asset(_ path: String) throws -> URL {
-        let url = folder.appendingPathComponent(path).standardizedFileURL
-        guard url.path.hasPrefix(folder.path + "/"), FileManager.default.fileExists(atPath: url.path) else {
+    /// Where the scenarios keep what more than one of them uses.
+    static let castFolder = "cast"
+
+    func asset(_ path: String) throws -> URL { try file(path, under: folder) }
+
+    /// A file named by a scenario, kept inside `root` however the name is written.
+    private func file(_ path: String, under root: URL) throws -> URL {
+        let url = root.appendingPathComponent(path).standardizedFileURL
+        guard url.path.hasPrefix(root.standardizedFileURL.path + "/"),
+              FileManager.default.fileExists(atPath: url.path) else {
             throw ScenarioError("Missing asset: \(path)")
         }
         return url

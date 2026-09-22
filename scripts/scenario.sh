@@ -56,15 +56,16 @@ fi
 [[ ${#selections} -le 1 || "$all" == true ]] || usage
 [[ "$shots" == false && "$record" == false || ${#selections} -gt 0 ]] || { print -u2 '--shots and --video need a scenario, or --all.'; exit 1; }
 
-# Anything a scenario names by web address is fetched here, beside it, before the app
-# starts: the bundle has no network of its own. Git ignores the folder.
+# Anything a scenario names by web address is fetched before the app starts, into one
+# cache beside the scenarios: the bundle has no network of its own, and two scenarios
+# naming the same thing share a copy. Git ignores the folder.
 fetch_media() {
     python3 - "$1" <<'PYTHON'
 import hashlib, json, subprocess, sys, urllib.parse
 from pathlib import Path
 
 folder = Path(sys.argv[1])
-cache = folder / ".cache"
+cache = folder.parent / ".cache"
 def addresses(node):
     if isinstance(node, dict):
         for value in node.values(): yield from addresses(value)

@@ -16,7 +16,7 @@
     { "key": "sonia", "name": "Sonia", "harness": "claude-code", "model": "opus", "effort": "high",
       "description": "Go-to-market lead: positioning, pricing and the plan", "avatar": { "image": "assets/sonia.jpg" } },
     { "key": "kira", "name": "Kira", "harness": "claude-code", "model": "sonnet",
-      "description": "Copywriter: headlines, emails and the landing page", "avatar": { "image": "assets/kira.jpg" } },
+      "description": "Copywriter: headlines, emails and the landing page", "avatar": { "image": "cast/kira.jpg" } },
     { "key": "mara", "name": "Mara", "harness": "codex", "model": "gpt-5.2-codex", "effort": "medium",
       "description": "Designs and builds the landing page and the launch film", "avatar": { "image": "assets/mara.jpg" } },
     { "key": "andre", "name": "Andre", "harness": "claude-code", "model": "sonnet",

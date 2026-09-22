@@ -13,12 +13,12 @@
     { "key": "sol", "name": "Sol", "harness": "claude-code", "model": "sonnet",
       "description": "Looks after the accounts and the tax return",
       "backstory": "You keep the household and business accounts. You are exact, you show your working, and you never submit anything without approval.",
-      "avatar": { "image": "assets/sol.jpg" },
+      "avatar": { "image": "cast/sol.jpg" },
       "autoReplies": ["Noted. I have updated the draft.", "Filed. The summary now reflects it."] },
     { "key": "tony", "name": "Tony", "harness": "claude-code", "model": "sonnet",
-      "description": "Negotiates bills, renewals and subscriptions", "avatar": { "image": "assets/tony.jpg" } },
+      "description": "Negotiates bills, renewals and subscriptions", "avatar": { "image": "cast/tony.jpg" } },
     { "key": "ada", "name": "Ada", "harness": "claude-code", "model": "haiku",
-      "description": "Bookkeeping: invoices out, payments in", "avatar": { "image": "assets/ada.jpg" } }
+      "description": "Bookkeeping: invoices out, payments in", "avatar": { "image": "cast/ada.jpg" } }
   ],
   "conversations": [
     { "key": "sol", "direct": "sol",

@@ -13,12 +13,12 @@
     { "key": "clara", "name": "Clara", "harness": "claude-code", "model": "opus", "effort": "high",
       "description": "New business: leads, proposals and follow-ups",
       "backstory": "You run new business for a small consultancy. You know every open conversation, and you never send a follow-up that gives the reader nothing.",
-      "avatar": { "image": "assets/clara.jpg" },
+      "avatar": { "image": "cast/clara.jpg" },
       "autoReplies": ["Sent. I will tell you the moment they reply.", "Drafted and waiting in your outbox."] },
     { "key": "ada", "name": "Ada", "harness": "claude-code", "model": "haiku",
-      "description": "Bookkeeping: invoices out, payments in", "avatar": { "image": "assets/ada.jpg" } },
+      "description": "Bookkeeping: invoices out, payments in", "avatar": { "image": "cast/ada.jpg" } },
     { "key": "kira", "name": "Kira", "harness": "claude-code", "model": "sonnet",
-      "description": "Writes the proposals and the case studies", "avatar": { "image": "assets/kira.jpg" } }
+      "description": "Writes the proposals and the case studies", "avatar": { "image": "cast/kira.jpg" } }
   ],
   "conversations": [
     { "key": "clara", "direct": "clara", "background": { "preset": "sunset" },

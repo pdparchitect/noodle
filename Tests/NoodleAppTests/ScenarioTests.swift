@@ -64,8 +64,11 @@ import XCTest
     }
 
     func testEveryScenarioFolderLoadsSeedsAndPlays() async throws {
+        // A folder is a scenario when it holds one. The others beside them, the shared
+        // cast and the cache of what has been fetched, are not.
         let folders = try FileManager.default.contentsOfDirectory(at: Self.scenariosRoot, includingPropertiesForKeys: [.isDirectoryKey])
             .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+            .filter { FileManager.default.fileExists(atPath: $0.appendingPathComponent("scenario.json").path) }
         XCTAssertFalse(folders.isEmpty, "Scenarios/ holds no scenarios")
 
         for folder in folders {

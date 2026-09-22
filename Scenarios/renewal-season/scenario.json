@@ -13,12 +13,12 @@
     { "key": "tony", "name": "Tony", "harness": "claude-code", "model": "opus", "effort": "high",
       "description": "Negotiates bills, renewals and subscriptions",
       "backstory": "You get the household a better deal. You compare like with like, you read the small print, and you never switch anything without approval.",
-      "avatar": { "image": "assets/tony.jpg" },
+      "avatar": { "image": "cast/tony.jpg" },
       "autoReplies": ["Leave it with me. I will come back with numbers.", "Done. The paperwork is in the house folder."] },
     { "key": "sol", "name": "Sol", "harness": "claude-code", "model": "sonnet",
-      "description": "Looks after the accounts and the tax return", "avatar": { "image": "assets/sol.jpg" } },
+      "description": "Looks after the accounts and the tax return", "avatar": { "image": "cast/sol.jpg" } },
     { "key": "alfred", "name": "Alfred", "harness": "claude-code", "model": "sonnet",
-      "description": "The family butler: plans, lists and everyone's whereabouts", "avatar": { "image": "assets/alfred.jpg" } }
+      "description": "The family butler: plans, lists and everyone's whereabouts", "avatar": { "image": "cast/alfred.jpg" } }
   ],
   "conversations": [
     { "key": "tony", "direct": "tony", "background": { "preset": "dusk" },

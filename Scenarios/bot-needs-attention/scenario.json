@@ -14,13 +14,13 @@
   },
   "agents": [
     { "key": "chloe", "name": "Chloe", "harness": "claude-code", "model": "opus", "effort": "high",
-      "description": "Personal assistant for the diary, travel and errands", "avatar": { "image": "assets/chloe.jpg" } },
+      "description": "Personal assistant for the diary, travel and errands", "avatar": { "image": "cast/chloe.jpg" } },
     { "key": "rex", "name": "Rex", "harness": "grok-build", "model": "grok-code",
       "description": "Triages incoming bug reports", "avatar": { "symbol": "ladybug.fill", "colour": 4 },
       "status": { "phase": "failed", "failure": "usageLimit",
         "detail": "Grok Build's usage limit has been reached. Once usage is available again, right-click the bot and choose Kick to resume. Unfinished work is preserved." } },
     { "key": "sol", "name": "Sol", "harness": "opencode", "model": "local/coder-large",
-      "description": "Keeps an eye on the numbers", "avatar": { "image": "assets/sol.jpg" } }
+      "description": "Keeps an eye on the numbers", "avatar": { "image": "cast/sol.jpg" } }
   ],
   "conversations": [
     { "key": "rex", "direct": "rex", "background": { "preset": "dusk" },
