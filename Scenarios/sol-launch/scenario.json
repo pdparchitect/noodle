@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "title": "GPT-6 Sol at work in Noodle",
+  "clock": "09:20",
+  "settings": { "Noodle.firstBotSetup.dismissed": true },
+  "harnesses": {
+    "codex": { "models": [
+      { "id": "gpt-6-sol", "name": "GPT-6 Sol", "description": "The newest OpenAI model", "default": true } ] }
+  },
+  "agents": [
+    { "key": "ray", "name": "Ray", "harness": "codex", "model": "gpt-6-sol",
+      "description": "Lives in the service: reproduces, fixes, and proves it stayed fixed",
+      "backstory": "You work on this service. You reproduce a problem before you touch it, you fix the cause rather than the symptom, and you leave a test behind.",
+      "avatar": { "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/66/OpenAI_logo_2025_%28symbol%29.svg/1280px-OpenAI_logo_2025_%28symbol%29.svg.png", "tint": "white" },
+      "autoReplies": ["Looking now.", "Done, and the test covers it so it cannot come back quietly."] },
+    { "key": "mila", "name": "Mila", "harness": "codex", "model": "gpt-6-sol",
+      "description": "Reads every change before anyone else has to",
+      "avatar": { "symbol": "eyeglasses", "colour": 2 } },
+    { "key": "bo", "name": "Bo", "harness": "codex", "model": "gpt-6-sol",
+      "description": "Watches the regions, the pages and the error budget",
+      "avatar": { "symbol": "antenna.radiowaves.left.and.right", "colour": 6 } }
+  ],
+  "conversations": [
+    { "key": "mila", "direct": "mila", "unread": true,
+      "messages": [
+        { "at": "08:15", "from": "mila",
+          "text": "The retry change is ready for you. It is forty lines and every one of them is the same idea, so it should not take long." } ] },
+    { "key": "bo", "direct": "bo",
+      "messages": [
+        { "at": "07:05", "from": "bo",
+          "text": "All five regions are inside the error budget for the first morning in three weeks. Sydney is the quietest of them." } ] },
+    { "key": "ray", "direct": "ray",
+      "background": { "video": "https://www.pexels.com/download/video/8295518/" },
+      "messages": [
+        { "at": "-2d 14:10", "from": "user",
+          "text": "We are getting timeouts out of Sydney, and only Sydney. Nobody here can reproduce it." },
+        { "at": "-2d 14:26", "from": "ray",
+          "text": "Reproduced against the Sydney replica. It is not the region. The retry measures its wait with the wall clock, so anything further away than about 180 ms can retry into its own timeout." },
+        { "at": "-2d 14:31", "from": "user",
+          "text": "Fix the cause. Not with a bigger timeout." },
+        { "at": "-1d 17:40", "from": "user",
+          "text": "We have moved you to GPT-6 Sol from today. Same service, same notes." },
+        { "at": "-1d 17:41", "from": "ray",
+          "text": "Understood. The branch and the failing region test are where I left them, so I will carry on." },
+        { "at": "08:55", "from": "ray",
+          "text": "The retry measures against a clock that only goes forwards, and the region test now covers all five rather than the two we happened to have fixtures for.\n\nSydney has been clean for eleven hours." }
+      ] }
+  ],
+  "present": {
+    "window": { "size": [1240, 860] },
+    "select": "ray"
+  },
+  "timeline": [
+    { "capture": "01-this-morning" },
+    { "wait": 1.4, "in": "ray",
+      "type": { "text": "What was it actually doing before? In plain words." } },
+    { "wait": 0.8, "agent": "ray", "status": { "phase": "working", "detail": "Reading back the retry change" } },
+    { "wait": 0.6, "agent": "ray",
+      "toolCall": { "input": "git show --stat HEAD && swift test --filter RegionRetryTests",
+        "output": "3 files changed, 41 insertions(+), 16 deletions(-)\n18 tests passed", "exit": 0, "duration": 1.4 } },
+    { "wait": 0.6, "agent": "ray",
+      "reply": { "key": "plainly",
+        "text": "It timed the wait with the wall clock. When that clock shifted, a two hundred millisecond wait could come back as none at all, so the request fired again straight away and the server saw a burst rather than a retry.\n\nSydney is far enough away that the burst and the original overlapped. Nearer regions finished before the clock had a chance to move, which is why it only ever happened there." } },
+    { "agent": "ray", "status": { "phase": "ready" } },
+    { "wait": 1.0, "react": { "message": "plainly", "emoji": "🙌" } },
+    { "capture": "02-answered" }
+  ],
+  "film": {
+    "background": "https://www.pexels.com/download/video/8295518/",
+    "intro": { "icon": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/66/OpenAI_logo_2025_%28symbol%29.svg/1280px-OpenAI_logo_2025_%28symbol%29.svg.png",
+      "iconTint": "white",
+      "title": "GPT-6 Sol",
+      "subtitle": "The next generation of frontier AI." },
+    "outro": { "tagline": "A workspace for you and your AI agents." }
+  }
+}

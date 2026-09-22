@@ -104,6 +104,8 @@ struct Scenario: Codable {
 
         struct Avatar: Codable {
             var image: String?
+            /// "white" or "black", for a mark that is drawn in the wrong one.
+            var tint: String?
             var symbol: String?
             var colour: Int?
         }
@@ -211,6 +213,8 @@ struct Scenario: Codable {
             /// A picture to bring up under the title, shown in a circle. Any asset in the
             /// scenario folder, so it can be a bot's own avatar or anything else.
             var icon: String?
+            /// "white" or "black", for a mark that is drawn in the wrong one.
+            var iconTint: String?
             /// The small line above the title, for what this is a scenario of.
             var kicker: String?
             /// Defaults to the scenario's own title.
@@ -305,6 +309,8 @@ struct ScenarioError: LocalizedError {
 // MARK: - Load and validate
 
 extension Scenario {
+    static let tints: Set<String> = ["white", "black", "none"]
+
     /// What a recording can move in on.
     static let focusRegions: Set<String> = ["composer", "transcript", "none"]
 
@@ -409,6 +415,7 @@ extension Scenario {
             }
             try require((film.intro?.hold ?? 0) >= 0 && (film.outro?.hold ?? 0) >= 0, "A film holds for a negative time.")
             if let icon = film.intro?.icon { _ = try media(icon) }
+            try require(Self.tints.contains(film.intro?.iconTint ?? "none"), "film.intro.iconTint is white or black.")
         }
         for key in (settings ?? [:]).keys {
             try require(Self.preferenceKeys.contains(key), "\"\(key)\" is not a preference a scenario can set.")
@@ -438,6 +445,7 @@ extension Scenario {
                 }
             }
             if let image = agent.avatar?.image { _ = try media(image) }
+            try require(Self.tints.contains(agent.avatar?.tint ?? "none"), "\(agent.key): a tint is white or black.")
             try Self.check(agent.status, of: agent.key)
         }
 
@@ -662,7 +670,11 @@ extension Scenario {
             let result = try repository.createAgent(named: agent.name, harnessIdentifier: agent.harness,
                 modelIdentifier: agent.model, reasoningEffort: agent.effort, publicDescription: agent.description,
                 avatarSymbolName: agent.avatar?.symbol, avatarColorIndex: agent.avatar?.colour ?? index,
-                avatarImageData: try agent.avatar?.image.map { try Data(contentsOf: media($0)) },
+                avatarImageData: try agent.avatar?.image.map { path in
+                    let data = try Data(contentsOf: media(path))
+                    guard let tint = agent.avatar?.tint, let image = NSImage(data: data) else { return data }
+                    return ScenarioSupport.tinted(image, tint).tiffRepresentation ?? data
+                },
                 backstory: agent.backstory ?? "", now: created.addingTimeInterval(Double(index) * 60))
             seeded.agents[agent.key] = result.agent
             seeded.directs[agent.key] = result.conversation
@@ -1066,7 +1078,8 @@ extension Scenario {
     /// The picture an opening card brings up, if it names one.
     private func icon(_ intro: Scenario.Film.Intro?) -> NSImage? {
         guard let path = intro?.icon, let url = try? scenario.media(path),
-              let image = NSImage(contentsOf: url) else { return nil }
+              var image = NSImage(contentsOf: url) else { return nil }
+        if let tint = intro?.iconTint { image = ScenarioSupport.tinted(image, tint) }
         return ScenarioSupport.roomAround(image)
     }
 
@@ -1570,6 +1583,20 @@ enum ScenarioSupport {
         let x = min(max(box.midX - width / 2, bounds.minX), bounds.maxX - width)
         let y = min(max(box.midY - height / 2, bounds.minY), bounds.maxY - height)
         return NSRect(x: x, y: y, width: width, height: height)
+    }
+
+    /// A mark drawn in one colour, redrawn in another. Only its shape is kept, so a
+    /// black logo can be shown on a dark card without disappearing into it.
+    static func tinted(_ image: NSImage, _ colour: String) -> NSImage {
+        let ink: NSColor = colour == "black" ? .black : .white
+        let box = NSRect(origin: .zero, size: image.size)
+        let result = NSImage(size: image.size)
+        result.lockFocus()
+        ink.set()
+        box.fill()
+        image.draw(in: box, from: .zero, operation: .destinationIn, fraction: 1)
+        result.unlockFocus()
+        return result
     }
 
     /// A mark drawn to its own edges is sliced by the circle it is shown in, so one is
