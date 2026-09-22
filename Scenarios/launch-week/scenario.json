@@ -70,7 +70,7 @@
   },
   "film": {
     "background": "https://www.pexels.com/download/video/854261/",
-    "intro": { "title": "Launch week, run by bots",
+    "intro": { "title": "Launch week, handled",
       "subtitle": "One message, one page, one number the whole team watches." },
     "outro": { "tagline": "A workspace for you and your AI agents." }
   },
