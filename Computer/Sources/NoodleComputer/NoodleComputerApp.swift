@@ -222,6 +222,7 @@ enum ComputerLaunchCheck {
     let model = try ComputerStore()
     model.provider = try ComputerProvider(store: model)
     store = model
+    model.wakeLocalMacService()
     return model
   }
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }

@@ -189,6 +189,14 @@ enum ComputerDisplayMode: String {
 
     deinit { if lease >= 0 { close(lease) } }
 
+    /// A background login can outlive a crashed or interrupted app, and an
+    /// updated service may not be running. The read-only handshake starts it,
+    /// so it can sign out logins that no desktop helper serves.
+    func wakeLocalMacService() {
+        guard sessions.contains(where: { $0.computer.kind == .localMac }) else { return }
+        Task { try? await LocalMacSetup.check() }
+    }
+
     var selected: ComputerSession? { sessions.first { $0.id == selection } }
     /// Reference files identify a computer; the normal library owns its UI and
     /// current terminal. Historical terminal IDs do not create another viewer.

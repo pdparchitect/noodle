@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Sign out a Local Mac's background account when nothing has been connected to it for five minutes, for example after Computer crashed, was force quit or took too long to quit. These sessions used to keep running with a full desktop until the Mac restarted. Opening Computer lets the helper do this cleanup, and Start still reconnects within those five minutes.
+
 ## [0.13.0] - 2026-09-21
 
 ### Added

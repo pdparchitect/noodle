@@ -42,6 +42,10 @@ name Local Mac; compatibility limitations are documented here.
   stop and explicit deletion. XPC checks the exact client signing identity and
   binds each request to the caller UID. Ownership records are root-private;
   generated passwords stay in the System keychain. Stop retains the account.
+  Every 30 seconds it also checks owned background logins for a running desktop
+  helper. A login with none for five minutes, such as after an app crash or an
+  interrupted quit, is stopped the same way; Start adopts it before then. The app
+  sends the read-only handshake at launch so an idle service is running to do this.
 - `LocalMacDesktop` runs as the standard account. `AccountCapture` handles
   ScreenCaptureKit; `AccountInput` handles events; `Terminal` handles PTYs;
   `LocalMacFileStore` handles files. The root service hands over inherited pipes

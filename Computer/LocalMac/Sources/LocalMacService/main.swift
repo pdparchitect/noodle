@@ -101,7 +101,17 @@ private final class Accounts {
         }
         return try load(id, owner: owner)
     }
-    func load(_ id: UUID, owner: UInt32) throws -> LocalMacAccount {
+    /// Every valid ownership record, for service-initiated maintenance only.
+    /// Each record is validated against its own recorded owner.
+    func all() -> [LocalMacAccount] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
+        return names.compactMap { name in
+            guard name.hasSuffix(".json"), let id = UUID(uuidString: String(name.dropLast(5))) else { return nil }
+            do { return try load(id, owner: nil) }
+            catch { log.error("Skipping Local Mac record \(id.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)"); return nil }
+        }
+    }
+    func load(_ id: UUID, owner: UInt32?) throws -> LocalMacAccount {
         let path = url(id)
         let fd = Darwin.open(path.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
         guard fd >= 0 else { throw LocalMacError("Local Mac is not set up. Use Start in Noodle Computer.") }
@@ -112,7 +122,7 @@ private final class Accounts {
         }
         let value = try JSONDecoder().decode(LocalMacAccount.self, from: handle.readToEnd() ?? Data())
         guard value.computerID == id else { throw LocalMacError("Local Mac record has a mismatched identifier.") }
-        try value.validate(owner: owner)
+        try value.validate(owner: owner ?? value.ownerUID)
         return value
     }
     func record(_ account: LocalMacAccount) throws -> ODRecord {
@@ -237,6 +247,8 @@ private final class Service: NSObject, NSXPCListenerDelegate {
     let executableFileID: String
     var retirement: LocalMacServiceRetirement
     private var updateMonitor: DispatchSourceTimer?
+    private var sessionMonitor: DispatchSourceTimer?
+    var orphans = LocalMacOrphanSweep()
     var restarting: Bool { retirement.restarting }
     var consoleMetadata: ConsoleMetadata?
     init(accounts: Accounts) throws {
@@ -262,6 +274,50 @@ private final class Service: NSObject, NSXPCListenerDelegate {
         }
         updateMonitor = monitor
         monitor.resume()
+    }
+    /// A crashed or force-quit app, or a quit that outlives its deadline, leaves
+    /// the background login running with nothing attached. Start adopts such a
+    /// login during the grace period; afterwards the service signs it out.
+    func monitorSessions() {
+        let monitor = DispatchSource.makeTimerSource(queue: queue)
+        monitor.schedule(deadline: .now(), repeating: 30, leeway: .seconds(5))
+        monitor.setEventHandler { [weak self] in self?.releaseOrphans() }
+        sessionMonitor = monitor
+        monitor.resume()
+    }
+    /// A desktop helper exits when the app's pipe closes, but that pipe bypasses
+    /// this service, so a helper can outlive a previous service instance.
+    /// Count running helpers by account, not only this instance's children.
+    private func desktopHelperUIDs() -> Set<UInt32> {
+        var pids = [pid_t](repeating: 0, count: 16_384)
+        let count = Int(proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size)))
+        var result = Set<UInt32>()
+        for pid in pids.prefix(max(0, min(count, pids.count))) where pid > 0 {
+            var info = proc_bsdinfo()
+            let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+            guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { continue }
+            let name = withUnsafeBytes(of: info.pbi_comm) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+            if name == "LocalMacDesktop" { result.insert(info.pbi_uid) }
+        }
+        return result
+    }
+    private func releaseOrphans() {
+        guard !restarting else { return }
+        let owned = accounts.all()
+        let live = Set(sessions().compactMap(uid))
+        let signedIn = Set(owned.filter { live.contains($0.uid) }.map(\.computerID))
+        let helpers = desktopHelperUIDs()
+        let attached = Set(children.filter { $0.value.isRunning }.map(\.key))
+            .union(owned.filter { helpers.contains($0.uid) }.map(\.computerID))
+        let expired = orphans.expired(signedIn: signedIn, attached: attached)
+        for account in owned where expired.contains(account.computerID) {
+            do {
+                try stop(account)
+                log.notice("Signed out unattached Local Mac \(account.computerID.uuidString, privacy: .public).")
+            } catch {
+                log.error("Cannot sign out unattached Local Mac \(account.computerID.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
     private func retireIfUpdated() throws -> Bool {
         let requirement = "anchor apple generic and identifier \"\(serviceID)\" and certificate leaf[subject.OU] = \"\(team)\""
@@ -573,6 +629,7 @@ do {
     listener.setConnectionCodeSigningRequirement("anchor apple generic and identifier \"\(providerID)\" and certificate leaf[subject.OU] = \"\(team)\"")
     listener.resume()
     service.monitorUpdates()
+    service.monitorSessions()
     log.notice("Local Mac lifecycle service is ready.")
     RunLoop.current.run()
 } catch { log.error("Local Mac service startup failed: \(error.localizedDescription, privacy: .public)"); exit(1) }
