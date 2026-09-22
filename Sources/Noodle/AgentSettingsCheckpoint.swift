@@ -13,7 +13,7 @@ import NoodleCore
     private var entries: [Entry] = []
 
     init(repository: WorkspaceRepository, agent: AgentRecord? = nil, conversations: [BotConversation] = []) throws {
-        try capture(WorkspaceMailbox(workspace: repository.rootURL, path: ""), names: ["computers.json", "browsers.json"])
+        try capture(WorkspaceMailbox(workspace: repository.rootURL, path: ""), names: ["computers.json", "browsers.json", "calendars.json"])
         try capture(WorkspaceMailbox(workspace: repository.rootURL, path: "MCP", create: true), names: ["connections.json"])
         if let agent {
             let layout = repository.storage(for: agent.id)

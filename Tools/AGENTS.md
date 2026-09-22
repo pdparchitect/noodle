@@ -3,6 +3,12 @@
 The tools Noodle gives its bots. Each folder here is one bundled ExtensionKit
 extension that Noodle discovers at launch; nothing in the app names them.
 
+`Tools/Calendar` is the exception: it has no extension. macOS grants calendar access
+to the app a person sees and never to a background extension, which was measured
+before the tool was written, so its provider is `ToolProviderKind.builtIn` and runs
+inside Noodle. Build a tool this way only when a permission makes an extension
+impossible; the extension is the default, and the provider contract is the same.
+
 `Tools/Browser` and `Tools/Computer` are the bot-facing tools. The apps they
 drive live in `/Browser` and `/Computer` and are separate products with their
 own versions and changelogs. A change here ships with Noodle and goes in the
@@ -18,6 +24,11 @@ Tools/NAME/
   Info.plist                          the .appex Info.plist
   Extension.entitlements              what the .appex is signed with; App Sandbox alone unless there is a reason
 ```
+
+A built-in tool has only `Sources/NoodleNAMETools` and `Tests/NoodleNAMEToolsTests`,
+registered with `builtInTool("NAME")` in `Package.swift`. Its EventKit-style access to
+the Mac, and the entitlement and usage string that go with it, belong to the app, and
+its controller lives in `Sources/Noodle` like the other assignment controllers.
 
 ## Where the framework is
 
@@ -55,6 +66,11 @@ Bots reach every tool through `messenger tool PROVIDER TOOL`. There is no per-to
 3. In `scripts/build-app.sh`, add the block that assembles `NoodleNAMETools.appex` and the line that signs it, next to the existing three. The bundle identifier is `<noodle id>.tools.NAME`.
 4. `scripts/verify-tool-extensions.sh` checks every bundled extension and needs no change for a tool whose `Extension.entitlements` holds the sandbox alone. Anything more needs a case there.
 5. If it follows an assignment, publish that assignment from `NoodleStore` with `toolAssignments.replace(KIND, with:)`.
+
+For a built-in tool, replace steps 2–4 with `builtInTool("NAME")` in `Package.swift`, a
+dependency on the provider from the `Noodle` target, `toolProviders.register(...)` in
+`NoodleStore`, and whatever entitlement and `Info.plist` usage string the access needs in
+`Support/`.
 
 ## Tests
 

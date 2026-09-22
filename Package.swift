@@ -26,6 +26,18 @@ func tool(_ name: String, dependencies: [Target.Dependency] = []) -> [Target] {
     ]
 }
 
+/// A built-in tool has only a provider and its tests: it runs inside Noodle rather than in
+/// an extension. Calendar is built in because macOS never grants calendar access to a
+/// background app extension, only to the app the person sees. See Tools/AGENTS.md.
+func builtInTool(_ name: String, dependencies: [Target.Dependency] = []) -> [Target] {
+    let provider = "Noodle\(name)Tools", folder = "Tools/\(name)"
+    return [
+        .target(name: provider, dependencies: ["NoodleCore"] + dependencies, path: "\(folder)/Sources/\(provider)"),
+        .testTarget(name: provider + "Tests", dependencies: [.target(name: provider), "NoodleCore"] + dependencies,
+                    path: "\(folder)/Tests/\(provider)Tests")
+    ]
+}
+
 let package = Package(
     name: "Noodle",
     platforms: [
@@ -74,7 +86,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleBrowserTools", "NoodleComputerTools", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge")],
+            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleMCP", "NoodleSharing", "NoodleAgentBridge", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",
@@ -119,6 +131,7 @@ let package = Package(
 )
 
 package.targets += tool("Vision")
+    + builtInTool("Calendar")
     + tool("Browser", dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol")])
     + tool("Computer", dependencies: [.product(name: "ComputerBridge", package: "Bridge")])
 

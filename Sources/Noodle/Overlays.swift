@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 import NoodleCore
 
 enum BotEditorTab: String, CaseIterable {
-    case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers", browsers = "Browsers"
+    case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers", browsers = "Browsers", calendars = "Calendars"
 }
 
 private struct BotEditorTabPicker: View {
@@ -51,6 +51,7 @@ struct NewBotSheet: View {
     @State private var mcpConnectionIDs: Set<UUID> = []
     @State private var computerIDs: Set<UUID> = []
     @State private var browserIDs: Set<UUID> = []
+    @State private var calendarIDs: Set<String> = []
     @State private var folders: [AgentFolder] = []
     @State private var selectedProfileID: UUID?
     @State private var selectedTab = BotEditorTab.general
@@ -140,6 +141,8 @@ struct NewBotSheet: View {
                     BrowserAssignmentPicker(controller: store.browsers, selectedIDs: $browserIDs)
                 case .computers:
                     ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
+                case .calendars:
+                    CalendarAssignmentPicker(controller: store.calendars, selectedIDs: $calendarIDs)
                 }
                 if selectedTab != .runtime {
                     HarnessExperimentalWarning(provider: HarnessProvider(rawValue: selectedHarnessIdentifier))
@@ -201,7 +204,7 @@ struct NewBotSheet: View {
             publicDescription: publicDescription,
             backstory: backstory,
             mcpConnectionIDs: mcpConnectionIDs,
-            computerIDs: computerIDs, browserIDs: browserIDs, folders: folders,
+            computerIDs: computerIDs, browserIDs: browserIDs, calendarIDs: calendarIDs, folders: folders,
             harnessProfile: selectedProfileID
         )
     }
@@ -250,6 +253,7 @@ struct EditBotSheet: View {
     @State private var mcpConnectionIDs: Set<UUID> = []
     @State private var computerIDs: Set<UUID> = []
     @State private var browserIDs: Set<UUID> = []
+    @State private var calendarIDs: Set<String> = []
     @State private var folders: [AgentFolder] = []
     @State private var selectedProfileID: UUID?
     @State private var confirmingDeletion = false
@@ -346,6 +350,8 @@ struct EditBotSheet: View {
                     BrowserAssignmentPicker(controller: store.browsers, selectedIDs: $browserIDs)
                 case .computers:
                     ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
+                case .calendars:
+                    CalendarAssignmentPicker(controller: store.calendars, selectedIDs: $calendarIDs)
                 }
             }
             .padding(20)
@@ -357,6 +363,7 @@ struct EditBotSheet: View {
             mcpConnectionIDs = store.mcp.selectedIDs(for: agent)
             computerIDs = store.computers.selectedIDs(for: agent)
             browserIDs = store.browsers.selectedIDs(for: agent)
+            calendarIDs = store.calendars.selectedIDs(for: agent)
             folders = store.folders(for: agent)
             selectedProfileID = store.harnessProfile(for: agent)
             if selectedHarnessIdentifier.isEmpty {
@@ -426,7 +433,7 @@ struct EditBotSheet: View {
                 publicDescription: publicDescription,
                 backstory: backstory,
                 mcpConnectionIDs: mcpConnectionIDs,
-                computerIDs: computerIDs, browserIDs: browserIDs, folders: folders,
+                computerIDs: computerIDs, browserIDs: browserIDs, calendarIDs: calendarIDs, folders: folders,
                 harnessProfile: .some(selectedProfileID)
             )
         }) {
