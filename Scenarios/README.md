@@ -53,7 +53,7 @@ A `type` step is given a sound track: the app reports each keystroke with the ti
 happened, and the script lays a key click on the recording at each one. Nothing is
 captured from the microphone or from what the Mac is playing.
 
-`--ratio W:H`, which can be given more than once, also writes `recordings/NAME-WxH.mp4`:
+`--silent` leaves the sound off. `--ratio W:H`, which can be given more than once, also writes `recordings/NAME-WxH.mp4`:
 the same recording centred on the same background, grown to that shape for wherever it
 is going. Nothing is cropped, and nothing is scaled up past the size it was recorded at.
 
@@ -195,6 +195,7 @@ Steps run in order once the window is up. A step does one thing, after an option
 | `{ "waitFor": "userMessage", "agent": "mira" }` | Waits until you write to the bot. |
 | `{ "waitFor": "key" }` | Waits for Scenarios > Next Step, or Return in the terminal. |
 | `{ "present": { … } }` | Changes the presentation. |
+| `{ "focus": "composer" }` | The recording moves in on the conversation and keeps up with whatever is being typed, letter by letter. `"transcript"` frames the conversation column, `"none"` pulls back. Typing releases the focus itself as the message goes, so the window is in view when it lands. |
 | `{ "capture": "02-replied" }` | With `--shots`, saves the main window as `shots/02-replied.png`. Otherwise nothing. |
 
 ## film
