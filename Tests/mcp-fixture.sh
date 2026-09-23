@@ -7,19 +7,16 @@ app="$project_root/.build/Noodle MCP Tests.app"
 # Start empty: a helper this script no longer builds must not linger from an earlier run.
 rm -rf "$app/Contents/Helpers"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Helpers"
-objects=("${(@f)$(grep -Ev '/(Noodle|NoodleAgentBridge|NoodleSharing)\.build/' "$bin_path/Noodle.product/Objects.LinkFileList")}")
+objects=("${(@f)$(grep -Ev '/(Noodle|NoodleSharing)\.build/' "$bin_path/Noodle.product/Objects.LinkFileList")}")
 swiftc -parse-as-library -I "$bin_path/Modules" \
     -Xcc "-fmodule-map-file=$project_root/.build/checkouts/swift-system/Sources/CSystem/include/module.modulemap" \
     -Xcc "-I$project_root/.build/checkouts/swift-system/Sources/CSystem/include" \
-    "$project_root/Sources/Noodle/MCPController.swift" \
     "$project_root/Sources/Noodle/ExternalEventPresentation.swift" \
     "$project_root/Sources/Noodle/AppIdentity.swift" \
-    "$project_root/Sources/Noodle/MCPSettingsView.swift" \
-    "$project_root/Sources/Noodle/ToolCatalogView.swift" \
-    "$project_root/Sources/Noodle/SheetSizing.swift" \
-    "$project_root/Sources/Noodle/SettingsStatusLabel.swift" \
+    "$project_root/Sources/Noodle/MCPAssignmentPicker.swift" \
     "$project_root/Tests/mcp-fixture.swift" \
     "$project_root/Tests/mcp-keychain-checks.swift" \
+    -F "$bin_path" -framework Sparkle -Xlinker -rpath -Xlinker "$bin_path" \
     "${objects[@]}" -o "$app/Contents/MacOS/MCPFixture"
 cp "$project_root/Tests/mcp-fixture-Info.plist" "$app/Contents/Info.plist"
 ditto "$project_root/Support/ToolIcons" "$app/Contents/Resources/ToolIcons"

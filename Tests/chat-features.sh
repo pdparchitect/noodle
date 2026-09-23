@@ -1,15 +1,13 @@
 #!/bin/zsh
 set -euo pipefail
 project_root="${0:A:h:h}"
-swift build --disable-sandbox --package-path "$project_root" --target NoodleCore
+swift build --disable-sandbox --package-path "$project_root" --target NoodleRuntimeSettings
 bin_path="$(swift build --disable-sandbox --package-path "$project_root" --show-bin-path)"
-core_objects=("${(@f)$(python3 "$project_root/Tests/core-link-objects.py" "$bin_path")}")
+core_objects=("${(@f)$(python3 "$project_root/Tests/core-link-objects.py" "$bin_path" NoodleRuntimeSettings NoodleRuntime NoodleAgentBridge NoodleSettingsUI NoodleWallpaper)}")
 fixture_app="$project_root/.build/Chat Feature Tests.app"
 mkdir -p "$fixture_app/Contents/MacOS"
 swiftc -I "$bin_path/Modules" \
-    "$project_root/Sources/Noodle/BotAvatar.swift" \
     "$project_root/Sources/Noodle/MessageMarkdownCache.swift" \
-    "$project_root/Sources/Noodle/SheetSizing.swift" \
     "$project_root/Sources/Noodle/ComposerNameCompletion.swift" \
     "$project_root/Sources/Noodle/ScrollableChatComposer.swift" \
     "$project_root/Sources/Noodle/ComposerAttachmentMenu.swift" \

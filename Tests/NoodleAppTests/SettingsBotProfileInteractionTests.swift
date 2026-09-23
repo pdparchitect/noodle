@@ -3,6 +3,7 @@ import SwiftUI
 import XCTest
 import NoodleCore
 @testable import Noodle
+@testable import NoodleRuntimeSettings
 
 @MainActor final class SettingsBotProfileInteractionTests: HiddenViewTests {
     func testProfilesInBothSettingsTabsOpenTheCorrectEditorAndRefreshAfterSave() async throws {
@@ -94,8 +95,8 @@ import NoodleCore
     }
 
     private func hostSettings(_ f: StoreFixture, heartbeat: Bool) -> NSView {
-        if heartbeat { return host(HeartbeatsSettingsView().environment(f.store).preferredColorScheme(.dark)) }
-        return host(AgentAccessSettingsView().environment(f.store).preferredColorScheme(.dark))
+        if heartbeat { return host(HeartbeatsSettingsView(store: f.store).environment(f.store).preferredColorScheme(.dark)) }
+        return host(AgentAccessSettingsView(store: f.store).environment(f.store).preferredColorScheme(.dark))
     }
 
     private func snapshot(_ view: NSView, to directory: String, name: String) throws {

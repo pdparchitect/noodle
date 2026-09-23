@@ -4,6 +4,7 @@ import XCTest
 import NoodleCore
 @testable import Noodle
 @testable import NoodleRuntime
+@testable import NoodleRuntimeSettings
 
 @MainActor final class HarnessStatusPresentationTests: HiddenViewTests {
     func testCachedUpdateErrorIsReplacedWhileRefreshingAndClearsOnSuccess() async throws {
@@ -16,7 +17,7 @@ import NoodleCore
             fetch: { _ in Data(#"{"tag_name":"rust-v0.154.0"}"#.utf8) })
         let setup = HarnessSetupController(providers: [:], defaults: f.runtime.defaults, versionChecker: checker)
         let row = { (refreshing: Bool) in
-            HarnessInstallationRow(installation: installation, liveInstallation: installation,
+            HarnessInstallationRow(store: f.store, installation: installation, liveInstallation: installation,
                 isRefreshing: refreshing, setup: setup, install: {}).environment(f.store)
         }
         let view = host(row(false))
@@ -44,7 +45,7 @@ import NoodleCore
         HarnessPresentationCache.save([.codex: .init(installation: installation, authentication: .unauthenticated,
             version: .init(installedVersion: "0.153.4"))], to: f.runtime.defaults)
         let setup = HarnessSetupController(providers: [:], defaults: f.runtime.defaults)
-        let view = host(HarnessInstallationRow(installation: installation, liveInstallation: installation,
+        let view = host(HarnessInstallationRow(store: f.store, installation: installation, liveInstallation: installation,
             isRefreshing: false, setup: setup, install: {}).environment(f.store))
         let frame = { (node: NSObject) in (node.value(forKey: "accessibilityFrame") as? NSValue)?.rectValue }
         let profilesButton = try await control("Profiles", in: view), signInButton = try await control("Sign In", in: view)
@@ -62,7 +63,7 @@ import NoodleCore
         addTeardownBlock { @MainActor in provider.gate.resolve(.failure(CancellationError())) }
         let setup = HarnessSetupController(providers: [.claudeCode: provider], defaults: f.runtime.defaults)
         let row = { (refreshing: Bool) in
-            HarnessInstallationRow(installation: installation, liveInstallation: installation,
+            HarnessInstallationRow(store: f.store, installation: installation, liveInstallation: installation,
                 isRefreshing: refreshing, setup: setup, install: {}).environment(f.store)
         }
         // Version lookups and the other harnesses' checks must not lock this row's Sign In.
@@ -86,7 +87,7 @@ import NoodleCore
         HarnessPresentationCache.save([.codex: .init(installation: installed, authentication: .authenticated)], to: f.runtime.defaults)
         let setup = HarnessSetupController(providers: [:], defaults: f.runtime.defaults)
         first.transition(.working, reconnectingSince: Date().addingTimeInterval(-135))
-        let view = host(HarnessInstallationRow(installation: installed, liveInstallation: installed,
+        let view = host(HarnessInstallationRow(store: f.store, installation: installed, liveInstallation: installed,
             isRefreshing: false, setup: setup, install: {}).environment(f.store))
         // Popovers only present from a window that is ordered in (still offscreen).
         let window = try XCTUnwrap(view.window)

@@ -4,6 +4,7 @@ import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 import NoodleCore
+import NoodleRuntimeSettings
 
 enum BotEditorTab: String, CaseIterable {
     case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers", browsers = "Browsers"

@@ -5,6 +5,7 @@ import XCTest
 import NoodleCore
 @testable import Noodle
 @testable import NoodleRuntime
+@testable import NoodleRuntimeSettings
 
 @MainActor final class AgentKickConfirmationTests: XCTestCase {
     func testNativeConfirmationCancelsWithoutChangesAndRecoversOnlyAfterApproval() async throws {
@@ -84,10 +85,11 @@ import NoodleCore
 }
 
 private struct KickDialogFixture: View {
+    @Environment(NoodleStore.self) private var store
     @Bindable var model: KickDialogFixtureModel
     var body: some View {
         Text("Recovery confirmation fixture")
             .frame(width: 600, height: 420)
-            .modifier(AgentKickConfirmation(request: $model.request))
+            .modifier(AgentKickConfirmation(store: store, request: $model.request))
     }
 }

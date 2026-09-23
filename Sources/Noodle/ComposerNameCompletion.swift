@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import NoodleCore
+import NoodleRuntimeSettings
 
 @MainActor
 final class ComposerNameCompletion: NSObject, ObservableObject {

@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-extension View {
+public extension View {
     func noodleSheetSizing(animated: Bool = false) -> some View {
         fixedSize(horizontal: false, vertical: true)
             .background {

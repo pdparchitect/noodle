@@ -1,5 +1,6 @@
 import SwiftUI
 import NoodleCore
+import NoodleRuntimeSettings
 
 /// Shares avatar, profile, and editor behavior across settings and group drafts.
 struct AgentProfileButton: View {

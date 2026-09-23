@@ -4,12 +4,12 @@ import NoodleCore
 import NoodleMCP
 
 @MainActor @Observable
-final class MCPController {
-    private(set) var registry = MCPRegistry()
+public final class MCPController {
+    public private(set) var registry = MCPRegistry()
     private(set) var connected: Set<UUID> = []
     private(set) var signingIn: UUID?
     private(set) var signInStage = ""
-    private(set) var errors: [UUID: String] = [:]
+    public private(set) var errors: [UUID: String] = [:]
     var errorMessage: String?
     @ObservationIgnored private let repository: WorkspaceRepository
     @ObservationIgnored private let service: MCPService
@@ -18,13 +18,13 @@ final class MCPController {
     @ObservationIgnored private var started = false
     @ObservationIgnored private var providers: [UUID: String] = [:]
     /// Where this controller registers one provider per connection.
-    @ObservationIgnored var toolRegistry: ToolProviderRegistry? { didSet { synchronizeProviders() } }
+    @ObservationIgnored public var toolRegistry: ToolProviderRegistry? { didSet { synchronizeProviders() } }
     /// Receives the connections each bot is granted, now and on every change.
-    @ObservationIgnored var onAssignmentsChange: (([UUID: Set<String>]) -> Void)? { didSet { synchronizeProviders() } }
+    @ObservationIgnored public var onAssignmentsChange: (([UUID: Set<String>]) -> Void)? { didSet { synchronizeProviders() } }
     @ObservationIgnored private let browser = MCPBrowserAuthorization()
     @ObservationIgnored private var registryReadable = true
 
-    init(repository: WorkspaceRepository, service: MCPService? = nil) {
+    public init(repository: WorkspaceRepository, service: MCPService? = nil) {
         self.repository = repository
         self.service = service ?? MCPService(namespace: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle.local")
         do { registry = try MCPRegistry.load(root: repository.rootURL) }
@@ -36,7 +36,7 @@ final class MCPController {
     deinit { loginTask?.cancel() }
     /// Bots reach tool connections through Noodle's tool broker. This controller owns the
     /// connections, their sign-in, and which bot is granted which connection.
-    func start(agents: [AgentRecord]) {
+    public func start(agents: [AgentRecord]) {
         self.agents = agents
         synchronizeProviders()
         if !started {
@@ -80,7 +80,7 @@ final class MCPController {
         try save(record)
         return registry.connections.first { $0.id == record.id }!
     }
-    func assign(_ ids: Set<UUID>, to agent: AgentRecord, synchronizeWorkspace: Bool = true) throws {
+    public func assign(_ ids: Set<UUID>, to agent: AgentRecord, synchronizeWorkspace: Bool = true) throws {
         try validateAssignment(ids)
         var next = registry
         try next.assign(ids, to: agent.id)
@@ -89,12 +89,12 @@ final class MCPController {
         synchronizeProviders()
         if synchronizeWorkspace { try repository.synchronizeAgentWorkspace(agent) }
     }
-    func reloadAssignments() throws {
+    public func reloadAssignments() throws {
         defer { synchronizeProviders() }
         do { registry = try MCPRegistry.load(root: repository.rootURL); registryReadable = true }
         catch { registryReadable = false; throw error }
     }
-    func validateAssignment(_ ids: Set<UUID>) throws {
+    public func validateAssignment(_ ids: Set<UUID>) throws {
         try requireReadableRegistry()
         guard ids.isSubset(of: Set(registry.connections.map(\.id))) else {
             throw MCPConnectionError.message("One of the selected tool connections no longer exists.")
@@ -105,7 +105,7 @@ final class MCPController {
             throw MCPConnectionError.message("Saved tool connections could not be read. Restore the registry before making changes; the existing file has not been replaced.")
         }
     }
-    func selectedIDs(for agent: AgentRecord) -> Set<UUID> { Set(registry.assigned(to: agent.id).map(\.id)) }
+    public func selectedIDs(for agent: AgentRecord) -> Set<UUID> { Set(registry.assigned(to: agent.id).map(\.id)) }
     func remove(_ record: MCPConnectionRecord) {
         if signingIn == record.id { loginTask?.cancel() }
         var next = registry
@@ -160,7 +160,7 @@ final class MCPController {
         }
     }
     func cancelSignIn() { loginTask?.cancel() }
-    @discardableResult func receiveAuthorizationCallback(_ url: URL) -> Bool {
+    @discardableResult public func receiveAuthorizationCallback(_ url: URL) -> Bool {
         browser.receive(url)
     }
     private func setSignInStage(_ stage: String) { signInStage = stage }
@@ -209,7 +209,7 @@ final class MCPController {
 
 // Open an ordinary default-browser tab, retaining normal profiles and extensions.
 // Only a callback for the currently pending target AND state may consume the login.
-@MainActor final class MCPBrowserAuthorization {
+@MainActor public final class MCPBrowserAuthorization {
     private let returnWindow = ExternalEventReturnWindow()
     private var pendingID: UUID?
     private var callbackURL: URL?
@@ -275,4 +275,28 @@ final class MCPController {
         timeout?.cancel(); timeout = nil
         continuation?.resume(with: result)
     }
+}
+
+@MainActor public final class ExternalEventReturnWindow {
+    private weak var window: NSWindow?
+
+    func capture() {
+        let window = NSApp.keyWindow
+        self.window = window?.sheetParent ?? window
+    }
+
+    func restore() {
+        let target = window
+        window = nil
+        // Let SwiftUI finish routing the external event to the existing scene
+        // before bringing the originating Settings window back to the front.
+        DispatchQueue.main.async { [weak target] in
+            guard let target, NSApp.windows.contains(where: { $0 === target }) else { return }
+            if target.isMiniaturized { target.deminiaturize(nil) }
+            NSApp.activate(ignoringOtherApps: true)
+            target.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    func clear() { window = nil }
 }

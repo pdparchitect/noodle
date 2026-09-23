@@ -3,8 +3,8 @@ import NoodleCore
 import SwiftUI
 import NoodleRuntime
 
-struct AppleLocalModelsView: View {
-    @Environment(NoodleStore.self) private var store
+public struct AppleLocalModelsView: View {
+    let store: any BotSettingsHost
     @Environment(\.dismiss) private var dismiss
     @State private var models: [AppleLocalModel] = []
     @State private var unreadable: [AppleLocalModel] = []
@@ -24,9 +24,10 @@ struct AppleLocalModelsView: View {
     @State private var installedHeight: CGFloat = 0
     private let checkSupport: @MainActor () async throws -> Bool
 
-    init(checkSupport: @escaping @MainActor () async throws -> Bool = {
+    init(store: any BotSettingsHost, checkSupport: @escaping @MainActor () async throws -> Bool = {
         try await AppleHostProbe.load().localModelsSupported == true
     }) {
+        self.store = store
         self.checkSupport = checkSupport
     }
 
@@ -51,7 +52,7 @@ struct AppleLocalModelsView: View {
         return formatter
     }()
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 18) {
                 Text("Local Models").font(.title2.bold())
@@ -85,8 +86,7 @@ struct AppleLocalModelsView: View {
             if let id = returnToModelID, installed.contains(where: { $0.id == id }) { modelUsageID = id }
             returnToModelID = nil
         }) { agent in
-            EditBotSheet(agent: agent, initialTab: .runtime)
-                .environment(store)
+            store.botRuntimeEditor(agent)
                 .noodleSheetSizing(animated: true)
         }
         .alert("Remove Model?", isPresented: Binding(
@@ -339,7 +339,7 @@ private struct AppleModelUsagePopover: View {
     let remove: () -> Void
     let close: () -> Void
 
-    var body: some View {
+    public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(agents.isEmpty ? "Model Unassigned" : "Model in Use").font(.headline)

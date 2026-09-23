@@ -1,4 +1,4 @@
-// Run with Sources/Noodle/SheetSizing.swift; this fixture never opens Noodle's store.
+// Run with Shared/SettingsUI/Sources/NoodleSettingsUI/SheetSizing.swift; this fixture never opens Noodle's store.
 import AppKit
 import SwiftUI
 import NoodleCore

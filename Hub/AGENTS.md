@@ -7,4 +7,10 @@ CHANGELOG.md here and Noodle integration notes in the root changelog.
 Do not publish releases without the user's explicit request.
 
 The Hub lives in the menu bar only: `LSUIElement` in its bundle and the `.accessory`
-activation policy. Its data stays apart from Noodle's.
+activation policy. Its data stays apart from Noodle's, in its own container under
+`Application Support/Noodle`: the Agent Host looks for bots in a folder with that name.
+
+Settings reuse Noodle's Harness, Heartbeat, Sandbox, Tools and Companions views from
+`NoodleRuntimeSettings` through `BotSettingsHost`; change them there, not here. The Hub
+does not run bots yet, has no bot editor, and opens companions directly rather than
+connecting to them.

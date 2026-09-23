@@ -3,6 +3,7 @@ import SwiftUI
 import XCTest
 import NoodleCore
 @testable import Noodle
+@testable import NoodleRuntimeSettings
 
 @MainActor final class MCPSettingsInteractionTests: HiddenViewTests {
     private func mcpFixture() throws -> MCPControllerFixture {
@@ -196,7 +197,7 @@ import NoodleCore
 
     func testSettingsReflectSavedConnectionsAndSignInStatusWithoutConnecting() async throws {
         let f = try fixture()
-        let settings = host(MCPSettingsView().environment(f.store))
+        let settings = host(MCPSettingsView(store: f.store).environment(f.store))
         _ = try await control("No connections", in: settings)
         let account = try MCPConnectionRecord(name: "Saved tools", endpoint: URL(string: "https://example.com/mcp")!, description: "Fixture account")
         try f.store.mcp.save(account)

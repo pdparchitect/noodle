@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import NoodleCore
+import NoodleRuntimeSettings
 
 /// Deliberately uses only the public record, never the workspace/backstory.
 struct AgentProfileSheet: View {

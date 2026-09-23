@@ -4,11 +4,12 @@ import XCTest
 import NoodleCore
 @testable import Noodle
 @testable import NoodleRuntime
+@testable import NoodleRuntimeSettings
 
 @MainActor final class AgentAccessSettingsInteractionTests: HiddenViewTests {
     func testAppsDefaultsOffAndTogglesIndependentlyWithClickableExplanation() async throws {
         let f = try fixture()
-        let settings = host(AgentAccessSettingsView().environment(f.store).preferredColorScheme(.dark))
+        let settings = host(AgentAccessSettingsView(store: f.store).environment(f.store).preferredColorScheme(.dark))
         let window = try XCTUnwrap(settings.window)
         window.setContentSize(.init(width: 680, height: 420))
         window.orderFront(nil)
@@ -62,7 +63,7 @@ import NoodleCore
 
     func testTurningAccessOnAsksFirstAndTurningItOffDoesNot() async throws {
         let f = try fixture()
-        let settings = host(AgentAccessSettingsView().environment(f.store))
+        let settings = host(AgentAccessSettingsView(store: f.store).environment(f.store))
         let window = try XCTUnwrap(settings.window)
         let configuration = { f.runtime.runtime.accessConfiguration }
         let settled = { !f.runtime.runtime.changingAccess.contains(f.a.id) }
@@ -92,7 +93,7 @@ import NoodleCore
         _ = try f.repository.updateAgent(f.a, displayName: f.a.displayName,
             harnessIdentifier: HarnessProvider.apple.rawValue, modelIdentifier: nil, reasoningEffort: nil)
         f.store.reload()
-        let settings = host(AgentAccessSettingsView().environment(f.store))
+        let settings = host(AgentAccessSettingsView(store: f.store).environment(f.store))
         _ = try await control("Ada, account apps unavailable", in: settings)
         XCTAssertFalse(hasControl("Ada, account apps", in: settings))
         XCTAssertTrue(hasControl("Grace, account apps", in: settings))

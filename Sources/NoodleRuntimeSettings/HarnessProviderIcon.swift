@@ -2,10 +2,10 @@ import SwiftUI
 import NoodleCore
 
 /// A provider-owned mark rather than a generic terminal symbol.
-struct HarnessProviderIcon: View {
+public struct HarnessProviderIcon: View {
     let provider: HarnessProvider
 
-    var body: some View {
+    public var body: some View {
         (provider == .apple ? Image(systemName: "apple.logo") : Image(assetName))
             .resizable()
             .renderingMode(.template)
@@ -31,5 +31,9 @@ struct HarnessProviderIcon: View {
         case .antigravity:
             "AntigravityHarness"
         }
+    }
+
+    public init(provider: HarnessProvider) {
+        self.provider = provider
     }
 }

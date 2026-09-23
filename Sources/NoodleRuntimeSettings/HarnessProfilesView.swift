@@ -3,8 +3,8 @@ import NoodleCore
 import NoodleRuntime
 
 /// Separate logins for one harness, opened from its Settings row.
-struct HarnessProfilesView: View {
-    @Environment(NoodleStore.self) private var store
+public struct HarnessProfilesView: View {
+    let store: any BotSettingsHost
     @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
     let installation: HarnessInstallation
@@ -20,7 +20,7 @@ struct HarnessProfilesView: View {
     private var controller: HarnessProfilesController { store.harnessProfiles }
     private var profiles: [HarnessProfile] { controller.profiles(for: installation.provider) }
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 18) {
                 Text("\(installation.provider.displayName) Profiles").font(.title2.bold())

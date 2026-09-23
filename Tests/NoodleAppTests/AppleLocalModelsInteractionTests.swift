@@ -3,6 +3,7 @@ import SwiftUI
 import XCTest
 import NoodleCore
 @testable import Noodle
+@testable import NoodleRuntimeSettings
 
 @MainActor final class AppleLocalModelsInteractionTests: HiddenViewTests {
     func testRemovalOpensBotHarnessSettingsAndRefreshesUsageAfterEditing() async throws {
@@ -26,7 +27,7 @@ import NoodleCore
         try select(model.id, for: fixture.a)
         try select(model.id, for: fixture.b)
         let settings = host(Color.clear.sheet(isPresented: .constant(true)) {
-            AppleLocalModelsView(checkSupport: { true }).environment(fixture.store)
+            AppleLocalModelsView(store: fixture.store, checkSupport: { true }).environment(fixture.store)
                 .noodleSheetSizing(animated: true)
         })
         let settingsWindow = try XCTUnwrap(settings.window)

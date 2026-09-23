@@ -52,7 +52,8 @@ Use the Applet CLI's explicit `convert --path SOURCE --output NEW_DOCUMENT` to
 copy a package between environments; saved runtime data and live links are not
 transferred. See [Applet development and conversion](../Applet/README.md#dev-and-production-builds).
 
-`scripts/build-and-launch-hub.sh` builds and opens Noodle Hub Dev, which keeps its bots and data apart from both Noodle builds.
+`scripts/build-and-launch-hub.sh` (Runbar: **Noodle Hub →
+Build & Launch Dev**) builds and opens Noodle Hub Dev, which keeps its bots and data apart from both Noodle builds.
 
 ## Documentation changes
 

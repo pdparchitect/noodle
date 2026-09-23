@@ -130,6 +130,10 @@ if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == 1 ]]; then updates_enabled=true; fi
 zsh "$project_root/scripts/generate-icon.sh" "$package/Support/AppSymbol.svg" "$staging/Hub.iconset" >&2
 iconutil -c icns "$staging/Hub.iconset" -o "$contents/Resources/Hub.icns"
 cp "$package/Support/AppSymbol.svg" "$contents/Resources/AppSymbol.svg"
+# The settings shared with Noodle draw harness marks and tool icons from the app's resources.
+xcrun actool "$project_root/Support/Assets.xcassets" --compile "$contents/Resources" --platform macosx \
+    --minimum-deployment-target 26.0 --output-partial-info-plist "$staging/asset-info.plist" >/dev/null
+ditto "$project_root/Support/ToolIcons" "$contents/Resources/ToolIcons"
 
 identity="${NOODLE_SIGNING_IDENTITY:-}"
 if [[ -z "$identity" ]]; then identity="$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)"; fi

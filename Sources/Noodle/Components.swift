@@ -1,5 +1,6 @@
 import SwiftUI
 import NoodleCore
+import NoodleRuntimeSettings
 
 struct ConversationAvatar: View {
     let participants: [AgentRecord]

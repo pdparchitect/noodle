@@ -1,5 +1,6 @@
 import SwiftUI
 import NoodleCore
+import NoodleRuntimeSettings
 
 /// The same add/remove interface is used when creating and editing a group.
 struct GroupMemberPicker: View {

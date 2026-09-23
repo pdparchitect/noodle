@@ -2,6 +2,7 @@ import Foundation
 import NoodleMCP
 import XCTest
 @testable import Noodle
+@testable import NoodleRuntimeSettings
 
 @MainActor final class MCPBrowserAuthorizationTests: XCTestCase {
     func testNativeGoogleStyleCallbackUsesExistingBrowserAndRejectsOtherAppsAndReplays() async throws {

@@ -6,10 +6,10 @@ import NoodleComputerTools
 
 /// Separately installed apps that extend Noodle. Bundled helpers and harnesses
 /// are managed elsewhere and are not companion apps.
-enum CompanionApp: String, CaseIterable, Identifiable {
+public enum CompanionApp: String, CaseIterable, Identifiable {
     case computer, applet, browser
 
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
     var name: String {
         switch self {
@@ -51,7 +51,7 @@ enum CompanionApp: String, CaseIterable, Identifiable {
         }
     }
 
-    var documentationURL: URL {
+    public var documentationURL: URL {
         switch self {
         case .browser: URL(string: "https://github.com/pdparchitect/noodle/tree/main/Browser")!
         case .computer: ComputerDistribution.documentation
@@ -69,7 +69,7 @@ enum CompanionApp: String, CaseIterable, Identifiable {
         }
     }
 
-    @MainActor static func installedApps() -> [Self: CompanionAppInstallation] {
+    @MainActor public static func installedApps() -> [Self: CompanionAppInstallation] {
         var result: [Self: CompanionAppInstallation] = [:]
         for app in allCases {
             let url: URL?
@@ -86,8 +86,8 @@ enum CompanionApp: String, CaseIterable, Identifiable {
     }
 }
 
-struct CompanionAppInstallation: Equatable {
-    let applicationURL: URL
+public struct CompanionAppInstallation: Equatable {
+    public let applicationURL: URL
     let version: String?
     /// What Sparkle compares with a feed's `sparkle:version`.
     let buildVersion: String?

@@ -3,7 +3,7 @@ import Observation
 import Sparkle
 
 /// The newest release a companion's own Sparkle feed offers this Mac.
-struct CompanionRelease: Equatable {
+public struct CompanionRelease: Equatable {
     /// Compared with the installed `CFBundleVersion`, as Sparkle does.
     let version: String
     let displayVersion: String
@@ -11,11 +11,11 @@ struct CompanionRelease: Equatable {
 
 /// Reports whether an installed companion is behind its own update feed. The
 /// companion's Sparkle updater still owns downloading and installing.
-@MainActor @Observable final class CompanionUpdateChecker {
-    static let shared = CompanionUpdateChecker()
+@MainActor @Observable public final class CompanionUpdateChecker {
+    public static let shared = CompanionUpdateChecker()
 
     /// Installed companions that are behind their feed, as of the last refresh.
-    private(set) var updates: [CompanionApp: CompanionRelease] = [:]
+    public private(set) var updates: [CompanionApp: CompanionRelease] = [:]
     @ObservationIgnored private let fetch: @MainActor (URL) async throws -> Data
     @ObservationIgnored private let now: @MainActor () -> Date
     @ObservationIgnored private var latest: [URL: (release: CompanionRelease?, checkedAt: Date)] = [:]
@@ -29,7 +29,7 @@ struct CompanionRelease: Equatable {
 
     /// Replaces any refresh still in flight. Await the returned task for the result.
     @discardableResult
-    func refresh(_ installations: [CompanionApp: CompanionAppInstallation], force: Bool = false) -> Task<Void, Never> {
+    public func refresh(_ installations: [CompanionApp: CompanionAppInstallation], force: Bool = false) -> Task<Void, Never> {
         refreshTask?.cancel()
         let task = Task { @MainActor in
             var found: [CompanionApp: CompanionRelease] = [:]
@@ -96,7 +96,7 @@ private final class SecureRedirectPolicy: NSObject, URLSessionTaskDelegate {
     }
 }
 
-enum CompanionAppcast {
+public enum CompanionAppcast {
     /// The highest release on the default channel that this Mac can run.
     static func latestRelease(in data: Data,
                               systemVersion: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion,

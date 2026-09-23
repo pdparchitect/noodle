@@ -3,6 +3,7 @@ import SwiftUI
 import XCTest
 import NoodleCore
 @testable import Noodle
+@testable import NoodleRuntimeSettings
 
 @MainActor final class ToolCreationInteractionTests: HiddenViewTests {
     private func mcpFixture() throws -> MCPControllerFixture {

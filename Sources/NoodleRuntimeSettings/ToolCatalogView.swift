@@ -3,14 +3,14 @@ import SwiftUI
 import NoodleCore
 
 /// Protocol-independent catalogue. Setup routing is kept in ToolCreationSheet.
-struct ToolCatalogView: View {
+public struct ToolCatalogView: View {
     let onSelect: (ToolDefinition) -> Void
     let onCustomMCP: () -> Void
     let onCancel: () -> Void
     var error: String? = nil
     @State private var search = ""
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
@@ -62,9 +62,9 @@ struct ToolCatalogView: View {
     }
 }
 
-struct ToolMaturityBadge: View {
+public struct ToolMaturityBadge: View {
     let maturity: ToolMaturity
-    var body: some View {
+    public var body: some View {
         if let badge = maturity.badge {
             Text(badge).font(.caption2).foregroundStyle(.orange)
                 .padding(.horizontal, 6).padding(.vertical, 2)
@@ -73,17 +73,21 @@ struct ToolMaturityBadge: View {
     }
 }
 
-struct MCPConnectionMaturityBadge: View {
+public struct MCPConnectionMaturityBadge: View {
     let connection: MCPConnectionRecord
-    var body: some View {
+    public var body: some View {
         if let tool = ToolCatalog.definition(forMCPEndpoint: connection.endpoint) {
             ToolMaturityBadge(maturity: tool.maturity)
         }
     }
+
+    public init(connection: MCPConnectionRecord) {
+        self.connection = connection
+    }
 }
 
 /// One dispatch boundary per supported tool type; MCP owns its form and storage.
-struct ToolCreationSheet: View {
+public struct ToolCreationSheet: View {
     let controller: MCPController
     var onAdded: (UUID) -> Void = { _ in }
     private let onConnect: (MCPConnectionRecord) -> Void
@@ -93,13 +97,13 @@ struct ToolCreationSheet: View {
     @State private var adding = false
     @State private var presetAttempts: [String: UUID] = [:]
 
-    init(controller: MCPController, onAdded: @escaping (UUID) -> Void = { _ in },
+    public init(controller: MCPController, onAdded: @escaping (UUID) -> Void = { _ in },
          onConnect: ((MCPConnectionRecord) -> Void)? = nil) {
         self.controller = controller; self.onAdded = onAdded
         self.onConnect = onConnect ?? controller.connect
     }
 
-    var body: some View {
+    public var body: some View {
         Group {
             if customMCP {
                 MCPEditor(controller: controller, onBack: { customMCP = false }, onSaved: { onAdded($0.id) }, onConnect: onConnect)
@@ -136,7 +140,7 @@ struct ToolCreationSheet: View {
     }
 }
 
-struct ToolCatalogIcon: View {
+public struct ToolCatalogIcon: View {
     let tool: ToolDefinition
     let size: CGFloat
 
@@ -145,7 +149,7 @@ struct ToolCatalogIcon: View {
         return NSImage(contentsOf: url)
     }
 
-    var body: some View {
+    public var body: some View {
         Group {
             if let image = Self.image(for: tool) {
                 Image(nsImage: image).resizable().scaledToFit()

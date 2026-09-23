@@ -1,6 +1,7 @@
 import Foundation
 import XCTest
 @testable import Noodle
+@testable import NoodleRuntimeSettings
 
 @MainActor final class CompanionUpdateCheckerTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)

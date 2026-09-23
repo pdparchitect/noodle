@@ -46,6 +46,7 @@ let package = Package(
     products: [
         .library(name: "NoodleCore", targets: ["NoodleCore"]),
         .library(name: "NoodleRuntime", targets: ["NoodleRuntime"]),
+        .library(name: "NoodleRuntimeSettings", targets: ["NoodleRuntimeSettings"]),
         .executable(name: "Noodle", targets: ["Noodle"]),
         .executable(name: "NoodleMessenger", targets: ["NoodleMessenger"])
     ],
@@ -82,6 +83,13 @@ let package = Package(
         /// Runs bots: harness processes, their discovery probes and message delivery. Shared by the
         /// apps that host bots, with none of their interface.
         .target(name: "NoodleRuntime", dependencies: ["NoodleCore", "NoodleAgentBridge"], swiftSettings: developmentHooks),
+        /// The Harness, Heartbeat and Sandbox settings, shared by the apps that run bots.
+        .target(name: "NoodleRuntimeSettings",
+                dependencies: ["NoodleCore", "NoodleRuntime", .product(name: "NoodleSettingsUI", package: "SettingsUI"),
+                               .product(name: "NoodleWallpaper", package: "Wallpaper"), "NoodleComputerTools", "NoodleMCP",
+                               .product(name: "ComputerBridge", package: "Bridge"), .product(name: "AppletBridge", package: "Protocol"),
+                               .product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "Sparkle", package: "Sparkle")],
+                swiftSettings: developmentHooks),
         .executableTarget(
             name: "NoodleShareExtension",
             dependencies: ["NoodleSharing"],
@@ -90,7 +98,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleRemindersTools", "NoodleMCP", "NoodleSharing", "NoodleRuntime", "NoodleAgentBridge", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge")],
+            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleRemindersTools", "NoodleMCP", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",
@@ -114,7 +122,7 @@ let package = Package(
         ),
         .testTarget(
             name: "NoodleAppTests",
-            dependencies: ["Noodle", "NoodleCore", "NoodleRuntime", "NoodleMCP", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks")],
+            dependencies: ["Noodle", "NoodleCore", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleMCP", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks")],
             swiftSettings: developmentHooks
         ),
         .testTarget(

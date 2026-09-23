@@ -3,6 +3,7 @@ import NoodleCore
 import XCTest
 @testable import Noodle
 @testable import NoodleMCP
+@testable import NoodleRuntimeSettings
 
 /// Exercise the app controller and real workspace IPC. The service uses an empty
 /// credential store, so broker rejection and reconnect paths need no accounts.

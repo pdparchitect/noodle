@@ -14,6 +14,7 @@ let package = Package(
     dependencies: [
         // Noodle itself: the Hub runs bots with the same runtime.
         .package(path: ".."),
+        .package(path: "../Shared/SettingsUI"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
     ],
     targets: [
@@ -25,7 +26,12 @@ let package = Package(
             ]),
         .executableTarget(
             name: "NoodleHub",
-            dependencies: ["HubCore", .product(name: "Sparkle", package: "Sparkle")],
+            dependencies: [
+                "HubCore",
+                .product(name: "NoodleRuntimeSettings", package: "noodle"),
+                .product(name: "NoodleSettingsUI", package: "SettingsUI"),
+                .product(name: "Sparkle", package: "Sparkle"),
+            ],
             swiftSettings: appSettings),
         .testTarget(name: "HubCoreTests", dependencies: ["HubCore"]),
     ],

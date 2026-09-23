@@ -4,6 +4,7 @@ import CoreGraphics
 import Observation
 import SwiftUI
 import UserNotifications
+import NoodleRuntimeSettings
 
 /// A macOS privacy permission a Noodle feature depends on.
 enum AppPermission: String, CaseIterable, Identifiable {

@@ -3,11 +3,11 @@ import SwiftUI
 import NoodleCore
 
 /// The device code a harness asks the user to enter on its own sign-in page.
-struct HarnessSignInChallengeView: View {
+public struct HarnessSignInChallengeView: View {
     let challenge: HarnessSignInChallenge
     @Environment(\.openURL) private var openURL
 
-    var body: some View {
+    public var body: some View {
         HStack {
             Text(challenge.code).font(.system(.body, design: .monospaced)).textSelection(.enabled)
             Button("Copy Code") {
@@ -18,5 +18,9 @@ struct HarnessSignInChallengeView: View {
         }
         Text("Enter this code on the sign-in page.")
             .font(.caption).foregroundStyle(.secondary)
+    }
+
+    public init(challenge: HarnessSignInChallenge) {
+        self.challenge = challenge
     }
 }

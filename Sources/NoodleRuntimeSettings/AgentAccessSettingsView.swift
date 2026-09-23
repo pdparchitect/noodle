@@ -1,15 +1,15 @@
 import SwiftUI
 import NoodleCore
 
-struct AgentAccessSettingsView: View {
-    @Environment(NoodleStore.self) private var store
+public struct AgentAccessSettingsView: View {
+    let store: any BotSettingsHost
     @State private var showsAccessInfo = false
     @State private var showsAppsInfo = false
     @State private var confirming: AccessConfirmation?
     private let accessColumnWidth: CGFloat = 100
     private let appsColumnWidth: CGFloat = 64
 
-    var body: some View {
+    public var body: some View {
         Form {
             Section {
                 if store.agents.isEmpty {
@@ -20,7 +20,7 @@ struct AgentAccessSettingsView: View {
                         let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")
                         let requiresUnrestrictedAccess = provider?.supportsRestrictedAccess == false
                         HStack(alignment: .top, spacing: 12) {
-                            AgentProfileButton(agent: agent)
+                            store.botProfileButton(agent)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(agent.displayName).font(.body)
                                 HStack(spacing: 4) {
@@ -120,6 +120,10 @@ struct AgentAccessSettingsView: View {
             Text(request.message)
         }
     }
+
+    public init(store: any BotSettingsHost) {
+        self.store = store
+    }
 }
 
 private struct AccessConfirmation: Equatable {
@@ -151,7 +155,7 @@ private struct AgentAccessStatusLabel: View {
 
     private var title: String { isExtended ? "unrestricted" : "restricted" }
 
-    var body: some View {
+    public var body: some View {
         if isChanging {
             Text("Restarting runtime…")
                 .font(.caption).foregroundStyle(.secondary)
@@ -181,7 +185,7 @@ private struct AgentAccessInfo: View {
         }
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(isExtended ? "Unrestricted" : "Restricted").font(.headline)
             Text(explanation)
@@ -201,7 +205,7 @@ private struct AgentAppsStatusLabel: View {
     let provider: HarnessProvider?
     @State private var showsInfo = false
 
-    var body: some View {
+    public var body: some View {
         Button("apps") { showsInfo.toggle() }
             .buttonStyle(.plain)
             .foregroundStyle(.orange)
@@ -223,7 +227,7 @@ private struct AgentAppsInfo: View {
         }
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Apps").font(.headline)
             Text("Allows the bot to use apps connected to your \(account) account, such as Gmail, Google Drive, and Calendar, with the permissions you granted there.")

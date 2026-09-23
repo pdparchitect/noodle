@@ -5,6 +5,7 @@ import NoodleCore
 import SwiftUI
 import UniformTypeIdentifiers
 import UserNotifications
+import NoodleRuntimeSettings
 
 enum NoodleNotifications {
     static let conversationIDKey = "conversationID"

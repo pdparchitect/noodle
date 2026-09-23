@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import NoodleCore
+@testable import NoodleRuntimeSettings
 
 // Exercise the production main scene + Settings lifecycle, not an AppKit
 // stand-in. Only synthetic OAuth callbacks are used; no accounts or bots run.

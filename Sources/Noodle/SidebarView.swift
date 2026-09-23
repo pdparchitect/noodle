@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import NoodleCore
 import NoodleRuntime
+import NoodleRuntimeSettings
 
 struct SidebarView: View {
     var focusComposer: () -> Void = {}
@@ -67,7 +68,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .modifier(AgentKickConfirmation(request: $kickRequest))
+        .modifier(AgentKickConfirmation(store: store, request: $kickRequest))
         .scrollContentBackground(.hidden)
         .modifier(ConversationListKeyboardNavigation(
             hasSelection: store.selectedConversationID != nil,

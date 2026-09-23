@@ -1,6 +1,7 @@
 import AppKit
 import NoodleCore
 import SwiftUI
+import NoodleRuntimeSettings
 
 struct CompanionAssignmentItem: Identifiable {
     let id: UUID

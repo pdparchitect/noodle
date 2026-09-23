@@ -1,5 +1,6 @@
 import SwiftUI
 import NoodleCore
+import NoodleRuntimeSettings
 
 struct AgentConfigurationFields: View {
     @Environment(NoodleStore.self) private var store

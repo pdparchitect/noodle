@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-struct CompanionAppsSettingsView: View {
-    @Environment(NoodleStore.self) private var store
+public struct CompanionAppsSettingsView: View {
+    let store: any BotSettingsHost
     @State private var installations: [CompanionApp: CompanionAppInstallation]
     @State private var opening: CompanionApp?
     @State private var actionError: String?
@@ -10,14 +10,16 @@ struct CompanionAppsSettingsView: View {
     private let discoverInstallations: @MainActor () -> [CompanionApp: CompanionAppInstallation]
     private let updateChecker: CompanionUpdateChecker
 
-    @MainActor init(discoverInstallations: @escaping @MainActor () -> [CompanionApp: CompanionAppInstallation] = { CompanionApp.installedApps() },
-                    updateChecker: CompanionUpdateChecker? = nil) {
+    @MainActor public init(store: any BotSettingsHost,
+                           discoverInstallations: @escaping @MainActor () -> [CompanionApp: CompanionAppInstallation] = { CompanionApp.installedApps() },
+                           updateChecker: CompanionUpdateChecker? = nil) {
+        self.store = store
         self.discoverInstallations = discoverInstallations
         self.updateChecker = updateChecker ?? .shared
         _installations = State(initialValue: discoverInstallations())
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             Form {
                 Section {
@@ -105,7 +107,7 @@ struct CompanionAppsSettingsView: View {
     }
 
     private func refresh(forceUpdates: Bool = false) {
-        store.applets.refreshSkills()
+        store.refreshCompanionSkills()
         let current = discoverInstallations()
         if current != installations { installations = current }
         updateChecker.refresh(current, force: forceUpdates)
@@ -128,13 +130,13 @@ struct CompanionAppsSettingsView: View {
                 }
                 switch app {
                 case .browser:
-                    if installed { try await store.browsers.openLibrary() }
+                    if installed { try await store.openCompanionLibrary(.browser) }
                     else { NSWorkspace.shared.open(app.documentationURL) }
                 case .computer:
-                    if installed { try await store.computers.openLibrary() }
-                    else { try await store.computers.openDownload() }
+                    if installed { try await store.openCompanionLibrary(.computer) }
+                    else { try await store.openComputerDownload() }
                 case .applet:
-                    if installed { try await store.applets.openLibrary() }
+                    if installed { try await store.openCompanionLibrary(.applet) }
                     else { NSWorkspace.shared.open(app.documentationURL) }
                 }
             } catch {

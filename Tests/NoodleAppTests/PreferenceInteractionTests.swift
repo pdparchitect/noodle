@@ -4,6 +4,7 @@ import XCTest
 import NoodleCore
 @testable import Noodle
 @testable import NoodleRuntime
+@testable import NoodleRuntimeSettings
 
 @MainActor final class PreferenceInteractionTests: HiddenViewTests {
     private func reopenedDefaults(_ f: StoreFixture) throws -> UserDefaults {
@@ -152,7 +153,7 @@ import NoodleCore
     func testHeartbeatControlsPersistGlobalAndPerBotSettingsAcrossRuntimeRecreation() async throws {
         let f = try fixture()
         f.runtime.runtime.configureHeartbeats(intervalMinutes: 7)
-        let settings = host(HeartbeatsSettingsView().environment(f.store))
+        let settings = host(HeartbeatsSettingsView(store: f.store).environment(f.store))
         _ = try await control("7 minutes", in: settings)
         flip(try await toggle("Heartbeat for Ada", in: settings))
         try await wait { f.runtime.runtime.heartbeatConfiguration.disabledAgentIDs == [f.a.id] }
