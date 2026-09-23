@@ -73,7 +73,7 @@ print "spctl $*" >> "$TEST_LOG"
 
 class DiskImagePublicationTests(unittest.TestCase):
     def test_companion_channels_include_verified_disk_images_before_feeds(self):
-        for product in ['Computer', 'Applet', 'Browser']:
+        for product in ['Computer', 'Applet', 'Browser', 'Hub']:
             for scenario in ['new', 'existing-channel', 'corrupt-dmg', 'missing-dmg']:
                 with self.subTest(product=product, scenario=scenario), tempfile.TemporaryDirectory() as temporary:
                     root = Path(temporary)

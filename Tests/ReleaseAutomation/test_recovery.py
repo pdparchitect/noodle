@@ -12,7 +12,8 @@ spec.loader.exec_module(recovery)
 class RecoveryTests(unittest.TestCase):
     def test_disk_images_are_verified_and_older_runs_can_omit_them(self):
         for product, prefix in [('noodle', 'Noodle'), ('computer', 'Noodle-Computer'),
-                                ('applet', 'Noodle-Applet'), ('browser', 'Noodle-Browser')]:
+                                ('applet', 'Noodle-Applet'), ('browser', 'Noodle-Browser'),
+                                ('hub', 'Noodle-Hub')]:
             with self.subTest(product=product), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 self.assertEqual(recovery.disk_image_assets(root, product), [])
@@ -91,7 +92,8 @@ class RecoveryTests(unittest.TestCase):
         for product, prefix, platform in [('noodle', 'Noodle', 'macOS'),
                                           ('computer', 'Noodle-Computer', 'arm64'),
                                           ('applet', 'Noodle-Applet', 'arm64'),
-                                          ('browser', 'Noodle-Browser', 'arm64')]:
+                                          ('browser', 'Noodle-Browser', 'arm64'),
+                                          ('hub', 'Noodle-Hub', 'arm64')]:
             for name in [f'{prefix}-arm64.zip', f'{prefix}-1.2.3-{platform}.zip']:
                 with self.subTest(product=product, archive=name), tempfile.TemporaryDirectory() as directory:
                     root = Path(directory)

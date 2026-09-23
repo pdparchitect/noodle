@@ -149,6 +149,7 @@ class VersionTests(unittest.TestCase):
         for product, prefix, tag_prefix in [
             ('noodle', 'Noodle', 'v'), ('computer', 'Noodle-Computer', 'computer-v'),
             ('applet', 'Noodle-Applet', 'applet-v'), ('browser', 'Noodle-Browser', 'browser-v'),
+            ('hub', 'Noodle-Hub', 'hub-v'),
         ]:
             with self.subTest(product=product):
                 self.write_version(product, '1.2.3', body='### Fixed\n\n- A release change.')

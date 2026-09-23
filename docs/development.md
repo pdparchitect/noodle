@@ -52,6 +52,8 @@ Use the Applet CLI's explicit `convert --path SOURCE --output NEW_DOCUMENT` to
 copy a package between environments; saved runtime data and live links are not
 transferred. See [Applet development and conversion](../Applet/README.md#dev-and-production-builds).
 
+`scripts/build-and-launch-hub.sh` builds and opens Noodle Hub Dev, which keeps its bots and data apart from both Noodle builds.
+
 ## Documentation changes
 
 Message/event guidance, the Messenger skill, and CLI help come from the message
@@ -88,7 +90,7 @@ The directory also contains a complete file summary and the original SwiftPM
 JSON export. To compare against a saved report, pass
 `--baseline /path/to/previous/summary.json`; changes are percentage points.
 
-The `Validate and release versions` workflow runs the Noodle, Computer, Applet,
+The `Validate and release versions` workflow runs the Noodle, Computer, Applet, Browser, Hub,
 and shared bridge suites for code changes on pull requests and pushes to `main`,
 and on manual runs, even when no version changes. Documentation and website
 changes follow the [CI path filters](releases.md#what-ci-does). Its macOS 26

@@ -51,6 +51,16 @@
             "env": {
                 "NOODLE_APPLET_DATA_CONTAINER": "development"
             }
+        },
+        {
+            "name": "Noodle Hub: Build & Launch Dev",
+            "type": "node-terminal",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "command": "scripts/build-and-launch-hub.sh",
+            "env": {
+                "NOODLE_HUB_DATA_CONTAINER": "development"
+            }
         }
     ]
 }

@@ -12,6 +12,7 @@ Each product has its own version and changelog:
 | Computer | `Computer/VERSION` | `Computer/CHANGELOG.md` | `computer-vX.Y.Z` |
 | Applet | `Applet/VERSION` | `Applet/CHANGELOG.md` | `applet-vX.Y.Z` |
 | Browser | `Browser/VERSION` | `Browser/CHANGELOG.md` | `browser-vX.Y.Z` |
+| Hub | `Hub/VERSION` | `Hub/CHANGELOG.md` | `hub-vX.Y.Z` |
 | Images | `Computer/Images/VERSION` | `Computer/Images/CHANGELOG.md` | `computer-images-vX.Y.Z` |
 
 1. Set the product's version to an unused, higher `X.Y.Z`.
@@ -26,13 +27,13 @@ publication. A new product with no release history and only Unreleased notes
 remains in development until its first dated version section is prepared. PRs validate and test without publishing. A manual workflow run on
 `main` reads the same version files.
 
-See [Computer releases](../Computer/RELEASING.md), [Applet releases](../Applet/RELEASING.md), and [Browser releases](../Browser/RELEASING.md)
+See [Computer releases](../Computer/RELEASING.md), [Applet releases](../Applet/RELEASING.md), [Browser releases](../Browser/RELEASING.md), and [Hub releases](../Hub/RELEASING.md)
 for their separate download channels, and [image releases](../Computer/Images/README.md#publish) for registry checks.
 
 ## Download filenames
 
 App ZIPs use fixed filenames: `Noodle-arm64.zip`, `Noodle-Computer-arm64.zip`,
-`Noodle-Applet-arm64.zip`, and `Noodle-Browser-arm64.zip`, each with a matching `.zip.sha256` file.
+`Noodle-Applet-arm64.zip`, `Noodle-Browser-arm64.zip`, and `Noodle-Hub-arm64.zip`, each with a matching `.zip.sha256` file.
 Each app also ships a signed, notarized disk image with the same basename and
 `.dmg` extension, plus a `.dmg.sha256` checksum. Open the DMG and drag the app to
 Applications. The installer uses a 660 × 400 Finder window, 160-point icons,
@@ -68,16 +69,17 @@ Each product's preparation starts as soon as its own tests pass, in parallel wit
 other suites.
 App preparation includes signing, notarization, stapling, Gatekeeper, and Sparkle
 verification. Image preparation builds and tests both ARM64 images. Tests are
-scoped by product; Computer, Applet, and Browser releases also run Noodle integration coverage.
+scoped by product; Computer, Applet, Browser, and Hub releases also run Noodle integration coverage. Hub preparation
+also waits for Noodle's tests, because the Hub ships Noodle's runtime.
 
 CI tags the checked commit and publishes the exact prepared artifacts. When
-released together, images publish first, then Computer, then Noodle. Applet and Browser publish independently of images and before Noodle. App releases
+released together, images publish first, then Computer, then Noodle. Applet, Browser, and Hub publish independently of images, and Applet and Browser before Noodle. App releases
 remain drafts until their ZIP, DMG, checksums, signed feed, and notes are uploaded.
 DMGs are built from the same stapled apps as the ZIPs, then signed, notarized,
 stapled, and assessed by Gatekeeper before their checksums are generated. They are
 created after Sparkle feed generation so automatic updates continue using ZIPs.
 A successful run requires every selected product to finish publishing.
-Computer, Applet, and Browser releases never replace Noodle's repository-wide latest release.
+Computer, Applet, Browser, and Hub releases never replace Noodle's repository-wide latest release.
 
 Noodle preparation uses GitHub's official [`xcode-27` image](https://github.com/actions/runner-images/issues/14404)
 and requires SDK 27 so the downloaded app includes the newer Apple and MLX features.
@@ -99,8 +101,8 @@ the image build workflow. These are native
 **Assemble Noodle Suite** runs after a successful main release workflow or verified
 artifact recovery. It can also be run manually on `main`. It packages the latest
 published stable Noodle, Computer, and Applet releases; Browser joins after its
-first stable release. Drafts, prereleases, and unreleased working-tree versions
-are excluded. Suite requires macOS 26 and Apple silicon.
+first stable release. Hub is not part of the suite: it runs on a separate Mac. Drafts,
+prereleases, and unreleased working-tree versions are excluded. Suite requires macOS 26 and Apple silicon.
 
 App release builds remain version-driven: a Computer patch builds Computer, while
 Suite reuses the other published app bundles. Suite never invokes an app compiler,

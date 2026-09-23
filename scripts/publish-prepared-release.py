@@ -38,6 +38,7 @@ def validate(run, jobs, artifacts):
         ('computer', 'computer-release-assets', 'prepare-computer / release'),
         ('applet', 'applet-release-assets', 'prepare-applet / release'),
         ('browser', 'browser-release-assets', 'prepare-browser / release'),
+        ('hub', 'hub-release-assets', 'prepare-hub / release'),
         ('noodle', 'noodle-release-assets', 'prepare-noodle / release'),
     ]:
         matches = [a for a in artifacts if a['name'] == artifact and not a['expired']]
@@ -79,6 +80,7 @@ def release_archive(directory, product, version):
         'computer': ('Noodle-Computer', 'arm64'),
         'applet': ('Noodle-Applet', 'arm64'),
         'browser': ('Noodle-Browser', 'arm64'),
+        'hub': ('Noodle-Hub', 'arm64'),
     }[product]
     candidates = [f'{prefix}-arm64.zip', f'{prefix}-{version}-{legacy_platform}.zip']
     present = [name for name in candidates if (directory / name).exists()
@@ -92,7 +94,7 @@ def release_archive(directory, product, version):
 
 def disk_image_assets(directory, product, required=False):
     prefix = {'noodle': 'Noodle', 'computer': 'Noodle-Computer',
-              'applet': 'Noodle-Applet', 'browser': 'Noodle-Browser'}[product]
+              'applet': 'Noodle-Applet', 'browser': 'Noodle-Browser', 'hub': 'Noodle-Hub'}[product]
     name = f'{prefix}-arm64.dmg'
     manifest = name + '.sha256'
     # Old prepared runs predate DMGs; a partial pair must still fail validation.
@@ -162,6 +164,14 @@ def main():
             destination.parent.mkdir(exist_ok=True)
             shutil.copytree(directory, destination)
             command('zsh', 'scripts/publish-browser-release.sh', version, str(destination / 'release-notes.md'))
+        if 'hub' in downloads:
+            version, _ = versions.version('hub')
+            directory = downloads['hub']
+            release_archive(directory, 'hub', version)
+            destination = ROOT / 'dist' / f'hub-{version}'
+            destination.parent.mkdir(exist_ok=True)
+            shutil.copytree(directory, destination)
+            command('zsh', 'scripts/publish-hub-release.sh', version, str(destination / 'release-notes.md'))
         if 'noodle' in downloads:
             version, tag = versions.version('noodle')
             directory = downloads['noodle']

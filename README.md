@@ -93,6 +93,7 @@ Each browser keeps its own sign-ins and browsing data.
 - [Noodle Computer](Computer/README.md)
 - [Noodle Applet](Applet/README.md)
 - [Noodle Browser](Browser/README.md)
+- [Noodle Hub](Hub/README.md)
 - [Architecture](docs/architecture.md)
 - [Security and privacy](docs/security.md)
 - [Development and testing](docs/development.md)

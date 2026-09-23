@@ -13,6 +13,7 @@ on:
       - 'Computer/CHANGELOG.md'
       - 'Applet/CHANGELOG.md'
       - 'Browser/CHANGELOG.md'
+      - 'Hub/CHANGELOG.md'
       - 'Computer/Images/CHANGELOG.md'
   pull_request:
     paths:
@@ -24,6 +25,7 @@ on:
       - 'Computer/CHANGELOG.md'
       - 'Applet/CHANGELOG.md'
       - 'Browser/CHANGELOG.md'
+      - 'Hub/CHANGELOG.md'
       - 'Computer/Images/CHANGELOG.md'
   workflow_dispatch:
 
@@ -50,6 +52,7 @@ jobs:
       computer: ${{ steps.versions.outputs.computer }}
       applet: ${{ steps.versions.outputs.applet }}
       browser: ${{ steps.versions.outputs.browser }}
+      hub: ${{ steps.versions.outputs.hub }}
       images: ${{ steps.versions.outputs.images }}
       any: ${{ steps.versions.outputs.any }}
       products: ${{ steps.versions.outputs.products }}
@@ -80,6 +83,7 @@ jobs:
           swift Computer/Tests/ReleaseWorkflowTests.swift "$PWD"
           swift Applet/Tests/ReleaseWorkflowTests.swift "$PWD"
           swift Browser/Tests/ReleaseWorkflowTests.swift "$PWD"
+          swift Hub/Tests/ReleaseWorkflowTests.swift "$PWD"
 
   test-noodle:
     needs: [versions, checks]
@@ -200,6 +204,17 @@ jobs:
       - name: Test Browser
         run: swift test --disable-sandbox --package-path Browser --scratch-path .build/browser
 
+  test-hub:
+    needs: [versions, checks]
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - name: Test Hub
+        run: swift test --disable-sandbox --package-path Hub --scratch-path .build/hub
+
   # Each preparation waits only for its own product's tests, so a companion is not signed
   # behind Noodle's long suite. The tag job below still requires every selected test.
   prepare-noodle:
@@ -231,24 +246,33 @@ jobs:
     uses: ./.github/workflows/browser-release.yml
     secrets: inherit
 
+  # The Hub ships Noodle's runtime and helpers, so it also waits for Noodle's own tests.
+  prepare-hub:
+    needs: [versions, checks, test-hub, test-noodle]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.hub == 'true'
+    uses: ./.github/workflows/hub-release.yml
+    secrets: inherit
+
   tag:
-    needs: [versions, workflow-lint, checks, test-noodle, test-noodle-macos27, test-computer, test-applet, test-browser, test-bridge, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-images]
+    needs: [versions, workflow-lint, checks, test-noodle, test-noodle-macos27, test-computer, test-applet, test-browser, test-hub, test-bridge, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-images]
     # Explicitly accept unselected/skipped products, never a failed/cancelled build.
     if: >-
       always() && !cancelled() && github.event_name != 'pull_request' &&
       github.ref == 'refs/heads/main' && needs.versions.outputs.any == 'true' &&
       needs.workflow-lint.result == 'success' &&
       needs.checks.result == 'success' &&
-      ((needs.versions.outputs.noodle != 'true' && needs.versions.outputs.computer != 'true' && needs.versions.outputs.applet != 'true' && needs.versions.outputs.browser != 'true') ||
+      ((needs.versions.outputs.noodle != 'true' && needs.versions.outputs.computer != 'true' && needs.versions.outputs.applet != 'true' && needs.versions.outputs.browser != 'true' && needs.versions.outputs.hub != 'true') ||
        (needs.test-noodle.result == 'success' && needs.test-bridge.result == 'success')) &&
       (needs.versions.outputs.computer != 'true' || needs.test-computer.result == 'success') &&
       (needs.versions.outputs.applet != 'true' || needs.test-applet.result == 'success') &&
       (needs.versions.outputs.browser != 'true' || needs.test-browser.result == 'success') &&
+      (needs.versions.outputs.hub != 'true' || needs.test-hub.result == 'success') &&
       (needs.versions.outputs.noodle != 'true' || needs.test-noodle-macos27.result == 'success') &&
       (needs.versions.outputs.noodle != 'true' || needs.prepare-noodle.result == 'success') &&
       (needs.versions.outputs.computer != 'true' || needs.prepare-computer.result == 'success') &&
       (needs.versions.outputs.applet != 'true' || needs.prepare-applet.result == 'success') &&
       (needs.versions.outputs.browser != 'true' || needs.prepare-browser.result == 'success') &&
+      (needs.versions.outputs.hub != 'true' || needs.prepare-hub.result == 'success') &&
       (needs.versions.outputs.images != 'true' || needs.prepare-images.result == 'success')
     runs-on: ubuntu-latest
     permissions:
@@ -383,6 +407,34 @@ jobs:
           cd ../..
           zsh scripts/publish-browser-release.sh "$BROWSER_VERSION" "dist/browser-$BROWSER_VERSION/release-notes.md"
 
+  publish-hub:
+    needs: [versions, tag]
+    if: >-
+      always() && !cancelled() && needs.tag.result == 'success' &&
+      needs.versions.outputs.hub == 'true'
+    runs-on: macos-26
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Read Hub version
+        run: echo "HUB_VERSION=$(cat Hub/VERSION)" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v7
+        with:
+          name: hub-release-assets
+          path: dist/hub-${{ env.HUB_VERSION }}
+      - name: Publish the verified Hub archive and update channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "dist/hub-$HUB_VERSION"
+          shasum -a 256 -c Noodle-Hub-arm64.zip.sha256
+          shasum -a 256 -c Noodle-Hub-arm64.dmg.sha256
+          cd ../..
+          zsh scripts/publish-hub-release.sh "$HUB_VERSION" "dist/hub-$HUB_VERSION/release-notes.md"
+
   publish-noodle:
     needs: [versions, tag, publish-images, publish-computer, publish-applet, publish-browser]
     if: >-
@@ -424,7 +476,7 @@ jobs:
           gh release edit "$tag" --draft=false --latest
 
   complete:
-    needs: [versions, tag, publish-images, publish-computer, publish-applet, publish-browser, publish-noodle]
+    needs: [versions, tag, publish-images, publish-computer, publish-applet, publish-browser, publish-hub, publish-noodle]
     if: always() && github.event_name != 'pull_request' && needs.versions.outputs.any == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -435,6 +487,7 @@ jobs:
           COMPUTER_RESULT: ${{ needs.publish-computer.result }}
           APPLET_RESULT: ${{ needs.publish-applet.result }}
           BROWSER_RESULT: ${{ needs.publish-browser.result }}
+          HUB_RESULT: ${{ needs.publish-hub.result }}
           NOODLE_RESULT: ${{ needs.publish-noodle.result }}
         run: |
           python3 - <<'PY'
