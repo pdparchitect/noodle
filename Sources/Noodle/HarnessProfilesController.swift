@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import NoodleCore
+import NoodleRuntime
 
 /// Noodle-owned harness logins. Each profile signs in through the same
 /// account-only session as the system profile, pointed at its own home.

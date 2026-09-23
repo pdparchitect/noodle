@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import NoodleCore
 import NoodleSettingsUI
+import NoodleRuntime
 
 enum NoodleSettingsTab: Hashable {
     case general, chat, harnesses, mcps, heartbeats, sandbox, keybindings, permissions, companions, updates

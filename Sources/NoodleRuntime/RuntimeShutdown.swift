@@ -1,12 +1,12 @@
 import Foundation
 
-@MainActor protocol RuntimeStopConnection: AnyObject {
+@MainActor package protocol RuntimeStopConnection: AnyObject {
     func stop(reply: @escaping (Bool) -> Void)
 }
 
 /// A failed stop must keep its transport: absence of a connection is not proof
 /// that its runtime exited. All callers share one outstanding confirmation.
-@MainActor final class RuntimeShutdown {
+@MainActor package final class RuntimeShutdown {
     private var connection: (any RuntimeStopConnection)?
     private var attempt: UUID?
     private var completions: [(Bool) -> Void] = []

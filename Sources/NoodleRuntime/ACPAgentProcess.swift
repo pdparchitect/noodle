@@ -4,8 +4,8 @@ import NoodleCore
 /// Persistent ACP transport. Agent output stays in the harness; Messenger is
 /// the sole author of user-visible messages, just as for Codex and Claude.
 @MainActor
-final class ACPAgentProcess: AgentRuntimeProcess {
-    let configuration: AgentRecord
+package final class ACPAgentProcess: AgentRuntimeProcess {
+    package let configuration: AgentRecord
     private let provider: HarnessProvider
     private var name: String { provider.displayName }
     private let executableURL: URL
@@ -45,7 +45,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
     private var startupTimeout: Task<Void, Never>?
     private lazy var trace = RuntimeTrace(agentID: configuration.id, provider: provider, workspace: workspaceURL)
 
-    private(set) var snapshot: AgentRuntimeSnapshot
+    package private(set) var snapshot: AgentRuntimeSnapshot
 
     init(provider: HarnessProvider, agent: AgentRecord, executableURL: URL, workspaceURL: URL, extendedAccess: Bool,
          recoverInterruptedWork: Bool,
@@ -77,11 +77,11 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         snapshot = .init(agentID: agent.id, phase: .offline, detail: "Not started")
     }
 
-    var isAlive: Bool { running || paused || (!extendedAccess && !provider.supportsRestrictedAccess) }
-    var hasInterruptedWork: Bool { recoveryPending || turnIsActive || notificationPending || turnRecovery.hasUnfinishedTurn }
-    var canReceiveHeartbeat: Bool { running && snapshot.phase == .ready && !turnIsActive && !notificationPending }
+    package var isAlive: Bool { running || paused || (!extendedAccess && !provider.supportsRestrictedAccess) }
+    package var hasInterruptedWork: Bool { recoveryPending || turnIsActive || notificationPending || turnRecovery.hasUnfinishedTurn }
+    package var canReceiveHeartbeat: Bool { running && snapshot.phase == .ready && !turnIsActive && !notificationPending }
 
-    func start() {
+    package func start() {
         guard connection == nil, !paused, !shutdown.isPending else { return }
         guard extendedAccess || provider.supportsRestrictedAccess else { update(.failed, "\(name) requires unrestricted access in Settings → Sandbox"); return }
         stopped = false
@@ -147,7 +147,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         } catch { terminated(error.localizedDescription) }
     }
 
-    func stop(completion: @escaping (Bool) -> Void) {
+    package func stop(completion: @escaping (Bool) -> Void) {
         connectionID = nil
         stopped = true
         running = false
@@ -165,7 +165,7 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         shutdown.stop(connection, completion: completion)
     }
     @discardableResult
-    func notify(immediately: Bool = false) -> UUID {
+    package func notify(immediately: Bool = false) -> UUID {
         RuntimeDiagnostics.notificationQueued(agentID: configuration.id, coalesced: notificationPending)
         let notificationID = notifications.enqueue(immediately: immediately)
         guard !paused else { return notificationID }
@@ -174,11 +174,11 @@ final class ACPAgentProcess: AgentRuntimeProcess {
         return notificationID
     }
 
-    func promoteNotification(_ id: UUID) {
+    package func promoteNotification(_ id: UUID) {
         notifications.promote(id)
         sendPending()
     }
-    func heartbeat() { if canReceiveHeartbeat { startTurn(.heartbeat) } }
+    package func heartbeat() { if canReceiveHeartbeat { startTurn(.heartbeat) } }
 
     private func openSession() {
         var params: [String: Any] = ["cwd": workspaceURL.path, "mcpServers": []]

@@ -2,6 +2,7 @@ import Foundation
 import XCTest
 @testable import NoodleCore
 @testable import Noodle
+@testable import NoodleRuntime
 
 @MainActor private final class InstallerFixture: HarnessInstalling {
     let store: ManagedHarnessStore

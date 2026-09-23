@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import NoodleCore
+import NoodleRuntime
 
 /// The first-run flow: choose a harness, get it ready, name the bot. It owns
 /// only the order of those steps; installing, signing in and creating the bot

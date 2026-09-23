@@ -5,6 +5,7 @@ import NoodleCalendarTools
 import NoodleCore
 import NoodleRemindersTools
 import UniformTypeIdentifiers
+import NoodleRuntime
 
 private struct TranscriptSnapshot: Sendable {
     let conversations: [BotConversation]

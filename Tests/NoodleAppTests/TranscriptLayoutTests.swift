@@ -3,6 +3,7 @@ import SwiftUI
 import XCTest
 import NoodleCore
 @testable import Noodle
+@testable import NoodleRuntime
 
 @MainActor final class TranscriptLayoutTests: XCTestCase {
     // A main-queue timeout cannot detect a main-thread SwiftUI layout loop.

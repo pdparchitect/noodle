@@ -1,5 +1,6 @@
 import AppKit
 import NoodleCore
+import NoodleRuntime
 
 @MainActor
 final class AgentActivityWindows {

@@ -5,17 +5,17 @@ swift build --build-system native --disable-sandbox --package-path "$project_roo
 bin_path="$(swift build --build-system native --disable-sandbox --package-path "$project_root" --show-bin-path)"
 core_objects=("${(@f)$(python3 "$project_root/Tests/core-link-objects.py" "$bin_path")}")
 
-swiftc -parse-as-library -I "$bin_path/Modules" \
-    "$project_root/Sources/Noodle/AgentRuntimeProcess.swift" \
-    "$project_root/Sources/Noodle/CodexAgentProcess.swift" \
-    "$project_root/Sources/Noodle/RuntimeShutdown.swift" \
-    "$project_root/Sources/Noodle/HarnessRuntimeConnection.swift" \
-    "$project_root/Sources/Noodle/ClaudeAgentProcess.swift" \
-    "$project_root/Sources/Noodle/ACPAgentProcess.swift" \
-    "$project_root/Sources/Noodle/MuseAgentProcess.swift" \
-    "$project_root/Sources/Noodle/AntigravityAgentProcess.swift" \
-    "$project_root/Sources/Noodle/MessageDeliveryClassifier.swift" \
-    "$project_root/Sources/Noodle/MessageDeliveryRouter.swift" \
+swiftc -parse-as-library -package-name noodle -I "$bin_path/Modules" \
+    "$project_root/Sources/NoodleRuntime/AgentRuntimeProcess.swift" \
+    "$project_root/Sources/NoodleRuntime/CodexAgentProcess.swift" \
+    "$project_root/Sources/NoodleRuntime/RuntimeShutdown.swift" \
+    "$project_root/Sources/NoodleRuntime/HarnessRuntimeConnection.swift" \
+    "$project_root/Sources/NoodleRuntime/ClaudeAgentProcess.swift" \
+    "$project_root/Sources/NoodleRuntime/ACPAgentProcess.swift" \
+    "$project_root/Sources/NoodleRuntime/MuseAgentProcess.swift" \
+    "$project_root/Sources/NoodleRuntime/AntigravityAgentProcess.swift" \
+    "$project_root/Sources/NoodleRuntime/MessageDeliveryClassifier.swift" \
+    "$project_root/Sources/NoodleRuntime/MessageDeliveryRouter.swift" \
     "$project_root/Tests/message-delivery.swift" \
     "${core_objects[@]}" \
     -o "$project_root/.build/MessageDeliveryChecks"

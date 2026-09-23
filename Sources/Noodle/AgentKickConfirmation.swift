@@ -1,5 +1,6 @@
 import SwiftUI
 import NoodleCore
+import NoodleRuntime
 
 /// Attach to the containing view so closing a context menu cannot dismiss the alert.
 struct AgentKickConfirmation: ViewModifier {

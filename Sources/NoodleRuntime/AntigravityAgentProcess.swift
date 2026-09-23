@@ -5,8 +5,8 @@ import NoodleCore
 /// one line in and one `result` out per turn. The visible response is
 /// intentionally ignored: Noodle agents communicate through the Messenger CLI.
 @MainActor
-final class AntigravityAgentProcess: AgentRuntimeProcess {
-    let configuration: AgentRecord
+package final class AntigravityAgentProcess: AgentRuntimeProcess {
+    package let configuration: AgentRecord
     private let executableURL: URL
     private let workspaceURL: URL
     private let extendedAccess: Bool
@@ -34,7 +34,7 @@ final class AntigravityAgentProcess: AgentRuntimeProcess {
     private var lastErrorText: String?
     private lazy var trace = RuntimeTrace(agentID: configuration.id, provider: .antigravity, workspace: workspaceURL)
 
-    private(set) var snapshot: AgentRuntimeSnapshot
+    package private(set) var snapshot: AgentRuntimeSnapshot
 
     init(
         agent: AgentRecord,
@@ -66,7 +66,7 @@ final class AntigravityAgentProcess: AgentRuntimeProcess {
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
     }
 
-    func start() {
+    package func start() {
         guard connection == nil, !shutdown.isPending else { return }
         intentionallyStopped = false
         terminationReported = false
@@ -138,7 +138,7 @@ final class AntigravityAgentProcess: AgentRuntimeProcess {
         }
     }
 
-    func stop(completion: @escaping (Bool) -> Void = { _ in }) {
+    package func stop(completion: @escaping (Bool) -> Void = { _ in }) {
         trace.finish(.runtimeStopped)
         connectionID = nil
         startupTimeout?.cancel()
@@ -155,7 +155,7 @@ final class AntigravityAgentProcess: AgentRuntimeProcess {
     }
 
     @discardableResult
-    func notify(immediately: Bool = false) -> UUID {
+    package func notify(immediately: Bool = false) -> UUID {
         RuntimeDiagnostics.notificationQueued(agentID: configuration.id, coalesced: notificationPending)
         let notificationID = notifications.enqueue(immediately: immediately)
         if connection == nil { start() }
@@ -163,22 +163,22 @@ final class AntigravityAgentProcess: AgentRuntimeProcess {
         return notificationID
     }
 
-    func promoteNotification(_ id: UUID) {
+    package func promoteNotification(_ id: UUID) {
         notifications.promote(id)
         sendPendingNotificationIfPossible()
     }
 
-    var canReceiveHeartbeat: Bool {
+    package var canReceiveHeartbeat: Bool {
         running && snapshot.phase == .ready && !turnIsActive && !notificationPending
     }
 
-    var isAlive: Bool { running }
+    package var isAlive: Bool { running }
 
-    var hasInterruptedWork: Bool {
+    package var hasInterruptedWork: Bool {
         recoveryPending || turnIsActive || notificationPending || turnRecovery.hasUnfinishedTurn
     }
 
-    func heartbeat() {
+    package func heartbeat() {
         guard canReceiveHeartbeat else { return }
         startTurn(reason: .heartbeat)
     }

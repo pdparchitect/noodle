@@ -3,6 +3,7 @@ import SwiftUI
 import XCTest
 import NoodleCore
 @testable import Noodle
+@testable import NoodleRuntime
 
 @MainActor final class PreferenceInteractionTests: HiddenViewTests {
     private func reopenedDefaults(_ f: StoreFixture) throws -> UserDefaults {

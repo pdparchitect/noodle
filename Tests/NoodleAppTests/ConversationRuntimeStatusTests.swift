@@ -2,6 +2,7 @@ import SwiftUI
 import XCTest
 import NoodleCore
 @testable import Noodle
+@testable import NoodleRuntime
 
 @MainActor final class ConversationRuntimeStatusTests: XCTestCase {
     func testWorkingWinsOverFailureAndFailureOverReady() {

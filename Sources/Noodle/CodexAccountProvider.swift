@@ -1,5 +1,6 @@
 import Foundation
 import NoodleCore
+import NoodleRuntime
 
 /// Codex reports its account by being run. The app does that itself for a Codex
 /// it can execute. A copy Noodle installed sits in the app's container, where

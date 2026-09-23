@@ -2,6 +2,7 @@ import Foundation
 import NoodleCore
 import XCTest
 @testable import Noodle
+@testable import NoodleRuntime
 
 /// Deliberately returns late answers after cancellation, like an external callback.
 @MainActor final class RoutingGate<Value: Sendable> {

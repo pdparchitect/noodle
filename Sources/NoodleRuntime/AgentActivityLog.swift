@@ -2,21 +2,28 @@ import Foundation
 import NoodleCore
 
 /// Display-only observations. These never acknowledge messages or drive a runtime.
-struct AgentActivityEvent {
+package struct AgentActivityEvent {
     var title: String
     var detail = ""
     var streamID: String? = nil
     var appending = false
+
+    package init(title: String, detail: String = "", streamID: String? = nil, appending: Bool = false) {
+        self.title = title
+        self.detail = detail
+        self.streamID = streamID
+        self.appending = appending
+    }
 }
 
-struct AgentActivityEntry: Equatable {
-    let id: UUID
+package struct AgentActivityEntry: Equatable {
+    package let id: UUID
     let date: Date
     var title: String
     var detail: String
     var streamID: String?
 
-    var text: String {
+    package var text: String {
         let time = date.formatted(.dateTime.hour().minute().second())
         let output = detail.trimmingCharacters(in: .newlines)
         return "[\(time)] \(title)\n" + (output.isEmpty ? "" : "\(output)\n")
@@ -26,9 +33,9 @@ struct AgentActivityEntry: Equatable {
 }
 
 @MainActor
-final class AgentActivityLog {
-    private(set) var entries: [AgentActivityEntry] = []
-    private(set) var revision = 0
+package final class AgentActivityLog {
+    package private(set) var entries: [AgentActivityEntry] = []
+    package private(set) var revision = 0
     private(set) var byteCount = 0
     private(set) var status = "Not started"
     private var phase: AgentRuntimePhase?
@@ -40,7 +47,7 @@ final class AgentActivityLog {
         self.byteLimit = max(1024, byteLimit)
     }
 
-    func record(_ event: AgentActivityEvent, at date: Date = Date()) {
+    package func record(_ event: AgentActivityEvent, at date: Date = Date()) {
         let title = Self.bounded(event.title, bytes: 256)
         let streamID = event.streamID.map { Self.bounded($0, bytes: 512) }
         let detail = Self.bounded(event.detail, bytes: min(16 * 1024, byteLimit - 768))
@@ -74,13 +81,13 @@ final class AgentActivityLog {
         record(.init(title: snapshot.detail))
     }
 
-    func clear() {
+    package func clear() {
         entries.removeAll()
         byteCount = 0
         revision &+= 1
     }
 
-    var text: String { entries.map(\.text).joined() }
+    package var text: String { entries.map(\.text).joined() }
 
     /// Retain recent output, trim oversized payloads, and remove terminal controls.
     static func bounded(_ text: String, bytes: Int) -> String {
@@ -94,10 +101,10 @@ final class AgentActivityLog {
 }
 
 @MainActor
-final class AgentActivityStore {
+package final class AgentActivityStore {
     private var logs: [UUID: AgentActivityLog] = [:]
 
-    func log(for agentID: UUID) -> AgentActivityLog {
+    package func log(for agentID: UUID) -> AgentActivityLog {
         if let log = logs[agentID] { return log }
         let log = AgentActivityLog()
         logs[agentID] = log

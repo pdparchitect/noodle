@@ -2,6 +2,7 @@ import AppKit
 import NoodleCore
 import XCTest
 @testable import Noodle
+@testable import NoodleRuntime
 
 @MainActor final class AgentActivityTests: XCTestCase {
     func testAppleStatusesAndToolResultsReachWindowLog() {

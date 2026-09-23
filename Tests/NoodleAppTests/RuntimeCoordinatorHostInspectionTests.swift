@@ -2,6 +2,7 @@ import Foundation
 import NoodleCore
 import XCTest
 @testable import Noodle
+@testable import NoodleRuntime
 
 @MainActor private final class HostInspectionFixture {
     var answers: [HarnessProvider: Result<HarnessHostInspection, Error>] = [:]

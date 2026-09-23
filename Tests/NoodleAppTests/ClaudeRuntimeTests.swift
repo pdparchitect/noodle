@@ -2,6 +2,7 @@ import Foundation
 import NoodleCore
 import XCTest
 @testable import Noodle
+@testable import NoodleRuntime
 
 @MainActor final class ClaudeRuntimeTests: XCTestCase {
     private func fixture() throws -> HarnessRuntimeFixture {

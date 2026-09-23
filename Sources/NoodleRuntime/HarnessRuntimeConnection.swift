@@ -3,7 +3,7 @@ import NoodleCore
 
 /// Testable transport boundary around the signed helper. Access selection stays
 /// here so injected connections cannot change the shipped launch policy.
-@MainActor protocol HarnessRuntimeConnection: RuntimeStopConnection {
+@MainActor package protocol HarnessRuntimeConnection: RuntimeStopConnection {
     var onData: ((Data, Bool) -> Void)? { get set }
     var onExit: ((Int32) -> Void)? { get set }
     var onFailure: ((String) -> Void)? { get set }
@@ -16,7 +16,7 @@ import NoodleCore
 }
 
 extension ExtendedAgentConnection: HarnessRuntimeConnection {
-    @MainActor func startHarness(provider: HarnessProvider, agentID: UUID, executablePath: String,
+    @MainActor package func startHarness(provider: HarnessProvider, agentID: UUID, executablePath: String,
                                 extendedAccess: Bool, appsEnabled: Bool, sessionID: UUID?, resumeSession: Bool,
                                 modelIdentifier: String?, effortIdentifier: String?,
                                 reply: @escaping (Int32, String?) -> Void) {

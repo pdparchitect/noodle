@@ -1,5 +1,6 @@
 import SwiftUI
 import NoodleCore
+import NoodleRuntime
 
 struct FirstBotSetupSheet: View {
     @Environment(NoodleStore.self) private var store

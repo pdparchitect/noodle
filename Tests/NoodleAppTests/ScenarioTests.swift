@@ -4,6 +4,7 @@ import NoodleCore
 import NoodleLaunchChecks
 import XCTest
 @testable import Noodle
+@testable import NoodleRuntime
 
 /// Scenarios are loaded by path from `Scenarios/` at the repository root. Every folder there is
 /// loaded, seeded and played here, so a scenario that no longer fits the app fails before a capture run does.

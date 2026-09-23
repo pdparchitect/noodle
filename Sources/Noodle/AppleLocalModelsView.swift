@@ -1,6 +1,7 @@
 import AppKit
 import NoodleCore
 import SwiftUI
+import NoodleRuntime
 
 struct AppleLocalModelsView: View {
     @Environment(NoodleStore.self) private var store

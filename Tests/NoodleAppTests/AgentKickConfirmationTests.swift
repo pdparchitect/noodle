@@ -4,6 +4,7 @@ import SwiftUI
 import XCTest
 import NoodleCore
 @testable import Noodle
+@testable import NoodleRuntime
 
 @MainActor final class AgentKickConfirmationTests: XCTestCase {
     func testNativeConfirmationCancelsWithoutChangesAndRecoversOnlyAfterApproval() async throws {

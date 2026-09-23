@@ -3,7 +3,7 @@ import NoodleCore
 
 
 @MainActor
-protocol AgentRuntimeProcess: AnyObject {
+package protocol AgentRuntimeProcess: AnyObject {
     var configuration: AgentRecord { get }
     var snapshot: AgentRuntimeSnapshot { get }
     var isAlive: Bool { get }
@@ -23,15 +23,15 @@ extension AgentRuntimeProcess {
 /// Construction is injected after workspace and access checks, so tests exercise
 /// the same coordinator policy without launching a harness or an XPC helper.
 @MainActor
-struct AgentRuntimeLaunch {
-    let agent: AgentRecord
+package struct AgentRuntimeLaunch {
+    package let agent: AgentRecord
     let provider: HarnessProvider
     let executableURL: URL
     let workspaceURL: URL
     let extendedAccess: Bool
     let appsEnabled: Bool
     let recoverInterruptedWork: Bool
-    let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
+    package let onSnapshot: @MainActor (AgentRuntimeSnapshot) -> Void
     let onHeartbeat: @MainActor () -> Void
     let onUnexpectedTermination: @MainActor (any AgentRuntimeProcess, String, Bool) -> Void
     var onActivity: @MainActor ([String: Any]) -> Void = { _ in }

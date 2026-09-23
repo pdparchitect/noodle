@@ -6,6 +6,7 @@ import NoodleCore
 import NoodleLaunchChecks
 import SwiftUI
 import UniformTypeIdentifiers
+import NoodleRuntime
 
 /// A screenshot scenario: `Scenarios/NAME/scenario.json`, replayed through the real repository with
 /// scripted bots in place of harnesses. Development builds only; the format is in Scenarios/README.md.

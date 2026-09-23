@@ -2,6 +2,7 @@ import Foundation
 import NoodleCore
 import XCTest
 @testable import Noodle
+@testable import NoodleRuntime
 
 @MainActor final class AntigravityRuntimeTests: XCTestCase {
     private let conversation = "8dd9b97a-fa4d-41e8-932b-b2446bfde88a"

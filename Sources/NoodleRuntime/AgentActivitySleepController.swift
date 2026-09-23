@@ -1,7 +1,7 @@
 import Foundation
 
 @MainActor
-final class AgentActivitySleepController {
+package final class AgentActivitySleepController {
     private var activity: NSObjectProtocol?
 
     func update(shouldPreventIdleSleep: Bool) {

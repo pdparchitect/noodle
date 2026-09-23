@@ -2,6 +2,7 @@ import Foundation
 import NoodleCore
 import XCTest
 @testable import Noodle
+@testable import NoodleRuntime
 
 @MainActor final class HarnessWire: HarnessRuntimeConnection {
     var onData: ((Data, Bool) -> Void)?

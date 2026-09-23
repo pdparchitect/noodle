@@ -2,6 +2,7 @@ import Foundation
 import NoodleCore
 import XCTest
 @testable import Noodle
+@testable import NoodleRuntime
 
 private final class HostLinkFixture: AgentHostRequestLink {
     var onFailure: ((String) -> Void)?

@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import NoodleCore
+import NoodleRuntime
 
 @MainActor protocol HarnessInstalling {
     func manages(_ installation: HarnessInstallation) -> Bool

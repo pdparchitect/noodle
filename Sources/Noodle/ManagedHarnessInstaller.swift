@@ -1,6 +1,7 @@
 import Foundation
 import NoodleCore
 import OSLog
+import NoodleRuntime
 
 /// The sandboxed app downloads and unpacks. It cannot make the result runnable:
 /// the Agent Host checks the vendor's signature and moves it into place.

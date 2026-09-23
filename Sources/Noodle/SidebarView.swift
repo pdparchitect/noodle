@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import NoodleCore
+import NoodleRuntime
 
 struct SidebarView: View {
     var focusComposer: () -> Void = {}

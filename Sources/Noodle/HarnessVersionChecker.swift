@@ -1,5 +1,6 @@
 import Foundation
 import NoodleCore
+import NoodleRuntime
 
 @MainActor final class HarnessVersionChecker: HarnessVersionChecking {
     private let inspect: @MainActor (HarnessInstallation) async throws -> HarnessVersionReport
