@@ -454,9 +454,7 @@ private struct LibraryView: View {
                 Color(red: 0.53, green: 0.61, blue: 0.39),
               ], startPoint: .topLeading, endPoint: .bottomTrailing)
           if let image = NSImage(contentsOf: thumbnail) {
-            Image(nsImage: image).resizable().aspectRatio(contentMode: .fill).frame(
-              height: 160
-            ).clipped()
+            NoodletThumbnail(image: image)
           } else {
             Image(
               systemName: entry.package.manifest.symbol
@@ -532,5 +530,17 @@ private struct LibraryView: View {
         delegate.library.choosePackage(open: delegate.runtime.open)
       }.keyboardShortcut("o")
     }
+  }
+}
+
+/// A noodlet's preview image, filling the card's tile. An aspect-fill image is wider than the
+/// tile, so it rides in an overlay: the card takes its width from the grid's column, not from
+/// the preview, and never spills over the card beside it.
+struct NoodletThumbnail: View {
+  let image: NSImage
+  var body: some View {
+    Color.clear.frame(height: 160).overlay {
+      Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+    }.clipped()
   }
 }
