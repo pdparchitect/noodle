@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Add `messenger tool vision cutout`, which removes the background from an image in the bot's workspace and writes the subject on transparency as a PNG. It can keep every subject or just one, and trim the result to what it kept. Like the other vision tools it runs on this Mac and sends nothing anywhere.
+
 ## [0.24.0] - 2026-09-22
 
 ### Changed
