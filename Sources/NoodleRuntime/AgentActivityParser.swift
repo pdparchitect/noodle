@@ -3,7 +3,7 @@ import NoodleCore
 
 /// Only consume public activity fields; initialization, auth, opaque reasoning,
 /// raw stderr and transport responses are deliberately not dumped into the log.
-package enum AgentActivityParser {
+public enum AgentActivityParser {
     static func events(_ message: [String: Any], provider: HarnessProvider) -> [AgentActivityEvent] {
         switch provider {
         case .codex: return items(message)

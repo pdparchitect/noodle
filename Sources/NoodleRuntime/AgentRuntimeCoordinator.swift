@@ -4,13 +4,13 @@ import Observation
 import NoodleCore
 
 /// What the Agent Host reports about a harness the sandboxed app cannot inspect itself.
-package struct HarnessHostInspection {
+public struct HarnessHostInspection {
     let executablePath: String?
     let models: [HarnessModel]
     /// Why the harness cannot be used yet, shown beside it in Settings.
     let capabilityError: String?
 
-    package init(executablePath: String?, models: [HarnessModel], capabilityError: String?) {
+    public init(executablePath: String?, models: [HarnessModel], capabilityError: String?) {
         self.executablePath = executablePath
         self.models = models
         self.capabilityError = capabilityError
@@ -38,7 +38,7 @@ package struct HarnessHostInspection {
 
     static let providers: [HarnessProvider] = [.openCode, .grokBuild, .muse, .antigravity]
 
-    @MainActor static func load(_ provider: HarnessProvider) async throws -> HarnessHostInspection {
+    @MainActor public static func load(_ provider: HarnessProvider) async throws -> HarnessHostInspection {
         switch provider {
         case .grokBuild: return .init(try await GrokHostProbe.load())
         case .openCode: return .init(try await OpenCodeHostProbe.load())
@@ -50,15 +50,15 @@ package struct HarnessHostInspection {
 }
 
 /// A confirmation is valid only for this bot configuration, runtime, and failure.
-package struct AgentKickRequest: Identifiable {
-    package let id = UUID()
+public struct AgentKickRequest: Identifiable {
+    public let id = UUID()
     let agent: AgentRecord
-    package let failure: AgentRuntimeFailure
+    public let failure: AgentRuntimeFailure
     fileprivate let runtimeID: UUID?
     fileprivate let lifecycleID: UUID
     fileprivate let extendedAccess: Bool
 
-    package var title: String {
+    public var title: String {
         switch failure {
         case .missingSession: return "Recover \(agent.displayName)?"
         case .usageLimit: return "Usage limit reached"
@@ -67,7 +67,7 @@ package struct AgentKickRequest: Identifiable {
         }
     }
 
-    package var message: String {
+    public var message: String {
         switch failure {
         case .missingSession:
             return "The previous session is unavailable. Noodle can start a replacement and help \(agent.displayName) continue using your conversation history.\n\nYour messages, files, and bot settings will be kept. Details remembered only within the previous session may be lost."
@@ -83,29 +83,29 @@ package struct AgentKickRequest: Identifiable {
 
 @MainActor
 @Observable
-package final class AgentRuntimeCoordinator {
-    package let activity = AgentActivityStore()
-    package private(set) var installations: [HarnessInstallation]
+public final class AgentRuntimeCoordinator {
+    public let activity = AgentActivityStore()
+    public private(set) var installations: [HarnessInstallation]
     private(set) var modelsByProvider: [HarnessProvider: [HarnessModel]] = [:]
-    package private(set) var capabilityErrors: [HarnessProvider: String] = [:]
+    public private(set) var capabilityErrors: [HarnessProvider: String] = [:]
     /// Last known answer from the Apple host probe. It survives failed or
     /// skipped probes so Local Models can open without waiting for a new one.
-    package private(set) var appleLocalModelsSupported: Bool?
-    package private(set) var isLoadingCapabilities = false
-    package private(set) var isRefreshingInstallations = false
+    public private(set) var appleLocalModelsSupported: Bool?
+    public private(set) var isLoadingCapabilities = false
+    public private(set) var isRefreshingInstallations = false
     private var installationChanges = 0
-    package private(set) var installationErrors: [HarnessProvider: String] = [:]
+    public private(set) var installationErrors: [HarnessProvider: String] = [:]
     private(set) var snapshots: [UUID: AgentRuntimeSnapshot] = [:] {
         didSet {
             activity.recordSnapshots(snapshots.filter { oldValue[$0.key] != $0.value })
             updateSleepAssertion()
         }
     }
-    package private(set) var preventIdleSleepWhileWorking: Bool
-    package private(set) var heartbeatConfiguration: AgentHeartbeatConfiguration
-    package private(set) var lastHeartbeatDates: [UUID: Date]
-    package private(set) var accessConfiguration: AgentAccessConfiguration
-    package private(set) var changingAccess: Set<UUID> = []
+    public private(set) var preventIdleSleepWhileWorking: Bool
+    public private(set) var heartbeatConfiguration: AgentHeartbeatConfiguration
+    public private(set) var lastHeartbeatDates: [UUID: Date]
+    public private(set) var accessConfiguration: AgentAccessConfiguration
+    public private(set) var changingAccess: Set<UUID> = []
     @ObservationIgnored private let sleepController = AgentActivitySleepController()
     private var lifecycleID = UUID()
     private var transitionIDs: [UUID: UUID] = [:]
@@ -141,7 +141,7 @@ package final class AgentRuntimeCoordinator {
     private var appleCapabilityTask: Task<Void, Never>?
     #if NOODLE_DEV_HOOKS
     /// A scenario lists its own models, so its stub harnesses are never run to ask; see Scenario.swift.
-    package var scriptedModels: [HarnessProvider: [HarnessModel]]?
+    public var scriptedModels: [HarnessProvider: [HarnessModel]]?
     #endif
 
     private func refreshAppleCapabilities() async {
@@ -162,7 +162,7 @@ package final class AgentRuntimeCoordinator {
         }
     }
 
-    package func recordAppleLocalModelsSupport(_ supported: Bool) {
+    public func recordAppleLocalModelsSupport(_ supported: Bool) {
         if appleLocalModelsSupported != supported { appleLocalModelsSupported = supported }
     }
 
@@ -188,7 +188,7 @@ package final class AgentRuntimeCoordinator {
         }
     }
 
-    package init(discovery: HarnessDiscovery = HarnessDiscovery(), defaults: UserDefaults = .standard,
+    public init(discovery: HarnessDiscovery = HarnessDiscovery(), defaults: UserDefaults = .standard,
          makeProcess: @escaping @MainActor (AgentRuntimeLaunch) -> any AgentRuntimeProcess = { $0.makeProcess() },
          inspectHost: @escaping @MainActor (HarnessProvider) async throws -> HarnessHostInspection = { try await HarnessHostInspection.load($0) },
          sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
@@ -211,7 +211,7 @@ package final class AgentRuntimeCoordinator {
         installations = discovery.discover()
     }
 
-    package func configurePreventIdleSleepWhileWorking(_ enabled: Bool) {
+    public func configurePreventIdleSleepWhileWorking(_ enabled: Bool) {
         preventIdleSleepWhileWorking = enabled
         defaults.set(enabled, forKey: Self.preventIdleSleepDefaultsKey)
         updateSleepAssertion()
@@ -227,17 +227,17 @@ package final class AgentRuntimeCoordinator {
     private static let preventIdleSleepDefaultsKey = "Noodle.power.preventIdleSleepWhileWorking"
 
     /// No bot receives access implicitly: a first launch records an empty grant list, later launches load what was saved.
-    package func prepareAccessForExistingAgents() {
+    public func prepareAccessForExistingAgents() {
         accessConfiguration = AgentAccessConfiguration.migrateExistingAgents([], in: defaults)
         accessConfiguration.migrateRequiredHarnessGrants([], in: defaults)
     }
 
-    package func authorizeSelectedHarness(_ agent: AgentRecord) {
+    public func authorizeSelectedHarness(_ agent: AgentRecord) {
         accessConfiguration.authorizeSelectedHarness(for: agent)
         accessConfiguration.save(to: defaults)
     }
 
-    package func setExtendedAccess(_ enabled: Bool, agent: AgentRecord, repository: WorkspaceRepository) {
+    public func setExtendedAccess(_ enabled: Bool, agent: AgentRecord, repository: WorkspaceRepository) {
         let required = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsRestrictedAccess == false
         guard (!required || enabled), accessConfiguration.isExtended(for: agent) != enabled else { return }
         changeAccess(enabled, agent: agent, repository: repository) { configuration in
@@ -246,7 +246,7 @@ package final class AgentRuntimeCoordinator {
         }
     }
 
-    package func setAppsEnabled(_ enabled: Bool, agent: AgentRecord, repository: WorkspaceRepository) {
+    public func setAppsEnabled(_ enabled: Bool, agent: AgentRecord, repository: WorkspaceRepository) {
         guard HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsAccountApps == true,
               accessConfiguration.appsEnabled(for: agent) != enabled else { return }
         changeAccess(enabled, agent: agent, repository: repository) { $0.setAppsEnabled(enabled, for: agent) }
@@ -287,7 +287,7 @@ package final class AgentRuntimeCoordinator {
         if let old { old.stop(completion: finish) } else { finish(true) }
     }
 
-    package func configureHeartbeats(enabled: Bool? = nil, intervalMinutes: Int? = nil) {
+    public func configureHeartbeats(enabled: Bool? = nil, intervalMinutes: Int? = nil) {
         applyHeartbeatConfiguration(AgentHeartbeatConfiguration(
             isEnabled: enabled ?? heartbeatConfiguration.isEnabled,
             intervalMinutes: intervalMinutes ?? heartbeatConfiguration.intervalMinutes,
@@ -295,7 +295,7 @@ package final class AgentRuntimeCoordinator {
         ))
     }
 
-    package func setHeartbeatEnabled(_ enabled: Bool, for agentID: UUID) {
+    public func setHeartbeatEnabled(_ enabled: Bool, for agentID: UUID) {
         var disabled = heartbeatConfiguration.disabledAgentIDs
         if enabled { disabled.remove(agentID) } else { disabled.insert(agentID) }
         applyHeartbeatConfiguration(AgentHeartbeatConfiguration(
@@ -312,13 +312,13 @@ package final class AgentRuntimeCoordinator {
         saveHeartbeatActivityDates()
     }
 
-    package func seedHeartbeatActivity(for agentID: UUID, at date: Date) {
+    public func seedHeartbeatActivity(for agentID: UUID, at date: Date) {
         if heartbeatScheduler.register(agentID, at: date) {
             saveHeartbeatActivityDates()
         }
     }
 
-    package func recordActivity(for agentID: UUID) {
+    public func recordActivity(for agentID: UUID) {
         heartbeatScheduler.recordActivity(for: agentID, at: now())
         saveHeartbeatActivityDates()
     }
@@ -361,7 +361,7 @@ package final class AgentRuntimeCoordinator {
         })
     }
 
-    package func checkHeartbeats() {
+    public func checkHeartbeats() {
         let readyIDs = Set(processes.filter { $0.value.canReceiveHeartbeat }.map(\.key))
         let dueIDs = heartbeatScheduler.takeDueHeartbeats(readyAgentIDs: readyIDs, at: now())
         if !dueIDs.isEmpty { saveHeartbeatActivityDates() }
@@ -371,11 +371,11 @@ package final class AgentRuntimeCoordinator {
         }
     }
 
-    package var availableInstallations: [HarnessInstallation] {
+    public var availableInstallations: [HarnessInstallation] {
         installations.filter(\.isAvailable)
     }
 
-    package func checkExternalInstallation(_ provider: HarnessProvider) async {
+    public func checkExternalInstallation(_ provider: HarnessProvider) async {
         #if NOODLE_DEV_HOOKS
         discovery.checkExternalInstallationDuringSimulation(provider)
         #endif
@@ -384,7 +384,7 @@ package final class AgentRuntimeCoordinator {
 
     /// Discovery is shared by Settings and bot configuration. Refreshing the
     /// catalogue does not restart agents or launch capability-probe processes.
-    package func refreshInstallations() async {
+    public func refreshInstallations() async {
         guard !isRefreshingInstallations else { return }
         isRefreshingInstallations = true
         defer { isRefreshingInstallations = false }
@@ -408,7 +408,7 @@ package final class AgentRuntimeCoordinator {
     /// Noodle installed or removed this harness itself. Only its files changed,
     /// so the other harnesses need none of the host probes a full refresh runs.
     @discardableResult
-    package func refreshInstallation(_ provider: HarnessProvider) -> HarnessInstallation {
+    public func refreshInstallation(_ provider: HarnessProvider) -> HarnessInstallation {
         installationChanges += 1
         // What the Agent Host last reported for this harness is now out of date.
         hostInstallations[provider] = nil
@@ -423,13 +423,13 @@ package final class AgentRuntimeCoordinator {
         return installations.first { $0.provider == provider && $0.isAvailable }
     }
 
-    package func models(for harnessIdentifier: String?) -> [HarnessModel] {
+    public func models(for harnessIdentifier: String?) -> [HarnessModel] {
         guard let harnessIdentifier,
               let provider = HarnessProvider(rawValue: harnessIdentifier) else { return [] }
         return modelsByProvider[provider, default: []]
     }
 
-    package func snapshot(for agentID: UUID) -> AgentRuntimeSnapshot {
+    public func snapshot(for agentID: UUID) -> AgentRuntimeSnapshot {
         snapshots[agentID] ?? AgentRuntimeSnapshot(
             agentID: agentID,
             phase: .offline,
@@ -437,7 +437,7 @@ package final class AgentRuntimeCoordinator {
         )
     }
 
-    package func refresh(agents: [AgentRecord], repository: WorkspaceRepository? = nil) {
+    public func refresh(agents: [AgentRecord], repository: WorkspaceRepository? = nil) {
         installations = discoveredInstallations()
         let liveIDs = Set(agents.map(\.id))
         activity.retainAgents(liveIDs)
@@ -495,7 +495,7 @@ package final class AgentRuntimeCoordinator {
         }
     }
 
-    package func refreshCapabilities() {
+    public func refreshCapabilities() {
         installations = discoveredInstallations()
         #if NOODLE_DEV_HOOKS
         if let scriptedModels { modelsByProvider = scriptedModels; return }
@@ -577,7 +577,7 @@ package final class AgentRuntimeCoordinator {
         }
     }
 
-    package func startAll(agents: [AgentRecord], repository: WorkspaceRepository) {
+    public func startAll(agents: [AgentRecord], repository: WorkspaceRepository) {
         isStoppingAll = false
         installations = discoveredInstallations()
         for agent in agents {
@@ -585,7 +585,7 @@ package final class AgentRuntimeCoordinator {
         }
     }
 
-    package func start(agent: AgentRecord, repository: WorkspaceRepository) {
+    public func start(agent: AgentRecord, repository: WorkspaceRepository) {
         guard processes[agent.id] == nil, !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id),
               !blockedRecoveries.contains(agent.id) else { return }
         if HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsRestrictedAccess == false,
@@ -641,7 +641,7 @@ package final class AgentRuntimeCoordinator {
 
     /// Ordinary Kick remains immediate; replacing a missing session requires a
     /// concrete confirmation. Account failures explain the prerequisite first.
-    package func kick(agent: AgentRecord, repository: WorkspaceRepository) -> AgentKickRequest? {
+    public func kick(agent: AgentRecord, repository: WorkspaceRepository) -> AgentKickRequest? {
         guard !isStoppingAll, !changingAccess.contains(agent.id), snapshot(for: agent.id).canKick else { return nil }
         connectionRecoveryAttempts[agent.id] = nil
         if let failure = snapshot(for: agent.id).failure, failure != .recoveryFailed {
@@ -654,7 +654,7 @@ package final class AgentRuntimeCoordinator {
         return nil
     }
 
-    package func confirmKick(_ request: AgentKickRequest, repository: WorkspaceRepository) {
+    public func confirmKick(_ request: AgentKickRequest, repository: WorkspaceRepository) {
         let agent = request.agent
         guard !isStoppingAll, !changingAccess.contains(agent.id),
               lifecycleID == request.lifecycleID, runtimeIDs[agent.id] == request.runtimeID,
@@ -669,7 +669,7 @@ package final class AgentRuntimeCoordinator {
         restart(agent: agent, repository: repository, sessionRecovery: recovery)
     }
 
-    package func restart(
+    public func restart(
         agent: AgentRecord,
         repository: WorkspaceRepository,
         resetThread: Bool = false
@@ -755,7 +755,7 @@ package final class AgentRuntimeCoordinator {
         if let old { old.stop(completion: finish) } else { finish(true) }
     }
 
-    package func notify(_ agents: [AgentRecord], repository: WorkspaceRepository) {
+    public func notify(_ agents: [AgentRecord], repository: WorkspaceRepository) {
         for agent in agents {
             recordActivity(for: agent.id)
             if processes[agent.id] == nil {
@@ -765,7 +765,7 @@ package final class AgentRuntimeCoordinator {
         }
     }
 
-    package func stop(agentID: UUID, revokeAccess: Bool = true) {
+    public func stop(agentID: UUID, revokeAccess: Bool = true) {
         connectionRecoveryAttempts[agentID] = nil
         blockedRecoveries.remove(agentID)
         runtimeIDs[agentID] = nil
@@ -787,7 +787,7 @@ package final class AgentRuntimeCoordinator {
         saveLastHeartbeatDates()
     }
 
-    package func stopAll() {
+    public func stopAll() {
         messageDelivery.cancelAll()
         fxCapabilityTask?.cancel()
         hostCapabilityTasks.values.forEach { $0.cancel() }
@@ -820,7 +820,7 @@ package final class AgentRuntimeCoordinator {
         }
     }
 
-    package func reconcile(agents: [AgentRecord], repository: WorkspaceRepository, immediately: Bool = false) {
+    public func reconcile(agents: [AgentRecord], repository: WorkspaceRepository, immediately: Bool = false) {
         guard !isStoppingAll else { return }
         for agent in agents where installation(for: agent) != nil {
             if let process = processes[agent.id], process.isAlive {

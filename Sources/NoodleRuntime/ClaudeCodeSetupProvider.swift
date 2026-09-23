@@ -4,9 +4,9 @@ import NoodleCore
 /// Claude account setup is checked by the isolated Agent Host so Noodle itself
 /// never receives access to Claude's private configuration or credentials.
 @MainActor
-package final class ClaudeCodeSetupProvider: HarnessSetupProviding {
-    package init() {}
-    package var installationGuide: HarnessInstallationGuide {
+public final class ClaudeCodeSetupProvider: HarnessSetupProviding {
+    public init() {}
+    public var installationGuide: HarnessInstallationGuide {
         HarnessInstallationGuide(
             command: "curl -fsSL https://claude.ai/install.sh | bash",
             instructions: "Run Anthropic’s official installer in Terminal, then return here and check the installation. Claude Code opens your browser when you sign in.",
@@ -14,11 +14,11 @@ package final class ClaudeCodeSetupProvider: HarnessSetupProviding {
         )
     }
 
-    package func status(for installation: HarnessInstallation) async throws -> HarnessAuthenticationStatus {
+    public func status(for installation: HarnessInstallation) async throws -> HarnessAuthenticationStatus {
         try await request(installation, signIn: false)
     }
 
-    package func signIn(
+    public func signIn(
         for installation: HarnessInstallation,
         onChallenge: @escaping @MainActor (HarnessSignInChallenge) -> Void
     ) async throws -> HarnessAuthenticationStatus {
@@ -38,15 +38,15 @@ package final class ClaudeCodeSetupProvider: HarnessSetupProviding {
 }
 
 @MainActor
-package final class HarnessAccountOperation {
+public final class HarnessAccountOperation {
     private let connection: ExtendedAgentConnection
     private var continuation: CheckedContinuation<HarnessAuthenticationStatus, Error>?
     private var finished = false
     private var timeout: Task<Void, Never>?
 
-    package init() throws { connection = try ExtendedAgentConnection() }
+    public init() throws { connection = try ExtendedAgentConnection() }
 
-    package func run(executablePath: String, signIn: Bool, provider: HarnessProvider = .claudeCode, profile: UUID? = nil,
+    public func run(executablePath: String, signIn: Bool, provider: HarnessProvider = .claudeCode, profile: UUID? = nil,
              onChallenge: (@MainActor (HarnessSignInChallenge) -> Void)? = nil) async throws -> HarnessAuthenticationStatus {
         try await withTaskCancellationHandler {
             try Task.checkCancellation()

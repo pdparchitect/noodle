@@ -45,6 +45,7 @@ let package = Package(
     ],
     products: [
         .library(name: "NoodleCore", targets: ["NoodleCore"]),
+        .library(name: "NoodleRuntime", targets: ["NoodleRuntime"]),
         .executable(name: "Noodle", targets: ["Noodle"]),
         .executable(name: "NoodleMessenger", targets: ["NoodleMessenger"])
     ],

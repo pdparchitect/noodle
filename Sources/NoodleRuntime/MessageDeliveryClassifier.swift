@@ -5,15 +5,15 @@ import FoundationModels
 #endif
 
 @MainActor
-package protocol MessageDeliveryClassifying {
+public protocol MessageDeliveryClassifying {
     var isAvailable: Bool { get }
     func shouldSendImmediately(_ context: MessageDeliveryContext) async throws -> Bool
 }
 
 @MainActor
-package struct MessageDeliveryClassifier: MessageDeliveryClassifying {
+public struct MessageDeliveryClassifier: MessageDeliveryClassifying {
     nonisolated init() {}
-    package var isAvailable: Bool {
+    public var isAvailable: Bool {
         #if canImport(FoundationModels)
         return SystemLanguageModel.default.availability == .available
         #else
@@ -21,7 +21,7 @@ package struct MessageDeliveryClassifier: MessageDeliveryClassifying {
         #endif
     }
 
-    package func shouldSendImmediately(_ context: MessageDeliveryContext) async throws -> Bool {
+    public func shouldSendImmediately(_ context: MessageDeliveryContext) async throws -> Bool {
         #if canImport(FoundationModels)
         if isAvailable {
             // Use a fresh session so one conversation cannot influence another.

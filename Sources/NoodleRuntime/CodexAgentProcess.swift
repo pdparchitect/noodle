@@ -7,7 +7,7 @@ private let noodleAppVersion = Bundle.main.object(
 ) as? String ?? "development"
 
 @MainActor
-package final class CodexAgentProcess: AgentRuntimeProcess {
+public final class CodexAgentProcess: AgentRuntimeProcess {
     private enum RequestPurpose {
         case initialize
         case startThread
@@ -23,7 +23,7 @@ package final class CodexAgentProcess: AgentRuntimeProcess {
         var needsHistoryRecovery: Bool? = nil
     }
 
-    package let configuration: AgentRecord
+    public let configuration: AgentRecord
     private let executableURL: URL
     private let workspaceURL: URL
     private let extendedAccess: Bool
@@ -64,7 +64,7 @@ package final class CodexAgentProcess: AgentRuntimeProcess {
     private var lastErrorText: String?
     private lazy var trace = RuntimeTrace(agentID: configuration.id, provider: .codex, workspace: workspaceURL)
 
-    package private(set) var snapshot: AgentRuntimeSnapshot
+    public private(set) var snapshot: AgentRuntimeSnapshot
 
     init(
         agent: AgentRecord,
@@ -102,7 +102,7 @@ package final class CodexAgentProcess: AgentRuntimeProcess {
         needsHistoryRecovery = state?.needsHistoryRecovery ?? false
     }
 
-    package func start() {
+    public func start() {
         guard hostConnection == nil, !shutdown.isPending else { return }
         intentionallyStopped = false
         terminationReported = false
@@ -160,7 +160,7 @@ package final class CodexAgentProcess: AgentRuntimeProcess {
         ])
     }
 
-    package func stop(completion: @escaping (Bool) -> Void = { _ in }) {
+    public func stop(completion: @escaping (Bool) -> Void = { _ in }) {
         trace.finish(.runtimeStopped)
         connectionID = nil
         startupTimeout?.cancel()
@@ -184,7 +184,7 @@ package final class CodexAgentProcess: AgentRuntimeProcess {
     }
 
     @discardableResult
-    package func notify(immediately: Bool = false) -> UUID {
+    public func notify(immediately: Bool = false) -> UUID {
         RuntimeDiagnostics.notificationQueued(agentID: configuration.id, coalesced: notificationPending)
         let notificationID = notifications.enqueue(immediately: immediately)
         if hostConnection == nil { start() }
@@ -192,23 +192,23 @@ package final class CodexAgentProcess: AgentRuntimeProcess {
         return notificationID
     }
 
-    package func promoteNotification(_ id: UUID) {
+    public func promoteNotification(_ id: UUID) {
         notifications.promote(id)
         sendPendingNotificationIfPossible()
     }
 
-    package var canReceiveHeartbeat: Bool {
+    public var canReceiveHeartbeat: Bool {
         hostRunning && snapshot.phase == .ready
             && !turnIsActive && !notificationPending && steeringNotificationID == nil && threadID != nil
     }
 
-    package var isAlive: Bool { hostRunning }
+    public var isAlive: Bool { hostRunning }
 
-    package var hasInterruptedWork: Bool {
+    public var hasInterruptedWork: Bool {
         recoveryPending || turnIsActive || notificationPending || steeringNotificationID != nil || turnRecovery.hasUnfinishedTurn
     }
 
-    package func heartbeat() {
+    public func heartbeat() {
         guard canReceiveHeartbeat else { return }
         startTurn(reason: .heartbeat)
     }
@@ -616,7 +616,7 @@ package final class CodexAgentProcess: AgentRuntimeProcess {
 }
 
 @MainActor
-package final class CodexCapabilityProbe {
+public final class CodexCapabilityProbe {
     private let executableURL: URL
     private var process: Process?
     private var input: ProcessInputWriter?

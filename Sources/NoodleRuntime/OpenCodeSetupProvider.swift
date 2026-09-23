@@ -2,18 +2,18 @@ import Foundation
 import NoodleCore
 
 @MainActor
-package final class OpenCodeSetupProvider: HarnessSetupProviding {
-    package init() {}
-    package var installationGuide: HarnessInstallationGuide {
+public final class OpenCodeSetupProvider: HarnessSetupProviding {
+    public init() {}
+    public var installationGuide: HarnessInstallationGuide {
         .init(command: "curl -fsSL https://opencode.ai/v2/install | bash",
               instructions: "Run OpenCode’s official v2 installer in Terminal, then run opencode auth login. Noodle uses your existing OpenCode sign-in; return here and choose Check Again.",
               documentationURL: URL(string: "https://opencode.ai/v2/docs")!)
     }
-    package func status(for installation: HarnessInstallation) async throws -> HarnessAuthenticationStatus {
+    public func status(for installation: HarnessInstallation) async throws -> HarnessAuthenticationStatus {
         let result = try await OpenCodeHostProbe.load()
         return result.authenticated ? .authenticated : (result.models.isEmpty ? .unauthenticated : .notRequired)
     }
-    package func signIn(for installation: HarnessInstallation, onChallenge: @escaping @MainActor (HarnessSignInChallenge) -> Void) async throws -> HarnessAuthenticationStatus {
+    public func signIn(for installation: HarnessInstallation, onChallenge: @escaping @MainActor (HarnessSignInChallenge) -> Void) async throws -> HarnessAuthenticationStatus {
         // OpenCode's login is an interactive prompt. A copy Noodle installed is not
         // on the shell's PATH, so name it in full; Terminal can run it from there.
         let standard = HarnessStorage.userHome.appendingPathComponent(".opencode/bin/opencode").path
@@ -23,7 +23,7 @@ package final class OpenCodeSetupProvider: HarnessSetupProviding {
 }
 
 @MainActor
-package enum OpenCodeHostProbe {
+public enum OpenCodeHostProbe {
     static func load() async throws -> OpenCodeInspectionResult {
         try await AgentHostRequest().load(timeout: .seconds(90), noReply: "OpenCode returned no account information.",
             timedOut: "OpenCode inspection timed out.") { $0.inspectOpenCode(reply: $1) }

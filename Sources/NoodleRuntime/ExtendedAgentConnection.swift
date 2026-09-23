@@ -2,15 +2,15 @@ import Foundation
 import NoodleAgentBridge
 import NoodleCore
 
-package final class ExtendedAgentConnection: NSObject, AgentHostClient {
+public final class ExtendedAgentConnection: NSObject, AgentHostClient {
     private let connection: NSXPCConnection
-    package var onData: ((Data, Bool) -> Void)?
-    package var onExit: ((Int32) -> Void)?
-    package var onFailure: ((String) -> Void)?
+    public var onData: ((Data, Bool) -> Void)?
+    public var onExit: ((Int32) -> Void)?
+    public var onFailure: ((String) -> Void)?
     var onSignInChallenge: ((String, String) -> Void)?
     private var stopping = false
 
-    package init(bundle: Bundle = .main) throws {
+    public init(bundle: Bundle = .main) throws {
         guard let requirement = AgentHostIdentity.requirement(for: AgentHostIdentity.service, bundle: bundle) else {
             throw NSError(domain: "Noodle", code: 1, userInfo: [NSLocalizedDescriptionKey: "Agent Host signing configuration is missing. Rebuild the signed app."])
         }
@@ -94,8 +94,8 @@ package final class ExtendedAgentConnection: NSObject, AgentHostClient {
         proxy()?.startRestrictedAntigravity(agentID: agentID.uuidString, executablePath: executablePath,
             conversationID: conversationID?.uuidString, modelIdentifier: modelIdentifier, withReply: reply)
     }
-    package func write(_ data: Data) { proxy()?.write(data) }
-    package func stop(reply: @escaping (Bool) -> Void) {
+    public func write(_ data: Data) { proxy()?.write(data) }
+    public func stop(reply: @escaping (Bool) -> Void) {
         stopping = true
         guard let service = proxy(failure: { _ in reply(false) }) else { reply(false); return }
         service.stop { [self] stopped in
@@ -105,7 +105,7 @@ package final class ExtendedAgentConnection: NSObject, AgentHostClient {
             reply(stopped)
         }
     }
-    package func invalidate() {
+    public func invalidate() {
         stopping = true
         connection.invalidate()
     }
@@ -142,9 +142,9 @@ package final class ExtendedAgentConnection: NSObject, AgentHostClient {
         proxy(failure: { reply(false, $0) })?.signInProfile(
             profileID: profile.uuidString, executablePath: executablePath, withReply: reply)
     }
-    package func receive(_ data: Data, isError: Bool) { onData?(data, isError) }
-    package func terminated(_ status: Int32) { onExit?(status) }
-    package func signInChallenge(_ url: String, code: String) { onSignInChallenge?(url, code) }
+    public func receive(_ data: Data, isError: Bool) { onData?(data, isError) }
+    public func terminated(_ status: Int32) { onExit?(status) }
+    public func signInChallenge(_ url: String, code: String) { onSignInChallenge?(url, code) }
     func fxModels(executablePath: String, reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.fxModels(executablePath: executablePath, withReply: reply)
     }
@@ -163,17 +163,17 @@ package final class ExtendedAgentConnection: NSObject, AgentHostClient {
     func inspectAntigravity(reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.inspectAntigravity(withReply: reply)
     }
-    package func publishHarness(_ staged: StagedHarness, reply: @escaping (String?, String?) -> Void) {
+    public func publishHarness(_ staged: StagedHarness, reply: @escaping (String?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.publishHarness(harnessIdentifier: staged.provider.rawValue, version: staged.version,
                                                            stagingID: staged.staging.uuidString, withReply: reply)
     }
-    package func inspectHarnessVersion(provider: HarnessProvider, executablePath: String, reply: @escaping (Data?, String?) -> Void) {
+    public func inspectHarnessVersion(provider: HarnessProvider, executablePath: String, reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.inspectHarnessVersion(harnessIdentifier: provider.rawValue, executablePath: executablePath, withReply: reply)
     }
 }
 
 /// The part of the Agent Host connection a single question needs; tests substitute it.
-package protocol AgentHostRequestLink: AnyObject {
+public protocol AgentHostRequestLink: AnyObject {
     var onFailure: ((String) -> Void)? { get set }
     func invalidate()
 }
@@ -183,7 +183,7 @@ extension ExtendedAgentConnection: AgentHostRequestLink {}
 /// One question to the Agent Host, answered once: by its JSON reply, a lost
 /// connection, the timeout or cancellation, whichever comes first.
 @MainActor
-package final class AgentHostRequest<Value: Decodable, Link: AgentHostRequestLink> {
+public final class AgentHostRequest<Value: Decodable, Link: AgentHostRequestLink> {
     private let link: Link
     private let sleep: (Duration) async throws -> Void
     private var continuation: CheckedContinuation<Value, Error>?
@@ -195,7 +195,7 @@ package final class AgentHostRequest<Value: Decodable, Link: AgentHostRequestLin
     }
 
     /// `disconnected` replaces the connection's own account of why it was lost.
-    package func load(timeout duration: Duration, noReply: String, timedOut: String, disconnected: String? = nil,
+    public func load(timeout duration: Duration, noReply: String, timedOut: String, disconnected: String? = nil,
               send: (Link, @escaping (Data?, String?) -> Void) -> Void) async throws -> Value {
         try await withTaskCancellationHandler {
             try Task.checkCancellation()
@@ -232,5 +232,5 @@ package final class AgentHostRequest<Value: Decodable, Link: AgentHostRequestLin
 }
 
 extension AgentHostRequest where Link == ExtendedAgentConnection {
-    package convenience init() throws { self.init(try ExtendedAgentConnection()) }
+    public convenience init() throws { self.init(try ExtendedAgentConnection()) }
 }

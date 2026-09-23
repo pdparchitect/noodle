@@ -3,7 +3,7 @@ import NoodleCore
 
 /// A narrow transport boundary; the default implementation retains the signed
 /// helper and its distinct restricted/autonomous launch entrypoints.
-@MainActor package protocol MuseRuntimeConnection: RuntimeStopConnection {
+@MainActor public protocol MuseRuntimeConnection: RuntimeStopConnection {
     var onData: ((Data, Bool) -> Void)? { get set }
     var onExit: ((Int32) -> Void)? { get set }
     var onFailure: ((String) -> Void)? { get set }
@@ -14,7 +14,7 @@ import NoodleCore
 }
 
 extension ExtendedAgentConnection: MuseRuntimeConnection {
-    @MainActor package func startMuse(agentID: UUID, executablePath: String, modelIdentifier: String?, effortIdentifier: String?,
+    @MainActor public func startMuse(agentID: UUID, executablePath: String, modelIdentifier: String?, effortIdentifier: String?,
                              extendedAccess: Bool, reply: @escaping (Int32, String?) -> Void) {
         if extendedAccess {
             start(provider: .muse, agentID: agentID, executablePath: executablePath,
@@ -29,8 +29,8 @@ extension ExtendedAgentConnection: MuseRuntimeConnection {
 /// Persistent MSP transport. Only Messenger creates chat messages; MSP events
 /// drive lifecycle and recovery, never a second copy of the assistant's output.
 @MainActor
-package final class MuseAgentProcess: AgentRuntimeProcess {
-    package let configuration: AgentRecord
+public final class MuseAgentProcess: AgentRuntimeProcess {
+    public let configuration: AgentRecord
     private let executableURL: URL
     private let workspaceURL: URL
     private let extendedAccess: Bool
@@ -78,7 +78,7 @@ package final class MuseAgentProcess: AgentRuntimeProcess {
     private lazy var reader = JSONLineReader { [weak self] object in
         Task { @MainActor in self?.receive(object) }
     }
-    package private(set) var snapshot: AgentRuntimeSnapshot
+    public private(set) var snapshot: AgentRuntimeSnapshot
 
     init(agent: AgentRecord, executableURL: URL, workspaceURL: URL, extendedAccess: Bool,
          recoverInterruptedWork: Bool,
@@ -118,11 +118,11 @@ package final class MuseAgentProcess: AgentRuntimeProcess {
         snapshot = .init(agentID: agent.id, phase: .offline, detail: "Not started")
     }
 
-    package var isAlive: Bool { running || paused }
-    package var hasInterruptedWork: Bool { recoveryPending || turnIsActive || notificationPending || steeringNotificationID != nil || turnRecovery.hasUnfinishedTurn }
-    package var canReceiveHeartbeat: Bool { running && snapshot.phase == .ready && !turnIsActive && !notificationPending && steeringNotificationID == nil }
+    public var isAlive: Bool { running || paused }
+    public var hasInterruptedWork: Bool { recoveryPending || turnIsActive || notificationPending || steeringNotificationID != nil || turnRecovery.hasUnfinishedTurn }
+    public var canReceiveHeartbeat: Bool { running && snapshot.phase == .ready && !turnIsActive && !notificationPending && steeringNotificationID == nil }
 
-    package func start() {
+    public func start() {
         guard connection == nil, !shutdown.isPending else { return }
         stopped = false; paused = false
         update(.starting, "Starting Muse Code")
@@ -161,7 +161,7 @@ package final class MuseAgentProcess: AgentRuntimeProcess {
         } catch { terminated(error.localizedDescription) }
     }
 
-    package func stop(completion: @escaping (Bool) -> Void) {
+    public func stop(completion: @escaping (Bool) -> Void) {
         stopped = true; running = false; paused = false
         startupTimeout?.cancel()
         trace.finish(.runtimeStopped)
@@ -175,7 +175,7 @@ package final class MuseAgentProcess: AgentRuntimeProcess {
         shutdown.stop(connection, completion: completion)
     }
     @discardableResult
-    package func notify(immediately: Bool = false) -> UUID {
+    public func notify(immediately: Bool = false) -> UUID {
         RuntimeDiagnostics.notificationQueued(agentID: configuration.id, coalesced: notificationPending)
         let notificationID = notifications.enqueue(immediately: immediately)
         guard !paused else { return notificationID }
@@ -184,11 +184,11 @@ package final class MuseAgentProcess: AgentRuntimeProcess {
         return notificationID
     }
 
-    package func promoteNotification(_ id: UUID) {
+    public func promoteNotification(_ id: UUID) {
         notifications.promote(id)
         sendPending()
     }
-    package func heartbeat() { if canReceiveHeartbeat { startTurn(.heartbeat) } }
+    public func heartbeat() { if canReceiveHeartbeat { startTurn(.heartbeat) } }
 
     private func openSession() {
         openingExistingSession = sessionID != nil

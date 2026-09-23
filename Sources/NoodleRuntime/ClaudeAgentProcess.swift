@@ -4,8 +4,8 @@ import NoodleCore
 /// A persistent Claude Code stream-json session. Claude's visible response is
 /// intentionally ignored: Noodle agents communicate through the Messenger CLI.
 @MainActor
-package final class ClaudeAgentProcess: AgentRuntimeProcess {
-    package let configuration: AgentRecord
+public final class ClaudeAgentProcess: AgentRuntimeProcess {
+    public let configuration: AgentRecord
     private let executableURL: URL
     private let workspaceURL: URL
     private let extendedAccess: Bool
@@ -39,7 +39,7 @@ package final class ClaudeAgentProcess: AgentRuntimeProcess {
     private lazy var trace = RuntimeTrace(agentID: configuration.id, provider: .claudeCode, workspace: workspaceURL)
 
 
-    package private(set) var snapshot: AgentRuntimeSnapshot
+    public private(set) var snapshot: AgentRuntimeSnapshot
 
     init(
         agent: AgentRecord,
@@ -73,7 +73,7 @@ package final class ClaudeAgentProcess: AgentRuntimeProcess {
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
     }
 
-    package func start() {
+    public func start() {
         guard connection == nil, !shutdown.isPending else { return }
         intentionallyStopped = false
         terminationReported = false
@@ -145,7 +145,7 @@ package final class ClaudeAgentProcess: AgentRuntimeProcess {
         }
     }
 
-    package func stop(completion: @escaping (Bool) -> Void = { _ in }) {
+    public func stop(completion: @escaping (Bool) -> Void = { _ in }) {
         trace.finish(.runtimeStopped)
         connectionID = nil
         startupTimeout?.cancel()
@@ -165,7 +165,7 @@ package final class ClaudeAgentProcess: AgentRuntimeProcess {
     }
 
     @discardableResult
-    package func notify(immediately: Bool = false) -> UUID {
+    public func notify(immediately: Bool = false) -> UUID {
         RuntimeDiagnostics.notificationQueued(agentID: configuration.id, coalesced: notificationPending)
         let notificationID = notifications.enqueue(immediately: immediately)
         if connection == nil { start() }
@@ -173,22 +173,22 @@ package final class ClaudeAgentProcess: AgentRuntimeProcess {
         return notificationID
     }
 
-    package func promoteNotification(_ id: UUID) {
+    public func promoteNotification(_ id: UUID) {
         notifications.promote(id)
         sendPendingNotificationIfPossible()
     }
 
-    package var canReceiveHeartbeat: Bool {
+    public var canReceiveHeartbeat: Bool {
         running && snapshot.phase == .ready && !turnIsActive && !notificationPending && interruptRequestID == nil
     }
 
-    package var isAlive: Bool { running }
+    public var isAlive: Bool { running }
 
-    package var hasInterruptedWork: Bool {
+    public var hasInterruptedWork: Bool {
         recoveryPending || turnIsActive || notificationPending || turnRecovery.hasUnfinishedTurn
     }
 
-    package func heartbeat() {
+    public func heartbeat() {
         guard canReceiveHeartbeat else { return }
         startTurn(reason: .heartbeat)
     }

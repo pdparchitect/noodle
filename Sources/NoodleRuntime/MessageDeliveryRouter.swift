@@ -7,7 +7,7 @@ import os
 /// The deadline only bounds a stuck model; it must outlast a cold model load,
 /// and a verdict for an already dispatched wake promotes nothing.
 @MainActor
-package final class MessageDeliveryRouter {
+public final class MessageDeliveryRouter {
     private struct Job {
         let id: UUID
         let task: Task<Void, Never>

@@ -2,13 +2,13 @@ import Foundation
 import NoodleCore
 
 /// Display-only observations. These never acknowledge messages or drive a runtime.
-package struct AgentActivityEvent {
+public struct AgentActivityEvent {
     var title: String
     var detail = ""
     var streamID: String? = nil
     var appending = false
 
-    package init(title: String, detail: String = "", streamID: String? = nil, appending: Bool = false) {
+    public init(title: String, detail: String = "", streamID: String? = nil, appending: Bool = false) {
         self.title = title
         self.detail = detail
         self.streamID = streamID
@@ -16,14 +16,14 @@ package struct AgentActivityEvent {
     }
 }
 
-package struct AgentActivityEntry: Equatable {
-    package let id: UUID
+public struct AgentActivityEntry: Equatable {
+    public let id: UUID
     let date: Date
     var title: String
     var detail: String
     var streamID: String?
 
-    package var text: String {
+    public var text: String {
         let time = date.formatted(.dateTime.hour().minute().second())
         let output = detail.trimmingCharacters(in: .newlines)
         return "[\(time)] \(title)\n" + (output.isEmpty ? "" : "\(output)\n")
@@ -33,9 +33,9 @@ package struct AgentActivityEntry: Equatable {
 }
 
 @MainActor
-package final class AgentActivityLog {
-    package private(set) var entries: [AgentActivityEntry] = []
-    package private(set) var revision = 0
+public final class AgentActivityLog {
+    public private(set) var entries: [AgentActivityEntry] = []
+    public private(set) var revision = 0
     private(set) var byteCount = 0
     private(set) var status = "Not started"
     private var phase: AgentRuntimePhase?
@@ -47,7 +47,7 @@ package final class AgentActivityLog {
         self.byteLimit = max(1024, byteLimit)
     }
 
-    package func record(_ event: AgentActivityEvent, at date: Date = Date()) {
+    public func record(_ event: AgentActivityEvent, at date: Date = Date()) {
         let title = Self.bounded(event.title, bytes: 256)
         let streamID = event.streamID.map { Self.bounded($0, bytes: 512) }
         let detail = Self.bounded(event.detail, bytes: min(16 * 1024, byteLimit - 768))
@@ -81,13 +81,13 @@ package final class AgentActivityLog {
         record(.init(title: snapshot.detail))
     }
 
-    package func clear() {
+    public func clear() {
         entries.removeAll()
         byteCount = 0
         revision &+= 1
     }
 
-    package var text: String { entries.map(\.text).joined() }
+    public var text: String { entries.map(\.text).joined() }
 
     /// Retain recent output, trim oversized payloads, and remove terminal controls.
     static func bounded(_ text: String, bytes: Int) -> String {
@@ -101,10 +101,10 @@ package final class AgentActivityLog {
 }
 
 @MainActor
-package final class AgentActivityStore {
+public final class AgentActivityStore {
     private var logs: [UUID: AgentActivityLog] = [:]
 
-    package func log(for agentID: UUID) -> AgentActivityLog {
+    public func log(for agentID: UUID) -> AgentActivityLog {
         if let log = logs[agentID] { return log }
         let log = AgentActivityLog()
         logs[agentID] = log
