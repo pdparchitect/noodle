@@ -1,30 +1,29 @@
 import Foundation
 import Observation
 import NoodleCore
-import NoodleRuntime
 
 /// Noodle-owned harness logins. Each profile signs in through the same
 /// account-only session as the system profile, pointed at its own home.
 @MainActor @Observable
-final class HarnessProfilesController {
-    private(set) var profiles: [HarnessProfile] = []
-    private(set) var authentication: [UUID: HarnessAuthenticationStatus] = [:]
-    private(set) var errors: [UUID: String] = [:]
-    private(set) var activity: [UUID: String] = [:]
-    private(set) var challenges: [UUID: HarnessSignInChallenge] = [:]
+public final class HarnessProfilesController {
+    public private(set) var profiles: [HarnessProfile] = []
+    public private(set) var authentication: [UUID: HarnessAuthenticationStatus] = [:]
+    public private(set) var errors: [UUID: String] = [:]
+    public private(set) var activity: [UUID: String] = [:]
+    public private(set) var challenges: [UUID: HarnessSignInChallenge] = [:]
     @ObservationIgnored private let store: HarnessProfileStore
     @ObservationIgnored private var operations: [UUID: (id: UUID, task: Task<Void, Never>)] = [:]
 
-    init(store: HarnessProfileStore) {
+    public init(store: HarnessProfileStore) {
         self.store = store
         reload()
     }
 
-    func profiles(for provider: HarnessProvider) -> [HarnessProfile] {
+    public func profiles(for provider: HarnessProvider) -> [HarnessProfile] {
         profiles.filter { $0.provider == provider }
     }
 
-    func profile(_ id: UUID?) -> HarnessProfile? {
+    public func profile(_ id: UUID?) -> HarnessProfile? {
         profiles.first { $0.id == id }
     }
 
@@ -32,18 +31,18 @@ final class HarnessProfilesController {
         profiles = (try? store.load()) ?? []
     }
 
-    func create(provider: HarnessProvider, named name: String) throws -> HarnessProfile {
+    public func create(provider: HarnessProvider, named name: String) throws -> HarnessProfile {
         let profile = try store.create(provider: provider, named: name)
         reload()
         return profile
     }
 
-    func rename(_ profile: HarnessProfile, to name: String) throws {
+    public func rename(_ profile: HarnessProfile, to name: String) throws {
         _ = try store.rename(profile, to: name)
         reload()
     }
 
-    func delete(_ profile: HarnessProfile) throws {
+    public func delete(_ profile: HarnessProfile) throws {
         cancel(profile)
         try store.delete(profile)
         authentication[profile.id] = nil
@@ -51,7 +50,7 @@ final class HarnessProfilesController {
         reload()
     }
 
-    func refresh(_ installation: HarnessInstallation) async {
+    public func refresh(_ installation: HarnessInstallation) async {
         for profile in profiles(for: installation.provider) where operations[profile.id] == nil {
             guard installation.isAvailable, let provider = setupProvider(for: profile) else {
                 authentication[profile.id] = nil
@@ -67,7 +66,7 @@ final class HarnessProfilesController {
         }
     }
 
-    func signIn(_ profile: HarnessProfile, installation: HarnessInstallation) {
+    public func signIn(_ profile: HarnessProfile, installation: HarnessInstallation) {
         guard operations[profile.id] == nil, installation.isAvailable, let provider = setupProvider(for: profile) else { return }
         let id = profile.id, token = UUID()
         errors[id] = nil
@@ -91,13 +90,13 @@ final class HarnessProfilesController {
         operations[id] = (token, task)
     }
 
-    func cancel(_ profile: HarnessProfile) {
+    public func cancel(_ profile: HarnessProfile) {
         guard let operation = operations[profile.id] else { return }
         operation.task.cancel()
         finish(profile.id, token: operation.id)
     }
 
-    func cancelAll() { profiles.forEach(cancel) }
+    public func cancelAll() { profiles.forEach(cancel) }
 
     private func finish(_ id: UUID, token: UUID) {
         guard operations[id]?.id == token else { return }

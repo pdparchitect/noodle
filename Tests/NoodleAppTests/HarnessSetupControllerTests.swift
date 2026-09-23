@@ -2,6 +2,7 @@ import Foundation
 import XCTest
 @testable import NoodleCore
 @testable import Noodle
+@testable import NoodleRuntime
 
 @MainActor private final class SetupProviderFixture: HarnessSetupProviding {
     let installationGuide = HarnessInstallationGuide(command: nil, instructions: "Fixture instructions", documentationURL: URL(string: "https://example.invalid/setup")!)

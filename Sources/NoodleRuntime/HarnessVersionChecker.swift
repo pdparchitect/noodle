@@ -1,12 +1,11 @@
 import Foundation
 import NoodleCore
-import NoodleRuntime
 
-@MainActor final class HarnessVersionChecker: HarnessVersionChecking {
+@MainActor public final class HarnessVersionChecker: HarnessVersionChecking {
     private let inspect: @MainActor (HarnessInstallation) async throws -> HarnessVersionReport
     private let fetch: @MainActor (URL) async throws -> Data
     private let now: @MainActor () -> Date
-    init(inspect: (@MainActor (HarnessInstallation) async throws -> HarnessVersionReport)? = nil,
+    public init(inspect: (@MainActor (HarnessInstallation) async throws -> HarnessVersionReport)? = nil,
          fetch: (@MainActor (URL) async throws -> Data)? = nil,
          now: @escaping @MainActor () -> Date = { Date() }) {
         self.inspect = inspect ?? { installation in
@@ -19,7 +18,7 @@ import NoodleRuntime
         self.fetch = fetch ?? { try await Self.fetchRelease($0) }
         self.now = now
     }
-    func check(_ installation: HarnessInstallation, previous: HarnessVersionReport?, forceLatest: Bool) async throws -> HarnessVersionReport {
+    public func check(_ installation: HarnessInstallation, previous: HarnessVersionReport?, forceLatest: Bool) async throws -> HarnessVersionReport {
         var report = try await inspect(installation)
         try Task.checkCancellation()
         if installation.provider == .apple { return report }

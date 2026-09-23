@@ -2,6 +2,7 @@ import Foundation
 import NoodleCore
 import XCTest
 @testable import Noodle
+@testable import NoodleRuntime
 
 @MainActor final class HarnessVersionCheckerTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)

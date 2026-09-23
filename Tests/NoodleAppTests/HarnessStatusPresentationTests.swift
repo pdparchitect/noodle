@@ -3,6 +3,7 @@ import SwiftUI
 import XCTest
 import NoodleCore
 @testable import Noodle
+@testable import NoodleRuntime
 
 @MainActor final class HarnessStatusPresentationTests: HiddenViewTests {
     func testCachedUpdateErrorIsReplacedWhileRefreshingAndClearsOnSuccess() async throws {

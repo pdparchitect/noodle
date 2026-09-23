@@ -1,9 +1,8 @@
 import Foundation
 import Observation
 import NoodleCore
-import NoodleRuntime
 
-@MainActor protocol HarnessInstalling {
+@MainActor public protocol HarnessInstalling {
     func manages(_ installation: HarnessInstallation) -> Bool
     /// Downloads the vendor's current release and has the Agent Host publish it.
     func install(_ provider: HarnessProvider, progress: @escaping @MainActor (HarnessDownloadProgress) -> Void) async throws
@@ -14,15 +13,15 @@ import NoodleRuntime
 }
 
 @MainActor @Observable
-final class HarnessSetupController {
-    private(set) var authentication: [HarnessProvider: HarnessAuthenticationStatus] = [:]
-    private(set) var errors: [HarnessProvider: String] = [:]
-    private(set) var activity: [HarnessProvider: String] = [:]
-    private(set) var challenges: [HarnessProvider: HarnessSignInChallenge] = [:]
+public final class HarnessSetupController {
+    public private(set) var authentication: [HarnessProvider: HarnessAuthenticationStatus] = [:]
+    public private(set) var errors: [HarnessProvider: String] = [:]
+    public private(set) var activity: [HarnessProvider: String] = [:]
+    public private(set) var challenges: [HarnessProvider: HarnessSignInChallenge] = [:]
     /// Download fraction while Noodle installs a harness; absent when indeterminate.
-    private(set) var installProgress: [HarnessProvider: Double] = [:]
-    private(set) var checking: Set<HarnessProvider> = []
-    private(set) var snapshots: [HarnessProvider: HarnessPresentationSnapshot]
+    public private(set) var installProgress: [HarnessProvider: Double] = [:]
+    public private(set) var checking: Set<HarnessProvider> = []
+    public private(set) var snapshots: [HarnessProvider: HarnessPresentationSnapshot]
     private let providers: [HarnessProvider: any HarnessSetupProviding]
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let versionChecker: (any HarnessVersionChecking)?
@@ -33,13 +32,13 @@ final class HarnessSetupController {
     /// Why the last install failed. A refresh clears a missing harness's error,
     /// and this is still the reason it is missing, until the next attempt.
     @ObservationIgnored private var installFailures: [HarnessProvider: String] = [:]
-    private(set) var checkingVersions = false
-    private(set) var refreshingAll = false
+    public private(set) var checkingVersions = false
+    public private(set) var refreshingAll = false
     @ObservationIgnored private(set) var operations: [HarnessProvider: Task<Void, Never>] = [:]
     @ObservationIgnored private var signInAttempts: [HarnessProvider: (id: UUID, installation: HarnessInstallation)] = [:]
     @ObservationIgnored private var statusChecks: [HarnessProvider: (id: UUID, installation: HarnessInstallation)] = [:]
 
-    init(providers: [HarnessProvider: any HarnessSetupProviding]? = nil, defaults: UserDefaults = .standard,
+    public init(providers: [HarnessProvider: any HarnessSetupProviding]? = nil, defaults: UserDefaults = .standard,
          versionChecker: (any HarnessVersionChecking)? = nil, installer: (any HarnessInstalling)? = nil) {
         self.defaults = defaults
         self.versionChecker = versionChecker
@@ -59,7 +58,7 @@ final class HarnessSetupController {
         ]
     }
 
-    var displayedInstallations: [HarnessInstallation] {
+    public var displayedInstallations: [HarnessInstallation] {
         HarnessProvider.allCases.map { snapshots[$0]?.installation ?? HarnessInstallation(provider: $0, executablePath: nil) }
     }
 
@@ -74,14 +73,14 @@ final class HarnessSetupController {
     }
 
     /// True when the harness's row shows an error, a required update, or an available update.
-    func needsAttention(_ id: HarnessProvider) -> Bool {
+    public func needsAttention(_ id: HarnessProvider) -> Bool {
         if errors[id] != nil { return true }
         guard let snapshot = snapshots[id], snapshot.installation.isAvailable else { return false }
         return snapshot.version?.compatibilityIssue != nil || snapshot.version?.updateAvailable == true
     }
 
     /// Rediscovers installations, then checks sign-in and versions.
-    func refreshAll(_ runtime: AgentRuntimeCoordinator, forceLatest: Bool = false) async {
+    public func refreshAll(_ runtime: AgentRuntimeCoordinator, forceLatest: Bool = false) async {
         guard !refreshingAll else { return }
         refreshingAll = true
         defer { refreshingAll = false }
@@ -94,7 +93,7 @@ final class HarnessSetupController {
         installAvailableUpdates(runtime)
     }
 
-    func refreshVersions(_ installations: [HarnessInstallation], forceLatest: Bool = false) async {
+    public func refreshVersions(_ installations: [HarnessInstallation], forceLatest: Bool = false) async {
         guard let versionChecker, !checkingVersions else { return }
         checkingVersions = true
         defer { checkingVersions = false }
@@ -123,7 +122,7 @@ final class HarnessSetupController {
         }
     }
 
-    func refresh(_ installations: [HarnessInstallation], discoveryErrors: [HarnessProvider: String] = [:]) async {
+    public func refresh(_ installations: [HarnessInstallation], discoveryErrors: [HarnessProvider: String] = [:]) async {
         let changes = changes
         for installation in installations {
             let id = installation.provider
@@ -164,11 +163,11 @@ final class HarnessSetupController {
         }
     }
 
-    func installationGuide(for id: HarnessProvider) -> HarnessInstallationGuide? {
+    public func installationGuide(for id: HarnessProvider) -> HarnessInstallationGuide? {
         providers[id]?.installationGuide
     }
 
-    func signIn(_ installation: HarnessInstallation) {
+    public func signIn(_ installation: HarnessInstallation) {
         let id = installation.provider
         guard operations[id] == nil, let provider = providers[id] else { return }
         retireStatusCheck(id)
@@ -199,7 +198,7 @@ final class HarnessSetupController {
     private static let rejectedVersionsKey = "Noodle.harness.rejectedVersions"
 
     /// Only for harnesses Noodle installed. One the user installed is theirs to update.
-    var automaticUpdates: Bool {
+    public var automaticUpdates: Bool {
         get { access(keyPath: \.automaticUpdates); return defaults.object(forKey: Self.automaticUpdatesKey) as? Bool ?? true }
         set { withMutation(keyPath: \.automaticUpdates) { defaults.set(newValue, forKey: Self.automaticUpdatesKey) } }
     }
@@ -211,7 +210,7 @@ final class HarnessSetupController {
     }
 
     /// Checks the harnesses Noodle installed, and only those, for a newer release and installs it.
-    func updateManagedHarnesses(_ runtime: AgentRuntimeCoordinator) async {
+    public func updateManagedHarnesses(_ runtime: AgentRuntimeCoordinator) async {
         guard automaticUpdates, installer != nil else { return }
         let managed = runtime.installations.filter(isManaged)
         guard !managed.isEmpty else { return }
@@ -230,11 +229,11 @@ final class HarnessSetupController {
         }
     }
 
-    func canInstall(_ id: HarnessProvider) -> Bool { installer != nil && id.supportsManagedInstallation }
-    func isManaged(_ installation: HarnessInstallation) -> Bool { installer?.manages(installation) ?? false }
+    public func canInstall(_ id: HarnessProvider) -> Bool { installer != nil && id.supportsManagedInstallation }
+    public func isManaged(_ installation: HarnessInstallation) -> Bool { installer?.manages(installation) ?? false }
 
     /// Installs the vendor's current release, or updates the copy Noodle installed.
-    func install(_ id: HarnessProvider, runtime: AgentRuntimeCoordinator) {
+    public func install(_ id: HarnessProvider, runtime: AgentRuntimeCoordinator) {
         guard operations[id] == nil, let installer, canInstall(id) else { return }
         retireStatusCheck(id)
         let token = UUID()
@@ -285,7 +284,7 @@ final class HarnessSetupController {
         }
     }
 
-    func removeManaged(_ id: HarnessProvider, runtime: AgentRuntimeCoordinator) {
+    public func removeManaged(_ id: HarnessProvider, runtime: AgentRuntimeCoordinator) {
         guard operations[id] == nil, let installer else { return }
         var failure: String?
         do { try installer.remove(id) } catch { failure = error.localizedDescription }
@@ -315,10 +314,10 @@ final class HarnessSetupController {
         guard signInAttempts[id]?.id == token else { return }
         signInAttempts[id] = nil; activity[id] = nil; challenges[id] = nil; operations[id] = nil
     }
-    func cancel(_ id: HarnessProvider) {
+    public func cancel(_ id: HarnessProvider) {
         operations[id]?.cancel()
         if let token = signInAttempts[id]?.id { finishSignIn(id, token: token) }
         if installs[id] != nil { finishInstall(id) }
     }
-    func cancelAll() { for id in Array(operations.keys) { cancel(id) } }
+    public func cancelAll() { for id in Array(operations.keys) { cancel(id) } }
 }

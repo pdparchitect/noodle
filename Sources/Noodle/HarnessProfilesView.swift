@@ -1,5 +1,6 @@
 import SwiftUI
 import NoodleCore
+import NoodleRuntime
 
 /// Separate logins for one harness, opened from its Settings row.
 struct HarnessProfilesView: View {

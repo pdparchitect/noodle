@@ -1,18 +1,17 @@
 import Foundation
 import NoodleCore
 import OSLog
-import NoodleRuntime
 
 /// The sandboxed app downloads and unpacks. It cannot make the result runnable:
 /// the Agent Host checks the vendor's signature and moves it into place.
-@MainActor final class ManagedHarnessInstaller: HarnessInstalling {
+@MainActor public final class ManagedHarnessInstaller: HarnessInstalling {
     private let store: ManagedHarnessStore
     private let log = Logger(subsystem: "com.pdparchitect.noodle", category: "HarnessInstall")
-    init(store: ManagedHarnessStore) { self.store = store }
+    public init(store: ManagedHarnessStore) { self.store = store }
 
-    func manages(_ installation: HarnessInstallation) -> Bool { store.manages(installation) }
+    public func manages(_ installation: HarnessInstallation) -> Bool { store.manages(installation) }
 
-    func install(_ provider: HarnessProvider, progress: @escaping @MainActor (HarnessDownloadProgress) -> Void) async throws {
+    public func install(_ provider: HarnessProvider, progress: @escaping @MainActor (HarnessDownloadProgress) -> Void) async throws {
         let store = store, log = log
         log.notice("install \(provider.rawValue, privacy: .public): staging into \(store.directory.path, privacy: .public)")
         let staged: StagedHarness?
@@ -40,9 +39,9 @@ import NoodleRuntime
         }
     }
 
-    func remove(_ provider: HarnessProvider) throws { try store.remove(provider) }
-    func versions(_ provider: HarnessProvider) -> [String] { store.versions(provider).map(\.text) }
-    func remove(_ provider: HarnessProvider, version: String) throws { try store.remove(provider, version: version) }
+    public func remove(_ provider: HarnessProvider) throws { try store.remove(provider) }
+    public func versions(_ provider: HarnessProvider) -> [String] { store.versions(provider).map(\.text) }
+    public func remove(_ provider: HarnessProvider, version: String) throws { try store.remove(provider, version: version) }
 }
 
 @MainActor private final class HarnessPublishOperation {
