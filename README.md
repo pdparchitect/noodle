@@ -102,3 +102,18 @@ Each browser keeps its own sign-ins and browsing data.
 - [Releases](docs/releases.md)
 - [All documentation](docs/README.md)
 - [Changelog](CHANGELOG.md)
+
+## Comparison
+
+| | Grok Bot | Muse | Noodle |
+| --- | --- | --- | --- |
+| Models | Grok family of models | Muse family of models only | Bring your own harness (OpenAI, Anthropic, Muse, Fx, even Grok) plus local AI models for free |
+| Licence | Closed source | Closed source app, mostly closed-weight models | Open source, Apache 2.0 |
+| App | Not native | Web and mobile, plus a US-only Mac app | Native and fast, taking advantage of all OS features |
+| Computers | Remote Linux-based computers that are slow to use | Cloud VMs run by Meta | Local desktop-grade secure computers, including first-class support for macOS local accounts |
+| Look and feel | Black | Little beyond memory and connector settings | Customise the look and feel to match your preferences: backgrounds, custom icons and more |
+| Voice | Voice sent to a remote server to train on | Processed on Meta's servers | On-device dictation and transcription that value your privacy |
+| OS integration | Limited OS features | Files, Mail, Messages, Calendar and Notes on Mac | First-class OS integration: calendars, shortcuts, reminders, accessibility and much more |
+| Tools | Limited tool support | Built-in connectors, no MCP servers on your own machine | Extensible tool support: any MCP you can think of, plus local extension points through ExtensionKit applications |
+| On-device tools | None | None | Built-in OS capabilities such as OCR, image generation, background removal and much more |
+| Data | Your data, who knows where | Stored in Meta's cloud, used for training unless you opt out | Your data stays local |
