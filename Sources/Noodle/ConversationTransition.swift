@@ -26,27 +26,28 @@ struct ConversationTransition<Content: View>: NSViewRepresentable {
     }
 }
 
-@MainActor final class ConversationTransitionSurface: NSView {
-    // Match NSHostingView's top-left origin. A bottom-left native wrapper adds
-    // a coordinate flip around the masked transcript and its selectable text
-    // backing layers, including layers created for incoming or virtualized rows.
-    override var isFlipped: Bool { true }
-
+/// The transcript's own hosting view carries the dissolve. An AppKit wrapper
+/// around it would be one more coordinate system between SwiftUI and the masked
+/// transcript, and text drawn under a flip that later disagrees with the one it
+/// is composited through appears vertically mirrored until its row is rebuilt.
+@MainActor final class ConversationTransitionSurface: NSHostingView<AnyView> {
     // Core Animation stores CATransition under this reserved key even when a
     // different key is supplied. Use it for replacement and cancellation too.
     static let animationKey = "transition"
-    private let hostingView: NSHostingView<AnyView>
     private(set) var conversationID: UUID
 
     init(content: AnyView, conversationID: UUID) {
         self.conversationID = conversationID
-        hostingView = NSHostingView(rootView: content)
-        super.init(frame: .zero)
+        super.init(rootView: content)
+        // The transcript sizes itself from the chat layout, not from its content.
+        sizingOptions = []
         wantsLayer = true
         layer?.masksToBounds = true
-        hostingView.sizingOptions = []
-        hostingView.autoresizingMask = [.width, .height]
-        addSubview(hostingView)
+    }
+
+    @MainActor required init(rootView: AnyView) {
+        conversationID = UUID()
+        super.init(rootView: rootView)
     }
 
     required init?(coder: NSCoder) { nil }
@@ -58,7 +59,7 @@ struct ConversationTransition<Content: View>: NSViewRepresentable {
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        hostingView.rootView = content
+        rootView = content
         if switching, !reduceMotion, window != nil, !inLiveResize, !bounds.isEmpty {
             // Replacing the animation under one key also bounds rapid keyboard
             // navigation to the latest selection, with no queued completions.
