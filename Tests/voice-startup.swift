@@ -7,6 +7,8 @@ import NoodleAudioCapture
 private final class BufferCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var seconds: TimeInterval = 0
+    /// Only touched on the capture's audio queue.
+    var starts = 0
     func consume(_ buffer: AVAudioPCMBuffer) {
         lock.lock(); defer { lock.unlock() }
         seconds += Double(buffer.frameLength) / buffer.format.sampleRate
@@ -60,13 +62,15 @@ private final class BufferCounter: @unchecked Sendable {
     }
 
     @MainActor private static func check(device: VoiceInputDevice, attempt: Int) async throws {
-        let engine = AVAudioEngine()
-        _ = try VoiceInputDevice.configure(engine, uid: device.id)
-        let native = NoodleAudioCapture(engine: engine)
+        let audio = VoiceAudioQueue()
+        let native = try await audio.run {
+            let engine = AVAudioEngine()
+            _ = try VoiceInputDevice.configure(engine, uid: device.id)
+            return NoodleAudioCapture(engine: engine)
+        }
         let counter = BufferCounter()
-        var starts = 0
-        let capture = VoiceCaptureRecovery(activate: {
-            starts += 1
+        let capture = VoiceCaptureRecovery(audio: audio, activate: {
+            counter.starts += 1
             try native.start(withBufferSize: 4096) { buffer, _ in counter.consume(buffer) }
         }, deactivate: { native.stop() }, running: { native.isRunning }, duration: { counter.duration })
         defer { capture.stop() }
@@ -74,13 +78,14 @@ private final class BufferCounter: @unchecked Sendable {
         let before = counter.duration
         for _ in 0..<12 {
             try await Task.sleep(for: .milliseconds(100))
-            if !capture.isRunning { try await capture.start() }
+            if !(await capture.isRunning) { try await capture.start() }
         }
-        guard capture.isRunning, counter.duration > before + 0.5 else {
+        guard await capture.isRunning, counter.duration > before + 0.5 else {
             throw VoiceFailure("Microphone stopped delivering buffers after startup")
         }
         capture.stop()
-        guard !capture.isRunning else { throw VoiceFailure("Microphone did not stop") }
+        guard !(await capture.isRunning) else { throw VoiceFailure("Microphone did not stop") }
+        let starts = counter.starts
         print("PASS attempt \(attempt): \(String(format: "%.2f", counter.duration)) seconds of buffers; \(starts) start(s)")
     }
 }

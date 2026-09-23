@@ -12,6 +12,9 @@ All notable changes to Noodle are documented here, following
   that it was never asked, which left the Reminders tool row on "Allow access to choose reminder lists"
   however often the button was pressed, and kept the bot's lists out of reach. The grant now stands, and a
   request that genuinely fails says why instead of falling silent.
+- Stop a stuck microphone from freezing Noodle. After a USB microphone reconnects, macOS can leave its audio input
+  hanging indefinitely; Noodle used to wait on it and spin. Recording now gives up after a few seconds with
+  "The microphone isn’t responding" and the rest of the app keeps working.
 - Remove a coordinate system from the conversation transition, a further cause of message text that appears upside down until the conversation is switched away from and back.
 - Keep a noodlet quiet while it is out of sight. A noodlet a bot runs in the background or headless no longer plays sound on the Mac: HTML pages are muted until they are shown and muted again when they are hidden, and a Swift noodlet started outside the foreground runs without audio output. A noodlet granted the microphone keeps its audio.
 - Open a noodlet in the foreground when it is clicked, whatever the bot left running. A background page is shown and unmuted; a Swift noodlet or a headless test session, which cannot gain sound or normal data after it launched, is closed and started again in the foreground.

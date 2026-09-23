@@ -89,10 +89,17 @@ struct VoiceRecordingDraft: Codable {
                 try check(token)
                 try await analyzer.start(inputSequence: stream.stream)
                 try check(token)
-                let engine = AVAudioEngine()
-                inputName = try VoiceInputDevice.configure(engine).name
-                let nativeCapture = NoodleAudioCapture(engine: engine)
+                // Core Audio can block indefinitely; keep every engine call off the main actor.
+                let audio = VoiceAudioQueue()
+                let (nativeCapture, name) = try await audio.run {
+                    let engine = AVAudioEngine()
+                    let name = try VoiceInputDevice.configure(engine).name
+                    return (NoodleAudioCapture(engine: engine), name)
+                }
+                try check(token)
+                inputName = name
                 let capture = VoiceCaptureRecovery(
+                    audio: audio,
                     activate: { try nativeCapture.start(withBufferSize: 4096) { buffer, _ in sink.consume(buffer) } },
                     deactivate: { nativeCapture.stop() },
                     running: { nativeCapture.isRunning },
@@ -117,8 +124,10 @@ struct VoiceRecordingDraft: Codable {
                         ticks += 1
                         stalledTicks = snapshot.duration == previousDuration ? stalledTicks + 1 : 0
                         previousDuration = snapshot.duration
-                        noInputSignal = snapshot.silentDuration >= 3 && capture.isRunning && stalledTicks < 10
-                        if snapshot.error == nil, !capture.isRunning || stalledTicks >= 10 {
+                        let isRunning = await capture.isRunning
+                        guard !Task.isCancelled, generation == token, phase == .recording else { break }
+                        noInputSignal = snapshot.silentDuration >= 3 && isRunning && stalledTicks < 10
+                        if snapshot.error == nil, !isRunning || stalledTicks >= 10 {
                             recoveringInput = true
                             noInputSignal = false
                             do {

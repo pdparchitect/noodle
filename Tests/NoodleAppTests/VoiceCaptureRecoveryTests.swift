@@ -2,7 +2,9 @@ import XCTest
 @testable import Noodle
 
 @MainActor final class VoiceCaptureRecoveryTests: XCTestCase {
-    @MainActor private final class Device {
+    // Driven serially: audio calls run on the recovery's queue while the test awaits.
+    private final class Device: @unchecked Sendable {
+        let audio = VoiceAudioQueue()
         var running = false
         var duration: TimeInterval = 0
         var starts = 0
@@ -12,8 +14,11 @@ import XCTest
         var advanceEvery = 1
         var onPoll: (() -> Void)?
 
-        func recovery() -> VoiceCaptureRecovery {
-            VoiceCaptureRecovery(activate: {
+        /// Teardown is posted to the audio queue; wait for it before asserting.
+        func drain() async { try? await audio.run {} }
+
+        @MainActor func recovery() -> VoiceCaptureRecovery {
+            VoiceCaptureRecovery(audio: audio, activate: {
                 self.starts += 1
                 if self.starts <= self.failStarts { throw VoiceFailure("Transient audio format change") }
                 self.running = true
@@ -37,7 +42,8 @@ import XCTest
         let recovery = device.recovery()
         try await recovery.start()
         XCTAssertEqual(device.starts, 2)
-        XCTAssertTrue(recovery.isRunning)
+        let isRunning = await recovery.isRunning
+        XCTAssertTrue(isRunning)
         XCTAssertGreaterThan(device.duration, 0)
     }
 
@@ -83,6 +89,7 @@ import XCTest
         XCTAssertEqual(device.starts, 5)
         XCTAssertEqual(device.polls, 50)
         recovery.stop()
+        await device.drain()
         XCTAssertFalse(device.running)
     }
 
@@ -94,9 +101,65 @@ import XCTest
             try await recovery.start()
             XCTFail("A discarded recording must cancel pending recovery")
         } catch { XCTAssertTrue(error is CancellationError) }
+        await device.drain()
         XCTAssertEqual(device.starts, 1)
         XCTAssertEqual(device.stops, 1)
         XCTAssertFalse(device.running)
+    }
+
+    func testMicrophoneCallsNeverRunOnTheMainThread() async {
+        final class Calls: @unchecked Sendable {
+            private let lock = NSLock()
+            private(set) var total = 0
+            private(set) var onMain = 0
+            func record() {
+                lock.lock(); defer { lock.unlock() }
+                total += 1
+                if Thread.isMainThread { onMain += 1 }
+            }
+        }
+        let calls = Calls()
+        let recovery = VoiceCaptureRecovery(activate: {
+            calls.record()
+            throw VoiceFailure("Transient audio format change")
+        }, deactivate: { calls.record() }, running: {
+            calls.record()
+            return false
+        }, duration: { 0 }, wait: { await Task.yield() })
+        _ = try? await recovery.start()
+        XCTAssertGreaterThan(calls.total, 0)
+        // Core Audio can block indefinitely; a blocked call must not freeze the UI.
+        XCTAssertEqual(calls.onMain, 0)
+    }
+
+    func testBlockedMicrophoneFailsInsteadOfHanging() async {
+        final class Gate: @unchecked Sendable {
+            let release = DispatchSemaphore(value: 0)
+            private let lock = NSLock()
+            private var blocked = false
+            var isBlocked: Bool { lock.lock(); defer { lock.unlock() }; return blocked }
+            func block() {
+                lock.lock(); blocked = true; lock.unlock()
+                release.wait()
+            }
+        }
+        let gate = Gate()
+        // The deadline expires only once a call is stuck, never on timing alone.
+        let audio = VoiceAudioQueue(deadline: {
+            while !gate.isBlocked { try await Task.sleep(for: .milliseconds(1)) }
+        })
+        let recovery = VoiceCaptureRecovery(audio: audio, activate: { gate.block() },
+            deactivate: {}, running: { false }, duration: { 0 }, wait: { await Task.yield() })
+        do {
+            try await recovery.start()
+            XCTFail("A blocked device must not count as recording")
+        } catch { XCTAssertTrue(error is VoiceAudioQueue.Unresponsive) }
+        // The queue is still blocked; later calls fail at once instead of queueing.
+        do {
+            _ = try await audio.run { true }
+            XCTFail("A blocked queue must reject new calls")
+        } catch { XCTAssertTrue(error is VoiceAudioQueue.Unresponsive) }
+        gate.release.signal()
     }
 
     func testCancelledTaskNeverStartsMicrophone() async {
