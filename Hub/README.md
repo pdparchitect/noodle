@@ -7,10 +7,11 @@ Noodle's own.
 ## Develop
 
 ```sh
-cd Hub
-swift build
-swift test
-.build/debug/NoodleHub
+scripts/build-and-launch-hub.sh
 ```
 
-The Hub appears in the menu bar and lists the harnesses it finds on this Mac.
+This builds, signs and verifies `Noodle Hub Dev` in `.build`, then opens it. The Hub
+appears in the menu bar and lists the harnesses it finds on this Mac. It needs an
+Apple Development or Developer ID signing identity, like Noodle.
+
+Run its tests with `cd Hub && swift test`.

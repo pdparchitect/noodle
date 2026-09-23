@@ -50,10 +50,11 @@ class AppIconTests(unittest.TestCase):
         # unchanged because it has no preceding pixel or row.
         self.assertEqual(zlib.decompress(compressed)[4], 0, 'opaque exterior corner')
 
-    def test_all_four_symbols_compose_standalone_icons_and_complete_iconsets(self):
+    def test_every_app_symbol_composes_a_standalone_icon_and_complete_iconset(self):
         with tempfile.TemporaryDirectory() as temporary:
             for name, support in [('Noodle', 'Support'), ('Computer', 'Computer/Support'),
-                                  ('Applet', 'Applet/Support'), ('Browser', 'Browser/Support')]:
+                                  ('Applet', 'Applet/Support'), ('Browser', 'Browser/Support'),
+                                  ('Hub', 'Hub/Support')]:
                 with self.subTest(app=name):
                     root = Path(temporary) / name
                     root.mkdir()

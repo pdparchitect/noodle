@@ -3,11 +3,11 @@ import HubCore
 import XCTest
 
 @MainActor final class HubTests: XCTestCase {
-    func testHubKeepsItsDataApartFromNoodle() {
+    /// The Agent Host finds bots under Application Support/Noodle in the Hub's container.
+    func testHubStoresDataWhereItsAgentHostLooks() {
         let applicationSupport = URL(fileURLWithPath: "/tmp/Application Support", isDirectory: true)
-        let root = Hub.root(applicationSupport: applicationSupport)
-        XCTAssertEqual(root.lastPathComponent, "Noodle Hub")
-        XCTAssertNotEqual(root, applicationSupport.appendingPathComponent("Noodle", isDirectory: true))
+        XCTAssertEqual(Hub.root(applicationSupport: applicationSupport),
+                       applicationSupport.appendingPathComponent("Noodle", isDirectory: true))
     }
 
     func testHubStoresBotsUnderItsRoot() throws {

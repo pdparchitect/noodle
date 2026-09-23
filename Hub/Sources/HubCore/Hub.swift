@@ -2,9 +2,10 @@ import Foundation
 import NoodleCore
 import NoodleRuntime
 
-/// The Hub's bots, harnesses and conversations, kept apart from Noodle's own.
+/// The Hub's bots, harnesses and conversations. They live in the Hub's own sandbox
+/// container, apart from Noodle's; the folder name is the one the Agent Host looks in.
 @MainActor public final class Hub {
-    public static let folderName = "Noodle Hub"
+    public static let folderName = "Noodle"
 
     public let repository: WorkspaceRepository
     public let runtime: AgentRuntimeCoordinator
