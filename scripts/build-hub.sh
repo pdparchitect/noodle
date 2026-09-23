@@ -111,12 +111,22 @@ for dependency in mlx-swift mlx-swift-lm swift-transformers swift-jinja swift-hu
     fi
 done
 cp "$checkouts/mlx-swift-lm/Libraries/MLXCXGrammar/xgrammar/LICENSE" "$contents/Resources/xgrammar-LICENSE.txt"
+sparkle="$contents/Frameworks/Sparkle.framework"
+mkdir -p "$contents/Frameworks"
+ditto "$build_root/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework" "$sparkle"
+# The app already has outbound network access, matching the other apps' Sparkle setup.
+rm -rf "$sparkle/Versions/B/XPCServices/Downloader.xpc"
+cp "$build_root/checkouts/Sparkle/LICENSE" "$contents/Resources/Sparkle-LICENSE.txt"
+install_name_tool -add_rpath '@executable_path/../Frameworks' "$contents/MacOS/NoodleHub"
 cp "$package/Support/Info.plist" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $app_name" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $app_name" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$contents/Info.plist"
+updates_enabled=false
+if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == 1 ]]; then updates_enabled=true; fi
+/usr/libexec/PlistBuddy -c "Add :NoodleUpdatesEnabled bool $updates_enabled" "$contents/Info.plist"
 zsh "$project_root/scripts/generate-icon.sh" "$package/Support/AppSymbol.svg" "$staging/Hub.iconset" >&2
 iconutil -c icns "$staging/Hub.iconset" -o "$contents/Resources/Hub.icns"
 cp "$package/Support/AppSymbol.svg" "$contents/Resources/AppSymbol.svg"
@@ -148,8 +158,17 @@ for file in "$contents/Info.plist" "$agent_host/Contents/Info.plist"; do
     /usr/libexec/PlistBuddy -c "Add :NoodleAgentHostService string $bundle_identifier.agent-host" "$file"
 done
 codesign --force --options runtime "$timestamp_option" --sign "$identity" "$agent_host"
+cp "$package/Support/Hub.entitlements" "$staging/entitlements.plist"
+# Same two narrowly scoped Sparkle installer endpoints as the other apps.
+/usr/libexec/PlistBuddy -c 'Add :com.apple.security.temporary-exception.mach-lookup.global-name array' "$staging/entitlements.plist"
+/usr/libexec/PlistBuddy -c "Add :com.apple.security.temporary-exception.mach-lookup.global-name:0 string $bundle_identifier-spks" "$staging/entitlements.plist"
+/usr/libexec/PlistBuddy -c "Add :com.apple.security.temporary-exception.mach-lookup.global-name:1 string $bundle_identifier-spki" "$staging/entitlements.plist"
+# Sign Sparkle inside-out. Its installer stays outside the app's sandbox so it can replace the app.
+for component in "$sparkle/Versions/B/XPCServices/Installer.xpc" "$sparkle/Versions/B/Autoupdate" "$sparkle/Versions/B/Updater.app" "$sparkle"; do
+    codesign --force --options runtime "$timestamp_option" --sign "$identity" "$component"
+done
 codesign --force --options runtime "$timestamp_option" --sign "$identity" \
-    --entitlements "$package/Support/Hub.entitlements" "$app"
+    --entitlements "$staging/entitlements.plist" "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
 zsh "$project_root/scripts/verify-hub-release.sh" "$app" >&2
 destination="$project_root/.build/$app_name.app"

@@ -24,6 +24,10 @@ final class HubDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
     }
+
+    @MainActor func applicationDidFinishLaunching(_ notification: Notification) {
+        HubUpdater.shared.start()
+    }
 }
 
 struct HubMenu: View {
@@ -38,6 +42,7 @@ struct HubMenu: View {
             }
         }
         Divider()
+        HubCheckForUpdatesButton()
         Button("Quit Noodle Hub") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
     }

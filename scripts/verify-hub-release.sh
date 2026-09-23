@@ -12,15 +12,18 @@ cmp "$project_root/Hub/Support/AppSymbol.svg" "$app/Contents/Resources/AppSymbol
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' "$info")" == true ]]
 # A development bundle carries development hooks; a production bundle must not.
 if [[ "$bundle" == com.pdparchitect.noodle.hub ]]; then zsh "$project_root/scripts/verify-launch-hooks.sh" "$app"; fi
+zsh "$project_root/scripts/verify-updater.sh" "$app"
 zsh "$project_root/scripts/verify-agent-host.sh" "$app"
-# The signed app holds exactly the entitlements in Hub/Support/Hub.entitlements.
+# The signed app holds exactly Hub/Support/Hub.entitlements plus Sparkle's two installer endpoints.
 signed="$(mktemp /tmp/hub-entitlements.XXXXXX)"
 trap 'rm -f "$signed"' EXIT
 codesign -d --entitlements :- "$app" > "$signed" 2>/dev/null
-python3 - "$signed" "$project_root/Hub/Support/Hub.entitlements" <<'PY'
+python3 - "$signed" "$project_root/Hub/Support/Hub.entitlements" "$bundle" <<'PY'
 import plistlib, sys
-signed, expected = (plistlib.load(open(path, 'rb')) for path in sys.argv[1:])
+signed, expected = (plistlib.load(open(path, 'rb')) for path in sys.argv[1:3])
+bundle = sys.argv[3]
+expected['com.apple.security.temporary-exception.mach-lookup.global-name'] = [f'{bundle}-spks', f'{bundle}-spki']
 if signed != expected:
     sys.exit(f'Hub entitlements differ from Hub/Support/Hub.entitlements:\n{signed}')
 PY
-print "Hub bundle, identity, Agent Host and entitlements verified"
+print "Hub bundle, identity, updater, Agent Host and entitlements verified"
