@@ -111,7 +111,12 @@ actor EventKitReminderStore: ReminderStore {
     private lazy var store = EKEventStore()
 
     private func authorized() throws {
-        guard EKEventStore.authorizationStatus(for: .reminder) == .fullAccess else {
+        switch EKEventStore.authorizationStatus(for: .reminder) {
+        case .fullAccess: return
+        // EventKit keeps reporting `notDetermined` for reminders long after it has
+        // granted the access, so lists it will hand over are the better answer.
+        case .notDetermined where !store.calendars(for: .reminder).isEmpty: return
+        default:
             throw ToolProviderError("Noodle does not have access to this Mac's reminders. Allow it in System Settings, Privacy & Security, Reminders.")
         }
     }
@@ -250,28 +255,45 @@ enum EventKitColour {
     private(set) var requesting = false
     @ObservationIgnored private let repository: WorkspaceRepository
     @ObservationIgnored private let lister: @Sendable () async throws -> [EventKitList]
+    /// What macOS answers when asked, and what it answers when told to ask the person.
+    /// Injectable so the states EventKit reaches on a real Mac can be tested without one.
+    @ObservationIgnored private let probe: @MainActor () -> Access
+    @ObservationIgnored private let requester: @Sendable () async throws -> Bool
     @ObservationIgnored private var readable = true
     /// Receives each agent's assigned IDs for the tool broker, now and on every change.
     @ObservationIgnored var onAssignmentsChange: (([UUID: Set<String>]) -> Void)? { didSet { publishAssignments() } }
     private func publishAssignments() { onAssignmentsChange?(registry.toolAssignments(readable: readable)) }
 
     init(repository: WorkspaceRepository, kind: EventKitAssignments.Kind,
+         status: (@MainActor () -> Access)? = nil,
+         request: (@Sendable () async throws -> Bool)? = nil,
          lister: @escaping @Sendable () async throws -> [EventKitList]) {
         self.repository = repository
         self.kind = kind
         self.lister = lister
+        let entity: EKEntityType = kind == .calendar ? .event : .reminder
+        probe = status ?? { Self.status(of: entity) }
+        requester = request ?? {
+            let store = EKEventStore()
+            return kind == .calendar ? try await store.requestFullAccessToEvents() : try await store.requestFullAccessToReminders()
+        }
         do { registry = try EventKitAssignments.load(root: repository.rootURL, kind: kind) }
         catch { readable = false; failure = error.localizedDescription }
     }
 
-    private var entity: EKEntityType { kind == .calendar ? .event : .reminder }
-
-    private func status() -> Access {
+    private static func status(of entity: EKEntityType) -> Access {
         switch EKEventStore.authorizationStatus(for: entity) {
         case .fullAccess: .granted
         case .notDetermined: .notDetermined
         default: .denied
         }
+    }
+
+    /// EventKit keeps answering `notDetermined` for reminders after it has already
+    /// granted the access, so a grant this app has seen outranks that answer. Anything
+    /// else it says, a withdrawal included, still stands.
+    private func observe(_ probed: Access) {
+        guard probed == .notDetermined, access == .granted else { access = probed; return }
     }
 
     func selectedIDs(for agent: AgentRecord) -> Set<String> { registry.assigned(to: agent.id) }
@@ -301,13 +323,15 @@ enum EventKitColour {
         guard !requesting, access != .granted else { return }
         requesting = true
         defer { requesting = false }
-        do {
-            let store = EKEventStore()
-            _ = kind == .calendar ? try await store.requestFullAccessToEvents() : try await store.requestFullAccessToReminders()
-            failure = nil
-        } catch { failure = error.localizedDescription }
-        access = status()
+        var granted = false, refused: String?
+        do { granted = try await requester(); failure = nil }
+        catch { refused = error.localizedDescription; failure = refused }
+        // The request itself is the answer. Asking again can contradict it.
+        if granted { access = .granted } else { observe(probe()) }
         await refresh()
+        // A request that failed says something the picker cannot work out on its own,
+        // so it survives the refresh that follows it.
+        if let refused { failure = refused }
     }
 
     func openPrivacySettings() {
@@ -318,7 +342,7 @@ enum EventKitColour {
 
     /// Keeps the catalogue shown in Settings in step with what is on this Mac.
     func refresh() async {
-        access = status()
+        observe(probe())
         // Access the person has not given is a state the picker explains, never a failure.
         guard access == .granted else { failure = nil; return }
         do {
