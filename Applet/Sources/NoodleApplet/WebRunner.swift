@@ -1,6 +1,7 @@
 import AppKit
 import AppletBridge
 import AppletCore
+import ObjectiveC
 import WebKit
 
 @MainActor
@@ -23,6 +24,8 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
   private var dragEvent: NSEvent?
   private var cancellations: [UUID: () -> Void] = [:]
   private(set) var rendering: AppletRenderingState?
+  /// A noodlet the user cannot see must not be heard either.
+  private(set) var muted = false
   init(
     package: NoodletPackage, dataRoot: URL, log: AppletLog, size: CGSize, storeID: UUID,
     rememberFrame: Bool = true, testClock: Bool = false, secrets: AppletSecrets = .shared
@@ -92,6 +95,8 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
         forIdentifier: "noodlet-local-v1", encodedContentRuleList: rules)
       if let list { web.configuration.userContentController.add(list) }
     }
+    setMuted(!foreground)
+    if !foreground { log.append("audio", "Muted: a noodlet makes sound only while it is in the foreground.") }
     if foreground { show() }
     try await withCheckedThrowingContinuation { continuation in
       loadContinuation = continuation
@@ -109,10 +114,30 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
     }
   }
   func show() {
+    setMuted(false)
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
   }
-  func hide() { window.orderOut(nil) }
+  func hide() {
+    setMuted(true)
+    window.orderOut(nil)
+  }
+  /// Page muting is WebKit's own, so media elements and Web Audio go silent
+  /// without pausing: a background noodlet keeps running, it just makes no sound.
+  func setMuted(_ value: Bool) {
+    guard value != muted else { return }
+    muted = value
+    let selector = NSSelectorFromString("_setPageMuted:")
+    typealias PageMuted = @convention(c) (AnyObject, Selector, UInt) -> Void
+    if let method = class_getInstanceMethod(WKWebView.self, selector) {
+      // 1 is WebKit's audio-muted bit; capture stays with the manifest's permissions.
+      unsafeBitCast(method_getImplementation(method), to: PageMuted.self)(web, selector, value ? 1 : 0)
+    } else {
+      // Older WebKit builds only offer the blunter instrument.
+      web.setAllMediaPlaybackSuspended(value)
+      log.append("audio", "This WebKit build cannot mute a page, so media playback is suspended instead.")
+    }
+  }
   func stop() {
     guard !stopped else { return }
     stopped = true

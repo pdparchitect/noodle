@@ -275,9 +275,18 @@ creates an independent copy. Keep the returned ID for subsequent commands.
 
 `headless` renders without a visible window and uses separate test data.
 `background` uses normal data without showing a window. `foreground` and `show`
-bring the noodlet forward. Offscreen execution still requires a logged-in macOS
-desktop session; this is not a WindowServer-free server runtime. Input is delivered
-to the noodlet's own view and does not move the system mouse or type into other apps.
+bring the noodlet forward. Only a noodlet in the foreground makes sound: an HTML
+page is muted until it is shown and muted again when it is hidden, and a Swift
+noodlet started in `background` or `headless` mode has no audio output for its
+whole run, where `AVAudioEngine` cannot start. A noodlet granted the microphone
+keeps its audio in every mode. Opening a noodlet from the library or a
+`noodlet://` link always brings it up in the foreground: a background page is
+shown and unmuted, and a session that cannot gain sound or user data after it
+launched — a Swift noodlet started out of sight, or a headless test session — is
+closed and started again in the foreground.
+Offscreen execution still requires a logged-in macOS desktop session; this is not a
+WindowServer-free server runtime. Input is delivered to the noodlet's own view and
+does not move the system mouse or type into other apps.
 
 Log output includes lifecycle events, compiler diagnostics, stdout/stderr, browser
 console messages, uncaught errors, and rejected promises. Logs are JSON lines on

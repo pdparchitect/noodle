@@ -10,6 +10,13 @@ import AppletCore
   let createdAt = Date()
   let testClock: Bool
   var isActive: Bool { ["starting", "building", "running"].contains(state) }
+  /// Whether showing this session would still leave the user without the noodlet
+  /// they asked for. A page's sound follows its window, but a native noodlet's
+  /// confinement and a test session's data are both fixed when the process starts.
+  var needsRelaunchToBeSeenAndHeard: Bool {
+    if let native { return !native.audible }
+    return dataRoot.lastPathComponent == "Testing"
+  }
   let size: CGSize
   var web: WebRunner?, native: NativeRunner?, recording: AppletRecording?
   init(package: NoodletPackage, owner: String, mode: String, size: CGSize, root: URL,
@@ -559,13 +566,26 @@ import AppletCore
   }
   func open(_ package: NoodletPackage) {
     Task {
-      var request = AppletRequest(.open)
-      request.path = package.url.path
-      request.mode = "foreground"
-      request.owner = owners[package.key] ?? "local"
-      let result = await handle(request, identity: AppletBuildIdentity.current.noodleID)
-      if let error = result.error { self.error = error }
+      if let error = await openInForeground(package).error { self.error = error }
     }
+  }
+  /// The user clicking a noodlet asks to see and hear it. A session the agent left
+  /// out of sight cannot be given the audio output or the user's data after the
+  /// fact, so it makes way for one that starts in the foreground.
+  func openInForeground(_ package: NoodletPackage) async -> AppletResponse {
+    if let live = sessions.values.first(where: { $0.package.key == package.key && $0.isActive }),
+      live.needsRelaunchToBeSeenAndHeard
+    {
+      live.log.append("lifecycle", "Closed to open this noodlet in the foreground.")
+      live.stop()
+      _ = status(live)
+      objectWillChange.send()
+    }
+    var request = AppletRequest(.open)
+    request.path = package.url.path
+    request.mode = "foreground"
+    request.owner = owners[package.key] ?? "local"
+    return await handle(request, identity: AppletBuildIdentity.current.noodleID)
   }
   private func show(_ session: AppletSession) async throws {
     guard session.state == "running" else {

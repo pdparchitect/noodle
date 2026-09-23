@@ -85,4 +85,21 @@ final class NoodletConfinementTests: XCTestCase {
         XCTAssertNotEqual(try run("ls '\(NSHomeDirectory())'"), 0, "The user's home")
         XCTAssertNotEqual(try run("cat '\(NSHomeDirectory())/Library/Keychains/login.keychain-db'"), 0, "The login Keychain")
     }
+
+    /// A noodlet running where the user cannot see it must not be heard either.
+    func testSilentLaunchesLoseTheAudioServer() {
+        let root = URL(fileURLWithPath: "/tmp/applet")
+        var request = launch(root)
+        let deny = "(deny mach-lookup (global-name \"com.apple.audio.audiohald\"))"
+        let quiet = NoodletConfinement.profile(request, toolchain: "/bin")
+        XCTAssertTrue(quiet.contains(deny), quiet)
+        // Seatbelt takes the last matching rule, so the deny has to follow the blanket allow.
+        XCTAssertTrue(quiet.range(of: deny)!.lowerBound > quiet.range(of: "(allow mach-lookup)")!.lowerBound, quiet)
+        request.audible = true
+        XCTAssertFalse(NoodletConfinement.profile(request, toolchain: "/bin").contains(deny))
+        // Recording granted by the user reaches the same audio server, so it keeps it.
+        request.audible = false
+        request.devices = ["microphone"]
+        XCTAssertFalse(NoodletConfinement.profile(request, toolchain: "/bin").contains(deny))
+    }
 }

@@ -6,6 +6,11 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep a noodlet quiet while it is out of sight. A noodlet a bot runs in the background or headless no longer plays sound on the Mac: HTML pages are muted until they are shown and muted again when they are hidden, and a Swift noodlet started outside the foreground runs without audio output. A noodlet granted the microphone keeps its audio.
+- Open a noodlet in the foreground when it is clicked, whatever the bot left running. A background page is shown and unmuted; a Swift noodlet or a headless test session, which cannot gain sound or normal data after it launched, is closed and started again in the foreground.
+
 ### Added
 
 - Add `messenger tool vision cutout`, which removes the background from an image in the bot's workspace and writes the subject on transparency as a PNG. It can keep every subject or just one, and trim the result to what it kept. Like the other vision tools it runs on this Mac and sends nothing anywhere.

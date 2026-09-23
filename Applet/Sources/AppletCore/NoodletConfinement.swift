@@ -12,10 +12,13 @@ public struct NoodletLaunch: Codable, Sendable {
   public var writable: [String]
   /// Manifest permissions the user granted that need a sandbox operation.
   public var devices: [String]
+  /// Whether this process may reach the audio output. Only a noodlet the user is
+  /// looking at is heard; everything else runs silent.
+  public var audible: Bool
   public init(
     id: String = UUID().uuidString, executable: String, arguments: [String],
     environment: [String: String], directory: String, readable: [String], writable: [String],
-    devices: [String] = []
+    devices: [String] = [], audible: Bool = false
   ) {
     self.id = id
     self.executable = executable
@@ -25,6 +28,7 @@ public struct NoodletLaunch: Codable, Sendable {
     self.readable = readable
     self.writable = writable
     self.devices = devices
+    self.audible = audible
   }
 }
 
@@ -61,6 +65,13 @@ public enum NoodletConfinement {
       // one still checks this sandbox before it touches a file for the caller.
       "(allow mach-lookup)", "(allow ipc-posix-shm)", "(allow iokit-open)", "(allow network-outbound)",
     ]
+    // Without the audio server the process finds no output device, so a noodlet
+    // running where the user cannot see it cannot be heard either. Seatbelt takes
+    // the last matching rule, so this one follows the blanket mach-lookup above.
+    // A granted microphone reaches the same server; that grant keeps its audio.
+    if !launch.audible, !launch.devices.contains("microphone") {
+      rules.append("(deny mach-lookup (global-name \"com.apple.audio.audiohald\"))")
+    }
     if !launch.writable.isEmpty {
       rules.append(
         "(allow file-write*\n  "

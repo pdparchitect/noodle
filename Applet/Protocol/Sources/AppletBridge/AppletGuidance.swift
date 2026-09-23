@@ -201,6 +201,13 @@ public enum AppletGuidance {
 
         Use headless mode for automated checks with separate test data. It still needs
         a logged-in Mac. Prefer background for normal data without foreground activation.
+        Only a foreground noodlet makes sound. HTML pages are muted until they are shown,
+        and a Swift noodlet started in background or headless mode has no audio output for
+        its whole run, where AVAudioEngine cannot start. A granted microphone keeps its
+        audio in any mode. When the user opens a noodlet it always comes up in the
+        foreground: a background page is shown and unmuted, while a live Swift or headless
+        session, which cannot gain sound or user data after launch, is closed and started
+        again. Expect session-not-running after that and open the noodlet again.
         Hidden pages may pause RAF and visibility-gated games. Check rendering diagnostics
         and actual captured pixels; running does not imply visual readiness. For explicit
         synthetic RAF tests use open --mode headless --test-clock, then step --frames 60.

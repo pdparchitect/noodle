@@ -10,6 +10,11 @@ import AppletCore
   var devices: [String] = []
   /// Only a visible noodlet may raise Applet's file dialogs.
   private var foreground = false
+  /// A noodlet the user cannot see must not be heard. The confinement decides this
+  /// when the process starts, so a noodlet launched out of sight stays silent for
+  /// its whole run and has to start again to be heard.
+  private(set) var audible = false
+  nonisolated static func audible(mode: String) -> Bool { mode == "foreground" }
   private var process: ConfinedProcess?
   private var input: Pipe?
   private var pending: [String: CheckedContinuation<String, Error>] = [:]
@@ -322,6 +327,10 @@ import AppletCore
       try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     }
     foreground = mode == "foreground"
+    audible = Self.audible(mode: mode)
+    if !audible {
+      log.append("audio", "Silent: a noodlet started outside the foreground has no audio output, and AVAudioEngine cannot start there. Restart it with --mode foreground for sound.")
+    }
     var env = Self.environment(home: home)
     // Match swift-driver's interpreter environment so JIT symbol lookup
     // finds the system SwiftUI framework, including NSHostingView.
@@ -344,7 +353,7 @@ import AppletCore
         executable: interpreter,
         arguments: interpreterArguments(buildRoot.appendingPathComponent("Program.swift"), sdk: sdk),
         environment: env, directory: snapshot.path, readable: [buildRoot.path, moduleCache.path],
-        writable: [dataRoot.path, home.path], devices: devices),
+        writable: [dataRoot.path, home.path], devices: devices, audible: Self.audible(mode: mode)),
       root: root)
     p.input = stdin.fileHandleForReading
     p.output = stdout.fileHandleForWriting
