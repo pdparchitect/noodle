@@ -64,9 +64,8 @@
       ] }
   ],
   "present": {
-    "window": { "size": [1240, 860], "origin": [100, 70] },
-    "select": "launch",
-    "draft": "Andre, which headline is winning? And where do we push tomorrow?"
+    "window": { "size": [1240, 860] },
+    "select": "launch"
   },
   "film": {
     "background": "https://www.pexels.com/download/video/854261/",
@@ -76,7 +75,8 @@
   },
   "timeline": [
     { "capture": "01-launch-day" },
-    { "waitFor": "userMessage", "agent": "andre" },
+    { "wait": 1.4, "in": "launch",
+      "type": { "text": "Andre, which headline is winning? And where do we push tomorrow?" } },
     { "agent": "andre", "status": { "phase": "working", "detail": "Reading the headline test" } },
     { "wait": 0.6, "agent": "andre",
       "toolCall": { "title": "Querying sign-ups", "input": "analytics/launch-day.sql",

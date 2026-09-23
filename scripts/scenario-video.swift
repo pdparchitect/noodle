@@ -239,7 +239,7 @@ Task {
             try? FileManager.default.removeItem(at: finished)
             try await export.export(to: finished, as: .mov)
             _ = try FileManager.default.replaceItemAt(movie, withItemAt: finished)
-            print("\(cues.count) keystrokes in \(movie.path)")
+            print("\(cues.count) sounds in \(movie.path)")
 
         case "zoom":
             guard arguments.count == 5 else { fail("usage: scenario-video.swift zoom MOVIE FOCUS STOPPED-AT") }
