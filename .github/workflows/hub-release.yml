@@ -8,12 +8,22 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-26
+    # The Hub ships the Apple harness with compiled MLX shaders, so it builds like Noodle's release:
+    # the standard macOS 26 image has no SDK 27.
+    runs-on: xcode-27
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
         with:
           lfs: true
+
+      - name: Require the macOS 27 SDK and prepare Metal tools
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          sdk_version="$(xcrun --sdk macosx --show-sdk-version)"
+          [[ "${sdk_version%%.*}" -ge 27 ]] || { print -u2 "Hub releases require SDK 27 or later; found $sdk_version"; exit 1; }
+          xcodebuild -downloadComponent MetalToolchain
 
       - name: Validate public release and notes
         env:

@@ -47,6 +47,9 @@ let package = Package(
         .library(name: "NoodleCore", targets: ["NoodleCore"]),
         .library(name: "NoodleRuntime", targets: ["NoodleRuntime"]),
         .library(name: "NoodleRuntimeSettings", targets: ["NoodleRuntimeSettings"]),
+        .library(name: "NoodleAgentBridge", targets: ["NoodleAgentBridge"]),
+        .library(name: "NoodleToolScripting", targets: ["NoodleToolScripting"]),
+        .library(name: "NoodleAppleRuntime", targets: ["NoodleAppleRuntime"]),
         .executable(name: "Noodle", targets: ["Noodle"]),
         .executable(name: "NoodleMessenger", targets: ["NoodleMessenger"])
     ],

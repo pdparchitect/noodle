@@ -10,6 +10,7 @@ let package = Package(
     platforms: [.macOS("26.0")],
     products: [
         .executable(name: "NoodleHub", targets: ["NoodleHub"]),
+        .library(name: "HubCore", targets: ["HubCore"]),
     ],
     dependencies: [
         // Noodle itself: the Hub runs bots with the same runtime.

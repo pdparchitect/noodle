@@ -58,10 +58,15 @@ Run from the repository root:
 swift test --disable-sandbox --package-path Hub --scratch-path .build/hub
 swift test --disable-sandbox
 swift Hub/Tests/ReleaseWorkflowTests.swift "$PWD"
-zsh scripts/build-hub.sh
-# The release packaging script sets NOODLE_HUB_DATA_CONTAINER=production.
-zsh scripts/verify-hub-release.sh '.build/Noodle Hub Dev.app'
+(cd Hub && "$(zsh ../scripts/install-tuist.sh)" generate --no-open)
+xcodebuild -workspace Hub/NoodleHub.xcworkspace -scheme NoodleHub -configuration Release \
+    -derivedDataPath Hub/Derived -destination 'platform=macOS' -skipPackagePluginValidation build
+zsh scripts/verify-hub-release.sh 'Hub/Derived/Build/Products/Release/Noodle Hub.app'
 ```
+
+The release itself archives the same project with `xcodebuild archive`, signs with Developer ID,
+timestamps every signature and turns updates on; see `scripts/package-hub-release.sh`. It runs
+on the `xcode-27` image, like Noodle's, because the Hub ships the Apple harness and its MLX shaders.
 
 `verify-hub-release.sh` also runs `scripts/verify-launch-hooks.sh` on a production
 bundle: it carries no development hooks and names no launch check.

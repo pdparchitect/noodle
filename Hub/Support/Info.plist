@@ -2,24 +2,26 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleName</key>
-	<string>Hub</string>
-	<key>CFBundleDisplayName</key>
-	<string>Noodle Hub</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
 	<key>CFBundleExecutable</key>
-	<string>NoodleHub</string>
+	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.pdparchitect.noodle.hub</string>
-	<key>CFBundleIconFile</key>
-	<string>Hub.icns</string>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundleDisplayName</key>
+	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
-	<string>0.1.0</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>26.0</string>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>LSMultipleInstancesProhibited</key>
 	<true/>
 	<key>LSUIElement</key>
@@ -28,6 +30,8 @@
 	<true/>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.developer-tools</string>
 	<key>SUFeedURL</key>
 	<string>https://github.com/pdparchitect/noodle/releases/download/hub-latest/appcast.xml</string>
 	<key>SUPublicEDKey</key>
@@ -48,7 +52,15 @@
 	<true/>
 	<key>SUSendProfileInfo</key>
 	<false/>
-	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.developer-tools</string>
+	<!-- The Hub and its Agent Host accept only each other. -->
+	<key>NoodleSigningTeam</key>
+	<string>$(DEVELOPMENT_TEAM)</string>
+	<key>NoodleApplicationIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>NoodleAgentHostService</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER).agent-host</string>
+	<!-- Preprocessed: true only for public releases. -->
+	<key>NoodleUpdatesEnabled</key>
+	<HUB_UPDATES_ENABLED/>
 </dict>
 </plist>
