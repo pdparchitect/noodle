@@ -6,6 +6,7 @@ bin_path="$(swift build --build-system native --disable-sandbox --package-path "
 core_objects=("${(@f)$(python3 "$project_root/Tests/core-link-objects.py" "$bin_path")}")
 swiftc -parse-as-library -I "$bin_path/Modules" \
     "$project_root/Sources/Noodle/RuntimeShutdown.swift" \
+    "$project_root/Sources/Noodle/HarnessRuntimeConnection.swift" \
     "$project_root/Sources/Noodle/MuseAgentProcess.swift" \
     "$project_root/Sources/Noodle/AntigravityAgentProcess.swift" \
     "$project_root/Tests/muse-runtime.swift" \

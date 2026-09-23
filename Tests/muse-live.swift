@@ -14,13 +14,33 @@ import NoodleCore
     private let process = Process(), input = Pipe(), output = Pipe()
     private var diagnostics = Data()
     init() throws {}
-    func start(provider: HarnessProvider, agentID: UUID, executablePath: String, modelIdentifier: String?,
-               effortIdentifier: String?, reply: @escaping (Int32, String?) -> Void) {
+    func start(provider: HarnessProvider, agentID: UUID, executablePath: String, sessionID: UUID? = nil,
+               resumeSession: Bool = false, modelIdentifier: String?, effortIdentifier: String?,
+               appsEnabled: Bool = false, reply: @escaping (Int32, String?) -> Void) {
         launch(executablePath: executablePath, restricted: false, reply: reply)
     }
     func startRestrictedMuse(agentID: UUID, executablePath: String, modelIdentifier: String?, effortIdentifier: String?,
                              reply: @escaping (Int32, String?) -> Void) {
         launch(executablePath: executablePath, restricted: true, reply: reply)
+    }
+    // The shared harness connection also starts the other harnesses; these checks never do.
+    func startRestrictedCodex(agentID: UUID, executablePath: String, appsEnabled: Bool, reply: @escaping (Int32, String?) -> Void) {
+        preconditionFailure("Muse checks start only Muse")
+    }
+    func startRestrictedClaude(agentID: UUID, executablePath: String, sessionID: UUID?, resumeSession: Bool,
+                               modelIdentifier: String?, effortIdentifier: String?, appsEnabled: Bool, reply: @escaping (Int32, String?) -> Void) {
+        preconditionFailure("Muse checks start only Muse")
+    }
+    func startRestrictedApple(agentID: UUID, modelIdentifier: String?, reply: @escaping (Int32, String?) -> Void) {
+        preconditionFailure("Muse checks start only Muse")
+    }
+    func startRestrictedACP(provider: HarnessProvider, agentID: UUID, executablePath: String,
+                            modelIdentifier: String?, effortIdentifier: String?, reply: @escaping (Int32, String?) -> Void) {
+        preconditionFailure("Muse checks start only Muse")
+    }
+    func startRestrictedAntigravity(agentID: UUID, executablePath: String, conversationID: UUID?, modelIdentifier: String?,
+                                    reply: @escaping (Int32, String?) -> Void) {
+        preconditionFailure("Muse checks start only Muse")
     }
     private func launch(executablePath: String, restricted: Bool, reply: @escaping (Int32, String?) -> Void) {
         do {

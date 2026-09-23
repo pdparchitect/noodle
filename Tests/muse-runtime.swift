@@ -23,13 +23,33 @@ import NoodleCore
     var restrictedMuse = false
     var approvals: [[String: Any]] = []
     init() throws { Self.current = self }
-    func start(provider: HarnessProvider, agentID: UUID, executablePath: String, modelIdentifier: String?,
-               effortIdentifier: String?, reply: @escaping (Int32, String?) -> Void) {
+    func start(provider: HarnessProvider, agentID: UUID, executablePath: String, sessionID: UUID? = nil,
+               resumeSession: Bool = false, modelIdentifier: String?, effortIdentifier: String?,
+               appsEnabled: Bool = false, reply: @escaping (Int32, String?) -> Void) {
         precondition(provider == .muse); reply(12345, nil)
     }
     func startRestrictedMuse(agentID: UUID, executablePath: String, modelIdentifier: String?, effortIdentifier: String?,
                              reply: @escaping (Int32, String?) -> Void) {
         restrictedMuse = true; reply(12345, nil)
+    }
+    // The shared harness connection also starts the other harnesses; these checks never do.
+    func startRestrictedCodex(agentID: UUID, executablePath: String, appsEnabled: Bool, reply: @escaping (Int32, String?) -> Void) {
+        preconditionFailure("Muse checks start only Muse")
+    }
+    func startRestrictedClaude(agentID: UUID, executablePath: String, sessionID: UUID?, resumeSession: Bool,
+                               modelIdentifier: String?, effortIdentifier: String?, appsEnabled: Bool, reply: @escaping (Int32, String?) -> Void) {
+        preconditionFailure("Muse checks start only Muse")
+    }
+    func startRestrictedApple(agentID: UUID, modelIdentifier: String?, reply: @escaping (Int32, String?) -> Void) {
+        preconditionFailure("Muse checks start only Muse")
+    }
+    func startRestrictedACP(provider: HarnessProvider, agentID: UUID, executablePath: String,
+                            modelIdentifier: String?, effortIdentifier: String?, reply: @escaping (Int32, String?) -> Void) {
+        preconditionFailure("Muse checks start only Muse")
+    }
+    func startRestrictedAntigravity(agentID: UUID, executablePath: String, conversationID: UUID?, modelIdentifier: String?,
+                                    reply: @escaping (Int32, String?) -> Void) {
+        preconditionFailure("Muse checks start only Muse")
     }
     func write(_ data: Data) {
         let request = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
