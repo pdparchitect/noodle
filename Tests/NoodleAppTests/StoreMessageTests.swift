@@ -49,7 +49,7 @@ import XCTest
         XCTAssertEqual(try Data(contentsOf: messages), Data("corrupt transcript".utf8))
     }
 
-    func testCommandAndVoiceSendKeepExistingComposerDrafts() throws {
+    func testVoiceSendCarriesStagedAttachmentsAndKeepsDraftText() throws {
         let f = try fixture(), file = try attachment(f)
         f.store.setDraft("Still editing", for: f.directA.id)
         f.store.selectedConversationID = f.directB.id
@@ -60,10 +60,12 @@ import XCTest
         try f.store.sendVoiceMessage(from: audio, voice: voice, to: f.directA.id)
         let messages = try f.repository.loadMessages(conversationID: f.directA.id)
         XCTAssertEqual(messages.map(\.body), [command.body, VoiceMessage.messageBody])
-        let sentVoice = try XCTUnwrap(f.store.attachments(for: messages[1]).first)
-        XCTAssertEqual(sentVoice.voice, voice)
+        let sent = f.store.attachments(for: messages[1])
+        XCTAssertEqual(sent.map(\.id).first, file.id)
+        XCTAssertEqual(sent.last?.voice, voice)
+        XCTAssertEqual(sent.count, 2)
         XCTAssertEqual(f.store.draft(for: f.directA.id), "Still editing")
-        XCTAssertEqual(f.store.pendingAttachments(for: f.directA.id).map(\.id), [file.id])
+        XCTAssertTrue(f.store.pendingAttachments(for: f.directA.id).isEmpty)
         XCTAssertEqual(f.store.selectedConversationID, f.directB.id)
         XCTAssertTrue(f.store.messages(for: f.directB).isEmpty)
     }

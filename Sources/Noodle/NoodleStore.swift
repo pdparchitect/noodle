@@ -650,15 +650,18 @@ final class NoodleStore {
         }
         let attachment = try repository.importAttachment(from: url, into: conversationID, mediaType: "audio/x-caf", voice: voice)
         attachmentsByConversation[conversationID, default: []].append(attachment)
+        // Staged files usually relate to what was said, so they travel with the recording.
+        let staged = pendingAttachments(for: conversationID)
         let message = try repository.sendUserMessage(conversationID: conversationID,
-            body: VoiceMessage.messageBody, attachmentIDs: [attachment.id])
+            body: VoiceMessage.messageBody, attachmentIDs: staged.map(\.id) + [attachment.id])
+        drafts[conversationID].attachments = []
         markConversationRead(conversationID)
         messagesByConversation[conversationID, default: []].append(message)
         if let index = conversations.firstIndex(where: { $0.id == conversationID }) {
             conversations[index].updatedAt = message.createdAt
             conversations.sort { $0.updatedAt > $1.updatedAt }
         }
-        // Existing text and file drafts are independent and remain untouched.
+        // The text draft is independent and remains untouched.
         runtime.notify(participants(for: conversation), repository: repository)
     }
 

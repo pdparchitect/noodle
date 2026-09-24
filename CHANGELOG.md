@@ -11,6 +11,7 @@ All notable changes to Noodle are documented here, following
 - Let a Codex profile sign in again after its saved login stops working. Sign In… used to stop at "Could not check sign-in status" when Codex could no longer read the old login, for example after its refresh token was used up. It now starts a new sign-in, and a failed status check includes the reason Codex gave.
 - Put the scroll bar at the edge of the calendar and reminder list chooser. It used to sit right after the longest list name.
 - Open the right conversation at the right message when a notification is clicked. A click used to do nothing if the main window was closed or the click launched Noodle, and it never scrolled to the new message. It now opens the conversation where it is shown, or in the main window, and scrolls to the message.
+- Send attached files with a voice message. Files added before recording used to stay behind in the message box; they now go out with the recording. Typed text still stays in the box.
 - Centre the website’s top links on the page. They used to sit between the logo and the Download button, off to one side.
 
 ## [0.25.0] - 2026-09-24
