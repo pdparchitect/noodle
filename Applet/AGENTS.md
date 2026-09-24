@@ -11,6 +11,11 @@ applet skill and the command prints it for --help; do not copy it anywhere else.
 and runtime diagnostics. Verify the signed sandboxed bundle before claiming a
 runtime or capability works.
 
+The app is built from an Xcode project that Tuist generates from `Project.swift`; the generated
+project and `Derived/` are not committed. Describe targets, settings and embedding there, never by
+editing the generated project. Its build phases check the noodlet runtime compiles, embed and sign
+the CLI, rename development examples and trim Sparkle; everything else is target settings.
+
 Launch arguments for verification runs are matched by digest (`AppletLaunchCheck` in
 Sources/NoodleApplet/App.swift, Shared/LaunchChecks), so no name appears in the binary.
 One that the release workflow or RELEASING.md runs against the packaged app stays in every

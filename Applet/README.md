@@ -53,15 +53,15 @@ Requires macOS 15+, Swift 6, and an Apple Development or Developer ID signing
 identity. From the repository root:
 
 ```sh
-scripts/build-applet.sh
-open '.build/Noodle Applet Dev.app'
+scripts/build-and-launch-applet.sh
 swift test --disable-sandbox --package-path Applet --scratch-path .build/applet
 ```
 
 The default signed application is `.build/Noodle Applet Dev.app`. Its CLI is
-`Contents/Helpers/noodlet`. Set `NOODLE_SIGNING_IDENTITY` to choose an identity and
-`NOODLE_APPLET_CONFIGURATION=debug` for a debug build. The default is optimized, matching Computer. This is a local
-development build; the script does not publish or notarize it.
+`Contents/Helpers/noodlet`. The build uses the Xcode project Tuist generates from
+`Applet/Project.swift`; to debug, run `cd Applet && tuist generate` and use Run in Xcode.
+`NOODLE_APPLET_DATA_CONTAINER=production` builds the production identity instead. This is a
+local development build; the script does not publish or notarize it.
 
 Run `python3 Applet/scripts/smoke.py` after building to exercise the signed app
 through its shipped CLI. It checks interaction, persistence, captures, compiler

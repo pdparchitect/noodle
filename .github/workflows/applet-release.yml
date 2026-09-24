@@ -69,7 +69,7 @@ jobs:
 
       - name: Build, sign, notarize, staple and sign update feed
         shell: zsh {0}
-        run: zsh scripts/package-applet-release.sh "applet-v$APPLET_VERSION"
+        run: zsh scripts/package-xcode-release.sh Applet "applet-v$APPLET_VERSION"
 
       - name: Verify application menu and native Update settings
         timeout-minutes: 2

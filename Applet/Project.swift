@@ -30,6 +30,15 @@ let embedHelpers: TargetScript = .post(script: """
     fi
     """, name: "Embed Helpers", basedOnDependencyAnalysis: false)
 
+/// Noodlets compile the bundled runtime and examples themselves, so every build checks they still do.
+let checkRuntime: TargetScript = .pre(script: """
+    set -euo pipefail
+    xcrun swiftc -typecheck -parse-as-library -swift-version 5 -module-cache-path "$DERIVED_FILE_DIR/RuntimeCheckCache" \\
+        "$SRCROOT/Sources/NoodleApplet/Resources/WindowFocusGuard.swift" \\
+        "$SRCROOT/Sources/NoodleApplet/Resources/NoodletRuntime.swift" \\
+        "$SRCROOT/Sources/NoodleApplet/Resources/Examples/Orbit.noodlet/Orbit.swift"
+    """, name: "Check Noodlet Runtime", basedOnDependencyAnalysis: false)
+
 /// The app already has outbound network access, so Sparkle's separate downloader goes. Removing it
 /// changes the framework, so it is signed again, inside out.
 let trimSparkle: TargetScript = .post(script: """
@@ -99,7 +108,7 @@ let project = Project(
             productName: "NoodleApplet",
             bundleId: "com.pdparchitect.noodle.applet",
             deploymentTargets: .macOS("15.0"),
-            infoPlist: .file(path: "Support/NoodleApplet-Info.plist"),
+            infoPlist: .file(path: "Support/Info.plist"),
             // The Resources folder holds the noodlet runtimes and examples; its Swift files are
             // compiled by noodlets later, not by the app.
             sources: .sourceFilesList(globs: [
@@ -110,8 +119,8 @@ let project = Project(
                 "Support/Assets.xcassets",
                 "Support/AppSymbol.svg",
             ],
-            entitlements: .file(path: "Support/NoodleApplet.entitlements"),
-            scripts: [embedHelpers, trimSparkle],
+            entitlements: .file(path: "Support/Applet.entitlements"),
+            scripts: [checkRuntime, embedHelpers, trimSparkle],
             dependencies: [
                 .package(product: "AppletCore"),
                 .package(product: "AppletBridge"),
@@ -174,9 +183,9 @@ let project = Project(
             product: .appExtension,
             bundleId: "com.pdparchitect.noodle.applet.preview",
             deploymentTargets: .macOS("15.0"),
-            infoPlist: .file(path: "Support/NoodletPreview-Info.plist"),
+            infoPlist: .file(path: "Support/Preview-Info.plist"),
             sources: ["Sources/NoodletPreview/**"],
-            entitlements: .file(path: "Support/NoodletPreview.entitlements"),
+            entitlements: .file(path: "Support/Preview.entitlements"),
             dependencies: [.package(product: "AppletCore"), .package(product: "AppletBridge")],
             settings: .settings(base: signing.merging([
                 "PRODUCT_BUNDLE_IDENTIFIER": "$(APPLET_APP_BUNDLE_ID).preview",

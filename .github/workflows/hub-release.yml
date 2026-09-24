@@ -79,7 +79,7 @@ jobs:
 
       - name: Build, sign, notarize, staple and sign update feed
         shell: zsh {0}
-        run: zsh scripts/package-hub-release.sh "hub-v$HUB_VERSION"
+        run: zsh scripts/package-xcode-release.sh Hub "hub-v$HUB_VERSION"
 
       - name: Save verified release assets
         run: cp "$RUNNER_TEMP/hub-notes.md" "dist/hub-$HUB_VERSION/release-notes.md"

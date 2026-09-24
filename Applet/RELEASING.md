@@ -62,13 +62,15 @@ Run from the repository root:
 swift test --disable-sandbox --package-path Applet --scratch-path .build/applet
 swift test --disable-sandbox
 swift Applet/Tests/ReleaseWorkflowTests.swift "$PWD"
-zsh scripts/build-applet.sh
-# The release packaging script sets NOODLE_APPLET_DATA_CONTAINER=production.
+NOODLE_APPLET_DATA_CONTAINER=production zsh scripts/xcode-build.sh Applet
 zsh scripts/verify-applet-release.sh '.build/Noodle Applet.app'
 '.build/Noodle Applet.app/Contents/MacOS/NoodleApplet' --noodle-background --updater-ui-test
 '.build/Noodle Applet.app/Contents/MacOS/NoodleApplet' --noodle-background --background-launch-ui-test
 zsh Applet/scripts/test-background-launch.sh
 ```
+
+The release archives the same Xcode project with `xcodebuild archive`, signs with Developer ID,
+timestamps every signature and turns updates on; see `scripts/package-xcode-release.sh`, shared with the Hub.
 
 `verify-applet-release.sh` also runs `scripts/verify-launch-hooks.sh` on a production
 bundle: it carries no development hooks and names no launch check. The two launch checks
