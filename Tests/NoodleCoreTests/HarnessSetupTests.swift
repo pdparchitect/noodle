@@ -117,6 +117,26 @@ final class HarnessSetupTests: XCTestCase {
         XCTAssertEqual(status, .authenticated)
     }
 
+    @MainActor func testSignInStartsWhenTheStoredAccountCannotBeRead() async throws {
+        let executable = try makeSignInHarness(completes: true, unreadableAccount: true)
+        let provider = CodexSetupProvider(codexHome: root)
+        var displayedCode: String?
+        let status = try await provider.signIn(for: HarnessInstallation(provider: .codex, executablePath: executable.path)) {
+            displayedCode = $0.code
+        }
+        XCTAssertEqual(displayedCode, "TEST-1234")
+        XCTAssertEqual(status, .authenticated)
+    }
+
+    @MainActor func testStatusErrorIncludesTheHarnessReason() async throws {
+        let executable = try makeSignInHarness(completes: false, unreadableAccount: true)
+        let provider = CodexSetupProvider(codexHome: root)
+        do {
+            _ = try await provider.status(for: HarnessInstallation(provider: .codex, executablePath: executable.path))
+            XCTFail("Expected an account error")
+        } catch { XCTAssertTrue(error.localizedDescription.contains("refresh token was already used"), error.localizedDescription) }
+    }
+
     @MainActor func testWaitingSignInCanBeCancelled() async throws {
         let executable = try makeSignInHarness(completes: false)
         let provider = CodexSetupProvider(codexHome: root)
@@ -156,7 +176,7 @@ final class HarnessSetupTests: XCTestCase {
         XCTAssertEqual(try CodexExecutableTrust.executable(at: shellCommand.path, home: home), trusted)
     }
 
-    private func makeSignInHarness(completes: Bool) throws -> URL {
+    private func makeSignInHarness(completes: Bool, unreadableAccount: Bool = false) throws -> URL {
         let executable = root.appendingPathComponent("fake-login-codex")
         let script = #"""
         #!/bin/sh
@@ -166,6 +186,8 @@ final class HarnessSetupTests: XCTestCase {
             *account*read*)
               if [ "$signed_in" = 1 ]; then
                 printf '%s\n' '{"id":2,"result":{"account":{"type":"chatgpt"},"requiresOpenaiAuth":true}}'
+              elif [ "\#(unreadableAccount ? "yes" : "no")" = yes ]; then
+                printf '%s\n' '{"id":2,"error":{"code":-32603,"message":"refresh token was already used"}}'
               else
                 printf '%s\n' '{"id":2,"result":{"account":null,"requiresOpenaiAuth":true}}'
               fi ;;

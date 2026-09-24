@@ -180,10 +180,21 @@ enum CodexAccountResponse {
     private func receive(_ message: [String: Any]) {
         guard continuation != nil else { return }
         if let id = message["id"] as? Int {
-            if message["error"] != nil {
-                let detail = id == 3
+            if let error = message["error"] {
+                // A login that can no longer be read, such as one whose refresh
+                // token was spent, must not stop the user from signing in again.
+                if id == 2, onChallenge != nil, !loginCompleted {
+                    send("account/login/start", id: 3, params: ["type": "chatgptDeviceCode"])
+                    setTimeout(seconds: 30)
+                    return
+                }
+                var detail = id == 3
                     ? "Sign-in could not start. Enable device-code login in your ChatGPT account or workspace settings, or sign in using Codex and check again."
                     : "Could not check sign-in status. Check the harness configuration and account access, then try again."
+                if let reason = ((error as? [String: Any])?["message"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines), !reason.isEmpty {
+                    detail += " Codex reported: \(reason.prefix(300))"
+                }
                 finish(.failure(HarnessSetupError(detail)))
                 return
             }

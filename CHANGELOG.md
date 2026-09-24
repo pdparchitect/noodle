@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Let a Codex profile sign in again after its saved login stops working. Sign In… used to stop at "Could not check sign-in status" when Codex could no longer read the old login, for example after its refresh token was used up. It now starts a new sign-in, and a failed status check includes the reason Codex gave.
+
 ## [0.25.0] - 2026-09-24
 
 ### Fixed
