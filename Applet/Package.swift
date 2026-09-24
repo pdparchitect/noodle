@@ -13,6 +13,7 @@ let package = Package(
         .executable(name: "noodlet", targets: ["NoodletCLI"]),
         .executable(name: "NoodletPreview", targets: ["NoodletPreview"]),
         .executable(name: "NoodletHost", targets: ["NoodletHost"]),
+        .library(name: "AppletCore", targets: ["AppletCore"]),
     ],
     dependencies: [
         .package(path: "../Shared/SettingsUI"),
