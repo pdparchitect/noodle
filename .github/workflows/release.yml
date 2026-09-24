@@ -95,7 +95,7 @@ jobs:
           NOODLE_TEST_CLI_APPLICATION: ${{ github.workspace }}/.build/Sandbox CLI Tests.app
         run: swift test --disable-sandbox --enable-code-coverage
       - name: Summarize Noodle coverage
-        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        if: ${{ !cancelled() && steps.tests.outcome == 'success' }}
         run: |
           coverage_path="$(swift test --disable-sandbox --show-codecov-path)"
           python3 scripts/coverage-report.py --input "$coverage_path" --output .build/coverage/noodle
