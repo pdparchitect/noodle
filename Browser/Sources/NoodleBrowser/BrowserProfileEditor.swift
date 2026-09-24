@@ -2,6 +2,7 @@ import BrowserBridge
 import BrowserCore
 import NoodleWallpaper
 import SwiftUI
+import NoodleSettingsUI
 
 struct BrowserProfileEditor: View {
     let presentation: BrowserPresentation

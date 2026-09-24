@@ -2,6 +2,7 @@ import AppKit
 import ComputerCore
 import LocalMacCore
 import SwiftUI
+import NoodleSettingsUI
 
 struct NewLocalMacView: View {
     @ObservedObject var store: ComputerStore

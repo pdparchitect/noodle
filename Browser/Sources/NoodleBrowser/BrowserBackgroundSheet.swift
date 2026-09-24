@@ -1,5 +1,6 @@
 import NoodleWallpaper
 import SwiftUI
+import NoodleSettingsUI
 
 struct BrowserBackgroundSheet: View {
     let original: BackgroundSelection

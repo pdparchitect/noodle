@@ -3,6 +3,7 @@ import Combine
 import ComputerCore
 import NoodleWallpaper
 import SwiftUI
+import NoodleSettingsUI
 
 extension ComputerAppearance {
     /// The icon fields, in the form the suite's shared icon views take.
