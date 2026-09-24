@@ -30,6 +30,16 @@ version with its saved data.
 
 Applet can also sit in the menu bar. Turn this on in the General settings.
 
+## Play on a TV
+
+A noodlet can play full screen on another display, such as an Apple TV or a
+TV that supports AirPlay. First add the TV as a separate display: choose
+**File → Play On → Add TV or Display…**, then pick the TV from the add menu in
+Displays settings. Then, with the noodlet in front, choose the TV from
+**File → Play On**. You can also right-click a running noodlet's card in the
+library. To end it, choose **Bring Back to This Mac** or leave full screen.
+Keyboards, mice and trackpads stay connected to the Mac.
+
 ## What bots can do
 
 Bots build noodlets, open and use them, take screenshots, and record short videos

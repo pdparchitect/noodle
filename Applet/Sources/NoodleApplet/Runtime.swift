@@ -106,6 +106,15 @@ import AppletCore
         }
       }
     }
+    // Play On lists the displays, and AirPlay adds and removes a TV while Applet runs.
+    NotificationCenter.default.addObserver(
+      forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+    ) { [weak self] _ in MainActor.assumeIsolated { self?.objectWillChange.send() } }
+  }
+  /// The running window a noodlet can play on another display, whichever runtime draws it.
+  func castTarget(for key: String) -> NoodletCastTarget? {
+    sessions.values.lazy.filter { $0.package.key == key }
+      .compactMap { $0.web as NoodletCastTarget? ?? $0.native }.first
   }
   func package(showing window: NSWindow?) -> NoodletPackage? {
     guard let window else { return nil }
@@ -538,6 +547,7 @@ import AppletCore
           _ = self?.status(session)
           self?.objectWillChange.send()
         }
+        runner.castChanged = { [weak self] in self?.objectWillChange.send() }
         session.web = runner
         try await runner.start(foreground: session.mode == "foreground")
       } else {
@@ -547,6 +557,7 @@ import AppletCore
             "Builds/\(session.id.uuidString)"), log: session.log)
         // Authorization already passed, so every declared permission is granted.
         runner.devices = package.manifest.permissions ?? []
+        runner.castChanged = { [weak self] in self?.objectWillChange.send() }
         session.native = runner
         session.state = "building"
         _ = status(session)

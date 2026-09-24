@@ -510,6 +510,7 @@ private struct LibraryView: View {
           runtime.objectWillChange.send()
         }
       }
+      if let target = runtime.castTarget(for: entry.id) { NoodletCastMenu(target: target) }
       Button("Reveal Package") {
         NSWorkspace.shared.activateFileViewerSelecting([entry.package.url])
       }
@@ -534,6 +535,37 @@ private struct LibraryView: View {
       if let package = runtime.frontPackage {
         Divider()
         Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([package.url]) }
+        if let target = runtime.castTarget(for: package.key) { NoodletCastMenu(target: target) }
+      }
+    }
+  }
+}
+
+/// A running noodlet window that can play full screen on another display.
+@MainActor protocol NoodletCastTarget: AnyObject {
+  var canCast: Bool { get }
+  var isCasting: Bool { get }
+  func play(on screen: NSScreen)
+  func bringBack()
+}
+extension WebRunner: NoodletCastTarget {}
+extension NativeRunner: NoodletCastTarget {}
+
+/// Plays a noodlet full screen on a display. A TV becomes one through AirPlay, which macOS
+/// only lets people add themselves, so the menu ends with the way to do that.
+@MainActor private struct NoodletCastMenu: View {
+  let target: NoodletCastTarget
+  var body: some View {
+    if target.isCasting {
+      Button("Bring Back to This Mac") { target.bringBack() }
+    } else if target.canCast {
+      Menu("Play On") {
+        ForEach(Array(NSScreen.screens.enumerated()), id: \.offset) { _, screen in
+          Button(screen.localizedName) { target.play(on: screen) }
+        }
+        if !NSScreen.screens.isEmpty { Divider() }
+        Button("Add TV or Display…") { NSWorkspace.shared.open(NoodletCast.displaysSettings) }
+          .help("Use an Apple TV or AirPlay TV as a separate display.")
       }
     }
   }

@@ -48,7 +48,7 @@ import AppletCore
     env["TMPDIR"] = home.appendingPathComponent("tmp").path
     return env
   }
-  private let prefix = "NOODLET_\(UUID().uuidString)_"
+  let prefix = "NOODLET_\(UUID().uuidString)_"
   var exited: ((Int32, Bool) -> Void)?
   init(package: NoodletPackage, dataRoot: URL, buildRoot: URL, log: AppletLog) {
     self.package = package
@@ -255,7 +255,9 @@ import AppletCore
         "#sourceLocation(file: \(quoted), line: 1)\n"
         + (try String(contentsOf: file, encoding: .utf8)) + "\n#sourceLocation()\n"
     }
-    combined += try String(contentsOf: resources.appendingPathComponent("WindowFocusGuard.swift"), encoding: .utf8) + "\n"
+    for shared in ["WindowFocusGuard.swift", "NoodletCast.swift"] {
+      combined += try String(contentsOf: resources.appendingPathComponent(shared), encoding: .utf8) + "\n"
+    }
     combined += try String(contentsOf: source, encoding: .utf8).replacingOccurrences(
       of: "@main struct NoodletRuntime", with: "struct NoodletRuntime")
     combined += Self.availabilitySupport
@@ -407,7 +409,7 @@ import AppletCore
     stop()
     throw AppletError("Native view did not become ready within 60 seconds. Inspect logs.")
   }
-  private func receive(_ line: String) {
+  func receive(_ line: String) {
     guard line.hasPrefix(prefix),
       let data = String(line.dropFirst(prefix.count)).data(using: .utf8),
       let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -418,6 +420,11 @@ import AppletCore
     }
     if id == "ready" {
       ready = true
+      return
+    }
+    if id == "cast" {
+      isCasting = object["value"] as? Bool ?? false
+      castChanged?()
       return
     }
     if id == "sound" {
@@ -441,6 +448,9 @@ import AppletCore
             reply["value"] = try await openFile() ?? NSNull()
           } else if call == "files.save" {
             reply["value"] = try await saveFile(name ?? "", suggested: value)
+          } else if call == "displays.add" {
+            NSWorkspace.shared.open(NoodletCast.displaysSettings)
+            reply["value"] = true
           } else if call == "package.reveal" {
             NSWorkspace.shared.activateFileViewerSelecting([package.url])
             reply["value"] = true
@@ -516,6 +526,21 @@ import AppletCore
           ))
       }
     }
+  }
+  /// The window is the noodlet's own, so the noodlet casts it and reports back.
+  private(set) var isCasting = false
+  var castChanged: (() -> Void)?
+  var canCast: Bool { package.manifest.window?.type != .preview }
+  func play(on screen: NSScreen) {
+    let display = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+    send(["operation": "cast", "display": display?.uint32Value ?? 0])
+  }
+  func bringBack() { send(["operation": "bring-back"]) }
+  private func send(_ command: [String: Any]) {
+    guard let input, let data = try? JSONSerialization.data(
+      withJSONObject: command.merging(["id": UUID().uuidString]) { old, _ in old })
+    else { return }
+    try? input.fileHandleForWriting.write(contentsOf: data + Data([10]))
   }
   func listen(_ sink: @escaping ([Int16], Double) -> Void) async throws {
     soundSink = sink

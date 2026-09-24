@@ -174,8 +174,9 @@ public struct NoodletSecrets: Sendable {
     }
 }
 
-@MainActor final class NoodletRuntimeDelegate: NSObject, NSApplicationDelegate {
+@MainActor final class NoodletRuntimeDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var window: NSWindow!
+    var cast: NoodletCast!
     var host: NSView!
     let prefix = ProcessInfo.processInfo.environment["NOODLET_PROTOCOL"]!
     func applicationShouldTerminateAfterLastWindowClosed(_ sender:NSApplication)->Bool {true}
@@ -226,12 +227,15 @@ public struct NoodletSecrets: Sendable {
             let current = window.contentRect(forFrameRect: window.frame).size
             window.setContentSize(NSSize(width: min(max(current.width, window.contentMinSize.width), window.contentMaxSize.width), height: min(max(current.height, window.contentMinSize.height), window.contentMaxSize.height)))
         }
+        cast = NoodletCast(window)
+        cast.changed = { [weak self] in self.map { $0.emit(["id":"cast","value":$0.cast.isCasting]) } }
         if !NoodletContext.isBackground { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
         NoodletHost.emit = { [weak self] in self?.emit($0) }
         // In front, the noodlet's own process owns the menu bar, not Applet.
         let appMenu = NSMenu(), fileMenu = NSMenu(title: "File"), bar = NSMenu()
         appMenu.addItem(withTitle: "Quit \(window.title)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         fileMenu.addItem(withTitle: "Show in Finder", action: #selector(showInFinder), keyEquivalent: "").target = self
+        fileMenu.delegate = self
         for menu in [appMenu, fileMenu] { bar.addItem(withTitle: menu.title, action: nil, keyEquivalent: "").submenu = menu }
         NSApp.mainMenu = bar
         emit(["id":"ready","value":"ready"])
@@ -248,6 +252,27 @@ public struct NoodletSecrets: Sendable {
     }
     // The noodlet runs from a snapshot; only Applet knows where its package lives.
     @objc func showInFinder() { Task { _ = try? await NoodletHost.call("package.reveal", [:]) } }
+    // Displays come and go with AirPlay, so Play On is rebuilt each time the File menu opens.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        while menu.items.count > 1 { menu.removeItem(at: 1) }
+        if cast.isCasting {
+            menu.addItem(withTitle: "Bring Back to This Mac", action: #selector(bringBack), keyEquivalent: "").target = self
+        } else if cast.canCast {
+            let screens = NSMenu()
+            for (index, screen) in NSScreen.screens.enumerated() {
+                let item = screens.addItem(withTitle: screen.localizedName, action: #selector(playOn(_:)), keyEquivalent: "")
+                item.target = self; item.tag = index
+            }
+            if !NSScreen.screens.isEmpty { screens.addItem(.separator()) }
+            let add = screens.addItem(withTitle: "Add TV or Display…", action: #selector(addDisplay), keyEquivalent: "")
+            add.target = self; add.toolTip = "Use an Apple TV or AirPlay TV as a separate display."
+            menu.addItem(withTitle: "Play On", action: nil, keyEquivalent: "").submenu = screens
+        }
+    }
+    @objc func playOn(_ item: NSMenuItem) { if NSScreen.screens.indices.contains(item.tag) { cast.play(on: NSScreen.screens[item.tag]) } }
+    @objc func bringBack() { cast.bringBack() }
+    // A confined noodlet cannot open System Settings; Applet does it.
+    @objc func addDisplay() { Task { _ = try? await NoodletHost.call("displays.add", [:]) } }
     func emit(_ value: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) else { return }
         FileHandle.standardOutput.write(Data((prefix + String(decoding: data, as: UTF8.self) + "\n").utf8))
@@ -260,6 +285,11 @@ public struct NoodletSecrets: Sendable {
             switch op {
             case "show": window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
             case "hide": window.orderOut(nil)
+            case "cast":
+                let display = (command["display"] as? NSNumber)?.uint32Value
+                guard let screen = NSScreen.screens.first(where: { ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == display }) else { throw RuntimeError("That display is no longer connected.") }
+                cast.play(on: screen)
+            case "bring-back": cast.bringBack()
             case "record-start": NoodletSound.listen { [weak self] in self?.emit($0) }
             case "record-stop": value = NoodletSound.stopListening()
             case "close", "terminate": emit(["id":id,"value":["ok":true]]); NSApp.terminate(nil); return

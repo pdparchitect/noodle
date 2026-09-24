@@ -14,6 +14,7 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
   let secrets: AppletSecrets
   let web: WKWebView
   let window: NSWindow
+  private let cast: NoodletCast
   private var loadContinuation: CheckedContinuation<Void, Error>?
   private var loadTimer: Task<Void, Never>?
   var failed: ((String) -> Void)?
@@ -43,6 +44,7 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
     web = WKWebView(frame: CGRect(origin: .zero, size: size), configuration: config)
     let options = package.manifest.window ?? NoodletWindowOptions()
     window = WindowPresentation.make(options, size: size)
+    cast = NoodletCast(window)
     super.init()
     window.title = package.manifest.title
     window.isReleasedWhenClosed = false
@@ -176,6 +178,18 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
     window.contentView = nil
   }
   func windowWillClose(_ notification: Notification) { if !stopped { closed?() } }
+  var castChanged: (() -> Void)? {
+    get { cast.changed }
+    set { cast.changed = newValue }
+  }
+  var canCast: Bool { cast.canCast }
+  var isCasting: Bool { cast.isCasting }
+  func play(on screen: NSScreen) {
+    setMuted(false)
+    cast.play(on: screen)
+  }
+  func bringBack() { cast.bringBack() }
+  func windowDidFailToEnterFullScreen(_ window: NSWindow) { cast.bringBack() }
   private func finishLoad(_ error: Error? = nil) {
     loadTimer?.cancel()
     loadTimer = nil

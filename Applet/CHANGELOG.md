@@ -7,6 +7,7 @@
 - Record a noodlet with its sound. `record` now adds what the noodlet plays to the MP4 as an AAC soundtrack, including while it runs muted in the background or headless, so the Mac stays quiet. HTML pages are heard through Web Audio and their own media elements. Swift noodlets play through the new `NoodletContext.audioEngine`, which also runs silently out of sight, where other audio APIs cannot start.
 - Hide a noodlet from the library's context menu. Hidden noodlets move to a new Hidden tab and no longer appear in All, Recent, Pinned or the menu bar; Unhide brings them back with their pin.
 - Show a noodlet's package in Finder from the File menu while its window is in front.
+- Play a noodlet on a TV. **Play On** in the File menu and the library's context menu takes an HTML or Swift noodlet full screen on another display, including an Apple TV or AirPlay TV added as a separate display; **Add TV or Display…** opens Displays settings to add one, and **Bring Back to This Mac** returns the window as it was.
 
 ## [0.8.2] - 2026-09-24
 

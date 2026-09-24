@@ -35,6 +35,7 @@ let checkRuntime: TargetScript = .pre(script: """
     set -euo pipefail
     xcrun swiftc -typecheck -parse-as-library -swift-version 5 -module-cache-path "$DERIVED_FILE_DIR/RuntimeCheckCache" \\
         "$SRCROOT/Sources/NoodleApplet/Resources/WindowFocusGuard.swift" \\
+        "$SRCROOT/Sources/NoodleApplet/Resources/NoodletCast.swift" \\
         "$SRCROOT/Sources/NoodleApplet/Resources/NoodletRuntime.swift" \\
         "$SRCROOT/Sources/NoodleApplet/Resources/Examples/Orbit.noodlet/Orbit.swift"
     """, name: "Check Noodlet Runtime", basedOnDependencyAnalysis: false)
