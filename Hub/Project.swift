@@ -86,6 +86,8 @@ let project = Project(
         base: [
             "DEVELOPMENT_TEAM": "S8VNVK39LH",
             "MACOSX_DEPLOYMENT_TARGET": "26.0",
+            // Releases ship for Apple silicon only.
+            "ARCHS": "arm64",
             "SWIFT_VERSION": "5",
             "MARKETING_VERSION": .string(version),
             "CURRENT_PROJECT_VERSION": .string(version),
