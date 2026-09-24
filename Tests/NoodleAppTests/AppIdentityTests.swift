@@ -23,7 +23,7 @@ final class AppIdentityTests: XCTestCase {
     /// an unreviewed one cannot ship. Both pins have to follow the policy when it changes.
     func testReleaseVerifiersPinTheNumberOfEntitlementsThePolicyHas() throws {
         let expected = try Self.sandboxPolicy().count
-        for script in ["scripts/package-release.sh", "Tests/smoke-test.sh"] {
+        for script in ["scripts/verify-noodle-release.sh", "Tests/smoke-test.sh"] {
             let text = try String(contentsOf: Self.repository.appendingPathComponent(script), encoding: .utf8)
             let pinned = text
                 .components(separatedBy: "entitlement_count\" != \"")

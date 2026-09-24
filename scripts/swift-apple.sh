@@ -25,7 +25,7 @@ noodle_scratch_args=()
 if [[ "$noodle_sdk" != "$noodle_xcode_sdk" ]]; then
     export NOODLE_APPLE_HARNESS_ONLY=1
     # Keep the helper's normal SwiftPM cache separate from the app's Xcode
-    # module cache, including when called by build-app.sh.
+    # module cache.
     unset CLANG_MODULE_CACHE_PATH SWIFTPM_MODULECACHE_OVERRIDE
     noodle_scratch="${0:A:h:h}/.build/apple27"
     noodle_explicit_scratch=false

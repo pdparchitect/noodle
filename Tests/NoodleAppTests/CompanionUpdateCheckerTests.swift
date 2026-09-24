@@ -66,8 +66,10 @@ import XCTest
     func testEveryCompanionDeclaresThatItAcceptsAnUpdateCheckAndOwnsAURLScheme() throws {
         let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         for companion in ["Browser", "Computer", "Applet"] {
-            let data = try Data(contentsOf: repository.appendingPathComponent("\(companion)/Support/Info.plist"))
-            let info = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+            // The build preprocesses the plist: a release turns its <APP_UPDATES_ENABLED/> tag into <true/>.
+            let source = try String(contentsOf: repository.appendingPathComponent("\(companion)/Support/Info.plist"), encoding: .utf8)
+                .replacingOccurrences(of: "<\\w+_UPDATES_ENABLED/>", with: "<false/>", options: .regularExpression)
+            let info = try XCTUnwrap(PropertyListSerialization.propertyList(from: Data(source.utf8), format: nil) as? [String: Any])
             XCTAssertEqual(info["NoodleAcceptsUpdateCheck"] as? Bool, true, companion)
             let types = try XCTUnwrap(info["CFBundleURLTypes"] as? [[String: Any]], companion)
             XCTAssertFalse((types.first?["CFBundleURLSchemes"] as? [String] ?? []).isEmpty, companion)

@@ -1,14 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-    <key>CFBundleIdentifier</key><string>com.pdparchitect.noodle.agent-host</string>
-    <key>CFBundleExecutable</key><string>NoodleAgentHost</string>
-    <key>CFBundleName</key><string>Noodle Agent Host</string>
-    <key>CFBundlePackageType</key><string>XPC!</string>
-    <key>CFBundleShortVersionString</key><string>0.0.0</string>
-    <key>CFBundleVersion</key><string>0</string>
-    <key>XPCService</key><dict>
-        <key>ServiceType</key><string>Application</string>
-        <key>JoinExistingSession</key><true/>
-    </dict>
-</dict></plist>
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleName</key>
+	<string>Noodle Agent Host</string>
+	<key>CFBundlePackageType</key>
+	<string>XPC!</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NoodleAgentHostService</key>
+	<string>$(NOODLE_APP_BUNDLE_ID).agent-host</string>
+	<key>NoodleApplicationIdentifier</key>
+	<string>$(NOODLE_APP_BUNDLE_ID)</string>
+	<key>NoodleSigningTeam</key>
+	<string>$(DEVELOPMENT_TEAM)</string>
+	<key>XPCService</key>
+	<dict>
+		<key>JoinExistingSession</key>
+		<true/>
+		<key>ServiceType</key>
+		<string>Application</string>
+	</dict>
+</dict>
+</plist>

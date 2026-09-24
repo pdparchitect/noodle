@@ -3,7 +3,7 @@ import Foundation
 import NoodleCore
 import Observation
 
-/// Noodle's extension point. `scripts/build-app.sh` extracts this definition into
+/// Noodle's extension point. The app's build extracts this definition into
 /// `Contents/Extensions/Noodle.appexpt`; the identifier is `<bundle identifier>.tool`.
 extension AppExtensionPoint {
     @Definition static var noodleTool: AppExtensionPoint {

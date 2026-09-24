@@ -23,7 +23,7 @@ zsh "$project_root/Tests/message-reader-annotations.sh"
 zsh "$project_root/Tests/mcp-fixture.sh" --check
 zsh "$project_root/Tests/mcp-window-routing.sh"
 zsh "$project_root/Tests/destructive-buttons.sh"
-app="$(NOODLE_BUILD_CONFIGURATION="${NOODLE_BUILD_CONFIGURATION:-debug}" "$project_root/scripts/build-app.sh")"
+app="$(zsh "$project_root/scripts/xcode-build.sh" Noodle)"
 
 expected_version="$(tr -d '[:space:]' < "$project_root/VERSION")"
 actual_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
@@ -32,7 +32,7 @@ if [[ "$actual_version" != "$expected_version" ]]; then
     exit 1
 fi
 actual_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist")"
-if [[ "$actual_build" != "${NOODLE_BUILD_NUMBER:-$expected_version}" ]]; then
+if [[ "$actual_build" != "$expected_version" ]]; then
     print -u2 "Built app's update version does not match VERSION."
     exit 1
 fi
@@ -108,7 +108,8 @@ if ! xcrun assetutil --info "$app/Contents/Resources/Assets.car" | grep -q '"Nam
 fi
 
 entitlements="$(codesign -d --entitlements :- "$app" 2>/dev/null)"
-compact_entitlements="$(print -r -- "$entitlements" | tr -d '[:space:]')"
+# The Dev app is a debug build, which the debugger may attach to; that entitlement is not part of the policy.
+compact_entitlements="$(print -r -- "$entitlements" | tr -d '[:space:]' | sed 's|<key>com.apple.security.get-task-allow</key><true/>||')"
 entitlement_count="$(print -r -- "$compact_entitlements" | grep -o '<key>' | wc -l | tr -d '[:space:]')"
 if [[ "$entitlement_count" != "10" ]]; then
     print -u2 "The app must contain exactly the ten reviewed sandbox entitlements."

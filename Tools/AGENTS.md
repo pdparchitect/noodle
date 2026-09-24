@@ -65,7 +65,7 @@ Bots reach every tool through `messenger tool PROVIDER TOOL`. There is no per-to
 
 1. Create `Tools/NAME` in the layout above. Copy `Tools/Vision`; it is the smallest.
 2. Add `tool("NAME")` at the end of `Package.swift`.
-3. In `scripts/build-app.sh`, add the block that assembles `NoodleNAMETools.appex` and the line that signs it, next to the existing three. The bundle identifier is `<noodle id>.tools.NAME`.
+3. In `Project.swift`, add `toolExtension("NAME")` to the targets and a dependency on it from the `Noodle` target, next to the existing three. The bundle identifier is `<noodle id>.tools.NAME`.
 4. `scripts/verify-tool-extensions.sh` checks every bundled extension and needs no change for a tool whose `Extension.entitlements` holds the sandbox alone. Anything more needs a case there.
 5. If it follows an assignment, publish that assignment from `NoodleStore` with `toolAssignments.replace(KIND, with:)`.
 
@@ -78,4 +78,4 @@ dependency on the provider from the `Noodle` target, `toolProviders.register(...
 
 - Provider tests run without the extension, a companion app, a network or an account. They must pass in CI.
 - Write the test first and see it fail.
-- Before calling a change done, run all of `swift test`, then `scripts/build-app.sh` and `scripts/verify-tool-extensions.sh` on the bundle.
+- Before calling a change done, run all of `swift test`, then `scripts/build-and-launch.sh` and `scripts/verify-tool-extensions.sh` on the bundle.

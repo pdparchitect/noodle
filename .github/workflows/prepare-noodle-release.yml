@@ -97,9 +97,7 @@ jobs:
 
       - name: Build, sign, notarize, and package
         shell: zsh {0}
-        env:
-          NOODLE_REQUIRE_APPLE27: '1'
-        run: scripts/package-release.sh "v$NOODLE_VERSION"
+        run: zsh scripts/package-xcode-release.sh Noodle "v$NOODLE_VERSION"
 
       - name: Prepare release notes from changelog
         shell: zsh {0}
@@ -110,12 +108,12 @@ jobs:
           print "NOODLE_RELEASE_NOTES=$notes" >> "$GITHUB_ENV"
 
       - name: Save verified release assets
-        run: cp "$NOODLE_RELEASE_NOTES" dist/release-notes.md
+        run: cp "$NOODLE_RELEASE_NOTES" "dist/noodle-$NOODLE_VERSION/release-notes.md"
 
       - uses: actions/upload-artifact@v6
         with:
           name: noodle-release-assets
-          path: dist/
+          path: dist/noodle-${{ env.NOODLE_VERSION }}/
           if-no-files-found: error
           retention-days: 7
 

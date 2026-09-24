@@ -8,7 +8,6 @@
             "cwd": "${workspaceFolder}",
             "command": "scripts/build-and-launch.sh",
             "env": {
-                "NOODLE_BUILD_CONFIGURATION": "debug",
                 "NOODLE_DATA_CONTAINER": "development"
             }
         },
@@ -17,10 +16,7 @@
             "type": "node-terminal",
             "request": "launch",
             "cwd": "${workspaceFolder}",
-            "command": "scripts/scenario.sh",
-            "env": {
-                "NOODLE_BUILD_CONFIGURATION": "debug"
-            }
+            "command": "scripts/scenario.sh"
         },
         {
             "name": "Noodle Browser: Build & Launch Dev",

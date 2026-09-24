@@ -6,7 +6,10 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>$(NoodleSharedGroup)</string>
+		<string>$(TeamIdentifierPrefix)$(NOODLE_APP_BUNDLE_ID).sharing</string>
+		<string>$(TeamIdentifierPrefix)com.pdparchitect.noodle.computers$(NOODLE_COMPANION_SUFFIX)</string>
+		<string>$(TeamIdentifierPrefix)com.pdparchitect.noodle.applets$(NOODLE_COMPANION_SUFFIX)</string>
+		<string>$(TeamIdentifierPrefix)com.pdparchitect.noodle.browsers$(NOODLE_COMPANION_SUFFIX)</string>
 	</array>
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
@@ -32,8 +35,8 @@
 	</array>
 	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
 	<array>
-		<string>com.pdparchitect.noodle-spks</string>
-		<string>com.pdparchitect.noodle-spki</string>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER)-spks</string>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER)-spki</string>
 	</array>
 </dict>
 </plist>

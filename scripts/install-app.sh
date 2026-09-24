@@ -3,7 +3,7 @@ set -euo pipefail
 
 project_root="${0:A:h:h}"
 export NOODLE_DATA_CONTAINER=development
-app="$("$project_root/scripts/build-app.sh")"
+app="$(zsh "$project_root/scripts/xcode-build.sh" Noodle)"
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" == com.pdparchitect.noodle.local ]] || {
     print -u2 'Refusing to install or launch a non-development Noodle bundle.'; exit 1
 }

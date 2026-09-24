@@ -11,7 +11,7 @@ bundle_identifier="com.pdparchitect.noodle.scenarios"
 entitlements="$build_root/NoodleScenarios.entitlements"
 
 usage() {
-    print -u2 'Usage: scripts/scenario.sh [--no-build] [--debug] [--shots] [--video] [--ratio W:H]'
+    print -u2 'Usage: scripts/scenario.sh [--no-build] [--shots] [--video] [--ratio W:H]'
     print -u2 '                            [--size WxH] [--shadow] [--all] [name|path]'
     print -u2 '  no name     open the picker'
     print -u2 '  --shots     play the timeline and save each capture step to Scenarios/NAME/shots/'
@@ -22,7 +22,6 @@ usage() {
     print -u2 '  --shadow    keep the window shadow in those shots'
     print -u2 '  --all       every scenario in turn'
     print -u2 '  --no-build  derive the bundle from the Noodle Dev.app already in .build'
-    print -u2 '  --debug     build the debug configuration'
     exit 1
 }
 
@@ -37,7 +36,6 @@ for argument in "$@"; do
     fi
     case "$argument" in
         --no-build) build=false ;;
-        --debug) export NOODLE_BUILD_CONFIGURATION=debug ;;
         --shots) shots=true ;;
         --silent) silent=true ;;
         --video) record=true ;;
@@ -119,7 +117,7 @@ done
 # Scenarios are a development hook, so they start from the development bundle.
 source_app="$build_root/Noodle Dev.app"
 if [[ "$build" == true ]]; then
-    source_app="$(NOODLE_DATA_CONTAINER=development zsh "$project_root/scripts/build-app.sh")"
+    source_app="$(NOODLE_DATA_CONTAINER=development zsh "$project_root/scripts/xcode-build.sh" Noodle)"
 fi
 [[ -d "$source_app" ]] || { print -u2 "Missing $source_app. Run without --no-build first."; exit 1; }
 # Count, so grep reads to the end: leaving early would break the pipe under pipefail.

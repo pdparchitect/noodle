@@ -8,21 +8,24 @@ set -euo pipefail
 project_root="${0:A:h:h}"
 app="${1:?Usage: scripts/xcode-build.sh APP [SETTING=VALUE ...]}"
 shift
-[[ -f "$project_root/$app/Project.swift" ]] || { print -u2 "$app has no Project.swift."; exit 1; }
+# Noodle's project is the repository's own; each companion's is in its folder.
+if [[ "$app" == Noodle ]]; then folder="$project_root"; name=Noodle; else folder="$project_root/$app"; name="Noodle $app"; fi
+[[ -f "$folder/Project.swift" ]] || { print -u2 "$app has no Project.swift."; exit 1; }
 container_setting="NOODLE_${(U)app}_DATA_CONTAINER"
+[[ "$app" != Noodle ]] || container_setting=NOODLE_DATA_CONTAINER
 case "${(P)container_setting:-${NOODLE_DATA_CONTAINER:-development}}" in
-    development) configuration=Debug; app_name="Noodle $app Dev" ;;
-    production) configuration=Release; app_name="Noodle $app" ;;
-    tests) configuration=Tests; app_name="Noodle $app Tests" ;;
+    development) configuration=Debug; app_name="$name Dev" ;;
+    production) configuration=Release; app_name="$name" ;;
+    tests) configuration=Tests; app_name="$name Tests" ;;
     *) print -u2 "$container_setting must be development, production or tests."; exit 1 ;;
 esac
 tuist="$(zsh "$project_root/scripts/install-tuist.sh")"
-(cd "$project_root/$app" && "$tuist" generate --no-open >&2)
-xcodebuild -workspace "$project_root/$app/Noodle$app.xcworkspace" -scheme "Noodle$app" -configuration "$configuration" \
-    -derivedDataPath "$project_root/$app/Derived" -destination 'platform=macOS' -allowProvisioningUpdates \
+(cd "$folder" && "$tuist" generate --no-open >&2)
+xcodebuild -workspace "$folder/${name// /}.xcworkspace" -scheme "${name// /}" -configuration "$configuration" \
+    -derivedDataPath "$folder/Derived" -destination 'platform=macOS' -allowProvisioningUpdates \
     -skipPackagePluginValidation -skipMacroValidation "$@" build >&2
 destination="$project_root/.build/$app_name.app"
 rm -rf "$destination"
-ditto "$project_root/$app/Derived/Build/Products/$configuration/$app_name.app" "$destination"
+ditto "$folder/Derived/Build/Products/$configuration/$app_name.app" "$destination"
 codesign --verify --deep --strict "$destination"
 print "$destination"

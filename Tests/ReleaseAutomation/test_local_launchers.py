@@ -49,13 +49,11 @@ print(os.environ['FIXTURE_INSTALLED_APP'])
                 self.assertFalse(build_log.exists())
             else:
                 fields = build_log.read_text().strip().split('/')
-                if launcher == 'build-and-launch.sh':
-                    self.assertEqual(fields[0], 'development')
-                else:
-                    # Xcode-built apps share one build script, told which app to build.
-                    name, container = {'build-and-launch-computer.sh': ('Computer', 1), 'build-and-launch-applet.sh': ('Applet', 2),
-                                      'build-and-launch-browser.sh': ('Browser', 3), 'build-and-launch-hub.sh': ('Hub', 4)}[launcher]
-                    self.assertEqual((fields[container], fields[5]), ('development', name))
+                # Every app builds with one script, told which app to build.
+                name, container = {'build-and-launch.sh': ('Noodle', 0), 'build-and-launch-computer.sh': ('Computer', 1),
+                                   'build-and-launch-applet.sh': ('Applet', 2), 'build-and-launch-browser.sh': ('Browser', 3),
+                                   'build-and-launch-hub.sh': ('Hub', 4)}[launcher]
+                self.assertEqual((fields[container], fields[5]), ('development', name))
                 self.assertEqual(result.returncode, 0 if expected_id == produced_id else 1, result.stderr)
             self.assertEqual(open_log.exists(), not arguments and expected_id == produced_id)
             installs = launcher == 'build-and-launch-computer.sh' and not arguments and expected_id == produced_id
@@ -65,7 +63,7 @@ print(os.environ['FIXTURE_INSTALLED_APP'])
 
     def test_launchers_force_local_and_refuse_production_output_or_arguments(self):
         for launcher, builder, local, production in [
-            ('build-and-launch.sh', 'build-app.sh', 'com.pdparchitect.noodle.local', 'com.pdparchitect.noodle'),
+            ('build-and-launch.sh', 'xcode-build.sh', 'com.pdparchitect.noodle.local', 'com.pdparchitect.noodle'),
             ('build-and-launch-computer.sh', 'xcode-build.sh', 'com.pdparchitect.noodle.computer.local',
              'com.pdparchitect.noodle.computer'),
             ('build-and-launch-applet.sh', 'xcode-build.sh', 'com.pdparchitect.noodle.applet.local',

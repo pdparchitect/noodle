@@ -206,8 +206,8 @@ class WorkflowTests(unittest.TestCase):
         prerequisite = next(i for i, step in enumerate(steps) if 'sdk_version=' in step.get('run', ''))
         signing = next(i for i, step in enumerate(steps) if 'MACOS_CERTIFICATE_P12' in step.get('env', {}))
         self.assertLess(prerequisite, signing)
-        package = next(step for step in steps if 'scripts/package-release.sh' in step.get('run', ''))
-        self.assertEqual(package['env']['NOODLE_REQUIRE_APPLE27'], '1')
+        package = next(i for i, step in enumerate(steps) if 'scripts/package-xcode-release.sh Noodle' in step.get('run', ''))
+        self.assertLess(signing, package)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             for name, body in {
@@ -359,7 +359,7 @@ class WorkflowTests(unittest.TestCase):
                     'CHANGELOG.md', 'Computer/CHANGELOG.md', 'Applet/CHANGELOG.md', 'Browser/CHANGELOG.md', 'Hub/CHANGELOG.md',
                     'Computer/Images/CHANGELOG.md',
                     'Sources/NoodleCore/MessengerDocumentation.swift', 'Package.swift',
-                    'Tests/NoodleAppTests/ScreenCaptureTests.swift', 'scripts/build-app.sh',
+                    'Tests/NoodleAppTests/ScreenCaptureTests.swift', 'Project.swift',
                     'Support/AppIcon.png', 'Support/update-milestones.json',
                     'Computer/Images/desktop/Dockerfile', 'Applet/Support/Info.plist', 'Hub/Support/Info.plist',
                     '.github/workflows/release.yml']
