@@ -39,18 +39,22 @@ jobs:
         uses: actions/checkout@v6
         with:
           sparse-checkout: website
-      - name: Check that both direct downloads are published
+      - name: Check that every direct download is published
         id: download
         run: |
           download_urls="$(python3 - <<'PY'
           from html.parser import HTMLParser
           from pathlib import Path
+          prefix = 'https://github.com/pdparchitect/noodle/releases/'
           class Download(HTMLParser):
+              urls = {}
               def handle_starttag(self, tag, attrs):
-                  attrs = dict(attrs)
-                  if tag == 'a' and 'button' in attrs.get('class', '').split():
-                      print(attrs['href'])
-          Download().feed(Path('website/index.html').read_text())
+                  href = dict(attrs).get('href') or ''
+                  if tag == 'a' and href.startswith(prefix) and '/download/' in href:
+                      self.urls[href] = None
+          parser = Download()
+          parser.feed(Path('website/index.html').read_text())
+          print('\n'.join(parser.urls))
           PY
           )"
           test -n "$download_urls"
