@@ -65,18 +65,22 @@ swift test --disable-sandbox --package-path Computer/LocalMac --scratch-path .bu
 swift test --disable-sandbox --package-path Computer/Bridge
 swift test --disable-sandbox
 swift Computer/Tests/ReleaseWorkflowTests.swift "$PWD"
-zsh scripts/build-computer.sh
-zsh scripts/verify-computer-release.sh '.build/Noodle Computer Dev.app'
-'.build/Noodle Computer Dev.app/Contents/MacOS/NoodleComputer' --updater-ui-test
+NOODLE_COMPUTER_DATA_CONTAINER=production zsh scripts/xcode-build.sh Computer
+zsh scripts/verify-computer-release.sh '.build/Noodle Computer.app'
+'.build/Noodle Computer.app/Contents/MacOS/NoodleComputer' --updater-ui-test
 ```
+
+The release archives the same Xcode project with `xcodebuild archive`, signs with Developer ID,
+timestamps every signature and turns updates on; see `scripts/package-xcode-release.sh`, shared with
+Applet, Browser and the Hub.
 
 The release workflow runs the same `--updater-ui-test` against the packaged app. It is
 the only launch check a production bundle contains, matched by digest rather than by
 name; every other check needs a development or test bundle.
 `scripts/verify-launch-hooks.sh` rejects a production bundle that carries any of them.
 
-For isolated updater UI checks, build with `NOODLE_COMPUTER_TEST_BUILD=1` and
-`NOODLE_COMPUTER_TEST_UPDATES=1`. The latter is rejected for production bundles.
+For isolated updater UI checks, build the test app with updates on:
+`NOODLE_COMPUTER_DATA_CONTAINER=tests zsh scripts/xcode-build.sh Computer INFOPLIST_PREPROCESSOR_DEFINITIONS=COMPUTER_UPDATES_ENABLED=true`.
 Check controls without installing updates or restarting the user's computers.
 Local checks do not replace CI notarization and distribution checks.
 
@@ -91,7 +95,7 @@ required Computer CI job. A signed build must also pass the helper identity,
 layout and entitlement checks in `verify-computer-release.sh`.
 
 For a native creation-form preview without creating a computer or account, build
-with `NOODLE_COMPUTER_TEST_BUILD=1` and run the test app with
+the test app with `NOODLE_COMPUTER_DATA_CONTAINER=tests` and run it with
 `--localmac-creation-preview`. It uses a temporary empty library, renders the form,
 prints its PNG path and exits; it never presses Create or registers the service.
 

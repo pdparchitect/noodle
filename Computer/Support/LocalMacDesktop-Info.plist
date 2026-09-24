@@ -1,19 +1,38 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-    <key>CFBundleIdentifier</key><string>com.pdparchitect.noodle.computer.desktop</string>
-    <key>CFBundleExecutable</key><string>LocalMacDesktop</string>
-    <key>CFBundleName</key><string>Noodle Local Mac Desktop</string>
-    <key>CFBundleDisplayName</key><string>Noodle Local Mac Desktop</string>
-    <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.0.0</string>
-    <key>CFBundleVersion</key><string>1</string>
-    <key>LSMinimumSystemVersion</key><string>26.0</string>
-    <key>LSUIElement</key><true/>
-    <key>NSHighResolutionCapable</key><true/>
-    <key>NSScreenCaptureUsageDescription</key><string>Show the separate Local Mac account’s desktop in Noodle Computer.</string>
-    <key>NSAppleEventsUsageDescription</key><string>Allow commands in this Local Mac account to control apps you approve.</string>
-    <key>NSDesktopFolderUsageDescription</key><string>Browse and transfer files in this Local Mac account’s Desktop folder.</string>
-    <key>NSDocumentsFolderUsageDescription</key><string>Browse and transfer files in this Local Mac account’s Documents folder.</string>
-    <key>NSDownloadsFolderUsageDescription</key><string>Browse and transfer files in this Local Mac account’s Downloads folder.</string>
-</dict></plist>
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>LocalMacDesktop</string>
+	<key>CFBundleExecutable</key>
+	<string>LocalMacDesktop</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleName</key>
+	<string>LocalMacDesktop</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Allow commands in this Local Mac account to control apps you approve.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Browse and transfer files in this Local Mac account’s Desktop folder.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Browse and transfer files in this Local Mac account’s Documents folder.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Browse and transfer files in this Local Mac account’s Downloads folder.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Show the separate Local Mac account’s desktop in Noodle Computer.</string>
+</dict>
+</plist>

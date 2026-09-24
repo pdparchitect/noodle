@@ -60,15 +60,16 @@ swift test --disable-sandbox --package-path Browser --scratch-path .build/browse
 swift test --disable-sandbox --filter 'BrowserBrokerTests|CompanionAssignmentPickerTests|MessengerDocumentationTests'
 swift Browser/Tests/ReleaseWorkflowTests.swift "$PWD"
 python3 -m unittest discover -s Tests/ReleaseAutomation -v
+NOODLE_BROWSER_DATA_CONTAINER=production zsh scripts/xcode-build.sh Browser
+zsh scripts/verify-browser-release.sh '.build/Noodle Browser.app'
 NOODLE_BROWSER_DATA_CONTAINER=development zsh scripts/xcode-build.sh Browser
-zsh scripts/verify-browser-release.sh '.build/Noodle Browser Dev.app'
 zsh scripts/test-browser.sh '.build/Noodle Browser Dev.app'
 zsh scripts/test-browser-ui.sh '.build/Noodle Browser Dev.app'
 ```
 
 The release archives the same Xcode project with `xcodebuild archive`, signs with Developer ID,
 timestamps every signature and turns updates on; see `scripts/package-xcode-release.sh`, shared with
-Applet and the Hub.
+Applet, Computer and the Hub.
 
 The signed browser fixtures use disposable profiles and a local fake site. Release
 preparation runs them against the production bundle before uploading any assets,

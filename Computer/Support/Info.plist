@@ -1,77 +1,115 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-    <key>CFBundleExecutable</key><string>NoodleComputer</string>
-    <key>CFBundleIdentifier</key><string>com.pdparchitect.noodle.computer</string>
-    <key>CFBundleName</key><string>Noodle Computer</string>
-    <key>CFBundleDisplayName</key><string>Noodle Computer</string>
-    <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleIconFile</key><string>Computer.icns</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
-    <key>CFBundleVersion</key><string>1</string>
-    <key>LSMinimumSystemVersion</key><string>26.0</string>
-    <key>NSHighResolutionCapable</key><true/>
-    <key>NSLocalNetworkUsageDescription</key>
-    <string>Noodle Computer connects to the virtual desktops running on this Mac to display their screens.</string>
-    <key>NSAppTransportSecurity</key><dict>
-        <key>NSAllowsLocalNetworking</key><true/>
-    </dict>
-    <key>NSPrincipalClass</key><string>NSApplication</string>
-    <key>CFBundleURLTypes</key>
-    <array><dict>
-        <key>CFBundleURLName</key><string>com.pdparchitect.noodle.computer.link</string>
-        <key>CFBundleURLSchemes</key><array><string>noodlecomputer</string></array>
-        <key>CFBundleTypeRole</key><string>Viewer</string>
-    </dict></array>
-    <key>NoodleAcceptsUpdateCheck</key><true/>
-    <key>SUFeedURL</key><string>https://github.com/pdparchitect/noodle/releases/download/computer-latest/appcast.xml</string>
-    <key>SUPublicEDKey</key><string>1ZT5NrPiDPaQ54iHGSI1a9JIn6kTrmjQvzZRBA9f/sk=</string>
-    <key>SURequireSignedFeed</key><true/>
-    <key>SUVerifyUpdateBeforeExtraction</key><true/>
-    <key>SUEnableInstallerLauncherService</key><true/>
-    <key>SUEnableAutomaticChecks</key><true/>
-    <key>SUScheduledCheckInterval</key><integer>86400</integer>
-    <key>SUAutomaticallyUpdate</key><false/>
-    <key>SUAllowsAutomaticUpdates</key><true/>
-    <key>SUSendProfileInfo</key><false/>
-    <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
-	<key>UTExportedTypeDeclarations</key>
-	<array>
-		<dict>
-			<key>UTTypeIdentifier</key>
-			<string>com.pdparchitect.noodle.computer-reference</string>
-			<key>UTTypeDescription</key>
-			<string>Noodle Computer Reference</string>
-			<key>UTTypeConformsTo</key>
-			<array>
-				<string>public.data</string>
-			</array>
-			<key>UTTypeTagSpecification</key>
-			<dict>
-				<key>public.filename-extension</key>
-				<array>
-					<string>noodlecomputer</string>
-				</array>
-				<key>public.mime-type</key>
-				<array>
-					<string>application/vnd.noodle.computer+json</string>
-				</array>
-			</dict>
-		</dict>
-	</array>
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
-			<string>Noodle Computer Reference</string>
+			<string>$(PRODUCT_NAME) Reference</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>LSHandlerRank</key>
 			<string>Owner</string>
 			<key>LSItemContentTypes</key>
 			<array>
-				<string>com.pdparchitect.noodle.computer-reference</string>
+				<string>com.pdparchitect.noodle.computer-reference$(COMPUTER_DOCUMENT_SUFFIX)</string>
 			</array>
 		</dict>
 	</array>
-</dict></plist>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).link</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>noodlecomputer$(COMPUTER_DOCUMENT_SUFFIX)</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.developer-tools</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Noodle Computer connects to the virtual desktops running on this Mac to display their screens.</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NoodleAcceptsUpdateCheck</key>
+	<true/>
+	<key>NoodleComputerGroup</key>
+	<string>$(DEVELOPMENT_TEAM).$(COMPUTER_GROUP_SUFFIX)</string>
+	<key>NoodleSigningTeam</key>
+	<string>$(DEVELOPMENT_TEAM)</string>
+	<key>NoodleUpdatesEnabled</key>
+	<COMPUTER_UPDATES_ENABLED/>
+	<key>SUAllowsAutomaticUpdates</key>
+	<true/>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/pdparchitect/noodle/releases/download/computer-latest/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>1ZT5NrPiDPaQ54iHGSI1a9JIn6kTrmjQvzZRBA9f/sk=</string>
+	<key>SURequireSignedFeed</key>
+	<true/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+	<key>SUSendProfileInfo</key>
+	<false/>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>$(PRODUCT_NAME) Reference</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.pdparchitect.noodle.computer-reference$(COMPUTER_DOCUMENT_SUFFIX)</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>noodlecomputer$(COMPUTER_DOCUMENT_SUFFIX)</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/vnd.noodle.computer$(COMPUTER_DOCUMENT_SUFFIX)+json</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>

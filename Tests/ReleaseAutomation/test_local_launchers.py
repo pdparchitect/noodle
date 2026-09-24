@@ -23,7 +23,7 @@ class LocalLauncherTests(unittest.TestCase):
             with (app / 'Contents/Info.plist').open('wb') as output:
                 plistlib.dump({'CFBundleIdentifier': produced_id}, output)
             (scripts / builder).write_text('''#!/bin/zsh
-print -r -- "$NOODLE_DATA_CONTAINER/$NOODLE_COMPUTER_DATA_CONTAINER/${NOODLE_COMPUTER_TEST_BUILD:-0}/$NOODLE_APPLET_DATA_CONTAINER/$NOODLE_BROWSER_DATA_CONTAINER/$NOODLE_HUB_DATA_CONTAINER/$*" > "$FIXTURE_BUILD_LOG"
+print -r -- "$NOODLE_DATA_CONTAINER/$NOODLE_COMPUTER_DATA_CONTAINER/$NOODLE_APPLET_DATA_CONTAINER/$NOODLE_BROWSER_DATA_CONTAINER/$NOODLE_HUB_DATA_CONTAINER/$*" > "$FIXTURE_BUILD_LOG"
 print -r -- "$FIXTURE_APP"
 ''')
             (scripts / builder).chmod(0o700)
@@ -37,8 +37,8 @@ print(os.environ['FIXTURE_INSTALLED_APP'])
             installed = root / 'Applications/Fixture.app'
             result = subprocess.run(['/bin/zsh', str(scripts / launcher), *arguments],
                 env=dict(os.environ, PATH=f'{tools}:/usr/bin:/bin',
-                         NOODLE_DATA_CONTAINER='production', NOODLE_COMPUTER_DATA_CONTAINER='production',
-                         NOODLE_COMPUTER_TEST_BUILD='1', NOODLE_APPLET_DATA_CONTAINER='production',
+                         NOODLE_DATA_CONTAINER='production', NOODLE_COMPUTER_DATA_CONTAINER='tests',
+                         NOODLE_APPLET_DATA_CONTAINER='production',
                          NOODLE_BROWSER_DATA_CONTAINER='production',
                          NOODLE_HUB_DATA_CONTAINER='production', FIXTURE_APP=str(app),
                          FIXTURE_INSTALLED_APP=str(installed), FIXTURE_INSTALL_LOG=str(install_log),
@@ -51,13 +51,11 @@ print(os.environ['FIXTURE_INSTALLED_APP'])
                 fields = build_log.read_text().strip().split('/')
                 if launcher == 'build-and-launch.sh':
                     self.assertEqual(fields[0], 'development')
-                elif launcher == 'build-and-launch-computer.sh':
-                    self.assertEqual(fields[1:3], ['development', '0'])
                 else:
                     # Xcode-built apps share one build script, told which app to build.
-                    name, container = {'build-and-launch-applet.sh': ('Applet', 3), 'build-and-launch-browser.sh': ('Browser', 4),
-                                      'build-and-launch-hub.sh': ('Hub', 5)}[launcher]
-                    self.assertEqual((fields[container], fields[6]), ('development', name))
+                    name, container = {'build-and-launch-computer.sh': ('Computer', 1), 'build-and-launch-applet.sh': ('Applet', 2),
+                                      'build-and-launch-browser.sh': ('Browser', 3), 'build-and-launch-hub.sh': ('Hub', 4)}[launcher]
+                    self.assertEqual((fields[container], fields[5]), ('development', name))
                 self.assertEqual(result.returncode, 0 if expected_id == produced_id else 1, result.stderr)
             self.assertEqual(open_log.exists(), not arguments and expected_id == produced_id)
             installs = launcher == 'build-and-launch-computer.sh' and not arguments and expected_id == produced_id
@@ -68,7 +66,7 @@ print(os.environ['FIXTURE_INSTALLED_APP'])
     def test_launchers_force_local_and_refuse_production_output_or_arguments(self):
         for launcher, builder, local, production in [
             ('build-and-launch.sh', 'build-app.sh', 'com.pdparchitect.noodle.local', 'com.pdparchitect.noodle'),
-            ('build-and-launch-computer.sh', 'build-computer.sh', 'com.pdparchitect.noodle.computer.local',
+            ('build-and-launch-computer.sh', 'xcode-build.sh', 'com.pdparchitect.noodle.computer.local',
              'com.pdparchitect.noodle.computer'),
             ('build-and-launch-applet.sh', 'xcode-build.sh', 'com.pdparchitect.noodle.applet.local',
              'com.pdparchitect.noodle.applet'),

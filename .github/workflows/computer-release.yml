@@ -82,7 +82,7 @@ jobs:
 
       - name: Build, sign, notarize, staple and sign update feed
         shell: zsh {0}
-        run: zsh scripts/package-computer-release.sh "computer-v$COMPUTER_VERSION"
+        run: zsh scripts/package-xcode-release.sh Computer "computer-v$COMPUTER_VERSION"
 
       - name: Verify application menu and native Update settings
         timeout-minutes: 2

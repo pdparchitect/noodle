@@ -9,8 +9,9 @@ zsh scripts/build-and-launch-computer.sh
 ```
 
 The kernel is tracked with Git LFS; its provenance is in
-[the kernel notice](Support/KERNEL-NOTICE.txt). Builds use release optimization.
-Set `NOODLE_COMPUTER_CONFIGURATION=debug` for debugging.
+[the kernel notice](Support/KERNEL-NOTICE.txt). The build uses the Xcode project Tuist
+generates from `Computer/Project.swift`; to debug, run `cd Computer && tuist generate` and use Run
+in Xcode.
 
 The build is packaged at `.build/Noodle Computer Dev.app`; the launcher installs
 it as `/Applications/Noodle Computer Dev.app`. Local Mac accounts must be able
@@ -55,8 +56,8 @@ swift test --disable-sandbox --package-path Computer/Bridge
 swift test --disable-sandbox --package-path Computer/Presentation
 ```
 
-Computer's preview and thumbnail extensions are bundled and signed by the same
-build script. Each has only App Sandbox, without network, App Group or optional
+Computer's preview and thumbnail extensions are built, embedded and signed by the
+same Xcode project. Each has only App Sandbox, without network, App Group or optional
 file access entitlements. `verify-computer-release.sh` checks both installed
 extension signatures, document-type declarations and their exact entitlement set.
 Quick Look renders the saved content; opening a document selects and starts its
@@ -112,14 +113,13 @@ disabled and no host mounts. See [image builds](Images/README.md#build-and-test)
 For signed integration fixtures, build a separate test app:
 
 ```sh
-NOODLE_COMPUTER_TEST_BUILD=1 zsh scripts/build-computer.sh
+NOODLE_COMPUTER_DATA_CONTAINER=tests zsh scripts/xcode-build.sh Computer
 '.build/Noodle Computer Tests.app/Contents/MacOS/NoodleComputer' --self-test
 ```
 
 Fixtures use temporary libraries. Some download images and start real guests.
-They are compiled only into development and test bundles, which `build-computer.sh`
-builds with `NOODLE_DEV_HOOKS=1`, and into debug builds. A production bundle has none of
-them; `scripts/verify-launch-hooks.sh` checks that.
+They are compiled only into development and test bundles, the project's Debug and Tests
+configurations. A production bundle has none of them; `scripts/verify-launch-hooks.sh` checks that.
 Run only the checks relevant to your change:
 
 | Flag | Checks |

@@ -84,6 +84,8 @@ jobs:
           swift Applet/Tests/ReleaseWorkflowTests.swift "$PWD"
           swift Browser/Tests/ReleaseWorkflowTests.swift "$PWD"
           swift Hub/Tests/ReleaseWorkflowTests.swift "$PWD"
+      - name: Verify app icons match their symbols
+        run: zsh scripts/verify-icons.sh
 
   test-noodle:
     needs: [versions, checks]

@@ -327,7 +327,7 @@ class WorkflowTests(unittest.TestCase):
         setup = next(i for i, step in enumerate(steps)
                      if step.get('uses', '').startswith('actions/setup-go@'))
         package = next(i for i, step in enumerate(steps)
-                       if 'scripts/package-computer-release.sh' in step.get('run', ''))
+                       if 'scripts/package-xcode-release.sh Computer' in step.get('run', ''))
         self.assertLess(setup, package)
         self.assertEqual(steps[setup]['with']['go-version'], '1.26.x')
         # The helper builds directly from standard-library-only source, without go.mod.

@@ -10,6 +10,7 @@ let package = Package(
     name: "NoodleComputer",
     platforms: [.macOS("26.0")],
     products: [.executable(name: "NoodleComputer", targets: ["NoodleComputer"]),
+        .library(name: "ComputerCore", targets: ["ComputerCore"]),
         .executable(name: "ComputerPreviewExtension", targets: ["ComputerPreviewExtension"]),
         .executable(name: "ComputerThumbnailExtension", targets: ["ComputerThumbnailExtension"])],
     dependencies: [
