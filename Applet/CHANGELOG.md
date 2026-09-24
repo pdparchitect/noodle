@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Move a noodlet to the Trash from the library's context menu. Its saved data, secrets and permissions are deleted with it.
+
 ## [0.9.0] - 2026-09-24
 
 ### Added

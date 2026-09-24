@@ -2,7 +2,7 @@ import AppletCore
 import XCTest
 @testable import NoodleApplet
 
-private final class MemorySecrets: AppletSecretStorage, @unchecked Sendable {
+final class MemorySecrets: AppletSecretStorage, @unchecked Sendable {
     private let lock = NSLock()
     private var items: [String: [String: String]] = [:]
     func load(_ account: String) throws -> [String: String] { lock.withLock { items[account] ?? [:] } }

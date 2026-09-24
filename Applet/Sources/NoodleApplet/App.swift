@@ -259,6 +259,7 @@ private struct LibraryView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var selection: LibrarySection? = .all
   @State private var columnVisibility = NavigationSplitViewVisibility.all
+  @State private var trashing: LibraryEntry?
   @AppStorage("AppletSidebarVisible") private var sidebarVisible = true
 
   private var entries: [LibraryEntry] {
@@ -350,6 +351,19 @@ private struct LibraryView: View {
       }
     } message: {
       Text(runtime.error ?? library.error ?? "")
+    }
+    .confirmationDialog(
+      "Move to Trash?", isPresented: Binding(get: { trashing != nil }, set: { if !$0 { trashing = nil } }),
+      titleVisibility: .visible
+    ) {
+      Button("Move to Trash", role: .destructive) {
+        guard let package = trashing?.package else { return }
+        Task {
+          do { try await library.trash(package) } catch { library.error = error.localizedDescription }
+        }
+      }
+    } message: {
+      Text("“\(trashing?.title ?? "")” will be moved to the Trash. Its saved data, secrets and permissions will be deleted.")
     }
   }
   /// SwiftUI places its own sidebar toggle last in the sidebar's toolbar section, so
@@ -516,6 +530,8 @@ private struct LibraryView: View {
       }
       Button(library.pinned.contains(entry.id) ? "Unpin" : "Pin") { library.pin(entry.id) }
       Button(library.hidden.contains(entry.id) ? "Unhide" : "Hide") { library.hide(entry.id) }
+      Divider()
+      Button("Move to Trash…") { trashing = entry }.disabled(running)
     }
   }
 }

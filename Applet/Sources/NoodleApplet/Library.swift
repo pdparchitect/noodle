@@ -242,6 +242,19 @@ struct LibraryEntry: Identifiable, Equatable {
     if hidden.contains(key) { hidden.removeAll { $0 == key } } else { hidden.append(key) }
     defaults.set(hidden, forKey: "hidden")
   }
+  /// Moves a noodlet to the Trash, then deletes what it saved, its secrets, permissions and thumbnail.
+  /// Nothing is deleted when the move fails.
+  func trash(
+    _ package: NoodletPackage, secrets: AppletSecrets = .shared,
+    moveToTrash: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
+  ) async throws {
+    try moveToTrash(package.url)
+    scan()
+    await AppletStorage.remove(package.key, root: root, defaults: defaults)
+    AppletPermissions.revoke(packageKey: package.key, defaults: defaults)
+    for scope in ["user", "test"] { try? secrets.storage.save([:], account: "\(package.key).\(scope)") }
+    try? FileManager.default.removeItem(at: root.appendingPathComponent("Thumbnails/\(package.key).png"))
+  }
   func pin(_ key: String) {
     if pinned.contains(key) { pinned.removeAll { $0 == key } } else { pinned.append(key) }
     defaults.set(pinned, forKey: "pinned")

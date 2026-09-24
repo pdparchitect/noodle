@@ -149,4 +149,89 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual(library.menuPinned.map(\.id), [packages[2].key], "Showing it again lost its pin.")
         XCTAssertEqual(library.hidden, [packages[1].key])
     }
+
+    /// Moving a noodlet to the Trash also deletes what it saved, its secrets, permissions and thumbnail.
+    @MainActor func testTrashingANoodletRemovesItAndEverythingItKept() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let suite = "AppletLibraryTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let library = AppletLibrary(root: root, defaults: defaults, installExamples: false, watchChanges: false)
+        var packages: [NoodletPackage] = []
+        for name in ["Kept", "Trashed"] {
+            packages.append(try NoodletPackage.install([
+                "noodlet.json": Data(#"{"version":1,"title":"\#(name)","runtime":"html","entry":"index.html"}"#.utf8),
+                "index.html": Data("<title>Test</title>".utf8),
+            ], to: library.documents.appendingPathComponent("\(name).noodlet")))
+        }
+        let secrets = AppletSecrets(storage: MemorySecrets())
+        for package in packages {
+            library.remember(package)
+            library.pin(package.key)
+            defaults.set(["network"], forKey: "permissions.\(package.key)")
+            _ = try secrets.perform("set", name: "token", value: "x", account: "\(package.key).user")
+            _ = try secrets.perform("set", name: "token", value: "x", account: "\(package.key).test")
+            for path in ["Data/\(package.key)/User", "Homes/\(package.key)"] {
+                try FileManager.default.createDirectory(
+                    at: root.appendingPathComponent(path), withIntermediateDirectories: true)
+            }
+            let thumbnails = root.appendingPathComponent("Thumbnails")
+            try FileManager.default.createDirectory(at: thumbnails, withIntermediateDirectories: true)
+            try Data([1]).write(to: thumbnails.appendingPathComponent("\(package.key).png"))
+        }
+        var trashed: [URL] = []
+        try await library.trash(packages[1], secrets: secrets) {
+            trashed.append($0)
+            try FileManager.default.removeItem(at: $0)
+        }
+
+        let (kept, gone) = (packages[0].key, packages[1].key)
+        XCTAssertEqual(trashed, [packages[1].url])
+        XCTAssertEqual(library.entries.map(\.id), [kept])
+        XCTAssertEqual(library.recent, [kept])
+        XCTAssertEqual(library.pinned, [kept])
+        XCTAssertEqual(Set(AppletPermissions.grants(defaults: defaults).keys), [kept])
+        XCTAssertEqual(Set(secrets.names().keys), ["\(kept).user", "\(kept).test"])
+        XCTAssertEqual(Set(AppletStorage.sizes(root: root).keys), [kept])
+        for path in ["Homes/\(gone)", "Thumbnails/\(gone).png"] {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(path).path), path)
+        }
+        for path in ["Homes/\(kept)", "Thumbnails/\(kept).png"] {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(path).path), path)
+        }
+    }
+
+    /// When the package cannot be moved to the Trash, nothing it kept is deleted.
+    @MainActor func testAFailedTrashKeepsTheNoodletsData() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let suite = "AppletLibraryTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let library = AppletLibrary(root: root, defaults: defaults, installExamples: false, watchChanges: false)
+        let package = try NoodletPackage.install([
+            "noodlet.json": Data(#"{"version":1,"title":"Stuck","runtime":"html","entry":"index.html"}"#.utf8),
+            "index.html": Data("<title>Test</title>".utf8),
+        ], to: library.documents.appendingPathComponent("Stuck.noodlet"))
+        let secrets = AppletSecrets(storage: MemorySecrets())
+        _ = try secrets.perform("set", name: "token", value: "x", account: "\(package.key).user")
+        defaults.set(["network"], forKey: "permissions.\(package.key)")
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("Data/\(package.key)/User"), withIntermediateDirectories: true)
+        library.scan()
+
+        do {
+            try await library.trash(package, secrets: secrets) { _ in throw CocoaError(.fileWriteNoPermission) }
+            XCTFail("The failed move was not reported.")
+        } catch {}
+        XCTAssertEqual(library.entries.map(\.id), [package.key])
+        XCTAssertEqual(Array(secrets.names().keys), ["\(package.key).user"])
+        XCTAssertEqual(Array(AppletPermissions.grants(defaults: defaults).keys), [package.key])
+        XCTAssertEqual(Array(AppletStorage.sizes(root: root).keys), [package.key])
+    }
 }
