@@ -2,6 +2,7 @@ import Foundation
 import NoodleCore
 import XCTest
 @testable import Noodle
+@testable import NoodleRuntime
 
 @MainActor final class MuseRuntimeTests: XCTestCase {
     private func fixture() throws -> MuseRuntimeFixture {
@@ -144,5 +145,103 @@ import XCTest
         XCTAssertEqual(f.failures, [false])
         XCTAssertFalse(FileManager.default.fileExists(atPath: f.state().path))
         XCTAssertEqual(wire.invalidations, 1)
+    }
+
+    private func working(_ f: MuseRuntimeFixture) async throws -> (MuseAgentProcess, MuseWireFixture) {
+        let (process, wire) = f.make()
+        process.start()
+        try await f.waitUntil { process.snapshot.phase == .ready }
+        process.notify()
+        try await f.waitUntil { process.snapshot.phase == .working && wire.turn != nil }
+        return (process, wire)
+    }
+
+    func testApprovalForAnotherSessionIsIgnored() async throws {
+        let f = try fixture(), (process, wire) = try await working(f)
+        let params: [String: Any] = ["sessionId": UUID().uuidString, "approvalId": "fixture-approval",
+            "currentRequirementId": ["approvalId": "fixture-approval", "sourceIndex": 0],
+            "availableChoices": [["choiceId": "once", "decision": "approved", "scope": "once"]]]
+        wire.emit(["method": "approval/requested", "params": params])
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertEqual(wire.count("approval/decide"), 0)
+        XCTAssertEqual(process.snapshot.phase, .working)
+    }
+
+    /// Only the active turn's completion ends work; a scheduled retry is shown and work goes on.
+    func testUnrelatedCompletionAndRetriesKeepWorkActive() async throws {
+        let f = try fixture(), (process, wire) = try await working(f)
+        wire.emit(["method": "turn/completed", "params": ["sessionId": wire.session, "turnId": UUID().uuidString,
+                                                           "terminal": "completed"]])
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertEqual(process.snapshot.phase, .working)
+        XCTAssertTrue(process.hasInterruptedWork, "An acknowledgement alone never completes work")
+        wire.emit(["method": "turn/retryScheduled", "params": ["sessionId": wire.session, "turnId": try XCTUnwrap(wire.turn),
+            "nextAttempt": 2, "maxAttempts": 10, "retryDelayMs": 60000, "reason": "HTTP 503"]])
+        try await f.waitUntil { process.snapshot.detail.contains("Retry 2/10") }
+        XCTAssertEqual(process.snapshot.phase, .working)
+        XCTAssertTrue(process.hasInterruptedWork)
+    }
+
+    func testStoppingKeepsUnfinishedWorkAndTheNextStartRecoversIt() async throws {
+        let f = try fixture(), (process, _) = try await working(f)
+        process.stop { XCTAssertTrue($0) }
+        XCTAssertTrue(process.hasInterruptedWork)
+        let (next, wire) = f.make()
+        wire.finishBeforeAcknowledgement = true
+        next.start()
+        try await f.waitUntil { next.snapshot.phase == .ready && !next.hasInterruptedWork }
+        XCTAssertEqual(wire.count("session/resume"), 1)
+        let inputs = try XCTUnwrap(wire.calls.first { $0.0 == "turn/start" }?.1["input"] as? [[String: String]])
+        XCTAssertEqual(inputs.first?["text"], AgentWakeReason.runtimeRecovered.eventText)
+    }
+
+    func testRejectedTurnFailsButKeepsTheWorkToRecover() async throws {
+        let f = try fixture(), (process, wire) = f.make()
+        wire.failTurn = true
+        process.start()
+        try await f.waitUntil { process.snapshot.phase == .ready }
+        process.notify()
+        try await f.waitUntil { process.snapshot.phase == .failed }
+        XCTAssertTrue(process.hasInterruptedWork)
+    }
+
+    /// A runtime paused by a permanent failure takes no new turns, and stays paused after a relaunch
+    /// instead of starting yet another session.
+    func testPermanentFailurePauseHoldsAcrossNotificationsAndRelaunch() async throws {
+        let f = try fixture(), (process, wire) = f.make()
+        wire.terminalErrors = ["projectionError", "projectionError"]
+        process.start()
+        try await f.waitUntil { process.snapshot.phase == .ready }
+        process.notify()
+        try await f.waitUntil { process.snapshot.phase == .failed }
+        XCTAssertTrue(process.snapshot.detail.contains("Fixture failure"))
+        let turns = wire.count("turn/start")
+        process.notify()
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertEqual(wire.count("turn/start"), turns)
+        process.stop { XCTAssertTrue($0) }
+        // The incompatible history is still there after a relaunch; recovery was already tried once.
+        let (relaunched, next) = f.make()
+        next.terminalErrors = ["projectionError"]
+        relaunched.start()
+        try await f.waitUntil { relaunched.snapshot.phase == .failed }
+        XCTAssertEqual(next.count("session/start"), 0)
+    }
+
+    /// An old session pointer has no workspace. A session bound elsewhere is replaced by a fresh one here,
+    /// which is told how to recover its context.
+    func testLegacySessionFromAnotherWorkspaceIsReplaced() async throws {
+        let f = try fixture()
+        try FileManager.default.createDirectory(at: f.state().deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: ["sessionID": UUID().uuidString]).write(to: f.state())
+        let (process, wire) = f.make()
+        wire.resumedWorkspace = f.root.path
+        wire.finishBeforeAcknowledgement = true
+        process.start()
+        try await f.waitUntil { process.snapshot.phase == .ready && !process.hasInterruptedWork && wire.count("turn/start") == 1 }
+        XCTAssertEqual(wire.count("session/resume"), 1)
+        XCTAssertEqual(wire.count("session/start"), 1)
+        let inputs = try XCTUnwrap(wire.calls.first { $0.0 == "turn/start" }?.1["input"] as? [[String: String]])
+        XCTAssertTrue(inputs.first?["text"]?.contains(MessengerDocumentation.recoveredModelContext) == true)
     }
 }
