@@ -74,13 +74,21 @@ needs. Add it in the bot's **Browsers** tab. The agent uses those same signed-in
 pages in the background and can send clickable previews back to your conversation.
 Each browser keeps its own sign-ins and browsing data.
 
+## A quick look
+
+<p align="center">
+
+  https://github.com/user-attachments/assets/9fe92721-4727-48f9-b2fd-5e2de72d555a
+
+</p>
+
 ## Features
 
 - **Persistent agents** with their own workspace, backstory, and history.
 - **Teams** of bots working toward a shared goal.
 - **Restricted by default**, with per-bot folder sharing.
 - **Computers, browsers, and applets** your bots can use and build.
-- **Tools**: dozens of MCP services, plus on-device OCR.
+- **Tools**: dozens of MCP services, on-device OCR, background removal, etc.
 - **On-device models**: Apple Intelligence, Qwen3, Llama, Gemma 4.
 - **Native chat**: voice, screen capture, annotations, Quick Look.
 - **Always on**: heartbeats, notifications, Spotlight, Shortcuts.
