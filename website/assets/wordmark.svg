@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3819" height="851" viewBox="0 119 3819 851" role="img" aria-labelledby="title">
+  <title id="title">Noodle wordmark</title>
+  <!-- One pen stroke: the app's own n, then oodle on the same baseline and in the same
+       weight. The path is the centre line; the shape is what the pen leaves behind, so a
+       scenario film can write it on screen a stroke at a time. -->
+  <path fill="none" stroke="#1d1d1f" stroke-width="128" stroke-linecap="round" stroke-linejoin="round" d="M64,906 L64,569 C64,444.18 165.18,343 290,343 C414.82,343 516,444.18 516,569 L516,818 C516,913 583,910 643,899 M1096.5,343 C941.03,343 815,469.03 815,624.5 C815,779.97 941.03,906 1096.5,906 C1251.97,906 1378,779.97 1378,624.5 C1378,469.03 1251.97,343 1096.5,343 M1831.5,343 C1676.03,343 1550,469.03 1550,624.5 C1550,779.97 1676.03,906 1831.5,906 C1986.97,906 2113,779.97 2113,624.5 C2113,469.03 1986.97,343 1831.5,343 M2566.5,343 C2411.03,343 2285,469.03 2285,624.5 C2285,779.97 2411.03,906 2566.5,906 C2721.97,906 2848,779.97 2848,624.5 C2848,469.03 2721.97,343 2566.5,343 M2848,183 L2848,906 M3020,183 L3020,906 M3192,624.5 L3755,624.5 C3755,469.03 3628.97,343 3473.5,343 C3318.03,343 3192,469.03 3192,624.5 C3192,779.97 3318.03,906 3473.5,906 C3569.89,906 3614.25,877.85 3681.81,821.55"/>
+</svg>

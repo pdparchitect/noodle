@@ -1,31 +1,156 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
-    <meta name="description" content="Meet your AI team. Noodle brings you and your AI agents together in a native Mac workspace." />
-    <title>Noodle — Meet your AI team.</title>
-    <link rel="icon" type="image/png" href="./assets/noodle.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260916-6" />
-  </head>
-  <body>
-    <a class="skip-link" href="#main">Skip to content</a>
-    <main id="main" tabindex="-1">
-      <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-copy content-width">
-          <p class="hero-eyebrow">Noodle</p>
-          <h1 id="hero-title">Meet your AI team.</h1>
-          <p class="hero-subtitle">A workspace for you and your AI agents.</p>
-          <a class="button" href="https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg">Download</a>
-          <a class="button button-secondary" href="https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Suite-arm64.dmg" title="Noodle and its released companion apps. Requires macOS 26 or later.">Download Suite</a>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+  <meta name="description" content="Noodle is a Mac app for working with AI agents. Give each one a name and a job, chat one to one or in groups, and let them use their own computers, browsers and apps." />
+  <title>Noodle — Meet your AI team.</title>
+  <link rel="icon" type="image/png" href="assets/favicon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="nav">
+    <div class="wrap nav-in">
+      <a class="logo" href="#top" aria-label="Noodle home"><img src="assets/symbol-noodle.svg" alt="Noodle" width="22" height="22" /></a>
+      <nav aria-label="Primary">
+        <a href="#teams">Teams</a>
+        <a href="#computer">Computer</a>
+        <a href="#browser">Browser</a>
+        <a href="#applet">Applet</a>
+        <a href="#privacy">Privacy</a>
+        <a href="https://github.com/pdparchitect/noodle/blob/main/docs/README.md">Docs</a>
+      </nav>
+      <a class="nav-dl" href="#download">Download</a>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="intro" id="top">
+      <div class="wrap narrow">
+        <h1 class="wordmark"><img src="assets/wordmark.svg" alt="Noodle" /></h1>
+        <p class="what">Noodle is a Mac app for working with AI agents. Give each one a name and a job, chat one to one or in groups, and let them use their own computers, browsers and apps.</p>
+        <div class="ctas">
+          <a class="btn" href="https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg">Download for Mac</a>
+          <a class="link" href="#download">See all apps <span aria-hidden="true">›</span></a>
         </div>
-        <figure class="hero-macbook">
-          <img class="hero-hardware" src="./assets/macbook-hero.jpg" width="1536" height="1024" alt="Noodle running on a matte black MacBook Pro." fetchpriority="high" draggable="false" />
-          <img class="hero-screen" src="./assets/workspace-launch.webp" width="2052" height="1539" alt="" fetchpriority="high" draggable="false" />
+        <p class="req">Free and open source.</p>
+      </div>
+      <div class="wrap">
+        <figure class="hero-shot">
+          <img class="shot-img" src="assets/screenshot-chloe.png" width="2469" height="1710" alt="Noodle on a Mac: Chloe, a personal assistant agent, sends the morning brief. Three things need you today, and she has already renewed the car insurance, booked the boiler service and booked a restaurant." />
         </figure>
-      </section>
-    </main>
-    <svg class="screen-mask" width="0" height="0" aria-hidden="true" focusable="false"><defs><clipPath id="hero-display" clipPathUnits="objectBoundingBox"><path d="M .013 0 H .438 V .020 Q .438 .031 .446 .031 H .554 Q .562 .031 .562 .020 V 0 H .987 Q 1 0 1 .021 V 1 H 0 V .021 Q 0 0 .013 0 Z" /></clipPath></defs></svg>
-  </body>
+      </div>
+    </section>
+    <section class="facts">
+      <div class="wrap facts-grid">
+        <div><h3>Agents with a job</h3><p>Each agent has a name, a backstory that sets its role, and its own workspace. It remembers the work you've done together.</p></div>
+        <div><h3>Teams, not just chatbots</h3><p>Put several agents in a group with a shared goal. They read each other's messages and split the work between them.</p></div>
+        <div><h3>On your Mac</h3><p>A native app that runs on the AI accounts you already have. Your conversations and files are stored on your computer.</p></div>
+      </div>
+    </section>
+    <section class="feature" id="teams">
+      <div class="wrap narrow">
+        <h2>One conversation. A whole team.</h2>
+        <p class="lead">Start a group, add the agents you need and give them a goal. A planner, a writer and a researcher work in the same thread, and you step in whenever you like.</p>
+      </div>
+      <div class="wrap">
+        <figure class="shot placeholder"><span>Screenshot: a group chat in the middle of a task, such as Lisbon offsite or Launch week</span></figure>
+      </div>
+    </section>
+    <section class="feature alt" id="computer">
+      <div class="wrap narrow">
+        <img class="feat-icon" src="assets/symbol-computer.svg" alt="" width="48" height="48" />
+        <p class="app-name">Noodle Computer</p>
+        <h2>A computer for every agent.</h2>
+        <p class="lead">Give an agent its own desktop that runs privately on your Mac. It can open documents, work with files and install what it needs, and everything is still there tomorrow. You can open the same desktop at any time.</p>
+        <p class="meta"><a href="https://github.com/pdparchitect/noodle/releases/download/computer-latest/Noodle-Computer-arm64.dmg">Download Noodle Computer <span aria-hidden="true">›</span></a></p>
+      </div>
+      <div class="wrap">
+        <figure class="shot placeholder"><span>Screenshot: Noodle Computer showing an agent's desktop</span></figure>
+      </div>
+    </section>
+    <section class="feature" id="browser">
+      <div class="wrap narrow">
+        <img class="feat-icon" src="assets/symbol-browser.svg" alt="" width="48" height="48" />
+        <p class="app-name">Noodle Browser</p>
+        <h2>Signed in, so they don't have to ask.</h2>
+        <p class="lead">Create a browser, sign in to the sites you use and hand it to an agent. It works in those pages in the background and sends what it finds back to your chat. Pause it whenever you want to take over.</p>
+        <p class="meta"><a href="https://github.com/pdparchitect/noodle/releases/download/browser-latest/Noodle-Browser-arm64.dmg">Download Noodle Browser <span aria-hidden="true">›</span></a></p>
+      </div>
+      <div class="wrap">
+        <figure class="shot placeholder"><span>Screenshot: Noodle Browser with a signed-in site and its agent</span></figure>
+      </div>
+    </section>
+    <section class="feature alt" id="applet">
+      <div class="wrap narrow">
+        <img class="feat-icon" src="assets/symbol-applet.svg" alt="" width="48" height="48" />
+        <p class="app-name">Noodle Applet</p>
+        <h2>Ask for a tool. Get a tool.</h2>
+        <p class="lead">When you need a tracker, a calculator or a small website, your agents build it. Applet opens it in its own window straight from the conversation, and it remembers its data between uses.</p>
+        <p class="meta"><a href="https://github.com/pdparchitect/noodle/releases/download/applet-latest/Noodle-Applet-arm64.dmg">Download Noodle Applet <span aria-hidden="true">›</span></a></p>
+      </div>
+      <div class="wrap">
+        <figure class="shot placeholder"><span>Screenshot: Noodle Applet running something an agent built</span></figure>
+      </div>
+    </section>
+    <section class="feature split" id="ai">
+      <div class="wrap split-grid">
+        <div>
+          <h2>Bring the AI you already use.</h2>
+          <p class="lead">Noodle doesn't sell you a model. Connect the accounts you already pay for, or run a free model on your Mac, and mix them in the same team.</p>
+          <ul class="providers">
+            <li><img src="assets/harness-codex.svg" alt="" />OpenAI Codex</li><li><img src="assets/harness-claude.svg" alt="" />Claude Code</li><li><img src="assets/harness-grok.svg" alt="" />Grok Build</li><li><img src="assets/harness-muse.svg" alt="" />Muse Code</li><li><img src="assets/harness-fx.svg" alt="" />FX</li><li><img src="assets/harness-opencode.svg" alt="" />OpenCode</li><li><img src="assets/harness-antigravity.svg" alt="" />Antigravity</li><li>Apple Intelligence</li><li>Local models</li>
+          </ul>
+        </div>
+        <figure class="shot placeholder small"><span>Screenshot: Settings → Harness</span></figure>
+      </div>
+    </section>
+    <section class="privacy" id="privacy">
+      <div class="wrap narrow">
+        <h2>Private by default.</h2>
+        <p class="lead">Every agent starts restricted. You decide which folders each one can see. Your conversations and files are stored on your Mac, and your voice is transcribed on it.</p>
+      </div>
+      <div class="wrap priv-grid">
+        <div><h3>Your files, your call</h3><p>Each agent works in its own folder until you share more.</p></div>
+        <div><h3>On-device voice</h3><p>Dictation and transcription happen entirely on your Mac.</p></div>
+        <div><h3>Open source</h3><p>Every line of code is public under the Apache 2.0 licence.</p></div>
+        <div><h3>No new account</h3><p>Noodle uses the AI accounts you already have. No sign-up.</p></div>
+      </div>
+    </section>
+    <section class="download" id="download">
+      <div class="wrap narrow">
+        <h2>Download Noodle.</h2>
+        <p class="lead">Start with Noodle, or get all four apps at once with the Suite. Everything is free.</p>
+      </div>
+      <div class="wrap dl-grid">
+        <a class="dl" href="https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg"><img src="assets/symbol-noodle-card.svg" alt="" /><b>Noodle</b><span>Work with AI agents on your own or as a team.</span><em>Download</em></a>
+        <a class="dl" href="https://github.com/pdparchitect/noodle/releases/download/computer-latest/Noodle-Computer-arm64.dmg"><img src="assets/symbol-computer.svg" alt="" /><b>Noodle Computer</b><span>Private computers for you and your agents.</span><em>Download</em></a>
+        <a class="dl" href="https://github.com/pdparchitect/noodle/releases/download/browser-latest/Noodle-Browser-arm64.dmg"><img src="assets/symbol-browser.svg" alt="" /><b>Noodle Browser</b><span>Signed-in browsers you hand to your agents.</span><em>Download</em></a>
+        <a class="dl" href="https://github.com/pdparchitect/noodle/releases/download/applet-latest/Noodle-Applet-arm64.dmg"><img src="assets/symbol-applet.svg" alt="" /><b>Noodle Applet</b><span>Runs the tools and apps your agents build.</span><em>Download</em></a>
+      </div>
+      <div class="wrap suite-row">
+        <a class="btn" href="https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Suite-arm64.dmg">Download the Suite</a>
+        <p>All four apps in one installer.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot-in">
+      <p>Noodle is free and open source under the Apache 2.0 licence.</p>
+      <nav aria-label="Footer">
+        <a href="https://github.com/pdparchitect/noodle">GitHub</a>
+        <a href="https://github.com/pdparchitect/noodle/blob/main/docs/README.md">Documentation</a>
+        <a href="https://github.com/pdparchitect/noodle/blob/main/docs/security.md">Security</a>
+        <a href="https://github.com/pdparchitect/noodle/blob/main/docs/enterprise.md">Enterprise</a>
+        <a href="https://github.com/pdparchitect/noodle/releases">Releases</a>
+      </nav>
+    </div>
+  </footer>
+  <script src="app.js"></script>
+</body>
 </html>
