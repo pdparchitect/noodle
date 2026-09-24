@@ -9,13 +9,6 @@ on:
       - '!docs/**'
       - '!website/**'
       - '!.github/workflows/website.yml'
-      # Dated notes can opt a product into its first release.
-      - 'CHANGELOG.md'
-      - 'Computer/CHANGELOG.md'
-      - 'Applet/CHANGELOG.md'
-      - 'Browser/CHANGELOG.md'
-      - 'Hub/CHANGELOG.md'
-      - 'Computer/Images/CHANGELOG.md'
   pull_request:
     paths:
       - '**'
@@ -23,12 +16,6 @@ on:
       - '!docs/**'
       - '!website/**'
       - '!.github/workflows/website.yml'
-      - 'CHANGELOG.md'
-      - 'Computer/CHANGELOG.md'
-      - 'Applet/CHANGELOG.md'
-      - 'Browser/CHANGELOG.md'
-      - 'Hub/CHANGELOG.md'
-      - 'Computer/Images/CHANGELOG.md'
   workflow_dispatch:
 
 permissions:
