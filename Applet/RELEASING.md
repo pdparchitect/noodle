@@ -61,7 +61,7 @@ Run from the repository root:
 ```sh
 swift test --disable-sandbox --package-path Applet --scratch-path .build/applet
 swift test --disable-sandbox
-swift Applet/Tests/ReleaseWorkflowTests.swift "$PWD"
+swift Tests/ReleaseAutomation/PublishReleaseTests.swift "$PWD"
 NOODLE_APPLET_DATA_CONTAINER=production zsh scripts/xcode-build.sh Applet
 zsh scripts/verify-applet-release.sh '.build/Noodle Applet.app'
 '.build/Noodle Applet.app/Contents/MacOS/NoodleApplet' --noodle-background --updater-ui-test

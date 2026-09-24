@@ -64,7 +64,7 @@ swift test --disable-sandbox --package-path Computer --scratch-path .build/compu
 swift test --disable-sandbox --package-path Computer/LocalMac --scratch-path .build/localmac
 swift test --disable-sandbox --package-path Computer/Bridge
 swift test --disable-sandbox
-swift Computer/Tests/ReleaseWorkflowTests.swift "$PWD"
+swift Tests/ReleaseAutomation/PublishReleaseTests.swift "$PWD"
 NOODLE_COMPUTER_DATA_CONTAINER=production zsh scripts/xcode-build.sh Computer
 zsh scripts/verify-computer-release.sh '.build/Noodle Computer.app'
 '.build/Noodle Computer.app/Contents/MacOS/NoodleComputer' --updater-ui-test

@@ -57,7 +57,7 @@ Run from the repository root:
 ```sh
 swift test --disable-sandbox --package-path Hub --scratch-path .build/hub
 swift test --disable-sandbox
-swift Hub/Tests/ReleaseWorkflowTests.swift "$PWD"
+swift Tests/ReleaseAutomation/PublishReleaseTests.swift "$PWD"
 NOODLE_HUB_DATA_CONTAINER=production zsh scripts/xcode-build.sh Hub
 zsh scripts/verify-hub-release.sh '.build/Noodle Hub.app'
 ```

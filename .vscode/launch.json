@@ -6,10 +6,7 @@
             "type": "node-terminal",
             "request": "launch",
             "cwd": "${workspaceFolder}",
-            "command": "scripts/build-and-launch.sh",
-            "env": {
-                "NOODLE_DATA_CONTAINER": "development"
-            }
+            "command": "scripts/build-and-launch.sh"
         },
         {
             "name": "Noodle: Build & Launch Scenarios",
@@ -23,40 +20,28 @@
             "type": "node-terminal",
             "request": "launch",
             "cwd": "${workspaceFolder}",
-            "command": "scripts/build-and-launch-browser.sh",
-            "env": {
-                "NOODLE_BROWSER_DATA_CONTAINER": "development"
-            }
+            "command": "scripts/build-and-launch.sh Browser"
         },
         {
             "name": "Noodle Computer: Build & Launch Dev",
             "type": "node-terminal",
             "request": "launch",
             "cwd": "${workspaceFolder}",
-            "command": "scripts/build-and-launch-computer.sh",
-            "env": {
-                "NOODLE_COMPUTER_DATA_CONTAINER": "development"
-            }
+            "command": "scripts/build-and-launch.sh Computer"
         },
         {
             "name": "Noodle Applet: Build & Launch Dev",
             "type": "node-terminal",
             "request": "launch",
             "cwd": "${workspaceFolder}",
-            "command": "scripts/build-and-launch-applet.sh",
-            "env": {
-                "NOODLE_APPLET_DATA_CONTAINER": "development"
-            }
+            "command": "scripts/build-and-launch.sh Applet"
         },
         {
             "name": "Noodle Hub: Build & Launch Dev",
             "type": "node-terminal",
             "request": "launch",
             "cwd": "${workspaceFolder}",
-            "command": "scripts/build-and-launch-hub.sh",
-            "env": {
-                "NOODLE_HUB_DATA_CONTAINER": "development"
-            }
+            "command": "scripts/build-and-launch.sh Hub"
         }
     ]
 }

@@ -58,7 +58,7 @@ Run from the repository root:
 ```sh
 swift test --disable-sandbox --package-path Browser --scratch-path .build/browser
 swift test --disable-sandbox --filter 'BrowserBrokerTests|CompanionAssignmentPickerTests|MessengerDocumentationTests'
-swift Browser/Tests/ReleaseWorkflowTests.swift "$PWD"
+swift Tests/ReleaseAutomation/PublishReleaseTests.swift "$PWD"
 python3 -m unittest discover -s Tests/ReleaseAutomation -v
 NOODLE_BROWSER_DATA_CONTAINER=production zsh scripts/xcode-build.sh Browser
 zsh scripts/verify-browser-release.sh '.build/Noodle Browser.app'

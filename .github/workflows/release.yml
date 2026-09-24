@@ -80,10 +80,7 @@ jobs:
         run: |
           python3 -m unittest discover -s Tests/ReleaseAutomation -v
           python3 -m unittest discover -s Tests/CoverageReporting -v
-          swift Computer/Tests/ReleaseWorkflowTests.swift "$PWD"
-          swift Applet/Tests/ReleaseWorkflowTests.swift "$PWD"
-          swift Browser/Tests/ReleaseWorkflowTests.swift "$PWD"
-          swift Hub/Tests/ReleaseWorkflowTests.swift "$PWD"
+          swift Tests/ReleaseAutomation/PublishReleaseTests.swift "$PWD"
       - name: Verify app icons match their symbols
         run: zsh scripts/verify-icons.sh
 
@@ -351,7 +348,7 @@ jobs:
           shasum -a 256 -c Noodle-Computer-arm64.zip.sha256
           shasum -a 256 -c Noodle-Computer-arm64.dmg.sha256
           cd ../..
-          zsh scripts/publish-computer-release.sh "$COMPUTER_VERSION" "dist/computer-$COMPUTER_VERSION/release-notes.md"
+          zsh scripts/publish-xcode-release.sh Computer "$COMPUTER_VERSION" "dist/computer-$COMPUTER_VERSION/release-notes.md"
 
   publish-applet:
     needs: [versions, tag]
@@ -379,7 +376,7 @@ jobs:
           shasum -a 256 -c Noodle-Applet-arm64.zip.sha256
           shasum -a 256 -c Noodle-Applet-arm64.dmg.sha256
           cd ../..
-          zsh scripts/publish-applet-release.sh "$APPLET_VERSION" "dist/applet-$APPLET_VERSION/release-notes.md"
+          zsh scripts/publish-xcode-release.sh Applet "$APPLET_VERSION" "dist/applet-$APPLET_VERSION/release-notes.md"
 
   publish-browser:
     needs: [versions, tag]
@@ -407,7 +404,7 @@ jobs:
           shasum -a 256 -c Noodle-Browser-arm64.zip.sha256
           shasum -a 256 -c Noodle-Browser-arm64.dmg.sha256
           cd ../..
-          zsh scripts/publish-browser-release.sh "$BROWSER_VERSION" "dist/browser-$BROWSER_VERSION/release-notes.md"
+          zsh scripts/publish-xcode-release.sh Browser "$BROWSER_VERSION" "dist/browser-$BROWSER_VERSION/release-notes.md"
 
   publish-hub:
     needs: [versions, tag]
@@ -435,7 +432,7 @@ jobs:
           shasum -a 256 -c Noodle-Hub-arm64.zip.sha256
           shasum -a 256 -c Noodle-Hub-arm64.dmg.sha256
           cd ../..
-          zsh scripts/publish-hub-release.sh "$HUB_VERSION" "dist/hub-$HUB_VERSION/release-notes.md"
+          zsh scripts/publish-xcode-release.sh Hub "$HUB_VERSION" "dist/hub-$HUB_VERSION/release-notes.md"
 
   publish-noodle:
     needs: [versions, tag, publish-images, publish-computer, publish-applet, publish-browser]

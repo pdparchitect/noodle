@@ -77,10 +77,11 @@ class DiskImagePublicationTests(unittest.TestCase):
             for scenario in ['new', 'existing-channel', 'corrupt-dmg', 'missing-dmg']:
                 with self.subTest(product=product, scenario=scenario), tempfile.TemporaryDirectory() as temporary:
                     root = Path(temporary)
-                    (root / product).mkdir()
+                    (root / product / 'Support').mkdir(parents=True)
                     (root / product / 'VERSION').write_text('1.2.3\n')
+                    shutil.copyfile(ROOT / product / 'Support/download-page.md', root / product / 'Support/download-page.md')
                     (root / 'scripts').mkdir()
-                    script = f'publish-{product.lower()}-release.sh'
+                    script = 'publish-xcode-release.sh'
                     shutil.copyfile(ROOT / 'scripts' / script, root / 'scripts' / script)
                     assets = root / 'dist' / f'{product.lower()}-1.2.3'
                     assets.mkdir(parents=True)
@@ -110,7 +111,7 @@ fi
                     executable(root / 'bin/git', 'print fixture-commit\n')
                     log = root / 'commands'
                     log.touch()
-                    result = subprocess.run(['zsh', str(root / 'scripts' / script), '1.2.3', str(assets / 'notes.md')],
+                    result = subprocess.run(['zsh', str(root / 'scripts' / script), product, '1.2.3', str(assets / 'notes.md')],
                         env=dict(os.environ, PATH=f'{root}/bin:' + os.environ['PATH'], TEST_LOG=str(log),
                                  TEST_SCENARIO=scenario, TEST_PRODUCT=product), capture_output=True, text=True)
                     commands = log.read_text().splitlines()

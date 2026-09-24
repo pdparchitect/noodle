@@ -144,7 +144,7 @@ import SwiftUI
     }
     func openDownload() async throws {
         guard ComputerBuildIdentity.current != .development else {
-            throw ComputerBridgeError("Build Noodle Computer Dev with scripts/build-and-launch-computer.sh to use computers in Noodle Dev.")
+            throw ComputerBridgeError("Build Noodle Computer Dev with scripts/build-and-launch.sh Computer to use computers in Noodle Dev.")
         }
         // Do not send users to a broken download before the first public release.
         var request = URLRequest(url: ComputerDistribution.releaseAPI)

@@ -147,7 +147,7 @@ def main():
             destination = ROOT / 'dist' / f'computer-{version}'
             destination.parent.mkdir(exist_ok=True)
             shutil.copytree(directory, destination)
-            command('zsh', 'scripts/publish-computer-release.sh', version, str(destination / 'release-notes.md'))
+            command('zsh', 'scripts/publish-xcode-release.sh', 'Computer', version, str(destination / 'release-notes.md'))
         if 'applet' in downloads:
             version, _ = versions.version('applet')
             directory = downloads['applet']
@@ -155,7 +155,7 @@ def main():
             destination = ROOT / 'dist' / f'applet-{version}'
             destination.parent.mkdir(exist_ok=True)
             shutil.copytree(directory, destination)
-            command('zsh', 'scripts/publish-applet-release.sh', version, str(destination / 'release-notes.md'))
+            command('zsh', 'scripts/publish-xcode-release.sh', 'Applet', version, str(destination / 'release-notes.md'))
         if 'browser' in downloads:
             version, _ = versions.version('browser')
             directory = downloads['browser']
@@ -163,7 +163,7 @@ def main():
             destination = ROOT / 'dist' / f'browser-{version}'
             destination.parent.mkdir(exist_ok=True)
             shutil.copytree(directory, destination)
-            command('zsh', 'scripts/publish-browser-release.sh', version, str(destination / 'release-notes.md'))
+            command('zsh', 'scripts/publish-xcode-release.sh', 'Browser', version, str(destination / 'release-notes.md'))
         if 'hub' in downloads:
             version, _ = versions.version('hub')
             directory = downloads['hub']
@@ -171,7 +171,7 @@ def main():
             destination = ROOT / 'dist' / f'hub-{version}'
             destination.parent.mkdir(exist_ok=True)
             shutil.copytree(directory, destination)
-            command('zsh', 'scripts/publish-hub-release.sh', version, str(destination / 'release-notes.md'))
+            command('zsh', 'scripts/publish-xcode-release.sh', 'Hub', version, str(destination / 'release-notes.md'))
         if 'noodle' in downloads:
             version, tag = versions.version('noodle')
             directory = downloads['noodle']

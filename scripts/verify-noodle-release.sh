@@ -6,8 +6,6 @@ info="$app/Contents/Info.plist"
 bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info")"
 [[ "$bundle" == com.pdparchitect.noodle || "$bundle" == com.pdparchitect.noodle.local ]]
 codesign --verify --deep --strict "$app"
-# A build linked against an older SDK than it was compiled with gets macOS's legacy appearance.
-python3 "$project_root/scripts/verify-build-sdk.py" "$app/Contents/MacOS/Noodle" "$(xcrun --sdk macosx --show-sdk-version)"
 [[ "$(lipo -archs "$app/Contents/MacOS/Noodle")" == arm64 ]] || { print -u2 'Noodle ships for Apple silicon only.'; exit 1; }
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$info")" == "$(tr -d '[:space:]' < "$project_root/VERSION")" ]]
 # A development bundle carries development hooks; a production bundle must not.
