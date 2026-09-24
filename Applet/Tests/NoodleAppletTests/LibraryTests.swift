@@ -151,6 +151,35 @@ final class LibraryTests: XCTestCase {
     }
 
     /// Moving a noodlet to the Trash also deletes what it saved, its secrets, permissions and thumbnail.
+    /// Only categories holding a visible noodlet are listed, in the fixed category order.
+    @MainActor func testCategoriesListOnlyThoseWithVisibleNoodlets() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let suite = "AppletLibraryTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let library = AppletLibrary(root: root, defaults: defaults, installExamples: false, watchChanges: false)
+        var packages: [NoodletPackage] = []
+        for (name, category) in [("Chess", "games"), ("Notes", "writing"), ("Todo", "productivity"), ("Plain", nil)] {
+            let field = category.map { #","category":"\#($0)""# } ?? ""
+            packages.append(try NoodletPackage.install([
+                "noodlet.json": Data(#"{"version":1,"title":"\#(name)","runtime":"html","entry":"index.html"\#(field)}"#.utf8),
+                "index.html": Data("<title>Test</title>".utf8),
+            ], to: library.documents.appendingPathComponent("\(name).noodlet")))
+        }
+        for package in packages { library.remember(package) }
+        library.scan()
+        XCTAssertEqual(library.categories, ["games", "productivity", "writing"])
+
+        library.hide(packages[1].key)
+        XCTAssertEqual(library.categories, ["games", "productivity"], "A category holding only hidden noodlets is listed.")
+
+        for package in [packages[0], packages[2]] { library.hide(package.key) }
+        XCTAssertEqual(library.categories, [])
+    }
+
     @MainActor func testTrashingANoodletRemovesItAndEverythingItKept() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let suite = "AppletLibraryTests." + UUID().uuidString

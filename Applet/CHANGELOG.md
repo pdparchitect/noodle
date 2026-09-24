@@ -5,6 +5,7 @@
 ### Added
 
 - Move a noodlet to the Trash from the library's context menu. Its saved data, secrets and permissions are deleted with it.
+- Browse noodlets by category. A noodlet can declare one category in `noodlet.json` (games, productivity, utilities, developer, data, creativity, media, writing, learning or lifestyle), and the library sidebar gains a collapsible Categories section listing only the categories that hold a visible noodlet.
 
 ### Fixed
 

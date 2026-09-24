@@ -19,7 +19,9 @@ available. Web noodlets need neither.
 ## The library
 
 Opening Noodle Applet shows your library of noodlets. The **All**, **Recent**,
-**Pinned** and **Hidden** tabs sort them. Right-click a noodlet's card to pin it,
+**Pinned** and **Hidden** tabs sort them. When noodlets say what kind they are,
+such as games or productivity, a **Categories** section lists each kind that has
+one. Right-click a noodlet's card to pin it,
 hide it, or reveal its files in Finder. Noodlets your bots make appear in the
 library on their own.
 

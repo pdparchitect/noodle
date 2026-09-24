@@ -13,6 +13,12 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
   public var window: NoodletWindowOptions?
   /// Protected resources the user is asked about before the noodlet starts.
   public var permissions: [String]?
+  /// Groups the noodlet under one library sidebar category; untagged noodlets appear only in All.
+  public var category: String?
+  public static let knownCategories = [
+    "games", "productivity", "utilities", "developer", "data",
+    "creativity", "media", "writing", "learning", "lifestyle",
+  ]
   public static let knownPermissions = ["microphone", "camera", "speech-recognition", "screen-capture"]
   public init(
     title: String, runtime: String = "html", entry: String = "index.html",
@@ -27,7 +33,7 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
     self.network = network
   }
   enum CodingKeys: String, CodingKey {
-    case version, title, runtime, entry, summary, symbol, network, window, permissions
+    case version, title, runtime, entry, summary, symbol, network, window, permissions, category
   }
   public init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -40,11 +46,15 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
     network = try c.decodeIfPresent(Bool.self, forKey: .network) ?? false
     window = try c.decodeIfPresent(NoodletWindowOptions.self, forKey: .window)
     permissions = try c.decodeIfPresent([String].self, forKey: .permissions)
+    category = try c.decodeIfPresent(String.self, forKey: .category)
   }
   public func validate() throws {
     try window?.validate()
     for permission in permissions ?? [] where !Self.knownPermissions.contains(permission) {
       throw AppletError("Unknown permission \(permission.prefix(40)). Use \(Self.knownPermissions.joined(separator: ", ")).")
+    }
+    if let category, !Self.knownCategories.contains(category) {
+      throw AppletError("Unknown category \(category.prefix(40)). Use \(Self.knownCategories.joined(separator: ", ")).")
     }
     guard version == 1 else { throw AppletError("Unsupported noodlet version \(version).") }
     guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, title.count <= 200

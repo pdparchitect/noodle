@@ -17,6 +17,19 @@ import XCTest
         XCTAssertThrowsError(try manifest(#"["contacts"]"#))
     }
 
+    func testManifestAcceptsKnownCategoriesOnly() throws {
+        func manifest(_ category: String) throws -> NoodletManifest {
+            let manifest = try JSONDecoder().decode(NoodletManifest.self, from: Data(
+                #"{"title":"Fixture","runtime":"html","entry":"index.html","category":"\#(category)"}"#.utf8))
+            try manifest.validate()
+            return manifest
+        }
+        XCTAssertEqual(try manifest("games").category, "games")
+        XCTAssertNoThrow(try manifest("media"))
+        XCTAssertThrowsError(try manifest("other"))
+        XCTAssertThrowsError(try manifest("Games"))
+    }
+
     func testRefusedPermissionFailsOpenWithReason() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let suite = "AppletPermissions." + UUID().uuidString

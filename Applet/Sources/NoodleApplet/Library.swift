@@ -237,6 +237,11 @@ struct LibraryEntry: Identifiable, Equatable {
       recent.filter { !pinned.contains($0) && !hidden.contains($0) }
         .compactMap { key in entries.first { $0.id == key } }.prefix(8))
   }
+  /// Categories holding at least one noodlet that is not hidden, in the fixed category order.
+  var categories: [String] {
+    let used = Set(entries.filter { !hidden.contains($0.id) }.compactMap(\.package.manifest.category))
+    return NoodletManifest.knownCategories.filter(used.contains)
+  }
   /// Hides a noodlet, or shows a hidden one again. Its pin is kept for when it is shown.
   func hide(_ key: String) {
     if hidden.contains(key) { hidden.removeAll { $0 == key } } else { hidden.append(key) }

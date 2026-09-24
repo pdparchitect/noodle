@@ -249,6 +249,18 @@ private enum LibrarySection: String, CaseIterable, Identifiable {
   }
 }
 
+/// A library section, or a category from the noodlets' manifests.
+private enum LibraryFilter: Hashable {
+  case section(LibrarySection)
+  case category(String)
+  static let categorySymbols = [
+    "games": "gamecontroller", "productivity": "checklist", "utilities": "wrench.and.screwdriver",
+    "developer": "chevron.left.forwardslash.chevron.right", "data": "chart.bar",
+    "creativity": "paintbrush", "media": "play.rectangle", "writing": "text.alignleft",
+    "learning": "graduationcap", "lifestyle": "heart",
+  ]
+}
+
 private struct LibraryView: View {
   @ObservedObject var library: AppletLibrary
   @ObservedObject var runtime: AppletRuntime
@@ -257,19 +269,28 @@ private struct LibraryView: View {
   @State private var searching = false
   @State private var searchFocused = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @State private var selection: LibrarySection? = .all
+  @State private var selection: LibraryFilter? = .section(.all)
   @State private var columnVisibility = NavigationSplitViewVisibility.all
   @State private var trashing: LibraryEntry?
   @AppStorage("AppletSidebarVisible") private var sidebarVisible = true
+  @AppStorage("AppletCategoriesExpanded") private var categoriesExpanded = true
+
+  private var section: LibrarySection? {
+    if case .section(let section) = selection { section } else { nil }
+  }
+  private var category: String? {
+    if case .category(let category) = selection { category } else { nil }
+  }
 
   private var entries: [LibraryEntry] {
     let matches = library.entries.filter {
       (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search))
-        && (selection == .hidden) == library.hidden.contains($0.id)
-        && (selection != .pinned || library.pinned.contains($0.id))
-        && (selection != .recent || library.recent.contains($0.id))
+        && (section == .hidden) == library.hidden.contains($0.id)
+        && (section != .pinned || library.pinned.contains($0.id))
+        && (section != .recent || library.recent.contains($0.id))
+        && (category == nil || $0.package.manifest.category == category)
     }
-    if selection == .recent {
+    if section == .recent {
       return matches.sorted {
         (library.recent.firstIndex(of: $0.id) ?? 999)
           < (library.recent.firstIndex(of: $1.id) ?? 999)
@@ -282,7 +303,15 @@ private struct LibraryView: View {
       List(selection: $selection) {
         Section("Library") {
           ForEach(LibrarySection.allCases) { section in
-            Label(section.rawValue, systemImage: section.symbol).tag(section)
+            Label(section.rawValue, systemImage: section.symbol).tag(LibraryFilter.section(section))
+          }
+        }
+        if !library.categories.isEmpty {
+          Section("Categories", isExpanded: $categoriesExpanded) {
+            ForEach(library.categories, id: \.self) { category in
+              Label(category.capitalized, systemImage: LibraryFilter.categorySymbols[category] ?? "tag")
+                .tag(LibraryFilter.category(category))
+            }
           }
         }
       }
@@ -308,17 +337,17 @@ private struct LibraryView: View {
             ContentUnavailableView.search(text: search)
           } else {
             ContentUnavailableView(
-              selection == .pinned
+              section == .pinned
                 ? "No pinned noodlets"
-                : selection == .recent
+                : section == .recent
                   ? "No recent noodlets"
-                  : selection == .hidden ? "No hidden noodlets" : "No noodlets",
-              systemImage: selection?.symbol ?? "square.grid.2x2")
+                  : section == .hidden ? "No hidden noodlets" : "No noodlets",
+              systemImage: section?.symbol ?? "square.grid.2x2")
           }
         }
       }
       .mask { ConversationContentTopFade() }
-      .navigationTitle(selection?.rawValue ?? "All")
+      .navigationTitle(category?.capitalized ?? section?.rawValue ?? "All")
       .toolbar { libraryToolbar }
     }
     .navigationSplitViewStyle(.balanced)
@@ -330,6 +359,9 @@ private struct LibraryView: View {
         .ignoresSafeArea()
     }
     .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+    .onChange(of: library.categories) { _, categories in
+      if let category, !categories.contains(category) { selection = .section(.all) }
+    }
     .onChange(of: searching) { _, active in if !active { searchFocused = false } }
     .onAppear { columnVisibility = sidebarVisible ? .all : .detailOnly }
     .onChange(of: columnVisibility) { _, value in sidebarVisible = value != .detailOnly }

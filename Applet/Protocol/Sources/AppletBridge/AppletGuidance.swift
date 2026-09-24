@@ -154,6 +154,10 @@ public enum AppletGuidance {
         and saved host credentials are not shared. XHR retains normal WebKit behavior.
         The privileged main page stays inside its package.
 
+        Optional manifest category (HTML and Swift), for example "category":"games",
+        groups the noodlet in the library: games, productivity, utilities, developer,
+        data, creativity, media, writing, learning or lifestyle. Leave it out when none fits.
+
         Optional manifest window object (HTML and Swift):
         {"type":"floating","background":"translucent","titlebar":false,"width":320,"height":350,"minWidth":260,"minHeight":300,"maxWidth":480,"maxHeight":520,"resizable":true,"rememberFrame":true}
         type is standard (default), floating (stays above ordinary windows), or preview
