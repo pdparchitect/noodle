@@ -31,3 +31,5 @@ Computer/Derived/
 /Noodle.xcodeproj/
 /Noodle.xcworkspace/
 /Derived/
+# Tuist's copy of each project's package pins; Package.resolved is the committed one.
+.package.resolved

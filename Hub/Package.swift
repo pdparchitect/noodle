@@ -1,10 +1,6 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// Development hooks are compiled into debug builds, and into any build made with NOODLE_DEV_HOOKS=1.
-var appSettings: [SwiftSetting] = [.define("NOODLE_DEV_HOOKS", .when(configuration: .debug))]
-if Context.environment["NOODLE_DEV_HOOKS"] == "1" { appSettings.append(.define("NOODLE_DEV_HOOKS")) }
-
 let package = Package(
     name: "NoodleHub",
     platforms: [.macOS("26.0")],
@@ -32,8 +28,7 @@ let package = Package(
                 .product(name: "NoodleRuntimeSettings", package: "noodle"),
                 .product(name: "NoodleSettingsUI", package: "SettingsUI"),
                 .product(name: "Sparkle", package: "Sparkle"),
-            ],
-            swiftSettings: appSettings),
+            ]),
         .testTarget(name: "HubCoreTests", dependencies: ["HubCore"]),
     ],
     swiftLanguageModes: [.v5]

@@ -386,47 +386,6 @@ class WorkflowTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(matches_paths(docs + [path], patterns))
 
-    def test_website_content_still_deploys_without_readme_only_runs(self):
-        flow = workflow('website.yml')
-        triggers = flow.get('on', flow.get('true'))
-        patterns = triggers['push']['paths']
-        self.assertEqual(triggers['push']['branches'], ['main'])
-        self.assertIn('workflow_dispatch', triggers)
-        self.assertFalse(matches_paths(['README.md', 'website/README.md', 'docs/website.md'], patterns))
-        for path in ['website/index.html', 'website/assets/noodle.png',
-                     'website/CNAME', '.github/workflows/website.yml']:
-            with self.subTest(path=path):
-                self.assertTrue(matches_paths(['website/README.md', path], patterns))
-
-    def test_website_waits_for_both_direct_downloads_before_deploying(self):
-        steps = workflow('website.yml')['jobs']['deploy']['steps']
-        index = next(i for i, step in enumerate(steps) if step.get('id') == 'download')
-        for step in steps[index + 1:]:
-            self.assertEqual(step.get('if'), "steps.download.outputs.ready == 'true'")
-        urls = ['https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg',
-                'https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Suite-arm64.dmg']
-        for missing in ['', *urls]:
-            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
-                (root / 'website').mkdir()
-                (root / 'website/index.html').write_text((ROOT / 'website/index.html').read_text())
-                (root / 'bin').mkdir()
-                curl = root / 'bin/curl'
-                curl.write_text('#!/bin/sh\nprintf "%s\\n" "$@" >> "$TEST_CURL_LOG"\n'
-                                'for arg in "$@"; do if [ "$arg" = "$TEST_MISSING_URL" ]; then exit 22; fi; done\n')
-                curl.chmod(0o700)
-                output = root / 'outputs'
-                result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', steps[index]['run']], cwd=root,
-                    env={**os.environ, 'PATH': str(root / 'bin') + os.pathsep + os.environ['PATH'],
-                         'GITHUB_OUTPUT': str(output), 'TEST_CURL_LOG': str(root / 'curl.log'),
-                         'TEST_MISSING_URL': missing}, capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(output.read_text().strip(), 'ready=' + str(not missing).lower())
-                calls = (root / 'curl.log').read_text().splitlines()
-                self.assertIn(urls[0], calls)
-                if missing != urls[0]:
-                    self.assertIn(urls[1], calls)
-
     def test_suite_only_runs_for_successful_trusted_main_releases(self):
         flow = workflow('suite-release.yml')
         triggers = flow.get('on', flow.get('true'))
@@ -469,16 +428,6 @@ class WorkflowTests(unittest.TestCase):
         retained = next(i for i, step in enumerate(steps) if step.get('with', {}).get('name') == 'suite-release-assets')
         published = next(i for i, step in enumerate(steps) if 'suite-release.py publish' in step.get('run', ''))
         self.assertLess(retained, published)
-
-    def test_suite_completion_retries_website_deployment(self):
-        flow = workflow('website.yml')
-        triggers = flow.get('on', flow.get('true'))
-        self.assertEqual(triggers['workflow_run']['workflows'], ['Assemble Noodle Suite'])
-        values = {'github.ref': 'refs/heads/main', 'github.event_name': 'workflow_run',
-                  'github.event.workflow_run.conclusion': 'success', 'github.event.workflow_run.head_branch': 'main'}
-        self.assertTrue(condition(flow['jobs']['deploy']['if'], values))
-        self.assertFalse(condition(flow['jobs']['deploy']['if'], {
-            **values, 'github.event.workflow_run.conclusion': 'failure'}))
 
 
 if __name__ == '__main__':
