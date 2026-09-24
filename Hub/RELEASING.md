@@ -63,7 +63,7 @@ zsh scripts/verify-hub-release.sh '.build/Noodle Hub.app'
 ```
 
 The release itself archives the same project with `xcodebuild archive`, signs with Developer ID,
-timestamps every signature and turns updates on; see `scripts/package-xcode-release.sh`, shared with Applet. It runs
+timestamps every signature and turns updates on; see `scripts/package-xcode-release.sh`, shared with Applet and Browser. It runs
 on the `xcode-27` image, like Noodle's, because the Hub ships the Apple harness and its MLX shaders.
 
 `verify-hub-release.sh` also runs `scripts/verify-launch-hooks.sh` on a production

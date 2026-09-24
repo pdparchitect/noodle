@@ -69,7 +69,7 @@ jobs:
 
       - name: Build, sign, notarize, staple and sign update feed
         shell: zsh {0}
-        run: zsh scripts/package-browser-release.sh "browser-v$BROWSER_VERSION"
+        run: zsh scripts/package-xcode-release.sh Browser "browser-v$BROWSER_VERSION"
 
       - name: Verify signed browsing, transfers and persistent profiles
         timeout-minutes: 8

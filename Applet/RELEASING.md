@@ -70,7 +70,7 @@ zsh Applet/scripts/test-background-launch.sh
 ```
 
 The release archives the same Xcode project with `xcodebuild archive`, signs with Developer ID,
-timestamps every signature and turns updates on; see `scripts/package-xcode-release.sh`, shared with the Hub.
+timestamps every signature and turns updates on; see `scripts/package-xcode-release.sh`, shared with the Hub and Browser.
 
 `verify-applet-release.sh` also runs `scripts/verify-launch-hooks.sh` on a production
 bundle: it carries no development hooks and names no launch check. The two launch checks

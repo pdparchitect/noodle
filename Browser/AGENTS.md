@@ -21,6 +21,10 @@ Protocol changes need coordinated broker/CLI handling and generated guidance in
 
 Run the unit tests and signed fake-site fixture for changes to WebKit operations,
 persistence or transfers. Fixtures use separate UUIDs and `.accessory` activation;
-never test against the user's ordinary browser profiles or credentials. Package
-with `scripts/build-browser.sh` and verify actual entitlements with
-`scripts/verify-browser.sh`.
+never test against the user's ordinary browser profiles or credentials. Verify
+actual entitlements with `scripts/verify-browser-release.sh`.
+
+The app is built from an Xcode project that Tuist generates from `Project.swift`; the generated
+project and `Derived/` are not committed. Describe targets, settings and embedding there, never by
+editing the generated project. Its build phases embed the page scripts and trim Sparkle; everything
+else is target settings.

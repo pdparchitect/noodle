@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep the bot's pointer above the whole page. Built with the macOS 27 SDK, WebKit adds colour strips along the page's edges, which covered the pointer there.
+
 ## [0.5.0] - 2026-09-21
 
 ### Added

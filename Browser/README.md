@@ -11,19 +11,14 @@ Each named browser has its own website data store. You can keep work, personal a
 Requires macOS 26 or later, matching Noodle Computer, Apple's developer tools, and an Apple Development or Developer ID signing identity for local builds.
 
 ```sh
-zsh scripts/build-browser.sh
+zsh scripts/build-and-launch-browser.sh
 zsh scripts/build-app.sh
-open '.build/Noodle Browser Dev.app'
 open '.build/Noodle Dev.app'
 ```
 
-Builds default to separate Dev apps and storage. `NOODLE_BROWSER_DATA_CONTAINER=production` selects the production Browser identity; use the corresponding Noodle environment. Both variants can be installed together: names, bundle IDs, URL schemes, sandbox containers and broker App Groups are separate. Noodle Dev connects only to Noodle Browser Dev; normal Noodle connects only to normal Noodle Browser. To package both Browser variants in one command:
+Builds default to separate Dev apps and storage. The build uses the Xcode project Tuist generates from `Browser/Project.swift`; to debug, run `cd Browser && tuist generate` and use Run in Xcode. `NOODLE_BROWSER_DATA_CONTAINER=production zsh scripts/xcode-build.sh Browser` builds the production identity into `.build/Noodle Browser.app`; use the corresponding Noodle environment. Both variants can be installed together: names, bundle IDs, URL schemes, sandbox containers and broker App Groups are separate. Noodle Dev connects only to Noodle Browser Dev; normal Noodle connects only to normal Noodle Browser.
 
-```sh
-zsh scripts/build-browser.sh --both
-```
-
-Use `NOODLE_DATA_CONTAINER=production zsh scripts/build-app.sh` for matching normal Noodle. Set `NOODLE_BROWSER_APP_DESTINATION` when building a single Browser variant to stage it elsewhere without replacing a running app. A production build is not a published release. Browser uses the same Sparkle updater as Computer and Applet, with its own signed release feed. Local builds keep update checks disabled; release builds enable them with automatic installation opt-in.
+Use `NOODLE_DATA_CONTAINER=production zsh scripts/build-app.sh` for matching normal Noodle. A production build is not a published release. Browser uses the same Sparkle updater as Computer and Applet, with its own signed release feed. Local builds keep update checks disabled; release builds enable them with automatic installation opt-in.
 
 1. In Noodle Browser, use **Create** in the toolbar or **File → New Browser…** and name it.
 2. Enter a website address and sign in normally.
@@ -151,6 +146,6 @@ Use `zsh scripts/test-browser-webmcp.sh PATH_TO_BROWSER_DEV_APP` for the focused
 
 `Tests/Fixtures/server.py` provides the local site. The signed app's explicit `--smoke-test --smoke-id UUID --smoke-port PORT` mode uses isolated test profiles and stays out of the Dock. Run again with the same ID and `--restore` to verify authentication survives a process restart. Its signed broker uses a separate test socket, so a running browser can stay open. Test output reports the screenshot artifact path.
 
-The app recognises these arguments by SHA-256 digest (`BrowserLaunchCheck` in `BrowserApp.swift`), so a built app never spells them. A production bundle contains only what `test-browser.sh` and `test-browser-ui.sh` run against the packaged release. The broker, live-demo, WebMCP-only and pointer-only checks are development hooks, compiled into Dev bundles, which `build-browser.sh` builds with `NOODLE_DEV_HOOKS=1`, and into debug builds. `scripts/verify-launch-hooks.sh` rejects a production bundle that carries them.
+The app recognises these arguments by SHA-256 digest (`BrowserLaunchCheck` in `BrowserApp.swift`), so a built app never spells them. A production bundle contains only what `test-browser.sh` and `test-browser-ui.sh` run against the packaged release. The broker, live-demo, WebMCP-only and pointer-only checks are development hooks, compiled into Dev bundles, the project's Debug configuration. `scripts/verify-launch-hooks.sh` rejects a production bundle that carries them.
 
 `scripts/test-browser-ui.sh` creates temporary profiles and checks the real sidebar, native toolbar, clicks in tab padding, independent tab closing, live page input, background screenshots, edit and icon sheets, application menus, Settings scene and Update tab. It saves native-window snapshots under `.build/browser-ui-verification`, including collapsed-sidebar content, tests deletion while the window is mounted, and removes its fixture profiles. This mode does not operate profiles from the browser library or start its provider socket.

@@ -93,6 +93,8 @@ import WebKit
     }
 
     private func display() {
+        // WebKit adds its own views later, such as the edge colour extensions, so raise the pointer above them.
+        if web.subviews.last !== overlay { web.addSubview(overlay, positioned: .above, relativeTo: nil) }
         overlay.position = position; overlay.pressed = pressed || pulsing; overlay.needsDisplay = true
     }
 

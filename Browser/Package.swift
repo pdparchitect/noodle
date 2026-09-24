@@ -6,7 +6,8 @@ let hooks: [SwiftSetting] = [.define("NOODLE_DEV_HOOKS", .when(configuration: .d
     + (Context.environment["NOODLE_DEV_HOOKS"] == "1" ? [.define("NOODLE_DEV_HOOKS")] : [])
 
 let package = Package(name: "NoodleBrowser", platforms: [.macOS("26.0")],
-    products: [.executable(name: "NoodleBrowser", targets: ["NoodleBrowser"])],
+    products: [.executable(name: "NoodleBrowser", targets: ["NoodleBrowser"]),
+        .library(name: "BrowserCore", targets: ["BrowserCore"])],
     dependencies: [.package(path: "BrowserProtocol"), .package(path: "../Shared/SettingsUI"),
         .package(path: "../Shared/Wallpaper"), .package(path: "../Shared/LaunchChecks"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4")],

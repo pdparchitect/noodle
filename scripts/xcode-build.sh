@@ -5,7 +5,7 @@
 # The signed app lands in .build, where launchers and checks find it. Releases use package-xcode-release.sh.
 set -euo pipefail
 project_root="${0:A:h:h}"
-app="${1:?Usage: scripts/xcode-build.sh APP (Hub or Applet)}"
+app="${1:?Usage: scripts/xcode-build.sh APP (Hub, Applet or Browser)}"
 [[ -f "$project_root/$app/Project.swift" ]] || { print -u2 "$app has no Project.swift."; exit 1; }
 container_setting="NOODLE_${(U)app}_DATA_CONTAINER"
 case "${(P)container_setting:-${NOODLE_DATA_CONTAINER:-development}}" in
