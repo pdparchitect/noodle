@@ -96,6 +96,10 @@ struct ConversationWindowView: View {
                     .help("Conversation Info")
                 }
             }
+
+            ToolbarItem(placement: .primaryAction) {
+                if let conversation { ConversationCompanionsMenu(conversation: conversation) }
+            }
         }
         .sheet(item: $agentBeingEdited) { agent in
             EditBotSheet(agent: agent).environment(store).noodleSheetSizing(animated: true)

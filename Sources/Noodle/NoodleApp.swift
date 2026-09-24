@@ -415,6 +415,10 @@ struct RootView: View {
                 }
             }
 
+            ToolbarItem(placement: .primaryAction) {
+                if let conversation = store.selectedConversation { ConversationCompanionsMenu(conversation: conversation) }
+            }
+
         }
         .sheet(item: $store.creationSheet) { sheet in
             switch sheet {

@@ -288,34 +288,12 @@ struct ChatView: View {
     private func showPreview(_ attachment: ConversationAttachment) {
         attachmentOpenTask?.cancel()
         selectedAttachmentID = attachment.id
-        if attachment.isBrowserDocument {
-            attachmentPreview.close(); screenCapturePreview.close()
-            let fileURL = store.attachmentFileURL(attachment)
-            attachmentOpenTask = Task { @MainActor in
-                do { try await store.browsers.openDocument(at: fileURL) }
-                catch { if !Task.isCancelled { store.errorMessage = error.localizedDescription } }
-            }
-            return
-        }
-        if attachment.isComputerDocument {
-            attachmentPreview.close()
-            screenCapturePreview.close()
-            let fileURL = store.attachmentFileURL(attachment)
-            attachmentOpenTask = Task { @MainActor in
-                do { try await store.computers.openDocument(at: fileURL) }
-                catch { if !Task.isCancelled { store.errorMessage = error.localizedDescription } }
-            }
-            return
-        }
-        if let url = attachment.url, NoodletLink.id(in: url) != nil {
+        if attachment.opensInCompanion {
             attachmentPreview.close()
             screenCapturePreview.close()
             attachmentOpenTask = Task { @MainActor in
-                do {
-                    try await store.applets.openNoodlet(url)
-                } catch {
-                    if !Task.isCancelled { store.errorMessage = error.localizedDescription }
-                }
+                do { try await store.openCompanion(attachment) }
+                catch { if !Task.isCancelled { store.errorMessage = error.localizedDescription } }
             }
             return
         }

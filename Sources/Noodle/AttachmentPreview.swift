@@ -17,6 +17,32 @@ extension ConversationAttachment {
             || ComputerBuildIdentity.allCases.contains { $0.fileExtension == (originalFilename as NSString).pathExtension.lowercased() })
     }
 
+    /// Computers, browser pages and noodlets open in a companion app instead of Quick Look.
+    private var companionKey: String? {
+        if let computer { return "computer:\(computer.computer.id)" }
+        if let browser { return "browser:\(browser.reference.url)" }
+        if let url, let link = NoodletLink.canonical(url) { return "noodlet:\(link)" }
+        if isComputerDocument || isBrowserDocument { return "file:\(originalFilename)" }
+        return nil
+    }
+
+    var opensInCompanion: Bool { companionKey != nil }
+
+    var companionSymbolName: String {
+        url.flatMap(NoodletLink.id) != nil ? "square.grid.2x2" : previewSymbolName
+    }
+
+    var companionTitle: String {
+        computer?.computer.name ?? browser.map { $0.reference.title.isEmpty ? $0.reference.url : $0.reference.title }
+            ?? originalFilename
+    }
+
+    /// One entry per computer, page or noodlet, keeping its most recent share.
+    static func companions(newestFirst attachments: [ConversationAttachment]) -> [ConversationAttachment] {
+        var seen = Set<String>()
+        return attachments.filter { $0.companionKey.map { seen.insert($0).inserted } ?? false }
+    }
+
     var previewSymbolName: String {
         if annotation != nil { return "text.bubble.fill" }
         if let computer { return computer.computer.symbol }
@@ -26,6 +52,42 @@ extension ConversationAttachment {
         if mediaType.hasPrefix("audio/") { return "waveform" }
         if mediaType.hasPrefix("video/") { return "film.fill" }
         return "doc.fill"
+    }
+}
+
+extension NoodleStore {
+    func companions(in conversation: BotConversation) -> [ConversationAttachment] {
+        ConversationAttachment.companions(newestFirst: messages(for: conversation).reversed().flatMap { attachments(for: $0) })
+    }
+
+    func openCompanion(_ attachment: ConversationAttachment) async throws {
+        if attachment.isBrowserDocument { try await browsers.openDocument(at: attachmentFileURL(attachment)) }
+        else if attachment.isComputerDocument { try await computers.openDocument(at: attachmentFileURL(attachment)) }
+        else if let url = attachment.url { try await applets.openNoodlet(url) }
+    }
+}
+
+/// Toolbar menu that reopens computers, browser pages and noodlets shared earlier in a conversation.
+struct ConversationCompanionsMenu: View {
+    @Environment(NoodleStore.self) private var store
+    let conversation: BotConversation
+
+    var body: some View {
+        let companions = store.companions(in: conversation)
+        Menu {
+            ForEach(companions) { attachment in
+                Button(attachment.companionTitle, systemImage: attachment.companionSymbolName) {
+                    Task { @MainActor in
+                        do { try await store.openCompanion(attachment) }
+                        catch { store.errorMessage = error.localizedDescription }
+                    }
+                }
+            }
+        } label: {
+            Label("Shared", systemImage: "square.stack")
+        }
+        .disabled(companions.isEmpty)
+        .help("Shared Computers, Browsers and Noodlets")
     }
 }
 
