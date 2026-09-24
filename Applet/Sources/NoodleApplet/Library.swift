@@ -41,6 +41,8 @@ struct LibraryEntry: Identifiable, Equatable {
   @Published var error: String?
   @Published var recent: [String]
   @Published var pinned: [String]
+  /// Kept in the library but listed only under Hidden: never in All, Recent, Pinned or the menu bar.
+  @Published var hidden: [String]
   private let defaults: UserDefaults
   private struct Registration {
     let url: URL
@@ -63,6 +65,7 @@ struct LibraryEntry: Identifiable, Equatable {
     documents = self.root.appendingPathComponent("Noodlets")
     recent = defaults.stringArray(forKey: "recent") ?? []
     pinned = defaults.stringArray(forKey: "pinned") ?? []
+    hidden = defaults.stringArray(forKey: "hidden") ?? []
     do {
       try FileManager.default.createDirectory(
         at: documents, withIntermediateDirectories: true)
@@ -156,8 +159,10 @@ struct LibraryEntry: Identifiable, Equatable {
     if !deleted.isEmpty {
       recent.removeAll { deleted.contains($0) }
       pinned.removeAll { deleted.contains($0) }
+      hidden.removeAll { deleted.contains($0) }
       defaults.set(recent, forKey: "recent")
       defaults.set(pinned, forKey: "pinned")
+      defaults.set(hidden, forKey: "hidden")
     }
     var found: [String: LibraryEntry] = [:]
     let thumbnails = root.appendingPathComponent("Thumbnails", isDirectory: true)
@@ -221,6 +226,21 @@ struct LibraryEntry: Identifiable, Equatable {
     recent = Array(recent.prefix(30))
     defaults.set(recent, forKey: "recent")
     scan()
+  }
+  /// Pinned noodlets for the menu bar, in pin order.
+  var menuPinned: [LibraryEntry] {
+    pinned.filter { !hidden.contains($0) }.compactMap { key in entries.first { $0.id == key } }
+  }
+  /// The most recent noodlets for the menu bar that are not already pinned there.
+  var menuRecent: [LibraryEntry] {
+    Array(
+      recent.filter { !pinned.contains($0) && !hidden.contains($0) }
+        .compactMap { key in entries.first { $0.id == key } }.prefix(8))
+  }
+  /// Hides a noodlet, or shows a hidden one again. Its pin is kept for when it is shown.
+  func hide(_ key: String) {
+    if hidden.contains(key) { hidden.removeAll { $0 == key } } else { hidden.append(key) }
+    defaults.set(hidden, forKey: "hidden")
   }
   func pin(_ key: String) {
     if pinned.contains(key) { pinned.removeAll { $0 == key } } else { pinned.append(key) }

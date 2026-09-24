@@ -87,21 +87,16 @@ private struct AppletMenu: View {
   var body: some View {
     Button("Open Library", action: openLibrary)
     Divider()
-    ForEach(library.pinned, id: \.self) { key in
-      if let entry = library.entries.first(where: { $0.id == key }) {
-        Button {
-          runtime.open(entry.package)
-        } label: {
-          Label(entry.title, systemImage: "pin.fill")
-        }
+    ForEach(library.menuPinned) { entry in
+      Button {
+        runtime.open(entry.package)
+      } label: {
+        Label(entry.title, systemImage: "pin.fill")
       }
     }
-    if library.entries.contains(where: { library.pinned.contains($0.id) }) { Divider() }
-    ForEach(library.recent.filter { !library.pinned.contains($0) }.prefix(8), id: \.self) {
-      key in
-      if let entry = library.entries.first(where: { $0.id == key }) {
-        Button(entry.title) { runtime.open(entry.package) }
-      }
+    if !library.menuPinned.isEmpty { Divider() }
+    ForEach(library.menuRecent) { entry in
+      Button(entry.title) { runtime.open(entry.package) }
     }
     Divider()
     CompanionMenuSettingsButton()
@@ -242,12 +237,14 @@ private enum LibrarySection: String, CaseIterable, Identifiable {
   case all = "All"
   case recent = "Recent"
   case pinned = "Pinned"
+  case hidden = "Hidden"
   var id: Self { self }
   var symbol: String {
     switch self {
     case .all: "square.grid.2x2"
     case .recent: "clock"
     case .pinned: "pin"
+    case .hidden: "eye.slash"
     }
   }
 }
@@ -267,6 +264,7 @@ private struct LibraryView: View {
   private var entries: [LibraryEntry] {
     let matches = library.entries.filter {
       (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search))
+        && (selection == .hidden) == library.hidden.contains($0.id)
         && (selection != .pinned || library.pinned.contains($0.id))
         && (selection != .recent || library.recent.contains($0.id))
     }
@@ -311,7 +309,9 @@ private struct LibraryView: View {
             ContentUnavailableView(
               selection == .pinned
                 ? "No pinned noodlets"
-                : selection == .recent ? "No recent noodlets" : "No noodlets",
+                : selection == .recent
+                  ? "No recent noodlets"
+                  : selection == .hidden ? "No hidden noodlets" : "No noodlets",
               systemImage: selection?.symbol ?? "square.grid.2x2")
           }
         }
@@ -514,6 +514,7 @@ private struct LibraryView: View {
         NSWorkspace.shared.activateFileViewerSelecting([entry.package.url])
       }
       Button(library.pinned.contains(entry.id) ? "Unpin" : "Pin") { library.pin(entry.id) }
+      Button(library.hidden.contains(entry.id) ? "Unhide" : "Hide") { library.hide(entry.id) }
     }
   }
 }

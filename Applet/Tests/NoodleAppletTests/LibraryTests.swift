@@ -115,4 +115,38 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual(library.entries.map(\.id), [package.key])
         XCTAssertEqual((defaults.array(forKey: "libraryBookmarks") as? [Data])?.count, 1)
     }
+
+    /// A hidden noodlet stays in the library but leaves the menu bar, and stays hidden after a relaunch.
+    @MainActor func testHiddenNoodletsLeaveTheMenuUntilShownAgain() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let suite = "AppletLibraryTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let library = AppletLibrary(root: root, defaults: defaults, installExamples: false, watchChanges: false)
+        var packages: [NoodletPackage] = []
+        for name in ["Kept", "Secret", "Pinned secret"] {
+            packages.append(try NoodletPackage.install([
+                "noodlet.json": Data(#"{"version":1,"title":"\#(name)","runtime":"html","entry":"index.html"}"#.utf8),
+                "index.html": Data("<title>Test</title>".utf8),
+            ], to: library.documents.appendingPathComponent("\(name).noodlet")))
+        }
+        for package in packages { library.remember(package) }
+        library.pin(packages[2].key)
+        library.hide(packages[1].key)
+        library.hide(packages[2].key)
+
+        for current in [library, AppletLibrary(root: root, defaults: defaults, installExamples: false, watchChanges: false)] {
+            current.scan()
+            XCTAssertEqual(current.entries.count, 3, "Hiding removed a noodlet from the library.")
+            XCTAssertEqual(Set(current.hidden), [packages[1].key, packages[2].key])
+            XCTAssertEqual(current.menuPinned.map(\.id), [])
+            XCTAssertEqual(current.menuRecent.map(\.id), [packages[0].key])
+        }
+        library.hide(packages[2].key)
+        XCTAssertEqual(library.menuPinned.map(\.id), [packages[2].key], "Showing it again lost its pin.")
+        XCTAssertEqual(library.hidden, [packages[1].key])
+    }
 }
