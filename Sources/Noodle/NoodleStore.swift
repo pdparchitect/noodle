@@ -54,6 +54,7 @@ final class NoodleStore {
             }
         }
     }
+    private(set) var pinnedConversationIDs: [UUID] = []
     private(set) var unreadConversationIDs: Set<UUID> = [] {
         didSet { updateDockBadge() }
     }
@@ -255,12 +256,34 @@ final class NoodleStore {
         }
     }
 
+    /// Pinned bots and groups sit above the rest, in the order they were pinned.
+    var pinnedConversations: [BotConversation] {
+        let visible = Dictionary(uniqueKeysWithValues: filteredConversations.map { ($0.id, $0) })
+        return pinnedConversationIDs.compactMap { visible[$0] }
+    }
+
     var directConversations: [BotConversation] {
-        filteredConversations.filter { $0.kind == .direct }
+        filteredConversations.filter { $0.kind == .direct && !pinnedConversationIDs.contains($0.id) }
     }
 
     var groupConversations: [BotConversation] {
-        filteredConversations.filter { $0.kind == .group }
+        filteredConversations.filter { $0.kind == .group && !pinnedConversationIDs.contains($0.id) }
+    }
+
+    func isPinned(_ conversationID: UUID) -> Bool {
+        pinnedConversationIDs.contains(conversationID)
+    }
+
+    func setPinned(_ pinned: Bool, conversationID: UUID) {
+        guard pinned != isPinned(conversationID) else { return }
+        var updated = pinnedConversationIDs.filter { $0 != conversationID }
+        if pinned { updated.append(conversationID) }
+        do {
+            try repository.savePinnedConversationIDs(updated)
+            pinnedConversationIDs = updated
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     func reload() {
@@ -312,6 +335,11 @@ final class NoodleStore {
             drafts.retainConversations(knownConversationIDs)
             try? transcriptPositions.retainConversations(knownConversationIDs)
             conversationWindows.retainConversations(knownConversationIDs)
+            let storedPinnedIDs = try repository.loadPinnedConversationIDs()
+            pinnedConversationIDs = storedPinnedIDs.filter(knownConversationIDs.contains)
+            if pinnedConversationIDs != storedPinnedIDs {
+                try repository.savePinnedConversationIDs(pinnedConversationIDs)
+            }
             let storedUnreadIDs = try repository.loadUnreadConversationIDs()
             unreadConversationIDs = storedUnreadIDs.intersection(knownConversationIDs)
             if unreadConversationIDs != storedUnreadIDs {

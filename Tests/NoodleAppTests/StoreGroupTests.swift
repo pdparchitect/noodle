@@ -105,6 +105,29 @@ import XCTest
         XCTAssertEqual(try f.repository.loadAgents().map(\.id), [f.b.id])
     }
 
+    func testPinnedConversationsLeaveTheirSectionAndPersistInPinOrder() throws {
+        let f = try fixture(), group = try f.group(name: "Launch team")
+        XCTAssertTrue(f.store.pinnedConversations.isEmpty)
+        f.store.setPinned(true, conversationID: group.id)
+        f.store.setPinned(true, conversationID: f.directB.id)
+        XCTAssertEqual(f.store.pinnedConversations.map(\.id), [group.id, f.directB.id])
+        XCTAssertEqual(f.store.directConversations.map(\.id), [f.directA.id])
+        XCTAssertTrue(f.store.groupConversations.isEmpty)
+        f.store.searchText = "Grace"
+        XCTAssertEqual(f.store.pinnedConversations.map(\.id), [group.id, f.directB.id])
+        f.store.searchText = "Launch"
+        XCTAssertEqual(f.store.pinnedConversations.map(\.id), [group.id])
+        f.store.searchText = ""
+        try f.repository.savePinnedConversationIDs(f.store.pinnedConversationIDs + [UUID()])
+        f.store.reload()
+        XCTAssertEqual(f.store.pinnedConversationIDs, [group.id, f.directB.id])
+        XCTAssertEqual(try f.repository.loadPinnedConversationIDs(), [group.id, f.directB.id])
+        f.store.setPinned(false, conversationID: group.id)
+        XCTAssertEqual(f.store.pinnedConversations.map(\.id), [f.directB.id])
+        XCTAssertEqual(f.store.groupConversations.map(\.id), [group.id])
+        XCTAssertEqual(try f.repository.loadPinnedConversationIDs(), [f.directB.id])
+    }
+
     func testSearchFindsTitlesDescriptionsParticipantsAndMessageContent() throws {
         let f = try fixture(), group = try f.group(name: "Launch team", description: "Quarterly planning")
         _ = try f.repository.sendUserMessage(conversationID: f.directB.id, body: "A **violet** notebook")

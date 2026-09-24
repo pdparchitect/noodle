@@ -15,57 +15,9 @@ struct SidebarView: View {
         @Bindable var store = store
 
         List(selection: $store.selectedConversationID) {
-            if !store.directConversations.isEmpty {
-                Section("Bots") {
-                    ForEach(store.directConversations) { conversation in
-                        ConversationRow(conversation: conversation)
-                            .tag(conversation.id)
-                            .contextMenu {
-                                // How a window is opened decides its mode, so this also docks a floating one.
-                                Button("Open in New Window") { store.dockConversation(conversation.id) }
-                                Button("Float on Top") { store.floatConversation(conversation.id) }
-                                Divider()
-                                if let agent = store.participants(for: conversation).first {
-                                    Button("Edit Bot") {
-                                        store.agentBeingEdited = agent
-                                    }
-                                }
-                                Button("Change Background…") { store.backgroundBeingEdited = conversation }
-                                if let agent = store.participants(for: conversation).first {
-                                    Divider()
-                                    Button("Show Activity") { store.showActivity(for: agent) }
-                                    Button("Show Workspace in Finder") {
-                                        store.revealWorkspace(for: agent)
-                                    }
-                                    if store.runtime.snapshot(for: agent.id).phase == .failed {
-                                        Divider()
-                                        Button("Kick") {
-                                            kickRequest = store.runtime.kick(agent: agent, repository: store.repository)
-                                        }
-                                        .disabled(store.runtime.changingAccess.contains(agent.id))
-                                    }
-                                }
-                            }
-                    }
-                }
-            }
-
-            if !store.groupConversations.isEmpty {
-                Section("Groups") {
-                    ForEach(store.groupConversations) { conversation in
-                        ConversationRow(conversation: conversation)
-                            .tag(conversation.id)
-                            .contextMenu {
-                                // How a window is opened decides its mode, so this also docks a floating one.
-                                Button("Open in New Window") { store.dockConversation(conversation.id) }
-                                Button("Float on Top") { store.floatConversation(conversation.id) }
-                                Divider()
-                                Button("Edit Group…") { store.groupBeingEdited = conversation }
-                                Button("Change Background…") { store.backgroundBeingEdited = conversation }
-                            }
-                    }
-                }
-            }
+            section("Pinned", store.pinnedConversations)
+            section("Bots", store.directConversations)
+            section("Groups", store.groupConversations)
         }
         .listStyle(.sidebar)
         .modifier(AgentKickConfirmation(store: store, request: $kickRequest))
@@ -96,6 +48,58 @@ struct SidebarView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
             searchIsFocused = true
+        }
+    }
+
+    @ViewBuilder
+    private func section(_ title: String, _ conversations: [BotConversation]) -> some View {
+        if !conversations.isEmpty {
+            Section(title) {
+                ForEach(conversations) { conversation in
+                    ConversationRow(conversation: conversation)
+                        .tag(conversation.id)
+                        .contextMenu { menu(for: conversation) }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func menu(for conversation: BotConversation) -> some View {
+        // How a window is opened decides its mode, so this also docks a floating one.
+        Button("Open in New Window") { store.dockConversation(conversation.id) }
+        Button("Float on Top") { store.floatConversation(conversation.id) }
+        if store.isPinned(conversation.id) {
+            Button("Unpin") { store.setPinned(false, conversationID: conversation.id) }
+        } else {
+            Button("Pin") { store.setPinned(true, conversationID: conversation.id) }
+        }
+        Divider()
+        switch conversation.kind {
+        case .group:
+            Button("Edit Group…") { store.groupBeingEdited = conversation }
+            Button("Change Background…") { store.backgroundBeingEdited = conversation }
+        case .direct:
+            if let agent = store.participants(for: conversation).first {
+                Button("Edit Bot") {
+                    store.agentBeingEdited = agent
+                }
+            }
+            Button("Change Background…") { store.backgroundBeingEdited = conversation }
+            if let agent = store.participants(for: conversation).first {
+                Divider()
+                Button("Show Activity") { store.showActivity(for: agent) }
+                Button("Show Workspace in Finder") {
+                    store.revealWorkspace(for: agent)
+                }
+                if store.runtime.snapshot(for: agent.id).phase == .failed {
+                    Divider()
+                    Button("Kick") {
+                        kickRequest = store.runtime.kick(agent: agent, repository: store.repository)
+                    }
+                    .disabled(store.runtime.changingAccess.contains(agent.id))
+                }
+            }
         }
     }
 }

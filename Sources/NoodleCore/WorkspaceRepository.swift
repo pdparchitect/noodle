@@ -96,6 +96,21 @@ public struct WorkspaceRepository: Sendable {
         )
     }
 
+    /// In the order they were pinned.
+    public func loadPinnedConversationIDs() throws -> [UUID] {
+        guard FileManager.default.fileExists(atPath: pinnedConversationsURL.path) else { return [] }
+        return try read(PinnedConversations.self, from: pinnedConversationsURL).conversationIDs
+    }
+
+    public func savePinnedConversationIDs(_ ids: [UUID]) throws {
+        try prepare()
+        try write(PinnedConversations(conversationIDs: ids), to: pinnedConversationsURL)
+    }
+
+    private var pinnedConversationsURL: URL {
+        rootURL.appendingPathComponent("pinned-conversations.json")
+    }
+
     public var harnessProfiles: HarnessProfileStore { HarnessProfileStore(root: rootURL) }
     public var managedHarnesses: ManagedHarnessStore { ManagedHarnessStore(root: rootURL) }
 
@@ -1346,6 +1361,11 @@ public struct WorkspaceRepository: Sendable {
         defer { flock(descriptor, LOCK_UN) }
         return try operation()
     }
+}
+
+private struct PinnedConversations: Codable {
+    var version = 1
+    let conversationIDs: [UUID]
 }
 
 private struct ConversationReadState: Codable {
