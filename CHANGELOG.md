@@ -6,10 +6,12 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-09-24
+
 ### Added
 
 - Pin bots and groups to the top of the sidebar. Choose Pin from a conversation's context menu to move it under a Pinned header, which appears only while something is pinned. Pins stay across restarts.
-- Reopen shared computers, browser pages and noodlets from the Shared menu at the right end of the toolbar. It appears once something has been shared and lists each one once, newest first.
+- Reopen shared computers, browser pages and noodlets from the Shared button at the right end of the toolbar. It appears once something has been shared and lists each one once, newest first, with its preview and type.
 
 ### Fixed
 

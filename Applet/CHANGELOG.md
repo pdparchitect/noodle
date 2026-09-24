@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-24
+
 ### Added
 
 - Record a noodlet with its sound. `record` now adds what the noodlet plays to the MP4 as an AAC soundtrack, including while it runs muted in the background or headless, so the Mac stays quiet. HTML pages are heard through Web Audio and their own media elements. Swift noodlets play through the new `NoodletContext.audioEngine`, which also runs silently out of sight, where other audio APIs cannot start.
