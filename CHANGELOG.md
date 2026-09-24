@@ -10,6 +10,7 @@ All notable changes to Noodle are documented here, following
 
 - Let a Codex profile sign in again after its saved login stops working. Sign In… used to stop at "Could not check sign-in status" when Codex could no longer read the old login, for example after its refresh token was used up. It now starts a new sign-in, and a failed status check includes the reason Codex gave.
 - Put the scroll bar at the edge of the calendar and reminder list chooser. It used to sit right after the longest list name.
+- Centre the website’s top links on the page. They used to sit between the logo and the Download button, off to one side.
 
 ## [0.25.0] - 2026-09-24
 

@@ -50,12 +50,13 @@ figure { margin: 0; }
 
 /* ---------- Nav ---------- */
 .nav { position: sticky; top: 0; z-index: 50; background: rgba(255,255,255,.8); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid rgba(0,0,0,.08); }
-.nav-in { height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 24px; font-size: 12px; line-height: 1.33337; letter-spacing: -0.01em; }
-.logo { display: flex; align-items: center; }
+/* Equal outer columns keep the links centred on the page whatever the logo and button widths. */
+.nav-in { height: 48px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px; font-size: 12px; line-height: 1.33337; letter-spacing: -0.01em; }
+.logo { display: flex; align-items: center; justify-self: start; }
 .logo img { width: 22px; height: 22px; }
 .nav nav { display: flex; gap: 30px; color: rgba(0,0,0,.72); }
 .nav nav a:hover { color: #000; }
-.nav-dl { background: var(--blue); color: #fff; border-radius: 999px; padding: 4px 12px; font-weight: 500; }
+.nav-dl { grid-column: 3; justify-self: end; background: var(--blue); color: #fff; border-radius: 999px; padding: 4px 12px; font-weight: 500; }
 .nav-dl:hover { background: var(--blue-hover); }
 @media (prefers-color-scheme: dark) {
   .nav { background: rgba(22,22,23,.8); border-bottom-color: rgba(255,255,255,.1); }
