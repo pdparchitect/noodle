@@ -489,7 +489,8 @@ private struct LibraryView: View {
       }.buttonStyle(.plain)
       VStack(alignment: .leading, spacing: 8) {
         HStack {
-          Text(entry.title).font(.system(size: 15, weight: .semibold))
+          Text(entry.title).font(.system(size: 15, weight: .semibold)).lineLimit(1)
+            .help(entry.title)
           Spacer()
           Button {
             library.pin(entry.id)

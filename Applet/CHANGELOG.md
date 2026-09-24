@@ -6,6 +6,10 @@
 
 - Move a noodlet to the Trash from the library's context menu. Its saved data, secrets and permissions are deleted with it.
 
+### Fixed
+
+- Keep every card in a library row the same height. A long noodlet title now stays on one line and shows in full on hover, instead of wrapping and making its card taller than the rest.
+
 ## [0.9.0] - 2026-09-24
 
 ### Added
