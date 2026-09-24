@@ -491,5 +491,6 @@ enum DevelopmentHook {
     static let scenario = "fc882b0401601368259a54b753ab1714b761d5cf88bf2069356700f6a2fd580e"  // --scenario
     static let scenarioShots = "f3e02727157d7ee04aee89ffe9c56c9f6790cd3294e3a21443d0962f2ed639ff"  // --scenario-shots
     static let scenarioPicker = "41998b9aaaa37cb4b3f6a1fc5666714235669efe3190d47bf71511e4f57cc517"  // --scenario-picker
+    static let scenarioSize = "3ab6e0e84b864576e7107a1f8502d0fa37e639c8ed3c973b201b159604655a6f"  // --scenario-size
 }
 #endif

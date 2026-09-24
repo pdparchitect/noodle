@@ -398,6 +398,27 @@ import XCTest
         XCTAssertEqual(LaunchChecks.digest("--scenario"), DevelopmentHook.scenario)
         XCTAssertEqual(LaunchChecks.digest("--scenario-shots"), DevelopmentHook.scenarioShots)
         XCTAssertEqual(LaunchChecks.digest("--scenario-picker"), DevelopmentHook.scenarioPicker)
+        XCTAssertEqual(LaunchChecks.digest("--scenario-size"), DevelopmentHook.scenarioSize)
+    }
+
+    func testALaunchSizeReplacesTheWindowSizeOnly() throws {
+        let present = "\"present\": { \"window\": { \"size\": [1240, 860], \"origin\": [10, 20] }, \"select\": \"ada\" },"
+        var scenario = try Scenario.load(from: try fixture(extra: present))
+        try scenario.resize(LaunchChecks(arguments: ["Noodle", "--scenario-size", "1426x860"]))
+        XCTAssertEqual(scenario.present?.window?.size, [1426, 860])
+        XCTAssertEqual(scenario.present?.window?.origin, [10, 20])
+        XCTAssertEqual(scenario.present?.select, "ada")
+
+        try scenario.resize(LaunchChecks(arguments: ["Noodle"]))
+        XCTAssertEqual(scenario.present?.window?.size, [1426, 860])
+
+        var bare = try Scenario.load(from: try fixture())
+        try bare.resize(LaunchChecks(arguments: ["Noodle", "--scenario-size", "1000x700"]))
+        XCTAssertEqual(bare.present?.window?.size, [1000, 700])
+
+        for value in ["1426", "1426x", "0x860", "wide", "1426x860x2"] {
+            XCTAssertThrowsError(try bare.resize(LaunchChecks(arguments: ["Noodle", "--scenario-size", value])), value)
+        }
     }
 
     func testLaunchRefusesOutsideScenariosBundle() {

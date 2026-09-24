@@ -12,11 +12,12 @@ entitlements="$build_root/NoodleScenarios.entitlements"
 
 usage() {
     print -u2 'Usage: scripts/scenario.sh [--no-build] [--debug] [--shots] [--video] [--ratio W:H]'
-    print -u2 '                            [--shadow] [--all] [name|path]'
+    print -u2 '                            [--size WxH] [--shadow] [--all] [name|path]'
     print -u2 '  no name     open the picker'
     print -u2 '  --shots     play the timeline and save each capture step to Scenarios/NAME/shots/'
     print -u2 '  --video     play the film and record it to Scenarios/NAME/recordings/NAME.mov'
     print -u2 '  --ratio W:H also write that shape as an .mp4, once per ratio (16:9, 9:16, 1:1, 4:5)'
+    print -u2 '  --size WxH  open the main window at that size instead of the scenario'"'"'s own'
     print -u2 '  --silent    leave the sound off the recording'
     print -u2 '  --shadow    keep the window shadow in those shots'
     print -u2 '  --all       every scenario in turn'
@@ -26,10 +27,13 @@ usage() {
 }
 
 build=true shots=false record=false shadow=false all=false silent=false
-selections=() ratios=() expect_ratio=false
+selections=() ratios=() expect_ratio=false size= expect_size=false
 for argument in "$@"; do
     if [[ "$expect_ratio" == true ]]; then
         ratios+=("$argument"); expect_ratio=false; continue
+    fi
+    if [[ "$expect_size" == true ]]; then
+        size="$argument"; expect_size=false; continue
     fi
     case "$argument" in
         --no-build) build=false ;;
@@ -39,13 +43,16 @@ for argument in "$@"; do
         --video) record=true ;;
         --ratio) expect_ratio=true; record=true ;;
         --ratio=*) ratios+=("${argument#--ratio=}"); record=true ;;
+        --size) expect_size=true ;;
+        --size=*) size="${argument#--size=}" ;;
         --shadow) shadow=true ;;
         --all) all=true ;;
         -*) usage ;;
         *) selections+=("$argument") ;;
     esac
 done
-[[ "$expect_ratio" == false ]] || usage
+[[ "$expect_ratio" == false && "$expect_size" == false ]] || usage
+[[ -z "$size" || "$size" == <->x<-> ]] || { print -u2 "$size is not a window size like 1240x860."; exit 1; }
 for ratio in "${ratios[@]}"; do
     [[ "$ratio" == <->:<-> ]] || { print -u2 "$ratio is not an aspect ratio like 16:9."; exit 1; }
 done
@@ -180,7 +187,8 @@ fi
 
 executable="$contents/MacOS/Noodle"
 # The scenario argument keeps the terminal attached: Return does what Scenarios > Next Step does.
-locale=(-AppleLocale en_US -AppleLanguages '(en)')
+launch_arguments=(-AppleLocale en_US -AppleLanguages '(en)')
+[[ -z "$size" ]] || launch_arguments+=(--scenario-size "$size")
 if [[ ${#folders} == 0 ]]; then
     # Without this the bundle returns to the scenario it showed last.
     open "$app" --args --scenario-picker
@@ -190,7 +198,7 @@ fi
 
 for folder in "${folders[@]}"; do
     if [[ "$shots" == false && "$record" == false ]]; then
-        "$executable" --scenario "$folder" "${locale[@]}"
+        "$executable" --scenario "$folder" "${launch_arguments[@]}"
         continue
     fi
     fetch_media "$folder"
@@ -201,7 +209,7 @@ for folder in "${folders[@]}"; do
     movie="$folder/recordings/${folder:t}.mov"
     cues="$(mktemp)" focus="$(mktemp)"
     # The flag goes last: AppKit reads arguments in pairs, and would take what follows it for its value.
-    coproc "$executable" --scenario "$folder" "${locale[@]}" --scenario-shots
+    coproc "$executable" --scenario "$folder" "${launch_arguments[@]}" --scenario-shots
     app_pid=$!
     trap 'kill "$app_pid" 2>/dev/null || true; [[ -z "$recorder" ]] || kill -INT "$recorder" 2>/dev/null || true' EXIT
     # The app waits for an empty line after READY, each SHOT and DONE, so the recorder is rolling

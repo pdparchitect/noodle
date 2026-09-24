@@ -317,6 +317,19 @@ struct ScenarioError: LocalizedError {
 // MARK: - Load and validate
 
 extension Scenario {
+    /// `--scenario-size WIDTHxHEIGHT` opens the main window at that size instead of the scenario's own,
+    /// so one scenario can be recorded in another shape without editing it.
+    mutating func resize(_ checks: LaunchChecks) throws {
+        guard let value = checks.value(after: DevelopmentHook.scenarioSize) else { return }
+        let parts = value.split(separator: "x", omittingEmptySubsequences: false).map { Double($0) }
+        guard parts.count == 2, let width = parts[0], let height = parts[1], width > 0, height > 0 else {
+            throw ScenarioError("\(value) is not a window size like 1240x860.")
+        }
+        var present = self.present ?? .init()
+        present.window = Presentation.Window(size: [width, height], origin: present.window?.origin)
+        self.present = present
+    }
+
     static let tints: Set<String> = ["white", "black", "none"]
 
     /// What a recording can move in on.
@@ -1421,7 +1434,9 @@ extension ScenarioSession {
         if let selection = selection(checks, pointer: pointerURL) {
             do {
                 guard let folder = folder(for: selection, root: scenariosRoot) else { throw ScenarioError("The bundle does not say where the scenarios are.") }
-                let session = try open(Scenario.load(from: folder))
+                var scenario = try Scenario.load(from: folder)
+                try scenario.resize(checks)
+                let session = try open(scenario)
                 session.selection = selection
                 try? select(selection, pointer: pointerURL)
                 session.takesShots = checks.contains(DevelopmentHook.scenarioShots)

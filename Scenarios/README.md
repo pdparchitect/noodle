@@ -59,6 +59,10 @@ captured from the microphone or from what the Mac is playing.
 the same recording centred on the same background, grown to that shape for wherever it
 is going. Nothing is cropped, and nothing is scaled up past the size it was recorded at.
 
+`--size WxH` opens the main window at that size instead of the one in `present.window`,
+keeping its origin. The recording is the window with a margin of 7% of its shorter side,
+so `--size 1426x860` records at 1546×980, the shape GitHub gives a video in a README.
+
 `swift test --disable-sandbox --filter ScenarioTests` loads, seeds and plays every
 folder here. Unknown keys, missing assets and references to bots, conversations or
 messages that do not exist all fail, in the tests and in the picker.
