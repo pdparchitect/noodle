@@ -445,7 +445,7 @@ struct EventKitToolRow: View {
                                 }
                             }.toggleStyle(.checkbox)
                         }
-                    }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
                 }
             case .notDetermined:
                 Text("Noodle needs access to this Mac's \(title.lowercased()) before you can choose.")
