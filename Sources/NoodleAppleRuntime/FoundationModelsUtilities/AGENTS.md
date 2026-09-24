@@ -24,9 +24,9 @@ the Apple SDK/toolchain, check upstream for relevant updates:
    user-visible behavior change. Keep the imported subset small. Reconsider a
    direct upstream package dependency when its deployment requirements allow
    Noodle to retain its supported macOS versions.
-5. Run `zsh scripts/swift-apple.sh test --disable-sandbox --filter NoodleAppleRuntimeTests`.
+5. Run `swift test --disable-sandbox --filter NoodleAppleRuntimeTests`.
    For model-facing changes, also run
-   `NOODLE_TEST_APPLE_MODEL=1 zsh scripts/swift-apple.sh test --disable-sandbox --filter Apple27LiveTests`
+   `NOODLE_TEST_APPLE_MODEL=1 swift test --disable-sandbox --filter Apple27LiveTests`
    on a compatible Mac with Apple Intelligence available. Report skipped checks.
 
 Documentation-only edits do not require an upstream refresh or model tests.

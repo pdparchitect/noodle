@@ -159,8 +159,7 @@ package.targets += tool("Vision")
     + tool("Browser", dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol")])
     + tool("Computer", dependencies: [.product(name: "ComputerBridge", package: "Bridge")])
 
-// A newer CLT SDK can build the isolated Apple helper while an older full
-// Xcode builds SwiftUI and packages the app. Keep their compiler outputs apart.
+// Only the Apple harness and its tests, for CI's macOS 27 job; the app is tested separately.
 if ProcessInfo.processInfo.environment["NOODLE_APPLE_HARNESS_ONLY"] == "1" {
     let targets: Set<String> = ["NoodleCore", "NoodleAppleRuntime", "NoodleAppleAgent",
                                "NoodleMessenger", "NoodleToolScripting", "NoodleCoreTests", "NoodleAppleRuntimeTests"]

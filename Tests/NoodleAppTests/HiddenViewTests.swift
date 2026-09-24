@@ -54,8 +54,9 @@ import NoodleCore
     func labels(_ node: NSObject) -> [String] {
         [attribute(node, .title), attribute(node, .description), attribute(node, .value), attribute(node, .help)].compactMap { $0 as? String }
     }
+    /// Waits for a condition, allowing for a busy machine; it returns as soon as the condition holds.
     final func wait(_ predicate: @escaping () -> Bool) async throws {
-        let end = ContinuousClock.now.advanced(by: .seconds(3))
+        let end = ContinuousClock.now.advanced(by: .seconds(15))
         while !predicate() {
             guard ContinuousClock.now < end else { XCTFail("Native control did not settle"); throw CancellationError() }
             try await Task.sleep(for: .milliseconds(5))

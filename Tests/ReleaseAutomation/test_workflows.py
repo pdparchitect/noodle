@@ -143,24 +143,19 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(steps[suite]['env']['NOODLE_TEST_CLI_APPLICATION'],
                          '${{ github.workspace }}/.build/Sandbox CLI Tests.app')
 
-    def test_apple27_uses_stable_runner_and_only_skips_missing_prerequisites(self):
+    def test_apple27_harness_always_runs_on_the_release_image(self):
         job = self.jobs['test-noodle-macos27']
-        self.assertEqual(job['runs-on'], 'macos-latest')
+        self.assertEqual(job['runs-on'], 'xcode-27')
         self.assertNotIn('if', job)
-        probe = next(step for step in job['steps'] if step.get('id') == 'apple27')
-        self.assertIn('scripts/detect-apple27.py', probe['run'])
-        tests = next(step for step in job['steps'] if 'swift-apple.sh test' in step.get('run', ''))
-        for available in ['false', 'true']:
-            self.assertEqual(condition(tests['if'], {'steps.apple27.outputs.available': available}), available == 'true')
+        tests = next(step for step in job['steps'] if "--filter 'AppleLocalModelsTests" in step.get('run', ''))
+        for step in job['steps']:
+            self.assertNotIn('if', step)
+            self.assertFalse(step.get('continue-on-error', False))
         self.assertFalse(job.get('continue-on-error', False))
-        self.assertFalse(tests.get('continue-on-error', False))
         self.assertIn('set -euo pipefail', tests['run'])
         self.assertIn('localModelsSupported', tests['run'])
         self.assertIn('build-mlx-metal.sh', tests['run'])
         self.assertEqual(tests['env']['NOODLE_APPLE_HARNESS_ONLY'], '1')
-        self.assertNotIn('NOODLE_TEST_APPLE_MODEL', tests['env'])
-        self.assertIn('test-noodle-macos27', self.jobs['prepare-noodle']['needs'])
-
     def test_preparation_waits_only_for_its_own_products_tests(self):
         # Signing and notarizing a companion must not queue behind Noodle's long suite.
         # The tag job still requires every selected test, so nothing ships early.

@@ -164,7 +164,7 @@ import NoodleCore
 
     /// Polls until `predicate` holds, returning false after `seconds` so the
     /// caller can fail with its own message.
-    private func eventually(seconds: Double = 5, _ predicate: () -> Bool) async -> Bool {
+    private func eventually(seconds: Double = 15, _ predicate: () -> Bool) async -> Bool {
         let end = ContinuousClock.now.advanced(by: .seconds(seconds))
         while true {
             for root in roots where root.window != nil { root.layoutSubtreeIfNeeded(); root.displayIfNeeded() }

@@ -123,38 +123,31 @@ jobs:
 
   test-noodle-macos27:
     needs: [versions, checks]
-    # Use an established label; run the new suite only when this stable image
-    # has the required OS and an installed SDK. Never queue on a preview label.
-    runs-on: macos-latest
+    # The image releases use: macOS 27 with Xcode 27, so the Apple harness is compiled in and runs.
+    runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
         with:
           lfs: true
-      - name: Detect macOS 27 test support
-        id: apple27
-        run: python3 scripts/detect-apple27.py
+      - name: Prepare Metal tools
+        run: xcodebuild -downloadComponent MetalToolchain
       - name: Test settings resizing on macOS 27
-        if: steps.apple27.outputs.available == 'true'
         run: swift test --disable-sandbox --package-path Shared/SettingsUI --scratch-path .build/settings-ui
       - name: Build and test the macOS 27 harness
-        if: steps.apple27.outputs.available == 'true'
         shell: zsh {0}
         env:
-          DEVELOPER_DIR: ${{ steps.apple27.outputs.developer_dir }}
-          NOODLE_SWIFT: ${{ steps.apple27.outputs.swift }}
-          NOODLE_MACOS_SDK: ${{ steps.apple27.outputs.sdk }}
+          # Only the harness and its tests; the app is tested on macOS 26 above.
           NOODLE_APPLE_HARNESS_ONLY: '1'
         run: |
           set -euo pipefail
-          xcodebuild -downloadComponent MetalToolchain
-          zsh scripts/swift-apple.sh build --disable-sandbox --scratch-path .build/apple27
-          bin_path="$(zsh scripts/swift-apple.sh build --disable-sandbox --scratch-path .build/apple27 --show-bin-path)"
+          swift build --disable-sandbox
+          bin_path="$(swift build --disable-sandbox --show-bin-path)"
           zsh scripts/build-mlx-metal.sh "$bin_path"
-          "$bin_path/NoodleAppleAgent" --inspect > .build/apple27/inspection.json
-          python3 -c 'import json; data = json.load(open(".build/apple27/inspection.json")); assert data.get("localModelsSupported") is True, "macOS 27 support was compiled out"'
+          "$bin_path/NoodleAppleAgent" --inspect > .build/inspection.json
+          python3 -c 'import json; data = json.load(open(".build/inspection.json")); assert data.get("localModelsSupported") is True, "macOS 27 support was compiled out"'
           export NOODLE_APPLE_TEST_HELPER="$bin_path/NoodleAppleAgent"
-          zsh scripts/swift-apple.sh test --disable-sandbox --scratch-path .build/apple27 --filter 'AppleLocalModelsTests|AppleModelDownloaderTests|NoodleAppleRuntimeTests'
+          swift test --disable-sandbox --filter 'AppleLocalModelsTests|AppleModelDownloaderTests|NoodleAppleRuntimeTests'
           print 'macOS 27 harness build, Metal shaders, and regression tests passed. Live inference remains an explicit local opt-in.' >> "$GITHUB_STEP_SUMMARY"
 
   test-computer:

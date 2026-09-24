@@ -47,6 +47,6 @@ included: its suffix can split a tool exchange or drop the current prompt.
 
 To update, compare these files with the corresponding upstream revision,
 preserve the listed adaptations, update this version and licence, and run
-`zsh scripts/swift-apple.sh test --disable-sandbox --filter NoodleAppleRuntimeTests`.
+`swift test --disable-sandbox --filter NoodleAppleRuntimeTests`.
 
 These are Swift library utilities, independent of the `fm` command-line tool.

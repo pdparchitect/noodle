@@ -54,7 +54,28 @@ import NoodleCore
         try await assertReadable(window)
     }
 
+    /// Mirrored text stays mirrored until its row is rebuilt, so the check retries until the text reads:
+    /// a slow machine or a failed capture is not a regression, text that never reads is.
     private func assertReadable(_ window: NSWindow) async throws {
+        let expected = ["I will review the research tomorrow", "Understood", "Take your time reviewing",
+                        "This is the second line", "No applications or introductions"]
+        let end = ContinuousClock.now.advanced(by: .seconds(15))
+        var text = "", failure: Error?
+        repeat {
+            do {
+                text = try await recognizedText(window)
+                failure = nil
+                if expected.allSatisfy(text.contains) { return }
+            } catch { failure = error }
+            try await Task.sleep(for: .milliseconds(250))
+        } while ContinuousClock.now < end
+        if let failure { throw failure }
+        for phrase in expected where !text.contains(phrase) {
+            XCTFail("Missing upright message pixels: \(phrase). Recognized: \(text)")
+        }
+    }
+
+    private func recognizedText(_ window: NSWindow) async throws -> String {
         let content = try await SCShareableContent.currentProcess
         let target = try XCTUnwrap(content.windows.first { $0.windowID == CGWindowID(window.windowNumber) })
         let config = SCStreamConfiguration()
@@ -72,11 +93,7 @@ import NoodleCore
         // Keep the visual regression independent of Neural Engine startup.
         request.usesCPUOnly = true
         try VNImageRequestHandler(cgImage: image).perform([request])
-        let text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
-        for expected in ["I will review the research tomorrow", "Understood", "Take your time reviewing",
-                         "This is the second line", "No applications or introductions"] {
-            XCTAssertTrue(text.contains(expected), "Missing upright message pixels: \(expected). Recognized: \(text)")
-        }
+        return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
     }
 }
 

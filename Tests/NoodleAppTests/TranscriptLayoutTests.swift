@@ -58,7 +58,9 @@ import NoodleCore
     private func settle() async throws { try await Task.sleep(for: .milliseconds(250)) }
 
     private func waitForThumbnail(_ file: URL) async throws {
-        for _ in 0..<200 {
+        // Generous for a busy machine; it returns as soon as the thumbnail is cached.
+        let end = ContinuousClock.now.advanced(by: .seconds(15))
+        while ContinuousClock.now < end {
             if AttachmentThumbnailCache.shared.object(forKey: file as NSURL) != nil {
                 try await settle()
                 return

@@ -178,7 +178,6 @@ codesign --verify --strict "$app"
 video_tool="$build_root/scenario-video"
 if [[ "$record" == true ]]; then
     if [[ ! -x "$video_tool" || "$project_root/scripts/scenario-video.swift" -nt "$video_tool" ]]; then
-        zsh "$project_root/scripts/swift-apple.sh" build --product Noodle >/dev/null 2>&1 || true
         xcrun swiftc -O "$project_root/scripts/scenario-video.swift" -o "$video_tool"
     fi
 fi

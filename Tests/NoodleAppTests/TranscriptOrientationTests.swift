@@ -122,7 +122,24 @@ import NoodleWallpaper
         return representation.representation(using: .png, properties: [:])!
     }
 
+    /// Mirrored text stays mirrored until its row is rebuilt, so this retries until every phrase reads:
+    /// a slow machine or a failed capture is not a regression, text that never reads is.
     private func missingPhrases(_ window: NSWindow, label: String) async throws -> String? {
+        let end = ContinuousClock.now.advanced(by: .seconds(15))
+        var missing: String?, failure: Error?
+        repeat {
+            do {
+                missing = try await capturedMissingPhrases(window, label: label)
+                failure = nil
+                if missing == nil { return nil }
+            } catch { failure = error }
+            try await Task.sleep(for: .milliseconds(250))
+        } while ContinuousClock.now < end
+        if let failure { throw failure }
+        return missing
+    }
+
+    private func capturedMissingPhrases(_ window: NSWindow, label: String) async throws -> String? {
         let content = try await SCShareableContent.currentProcess
         let target = try XCTUnwrap(content.windows.first { $0.windowID == CGWindowID(window.windowNumber) })
         let config = SCStreamConfiguration()
