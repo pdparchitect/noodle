@@ -74,20 +74,21 @@ struct ConversationCompanionsMenu: View {
 
     var body: some View {
         let companions = store.companions(in: conversation)
-        Menu {
-            ForEach(companions) { attachment in
-                Button(attachment.companionTitle, systemImage: attachment.companionSymbolName) {
-                    Task { @MainActor in
-                        do { try await store.openCompanion(attachment) }
-                        catch { store.errorMessage = error.localizedDescription }
+        if !companions.isEmpty {
+            Menu {
+                ForEach(companions) { attachment in
+                    Button(attachment.companionTitle, systemImage: attachment.companionSymbolName) {
+                        Task { @MainActor in
+                            do { try await store.openCompanion(attachment) }
+                            catch { store.errorMessage = error.localizedDescription }
+                        }
                     }
                 }
+            } label: {
+                Label("Shared", systemImage: "square.stack")
             }
-        } label: {
-            Label("Shared", systemImage: "square.stack")
+            .help("Shared Computers, Browsers and Noodlets")
         }
-        .disabled(companions.isEmpty)
-        .help("Shared Computers, Browsers and Noodlets")
     }
 }
 
