@@ -228,6 +228,12 @@ public struct NoodletSecrets: Sendable {
         }
         if !NoodletContext.isBackground { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
         NoodletHost.emit = { [weak self] in self?.emit($0) }
+        // In front, the noodlet's own process owns the menu bar, not Applet.
+        let appMenu = NSMenu(), fileMenu = NSMenu(title: "File"), bar = NSMenu()
+        appMenu.addItem(withTitle: "Quit \(window.title)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        fileMenu.addItem(withTitle: "Show in Finder", action: #selector(showInFinder), keyEquivalent: "").target = self
+        for menu in [appMenu, fileMenu] { bar.addItem(withTitle: menu.title, action: nil, keyEquivalent: "").submenu = menu }
+        NSApp.mainMenu = bar
         emit(["id":"ready","value":"ready"])
         let prefix = self.prefix
         DispatchQueue.global().async { [weak self] in
@@ -240,6 +246,8 @@ public struct NoodletSecrets: Sendable {
             Darwin.exit(0)
         }
     }
+    // The noodlet runs from a snapshot; only Applet knows where its package lives.
+    @objc func showInFinder() { Task { _ = try? await NoodletHost.call("package.reveal", [:]) } }
     func emit(_ value: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) else { return }
         FileHandle.standardOutput.write(Data((prefix + String(decoding: data, as: UTF8.self) + "\n").utf8))

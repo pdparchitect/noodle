@@ -46,7 +46,7 @@ import OSLog
       CommandGroup(replacing: .help) {
         Button("\(AppletBuildIdentity.current.appName) Help") { NSWorkspace.shared.open(AppletLinks.repository) }
       }
-      AppletFileCommands(delegate: delegate)
+      AppletFileCommands(delegate: delegate, runtime: delegate.runtime)
     }
     Settings {
       AppletSettingsView(background: delegate.background, library: delegate.library, runtime: delegate.runtime).preferredColorScheme(.dark)
@@ -521,6 +521,7 @@ private struct LibraryView: View {
 
 @MainActor private struct AppletFileCommands: Commands {
   let delegate: AppletDelegate
+  @ObservedObject var runtime: AppletRuntime
   @Environment(\.openWindow) private var openWindow
   var body: some Commands {
     let action = openWindow
@@ -530,6 +531,10 @@ private struct LibraryView: View {
       Button("Open Noodlet…") {
         delegate.library.choosePackage(open: delegate.runtime.open)
       }.keyboardShortcut("o")
+      if let package = runtime.frontPackage {
+        Divider()
+        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([package.url]) }
+      }
     }
   }
 }

@@ -441,6 +441,9 @@ import AppletCore
             reply["value"] = try await openFile() ?? NSNull()
           } else if call == "files.save" {
             reply["value"] = try await saveFile(name ?? "", suggested: value)
+          } else if call == "package.reveal" {
+            NSWorkspace.shared.activateFileViewerSelecting([package.url])
+            reply["value"] = true
           } else {
             throw AppletError("Unknown host call.")
           }

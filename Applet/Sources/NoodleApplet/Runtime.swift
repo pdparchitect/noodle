@@ -78,6 +78,8 @@ import AppletCore
   let library: AppletLibrary
   @Published var sessions: [UUID: AppletSession] = [:]
   @Published var error: String?
+  /// The noodlet whose window is key, which File > Show in Finder reveals.
+  @Published private(set) var frontPackage: NoodletPackage?
   private var server: AppletConnectionServer?
   private var artifacts: [UUID: (owner: String, url: URL)] = [:]
   private var origins: [String: String]
@@ -94,6 +96,20 @@ import AppletCore
       defaults.dictionary(forKey: "sourceOrigins") as? [String: String] ?? [:]
     owners =
       defaults.dictionary(forKey: "packageOwners") as? [String: String] ?? [:]
+    for change in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
+      NotificationCenter.default.addObserver(forName: change, object: nil, queue: .main) { [weak self] note in
+        let key = change == NSWindow.didBecomeKeyNotification
+        MainActor.assumeIsolated {
+          guard let self else { return }
+          let package = self.package(showing: note.object as? NSWindow)
+          if key { self.frontPackage = package } else if package != nil { self.frontPackage = nil }
+        }
+      }
+    }
+  }
+  func package(showing window: NSWindow?) -> NoodletPackage? {
+    guard let window else { return nil }
+    return sessions.values.first { $0.web?.window === window }?.package
   }
   func startServer() {
     for entry in library.entries {
