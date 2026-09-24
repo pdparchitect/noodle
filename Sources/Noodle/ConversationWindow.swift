@@ -51,7 +51,7 @@ struct ConversationWindowView: View {
         }
         .background(ConversationWindowHost(registry: store.conversationWindows,
             conversationID: conversation?.id, title: conversation.map { store.title(for: $0) } ?? "Conversation",
-            markRead: store.markConversationRead, openConversation: open))
+            markRead: store.markConversationRead))
         .onDrop(of: AttachmentTransfer.dropContentTypes, isTargeted: $isFileDropTargeted) { providers in
             guard conversation != nil, !providers.isEmpty else { return false }
             store.markConversationRead(conversationID)
@@ -166,8 +166,6 @@ struct ConversationErrorAlert: ViewModifier {
     init(fileURL: URL? = nil) {
         session = ConversationWindowSession(fileURL: fileURL)
         super.init()
-        NotificationCenter.default.addObserver(self, selector: #selector(openRequestedConversation),
-            name: .openConversation, object: nil)
     }
 
     func retainConversations(_ ids: Set<UUID>) {
@@ -217,14 +215,6 @@ struct ConversationErrorAlert: ViewModifier {
         session.remove(id)
     }
 
-    @objc private func openRequestedConversation(_ notification: Notification) {
-        guard let id = notification.object as? UUID, !focus(id) else { return }
-        let mounts = hosts.allObjects
-        // A separate chat can open a notification even after the main window closes.
-        let host = mounts.first(where: \.isMainWindow) ?? mounts.first
-        host?.openConversation?(id)
-    }
-
     func isViewing(_ conversationID: UUID) -> Bool {
         NSApp.isActive && hosts.allObjects.contains {
             $0.conversationID == conversationID && $0.window.map {
@@ -262,16 +252,11 @@ struct ConversationErrorAlert: ViewModifier {
 
     /// Opens or raises the conversation's separate window and puts the caret in its input.
     func present(_ conversationID: UUID) {
-        let mounts = hosts.allObjects
         if focus(conversationID, separateOnly: true) {
             NotificationCenter.default.post(name: .focusConversationComposer, object: conversationID)
             return
         }
         openSeparateWindow?(conversationID)
-    }
-
-    func focusMainWindow() {
-        if let window = hosts.allObjects.first(where: \.isMainWindow)?.window { show(window) }
     }
 
     /// Raises the main window, opening it again if it was closed.
@@ -293,7 +278,6 @@ struct ConversationWindowHost: NSViewRepresentable {
     var isMainWindow = false
     var title = NoodleAppIdentity.name
     let markRead: (UUID?) -> Void
-    var openConversation: ((UUID) -> Void)? = nil
 
     func makeNSView(context: Context) -> Probe { Probe(registry: registry) }
     func updateNSView(_ view: Probe, context: Context) {
@@ -301,7 +285,6 @@ struct ConversationWindowHost: NSViewRepresentable {
         view.isMainWindow = isMainWindow
         view.title = title
         view.markRead = markRead
-        view.openConversation = openConversation
         DispatchQueue.main.async { [weak view] in view?.updateWindow() }
     }
 
@@ -311,7 +294,6 @@ struct ConversationWindowHost: NSViewRepresentable {
         var isMainWindow = false
         var title = NoodleAppIdentity.name
         var markRead: ((UUID?) -> Void)?
-        var openConversation: ((UUID) -> Void)?
         fileprivate var restoredConversationID: UUID?
         fileprivate var isRestoringFrame = false
         fileprivate var isClosed = false

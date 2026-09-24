@@ -195,13 +195,6 @@ import NoodleCore
         host.conversationID = nextID
         XCTAssertFalse(registry.focus(firstID))
         XCTAssertTrue(registry.focus(nextID))
-        var opened: UUID?
-        host.openConversation = { opened = $0 }
-        NotificationCenter.default.post(name: .openConversation, object: firstID)
-        XCTAssertEqual(opened, firstID, "A remaining separate window must route other conversations")
-        opened = nil
-        NotificationCenter.default.post(name: .openConversation, object: nextID)
-        XCTAssertNil(opened, "An existing conversation window must be reused")
         window.close()
         XCTAssertFalse(registry.focus(nextID))
     }
@@ -337,6 +330,38 @@ import NoodleCore
         XCTAssertNil(FloatingConversationPanels.shared.panel(for: bot.id))
         XCTAssertFalse(floating.contains(bot.id))
         XCTAssertEqual(reopened, 1, "With the main window closed, returning must open it again")
+    }
+
+    func testNotificationClickSelectsItsConversationEvenWithTheMainWindowClosed() throws {
+        let (store, bot, group) = try fixture()
+        store.selectedConversationID = group.id
+        var reopened = 0
+        store.conversationWindows.openMainWindow = { reopened += 1 }
+        let popout = mount(group.id, in: store.conversationWindows)
+        defer { popout.close() }
+        store.openNotification(conversationID: bot.id, messageID: nil)
+        XCTAssertEqual(store.selectedConversationID, bot.id)
+        XCTAssertEqual(reopened, 1, "With only another chat's window open, the main window must open on the notified chat")
+        popout.close()
+        // A notification that launches the app arrives before any window exists.
+        store.openNotification(conversationID: group.id, messageID: nil)
+        XCTAssertEqual(store.selectedConversationID, group.id)
+    }
+
+    func testNotificationClickOpensTheTranscriptAtItsMessage() throws {
+        let (store, bot, _) = try fixture()
+        let agentID = bot.participantIDs[0]
+        let replies = try (0..<3).map { index in
+            let reply = ChatMessage(conversationID: bot.id, author: .agent(agentID), body: "Reply \(index)", delivery: .delivered)
+            try store.repository.append(reply)
+            return reply
+        }
+        store.refreshTranscripts()
+        store.openNotification(conversationID: bot.id, messageID: replies[1].id)
+        XCTAssertEqual(store.transcriptViewport(for: bot), TranscriptViewport(isAtBottom: false, messageID: replies[1].id))
+        // The latest message is the bottom, which keeps following new replies.
+        store.openNotification(conversationID: bot.id, messageID: replies[2].id)
+        XCTAssertEqual(store.transcriptViewport(for: bot), TranscriptViewport())
     }
 
     func testFloatingPanelAndSeparateWindowBothCarryTheReturnButtonInTheirTitlebar() async throws {
@@ -515,6 +540,29 @@ import NoodleCore
         try wheel(delta: 0, phase: 4)
         try await wait { !f.store.hasUnreadMessages(in: f.directA) }
         XCTAssertTrue(try f.repository.loadUnreadConversationIDs().isEmpty)
+    }
+
+    func testNotificationClickScrollsAnOpenTranscriptToItsMessage() async throws {
+        let f = try fixture()
+        var replies: [ChatMessage] = []
+        for index in 0..<40 {
+            let reply = ChatMessage(conversationID: f.directA.id, author: .agent(f.a.id),
+                body: "Reply \(index)", delivery: .delivered)
+            try f.repository.append(reply)
+            replies.append(reply)
+        }
+        f.store.refreshTranscripts()
+        let root = host(ChatView(conversation: f.directA, attachmentPreview: AttachmentPreviewController())
+            .environment(f.store).environment(\.controlActiveState, .inactive))
+        try XCTUnwrap(root.window).orderFront(nil)
+        try await wait { self.elements(root).contains { $0 is ComposerTextView } }
+        let scroll = try XCTUnwrap(elements(root).compactMap { $0 as? NSScrollView }
+            .first { !($0 is ComposerScrollView) })
+        func offset() -> CGFloat { root.layoutSubtreeIfNeeded(); return scroll.contentView.bounds.minY }
+        // A new reply arrived while the reader was at the bottom.
+        try await wait { (scroll.documentView?.frame.height ?? 0) > scroll.contentView.bounds.height * 2 && offset() > 500 }
+        f.store.openNotification(conversationID: f.directA.id, messageID: replies[1].id)
+        try await wait { offset() < 300 }
     }
 
     func testTheSidebarOpensAtItsIntendedWidth() async throws {

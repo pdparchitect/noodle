@@ -9,6 +9,7 @@ import NoodleRuntimeSettings
 
 enum NoodleNotifications {
     static let conversationIDKey = "conversationID"
+    static let messageIDKey = "messageID"
 
     private static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle",
@@ -52,7 +53,7 @@ enum NoodleNotifications {
         }
         content.body = message.body
         content.sound = .default
-        content.userInfo = [conversationIDKey: conversation.id.uuidString]
+        content.userInfo = [conversationIDKey: conversation.id.uuidString, messageIDKey: message.id.uuidString]
         if let avatar = avatarAttachment(for: agent, messageID: message.id) {
             content.attachments = [avatar]
         }
@@ -119,4 +120,27 @@ enum NoodleNotifications {
         )
         return directory
     }
+}
+
+extension NoodleStore {
+    /// Lands on the notified message, in whichever window shows its conversation.
+    func openNotification(conversationID: UUID, messageID: UUID?) {
+        guard let conversation = conversations.first(where: { $0.id == conversationID }) else { return }
+        if let messageID, messages(for: conversation).contains(where: { $0.id == messageID }) {
+            // The latest message is the bottom, which keeps following new replies.
+            let isLatest = messages(for: conversation).last?.id == messageID
+            // A transcript mounted later restores this; one already on screen scrolls to it.
+            saveTranscriptViewport(isLatest ? TranscriptViewport()
+                : TranscriptViewport(isAtBottom: false, messageID: messageID), for: conversationID)
+            NotificationCenter.default.post(name: .revealTranscriptMessage, object: messageID)
+        }
+        guard !conversationWindows.focus(conversationID) else { return }
+        // Also covers a closed main window and a launch from the notification, before any window exists.
+        selectedConversationID = conversationID
+        conversationWindows.showMainWindow()
+    }
+}
+
+extension Notification.Name {
+    static let revealTranscriptMessage = Notification.Name("Noodle.revealTranscriptMessage")
 }

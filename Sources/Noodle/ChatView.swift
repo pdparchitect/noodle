@@ -483,7 +483,8 @@ private struct ConversationTranscript: View {
             lastMessageIsFromUser: messages.last?.author == .user,
             bottomOverlayHeight: bottomOverlayHeight,
             saveViewport: saveViewport,
-            onInteraction: { store.markConversationRead(conversation.id) }
+            onInteraction: { store.markConversationRead(conversation.id) },
+            containsMessage: { id in messages.contains { $0.id == id } }
         ) {
             ConversationStartView(conversation: conversation, showAgentProfile: showAgentProfile)
                 .padding(.bottom, 14)

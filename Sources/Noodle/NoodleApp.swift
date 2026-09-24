@@ -225,17 +225,13 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let rawID = response.notification.request.content.userInfo[
-            NoodleNotifications.conversationIDKey
-        ] as? String
+        let userInfo = response.notification.request.content.userInfo
+        let conversationID = (userInfo[NoodleNotifications.conversationIDKey] as? String).flatMap(UUID.init)
+        let messageID = (userInfo[NoodleNotifications.messageIDKey] as? String).flatMap(UUID.init)
 
         Task { @MainActor in
-            if let rawID, let conversationID = UUID(uuidString: rawID),
-               NoodleStore.active?.conversationWindows.focus(conversationID) != true {
-                NotificationCenter.default.post(
-                    name: .openConversation,
-                    object: conversationID
-                )
+            if let conversationID {
+                NoodleStore.active?.openNotification(conversationID: conversationID, messageID: messageID)
             }
             NSApp.activate(ignoringOtherApps: true)
             completionHandler()
@@ -247,7 +243,6 @@ extension Notification.Name {
     static let newBot = Notification.Name("Noodle.newBot")
     static let newGroup = Notification.Name("Noodle.newGroup")
     static let focusSearch = Notification.Name("Noodle.focusSearch")
-    static let openConversation = Notification.Name("Noodle.openConversation")
 }
 
 private struct WindowConfiguration: NSViewRepresentable {
@@ -363,11 +358,7 @@ struct RootView: View {
         .navigationSplitViewStyle(.balanced)
         .background(ConversationWindowHost(registry: store.conversationWindows,
             conversationID: store.selectedConversationID, isMainWindow: true,
-            markRead: store.markConversationRead, openConversation: { id in
-                guard store.conversations.contains(where: { $0.id == id }) else { return }
-                store.selectedConversationID = id
-                store.conversationWindows.focusMainWindow()
-            }))
+            markRead: store.markConversationRead))
         .background {
             let conversation = store.selectedConversation
             let background = store.background(for: conversation)

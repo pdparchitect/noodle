@@ -41,6 +41,8 @@ struct TranscriptScrollView<Content: View>: View {
     let bottomOverlayHeight: CGFloat
     let saveViewport: (TranscriptViewport) -> Void
     let onInteraction: () -> Void
+    /// Whether a message this view could be asked to reveal is one of its rows.
+    let containsMessage: (UUID) -> Bool
     private let content: Content
     @State private var position: ScrollPosition
     @State private var viewportRecorder: TranscriptViewportRecorder
@@ -51,7 +53,7 @@ struct TranscriptScrollView<Content: View>: View {
 
     init(initialViewport: TranscriptViewport, lastMessageID: UUID?, lastMessageIsFromUser: Bool,
          bottomOverlayHeight: CGFloat, saveViewport: @escaping (TranscriptViewport) -> Void,
-         onInteraction: @escaping () -> Void = {},
+         onInteraction: @escaping () -> Void = {}, containsMessage: @escaping (UUID) -> Bool = { _ in false },
          @ViewBuilder content: () -> Content) {
         self.initialViewport = initialViewport
         self.lastMessageID = lastMessageID
@@ -59,6 +61,7 @@ struct TranscriptScrollView<Content: View>: View {
         self.bottomOverlayHeight = bottomOverlayHeight
         self.saveViewport = saveViewport
         self.onInteraction = onInteraction
+        self.containsMessage = containsMessage
         self.content = content()
         let target = initialViewport.isAtBottom ? TranscriptScrollTarget.bottom
             : initialViewport.messageID.map(TranscriptScrollTarget.message) ?? .start
@@ -160,6 +163,18 @@ struct TranscriptScrollView<Content: View>: View {
             }
             if followsLatest && !userIsScrolling {
                 position.scrollTo(id: TranscriptScrollTarget.bottom, anchor: .bottom)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .revealTranscriptMessage)) { notification in
+            guard let id = notification.object as? UUID, containsMessage(id) else { return }
+            // The store already saved this position; an older checkpoint must not replace it.
+            didRestoreInitialViewport = true
+            viewportRecorder.lastUserViewport = nil
+            followsLatest = id == lastMessageID
+            Task { @MainActor in
+                await Task.yield()
+                if followsLatest { position.scrollTo(id: TranscriptScrollTarget.bottom, anchor: .bottom) }
+                else { position.scrollTo(id: TranscriptScrollTarget.message(id), anchor: .top) }
             }
         }
         .onDisappear { saveLastUserViewport() }
