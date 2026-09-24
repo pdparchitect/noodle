@@ -11,6 +11,10 @@ All notable changes to Noodle are documented here, following
 - Write the Noodle wordmark on the website a stroke at a time, as the scenario films do. It shows at once when the visitor asks for reduced motion.
 - Open a scenario without its film backdrop and title cards. They now appear only when recording or taking shots with `scripts/scenario.sh --video` or `--shots`.
 
+### Fixed
+
+- Name noodlets in the Shared list the way their conversation cards do, with the same preview. They used to show as "Noodlet.webloc", and an unavailable one now says so.
+
 ## [0.26.0] - 2026-09-24
 
 ### Added

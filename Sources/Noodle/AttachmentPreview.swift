@@ -43,7 +43,7 @@ extension ConversationAttachment {
 
     var companionTitle: String {
         computer?.computer.name ?? browser.map { $0.reference.title.isEmpty ? $0.reference.url : $0.reference.title }
-            ?? originalFilename
+            ?? (url.flatMap(NoodletLink.id) != nil ? (originalFilename as NSString).deletingPathExtension : originalFilename)
     }
 
     /// One entry per computer, page or noodlet, keeping its most recent share.
@@ -116,6 +116,8 @@ private struct CompanionRow: View {
     let attachment: ConversationAttachment
     let open: () -> Void
     @State private var noodletPreview: NSImage?
+    @State private var noodletTitle: String?
+    @State private var noodletUnavailable = false
     @State private var isHovered = false
 
     var body: some View {
@@ -125,10 +127,10 @@ private struct CompanionRow: View {
                     .frame(width: 84, height: 54)
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(attachment.companionTitle)
+                    Text(title)
                         .lineLimit(2)
                         .truncationMode(.tail)
-                    Text(attachment.companionKind)
+                    Text(noodletUnavailable ? "Noodlet unavailable" : attachment.companionKind)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -141,21 +143,24 @@ private struct CompanionRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .help(attachment.companionTitle)
+        .help(title)
         .task {
-            guard let url = attachment.url, NoodletLink.id(in: url) != nil,
-                  let access = try? await store.applets.resolvePreview(url) else { return }
-            noodletPreview = access.imageData.flatMap(NSImage.init(data:))
-                ?? NSImage(contentsOf: access.url.appendingPathComponent("preview.png"))
-            withExtendedLifetime(access) {}
+            guard let url = attachment.url, NoodletLink.id(in: url) != nil else { return }
+            do {
+                let preview = try await NoodletAttachmentCard.load(url, from: store.applets)
+                noodletTitle = preview.title
+                noodletPreview = preview.image
+            } catch { noodletUnavailable = true }
         }
     }
+
+    private var title: String { noodletTitle ?? attachment.companionTitle }
 
     @ViewBuilder private var preview: some View {
         if let image = attachment.companionPreviewImage.flatMap(NSImage.init(data:)) ?? noodletPreview {
             Image(nsImage: image).resizable().scaledToFill()
         } else {
-            Image(systemName: attachment.companionSymbolName)
+            Image(systemName: noodletUnavailable ? "exclamationmark.link" : attachment.companionSymbolName)
                 .font(.system(size: 20))
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

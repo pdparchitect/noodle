@@ -51,4 +51,9 @@ final class ConversationCompanionTests: XCTestCase {
         XCTAssertEqual(items.map(\.companionKind), ["Computer", "Browser", "Noodlet"])
         XCTAssertEqual(items.map(\.companionPreviewImage), [image, image, nil])
     }
+
+    func testNoodletTitleBeforeItsPreviewResolvesIsNotTheBookmarkFilename() {
+        XCTAssertEqual(attachment("Noodlet.webloc", mediaType: "application/x-webloc",
+                                  url: NoodletLink.url(for: UUID())).companionTitle, "Noodlet")
+    }
 }

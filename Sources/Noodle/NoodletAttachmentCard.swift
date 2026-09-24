@@ -29,23 +29,27 @@ struct NoodletAttachmentCard: View {
         .task(id: shouldLoad) {
             guard shouldLoad else { return }
             do {
-                let access = try await store.applets.resolvePreview(url)
+                let preview = try await Self.load(url, from: store.applets)
                 guard !Task.isCancelled else { return }
-                title = access.title
+                title = preview.title
+                thumbnail = preview.image
                 unavailable = false
-                if let image = access.imageData.flatMap(NSImage.init(data:)) ?? NSImage(contentsOf: access.url.appendingPathComponent("preview.png")) {
-                    thumbnail = image
-                } else {
-                    let request = QLThumbnailGenerator.Request(fileAt: access.url,
-                        size: CGSize(width: 560, height: 300), scale: 1, representationTypes: .all)
-                    let result = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request)
-                    guard !Task.isCancelled else { return }
-                    thumbnail = result?.nsImage
-                }
-                withExtendedLifetime(access) {}
             } catch {
                 if !Task.isCancelled { unavailable = true }
             }
         }
+    }
+
+    /// The live noodlet's title and thumbnail, shared with the conversation's Shared popover.
+    static func load(_ url: URL, from applets: AppletController) async throws -> (title: String, image: NSImage?) {
+        let access = try await applets.resolvePreview(url)
+        defer { withExtendedLifetime(access) {} }
+        if let image = access.imageData.flatMap(NSImage.init(data:)) ?? NSImage(contentsOf: access.url.appendingPathComponent("preview.png")) {
+            return (access.title, image)
+        }
+        let request = QLThumbnailGenerator.Request(fileAt: access.url,
+            size: CGSize(width: 560, height: 300), scale: 1, representationTypes: .all)
+        let result = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request)
+        return (access.title, result?.nsImage)
     }
 }
