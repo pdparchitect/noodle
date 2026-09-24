@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Changed
 
 - Write the Noodle wordmark on the website a stroke at a time, as the scenario films do. It shows at once when the visitor asks for reduced motion.
+- Open a scenario without its film backdrop and title cards. They now appear only when recording or taking shots with `scripts/scenario.sh --video` or `--shots`.
 
 ## [0.26.0] - 2026-09-24
 

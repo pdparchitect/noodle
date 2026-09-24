@@ -981,7 +981,8 @@ extension Scenario {
     /// The titles. Their timings are fixed so every film opens and closes alike; a
     /// scenario chooses only the words and how long the finished card stays up.
     private func play(_ stage: Scenario.Film.Stage) async throws {
-        guard let film = scenario.film else { return }
+        // The titles are for the camera; someone watching gets straight to the timeline.
+        guard takesShots, let film = scenario.film else { return }
         if let playFilm { try await playFilm(stage); return }
         let card: ScenarioFilmModel.Card?, written: Double
         switch stage {
@@ -1303,7 +1304,8 @@ extension Scenario {
         }
         // Only when the app first appears. A later presentation that set the film up again would
         // put the opening card back and leave the app concealed behind it for the rest of the film.
-        if initial, let film = scenario.film {
+        // The backdrop and the cards are staged for a recording only; watched, the app stays on the desktop.
+        if initial, takesShots, let film = scenario.film {
             let opening = film.intro.map { ScenarioFilmModel.Card.intro(kicker: $0.kicker, title: $0.title ?? scenario.title, subtitle: $0.subtitle, icon: icon($0)) }
             let stage = filmStage ?? ScenarioFilmStage(film: film, opening: opening,
                                                        media: film.media.flatMap { try? scenario.media($0) })

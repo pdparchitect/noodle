@@ -159,6 +159,7 @@ import XCTest
         session.playFilm = { stage in
             played.append((stage, (try? session.repository.loadMessages(conversationID: conversation.id).count) ?? -1))
         }
+        session.takesShots = true
         session.store.startAgents()
         try await session.play()
 
@@ -185,6 +186,7 @@ import XCTest
         window.isReleasedWhenClosed = false
         defer { window.close() }
 
+        session.takesShots = true
         await session.arrangeWindows(.init(), initial: true)
         XCTAssertEqual(window.alphaValue, 0, "The intro card covers the app to begin with")
 
@@ -193,6 +195,29 @@ import XCTest
         window.alphaValue = 1
         await session.arrangeWindows(.init(draft: "Here is the cut."), initial: false)
         XCTAssertEqual(window.alphaValue, 1, "The app was hidden again part way through the timeline")
+    }
+
+    /// The backdrop and the titles are for the camera. Someone opening a scenario to watch
+    /// it gets the app on their own desktop, with nothing behind it or in front of it.
+    @MainActor func testOnlyARecordingPutsTheAppOnAStage() async throws {
+        let film = "{ \"intro\": { \"title\": \"A morning with Ada\" }, \"outro\": { \"tagline\": \"Bots that live in a chat.\" } }"
+        let session = try session(try scenario(film: film))
+        var played = 0
+        session.playFilm = { _ in played += 1 }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.title = NoodleAppIdentity.name
+        window.contentViewController = NSViewController()
+        window.contentViewController?.view = NSView(frame: window.contentRect(forFrameRect: window.frame))
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+
+        await session.arrangeWindows(.init(), initial: true)
+        XCTAssertEqual(window.alphaValue, 1, "The intro card hid the app with nobody recording")
+        try await session.play()
+        XCTAssertEqual(played, 0, "The titles played with nobody recording")
     }
 
     func testAScenarioWithoutAFilmPlaysNoTitles() async throws {
