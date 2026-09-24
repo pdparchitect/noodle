@@ -39,4 +39,16 @@ final class ConversationCompanionTests: XCTestCase {
         XCTAssertEqual(companions.map(\.id), [newestFirst[0], newestFirst[2], newestFirst[3], newestFirst[6]].map(\.id))
         XCTAssertEqual(companions.map(\.companionTitle), ["Build Box", "Timer", "A", "B"])
     }
+
+    func testEachCompanionNamesItsKindAndCarriesItsPreview() {
+        let image = Data([1, 2, 3])
+        let computer = ComputerCard(computer: RemoteComputer(id: UUID(), name: "Mac", kind: "host", state: "running",
+            symbol: "desktopcomputer"), agentID: UUID(), terminalPreview: "", previewImage: image)
+        let page = BrowserCard(reference: BrowserReference(browser: RemoteBrowser(id: UUID(), name: "Local"),
+            tabID: UUID(), url: "https://example.com", title: "Example", previewImage: image), agentID: UUID())
+        let items = [attachment("m.noodlecomputer", computer: computer), attachment("p.noodlebrowser", browser: page),
+                     attachment("Timer", url: NoodletLink.url(for: UUID()))]
+        XCTAssertEqual(items.map(\.companionKind), ["Computer", "Browser", "Noodlet"])
+        XCTAssertEqual(items.map(\.companionPreviewImage), [image, image, nil])
+    }
 }

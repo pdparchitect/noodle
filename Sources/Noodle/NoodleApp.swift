@@ -415,7 +415,8 @@ struct RootView: View {
                 }
             }
 
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarSpacer(.flexible)
+            ToolbarItem {
                 if let conversation = store.selectedConversation { ConversationCompanionsMenu(conversation: conversation) }
             }
 

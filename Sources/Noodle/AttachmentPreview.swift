@@ -28,6 +28,15 @@ extension ConversationAttachment {
 
     var opensInCompanion: Bool { companionKey != nil }
 
+    var companionKind: String {
+        if isComputerDocument { return "Computer" }
+        if isBrowserDocument { return "Browser" }
+        return "Noodlet"
+    }
+
+    /// Noodlet previews live with the applet and are resolved on demand.
+    var companionPreviewImage: Data? { computer?.previewImage ?? browser?.reference.previewImage }
+
     var companionSymbolName: String {
         url.flatMap(NoodletLink.id) != nil ? "square.grid.2x2" : previewSymbolName
     }
@@ -67,27 +76,90 @@ extension NoodleStore {
     }
 }
 
-/// Toolbar menu that reopens computers, browser pages and noodlets shared earlier in a conversation.
+/// Toolbar popover that reopens computers, browser pages and noodlets shared earlier in a conversation.
 struct ConversationCompanionsMenu: View {
     @Environment(NoodleStore.self) private var store
     let conversation: BotConversation
+    @State private var isPresented = false
 
     var body: some View {
         let companions = store.companions(in: conversation)
         if !companions.isEmpty {
-            Menu {
-                ForEach(companions) { attachment in
-                    Button(attachment.companionTitle, systemImage: attachment.companionSymbolName) {
-                        Task { @MainActor in
-                            do { try await store.openCompanion(attachment) }
-                            catch { store.errorMessage = error.localizedDescription }
-                        }
-                    }
-                }
-            } label: {
+            Button { isPresented.toggle() } label: {
                 Label("Shared", systemImage: "square.stack")
             }
             .help("Shared Computers, Browsers and Noodlets")
+            .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+                ScrollView {
+                    VStack(spacing: 2) {
+                        ForEach(companions) { attachment in
+                            CompanionRow(attachment: attachment) {
+                                isPresented = false
+                                Task { @MainActor in
+                                    do { try await store.openCompanion(attachment) }
+                                    catch { store.errorMessage = error.localizedDescription }
+                                }
+                            }
+                        }
+                    }
+                    .padding(6)
+                }
+                .frame(width: 340, height: min(CGFloat(companions.count) * CompanionRow.height + 12, 460))
+            }
+        }
+    }
+}
+
+private struct CompanionRow: View {
+    static let height: CGFloat = 70
+    @Environment(NoodleStore.self) private var store
+    let attachment: ConversationAttachment
+    let open: () -> Void
+    @State private var noodletPreview: NSImage?
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 10) {
+                preview
+                    .frame(width: 84, height: 54)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(attachment.companionTitle)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                    Text(attachment.companionKind)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 6)
+            .frame(height: Self.height - 2)
+            .contentShape(Rectangle())
+            .background(isHovered ? Color.primary.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help(attachment.companionTitle)
+        .task {
+            guard let url = attachment.url, NoodletLink.id(in: url) != nil,
+                  let access = try? await store.applets.resolvePreview(url) else { return }
+            noodletPreview = access.imageData.flatMap(NSImage.init(data:))
+                ?? NSImage(contentsOf: access.url.appendingPathComponent("preview.png"))
+            withExtendedLifetime(access) {}
+        }
+    }
+
+    @ViewBuilder private var preview: some View {
+        if let image = attachment.companionPreviewImage.flatMap(NSImage.init(data:)) ?? noodletPreview {
+            Image(nsImage: image).resizable().scaledToFill()
+        } else {
+            Image(systemName: attachment.companionSymbolName)
+                .font(.system(size: 20))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.quaternary.opacity(0.5))
         }
     }
 }
