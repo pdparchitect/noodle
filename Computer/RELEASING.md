@@ -111,14 +111,43 @@ and may need that account credential's trusted application updated in Keychain
 Access. Keep the password hidden and unchanged; never grant all applications
 access. Desktop privacy approvals can also retain the development certificate
 even when System Settings reports a new grant. Verify accepted capture and input
-in the running helper; the narrowly scoped recovery is documented in
-`LocalMac/README.md`. Verify this migration separately from release-to-release
+in the running helper. If a grant keeps the old requirement, clear only the
+helper's two approvals, then grant the installed desktop helper again in System
+Settings:
+
+```sh
+tccutil reset ScreenCapture com.pdparchitect.noodle.computer.desktop
+tccutil reset Accessibility com.pdparchitect.noodle.computer.desktop
+```
+
+Never run a service-wide or `All` reset, edit TCC databases or reset other apps'
+permissions. Confirm the helper reports capture and input access after
+reapproval and a restart. Verify this migration separately from release-to-release
 updates.
 
 Keep one account for development and upgrades. Use a separate test machine for
 fresh-account setup, deletion and alternate display arrangements when available.
 Passing unit tests does not establish compatibility with an untested macOS build;
-the background login API is private. Record actual OS and display configurations
-and results in `LocalMac/README.md`; do not claim those live checks from a build.
+the background login API is private. Record the actual OS and display configurations
+checked in the release pull request; do not claim those live checks from a build.
+
+## Computer images
+
+Only publish when explicitly requested. Images have their own `VERSION` and
+`CHANGELOG.md`, independent of both apps.
+
+1. Choose a higher, unused version and move relevant Unreleased notes into a dated release section.
+2. Commit and push to `main`; the version change requests publication.
+3. Watch the [shared release workflow](../docs/releases.md). It tests both images, creates `computer-images-vX.Y.Z`, and publishes the exact tested artifacts.
+4. Verify both GHCR packages are **Public**, linked to this repository, and pullable anonymously as ARM64 images. Check versioned and `:latest` digests match.
+
+CI uses `GITHUB_TOKEN`. Never create or move version tags manually, rebuild a
+published version, or ship registry credentials in the app. Retry failed jobs in
+the original workflow to reuse its tested artifacts. Images create no GitHub app
+release; digests are recorded in the workflow summary and artifact.
+
+Both public `:latest` images must exist before an app depending on them ships.
+Check Shell startup and networking, Desktop's authenticated display, wallpaper,
+and terminal when changing the image contract.
 
 [Computer](README.md)

@@ -13,11 +13,11 @@ Shortcuts, and dictate with on-device transcription on supported Macs. Native
 notifications bring you back when there's something to review. Give agents
 specialist roles and bring several into a group around a shared goal.
 
-The same integration carries through to security: Noodle runs in App Sandbox,
-macOS enforces restricted agents' file access, and Keychain holds connected-tool
-OAuth credentials. Microphone and screen capture follow macOS privacy
-permissions. Unrestricted access is an explicit per-agent choice in
-**Settings → Sandbox**. [Explore the security model](security.md).
+Agents start restricted to their own workspace and cannot read your personal
+files. Sign-ins for connected tools stay in the macOS Keychain. Microphone and
+screen capture follow macOS privacy permissions. Unrestricted access is an
+explicit per-agent choice in **Settings → Sandbox**.
+[Read about agent access and privacy](security.md).
 
 ## Deploy through familiar IT tools
 
@@ -29,21 +29,21 @@ or another Mac MDM with
 so a pilot can grow through your existing device groups and rollout processes.
 
 Noodle runs on macOS 26 or later. Current releases are app ZIPs for IT to package.
-Noodle can install external agent providers itself, or use ones your team already
+Noodle can install agent programs itself, or use ones your team already
 manages; each signs in with its own account.
 
 ## Keep work local and connect where it matters
 
 Keep conversations and agent workspaces on the Mac, with a choice of AI
-providers. The experimental Apple Intelligence integration offers direct access
-to Apple's on-device model on supported Macs running macOS 26 or later.
-Cloud agents use your existing provider accounts; work sent to cloud models and
-connected services is processed under those providers' data policies.
+providers. The experimental Apple Intelligence option uses Apple's on-device
+model on supported Macs running macOS 26 or later. Cloud agents use your
+existing provider accounts; work sent to cloud models and connected services is
+handled under those providers' data policies.
 
-[Connect compatible business services](mcp-connections.md) through MCP and assign
-the tools each agent needs. For development and automation,
-[Noodle Computer](../Computer/README.md) adds Linux workspaces without mounting
-host folders.
+[Connect compatible business services](mcp-connections.md) and choose the tools
+each agent can use. For development and automation,
+[Noodle Computer](../Computer/README.md) adds Linux workspaces that cannot see
+the Mac's folders.
 
 Start with one team and a task they repeat every week.
 [Set up your first agent](harness-setup.md) and [put it to work](usage.md).

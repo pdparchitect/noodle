@@ -1,7 +1,8 @@
 # Connect tools
 
 1. Open **Settings → Tools → Add Tools**.
-2. Choose a service, or **Custom MCP…** for a public HTTPS MCP endpoint.
+2. Choose a service, or **Custom MCP…** to enter the web address of a service
+   not in the list.
 3. Complete sign-in in your browser.
 4. Add the connection under **Tools** when creating or editing a bot, then save.
 
@@ -11,197 +12,44 @@ separately; cancelling the bot editor leaves the connection unassigned.
 ## Accounts and permissions
 
 Add separate, clearly named connections for different accounts. Each has its own
-credentials. Reconnecting can change the account while keeping bot assignments.
+sign-in. Reconnecting can change the account while keeping bot assignments.
 Editing a connection's instructions affects every bot assigned to it.
 
-Assigned bots can use the approved permissions without per-call Noodle approval.
-Noodle must remain open. Removing an assignment stops future access; removing a
-connection deletes its local credentials. Revoke access at the provider too when
-needed. Check timed-out writes before retrying: the operation may have completed.
+Assigned bots can use the permissions you approved at sign-in without asking you
+again for each use. Noodle must remain open. Removing an assignment stops future
+access; removing a connection deletes its sign-in from this Mac. Revoke access at
+the provider too when needed. If a change timed out, check whether it happened
+before trying again.
 
-## Supported servers
+## Supported services
 
-Public HTTPS MCP servers using Streamable HTTP, browser OAuth, native app callbacks
-and S256 PKCE. Clients use dynamic registration or catalogue-supplied configuration.
-Local stdio, API-key entry, manual client secrets and legacy SSE are unsupported.
-Providers may restrict accounts or plans.
+Custom connections must be services that sign you in through your browser.
+Services that ask you to paste an API key, token or client secret, or that run
+as a program on your Mac, are not supported. Providers may restrict accounts or
+plans.
 
-Gateway connections can expose several services. Assigning one to a bot grants
-access to the connection as a whole; check the intended service and account
-before acting. For Pipedream, choose its catalogue entry, which uses the
-end-user endpoint at `https://mcp.pipedream.net/v2`, and complete any additional
-account-connection steps in your browser. Zapier is not in the catalogue;
-its manual-token setup is unsupported.
+Some connections, such as Pipedream, give access to several services at once.
+Assigning one to a bot grants access to all of them; check the intended service
+and account before acting. For Pipedream, choose its entry in the list and
+complete any extra account steps in your browser. Zapier is not in the list and
+cannot be added.
 
 ### Google Workspace (Experimental)
 
-Each service is a separate connection with multiple-account support:
+Each service is a separate connection, and you can connect several accounts:
 
-| Service | Capabilities | Scopes under `https://www.googleapis.com/auth/` |
-| --- | --- | --- |
-| Gmail | Read mail, create drafts, manage labels; no send tool currently. | `gmail.modify` |
-| Google Docs | Read and edit documents; use Drive to find or create them. | `documents` |
-| Google Drive | Find, read, download, create and copy files. | `drive.readonly`, `drive.file` |
-| Google Calendar | Find availability and manage events and invitations. | `calendar.calendarlist.readonly`, `calendar.events` |
-
-The preview is limited to configured test accounts. Testing refresh tokens expire
-in seven days; permission changes also require reconnection. Revoking Google access
-can affect that account across the project. Drive writes are limited to files
-available to the app, and Google's [file eligibility rules](https://developers.google.com/workspace/drive/api/guides/drive-mcp-server-file-eligibility)
-can further restrict access.
-
-## Add a catalogue entry
-
-Add the endpoint, description, instructions and icon name to the tool catalogue
-in NoodleCore. Set maturity to
-`.experimental` for a badge and placement at the end of the list. Bundle its `.icon`
-in `Support/ToolIcons` and record the update URL in [SOURCES.md](../Support/ToolIcons/SOURCES.md).
-Set `MCPToolConfiguration.oauth` for a fixed public client; leave it unset for discovery
-and registration. Configuration is matched by exact endpoint; the OAuth engine stays generic.
-
-Google's shared native clients are defined with NoodleCore's other OAuth
-configurations. Keep their reversed-ID callback schemes in `Support/Info.plist` and `scripts/build-app.sh`
-in sync. In the Google Cloud project that owns the clients, enable each product
-and MCP API and declare the consent scopes. Follow Google's setup guides for [Gmail](https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server),
-[Docs](https://developers.google.com/workspace/docs/api/guides/configure-mcp-server),
-[Drive](https://developers.google.com/workspace/drive/api/guides/configure-mcp-server) and
-[Calendar](https://developers.google.com/workspace/calendar/api/guides/configure-mcp-server).
-Check per-tool scopes for writes; setup examples may be read-only.
-
-## Developer reference
-
-Bots reach a connection through Noodle's one tool command, shown here as `messenger`
-for `./.agents/skills/messenger/messenger`. `mcp-notion` stands for the connection's
-name in the bot's `.agents/skills`:
-
-```sh
-messenger tool mcp-notion
-messenger tool mcp-notion TOOL_NAME --help
-messenger tool mcp-notion TOOL_NAME --argument value
-messenger tool mcp-notion TOOL_NAME --input '{"argument":"value"}'
-messenger tool mcp-notion mcp-resources
-messenger tool mcp-notion mcp-read-resource --uri 'reports://monthly/123'
-```
-
-Options are typed from the tool's schema. `--input -` reads the JSON object from stdin. Results preserve text, metadata, `structuredContent`
-and `isError`; tool errors exit nonzero. Binary results are saved under
-`<bot-workspace>/.noodle/tool-attachments/<call-id>/` and returned as `file` blocks
-with `path`, `mimeType`, `bytes` and `sourceType`. Files remain after the call.
-Use `--raw` for original JSON without extraction.
-Resource links are not fetched automatically; resource operations require server support.
-
-In input JSON, `"@report.pdf"` substitutes a workspace file's base64 content;
-`"@@name"` sends literal `"@name"`. Inspect the tool schema for the correct field.
-Paths resolve from the current directory; absolute workspace paths work too.
-Symlinks, hard links and `..` components are rejected. Filename and MIME fields
-are not inferred. Limits are **1 MiB arguments after expansion** and **8 MiB result
-JSON before extraction**, including with `--raw`.
-
-Requests use `.noodle/tool-bridge`, the same path as every other tool. Noodle checks the
-session and that the connection is assigned before and after each call, removes anything a
-server sends that imitates Noodle's own tool markers, keeps credentials in Keychain and
-serializes calls per account. Consumed requests are
-never automatically replayed after a crash.
-
-### JavaScript workflows
-
-Use the macOS JavaScriptCore runtime to filter results, loop, or chain calls on
-one connection:
-
-```sh
-messenger tool mcp-notion --eval 'print(mcp.tools().tools.map(t => t.name))'
-messenger tool mcp-notion --run workflow.js
-messenger tool mcp-notion --run - <<'JS'
-const tools = mcp.tools().tools;
-print(tools.filter(tool => /search/i.test(tool.name)));
-JS
-```
-
-Naming a connection binds the global `mcp` to it. A script can also reach every other
-tool Noodle provides to the bot, with or without a connection named:
-
-```js
-const text = tools.call('vision', 'ocr', {image: 'page.png'}).structuredContent.text;
-mcp.call('create-page', {title: 'Pricing', body: text});
-```
-
-`tools.providers()`, `tools.list(provider)`, `tools.inspect(provider, name)` and
-`tools.call(provider, name, input)` work for any provider; `tools.provider(name)` returns
-the same operations bound to one. Each call is authorized on its own, exactly as a single
-command is. `"@path"` file references apply only to calls on a tool connection.
-
-Scripts have these synchronous methods:
-
-| Method | Result |
+| Service | What bots can do |
 | --- | --- |
-| `mcp.tools()` | Tool listing, including `tools` |
-| `mcp.inspect(name)` | One tool's schema and metadata |
-| `mcp.call(name, input = {}, options = {})` | Complete MCP tool result |
-| `mcp.resources()` | Resource listing, including `resources` |
-| `mcp.readResource(uri, options = {})` | Complete resource result |
+| Gmail | Read mail, create drafts, manage labels. Bots cannot send mail. |
+| Google Docs | Read and edit documents; use Drive to find or create them. |
+| Google Drive | Find, read, download, create and copy files. |
+| Google Calendar | Find availability and manage events and invitations. |
 
-Results are JavaScript objects with the same fields as CLI JSON. Both methods
-with `options` accept `{raw: true}` to skip binary extraction. File references
-(`@file`, `@@literal`) and saved attachments work as described above. Paths
-resolve from the invocation's current directory, including when the script is
-in a different workspace subdirectory.
-
-`print(value)` writes one JSON value followed by a newline to stdout.
-`console.log`, `info`, `warn`, `error`, `debug`, and `dir` write diagnostics to
-stderr. Logging handles `undefined`, errors (including their stacks), and
-circular objects. The logging methods support `%s`, `%d`, `%i`, `%f`, `%o`,
-`%O`, and `%%` formatting; `dir` inspects its first argument directly.
-`console.trace(...values)` prints a labelled call stack, and
-`console.assert(condition, ...values)` logs when the condition is false.
-Console logging, including `error` and `assert`, does not change the exit status.
-Results and the final expression do not print implicitly. Bridge failures and tool results with
-`isError: true` throw; tool errors retain the complete result as `error.result`:
-
-```js
-try {
-  const result = mcp.call('TOOL_NAME', {argument: 'value'});
-  print(result.structuredContent ?? result.content);
-} catch (error) {
-  console.log(error.message, error.result ?? null);
-  throw error;
-}
-```
-
-Uncaught errors print a readable message, source location, and available stack
-frames to stderr, then exit nonzero. Syntax errors include their source line;
-runtime and MCP errors retain the script's calling functions and line numbers.
-Caught operation errors may be handled and the
-workflow continued; calls are never automatically retried. Each invocation
-uses a fresh context and one connection. There are no imports, Node/browser
-APIs, shell execution, or general filesystem/network APIs. Async workflows
-are unsupported; use ordinary loops and synchronous calls.
-
-Script files must be regular UTF-8 files inside the bot workspace, without
-symlinks, hard links, or `..` components. Source is limited to **1 MiB**.
-Each invocation allows **100 MCP operations**, **8 MiB combined stdout and
-diagnostic output**, and **300 seconds**, including input loading and remote
-calls. Use `--timeout SECONDS` after the file or code to choose **1–3600 seconds**.
-Call/output limit failures remain fatal even if caught. The deadline also stops
-infinite loops. Timing out cannot undo remote changes or guarantee cancellation
-of an in-flight call; verify writes before retrying. Existing per-call limits
-still apply.
-
-Scripts execute in the helper under the harness's existing process sandbox.
-Noodle authorizes every request through the same workspace broker, and retains
-the credentials. JavaScriptCore adds no external runtime or helper entitlements.
-
-Validate catalogue, protocol, and scripting changes with:
-
-```sh
-swift test --disable-sandbox --filter 'ToolCatalogTests|NoodleMCPTests|NoodleToolScriptingTests'
-zsh Tests/build-sandbox-cli-fixture.sh
-NOODLE_TEST_CLI_APPLICATION="$PWD/.build/Sandbox CLI Tests.app" \
-  swift test --disable-sandbox --filter BridgeCLISandboxTests
-zsh Tests/mcp-fixture.sh --check
-```
-
-Use `--open` for the interactive sign-in fixture. `zsh Tests/mcp-window-routing.sh`
-checks window routing and synthetic callbacks. Real provider consent and tool calls
-need separate verification.
+The preview works only for accounts that have been added as testers. Sign-ins
+expire after seven days, and you must reconnect after permissions change.
+Revoking Noodle's Google access may affect that account's other Google
+connections in Noodle. Drive can change only files made available to Noodle, and Google's
+[file eligibility rules](https://developers.google.com/workspace/drive/api/guides/drive-mcp-server-file-eligibility)
+may restrict access further.
 
 [Agent access](security.md) · [Documentation](README.md)

@@ -29,24 +29,24 @@ In Noodle, create or edit a bot and add a computer in its **Computers** tab.
 Noodle starts the Computer app when needed; its window can stay closed.
 
 Assign the same computer to several agents when they need to work on shared files
-and services. Each gets its own terminal sessions. An agent can present a terminal
-or desktop in the conversation as a `.noodlecomputer` file. Quick Look shows its
-saved preview. Click the attachment or double-click the file to select and start
-that computer in Noodle Computer's main window. This uses the normal desktop or
-human terminal, independently of Noodle and agent assignments. Closing the window
-leaves the computer running.
+and services. Each gets its own terminal sessions. Agents can copy files between
+their work area and the computer, up to 8 GB each.
+
+An agent can show you a terminal or desktop in the conversation as an attachment
+with a saved preview, which Quick Look can also show. Click the attachment, or
+double-click the file in Finder, to select and start that computer in Noodle
+Computer. You get the computer's normal desktop or terminal, not the agent's own
+session. Closing the window leaves the computer running.
 
 ## Use the terminal
 
 Shell and Desktop images use the non-root `agent` account, with passwordless
 `sudo` for administrative work (for example, `sudo apk add jq` in Shell).
-Terminals, agent commands, and file transfers follow the image's configured user;
-custom and older images may still select root. Choose an image Update to receive
-new image defaults after publication. Files previously created by root retain
-their ownership; use `sudo` when you need to manage them.
+Custom and older images may still use root; choose **Update** to get the current
+account setup. Files created earlier by root keep their owner; use `sudo` to
+manage them.
 
-The terminal uses that account’s configured shell, with a fallback for minimal
-images. Commands come from the image and the packages you install in it.
+The commands available are the ones in the image plus any packages you install.
 
 **Command-K** clears earlier output while preserving the current input. You can
 also right-click and choose **Clear Terminal**. In full-screen applications, this
@@ -86,36 +86,76 @@ Edit a computer to change its name, description, icon, background, and terminal
 colours. Backgrounds support images, animated HEIC, and muted looping video.
 
 The optional description (up to 500 characters) says what the computer is for,
-such as which project it builds. Assigned bots receive it with the name from
-`computer list` and use it to choose the right computer. It is left out of
-preview cards, which every conversation member can read.
+such as which project it builds. Assigned bots see it with the name and use it to
+choose the right computer. It is not shown on preview cards in conversations.
 
 Choose **Update** from the computer's context menu or editor to fetch its latest
 image. The computer stops during the update and restarts afterward. Your files
 and installed software are preserved; modified system files can override updated
-defaults. A failed update leaves the active disk unchanged. Older flat-disk
-computers do not support this update layout.
+defaults. A failed update leaves the computer as it was. Some older computers
+cannot be updated this way.
 
 App updates are separate, under **Settings → Update**. Save guest work first;
 computers are stopped and are not automatically restarted after the app relaunches.
 
 ## Custom images
 
-Choose **New from Container Image…** and enter a public ARM64 OCI image reference.
-The image must contain `/bin/sh`. Without a web port, it opens as a shell. With a
-web port, Computer runs the image's application command and displays its web app.
-The service must listen on the guest network interface, not only localhost.
-Private registry credentials and Compose are not supported.
+Choose **New from Container Image…** and enter the name of a public container
+image built for ARM64. The image must include a shell at `/bin/sh`. Without a web
+port, it opens as a shell. With a web port, Computer starts the image's app and
+shows its web page; the app must accept connections from outside the computer,
+not only from itself. Images that need a registry sign-in, and multi-container
+setups, are not supported.
+
+You can also publish your own image based on the Desktop image, for example with
+extra tools, a different homepage or starter files in `/workspace`, and open it
+the same way.
+
+## Automate the desktop browser
+
+The Desktop computer's browser keeps its sign-ins across restarts. Sign in to a
+website there and an assigned agent can work in the same tabs from the computer's
+terminal. Every agent assigned to that computer can use those sign-ins. Pause
+agents while you sign in, and choose **Update** on older computers to get this.
+
+## Local Mac (experimental)
+
+**Local Mac**, in the same menus as **New Container**, gives agents a desktop on
+this Mac instead of a Linux computer. It runs as a separate standard macOS account
+signed in in the background, with its own desktop, terminal and files. It shares
+your Mac's processor, memory and network, and it is not isolated like a virtual
+machine: its terminal can reach whatever macOS lets that account reach.
+
+The first time, choose **Enable Local Mac** and approve it in **System Settings →
+Login Items**. Inside the Local Mac account, allow **Noodle Local Mac Desktop**
+under **Screen Recording** and **Accessibility** so Computer can show and control
+its desktop. The computer's settings point you to the right app. Its Desktop,
+Documents and Downloads folders, and scripts that control other apps, ask for
+permission in that account the usual macOS way.
+
+- **Focus Window** opens the account's front window in its own resizable window
+  on your Mac. **Open All Windows** does the same for every visible window and
+  tiles them. Closing one leaves the app running in the account.
+- Press **Control-Option-Escape** to release the keyboard from the Local Mac
+  desktop. Command-Tab always goes to your own Mac.
+- **Stop** signs the account out and keeps it. If nothing has connected to it for
+  five minutes, for example after Computer quit unexpectedly, it is signed out
+  automatically.
+- **Delete** removes the account and its files after you confirm. If macOS blocks
+  this, Computer offers to open Full Disk Access for it.
+- If Local Mac stops responding after an update, choose **Repair Local Mac** in
+  Setup. Your accounts, files and permissions are kept.
+
+Agents can use the terminal and files and show the desktop in a conversation, but
+cannot yet click or type on the desktop.
 
 ## Access and storage
 
-Each computer runs in its own virtual machine. Host folders and clipboard are not
+Each Linux computer runs in its own virtual machine. Host folders and clipboard are not
 shared; file transfers are explicit. Guest networking can reach your LAN. You can
 disable it for Shell computers; Desktop requires it.
 
 Closing the window keeps computers running. Quitting stops them. Deleting a
 computer requires confirmation and moves its stopped disk to Trash.
 
-[Build and test](DEVELOPMENT.md) · [Noodle integration](Bridge/README.md) ·
-[Images](Images/README.md) · [Releases](RELEASING.md) · [Changelog](CHANGELOG.md) ·
-[Noodle](../README.md)
+[Releases](RELEASING.md) · [Changelog](CHANGELOG.md) · [Noodle](../README.md)

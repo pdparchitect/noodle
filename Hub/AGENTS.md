@@ -20,3 +20,6 @@ Settings reuse Noodle's Harness, Heartbeat, Sandbox, Tools and Companions views 
 `NoodleRuntimeSettings` through `BotSettingsHost`; change them there, not here. The Hub
 does not run bots yet, has no bot editor, and opens companions directly rather than
 connecting to them.
+
+README.md is for people using the Hub; do not document code in it. Follow the
+`no-code-docs` skill.

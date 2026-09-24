@@ -28,3 +28,6 @@ The app is built from an Xcode project that Tuist generates from `Project.swift`
 project and `Derived/` are not committed. Describe targets, settings and embedding there, never by
 editing the generated project. Its build phases embed the page scripts and trim Sparkle; everything
 else is target settings.
+
+README.md is for people using Browser; do not document code in it. Follow the
+`no-code-docs` skill.

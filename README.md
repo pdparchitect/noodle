@@ -8,7 +8,6 @@
 
 <p>
   <img alt="macOS 26+" src="https://img.shields.io/badge/macOS-%E2%89%A526-0a0a0a?style=flat-square&logo=apple&logoColor=white">
-  <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-0a0a0a?style=flat-square&logo=swift&logoColor=white">
   <img alt="Persistent agents" src="https://img.shields.io/badge/agents-persistent-0a0a0a?style=flat-square">
   <img alt="Individual and team work" src="https://img.shields.io/badge/work-individual%20%2B%20teams-0a0a0a?style=flat-square">
 </p>
@@ -102,9 +101,7 @@ Each browser keeps its own sign-ins and browsing data.
 - [Noodle Applet](Applet/README.md)
 - [Noodle Browser](Browser/README.md)
 - [Noodle Hub](Hub/README.md)
-- [Architecture](docs/architecture.md)
 - [Security and privacy](docs/security.md)
-- [Development and testing](docs/development.md)
 - [Contributing](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Releases](docs/releases.md)
@@ -122,6 +119,6 @@ Each browser keeps its own sign-ins and browsing data.
 | Look and feel | Light or dark | Stock | Customise the look and feel to match your preferences: backgrounds, custom icons and more |
 | Voice | Sent to xAI's servers | Sent to Meta's servers | On-device dictation and transcription that value your privacy |
 | OS integration | Cloud connectors only | A few Mac apps | First-class OS integration: calendars, shortcuts, reminders, accessibility and much more |
-| Tools | Cloud connectors, no local MCP | Cloud connectors, no local MCP | Extensible tool support: any MCP you can think of, plus local extension points through ExtensionKit applications |
+| Tools | Cloud connectors, no local MCP | Cloud connectors, no local MCP | Extensible tool support: any MCP you can think of, plus tool apps installed on your Mac |
 | On-device tools | Shell commands only | None | Built-in OS capabilities such as OCR, image generation, background removal and much more |
 | Data | Cloud only, no privacy mode | Trains on your chats | Your data stays local |

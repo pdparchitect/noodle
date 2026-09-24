@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Opens Noodle in a scenario from Scenarios/, in a bundle of its own that cannot reach the network,
-# an account or any other Noodle's data, and can photograph or record it. See Scenarios/README.md.
+# an account or any other Noodle's data, and can photograph or record it.
 set -euo pipefail
 
 project_root="${0:A:h:h}"

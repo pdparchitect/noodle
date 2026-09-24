@@ -21,3 +21,6 @@ Sources/NoodleApplet/App.swift, Shared/LaunchChecks), so no name appears in the 
 One that the release workflow or RELEASING.md runs against the packaged app stays in every
 build. Any other goes under `#if NOODLE_DEV_HOOKS`, which only development bundles and
 debug builds compile. `scripts/verify-launch-hooks.sh` checks a production bundle.
+
+README.md is for people using Applet; do not document code in it. Follow the
+`no-code-docs` skill.

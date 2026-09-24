@@ -9,19 +9,15 @@
 - [Voice messages](voice-messages.md)
 - [Keyboard shortcuts](keyboard-shortcuts.md)
 - [Attachment annotations](attachment-annotations.md)
+- [Chat effects](chat-effects.md)
 - [Agent access and privacy](security.md)
 - [Noodle in the enterprise](enterprise.md)
 - [Noodle Computer](../Computer/README.md)
 - [Noodle Browser](../Browser/README.md)
 
-## Develop Noodle
+## Contribute
 
-- [Build and test](development.md)
 - [Contributing](../CONTRIBUTING.md)
-- [Architecture](architecture.md)
-- [Storage and Messenger](storage-and-messenger.md)
-- [Chat effects](chat-effects.md)
-- [Add a tool preset](mcp-connections.md#add-a-catalogue-entry)
 - [Releases](releases.md)
 
 [Changelog](../CHANGELOG.md) · [Noodle](../README.md)

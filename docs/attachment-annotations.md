@@ -11,8 +11,8 @@ conversation. Saving an annotation adds it to the draft; it does not send it.
 2. Enter your comment. Check that the quote or captured region is correct.
 3. Click **Save** or press **⌘Return**. Press **Escape** to cancel.
 
-Text annotations retain the selected quote and its source message. Region
-annotations capture the content inside the current Noodle window. Switching
+Text annotations keep the selected quote and the message it came from. Region
+annotations capture what is inside the current Noodle window. Switching
 conversations cancels an unfinished annotation.
 
 ## Annotate an attachment
@@ -28,8 +28,8 @@ Open an attachment in Noodle's Quick Look preview, then:
    close button cancels and returns focus to the preview.
 
 Hold Escape to dismiss the annotation, then release and press it again to close
-Quick Look. These actions apply to Noodle's preview, not external Preview.app
-windows. The original attachment is unchanged.
+Quick Look. This works in Noodle's preview, not in the Preview app. The original
+attachment is unchanged.
 
 Shortcuts follow the active conversation or preview. Change them in
 **Settings → Keybindings**; menus show your current bindings. See
@@ -40,24 +40,18 @@ Shortcuts follow the active conversation or preview. Change them in
 Click a saved annotation in the draft to review its comment and quote or marked
 image. Choose **Edit Comment** to change an unsent comment; **Save** updates it
 and **Cancel** discards the edit. Remove unwanted feedback with the draft
-attachment's remove button. Saved drafts survive relaunch.
+attachment's remove button. Drafts are kept after relaunch.
 
-Use the conversation's **Send** button when the feedback is ready. Every
-participant receives the annotation through normal message delivery. Submitted
-annotations are read-only, including messages waiting for delivery.
+Use the conversation's **Send** button when the feedback is ready. Everyone in
+the conversation receives it. Sent annotations can no longer be edited, even
+while they wait to be delivered.
 
-## Saved content and privacy
+## Privacy
 
-Text annotations store the comment and quote in a text attachment. Region
-annotations store a PNG snapshot with an orange marker. Older PDF annotations
-remain readable, and editing an older unsent annotation preserves its format.
+Capture covers only the Noodle conversation or attachment preview you are
+annotating and needs no extra macOS permissions. A marked region is a snapshot;
+it does not follow the content when you scroll or zoom.
 
-Capture is limited to the selected Noodle conversation or attachment-preview
-window. It does not require additional Accessibility or Screen Recording
-permission. A region is a saved snapshot; it does not track content after
-scrolling or zooming.
-
-Bots receive the comment, source reference, and saved content. The Messenger
-skill in each bot's workspace describes the metadata and CLI access.
+Bots receive your comment, the quote or snapshot, and where it came from.
 
 [Documentation](README.md)

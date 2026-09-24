@@ -57,14 +57,13 @@ Press ⌃⌥Space in any app, or choose **Conversation → Choose Conversation�
 pick a bot or group from a grid. Type to filter, move with the arrow keys, press
 Return to choose and Escape to cancel. Conversations that are already floating
 come first and carry a badge, so the grid also switches between them. A blue dot
-before a name marks unread messages. The conversation lands as a floating window by the pointer, or where you last left
-its window, stepped aside from any float already there, with the caret in its
-message field. Capture and
+before a name marks unread messages. The conversation opens as a floating window
+by the pointer, or where you last left it, ready for typing. Capture and
 annotations work there as in any chat window, so you can share what is on screen
 without going back to Noodle. Change the shortcut in **Settings → Keybindings**.
 
 Several conversations can float at once. To keep a single float, turn on
-**Settings → Chat → Keep one floating conversation**: floating another
+**Settings → Conversation → Keep one floating conversation**: floating another
 conversation then closes the open one and takes its exact place and size.
 
 ## Watch an agent’s activity
@@ -72,15 +71,13 @@ conversation then closes the open one and takes its exact place and size.
 Right-click a bot in the sidebar or its avatar in a conversation and choose
 **Show Activity**. Each bot has one floating log window showing its runtime
 status, tool activity, and output across direct and group conversations.
-The window uses the same frame as previews: drag the header to move it, resize
-from its edges, and close it with the close control, **Esc**, or **⌘W**.
+Drag the header to move it, resize it from its edges, and close it with the close control, **Esc**, or **⌘W**.
 
 Scroll up or select text to pause automatic following. Right-click the log for
 **Copy**, **Copy All**, **Select All**, **Follow Latest**, and **Clear**.
 Selected text also supports the standard **⌘C** shortcut.
-Recent activity stays in memory while Noodle is open, including while the window
-is closed. Logs are limited to 500 entries and 256 KiB per bot, with long output
-trimmed. Restarting Noodle clears them.
+Recent activity is kept while Noodle is open, even with the window closed. Older
+entries and long output are trimmed. Quitting Noodle clears the log.
 
 Available detail depends on the harness. Apple currently reports working and
 lifecycle status; other harnesses also expose tool activity and text output.
@@ -133,7 +130,7 @@ To send selected text or files from another app, choose **Services → Send to A
 and select the agent or group that should receive them.
 
 **Settings → General** includes bot naming and **Keep Mac awake while agents work**.
-**Settings → Chat** includes message delivery, the recording microphone, bot
+**Settings → Conversation** includes message delivery, the recording microphone, bot
 descriptions in the @ menu, and link-preview timeout. See [agent access](security.md)
 for permissions and [updates](releases.md#in-app-updates) for update settings.
 

@@ -1,151 +1,115 @@
 # Noodle Browser
 
-Noodle Browser gives your bots persistent WebKit browsers on your Mac. Create a browser, open a website and sign in, then assign that browser in a bot's **Browsers** settings. The bot operates the same tabs and website data you see.
+Noodle Browser gives your bots web browsers on your Mac that remember where they
+were and who they are signed in as. Create a browser, open a website and sign in,
+then assign that browser to a bot in Noodle. The bot works in the same tabs and
+signed-in accounts you see.
 
-Browser is currently in development. It uses the suite's [shared release process](RELEASING.md), with its own version and download channel. Its first public download becomes available when its first release is published.
+Noodle Browser is still in development. It will be available to download once
+its first release is published. It requires macOS 26 or later and works together
+with Noodle.
 
-Each named browser has its own website data store. You can keep work, personal and unsigned browsing separate, or deliberately assign the same browser to several bots. Select browsers in the searchable sidebar; their tabs open in the same window. Closing the window leaves browsers running in the background. Quitting the app preserves website data and tab URLs; reopening reloads those URLs.
+## Get started
 
-## Build and use
+1. In Noodle Browser, choose **Create** in the toolbar or **File → New Browser…**
+   and give the browser a name.
+2. Enter a website address and sign in as you normally would.
+3. In Noodle, edit a bot, choose **Browsers → Add Browsers**, pick the browser
+   and save.
+4. Ask the bot to work on that site. Noodle starts Noodle Browser in the
+   background when the bot needs it.
 
-Requires macOS 26 or later, matching Noodle Computer, Apple's developer tools, and an Apple Development or Developer ID signing identity for local builds.
+## Browsers
 
-```sh
-zsh scripts/build-and-launch-browser.sh
-zsh scripts/build-app.sh
-open '.build/Noodle Dev.app'
-```
+Each browser keeps its own sign-ins and website data, so you can keep work,
+personal and signed-out browsing apart. You can also give the same browser to
+several bots on purpose.
 
-Builds default to separate Dev apps and storage. The build uses the Xcode project Tuist generates from `Browser/Project.swift`; to debug, run `cd Browser && tuist generate` and use Run in Xcode. `NOODLE_BROWSER_DATA_CONTAINER=production zsh scripts/xcode-build.sh Browser` builds the production identity into `.build/Noodle Browser.app`; use the corresponding Noodle environment. Both variants can be installed together: names, bundle IDs, URL schemes, sandbox containers and broker App Groups are separate. Noodle Dev connects only to Noodle Browser Dev; normal Noodle connects only to normal Noodle Browser.
+Pick a browser in the searchable sidebar to see its tabs. Closing the window
+leaves your browsers running in the background. When you quit, your sign-ins and
+open pages are kept, and the pages reload when you open the app again. A page's
+back and forward history and anything you were typing into it are not kept.
 
-Use `NOODLE_DATA_CONTAINER=production zsh scripts/build-app.sh` for matching normal Noodle. A production build is not a published release. Browser uses the same Sparkle updater as Computer and Applet, with its own signed release feed. Local builds keep update checks disabled; release builds enable them with automatic installation opt-in.
+Closing a tab removes it. Deleting a browser removes its sign-ins, tabs, history,
+bookmarks and files.
 
-1. In Noodle Browser, use **Create** in the toolbar or **File → New Browser…** and name it.
-2. Enter a website address and sign in normally.
-3. In Noodle, edit the bot, select **Browsers → Add Browsers**, choose the browser and save.
-4. Ask the bot to work on that site. Noodle supplies its Browser skill and starts the companion quietly when needed.
+### Pause Agents
 
-**Pause Agents** prevents new agent operations while you use the browser. It does not undo an action already sent to a website. **Resume Agents** permits them again. Closing a tab removes it; deleting a browser removes its website data, tabs and stored files.
+**Pause Agents** stops bots from doing anything new in a browser while you use it
+yourself. It cannot undo something a bot already did on a website. Bots can still
+read history and bookmarks while paused. **Resume Agents** lets them continue.
 
-Browsers start muted. The public WebKit API implements this by suspending media playback, so video pauses too. New tabs and popups inherit that setting. The user can resume media with the speaker control. Camera and microphone capture are unavailable.
+### Sound and media
 
-## Interface and settings
+Browsers start muted, and muting also pauses video. New tabs and pop-ups follow
+the same setting. Use the speaker button to turn sound and playback back on.
+Websites cannot use your camera or microphone.
 
-The native single-window layout follows Noodle Computer: searchable sidebar, circular profile icons, status indicators, persistent selection and sidebar visibility, shared wallpaper rendering, rounded content surface, and a unified native toolbar. Edit a browser from its sidebar context menu or the toolbar to change its name, description, icon, colour and background. The optional description (up to 500 characters) says what the browser is for, such as which account it is signed in to; assigned bots receive it with the name from `browser list` and use it to choose the right browser. It is left out of page-preview cards, which every conversation member can read. Each browser owns its background; use **Background** in the editor or **Change Background…** in its context menu for the suite’s preset, file, Photos and Image Playground controls. Imported images, dynamic HEIC files and videos are copied into that browser’s private storage; videos play silently. Switching browsers switches the full window wallpaper, including beneath the sidebar. New browsers start with an available name such as “Browser 2”. Browsers retain their profile UUIDs, history, bookmarks and sign-ins through these edits.
+### History, bookmarks and downloads
 
-Click the browser icon in its editor to open the suite’s icon dialog. Choose a symbol and colour, import an image from a file or Photos, or create one with Image Playground. Custom icon images are stored with that browser.
+Use the Browser, History, Bookmarks and Downloads control in the toolbar to switch
+views. History lists the pages you and your bots visited until you clear it or
+delete the browser; clearing history keeps bookmarks and sign-ins. Add the current
+page with **Add** in the bookmark list, and right-click a bookmark to edit or
+delete it. Bots can search both lists and manage bookmarks too.
 
-In Noodle’s bot editor, **Add Browsers** uses the same searchable assignment picker and removable icon grid as **Add Computers**. Custom browser icons appear there too.
+Downloads stay inside that browser until you save them to your Mac or a bot
+copies them into its own work area. Interrupted downloads must be started again.
 
-Agents can send a page back with `browser present --browser UUID --tab UUID --conversation UUID --message "Open this page"`. The conversation gets a saved screenshot card and a `.noodlebrowser` file (`.noodlebrowser-dev` in Dev). Clicking the card or opening the file selects the original tab if it still shows the saved URL; otherwise it opens that URL in a new tab in the same persistent browser. A deleted browser stays deleted. The reference includes no cookies or agent credentials, and the preview is a captured image rather than a live embedded browser. Ordinary web links continue to open in the default browser. Agents can close individual tabs with `browser close --browser UUID --tab UUID`.
+## Customize
 
-**Settings…** (⌘,) uses the suite’s General and Update tabs and shared settings layout. General selects the search engine and selection restoration. The application menu includes About and Check for Updates; File creates browsers and tabs; Browser provides navigation, history, bookmarks and downloads; View, Window and Help use the native menu structure.
+Edit a browser from its right-click menu in the sidebar or from the toolbar to
+change its name, description, icon, colour and background.
 
-## Browser commands
+- The optional description, up to 500 characters, says what the browser is for,
+  such as which account it is signed in to. Bots see it with the name and use it
+  to pick the right browser. It is not shown on page cards in conversations.
+- Click the icon in the editor to choose a symbol and colour, use an image from a
+  file or Photos, or create one with Image Playground.
+- Choose **Background** in the editor or **Change Background…** in the right-click
+  menu for a preset, a file, a photo or an Image Playground image. Moving
+  backgrounds and videos play silently. Each browser has its own background.
 
-Runbar’s **Noodle Browser → Build & Launch Dev** runs `scripts/build-and-launch-browser.sh`, which always builds and opens the isolated Dev app. Quit a running Dev build before replacing it.
+Renaming or restyling a browser keeps its sign-ins, history and bookmarks.
 
-Bots use browsers through Noodle's tool command, `./.agents/skills/messenger/messenger tool browser TOOL`, shown as `browser` below. Add `--help` after a tool name for its options. Results are JSON; a tool error exits with status 1.
+**Settings…** (⌘,) lets you choose the search engine and whether the last browser
+is selected when the app opens. **Check for Updates** is in the app menu and under
+**Settings → Update**.
 
-```sh
-browser list
-browser open --browser BROWSER_UUID --url https://example.com
-browser inspect --browser BROWSER_UUID --tab TAB_UUID
-browser fill --browser BROWSER_UUID --tab TAB_UUID --target '#search' --text 'annual report'
-browser click --browser BROWSER_UUID --tab TAB_UUID --target 'button[type=submit]'
-browser eval --browser BROWSER_UUID --tab TAB_UUID --text 'return document.title;'
-browser upload --browser BROWSER_UUID --tab TAB_UUID --target 'input[type=file]' --source report.pdf
-browser history --browser BROWSER_UUID --query example --limit 50 --offset 0
-browser bookmarks --browser BROWSER_UUID
-browser bookmark-add --browser BROWSER_UUID --url https://example.com --title Example
-browser bookmark-update --browser BROWSER_UUID --bookmark BOOKMARK_UUID --title 'Example account'
-browser bookmark-remove --browser BROWSER_UUID --bookmark BOOKMARK_UUID
-browser downloads --browser BROWSER_UUID
-browser download --browser BROWSER_UUID --download DOWNLOAD_UUID --output downloaded.pdf
-browser screenshot --browser BROWSER_UUID --tab TAB_UUID --output screenshot.png
-```
+## What bots can do
 
-Navigation returns immediately; inspect the page or read status to determine readiness. `inspect` returns CSS selectors and frame IDs. JavaScript is an async function body; use `return` for a result. Frame IDs expire on navigation. `show` opens the human window for an explicit handoff.
+An assigned bot can open pages, read them, fill in forms, click, upload and
+download files, take screenshots, and use history and bookmarks. It uploads only
+files from its own work area and saves downloads there. Files can be up to 8 GB.
 
-Each tab has a virtual agent pointer, drawn as a cyan target with a diamond. It appears in the browser, screenshots and page cards. Moving it triggers native WebKit hover and mouse/pointer events while leaving the desktop cursor and application focus alone. Use `move` to reveal hover menus, then inspect or capture the page before selecting the revealed action.
+While a bot works, you can watch it in the browser window. A cyan target marks
+where the bot is pointing in each tab. It can hover over menus and click, but it
+does not move your own pointer or take focus from the app you are using. Bots
+cannot drag or right-click. Your own clicks, navigating, pausing agents or closing
+the tab reset the bot's pointer.
 
-```sh
-browser move --browser BROWSER_UUID --tab TAB_UUID --target '#menu'
-browser click --browser BROWSER_UUID --tab TAB_UUID --target '#menu-action'
-browser click --browser BROWSER_UUID --tab TAB_UUID --x 320 --y 180 --count 2
-browser mouse-reset --browser BROWSER_UUID --tab TAB_UUID
-```
+Some websites offer tools made for AI agents. Bots can find and use these in a
+signed-in tab, in the background, without extra setup. This support is
+experimental. A form that needs your confirmation is left filled in for you to
+submit. Bots treat what a website says about its tools as untrusted and act only
+on your request.
 
-Only primary clicks are supported; dragging and independent button holds are not supported. Coordinates are points from the top-left of the main page viewport; scale Retina screenshot pixels to viewport points. Selectors scroll into view and reject covered targets. Same-origin frame selectors accept `--frame`; cross-origin or transformed frames require main-viewport coordinates. Pointer commands and `status --tab` return `pointer` with `x`, `y`, `visible` and `pressed`.
+### Pages in conversations
 
-Human input, navigation, pausing agents and closing the tab reset the pointer. `mouse-reset` clears hover and hides it. Agents sharing a tab also share its pointer.
+A bot can send a page back to the conversation as a card with a screenshot.
+Clicking the card opens that page in the same browser, in its original tab if it
+is still there. The card does not carry your sign-ins, and the screenshot is a
+picture, not a live page. A deleted browser cannot be brought back from a card.
 
-Uploads and downloads pass directly through app storage, without Finder dialogs for the agent. Transfers support regular files up to 8 GiB. Local paths must remain inside that bot's workspace, parent directories must exist, and symlinks and overwrites are refused. Downloads stay in the browser; `download` copies a completed file to the workspace. Human file selection and exporting use standard macOS file panels. Interrupted downloads must be retried.
+## Limits
 
-## WebMCP
+This is a built-in web browser, not Safari. It does not share Safari or Chrome
+sign-ins, passwords, profiles or extensions, and browser extensions are not
+supported. Websites may sign you out, ask for two-factor codes again, or refuse to
+work in it. Some passkey, single sign-on, protected video and open-in-app flows
+may not work yet. Pages in background tabs may slow down or behave differently.
 
-The browser tools can discover and invoke tools that websites expose through WebMCP. Tools execute in the selected tab's signed-in profile, in the background. No extension or Safari developer setting is required.
+Noodle Browser does not need Accessibility, Screen Recording, Full Disk Access or
+Safari settings. It opens files only when you choose them.
 
-```sh
-browser webmcp-list --browser BROWSER_UUID --tab TAB_UUID
-browser webmcp-call --browser BROWSER_UUID --tab TAB_UUID --tool TOOL_ID --args '{"query":"report"}'
-browser webmcp-call --browser BROWSER_UUID --tab TAB_UUID --tool TOOL_ID --args-file arguments.json
-```
-
-Use the IDs returned by discovery. Add `--frame FRAME_ID` to both commands to use a same-origin frame returned by `inspect`. Arguments default to `{}` and must be JSON objects; argument files must be UTF-8, at most 1 MiB, and inside the bot's workspace. Tool names are descriptive; opaque IDs bind calls to a document and registration, avoiding accidental execution of a replacement tool after navigation.
-
-Both commands return their payload under `value`. Discovery reports `status` (`available`, `empty`, or `unsupported`), document identity, origin, frame, and a `tools` array with IDs, names, descriptions, input schemas and annotation hints. Invocation reports `completed` and `result`, `needs-user-action` for a form requiring human submission, `navigation-started` for a form beginning navigation, or `error` with a code and message. Tool errors are emitted as JSON and exit with status 1; invalid commands and transport errors follow the CLI's usual stderr behavior. Results and schemas are limited to 1 MiB.
-
-The same registry is available to scripts through `browser eval`:
-
-```javascript
-const tools = await document.modelContext.getTools();
-const search = tools.find(tool => tool.name === 'search');
-if (!search) throw Error('Search tool unavailable');
-return await document.modelContext.executeTool(search, { query: 'report' });
-```
-
-`getTools()` descriptors include a Window reference, so return selected metadata when inspecting them through `eval`. Scripted `executeTool` follows the draft's string-or-null result convention. `webmcp-call` preserves JSON return values directly. Both paths support asynchronous tool results and use the existing live website session. `webmcp-call` applies a 15-second execution timeout and signals cancellation; website code must cooperate with cancellation, so an action may continue or already have completed. Navigation can interrupt delivery of the result. Inspect the page before retrying an uncertain action.
-
-Noodle bundles a document-local compatibility implementation of the [WebMCP draft API](https://webmachinelearning.github.io/webmcp/) for WebKit. It installs before website scripts and supports `document.modelContext.registerTool`, `getTools`, `executeTool`, registration/execution AbortSignals, `toolchange`, and the early `navigator.modelContext` alias. JavaScript tools and HTML forms annotated with `toolname` and `tooldescription` share discovery. Forms support ordinary input, textarea, select and radio fields, validation, `toolactivated`/`toolcancel`, `agentInvoked`, and asynchronous `respondWith`. Forms without `toolautosubmit` are prepared for human submission; use `present` to provide a clickable handoff. No browser window opens automatically.
-
-This implementation is experimental and does not claim full browser conformance. It supports HTTPS and secure loopback pages, with explicit selection of same-origin frames. Cross-origin tool sharing, automatic frame-tree aggregation, native CSS tool pseudo-classes, custom form-associated elements and repeated non-radio field names are unsupported. Use `upload` for file inputs. JSON Schema validation supports common object/array/scalar constraints, enums, composition and local `$ref`; unsupported validation keywords fail explicitly. Native WebMCP is preferred when the engine provides it. The CLI honors explicit `tools` response-policy opt-outs and `Origin-Agent-Cluster: ?0`; the compatibility layer is not a replacement for native Permissions Policy enforcement.
-
-Assignment authorization and Pause Agents apply to both the WebMCP tools and `eval`. Tool descriptions, schemas, hints and outputs remain untrusted website data; they do not authorize actions outside the user's request. Scripts have no additional native privileges.
-
-## Persistence and compatibility
-
-Profiles use public `WKWebsiteDataStore(forIdentifier:)` APIs. Cookies, localStorage and IndexedDB persist in the app's own WebKit storage. Tab identities, URLs, selected tabs, download records and browser preferences are saved separately in the app's sandbox. Live DOM, the live tab’s back/forward stack and sessionStorage do not survive quitting. Downloads and uploaded files remain in per-browser folders until that browser is deleted.
-
-Browsing history and bookmarks live in a separate SQLite database inside each browser’s private folder. History records successful HTTP(S) main-page visits (including reloads, back/forward and same-document URL changes), with title, URL and an ISO 8601 UTC visit time. Blank/internal pages, subframes and failed loads are excluded. History is retained until the user clears it or deletes the browser; clearing history keeps bookmarks and website sign-ins. This does not reconstruct visits from before history recording was added.
-
-The toolbar’s Browser/History/Bookmarks/Downloads control switches the detail pane while keeping your browser sidebar available. The bookmark list has an Add button for the current page; its context menu edits or deletes entries. Agents can search both lists and add, edit or remove bookmarks by stable ID. Queries match titles and URLs, returning up to 200 records per page (50 by default), with `totalCount`, `limit` and `offset`. History is newest first; bookmarks are ordered by last edit. Pagination may shift while another tab or agent adds records. Pausing agent control permits reads and blocks bookmark mutations. Existing profiles keep their UUIDs and sign-ins; their record database is created on first use.
-
-This is an embedded WebKit browser, not Safari. It does not share Safari or Chrome cookies, password stores, profiles or extensions. Websites can expire authentication, require MFA again, or reject embedded browsers. Some passkey, SSO, DRM and external-app flows may need capabilities beyond this initial version. Hidden pages may throttle animations or change their behavior based on visibility. Inspect supports ordinary DOM elements; JavaScript can handle custom widgets and open shadow roots. There is no browser-extension compatibility or WebDriver endpoint.
-
-## Architecture and permissions
-
-Noodle owns browser assignments. Its bundled Browser tools extension supplies the tools and the skill that describes them. Agents write to their workspace mailbox; Noodle validates their active session and assignment on each request, then passes the call to the extension. A versioned protocol connects Noodle to the companion over a private Unix socket in a narrowly scoped App Group. Both endpoints verify the peer's signing team and exact app identity. Bots do not receive direct access to that socket or the shared file staging directory.
-
-The Browser app uses App Sandbox, outbound networking, user-selected file access, and the Browser App Group. Like Computer and Applet, the signed Sparkle updater has only two additional Mach lookup grants, scoped to this app’s own installer endpoints (`<bundle-id>-spks` and `<bundle-id>-spki`). Its Installer, Autoupdate and Updater helpers are signed with the same team; the separate downloader is omitted. No general filesystem access is added. It does not require Accessibility, Apple Events, screen recording, Full Disk Access, or changing Safari's developer settings. Screenshots come from the web view; native input events are delivered to that view, not the system event stream. Operations are serialized per browser. A timeout never triggers an automatic replay of an action already sent.
-
-## Verification
-
-```sh
-swift test --disable-sandbox --package-path Browser --scratch-path .build/browser
-swift test --disable-sandbox --filter BrowserBrokerTests
-zsh scripts/test-browser.sh
-zsh scripts/test-browser-ui.sh '.build/Noodle Browser Dev.app'
-```
-
-`scripts/test-browser.sh` launches a loopback-only fake login/upload/download site, runs the signed app twice, saves screenshot artifacts under `.build/browser-verification`, and removes its test profiles. Set `NOODLE_BROWSER_TEST_NOODLE_APP` to a separately built Noodle Dev app to also verify its managed CLI and signed cross-app connection.
-
-The local fixture also exercises WebMCP registration before page scripts, tool/eval parity, fake-account isolation, schema and form validation, stale IDs, frame boundaries, response-policy opt-outs, cancellation and navigation. Set `NOODLE_BROWSER_TEST_WEBMCP_DEMOS=1` to additionally exercise the live [Google Chrome Labs Pizza Maker](https://googlechromelabs.github.io/webmcp-tools/demos/pizza-maker/) and [Le Petit Bistro](https://googlechromelabs.github.io/webmcp-tools/demos/french-bistro/) demos with Noodle's injected runtime. That optional smoke test needs a Dev bundle and internet access, and depends on the upstream demo contracts; the default fixture stays local and deterministic.
-
-Use `zsh scripts/test-browser-webmcp.sh PATH_TO_BROWSER_DEV_APP` for the focused WebMCP fixture. It accepts the same demo and Noodle-broker environment variables and keeps temporary profiles separate from the browser library.
-
-`Tests/Fixtures/server.py` provides the local site. The signed app's explicit `--smoke-test --smoke-id UUID --smoke-port PORT` mode uses isolated test profiles and stays out of the Dock. Run again with the same ID and `--restore` to verify authentication survives a process restart. Its signed broker uses a separate test socket, so a running browser can stay open. Test output reports the screenshot artifact path.
-
-The app recognises these arguments by SHA-256 digest (`BrowserLaunchCheck` in `BrowserApp.swift`), so a built app never spells them. A production bundle contains only what `test-browser.sh` and `test-browser-ui.sh` run against the packaged release. The broker, live-demo, WebMCP-only and pointer-only checks are development hooks, compiled into Dev bundles, the project's Debug configuration. `scripts/verify-launch-hooks.sh` rejects a production bundle that carries them.
-
-`scripts/test-browser-ui.sh` creates temporary profiles and checks the real sidebar, native toolbar, clicks in tab padding, independent tab closing, live page input, background screenshots, edit and icon sheets, application menus, Settings scene and Update tab. It saves native-window snapshots under `.build/browser-ui-verification`, including collapsed-sidebar content, tests deletion while the window is mounted, and removes its fixture profiles. This mode does not operate profiles from the browser library or start its provider socket.
+[Changelog](CHANGELOG.md) · [Releases](RELEASING.md) · [Noodle](../README.md)
