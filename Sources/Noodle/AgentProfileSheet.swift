@@ -6,6 +6,8 @@ import NoodleRuntimeSettings
 /// Deliberately uses only the public record, never the workspace/backstory.
 struct AgentProfileSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openWindow) private var openWindow
+    @Environment(NoodleStore.self) private var store
     let agent: AgentRecord
     let edit: () -> Void
     var canOpenDirectMessage = false
@@ -58,6 +60,16 @@ struct AgentProfileSheet: View {
                 }
                 .help("Edit Bot")
                 .accessibilityLabel("Edit Bot")
+                Divider().frame(height: 32).accessibilityHidden(true)
+                Button {
+                    store.usage.agentFilter = agent.id
+                    openWindow(id: UsageView.windowID)
+                    dismiss()
+                } label: {
+                    actionLabel("Usage", systemImage: "chart.bar")
+                }
+                .help("Show Usage")
+                .accessibilityLabel("Show Usage")
             }
             .buttonStyle(.plain)
         }

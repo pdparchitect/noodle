@@ -49,6 +49,8 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
     private var needsHistoryRecovery = false
     private var turnIsActive = false
     private var activeTurnID: String?
+    private var finishedTurnID: String?
+    private var threadModel: String?
     private var earlyTurnCompletion: [String: Any]?
     private var earlyTurnError: [String: Any]?
     private var turnErrorDetail: String?
@@ -284,6 +286,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
                     return
                 }
                 threadID = id
+                threadModel = result["model"] as? String
                 guard saveState(threadID: id) else { startupTimeout?.cancel(); return }
                 setThreadName(id)
             case .setThreadName:
@@ -328,6 +331,13 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
            let reportedTurn = params["turnId"] as? String,
            activeTurnID == nil || reportedTurn == activeTurnID {
             onActivity(message)
+        }
+        // The last call's usage may arrive after its turn has completed.
+        if method == "thread/tokenUsage/updated", var params = message["params"] as? [String: Any],
+           params["threadId"] as? String == threadID, let reportedTurn = params["turnId"] as? String,
+           reportedTurn == activeTurnID || reportedTurn == finishedTurnID {
+            params["model"] = threadModel
+            onActivity(["method": method, "params": params])
         }
         if method == "error" {
             guard turnIsActive, let params = message["params"] as? [String: Any],
@@ -382,6 +392,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
                 return
             }
             turnIsActive = false
+            finishedTurnID = activeTurnID
             self.activeTurnID = nil
             turnErrorDetail = nil
             reconnectingSince = nil

@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- See what each bot spends in the new Usage window (**Noodle → Usage**, ⇧⌘U), also opened from a bot's profile. It charts tokens or cost over 7 days, 30 days or 12 months, stacked by bot, harness or model, with totals, cache hits and a breakdown table. Claude Code and Codex usage is recorded from now on, and cost where Claude Code reports it.
+
 ### Changed
 
 - Write the Noodle wordmark on the website a stroke at a time, as the scenario films do. It shows at once when the visitor asks for reduced motion.

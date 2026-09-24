@@ -13,6 +13,7 @@ Open **Noodle → Settings → Keybindings** to discover commands and change the
 | Annotate Region | ⇧⌘R | The current conversation window or attachment preview |
 | Save Annotation Comment | ⌘Return | The annotation popup or an unsent annotation's comment editor |
 | Choose Conversation | ⌃⌥Space | Any app, while Noodle is open. Opens the grid described in [Float a conversation over other apps](usage.md#float-a-conversation-over-other-apps) |
+| Usage | ⇧⌘U | Noodle. Opens the window described in [See what your bots spend](usage.md#see-what-your-bots-spend) |
 
 Click a binding, then press the new combination using Command (⌘), Control (⌃) or Option (⌥). A shortcut that uses Option alone, such as ⌥Space, stops typing its usual character: in Noodle for most commands, and in every app for Choose Conversation while Noodle is open. Escape cancels; Delete clears the binding. A changed shortcut shows a reset button beside it. Right-click a binding to reset or clear it. **Restore Defaults** resets all commands. Shortcuts that conflict with another command or a common system or editing shortcut are rejected with an explanation, and the existing binding stays.
 

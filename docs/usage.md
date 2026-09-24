@@ -82,6 +82,18 @@ entries and long output are trimmed. Quitting Noodle clears the log.
 Available detail depends on the harness. Apple currently reports working and
 lifecycle status; other harnesses also expose tool activity and text output.
 
+## See what your bots spend
+
+Choose **Noodle → Usage** (**⇧⌘U**) to chart token use over the last 7 days,
+30 days or 12 months. Stack the bars by bot, harness or model, switch between
+tokens and cost, and hover a bar for that day's figures. The table below the
+chart breaks the period down by input, output and cached tokens. To see one bot,
+pick it from the menu at the top left, or open its profile and click **Usage**.
+
+History is kept across restarts and after a bot is deleted. Claude Code and
+Codex report usage; Claude Code also reports cost. Other harnesses are not
+counted yet.
+
 ## Messages and files
 
 - **Return** sends; **Shift+Return** adds a line.

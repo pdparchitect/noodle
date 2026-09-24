@@ -96,6 +96,7 @@ struct NoodleApp: App {
             }
             CommandGroup(after: .appSettings) {
                 CheckForUpdatesButton()
+                UsageMenuButton(history: store.usage)
             }
             CommandGroup(replacing: .newItem) {
                 Button("New Bot") {
@@ -135,6 +136,16 @@ struct NoodleApp: App {
         .restorationBehavior(.disabled)
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified(showsTitle: false))
+
+        Window("Usage", id: UsageView.windowID) {
+            UsageView()
+                .environment(store)
+                .preferredColorScheme(.dark)
+        }
+        .defaultSize(width: 860, height: 680)
+        .windowResizability(.contentMinSize)
+        // Opened from the app menu, next to Settings.
+        .commandsRemoved()
 
         Settings {
             NoodleSettingsView()

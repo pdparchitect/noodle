@@ -130,6 +130,7 @@ final class NoodleStore {
     let applets: AppletController
     let harnessProfiles: HarnessProfilesController
     let runtime: AgentRuntimeCoordinator
+    let usage: UsageHistory
     let harnessSetup: HarnessSetupController
     private let connectsServices: Bool
     private var transcriptRefreshTask: Task<Void, Never>?
@@ -167,6 +168,8 @@ final class NoodleStore {
             discovery.removeSupersededManagedHarnesses()
             self.runtime = AgentRuntimeCoordinator(discovery: discovery)
         }
+        usage = UsageHistory(url: self.repository.rootURL.appendingPathComponent("usage.sqlite"))
+        self.runtime.onUsage = { [usage] in usage.record($0) }
         harnessSetup = HarnessSetupController(versionChecker: HarnessVersionChecker(),
             installer: repository == nil ? ManagedHarnessInstaller(store: self.repository.managedHarnesses) : nil)
 

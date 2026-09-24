@@ -57,7 +57,7 @@ public struct KeyBinding: Codable, Hashable, Sendable {
 
 public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiable {
     case newBot, newGroup, searchConversations, recordVoice, capture, annotateSelection, annotateRegion, saveAnnotation
-    case chooseConversation
+    case chooseConversation, showUsage
     public var id: String { rawValue }
     public var title: String {
         switch self {
@@ -70,6 +70,7 @@ public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiabl
         case .annotateRegion: "Annotate Region"
         case .saveAnnotation: "Save Annotation Comment"
         case .chooseConversation: "Choose Conversation"
+        case .showUsage: "Usage"
         }
     }
     public var summary: String {
@@ -83,6 +84,7 @@ public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiabl
         case .annotateRegion: "Mark a region of the Noodle window, an attachment preview, or a live capture."
         case .saveAnnotation: "Save a new annotation or an unsent comment edit."
         case .chooseConversation: "From any app, pick a bot or group to float over your work."
+        case .showUsage: "Show token usage and cost for every bot."
         }
     }
     public var defaultBinding: KeyBinding {
@@ -96,6 +98,7 @@ public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiabl
         case .annotateRegion: KeyBinding("r", modifiers: [.command, .shift])
         case .saveAnnotation: KeyBinding("\r")
         case .chooseConversation: KeyBinding(" ", modifiers: [.control, .option])
+        case .showUsage: KeyBinding("u", modifiers: [.command, .shift])
         }
     }
 }

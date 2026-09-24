@@ -107,6 +107,9 @@ public final class AgentRuntimeCoordinator {
     public private(set) var accessConfiguration: AgentAccessConfiguration
     public private(set) var changingAccess: Set<UUID> = []
     @ObservationIgnored private let sleepController = AgentActivitySleepController()
+    /// Receives what each model call cost. Nothing is kept here.
+    @ObservationIgnored public var onUsage: (@MainActor (UsageSample) -> Void)?
+    @ObservationIgnored private var usageMeters: [UUID: UsageMeter] = [:]
     private var lifecycleID = UUID()
     private var transitionIDs: [UUID: UUID] = [:]
     private var blockedRestarts: Set<UUID> = []
@@ -441,6 +444,7 @@ public final class AgentRuntimeCoordinator {
         installations = discoveredInstallations()
         let liveIDs = Set(agents.map(\.id))
         activity.retainAgents(liveIDs)
+        usageMeters = usageMeters.filter { liveIDs.contains($0.key) }
         let trackedIDs = Set(processes.keys).union(restartTasks.keys).union(stabilityTasks.keys)
             .union(changingAccess).union(recoveryPending).union(blockedRecoveries).union(blockedRestarts)
         for id in trackedIDs where !liveIDs.contains(id) {
@@ -615,6 +619,7 @@ public final class AgentRuntimeCoordinator {
         restartTasks.removeValue(forKey: agent.id)?.cancel()
         let runtimeID = UUID()
         runtimeIDs[agent.id] = runtimeID
+        usageMeters[agent.id] = UsageMeter()
         let process = makeProcess(AgentRuntimeLaunch(
             agent: agent, provider: installation.provider,
             executableURL: URL(fileURLWithPath: executablePath), workspaceURL: repository.directory(for: agent),
@@ -633,10 +638,21 @@ public final class AgentRuntimeCoordinator {
             onActivity: { [weak self] message in
                 guard let self, self.runtimeIDs[agent.id] == runtimeID else { return }
                 self.activity.record(message, provider: installation.provider, agentID: agent.id)
+                self.recordUsage(message, provider: installation.provider, agent: agent)
             }))
         processes[agent.id] = process
         process.start()
         recoverUnreadMessages(for: agent, process: processes[agent.id], repository: repository)
+    }
+
+    private func recordUsage(_ message: [String: Any], provider: HarnessProvider, agent: AgentRecord) {
+        guard let onUsage else { return }
+        let now = Date()
+        for reading in usageMeters[agent.id, default: UsageMeter()].readings(message, provider: provider) {
+            onUsage(UsageSample(date: now, agentID: agent.id, agentName: agent.displayName, harness: provider.rawValue,
+                model: reading.model.isEmpty ? agent.modelIdentifier ?? "" : reading.model,
+                tokens: reading.tokens, costUSD: reading.costUSD))
+        }
     }
 
     /// Ordinary Kick remains immediate; replacing a missing session requires a
