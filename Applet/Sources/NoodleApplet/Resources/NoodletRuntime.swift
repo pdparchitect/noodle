@@ -1,4 +1,5 @@
 import AppKit
+import AVFAudio
 import SwiftUI
 import SpriteKit
 
@@ -11,6 +12,115 @@ public enum NoodletContext {
     public static let secrets = NoodletSecrets()
     /// The only way to files outside the noodlet: the user picks them in Applet's dialog.
     public static let files = NoodletFiles()
+    /// Play sound through this engine. It is heard in the foreground; out of sight it runs
+    /// silently in real time. Either way a recording hears it, and nothing else.
+    @MainActor public static var audioEngine: AVAudioEngine { NoodletSound.shared.engine }
+}
+
+/// The noodlet's audio engine and what a recording hears from it: interleaved 16-bit stereo
+/// at 48 kHz, each piece timed from when the recording started.
+@MainActor final class NoodletSound {
+    private(set) static var current: NoodletSound?
+    static var shared: NoodletSound {
+        if let current { return current }
+        let sound = NoodletSound()
+        current = sound
+        return sound
+    }
+    static let rate = 48000.0
+    static let format = AVAudioFormat(standardFormatWithSampleRate: rate, channels: 2)!
+    let engine = AVAudioEngine()
+    /// Without the audio output the engine would not start, so it renders itself at the pace a device would.
+    private let offline = ProcessInfo.processInfo.environment["NOODLET_AUDIO"] != "device"
+    private var timer: DispatchSourceTimer?
+    private var clock: Double?, rendered = 0
+    private let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4096)!
+    /// A recording may start before the noodlet first asks for its engine.
+    private static var listening: Double?, emit: (([String: Any]) -> Void)?
+    private var pending: [Int16] = [], pendingAt = 0.0
+    private var converter: AVAudioConverter?
+    private init() {
+        guard offline else {
+            if Self.listening != nil { tap() }
+            return
+        }
+        do { try engine.enableManualRenderingMode(.offline, format: Self.format, maximumFrameCount: 4096) }
+        catch { print("Sound cannot run out of sight: \(error.localizedDescription)"); return }
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now(), repeating: .milliseconds(10))
+        timer.setEventHandler { MainActor.assumeIsolated { NoodletSound.current?.render() } }
+        timer.resume()
+        self.timer = timer
+    }
+    private static var now: Double { ProcessInfo.processInfo.systemUptime }
+    private func render() {
+        guard engine.isRunning else { clock = nil; return }
+        let now = Self.now
+        if clock == nil { clock = now; rendered = 0 }
+        let due = Int((now - clock!) * Self.rate)
+        // A stall of more than a second is skipped, as a device would drop it.
+        if due - rendered > Int(Self.rate) { rendered = due - 4096 }
+        while rendered < due {
+            let count = min(4096, due - rendered)
+            let at = clock! + Double(rendered) / Self.rate
+            guard (try? engine.renderOffline(AVAudioFrameCount(count), to: buffer)) == .success else { return }
+            rendered += count
+            hear(buffer, at: at)
+        }
+    }
+    private func hear(_ buffer: AVAudioPCMBuffer, at time: Double) {
+        guard let listening = Self.listening, let channels = buffer.floatChannelData else { return }
+        let count = Int(buffer.frameLength), right = buffer.format.channelCount > 1 ? 1 : 0
+        // Sound after a pause starts a piece of its own, so it keeps its place.
+        if !pending.isEmpty, abs(pendingAt + Double(pending.count / 2) / Self.rate - (time - listening)) > 0.005 { Self.emit?(take()) }
+        if pending.isEmpty { pendingAt = time - listening }
+        pending.reserveCapacity(pending.count + count * 2)
+        for frame in 0..<count {
+            pending.append(Int16(max(-1, min(1, channels[0][frame])) * 32767))
+            pending.append(Int16(max(-1, min(1, channels[right][frame])) * 32767))
+        }
+        if pending.count >= Int(Self.rate) / 2 { Self.emit?(take()) }
+    }
+    private func take() -> [String: Any] {
+        defer { pending = [] }
+        return ["id": "sound", "at": pendingAt, "pcm": pending.withUnsafeBytes { Data($0) }.base64EncodedString()]
+    }
+    static func listen(_ emit: @escaping ([String: Any]) -> Void) {
+        self.emit = emit
+        listening = now
+        current?.pending = []
+        if let current, !current.offline { current.tap() }
+    }
+    private func tap() {
+        // The mixer's output is the device's format, which the recording may not share.
+        engine.mainMixerNode.installTap(onBus: 0, bufferSize: 4800, format: nil) { tapped, when in
+            let time = AVAudioTime.seconds(forHostTime: when.hostTime)
+            DispatchQueue.main.async { MainActor.assumeIsolated { NoodletSound.current?.convert(tapped, at: time) } }
+        }
+    }
+    private func convert(_ tapped: AVAudioPCMBuffer, at time: Double) {
+        if converter?.inputFormat != tapped.format { converter = AVAudioConverter(from: tapped.format, to: Self.format) }
+        guard let converter else { return }
+        let capacity = AVAudioFrameCount(Double(tapped.frameLength) * Self.rate / tapped.format.sampleRate) + 16
+        guard let output = AVAudioPCMBuffer(pcmFormat: Self.format, frameCapacity: capacity) else { return }
+        var supplied = false
+        _ = converter.convert(to: output, error: nil) { _, status in
+            if supplied { status.pointee = .noDataNow; return nil }
+            supplied = true
+            status.pointee = .haveData
+            return tapped
+        }
+        // Host time is the machine's clock; systemUptime counts the same seconds.
+        hear(output, at: time)
+    }
+    /// Ends listening and returns what was not yet sent.
+    static func stopListening() -> [String: Any] {
+        defer { listening = nil; emit = nil }
+        guard let current else { return ["ok": true] }
+        if !current.offline { current.engine.mainMixerNode.removeTap(onBus: 0) }
+        current.converter = nil
+        return current.pending.isEmpty ? ["ok": true] : current.take()
+    }
 }
 
 public struct NoodletFiles: Sendable {
@@ -142,6 +252,8 @@ public struct NoodletSecrets: Sendable {
             switch op {
             case "show": window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
             case "hide": window.orderOut(nil)
+            case "record-start": NoodletSound.listen { [weak self] in self?.emit($0) }
+            case "record-stop": value = NoodletSound.stopListening()
             case "close", "terminate": emit(["id":id,"value":["ok":true]]); NSApp.terminate(nil); return
             case "inspect":
                 var controls: [[String: Any]] = []

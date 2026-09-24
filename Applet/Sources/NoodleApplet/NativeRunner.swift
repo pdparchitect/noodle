@@ -16,6 +16,8 @@ import AppletCore
   private(set) var audible = false
   nonisolated static func audible(mode: String) -> Bool { mode == "foreground" }
   private var process: ConfinedProcess?
+  /// Where the noodlet's sound goes while a recording listens.
+  private var soundSink: (([Int16], Double) -> Void)?
   private var input: Pipe?
   private var pending: [String: CheckedContinuation<String, Error>] = [:]
   private var ready = false
@@ -329,7 +331,7 @@ import AppletCore
     foreground = mode == "foreground"
     audible = Self.audible(mode: mode)
     if !audible {
-      log.append("audio", "Silent: a noodlet started outside the foreground has no audio output, and AVAudioEngine cannot start there. Restart it with --mode foreground for sound.")
+      log.append("audio", "Silent: a noodlet started outside the foreground has no audio output. NoodletContext.audioEngine runs there silently, so a recording still hears it; other audio APIs cannot start. Restart it with --mode foreground for sound.")
     }
     var env = Self.environment(home: home)
     // Match swift-driver's interpreter environment so JIT symbol lookup
@@ -348,13 +350,14 @@ import AppletCore
     env["NOODLET_PROTOCOL"] = prefix
     // The noodlet reads its build and the module cache and writes only its own
     // data and home. Nothing else of Applet's, or the user's, is in reach.
-    let p = ConfinedProcess(
-      NoodletLaunch(
-        executable: interpreter,
-        arguments: interpreterArguments(buildRoot.appendingPathComponent("Program.swift"), sdk: sdk),
-        environment: env, directory: snapshot.path, readable: [buildRoot.path, moduleCache.path],
-        writable: [dataRoot.path, home.path], devices: devices, audible: Self.audible(mode: mode)),
-      root: root)
+    var launch = NoodletLaunch(
+      executable: interpreter,
+      arguments: interpreterArguments(buildRoot.appendingPathComponent("Program.swift"), sdk: sdk),
+      environment: env, directory: snapshot.path, readable: [buildRoot.path, moduleCache.path],
+      writable: [dataRoot.path, home.path], devices: devices, audible: Self.audible(mode: mode))
+    // Without the audio server the noodlet's engine renders itself.
+    launch.environment["NOODLET_AUDIO"] = launch.reachesAudioServer ? "device" : "offline"
+    let p = ConfinedProcess(launch, root: root)
     p.input = stdin.fileHandleForReading
     p.output = stdout.fileHandleForWriting
     p.error = stderr.fileHandleForWriting
@@ -415,6 +418,12 @@ import AppletCore
     }
     if id == "ready" {
       ready = true
+      return
+    }
+    if id == "sound" {
+      if let samples = AppletRecording.samples(object["pcm"]), let at = object["at"] as? Double {
+        soundSink?(samples, at)
+      }
       return
     }
     // The noodlet asking the host. Only this noodlet's pipe reaches here, so the
@@ -504,6 +513,19 @@ import AppletCore
           ))
       }
     }
+  }
+  func listen(_ sink: @escaping ([Int16], Double) -> Void) async throws {
+    soundSink = sink
+    _ = try await perform(AppletRequest(.recordStart))
+  }
+  /// The reply carries what the noodlet had not sent yet, so none of it trails the recording.
+  func stopListening() async throws {
+    defer { soundSink = nil }
+    let reply = try await perform(AppletRequest(.recordStop))
+    guard let object = try? JSONSerialization.jsonObject(with: Data(reply.utf8)) as? [String: Any],
+      let samples = AppletRecording.samples(object["pcm"]), let at = object["at"] as? Double
+    else { return }
+    soundSink?(samples, at)
   }
   func snapshot() async throws -> NSImage {
     _ = try await perform(AppletRequest(.screenshot))

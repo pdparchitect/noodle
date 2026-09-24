@@ -43,7 +43,7 @@ public enum AppletGuidance {
         identity, state and available mode/data metadata; viewAvailable is false.
         Formerly active sessions report interrupted. Older records may omit newer fields.
         JavaScript input is an async function body: use `return` for a result.
-        --output refuses to replace an existing file. Recordings are silent MP4.
+        --output refuses to replace an existing file. Recordings are MP4 with the noodlet's sound.
         Headless runs offscreen in a logged-in macOS desktop session and uses test data.
         Background uses normal data without showing a window. Foreground activates it.
         Hidden WebKit pages may suspend requestAnimationFrame or pause their own game.
@@ -81,7 +81,7 @@ public enum AppletGuidance {
         case .scroll: "Scroll an HTML target/window by --to-x/--to-y points. Native scroll is currently unsupported."
         case .drag: "Drag within the noodlet from --x/--y to --to-x/--to-y. HTML events are synthetic."
         case .screenshot: "Capture the current view as PNG; use --output FILE to retrieve it. Works without activating the desktop."
-        case .recordStart: "Start silent video capture; --duration defaults to 30 seconds, maximum 60. Also accepts `record start`."
+        case .recordStart: "Start video capture with the noodlet's sound, even while it is muted out of sight; --duration defaults to 30 seconds, maximum 60. Also accepts `record start`."
         case .recordStop: "Finalize active capture and retrieve the MP4 with --output FILE. Also accepts `record stop`."
         case .show: "Explicitly bring the running noodlet into the foreground."
         case .hide: "Hide the noodlet window; HTML animation or game simulation may pause."
@@ -179,7 +179,9 @@ public enum AppletGuidance {
         SpriteKit and other installed Apple SDKs. NoodletContext.dataDirectory and
         packageDirectory provide URLs; isBackground reports the initial launch mode.
         `try await NoodletContext.secrets.set(name, value)` / `get(name)` / `delete(name)` /
-        `names()` is the same per-noodlet Keychain store.
+        `names()` is the same per-noodlet Keychain store. Play sound through
+        `NoodletContext.audioEngine` (an AVAudioEngine): it is the only Swift audio that
+        records, and the only one that runs in background or headless mode.
         Swift requires installed Apple developer tools. Native code runs confined to
         its package, NoodletContext.dataDirectory and a private home directory. It
         cannot read the user's files, other noodlets, Applet's storage or the
@@ -203,7 +205,8 @@ public enum AppletGuidance {
         a logged-in Mac. Prefer background for normal data without foreground activation.
         Only a foreground noodlet makes sound. HTML pages are muted until they are shown,
         and a Swift noodlet started in background or headless mode has no audio output for
-        its whole run, where AVAudioEngine cannot start. A granted microphone keeps its
+        its whole run; only NoodletContext.audioEngine runs there, silently. Recordings
+        hear a muted noodlet all the same. A granted microphone keeps its
         audio in any mode. When the user opens a noodlet it always comes up in the
         foreground: a background page is shown and unmuted, while a live Swift or headless
         session, which cannot gain sound or user data after launch, is closed and started

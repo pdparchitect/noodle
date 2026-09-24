@@ -42,6 +42,25 @@ import AppletCore
     if let native { return try await native.snapshot() }
     throw AppletError("The noodlet has no running view.")
   }
+  /// Hands the noodlet's sound to the recording. A noodlet that cannot be heard
+  /// still records a video; the log says why it has no sound.
+  func listen(_ recording: AppletRecording) async {
+    let sink: ([Int16], Double) -> Void = { [weak recording] samples, at in
+      recording?.appendAudio(samples, at: at)
+    }
+    do {
+      try await web?.listen(sink)
+      try await native?.listen(sink)
+    } catch { log.append("recording", "Recording without sound: \(error.localizedDescription)") }
+  }
+  func stopListening() async {
+    do {
+      try await web?.stopListening()
+      try await native?.stopListening()
+    } catch {
+      log.append("recording", "The end of the sound may be missing: \(error.localizedDescription)")
+    }
+  }
   func stop() {
     recording?.cancel()
     recording = nil
@@ -364,7 +383,8 @@ import AppletCore
             return try await session.snapshot()
           }, duration: request.duration ?? 30)
         session.recording = recording
-        session.log.append("recording", "Started capture (silent MP4, 30 fps).")
+        await session.listen(recording)
+        session.log.append("recording", "Started capture (MP4, 30 fps, with the noodlet's sound).")
         var response = status(session)
         response.text =
           "Recording started. Call record stop to finalize and retrieve the MP4."
@@ -373,6 +393,7 @@ import AppletCore
         guard let recording = session.recording else {
           throw AppletError("No recording is active.")
         }
+        await session.stopListening()
         session.recording = nil
         try await recording.finish()
         var response = status(session)

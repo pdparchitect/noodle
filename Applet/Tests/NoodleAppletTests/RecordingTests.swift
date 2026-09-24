@@ -13,11 +13,7 @@ final class RecordingTests: XCTestCase {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(UUID().uuidString).mp4")
         addTeardownBlock { try? FileManager.default.removeItem(at: url) }
-        let image = NSImage(size: size)
-        image.lockFocus()
-        NSColor.systemTeal.setFill()
-        NSBezierPath(rect: CGRect(origin: .zero, size: size)).fill()
-        image.unlockFocus()
+        let image = Self.filled(size)
         let recording = try AppletRecording(url: url, size: size)
         recording.start(
             snapshot: {
@@ -74,5 +70,89 @@ final class RecordingTests: XCTestCase {
                 "A frame is \(time.value)/\(time.timescale), which is not a whole frame.")
         }
         XCTAssertEqual(Set(times.map(\.seconds)).count, times.count, "A frame time repeats.")
+    }
+
+    /// Sound goes where it was heard: a noodlet that starts playing half a second into the
+    /// recording must not have its sound pulled back to the start of the video.
+    @MainActor func testSoundLandsInTheVideoWhereItWasHeard() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString).mp4")
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        let size = CGSize(width: 320, height: 200)
+        let image = Self.filled(size)
+        let recording = try AppletRecording(url: url, size: size)
+        recording.start(snapshot: { image }, duration: 1.0)
+        let rate = Int(AppletRecording.audioRate)
+        var tone: [Int16] = []
+        for frame in 0..<(rate / 4) {
+            let value = Int16(sin(Double(frame) * 2 * .pi * 440 / Double(rate)) * 16000)
+            tone += [value, value]
+        }
+        recording.appendAudio(tone, at: 0.5)
+        try await Task.sleep(for: .milliseconds(1400))
+        try await recording.finish()
+        let levels = try await Self.levels(url)
+        XCTAssertLessThan(levels(0.05, 0.4), 0.01, "Sound before the noodlet played it.")
+        XCTAssertGreaterThan(levels(0.55, 0.7), 0.2, "The noodlet's sound is missing.")
+        XCTAssertLessThan(levels(0.8, 0.95), 0.01, "Sound after the noodlet stopped.")
+    }
+
+    /// A noodlet that made no sound still records a video, without a soundtrack.
+    @MainActor func testARecordingWithoutSoundHasNoSoundtrack() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString).mp4")
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        let size = CGSize(width: 320, height: 200)
+        let recording = try AppletRecording(url: url, size: size)
+        let image = Self.filled(size)
+        recording.start(snapshot: { image }, duration: 0.3)
+        try await Task.sleep(for: .milliseconds(600))
+        try await recording.finish()
+        let asset = AVURLAsset(url: url)
+        let video = try await asset.loadTracks(withMediaType: .video)
+        let audio = try await asset.loadTracks(withMediaType: .audio)
+        XCTAssertEqual(video.count, 1)
+        XCTAssertEqual(audio.count, 0)
+    }
+
+    private static func filled(_ size: CGSize) -> NSImage {
+        let image = NSImage(size: size)
+        image.lockFocus()
+        NSColor.systemTeal.setFill()
+        NSBezierPath(rect: CGRect(origin: .zero, size: size)).fill()
+        image.unlockFocus()
+        return image
+    }
+
+    /// The root mean square of the recording's first channel between two times, in full scale.
+    static func levels(_ url: URL) async throws -> (Double, Double) -> Double {
+        let asset = AVURLAsset(url: url)
+        let tracks = try await asset.loadTracks(withMediaType: .audio)
+        let track = try XCTUnwrap(tracks.first, "The recording has no soundtrack.")
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(
+            track: track,
+            outputSettings: [
+                AVFormatIDKey: kAudioFormatLinearPCM, AVLinearPCMBitDepthKey: 32,
+                AVLinearPCMIsFloatKey: true, AVLinearPCMIsNonInterleaved: false,
+                AVSampleRateKey: AppletRecording.audioRate, AVNumberOfChannelsKey: 2,
+            ])
+        reader.add(output)
+        XCTAssertTrue(reader.startReading())
+        var samples: [Float] = []
+        while let buffer = output.copyNextSampleBuffer(), let block = CMSampleBufferGetDataBuffer(buffer) {
+            var data = Data(count: CMBlockBufferGetDataLength(block))
+            data.withUnsafeMutableBytes {
+                _ = CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: $0.count, destination: $0.baseAddress!)
+            }
+            data.withUnsafeBytes { samples += $0.bindMemory(to: Float.self) }
+        }
+        return { from, to in
+            let first = Int(from * AppletRecording.audioRate), last = Int(to * AppletRecording.audioRate)
+            guard last * 2 <= samples.count, first < last else { return -1 }
+            var sum = 0.0
+            for frame in first..<last { sum += Double(samples[frame * 2] * samples[frame * 2]) }
+            return (sum / Double(last - first)).squareRoot()
+        }
     }
 }

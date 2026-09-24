@@ -26,6 +26,9 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
   private(set) var rendering: AppletRenderingState?
   /// A noodlet the user cannot see must not be heard either.
   private(set) var muted = false
+  /// Where the page's sound goes while a recording listens: interleaved stereo at
+  /// AppletRecording.audioRate, and when it was heard.
+  private var soundSink: (([Int16], Double) -> Void)?
   init(
     package: NoodletPackage, dataRoot: URL, log: AppletLog, size: CGSize, storeID: UUID,
     rememberFrame: Bool = true, testClock: Bool = false, secrets: AppletSecrets = .shared
@@ -86,6 +89,21 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
     let script = (try? String(contentsOf: scriptURL, encoding: .utf8)) ?? ""
     config.userContentController.addUserScript(
       WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    let sound = scriptURL.deletingLastPathComponent().appendingPathComponent("Sound.js")
+    config.userContentController.addUserScript(WKUserScript(
+      source: (try? String(contentsOf: sound, encoding: .utf8)) ?? "",
+      injectionTime: .atDocumentStart, forMainFrameOnly: true))
+  }
+  /// The page keeps its mute: WebKit still renders what a muted page plays, so a
+  /// recording hears it while the Mac does not.
+  func listen(_ sink: @escaping ([Int16], Double) -> Void) async throws {
+    soundSink = sink
+    _ = try await evaluate("return window.__noodletSound?.start() ?? false")
+  }
+  /// Returns once the page has handed over everything it played.
+  func stopListening() async throws {
+    defer { soundSink = nil }
+    _ = try await evaluate("return await window.__noodletSound?.stop() ?? false")
   }
   func start(foreground: Bool) async throws {
     if !package.manifest.network {
@@ -246,6 +264,12 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
         return (try await network.fetch(body, enabled: package.manifest.network), nil)
       case "cancelFetch":
         if let id = body["id"] as? String { network.cancel(id) }
+        return (true, nil)
+      case "sound":
+        guard let sink = soundSink else { return (false, nil) }
+        guard let samples = AppletRecording.samples(body["pcm"]), let at = body["at"] as? Double
+        else { throw AppletError("Sound must be base64 16-bit stereo within 2 MiB.") }
+        sink(samples, at)
         return (true, nil)
       case "log":
         log.append(body["level"] as? String ?? "console", body["text"] as? String ?? "")

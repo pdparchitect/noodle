@@ -278,7 +278,8 @@ creates an independent copy. Keep the returned ID for subsequent commands.
 bring the noodlet forward. Only a noodlet in the foreground makes sound: an HTML
 page is muted until it is shown and muted again when it is hidden, and a Swift
 noodlet started in `background` or `headless` mode has no audio output for its
-whole run, where `AVAudioEngine` cannot start. A noodlet granted the microphone
+whole run. There `NoodletContext.audioEngine` still runs, silently and in real time,
+while other audio APIs cannot start. A noodlet granted the microphone
 keeps its audio in every mode. Opening a noodlet from the library or a
 `noodlet://` link always brings it up in the foreground: a background page is
 shown and unmuted, and a session that cannot gain sound or user data after it
@@ -381,7 +382,8 @@ quarantined executables while retaining native framework access.
 
 Use SwiftUI, AppKit through `NSViewRepresentable`, SpriteKit, and installed Apple
 SDKs. `NoodletContext.dataDirectory` and `.packageDirectory` expose file URLs;
-`.isBackground` reports the initial launch mode. Xcode must be installed at
+`.isBackground` reports the initial launch mode. `.audioEngine` is the noodlet's
+`AVAudioEngine`: sound played through it is recorded, and it runs in every mode. Xcode must be installed at
 `/Applications/Xcode.app`, or Command Line Tools at their standard location.
 The compiler and SDK are not bundled. HTML needs neither.
 
@@ -422,10 +424,14 @@ clicks, drags, keys, and focused text controls; native scroll injection is not y
 implemented.
 Snapshots capture WebKit content, ordinary native views, and SpriteKit scenes;
 arbitrary Metal, video, and embedded web surfaces can need a specific renderer.
-Recordings are silent H.264 MP4 at 30 fps, bounded to 60 seconds. A noodlet that
+Recordings are H.264 MP4 at 30 fps, bounded to 60 seconds, with the noodlet's sound
+as AAC in every mode, including a muted background or headless one. A noodlet that
 cannot be captured that fast holds each frame for a whole number of them, so playback
-stays even. They capture only noodlet content and do not request Screen Recording or
-Accessibility access.
+stays even. An HTML page is heard through Web Audio and its same-origin media
+elements; remote media stays out of the recording. A Swift noodlet is heard through
+`NoodletContext.audioEngine` only. A recording without any such sound has no
+soundtrack. Recordings capture only noodlet content and do not request Screen
+Recording or Accessibility access.
 For hidden SpriteKit scenes, capture advances the scene's `update` callback.
 
 ### Hidden HTML animation checks
