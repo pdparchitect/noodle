@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Removed
+
+- Remove the experimental Omarchy preset. Existing Omarchy computers keep working and now show as Linux.
+
 ## [0.13.2] - 2026-09-24
 
 ### Changed

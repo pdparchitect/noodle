@@ -70,7 +70,7 @@ final class ComputerTests: XCTestCase {
     }
 
     func testVMRecordsRemainSupportedWithoutBecomingContainerTemplates() throws {
-        for kind in [ComputerKind.macOS, .linux, .omarchy] {
+        for kind in [ComputerKind.macOS, .linux] {
             let computer = Computer(name: "Existing VM", kind: kind)
             let decoded = try JSONDecoder().decode(Computer.self,
                 from: JSONEncoder().encode(computer))
@@ -79,6 +79,16 @@ final class ComputerTests: XCTestCase {
             XCTAssertEqual(decoded.displayType, kind.title)
             XCTAssertNoThrow(try decoded.validate())
         }
+    }
+
+    // TODO(0.15.0): Remove with the omarchy decoding in ComputerKind.init(from:).
+    func testOmarchyRecordsLoadAsLinux() throws {
+        let computer = Computer(name: "Existing Omarchy", kind: .linux)
+        var record = try JSONSerialization.jsonObject(with: JSONEncoder().encode(computer)) as! [String: Any]
+        record["kind"] = "omarchy"
+        let decoded = try JSONDecoder().decode(Computer.self,
+            from: JSONSerialization.data(withJSONObject: record))
+        XCTAssertEqual(decoded, computer)
     }
 
     func testDesktopTemplateAndLegacyWorkspaceRemainDistinct() throws {

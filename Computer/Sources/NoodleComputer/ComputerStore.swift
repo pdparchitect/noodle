@@ -376,10 +376,8 @@ enum ComputerDisplayMode: String {
                     let installer: URL
                     if let source {
                         installer = source
-                    } else if computer.kind == .linux {
-                        installer = try await defaultLinuxInstaller(for: requested.id)
                     } else {
-                        throw ComputerError("Choose a compatible ARM64 Omarchy installer in Advanced Options.")
+                        installer = try await defaultLinuxInstaller(for: requested.id)
                     }
                     setCreationStage("Importing the installer…")
                     let destination = directory.appendingPathComponent("Installer.iso")

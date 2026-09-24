@@ -1,14 +1,24 @@
 import Foundation
 
 public enum ComputerKind: String, Codable, CaseIterable, Sendable {
-    case macOS, linux, container, omarchy, localMac
+    case macOS, linux, container, localMac
+
+    // TODO(0.15.0): Remove this decoder and testOmarchyRecordsLoadAsLinux. The Omarchy
+    // preset ran the same EFI machine as Linux, so its records load as Linux.
+    public init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        guard let kind = ComputerKind(rawValue: value == "omarchy" ? "linux" : value) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                debugDescription: "Unknown computer kind \(value)"))
+        }
+        self = kind
+    }
 
     public var title: String {
         switch self {
         case .macOS: "macOS"
         case .linux: "Linux"
         case .container: "Linux Container"
-        case .omarchy: "Omarchy · Experimental"
         case .localMac: "Local Mac"
         }
     }
@@ -18,7 +28,6 @@ public enum ComputerKind: String, Codable, CaseIterable, Sendable {
         case .macOS: "desktopcomputer"
         case .linux: "terminal"
         case .container: "shippingbox"
-        case .omarchy: "square.grid.3x3"
         case .localMac: "person.crop.rectangle"
         }
     }
@@ -28,7 +37,6 @@ public enum ComputerKind: String, Codable, CaseIterable, Sendable {
         case .macOS: "A private Mac with its own desktop. Automatically downloads the latest compatible macOS from Apple (several GB)."
         case .linux: "An Alpine Linux virtual machine with a command-line console. Automatically downloads the ARM64 installer; no graphical desktop included."
         case .container: ContainerRegistry.bundled.defaultTemplate.description
-        case .omarchy: "Experimental custom Linux preset. Choose an ARM64 Omarchy installer in Advanced Options. No verified default image is available; a standard x86-64 ISO will not boot."
         case .localMac: "A separate standard account on this Mac, with its own desktop and files. Shares this Mac’s operating system and resources. One-time administrator setup is required."
         }
     }
@@ -47,7 +55,7 @@ public struct Computer: Codable, Identifiable, Equatable, Sendable {
     public var hasDesktop: Bool { template?.type == .desktop }
     public var hasWebDisplay: Bool { hasDesktop || (isCustomContainer && webPort != nil) }
     public var hasDisplay: Bool { hasWebDisplay || kind == .localMac }
-    public var usesVirtualMachine: Bool { kind == .macOS || kind == .linux || kind == .omarchy }
+    public var usesVirtualMachine: Bool { kind == .macOS || kind == .linux }
     public var template: ComputerTemplate? {
         ContainerRegistry.bundled.template(for: self)
     }

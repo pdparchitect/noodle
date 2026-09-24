@@ -775,7 +775,7 @@ struct EditComputerView: View {
   @State private var forceStopping = false
   @State private var updating = false
   @State private var appearance = ComputerAppearance()
-  private var stopLabel: String { session.computer.kind == .macOS || session.computer.kind == .linux || session.computer.kind == .omarchy ? "Force Stop" : "Stop" }
+  private var stopLabel: String { session.computer.usesVirtualMachine ? "Force Stop" : "Stop" }
 
   var body: some View {
     VStack(spacing: 0) {
