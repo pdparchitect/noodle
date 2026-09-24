@@ -647,9 +647,9 @@ public final class AgentRuntimeCoordinator {
 
     private func recordUsage(_ message: [String: Any], provider: HarnessProvider, agent: AgentRecord) {
         guard let onUsage else { return }
-        let now = Date()
+        let date = now()
         for reading in usageMeters[agent.id, default: UsageMeter()].readings(message, provider: provider) {
-            onUsage(UsageSample(date: now, agentID: agent.id, agentName: agent.displayName, harness: provider.rawValue,
+            onUsage(UsageSample(date: date, agentID: agent.id, agentName: agent.displayName, harness: provider.rawValue,
                 model: reading.model.isEmpty ? agent.modelIdentifier ?? "" : reading.model,
                 tokens: reading.tokens, costUSD: reading.costUSD))
         }
