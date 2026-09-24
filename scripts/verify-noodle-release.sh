@@ -40,6 +40,16 @@ if otool -L "$app/Contents/MacOS/Noodle" "$app/Contents/Helpers/messenger" | gre
     print -u2 "The exported app links against a mutable external dependency."
     exit 1
 fi
+swift "$project_root/Tests/agent-host-startup.swift" "$app/Contents/XPCServices/NoodleAgentHost.xpc/Contents/MacOS/NoodleAgentHost"
+# Shortcuts finds the Send to Agent intent in the app's metadata.
+grep -q SendNoodleCommandIntent "$app/Contents/Resources/Metadata.appintents/extract.actionsdata" ||
+    { print -u2 "The Send to Agent intent is missing from App Intents metadata."; exit 1; }
+assets="$(xcrun assetutil --info "$app/Contents/Resources/Assets.car")"
+for icon in CodexHarness ClaudeHarness GrokHarness FxHarness; do
+    print -r -- "$assets" | grep -q "\"Name\" : \"$icon\"" || { print -u2 "The $icon icon is missing from the asset catalogue."; exit 1; }
+done
+for icon in "$project_root"/Support/ToolIcons/*.icon; do cmp "$icon" "$app/Contents/Resources/ToolIcons/${icon:t}"; done
+[[ -f "$app/Contents/Resources/swift-sdk-LICENSE.txt" ]] || { print -u2 "Dependency licences are missing."; exit 1; }
 # Local models need the Apple helper built with the macOS 27 SDK and MLX's compiled shaders.
 [[ "$("$app/Contents/Helpers/NoodleAppleAgent" --build-capabilities | plutil -extract apple27 raw -o - -)" == true ]] ||
     { print -u2 "The Apple helper was not compiled with the macOS 27 SDK."; exit 1; }

@@ -21,6 +21,9 @@ import XCTest
     /// Rejects every turn/start with a JSON-RPC error.
     var failTurn = false
     var terminalErrors: [String] = []
+    /// Methods whose replies wait for `release`, so tests control acknowledgement order.
+    var heldMethods: Set<String> = []
+    var heldReplies: [String: [String: Any]] = [:]
     var invalidations = 0
     var stops = 0
     var automaticStop = true
@@ -65,11 +68,17 @@ import XCTest
                 XCTFail("Unexpected Muse request: \(method)")
                 return
             }
+            if heldMethods.contains(method) { heldReplies[method] = ["id": id, "result": result]; return }
             emit(["id": id, "result": result])
         } catch { XCTFail("Invalid Muse wire data: \(error)") }
     }
-    func complete() {
-        guard let turn else { return XCTFail("No active wire turn") }
+    /// Sends a held reply, or rejects the request with an error.
+    func release(_ method: String, reject: Bool = false) {
+        guard let reply = heldReplies.removeValue(forKey: method) else { return XCTFail("No held \(method) reply") }
+        emit(reject ? ["id": reply["id"]!, "error": ["code": -32000, "message": "Turn no longer active"]] : reply)
+    }
+    func complete(turnID: String? = nil) {
+        guard let turn = turnID ?? turn else { return XCTFail("No active wire turn") }
         emit(["method": "turn/completed", "params": ["sessionId": session, "turnId": turn, "terminal": "completed"]])
     }
     func emit(_ object: [String: Any]) {

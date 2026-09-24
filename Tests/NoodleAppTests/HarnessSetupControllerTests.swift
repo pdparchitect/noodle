@@ -235,4 +235,43 @@ import XCTest
         operation.cancel(); gate.resolve(.success(f.versions.report)); await operation.value
         XCTAssertEqual(c.snapshots, before); XCTAssertFalse(c.checkingVersions)
     }
+
+    /// Refreshing into the same result leaves the stored presentation untouched, and a
+    /// refresh cancelled mid-check cannot publish a sign-out it only half observed.
+    func testUnchangedRefreshKeepsStoredBytesAndCancelledRefreshKeepsSignIn() async {
+        let f = fixture(), c = f.controller
+        f.provider.statusResult = .authenticated
+        await c.refresh([f.installation])
+        let saved = f.defaults.data(forKey: HarnessPresentationCache.defaultsKey)
+        var writes = 0
+        let observer = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification,
+                                                              object: f.defaults, queue: nil) { _ in writes += 1 }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        await c.refresh([f.installation])
+        XCTAssertEqual(f.defaults.data(forKey: HarnessPresentationCache.defaultsKey), saved)
+        XCTAssertEqual(writes, 0, "An unchanged check does not rewrite the stored presentation")
+
+        let gate = f.heldStatus()
+        let cancelled = Task { await c.refresh([f.installation]) }
+        await fulfillment(of: [gate.entered], timeout: 2)
+        cancelled.cancel()
+        gate.resolve(.success(.unauthenticated)); await cancelled.value
+        XCTAssertEqual(c.authentication[.codex], .authenticated)
+        XCTAssertEqual(HarnessPresentationCache.load(from: f.defaults)[.codex]?.authentication, .authenticated)
+    }
+
+    /// Check Again asks for the latest release, records the new report, and never
+    /// changes the sign-in state shown beside it.
+    func testForcedVersionCheckAsksForLatestAndLeavesSignInAlone() async {
+        let f = fixture(), c = f.controller
+        f.provider.statusResult = .unauthenticated
+        await c.refresh([f.installation])
+        XCTAssertEqual(c.authentication[.codex], .unauthenticated)
+        await c.refreshVersions([f.installation], forceLatest: true)
+        XCTAssertEqual(f.versions.calls.map(\.2), [true])
+        XCTAssertEqual(c.snapshots[.codex]?.version?.installedVersion, "2.0.0")
+        XCTAssertEqual(c.snapshots[.codex]?.version?.updateAvailable, true)
+        XCTAssertEqual(c.authentication[.codex], .unauthenticated)
+        XCTAssertEqual(HarnessPresentationCache.load(from: f.defaults)[.codex]?.authentication, .unauthenticated)
+    }
 }

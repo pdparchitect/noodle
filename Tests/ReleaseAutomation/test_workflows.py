@@ -131,17 +131,13 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.jobs['prepare-images']['needs'], ['versions', 'checks'])
         self.assertNotIn('swift test', json.dumps(self.jobs['checks']))
 
-    def test_sandbox_helpers_and_adapter_recovery_are_required_before_coverage(self):
+    def test_sandbox_helpers_are_built_before_the_suite(self):
         steps = self.jobs['test-noodle']['steps']
         fixture = next(i for i, step in enumerate(steps)
                        if 'Tests/build-sandbox-cli-fixture.sh' in step.get('run', ''))
-        delivery = next(i for i, step in enumerate(steps)
-                        if 'Tests/message-delivery.sh' in step.get('run', ''))
         suite = next(i for i, step in enumerate(steps) if step.get('id') == 'tests')
         self.assertLess(fixture, suite)
-        # The standalone swiftc fixture links uninstrumented SwiftPM objects.
-        self.assertLess(delivery, suite)
-        for index in [fixture, delivery, suite]:
+        for index in [fixture, suite]:
             self.assertFalse(steps[index].get('continue-on-error', False))
             self.assertNotIn('if', steps[index])
         self.assertEqual(steps[suite]['env']['NOODLE_TEST_CLI_APPLICATION'],

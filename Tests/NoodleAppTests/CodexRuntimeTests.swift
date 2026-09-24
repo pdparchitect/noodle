@@ -61,6 +61,9 @@ import XCTest
         }
     }
 
+    /// A rejected resume starts a fresh thread whose first turn rebuilds context.
+    /// The new thread is saved at once, but recovery stays pending until Codex
+    /// acknowledges that turn.
     func testRejectedResumeStartsFreshWithHistoryRecovery() async throws {
         let f = try fixture(), old = HarnessWire(), first = f.codex(old)
         first.start(); try await f.openCodex(old); first.stop()
@@ -76,6 +79,14 @@ import XCTest
         let input = try XCTUnwrap(params["input"] as? [[String: String]])
         XCTAssertTrue(input[0]["text"]?.contains(MessengerDocumentation.recoveredModelContext) == true)
         XCTAssertTrue(f.recovery(.codex).hasUnfinishedTurn)
+        func saved() throws -> [String: Any] {
+            try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: f.state(.codex))) as? [String: Any])
+        }
+        XCTAssertEqual(try saved()["threadID"] as? String, "replacement")
+        XCTAssertEqual(try saved()["needsHistoryRecovery"] as? Bool, true, "Recovery stays pending until Codex accepts the turn")
+        try wire.reply("turn/start", result: ["turn": ["id": "turn-one"]])
+        try await f.wait { (try? saved()["needsHistoryRecovery"] as? Bool) == false }
+        XCTAssertEqual(try saved()["threadID"] as? String, "replacement")
     }
 
     func testFailedSessionSaveDoesNotContinueStartupOrSubmitQueuedWork() async throws {
@@ -132,6 +143,80 @@ import XCTest
         try wire.reply("turn/steer", error: ["message": "Turn already ending"]); await f.drain()
         XCTAssertEqual(wire.count("turn/steer"), 1)
         complete(wire); try await f.wait { wire.count("turn/start") == 2 }
+    }
+
+    /// A queued message promoted before Codex acknowledges the turn steers only
+    /// once the turn ID is known. If the turn ends while the steer is in flight
+    /// the bot takes no heartbeat until the steer is answered, and a rejected
+    /// steer becomes a follow-up turn. An accepted steer adds no extra turn.
+    func testSteeringWaitsForTurnAcknowledgementAndSteerReply() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.codex(wire)
+        p.start(); try await f.openCodex(wire); p.notify()
+        try await f.wait { wire.count("turn/start") == 1 }
+        p.notify(immediately: true); await f.drain()
+        XCTAssertEqual(wire.count("turn/steer"), 0)
+        try wire.reply("turn/start", result: ["turn": ["id": "turn-one"]])
+        try await f.wait { wire.count("turn/steer") == 1 }
+        XCTAssertEqual((try wire.last("turn/steer")["params"] as? [String: Any])?["expectedTurnId"] as? String, "turn-one")
+        complete(wire); try await f.wait { p.snapshot.phase == .ready }; await f.drain()
+        XCTAssertFalse(p.canReceiveHeartbeat, "The unanswered steer still holds the message")
+        XCTAssertEqual(wire.count("turn/start"), 1)
+        try wire.reply("turn/steer", error: ["message": "Turn no longer active"])
+        try await f.wait { wire.count("turn/start") == 2 }
+        try wire.reply("turn/start", result: ["turn": ["id": "turn-two"]])
+        try await f.wait { p.snapshot.phase == .working }
+        complete(wire, turn: "stale-turn"); await f.drain()
+        XCTAssertEqual(p.snapshot.phase, .working)
+        complete(wire, turn: "turn-two"); try await f.wait { p.canReceiveHeartbeat }
+
+        p.notify(); try await f.wait { wire.count("turn/start") == 3 }
+        try wire.reply("turn/start", result: ["turn": ["id": "turn-three"]])
+        await f.drain()
+        p.notify(immediately: true)
+        try await f.wait { wire.count("turn/steer") == 2 }
+        try wire.reply("turn/steer", result: ["turnId": "turn-three"]); await f.drain()
+        complete(wire, turn: "turn-three"); try await f.wait { p.canReceiveHeartbeat }
+        XCTAssertEqual(wire.count("turn/start"), 3)
+    }
+
+    /// Retry errors apply only to the current thread's active turn and never
+    /// rewrite the saved thread. An error before the turn acknowledgement still
+    /// applies once acknowledged. A final error keeps the unfinished marker
+    /// until Codex reports the failed turn, which clears it but stays failed.
+    func testRetryErrorsAreScopedToTheActiveTurnAndKeepUnfinishedWork() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.codex(wire)
+        try await active(f, wire, p)
+        let state = try Data(contentsOf: f.state(.codex))
+        func retry(thread: String = "fixture-thread", turn: String = "turn-one", willRetry: Bool = true) {
+            wire.emit(["method": "error", "params": ["threadId": thread, "turnId": turn, "willRetry": willRetry,
+                "error": ["codexErrorInfo": ["responseStreamConnectionFailed": ["httpStatusCode": NSNull()]]]]])
+        }
+        retry(thread: "another-thread"); await f.drain()
+        XCTAssertNil(p.snapshot.reconnectingSince)
+        retry(); try await f.wait { p.snapshot.reconnectingSince != nil }
+        XCTAssertTrue(p.isAlive); XCTAssertFalse(p.canReceiveHeartbeat)
+        XCTAssertTrue(f.recovery(.codex).hasUnfinishedTurn)
+        XCTAssertEqual(try Data(contentsOf: f.state(.codex)), state)
+        complete(wire); try await f.wait { p.canReceiveHeartbeat }
+        XCTAssertFalse(f.recovery(.codex).hasUnfinishedTurn)
+        retry(); await f.drain()
+        XCTAssertEqual(p.snapshot.phase, .ready, "Errors after completion are ignored")
+        XCTAssertNil(p.snapshot.reconnectingSince)
+
+        p.notify(); try await f.wait { wire.count("turn/start") == 2 }
+        retry(turn: "turn-two"); await f.drain()
+        try wire.reply("turn/start", result: ["turn": ["id": "turn-two"]])
+        try await f.wait { p.snapshot.reconnectingSince != nil }
+        XCTAssertTrue(f.recovery(.codex).hasUnfinishedTurn)
+        retry(turn: "turn-two", willRetry: false)
+        try await f.wait { p.snapshot.phase == .failed }
+        XCTAssertTrue(p.snapshot.detail.contains("Kick"))
+        XCTAssertTrue(f.recovery(.codex).hasUnfinishedTurn)
+        wire.emit(["method": "turn/completed", "params": ["threadId": "fixture-thread",
+            "turn": ["id": "turn-two", "status": "failed", "error": ["message": "Connection failed"]]]])
+        try await f.wait { !f.recovery(.codex).hasUnfinishedTurn }
+        XCTAssertEqual(p.snapshot.phase, .failed)
+        XCTAssertTrue(f.failures.isEmpty)
     }
 
     func testRetryErrorPreservesRecoveryAndOutputRestoresWorkingState() async throws {

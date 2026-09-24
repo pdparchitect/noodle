@@ -71,6 +71,40 @@ import XCTest
         XCTAssertFalse(process.hasInterruptedWork)
     }
 
+    /// A message promoted before Muse acknowledges the turn steers only once the
+    /// turn ID is known. If the turn ends while the steer is in flight the bot
+    /// takes no heartbeat until the steer is answered, and a rejected steer
+    /// becomes a follow-up turn that ignores completions for other turns.
+    func testSteeringWaitsForTurnAcknowledgementAndSteerReply() async throws {
+        let f = try fixture(), (process, wire) = f.make()
+        process.start()
+        try await f.waitUntil { process.snapshot.phase == .ready }
+        wire.heldMethods = ["turn/start", "turn/steer"]
+        process.notify()
+        try await f.waitUntil { wire.heldReplies["turn/start"] != nil }
+        process.notify(immediately: true)
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertEqual(wire.count("turn/steer"), 0)
+        wire.release("turn/start")
+        try await f.waitUntil { wire.heldReplies["turn/steer"] != nil }
+        XCTAssertEqual(wire.calls.first { $0.0 == "turn/steer" }?.1["expectedTurnId"] as? String, wire.turn)
+        wire.heldMethods = []
+        wire.complete()
+        try await f.waitUntil { process.snapshot.phase == .ready }
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertFalse(process.canReceiveHeartbeat, "The unanswered steer still holds the message")
+        XCTAssertEqual(wire.count("turn/start"), 1)
+        wire.release("turn/steer", reject: true)
+        try await f.waitUntil { wire.count("turn/start") == 2 && process.snapshot.phase == .working }
+        wire.complete(turnID: UUID().uuidString)
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertEqual(process.snapshot.phase, .working)
+        wire.complete()
+        try await f.waitUntil { process.canReceiveHeartbeat }
+        XCTAssertFalse(process.hasInterruptedWork)
+        XCTAssertTrue(f.failures.isEmpty)
+    }
+
     func testInvalidTurnAcknowledgementPreservesUnfinishedWorkForRecovery() async throws {
         let f = try fixture(), (process, wire) = f.make()
         wire.invalidAcknowledgement = true
