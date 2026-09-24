@@ -31,6 +31,7 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
     private var stopped = false
     private var paused = false
     private var usageLimitDetail: String?
+    private var sessionModel: String?
     private var turnIsActive = false
     private var interruptRequested = false
     private var interruptTimeout: Task<Void, Never>?
@@ -326,6 +327,7 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
             openSession()
         case .create, .load:
             if let returned = result["sessionId"] as? String { sessionID = returned }
+            sessionModel = configuration.modelIdentifier ?? (result["models"] as? [String: Any])?["currentModelId"] as? String
             guard let sessionID, FxProtocol.validIdentifier(sessionID) else { terminated("\(name) did not identify its session"); return }
             do {
                 try FileManager.default.createDirectory(at: stateURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -345,6 +347,10 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
         case .effort:
             sessionReady()
         case .prompt:
+            // Per-turn usage is only in the response, which is not a session update.
+            if let usage = result["usage"] as? [String: Any] {
+                onActivity(["model": sessionModel ?? "", "result": ["usage": usage]])
+            }
             if let usageLimitDetail {
                 pause(usageLimitDetail, failure: .usageLimit)
                 return

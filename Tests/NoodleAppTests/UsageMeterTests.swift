@@ -42,6 +42,45 @@ import XCTest
         XCTAssertTrue(meter.readings(["method": "item/completed", "params": [:]], provider: .codex).isEmpty)
     }
 
+    /// ACP's per-turn usage arrives with the prompt response; its session cost is cumulative and not used.
+    func testACPPromptUsageKeepsCachedTokensApart() {
+        var meter = UsageMeter()
+        let message: [String: Any] = ["model": "big-pickle", "result": ["stopReason": "end_turn", "usage": [
+            "inputTokens": 99, "outputTokens": 16, "totalTokens": 12147, "cachedReadTokens": 12032,
+            "cachedWriteTokens": 5, "thoughtTokens": 7]]]
+        for provider in [HarnessProvider.openCode, .grokBuild, .fx] {
+            XCTAssertEqual(meter.readings(message, provider: provider), [UsageReading(model: "big-pickle",
+                tokens: UsageTokens(input: 99, output: 16, cacheRead: 12032, cacheWrite: 5, reasoning: 7), costUSD: nil)])
+        }
+        let update: [String: Any] = ["method": "session/update", "params": ["sessionId": "s", "update": [
+            "sessionUpdate": "usage_update", "used": 12147, "size": 200000, "cost": ["amount": 0.5, "currency": "USD"]]]]
+        XCTAssertTrue(meter.readings(update, provider: .openCode).isEmpty)
+    }
+
+    func testACPForwardsPromptUsageWithTheSessionModel() async throws {
+        let f = try HarnessRuntimeFixture(), wire = HarnessWire()
+        defer { f.cleanUp() }
+        var received: [[String: Any]] = []
+        let process = ACPAgentProcess(provider: .fx, agent: .init(displayName: "ACP", harnessIdentifier: "fx"),
+            executableURL: f.root, workspaceURL: f.workspace, extendedAccess: true, recoverInterruptedWork: false,
+            onSnapshot: { _ in }, onHeartbeat: {}, onUnexpectedTermination: { _, _, _ in },
+            onActivity: { received.append($0) }, makeConnection: { wire }, sleep: { try await f.clock.sleep($0) })
+        f.processes.append(process)
+        process.start()
+        try await f.wait { wire.count("initialize") > 0 }
+        try wire.reply("initialize", result: ["protocolVersion": 1, "agentInfo": ["version": "2.0.7"]])
+        try await f.wait { wire.count("session/new") > 0 }
+        try wire.reply("session/new", result: ["sessionId": "fixture-session", "models": ["currentModelId": "fx-default"]])
+        try await f.wait { process.snapshot.phase == .ready }
+        process.notify()
+        try await f.wait { wire.count("session/prompt") == 1 }
+        try wire.reply("session/prompt", result: ["stopReason": "end_turn", "usage": ["inputTokens": 3, "outputTokens": 4, "totalTokens": 7]])
+        try await f.wait { process.snapshot.phase == .ready }
+        XCTAssertEqual(received.count, 1)
+        XCTAssertEqual(received.first?["model"] as? String, "fx-default")
+        XCTAssertEqual(((received.first?["result"] as? [String: Any])?["usage"] as? [String: Any])?["outputTokens"] as? Int, 4)
+    }
+
     func testCodexForwardsTokenUsageForItsThreadWithTheThreadModel() async throws {
         let f = try HarnessRuntimeFixture(), wire = HarnessWire()
         defer { f.cleanUp() }

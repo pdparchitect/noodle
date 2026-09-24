@@ -8,7 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
-- See what each bot spends in the new Usage window (**Noodle → Usage**, ⇧⌘U), also opened from a bot's profile. It charts tokens or cost over 7 days, 30 days or 12 months, stacked by bot, harness or model, with totals, cache hits and a breakdown table. Claude Code and Codex usage is recorded from now on, and cost where Claude Code reports it.
+- See what each bot spends in the new Usage window (**Noodle → Usage**, ⇧⌘U), also opened from a bot's profile. It charts tokens or cost over 7 days, 30 days or 12 months, stacked by bot, harness or model, with totals, cache hits and a breakdown table. Tokens are recorded from now on for Claude Code, Codex, Grok Build, FX and OpenCode, and cost for Claude Code.
 
 ### Changed
 

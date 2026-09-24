@@ -90,9 +90,9 @@ tokens and cost, and hover a bar for that day's figures. The table below the
 chart breaks the period down by input, output and cached tokens. To see one bot,
 pick it from the menu at the top left, or open its profile and click **Usage**.
 
-History is kept across restarts and after a bot is deleted. Claude Code and
-Codex report usage; Claude Code also reports cost. Other harnesses are not
-counted yet.
+History is kept across restarts and after a bot is deleted. Claude Code, Codex,
+Grok Build, FX and OpenCode report tokens; only Claude Code reports cost. Muse,
+Antigravity and Apple Intelligence are not counted yet.
 
 ## Messages and files
 

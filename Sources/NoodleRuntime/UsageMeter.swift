@@ -22,7 +22,8 @@ struct UsageMeter {
         switch provider {
         case .claudeCode: return claude(message)
         case .codex: return codex(message).map { [$0] } ?? []
-        case .muse, .fx, .grokBuild, .apple, .openCode, .antigravity: return []
+        case .fx, .grokBuild, .openCode, .apple: return acp(message).map { [$0] } ?? []
+        case .muse, .antigravity: return []
         }
     }
 
@@ -61,6 +62,18 @@ struct UsageMeter {
             reasoning: Self.int(last["reasoningOutputTokens"]))
         guard tokens.total > 0 else { return nil }
         return UsageReading(model: params["model"] as? String ?? "", tokens: tokens, costUSD: nil)
+    }
+
+    /// The prompt response's usage covers one turn. The session cost in
+    /// usage_update is cumulative and not re-sent after a resume, so it is not used.
+    private func acp(_ message: [String: Any]) -> UsageReading? {
+        guard message["method"] == nil,
+              let usage = (message["result"] as? [String: Any])?["usage"] as? [String: Any] else { return nil }
+        let tokens = UsageTokens(input: Self.int(usage["inputTokens"]), output: Self.int(usage["outputTokens"]),
+            cacheRead: Self.int(usage["cachedReadTokens"]), cacheWrite: Self.int(usage["cachedWriteTokens"]),
+            reasoning: Self.int(usage["thoughtTokens"]))
+        guard tokens.total > 0 else { return nil }
+        return UsageReading(model: message["model"] as? String ?? "", tokens: tokens, costUSD: nil)
     }
 
     private static func int(_ value: Any?) -> Int {
