@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-09-24
+
+### Changed
+
+- Build and sign Computer with Xcode, like the other Noodle apps. Nothing you use changes.
+
 ## [0.13.1] - 2026-09-22
 
 ### Fixed
