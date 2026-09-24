@@ -35,6 +35,8 @@ gh release edit "$tag" --repo "$repo" --draft=false --latest=false
 # This tag is a channel marker, not a version tag. It never becomes repo latest.
 channel_notes="Noodle Hub $version
 
+Early development build: Noodle Hub does not run bots yet.
+
 [Download DMG for Apple silicon](https://github.com/$repo/releases/download/$tag/$disk_image) · [ZIP](https://github.com/$repo/releases/download/$tag/$archive)
 
 Requires macOS 26 or later. Open the DMG and drag Noodle Hub.app to Applications on the Mac that runs your bots.

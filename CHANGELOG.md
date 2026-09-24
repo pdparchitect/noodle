@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-09-24
+
 ### Fixed
 
 - Take the Reminders grant the first time it is given. macOS hands back the access and then keeps reporting

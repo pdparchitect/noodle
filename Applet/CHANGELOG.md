@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-09-24
+
 ### Fixed
 
 - Keep every card in the library inside its own column. A noodlet whose preview image is wider than it is tall stretched its card past the grid, so it covered the card beside it.
