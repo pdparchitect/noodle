@@ -45,7 +45,7 @@ figure { margin: 0; }
 
 /* Symbols are drawn in near-black; flip them to light in dark mode. */
 @media (prefers-color-scheme: dark) {
-  .logo img, .wordmark img, .feat-icon, .dl img, .providers li img { filter: invert(1) brightness(.96); }
+  .logo img, .wordmark svg, .feat-icon, .dl img, .providers li img { filter: invert(1) brightness(.96); }
 }
 
 /* ---------- Nav ---------- */
@@ -77,7 +77,15 @@ figure { margin: 0; }
 /* ---------- Intro ---------- */
 .intro { padding-top: 84px; }
 .wordmark { margin: 18px auto 0; line-height: 0; }
-.wordmark img { height: 84px; width: auto; margin: 0 auto; }
+.wordmark svg { display: block; height: 84px; width: auto; max-width: 100%; margin: 0 auto; }
+/* Written on in the films' 2.1 s after a 0.55 s pause. The gap is twice the path and starts
+   just past it, so no round cap shows as a dot before its stroke begins. */
+@media (prefers-reduced-motion: no-preference) {
+  .wordmark path { stroke-dasharray: 1 2; animation: write calc(var(--len) * 2.1s) linear calc(.55s + var(--at) * 2.1s) both; }
+  .wordmark path:first-child { animation-timing-function: ease-in; }
+  .wordmark path:last-child { animation-timing-function: ease-out; }
+}
+@keyframes write { from { stroke-dashoffset: 1.01; } to { stroke-dashoffset: 0; } }
 .what { margin-top: 34px; font-family: var(--display); font-size: 28px; line-height: 1.14286; font-weight: 400; letter-spacing: .007em; text-wrap: balance; }
 .req { margin-top: 16px; font-size: 14px; line-height: 1.28577; letter-spacing: -0.016em; color: var(--gray); }
 .hero-shot { margin-top: 56px; }
@@ -164,7 +172,7 @@ figure { margin: 0; }
 }
 @media (max-width: 734px) {
   .intro { padding-top: 48px; }
-  .wordmark img { height: 60px; }
+  .wordmark svg { height: 60px; }
   .feature h2, .privacy h2, .download h2 { font-size: 32px; line-height: 1.125; letter-spacing: .004em; }
   .what { font-size: 21px; line-height: 1.19048; letter-spacing: .011em; }
   .lead { font-size: 19px; line-height: 1.4211; letter-spacing: .012em; }
