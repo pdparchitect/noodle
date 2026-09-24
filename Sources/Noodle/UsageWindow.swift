@@ -98,9 +98,16 @@ struct UsageReport {
 
     init(days: [UsageDay], span: Span, grouping: Grouping, metric: Metric, now: Date, calendar: Calendar = .current) {
         self.metric = metric
+        // Bots are told apart by ID; a repeated name gets a number.
+        var botLabels: [UUID: String] = [:]
+        for (name, ids) in Dictionary(grouping: Set(days.map(\.agentID)), by: { id in days.first { $0.agentID == id }!.agentName }) {
+            for (index, id) in ids.sorted(by: { $0.uuidString < $1.uuidString }).enumerated() {
+                botLabels[id] = index == 0 ? name : "\(name) (\(index + 1))"
+            }
+        }
         func group(_ day: UsageDay) -> String {
             switch grouping {
-            case .agent: day.agentName
+            case .agent: botLabels[day.agentID] ?? day.agentName
             case .harness: HarnessProvider(rawValue: day.harness)?.displayName ?? day.harness
             case .model: day.model.isEmpty ? "Default Model" : day.model
             }

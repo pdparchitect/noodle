@@ -65,6 +65,16 @@ final class UsageReportTests: XCTestCase {
         XCTAssertEqual(byModel.groups, ["Default Model", "grok-4.7"])
     }
 
+    func testBotsSharingANameStayApart() {
+        var first = day(0, "Ada", tokens: 10), second = day(0, "Ada", tokens: 20), again = day(1, "Ada", tokens: 5)
+        first.agentID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+        second.agentID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+        again.agentID = first.agentID
+        let report = UsageReport(days: [second, first, again], span: .week, grouping: .agent, metric: .tokens, now: now, calendar: calendar)
+        XCTAssertEqual(report.rows.map(\.group), ["Ada (2)", "Ada"])
+        XCTAssertEqual(report.rows.map(\.tokens.total), [20, 15])
+    }
+
     func testCacheHitsAreTheShareOfInputReadFromTheCache() {
         var cached = day(0, "Ada", tokens: 20)
         cached.tokens = UsageTokens(input: 20, output: 500, cacheRead: 70, cacheWrite: 10)
