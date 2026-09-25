@@ -1,7 +1,8 @@
 # Noodle Mobile
 
-Keep the iPhone and iPad app in this folder. It is a placeholder: one screen showing
-the Noodle symbol. It does not connect to a hub yet. Keep its release notes in
+Keep the iPhone and iPad app in this folder. So far it only joins a Noodle Hub and
+shows who it joined as, using the shared `HubLink` package the Mac apps use; change
+pairing there, not here. Keep its release notes in
 CHANGELOG.md here. Do not publish releases without the user's explicit request.
 
 The app is built from an Xcode project that Tuist generates from `Project.swift`; the

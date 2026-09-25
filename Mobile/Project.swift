@@ -7,6 +7,7 @@ let version = (try? String(contentsOfFile: "VERSION", encoding: .utf8))?
 
 let project = Project(
     name: "NoodleMobile",
+    packages: [.local(path: "../Shared/HubLink")],
     settings: .settings(
         base: [
             "DEVELOPMENT_TEAM": "S8VNVK39LH",
@@ -41,9 +42,14 @@ let project = Project(
                 "UILaunchScreen": [:],
                 // Only the system's own encryption, so TestFlight asks no export question.
                 "ITSAppUsesNonExemptEncryption": false,
+                // Invitation links and QR codes are noodle://join-hub links, the same as on the Mac.
+                "CFBundleURLTypes": [["CFBundleURLName": "$(MOBILE_APP_BUNDLE_ID)", "CFBundleURLSchemes": ["noodle"]]],
+                "NSCameraUsageDescription": "Noodle scans the QR code of a Noodle Hub invitation.",
+                "NSLocalNetworkUsageDescription": "Noodle connects to your Noodle Hub on this network.",
             ]),
             sources: ["Sources/NoodleMobile/**"],
             resources: ["Support/Assets.xcassets"],
+            dependencies: [.package(product: "HubLink")],
             settings: .settings(base: [
                 "PRODUCT_BUNDLE_IDENTIFIER": "$(MOBILE_APP_BUNDLE_ID)",
                 "CODE_SIGN_STYLE": "Automatic",

@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "HubLink",
-    platforms: [.macOS("26.0")],
+    platforms: [.macOS("26.0"), .iOS("26.0")],
     products: [.library(name: "HubLink", targets: ["HubLink"])],
     dependencies: [
         .package(url: "https://github.com/apple/swift-certificates", from: "1.10.0"),

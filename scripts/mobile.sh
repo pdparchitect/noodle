@@ -1,5 +1,6 @@
 #!/bin/zsh
 # Tests, packages and uploads the phone app, from the Xcode project Tuist generates from Mobile/Project.swift.
+#   run                        builds Noodle Dev and opens it on an iPhone simulator
 #   test                       runs its tests on an iPhone simulator
 #   package VERSION BUILD DIR  archives a release, exports Noodle-Mobile.ipa and its checksum into DIR and
 #                              has App Store Connect validate it
@@ -10,13 +11,22 @@
 set -euo pipefail
 project_root="${0:A:h:h}"
 folder="$project_root/Mobile"
-command="${1:?Usage: scripts/mobile.sh test | package VERSION BUILD DIR | upload IPA}"
+command="${1:?Usage: scripts/mobile.sh run | test | package VERSION BUILD DIR | upload IPA}"
 shift
 
+# Regenerating rewrites the project, which makes Xcode rebuild everything, so it happens only when the
+# project description or the set of files changed.
 generate() {
-    local tuist
+    local tuist stamp
     tuist="$(zsh "$project_root/scripts/install-tuist.sh")"
+    stamp="$( { print -r -- "$tuist"; cat "$folder/Project.swift" "$folder/Tuist.swift"
+                (cd "$folder" && find Sources Tests Support | sort) } | shasum -a 256)"
+    if [[ -d "$folder/NoodleMobile.xcworkspace" && -d "$folder/Derived/Sources" &&
+          "$(cat "$folder/Derived/.generated" 2>/dev/null)" == "$stamp" ]]; then
+        return
+    fi
     (cd "$folder" && "$tuist" generate --no-open >&2)
+    print -r -- "$stamp" > "$folder/Derived/.generated"
 }
 
 require_key() {
@@ -25,14 +35,33 @@ require_key() {
     : "${APPLE_API_ISSUER_ID:?Missing App Store Connect issuer}"
 }
 
-case "$command" in
-    test)
-        simulator="$(xcrun simctl list devices available --json | python3 -c '
+# An iPhone simulator on the newest iOS, preferring one already running.
+choose_simulator() {
+    simulator="$(xcrun simctl list devices available --json | python3 -c '
 import json, sys
 devices = json.load(sys.stdin)["devices"]
-print(next((d["udid"] for runtime, found in sorted(devices.items(), reverse=True) if ".iOS-" in runtime
-            for d in found if d["name"].startswith("iPhone")), ""))')"
-        [[ -n "$simulator" ]] || { print -u2 "No iPhone simulator is installed; run: xcodebuild -downloadPlatform iOS"; exit 1; }
+phones = [d for runtime, found in sorted(devices.items(), reverse=True) if ".iOS-" in runtime
+          for d in found if d["name"].startswith("iPhone")]
+print(next((d["udid"] for d in phones if d["state"] == "Booted"), phones[0]["udid"] if phones else ""))')"
+    [[ -n "$simulator" ]] || { print -u2 "No iPhone simulator is installed; run: xcodebuild -downloadPlatform iOS"; exit 1; }
+}
+
+case "$command" in
+    run)
+        choose_simulator
+        generate
+        xcodebuild -workspace "$folder/NoodleMobile.xcworkspace" -scheme NoodleMobile -configuration Debug \
+            -derivedDataPath "$folder/Derived" -destination "id=$simulator" build
+        xcrun simctl boot "$simulator" 2>/dev/null || true
+        # Xcode 27 shows simulators in Device Hub; earlier versions have the Simulator app.
+        open "devices://device/open?id=$simulator" 2>/dev/null ||
+            open -b com.apple.iphonesimulator --args -CurrentDeviceUDID "$simulator" 2>/dev/null ||
+            print -u2 "Neither Device Hub nor the Simulator app is installed, so the simulator runs without a window."
+        xcrun simctl install "$simulator" "$folder/Derived/Build/Products/Debug-iphonesimulator/NoodleMobile.app"
+        xcrun simctl launch --terminate-running-process "$simulator" com.pdparchitect.noodle.mobile.local
+        ;;
+    test)
+        choose_simulator
         generate
         xcodebuild -workspace "$folder/NoodleMobile.xcworkspace" -scheme NoodleMobile -configuration Debug \
             -derivedDataPath "$folder/Derived" -destination "id=$simulator" test

@@ -42,6 +42,13 @@
             "request": "launch",
             "cwd": "${workspaceFolder}",
             "command": "scripts/build-and-launch.sh Hub"
+        },
+        {
+            "name": "Noodle Mobile: Build & Launch Simulator",
+            "type": "node-terminal",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "command": "scripts/mobile.sh run"
         }
     ]
 }

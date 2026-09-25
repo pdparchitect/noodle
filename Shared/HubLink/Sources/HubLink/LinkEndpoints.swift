@@ -1,10 +1,13 @@
 import Darwin
 import Foundation
+#if os(macOS)
 import SystemConfiguration
+#endif
 
 extension LinkEndpoint {
     public static let defaultPort: UInt16 = 38_415
 
+    #if os(macOS)
     /// This Mac's own addresses: its Bonjour name, then every IPv4 and routable IPv6 address
     /// on an active interface. Loopback and link-local addresses are left out: a device on
     /// the same Mac reaches the Hub the same way a device across the room does.
@@ -43,6 +46,7 @@ extension LinkEndpoint {
         var seen = Set<String>()
         return (hosts + ipv4 + ipv6).filter { seen.insert($0).inserted }.map { LinkEndpoint(host: $0, port: port) }
     }
+    #endif
 
     /// Reads "host", "host:port", "[v6]:port" or a bare IPv6 address.
     public init?(text: String, defaultPort: UInt16) {
