@@ -6,17 +6,52 @@ import SwiftUI
     let pairing: HubPairing
     private(set) var agents: [LinkBot] = []
     private(set) var error: String?
+    /// Pins belong to this phone alone; the Hub never sees them.
+    private var pinned: Set<UUID>
     private var conversations: [UUID: [LinkMessage]] = [:]
     /// How far each conversation has been read. It stops at a message the bot has not taken yet,
     /// so that message is read again until it shows as delivered.
     @ObservationIgnored private var read: [UUID: Int] = [:]
 
-    init(pairing: HubPairing) { self.pairing = pairing }
-
-    /// Newest conversation first, as in Messages.
-    var sortedAgents: [LinkBot] {
-        agents.sorted { (latestMessage(of: $0)?.createdAt ?? $0.createdAt) > (latestMessage(of: $1)?.createdAt ?? $1.createdAt) }
+    init(pairing: HubPairing) {
+        self.pairing = pairing
+        pinned = Set((try? JSONDecoder().decode([UUID].self, from: Data(contentsOf: pairing.directory.appendingPathComponent("pins.json")))) ?? [])
     }
+
+    /// Pinned first, then newest conversation first, as in Messages.
+    var sortedAgents: [LinkBot] {
+        agents.sorted {
+            let (lhs, rhs) = (isPinned($0), isPinned($1))
+            if lhs != rhs { return lhs }
+            return (latestMessage(of: $0)?.createdAt ?? $0.createdAt) > (latestMessage(of: $1)?.createdAt ?? $1.createdAt)
+        }
+    }
+
+    func isPinned(_ agent: LinkBot) -> Bool { pinned.contains(agent.id) }
+
+    func togglePin(_ agent: LinkBot) {
+        if pinned.remove(agent.id) == nil { pinned.insert(agent.id) }
+        try? JSONEncoder().encode(pinned.sorted { $0.uuidString < $1.uuidString })
+            .write(to: pairing.directory.appendingPathComponent("pins.json"), options: .atomic)
+    }
+
+    /// Makes a bot on the Hub, which checks that the user's plan lends its harness.
+    func create(_ draft: LinkBotDraft) async throws -> LinkBot {
+        guard case .bot(let bot) = try await pairing.request(.createBot(draft)) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        agents.append(bot)
+        return bot
+    }
+
+    func update(_ agent: LinkBot) async throws {
+        guard case .bot(let bot) = try await pairing.request(.updateBot(id: agent.id, agent.draft)) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        if let index = agents.firstIndex(where: { $0.id == bot.id }) { agents[index] = bot }
+    }
+
+    func agent(_ id: UUID) -> LinkBot? { agents.first { $0.id == id } }
 
     func messages(of agent: LinkBot) -> [LinkMessage] { conversations[agent.conversationID] ?? [] }
 
@@ -84,13 +119,22 @@ import SwiftUI
 struct AgentsView: View {
     @State private var chats: HubChats
     @State private var showingProfile = false
+    @State private var creating = false
 
     init(pairing: HubPairing) { _chats = State(initialValue: HubChats(pairing: pairing)) }
 
     var body: some View {
         NavigationStack {
             List(chats.sortedAgents) { agent in
-                NavigationLink(value: agent.id) { AgentRow(agent: agent, latest: chats.latestMessage(of: agent)) }
+                NavigationLink(value: agent.id) {
+                    AgentRow(agent: agent, latest: chats.latestMessage(of: agent), pinned: chats.isPinned(agent))
+                }
+                .swipeActions(edge: .leading) {
+                    Button { chats.togglePin(agent) } label: {
+                        Label(chats.isPinned(agent) ? "Unpin" : "Pin", systemImage: chats.isPinned(agent) ? "pin.slash.fill" : "pin.fill")
+                    }
+                    .tint(.orange)
+                }
             }
             .listStyle(.plain)
             .overlay {
@@ -102,18 +146,21 @@ struct AgentsView: View {
                     }
                 }
             }
-            .navigationTitle("Agents")
-            .navigationDestination(for: UUID.self) { id in
-                if let agent = chats.agents.first(where: { $0.id == id }) { ChatView(chats: chats, agent: agent) }
-            }
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: UUID.self) { id in ChatView(chats: chats, agentID: id) }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showingProfile = true } label: { Image(systemName: "person.crop.circle") }
                         .accessibilityLabel("Profile")
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { creating = true } label: { Image(systemName: "square.and.pencil") }
+                        .accessibilityLabel("New Agent")
+                }
             }
             .refreshable { try? await chats.reload() }
             .sheet(isPresented: $showingProfile) { ProfileView(pairing: chats.pairing) }
+            .sheet(isPresented: $creating) { AgentEditor(chats: chats, agent: nil) }
         }
         .task { await chats.follow() }
     }
@@ -122,6 +169,7 @@ struct AgentsView: View {
 private struct AgentRow: View {
     let agent: LinkBot
     let latest: LinkMessage?
+    let pinned: Bool
 
     var body: some View {
         HStack(spacing: 12) {
@@ -130,6 +178,9 @@ private struct AgentRow: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(agent.draft.name).font(.headline).lineLimit(1)
                     Spacer()
+                    if pinned {
+                        Image(systemName: "pin.fill").font(.caption).foregroundStyle(.orange).accessibilityLabel("Pinned")
+                    }
                     if let latest {
                         Text(latest.createdAt, format: .relative(presentation: .numeric, unitsStyle: .abbreviated))
                             .font(.subheadline).foregroundStyle(.secondary)
@@ -147,11 +198,16 @@ private struct AgentRow: View {
 /// One agent's conversation, laid out like Messages.
 struct ChatView: View {
     let chats: HubChats
-    let agent: LinkBot
+    let agentID: UUID
     @State private var draft = ""
     @State private var problem: String?
+    @State private var editing = false
 
     var body: some View {
+        if let agent = chats.agent(agentID) { conversation(with: agent) }
+    }
+
+    private func conversation(with agent: LinkBot) -> some View {
         ScrollView {
             LazyVStack(spacing: 6) {
                 ForEach(chats.messages(of: agent)) { message in
@@ -167,12 +223,16 @@ struct ChatView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                HStack(spacing: 8) {
-                    AgentAvatar(draft: agent.draft, size: 28)
-                    Text(agent.draft.name).font(.headline)
+                Button { editing = true } label: {
+                    HStack(spacing: 8) {
+                        AgentAvatar(draft: agent.draft, size: 28)
+                        Text(agent.draft.name).font(.headline).foregroundStyle(.primary)
+                    }
                 }
+                .accessibilityHint("Edit")
             }
         }
+        .sheet(isPresented: $editing) { AgentEditor(chats: chats, agent: agent) }
     }
 
     private var composer: some View {
@@ -198,7 +258,7 @@ struct ChatView: View {
 
     private func send() {
         let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !body.isEmpty else { return }
+        guard !body.isEmpty, let agent = chats.agent(agentID) else { return }
         draft = ""
         problem = nil
         Task {
@@ -239,6 +299,121 @@ private struct Bubble: View {
     }
 }
 
+/// Makes a new agent on the Hub, or edits one: its name, colour and the harness it runs on.
+struct AgentEditor: View {
+    let chats: HubChats
+    /// Nil makes a new agent.
+    let agent: LinkBot?
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft: LinkBotDraft
+    @State private var saving = false
+    @State private var problem: String?
+
+    init(chats: HubChats, agent: LinkBot?) {
+        self.chats = chats
+        self.agent = agent
+        _draft = State(initialValue: agent?.draft ?? LinkBotDraft(name: "", provider: "", avatarSymbolName: "sparkles",
+                                                                  avatarColorIndex: Int.random(in: 0..<AgentAvatar.colourCount)))
+    }
+
+    /// What the plan lends, plus the agent's current harness if the plan no longer lends it.
+    private var harnesses: [LinkHarness] {
+        var lent = chats.pairing.status?.harnesses ?? []
+        if let agent, !lent.contains(where: { $0.provider == agent.draft.provider && $0.profile == agent.draft.profile }) {
+            lent.insert(LinkHarness(provider: agent.draft.provider, providerName: agent.draft.provider,
+                                    profile: agent.draft.profile, profileName: nil), at: 0)
+        }
+        return lent
+    }
+
+    private var harness: Binding<LinkHarness?> {
+        Binding {
+            harnesses.first { $0.provider == draft.provider && $0.profile == draft.profile }
+        } set: { harness in
+            draft.provider = harness?.provider ?? ""
+            draft.profile = harness?.profile
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    VStack(spacing: 16) {
+                        AgentAvatar(draft: draft, size: 88)
+                        HStack(spacing: 12) {
+                            ForEach(0..<AgentAvatar.colourCount, id: \.self) { index in
+                                Button { draft.avatarColorIndex = index } label: {
+                                    AgentAvatar.swatch(index)
+                                        .frame(width: 30, height: 30)
+                                        .overlay { if AgentAvatar.colourIndex(draft.avatarColorIndex) == index {
+                                            Circle().strokeBorder(.primary, lineWidth: 2).padding(-4)
+                                        } }
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Colour \(index + 1)")
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .listRowBackground(Color.clear)
+                }
+                Section {
+                    TextField("Name", text: $draft.name)
+                }
+                Section {
+                    if harnesses.isEmpty {
+                        Text("Your plan lends no harnesses").foregroundStyle(.secondary)
+                    } else {
+                        Picker("Harness", selection: harness) {
+                            if harness.wrappedValue == nil { Text("Choose").tag(LinkHarness?.none) }
+                            ForEach(harnesses, id: \.self) { harness in
+                                Text(harness.profileName.map { "\(harness.providerName) (\($0))" } ?? harness.providerName)
+                                    .tag(LinkHarness?.some(harness))
+                            }
+                        }
+                    }
+                }
+                if let problem {
+                    Section { Text(problem).foregroundStyle(.red) }
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    if saving {
+                        ProgressView()
+                    } else {
+                        Button(agent == nil ? "Create" : "Save", action: save)
+                            .disabled(draft.name.trimmingCharacters(in: .whitespaces).isEmpty || draft.provider.isEmpty)
+                    }
+                }
+            }
+            .task { if chats.pairing.status == nil { await chats.pairing.refresh(quietly: true) } }
+        }
+    }
+
+    private func save() {
+        draft.name = draft.name.trimmingCharacters(in: .whitespaces)
+        saving = true
+        problem = nil
+        Task {
+            defer { saving = false }
+            do {
+                if var agent {
+                    agent.draft = draft
+                    try await chats.update(agent)
+                } else {
+                    _ = try await chats.create(draft)
+                }
+                dismiss()
+            } catch {
+                problem = error.localizedDescription
+            }
+        }
+    }
+}
+
 /// The bot's picture, or its symbol on its colour, as Noodle on the Mac shows it.
 struct AgentAvatar: View {
     /// The same gradients as the Mac's bot avatars, indexed the same way.
@@ -248,13 +423,21 @@ struct AgentAvatar: View {
     let draft: LinkBotDraft
     let size: CGFloat
 
+    static var colourCount: Int { gradients.count }
+
+    /// Bots may store any integer; it wraps onto the palette.
+    static func colourIndex(_ colour: Int) -> Int { Int(colour.magnitude % UInt(gradients.count)) }
+
+    static func swatch(_ index: Int) -> some View {
+        Circle().fill(LinearGradient(colors: gradients[index], startPoint: .topLeading, endPoint: .bottomTrailing))
+    }
+
     var body: some View {
         Group {
             if let data = draft.avatarImageData, let image = UIImage(data: data) {
                 Image(uiImage: image).resizable().scaledToFill()
             } else {
-                LinearGradient(colors: Self.gradients[Int(draft.avatarColorIndex.magnitude % UInt(Self.gradients.count))],
-                               startPoint: .topLeading, endPoint: .bottomTrailing)
+                Self.swatch(Self.colourIndex(draft.avatarColorIndex))
                     .overlay {
                         Image(systemName: draft.avatarSymbolName ?? "sparkles")
                             .font(.system(size: size * 0.45, weight: .semibold)).foregroundStyle(.white)
