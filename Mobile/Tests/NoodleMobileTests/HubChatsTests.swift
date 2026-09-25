@@ -135,4 +135,26 @@ private actor FakeHub {
         #expect(chats.agents.map(\.draft.name) == ["Scout II"])
         #expect(await hub.bot.draft.name == "Scout II")
     }
+
+    @Test func aRelaunchShowsWhatWasLastSyncedBeforeTheHubAnswers() async throws {
+        let hub = FakeHub()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let (chats, server) = try await paired(to: hub, directory: directory)
+        try await chats.reload()
+        #expect(chats.isLoaded)
+        server.stop()
+
+        let relaunched = HubChats(pairing: HubPairing(directory: directory, deviceName: "iPhone"))
+
+        let scout = try #require(relaunched.agents.first)
+        #expect(scout.draft.name == "Scout")
+        #expect(relaunched.latestMessage(of: scout)?.body == "Hello")
+    }
+
+    @Test func noAgentsIsOnlyKnownOnceTheHubHasAnswered() {
+        let chats = HubChats(pairing: HubPairing(directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString), deviceName: "iPhone"))
+        #expect(chats.agents.isEmpty)
+        #expect(!chats.isLoaded)
+    }
 }

@@ -222,7 +222,8 @@ struct ProfileView: View {
     }
 
     private var status: some View {
-        let (title, color): (String, Color) = if pairing.isWorking || (pairing.status == nil && pairing.error == nil) {
+        // The status shown may be the one saved at the last launch; only an answer this launch means connected.
+        let (title, color): (String, Color) = if pairing.isWorking || (pairing.endpoint == nil && pairing.error == nil) {
             ("Connecting…", .secondary)
         } else if pairing.error != nil {
             ("Not connected", .orange)

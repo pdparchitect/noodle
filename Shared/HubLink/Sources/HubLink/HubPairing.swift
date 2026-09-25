@@ -12,6 +12,7 @@ import Observation
     }
 
     public private(set) var hub: Hub?
+    /// What the Hub last said it lends, kept across launches so it shows before the Hub answers again.
     public private(set) var status: LinkStatus?
     /// The address that answered last.
     public private(set) var endpoint: LinkEndpoint?
@@ -25,6 +26,7 @@ import Observation
         self.directory = directory
         self.deviceName = deviceName
         hub = try? JSONDecoder().decode(Hub.self, from: Data(contentsOf: hubURL))
+        if hub != nil { status = try? LinkProtocol.decoder.decode(LinkStatus.self, from: Data(contentsOf: statusURL)) }
     }
 
     public var keyFingerprint: String? { try? identity().publicKey.fingerprint }
@@ -37,7 +39,7 @@ import Observation
             let status = try await self.exchange(.enroll(token: invitation.token, deviceName: self.deviceName),
                                                  key: invitation.hubKey, endpoints: invitation.endpoints)
             try self.save(Hub(name: status.hubName, key: invitation.hubKey, endpoints: status.endpoints, userName: status.userName))
-            self.status = status
+            self.remember(status)
         }
     }
 
@@ -49,7 +51,7 @@ import Observation
             // Left or joined another Hub while this was in flight.
             guard self.hub?.key == hub.key else { return }
             try self.save(Hub(name: status.hubName, key: hub.key, endpoints: status.endpoints, userName: status.userName))
-            self.status = status
+            self.remember(status)
         }
     }
 
@@ -66,6 +68,7 @@ import Observation
     /// Forgets the Hub. The Hub still lists this device until its owner removes it.
     public func leave() {
         try? FileManager.default.removeItem(at: hubURL)
+        try? FileManager.default.removeItem(at: statusURL)
         hub = nil
         status = nil
         endpoint = nil
@@ -170,5 +173,11 @@ import Observation
         self.hub = hub
     }
 
+    private func remember(_ status: LinkStatus) {
+        self.status = status
+        try? LinkProtocol.encoder.encode(status).write(to: statusURL, options: .atomic)
+    }
+
     private var hubURL: URL { directory.appendingPathComponent("hub.json") }
+    private var statusURL: URL { directory.appendingPathComponent("status.json") }
 }

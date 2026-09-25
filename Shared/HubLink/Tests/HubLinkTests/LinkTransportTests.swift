@@ -93,3 +93,43 @@ final class LinkStreamTests: XCTestCase {
 final class StreamBox: @unchecked Sendable {
     var stream: LinkStream?
 }
+
+@MainActor final class HubPairingTests: XCTestCase {
+    /// What the Hub lends is known at launch, before the Hub answers again.
+    func testTheHubsLastAnswerSurvivesARelaunch() async throws {
+        let hub = LinkIdentity()
+        let harness = LinkHarness(provider: "codex", providerName: "Codex", profileName: nil)
+        let port = LockedPort()
+        let server = try LinkServer(identity: hub, port: 0) { _, _ in
+            .response(LinkProtocol.encode(.status(LinkStatus(hubName: "Studio", userName: "Petko", planName: "Family",
+                harnesses: [harness], endpoints: [LinkEndpoint(host: "127.0.0.1", port: port.value)]))))
+        }
+        try await server.start()
+        addTeardownBlock { server.stop() }
+        port.value = try XCTUnwrap(server.port)
+        let invitation = LinkInvitation(hubName: "Studio", hubKey: hub.publicKey,
+                                        endpoints: [LinkEndpoint(host: "127.0.0.1", port: port.value)],
+                                        userName: "Petko", token: "t", expires: Date().addingTimeInterval(600))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let pairing = HubPairing(directory: directory, deviceName: "iPhone")
+        await pairing.join(invitation.url().absoluteString)
+        XCTAssertNil(pairing.error)
+
+        let relaunched = HubPairing(directory: directory, deviceName: "iPhone")
+
+        XCTAssertEqual(relaunched.status?.harnesses, [harness])
+        XCTAssertEqual(relaunched.status?.planName, "Family")
+        relaunched.leave()
+        XCTAssertNil(HubPairing(directory: directory, deviceName: "iPhone").status)
+    }
+}
+
+private final class LockedPort: @unchecked Sendable {
+    private let lock = NSLock()
+    private var port: UInt16 = 0
+    var value: UInt16 {
+        get { lock.withLock { port } }
+        set { lock.withLock { port = newValue } }
+    }
+}

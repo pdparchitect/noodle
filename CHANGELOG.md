@@ -10,6 +10,10 @@ All notable changes to Noodle are documented here, following
 
 - Connect Replit in Settings → Tools → Add Tools, so bots can work with your Replit apps.
 
+### Changed
+
+- Choose a Noodle Hub harness for a bot as soon as Noodle opens. Noodle remembers what each Hub last said it lends instead of waiting for the Hub to answer again.
+
 ## [0.27.0] - 2026-09-25
 
 ### Added

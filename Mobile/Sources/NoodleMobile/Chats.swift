@@ -6,6 +6,8 @@ import SwiftUI
     let pairing: HubPairing
     private(set) var agents: [LinkBot] = []
     private(set) var error: String?
+    /// Whether the list is known: from the last sync saved on this phone, or from the Hub itself.
+    private(set) var isLoaded = false
     /// Pins belong to this phone alone; the Hub never sees them.
     private var pinned: Set<UUID>
     private var conversations: [UUID: [LinkMessage]] = [:]
@@ -13,9 +15,29 @@ import SwiftUI
     /// so that message is read again until it shows as delivered.
     @ObservationIgnored private var read: [UUID: Int] = [:]
 
+    /// The last sync, shown at launch while the Hub is asked again.
+    private struct Cache: Codable {
+        var agents: [LinkBot]
+        var conversations: [UUID: [LinkMessage]]
+        var read: [UUID: Int]
+    }
+
     init(pairing: HubPairing) {
         self.pairing = pairing
         pinned = Set((try? JSONDecoder().decode([UUID].self, from: Data(contentsOf: pairing.directory.appendingPathComponent("pins.json")))) ?? [])
+        if let cache = try? JSONDecoder().decode(Cache.self, from: Data(contentsOf: cacheURL)) {
+            agents = cache.agents
+            conversations = cache.conversations
+            read = cache.read
+            isLoaded = true
+        }
+    }
+
+    private var cacheURL: URL { pairing.directory.appendingPathComponent("chats.json") }
+
+    private func saveCache() {
+        try? JSONEncoder().encode(Cache(agents: agents, conversations: conversations, read: read))
+            .write(to: cacheURL, options: .atomic)
     }
 
     /// Pinned first, then newest conversation first, as in Messages.
@@ -41,6 +63,7 @@ import SwiftUI
             throw LinkError("The Hub sent an unexpected answer.")
         }
         agents.append(bot)
+        saveCache()
         return bot
     }
 
@@ -49,6 +72,7 @@ import SwiftUI
             throw LinkError("The Hub sent an unexpected answer.")
         }
         if let index = agents.firstIndex(where: { $0.id == bot.id }) { agents[index] = bot }
+        saveCache()
     }
 
     func agent(_ id: UUID) -> LinkBot? { agents.first { $0.id == id } }
@@ -65,7 +89,9 @@ import SwiftUI
                 for try await event in try await pairing.subscribe() {
                     switch event {
                     case .botsChanged: try await reload()
-                    case .conversationChanged(let id, _): try await load(id)
+                    case .conversationChanged(let id, _):
+                        try await load(id)
+                        saveCache()
                     // Tools are lent by a Mac; this phone lends none.
                     case .toolCall: break
                     }
@@ -81,7 +107,11 @@ import SwiftUI
         guard case .bots(let bots) = try await pairing.request(.bots) else { throw LinkError("The Hub sent an unexpected answer.") }
         agents = bots
         for bot in bots { try await load(bot.conversationID) }
+        // Conversations of bots that are gone.
+        conversations = conversations.filter { id, _ in bots.contains { $0.conversationID == id } }
+        isLoaded = true
         error = nil
+        saveCache()
     }
 
     func send(_ body: String, to agent: LinkBot) async throws {
@@ -94,6 +124,7 @@ import SwiftUI
         }
         merge([sent], into: agent.conversationID)
         try await load(agent.conversationID)
+        saveCache()
     }
 
     private func load(_ conversationID: UUID) async throws {
@@ -139,7 +170,9 @@ struct AgentsView: View {
             .listStyle(.plain)
             .overlay {
                 if chats.agents.isEmpty {
-                    if let error = chats.error {
+                    if !chats.isLoaded, chats.error == nil {
+                        ProgressView()
+                    } else if let error = chats.error {
                         ContentUnavailableView("Not Connected", systemImage: "wifi.exclamationmark", description: Text(error))
                     } else {
                         ContentUnavailableView("No Agents", systemImage: "bubble.left.and.bubble.right")
@@ -149,14 +182,16 @@ struct AgentsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: UUID.self) { id in ChatView(chats: chats, agentID: id) }
             .toolbar {
+                // Plain text buttons, as in Messages, not the round glass default.
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { showingProfile = true } label: { Image(systemName: "person.crop.circle") }
-                        .accessibilityLabel("Profile")
+                    Button("Profile") { showingProfile = true }.foregroundStyle(.tint)
                 }
+                .sharedBackgroundVisibility(.hidden)
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { creating = true } label: { Image(systemName: "square.and.pencil") }
+                    Button("New") { creating = true }.foregroundStyle(.tint)
                         .accessibilityLabel("New Agent")
                 }
+                .sharedBackgroundVisibility(.hidden)
             }
             .refreshable { try? await chats.reload() }
             .sheet(isPresented: $showingProfile) { ProfileView(pairing: chats.pairing) }
