@@ -4,11 +4,14 @@ import HubLink
 import NoodleRuntimeSettings
 import SwiftUI
 
+/// "Noodle Hub Dev" in development builds, so they are told apart from a released Hub running beside them.
+let hubAppName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Noodle Hub"
+
 @main struct NoodleHubApp: App {
     @NSApplicationDelegateAdaptor(HubDelegate.self) private var delegate
 
     var body: some Scene {
-        MenuBarExtra("Noodle Hub", systemImage: "server.rack") {
+        MenuBarExtra(hubAppName, systemImage: "server.rack") {
             HubMenu(hub: delegate.settings.hub)
         }
         Window("Usage", id: UsageView.windowID) {
@@ -73,7 +76,7 @@ struct HubMenu: View {
         }
         .keyboardShortcut(",")
         Divider()
-        Button("Quit Noodle Hub") { NSApp.terminate(nil) }
+        Button("Quit \(hubAppName)") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
     }
 }
