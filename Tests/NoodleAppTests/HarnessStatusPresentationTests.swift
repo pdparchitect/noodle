@@ -22,11 +22,11 @@ import NoodleCore
         }
         let view = host(row(false))
         _ = try await control(error, in: view)
-        _ = try await control("Version 0.153.4", in: view)
+        _ = try await control("0.153.4", in: view)
         view.rootView = row(true)
         _ = try await control("Checking for updates…", in: view)
         XCTAssertFalse(hasControl(error, in: view))
-        _ = try await control("Version 0.153.4", in: view)
+        _ = try await control("0.153.4", in: view)
         // A check that still fails must show the error again once it finishes.
         view.rootView = row(false)
         _ = try await control(error, in: view)
