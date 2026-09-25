@@ -16,7 +16,7 @@
 
 ### Changed
 
-- Show only Harness, Users, Plans, Network and Update in Settings for now. Heartbeat, Sandbox, Tools and Companions return when the Hub runs shared agents.
+- Show only Harness, Users, Plans, Bots, Network and Update in Settings for now. Heartbeat, Sandbox, Tools and Companions return when the Hub runs shared agents.
 
 ## [0.1.0] - 2026-09-24
 
