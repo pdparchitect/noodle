@@ -111,14 +111,19 @@ import SwiftUI
             .write(to: cacheURL, options: .atomic)
     }
 
-    /// Pinned first, then newest conversation first, as in Messages.
-    var sortedAgents: [LinkBot] {
-        agents.sorted {
-            let (lhs, rhs) = (isPinned($0), isPinned($1))
-            if lhs != rhs { return lhs }
-            return (latestMessage(of: $0)?.createdAt ?? $0.createdAt) > (latestMessage(of: $1)?.createdAt ?? $1.createdAt)
+    var sortedAgents: [LinkBot] { Self.sorted(agents.map { (self, $0) }).map(\.1) }
+
+    /// Pinned first, then newest conversation first, as in Messages, across however many Hubs.
+    static func sorted(_ agents: [(HubChats, LinkBot)]) -> [(HubChats, LinkBot)] {
+        agents.sorted { lhs, rhs in
+            let (left, right) = (lhs.0.isPinned(lhs.1), rhs.0.isPinned(rhs.1))
+            if left != right { return left }
+            return lhs.0.recency(of: lhs.1) > rhs.0.recency(of: rhs.1)
         }
     }
+
+    /// When the conversation last moved, or the bot was made.
+    private func recency(of agent: LinkBot) -> Date { latestMessage(of: agent)?.createdAt ?? agent.createdAt }
 
     func isPinned(_ agent: LinkBot) -> Bool { pinned.contains(agent.id) }
 
@@ -335,39 +340,53 @@ struct OutgoingFile: Identifiable, Equatable {
     var voice: LinkVoice?
 }
 
-/// The home screen once paired: the agents, newest conversation first.
+/// The home screen once paired: the agents of the Hubs shown, newest conversation first.
 struct AgentsView: View {
-    @State private var chats: HubChats
+    let pairings: [HubPairing]
+    /// Kept per Hub while it stays shown, so switching the option keeps what each Hub loaded.
+    @State private var chats: [HubChats] = []
     @State private var showingMore = false
     /// What was picked in the … sheet; it opens once that sheet has gone.
     @State private var chosen: MoreChoice?
     @State private var showingProfile = false
     @State private var creating = false
 
-    init(pairing: HubPairing) { _chats = State(initialValue: HubChats(pairing: pairing)) }
+    private struct Row: Identifiable {
+        let chats: HubChats
+        let agent: LinkBot
+        let id: ChatLink
+    }
+
+    private var rows: [Row] {
+        HubChats.sorted(chats.flatMap { hub in hub.agents.map { (hub, $0) } }).map { hub, agent in
+            Row(chats: hub, agent: agent, id: ChatLink(hub: CurrentHub.name(of: hub.pairing), agent: agent.id))
+        }
+    }
 
     var body: some View {
+        let rows = rows
         NavigationStack {
-            List(chats.sortedAgents) { agent in
-                NavigationLink(value: agent.id) {
-                    AgentRow(agent: agent, latest: chats.latestMessage(of: agent), pinned: chats.isPinned(agent),
-                             unread: chats.isUnread(agent))
+            List(rows) { row in
+                NavigationLink(value: row.id) {
+                    AgentRow(agent: row.agent, latest: row.chats.latestMessage(of: row.agent), pinned: row.chats.isPinned(row.agent),
+                             unread: row.chats.isUnread(row.agent), hub: chats.count > 1 ? row.chats.pairing.hubName : nil)
                 }
                 // As in Messages: dividers between rows, none above the first.
-                .listRowSeparator(agent.id == chats.sortedAgents.first?.id ? .hidden : .visible, edges: .top)
+                .listRowSeparator(row.id == rows.first?.id ? .hidden : .visible, edges: .top)
                 .swipeActions(edge: .leading) {
-                    Button { chats.togglePin(agent) } label: {
-                        Label(chats.isPinned(agent) ? "Unpin" : "Pin", systemImage: chats.isPinned(agent) ? "pin.slash.fill" : "pin.fill")
+                    let pinned = row.chats.isPinned(row.agent)
+                    Button { row.chats.togglePin(row.agent) } label: {
+                        Label(pinned ? "Unpin" : "Pin", systemImage: pinned ? "pin.slash.fill" : "pin.fill")
                     }
                     .tint(.orange)
                 }
             }
             .listStyle(.plain)
             .overlay {
-                if chats.agents.isEmpty {
-                    if !chats.isLoaded, chats.error == nil {
+                if rows.isEmpty {
+                    if chats.isEmpty || chats.contains(where: { !$0.isLoaded && $0.error == nil }) {
                         ProgressView()
-                    } else if let error = chats.error {
+                    } else if let error = chats.lazy.compactMap(\.error).first {
                         ContentUnavailableView("Not Connected", systemImage: "wifi.exclamationmark", description: Text(error))
                     } else {
                         ContentUnavailableView("No Bots", systemImage: "bubble.left.and.bubble.right")
@@ -375,7 +394,11 @@ struct AgentsView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: UUID.self) { id in ChatView(chats: chats, agentID: id) }
+            .navigationDestination(for: ChatLink.self) { link in
+                if let hub = chats.first(where: { CurrentHub.name(of: $0.pairing) == link.hub }) {
+                    ChatView(chats: hub, agentID: link.agent)
+                }
+            }
             .toolbar {
                 // A plain button, as in Messages, not the round glass default.
                 ToolbarItem(placement: .topBarTrailing) {
@@ -385,17 +408,26 @@ struct AgentsView: View {
                 }
                 .sharedBackgroundVisibility(.hidden)
             }
-            .refreshable { try? await chats.reload() }
+            .refreshable {
+                for hub in chats { try? await hub.reload() }
+            }
             .sheet(isPresented: $showingMore, onDismiss: openChosen) {
                 MoreSheet { choice in
                     chosen = choice
                     showingMore = false
                 }
             }
-            .sheet(isPresented: $showingProfile) { ProfileView(pairing: chats.pairing) }
-            .sheet(isPresented: $creating) { AgentEditor(chats: chats, agent: nil) }
+            .sheet(isPresented: $showingProfile) { HubsView() }
+            .sheet(isPresented: $creating) {
+                if let first = chats.first { AgentEditor(chats: first, agent: nil, hubs: chats) }
+            }
         }
-        .task { await chats.follow() }
+        .task(id: pairings.map(CurrentHub.name)) {
+            chats = pairings.map { pairing in chats.first { $0.pairing === pairing } ?? HubChats(pairing: pairing) }
+            await withTaskGroup(of: Void.self) { group in
+                for hub in chats { group.addTask { await hub.follow() } }
+            }
+        }
     }
 
     private func openChosen() {
@@ -406,6 +438,12 @@ struct AgentsView: View {
         }
         chosen = nil
     }
+}
+
+/// A conversation in the list: the Hub, by the name of its folder, and the bot.
+struct ChatLink: Hashable {
+    let hub: String
+    let agent: UUID
 }
 
 enum MoreChoice { case createBot, profiles }
@@ -438,6 +476,8 @@ private struct AgentRow: View {
     let latest: LinkMessage?
     let pinned: Bool
     let unread: Bool
+    /// The bot's Hub, when several are shown together.
+    var hub: String?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -452,6 +492,9 @@ private struct AgentRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(agent.draft.name).font(.headline).lineLimit(1)
+                    if let hub {
+                        Text(hub).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
                     Spacer()
                     if pinned {
                         Image(systemName: "pin.fill").font(.caption).foregroundStyle(.orange).accessibilityLabel("Pinned")
@@ -831,18 +874,22 @@ private struct Bubble: View {
 
 /// Makes a new agent on the Hub, or edits one: its name, colour and the harness it runs on.
 struct AgentEditor: View {
-    let chats: HubChats
+    /// The Hub the agent is on, or is made on.
+    @State private var chats: HubChats
     /// Nil makes a new agent.
     let agent: LinkBot?
+    /// The Hubs a new agent can be made on.
+    private let hubs: [HubChats]
     @Environment(\.dismiss) private var dismiss
     @State private var draft: LinkBotDraft
     @State private var saving = false
     @State private var confirmingDelete = false
     @State private var problem: String?
 
-    init(chats: HubChats, agent: LinkBot?) {
-        self.chats = chats
+    init(chats: HubChats, agent: LinkBot?, hubs: [HubChats] = []) {
+        _chats = State(initialValue: chats)
         self.agent = agent
+        self.hubs = hubs
         _draft = State(initialValue: agent?.draft ?? LinkBotDraft(name: "", provider: "", avatarSymbolName: "sparkles",
                                                                   avatarColorIndex: Int.random(in: 0..<AgentAvatar.colourCount)))
     }
@@ -855,6 +902,14 @@ struct AgentEditor: View {
                                     profile: agent.draft.profile, profileName: nil), at: 0)
         }
         return lent
+    }
+
+    private var hub: Binding<String> {
+        Binding {
+            CurrentHub.name(of: chats.pairing)
+        } set: { name in
+            if let hub = hubs.first(where: { CurrentHub.name(of: $0.pairing) == name }) { chats = hub }
+        }
     }
 
     private var harness: Binding<LinkHarness?> {
@@ -887,6 +942,13 @@ struct AgentEditor: View {
                     TextField("Name", text: $draft.name)
                 }
                 Section {
+                    if agent == nil, hubs.count > 1 {
+                        Picker("Hub", selection: hub) {
+                            ForEach(hubs, id: \.pairing.directory) { hub in
+                                Text(hub.pairing.hubName).tag(CurrentHub.name(of: hub.pairing))
+                            }
+                        }
+                    }
                     if harnesses.isEmpty {
                         Text("Your plan lends no harnesses").foregroundStyle(.secondary)
                     } else {
@@ -928,7 +990,9 @@ struct AgentEditor: View {
                     }
                 }
             }
-            .task { if chats.pairing.status == nil { await chats.pairing.refresh(quietly: true) } }
+            .task(id: CurrentHub.name(of: chats.pairing)) {
+                if chats.pairing.status == nil { await chats.pairing.refresh(quietly: true) }
+            }
         }
     }
 

@@ -7,11 +7,6 @@ import VisionKit
 struct JoinView: View {
     @Environment(HubMemberships.self) private var hubs
     @State private var choosing = false
-    /// What was picked in the sheet; it starts once the sheet has gone, so two sheets never overlap.
-    @State private var chosen: PairingSource?
-    @State private var scanning = false
-    @State private var pickingPhoto = false
-    @State private var photo: PhotosPickerItem?
     @State private var problem: String?
 
     var body: some View {
@@ -38,25 +33,48 @@ struct JoinView: View {
             .disabled(hubs.isJoining)
         }
         .padding(24)
-        .sheet(isPresented: $choosing, onDismiss: start) {
-            PairingSources { source in
-                chosen = source
-                choosing = false
+        .pairing(isPresented: $choosing, problem: $problem)
+    }
+}
+
+extension View {
+    /// Asks how to hand over an invitation, then joins its Hub.
+    func pairing(isPresented: Binding<Bool>, problem: Binding<String?>) -> some View {
+        modifier(Pairing(choosing: isPresented, problem: problem))
+    }
+}
+
+private struct Pairing: ViewModifier {
+    @Environment(HubMemberships.self) private var hubs
+    @Binding var choosing: Bool
+    @Binding var problem: String?
+    /// What was picked in the sheet; it starts once the sheet has gone, so two sheets never overlap.
+    @State private var chosen: PairingSource?
+    @State private var scanning = false
+    @State private var pickingPhoto = false
+    @State private var photo: PhotosPickerItem?
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $choosing, onDismiss: start) {
+                PairingSources { source in
+                    chosen = source
+                    choosing = false
+                }
             }
-        }
-        .photosPicker(isPresented: $pickingPhoto, selection: $photo, matching: .images)
-        .sheet(isPresented: $scanning) {
-            QRScanner { code in
-                scanning = false
-                join(code)
+            .photosPicker(isPresented: $pickingPhoto, selection: $photo, matching: .images)
+            .sheet(isPresented: $scanning) {
+                QRScanner { code in
+                    scanning = false
+                    join(code)
+                }
+                .ignoresSafeArea()
             }
-            .ignoresSafeArea()
-        }
-        .onChange(of: photo) { _, item in
-            guard let item else { return }
-            photo = nil
-            Task { await read(item) }
-        }
+            .onChange(of: photo) { _, item in
+                guard let item else { return }
+                photo = nil
+                Task { await read(item) }
+            }
     }
 
     private func join(_ text: String) {
@@ -157,7 +175,85 @@ struct PasteLinkButton: UIViewRepresentable {
     }
 }
 
-/// Who this phone joined the Hub as, and whether the Hub answers.
+/// Every Hub this phone joined: tap one to show its bots, or its info button for its details. Shown
+/// together, tapping a Hub opens its details.
+struct HubsView: View {
+    @Environment(HubMemberships.self) private var hubs
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage(CurrentHub.key) private var current = ""
+    @AppStorage(CurrentHub.togetherKey) private var together = false
+    /// The folder of the Hub whose details are open.
+    @State private var details: URL?
+    @State private var adding = false
+    @State private var problem: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if hubs.hubs.count > 1 {
+                    Section { Toggle("Show All Hubs Together", isOn: $together) }
+                }
+                Section {
+                    ForEach(hubs.hubs) { pairing in
+                        HStack {
+                            Button {
+                                if together {
+                                    details = pairing.directory
+                                } else {
+                                    current = CurrentHub.name(of: pairing)
+                                    dismiss()
+                                }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(pairing.hubName).foregroundStyle(.primary)
+                                    Text(pairing.userName).font(.subheadline).foregroundStyle(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(.rect)
+                            }
+                            .buttonStyle(.plain)
+                            if !together, hubs.hubs.count > 1, CurrentHub.pick(hubs.hubs, saved: current) === pairing {
+                                Image(systemName: "checkmark").foregroundStyle(.tint).accessibilityLabel("Shown")
+                            }
+                            Button { details = pairing.directory } label: { Image(systemName: "info.circle") }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("Details")
+                        }
+                    }
+                }
+                Section {
+                    if hubs.isJoining {
+                        ProgressView("Joining…")
+                    } else if let message = problem ?? hubs.joinError {
+                        Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                    }
+                    Button {
+                        problem = nil
+                        hubs.clearJoinError()
+                        adding = true
+                    } label: {
+                        Label("Add Hub", systemImage: "plus")
+                    }
+                    .disabled(hubs.isJoining)
+                }
+            }
+            .navigationTitle("Profiles")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+            .navigationDestination(item: $details) { folder in
+                if let pairing = hubs.hubs.first(where: { $0.directory == folder }) {
+                    ProfileView(pairing: pairing)
+                }
+            }
+            .refreshable { await hubs.refreshAll() }
+            .pairing(isPresented: $adding, problem: $problem)
+        }
+    }
+}
+
+/// Who this phone joined a Hub as, and whether the Hub answers.
 struct ProfileView: View {
     @Environment(HubMemberships.self) private var hubs
     @Environment(\.dismiss) private var dismiss
@@ -165,60 +261,52 @@ struct ProfileView: View {
     @State private var leaving = false
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    VStack(spacing: 8) {
-                        Image(systemName: "person.crop.circle.fill")
-                            .font(.system(size: 72))
-                            .foregroundStyle(.tint)
-                            .accessibilityHidden(true)
-                        Text(userName).font(.title2.bold())
-                        Text(hubName).foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .listRowBackground(Color.clear)
+        List {
+            Section {
+                VStack(spacing: 8) {
+                    Image(systemName: "person.crop.circle.fill")
+                        .font(.system(size: 72))
+                        .foregroundStyle(.tint)
+                        .accessibilityHidden(true)
+                    Text(pairing.userName).font(.title2.bold())
+                    Text(pairing.hubName).foregroundStyle(.secondary)
                 }
-                Section {
-                    HStack {
-                        Text("Status")
-                        Spacer()
-                        status
-                    }
-                    if let plan = pairing.status?.planName, !plan.isEmpty {
-                        LabeledContent("Plan", value: plan)
-                    }
-                    if let endpoint = pairing.endpoint {
-                        LabeledContent("Address", value: endpoint.description)
-                    }
-                    if let fingerprint = pairing.keyFingerprint {
-                        LabeledContent("Device Key", value: fingerprint)
-                    }
+                .frame(maxWidth: .infinity)
+                .listRowBackground(Color.clear)
+            }
+            Section {
+                HStack {
+                    Text("Status")
+                    Spacer()
+                    status
                 }
-                if let error = pairing.error {
-                    Section { Text(error).foregroundStyle(.orange) }
+                if let plan = pairing.status?.planName, !plan.isEmpty {
+                    LabeledContent("Plan", value: plan)
                 }
-                Section {
-                    Button("Leave Hub", role: .destructive) { leaving = true }
+                if let endpoint = pairing.endpoint {
+                    LabeledContent("Address", value: endpoint.description)
+                }
+                if let fingerprint = pairing.keyFingerprint {
+                    LabeledContent("Device Key", value: fingerprint)
                 }
             }
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            if let error = pairing.error {
+                Section { Text(error).foregroundStyle(.orange) }
             }
-            .refreshable { await pairing.refresh() }
-            .confirmationDialog("Leave \(hubName)?", isPresented: $leaving, titleVisibility: .visible) {
-                Button("Leave", role: .destructive) { hubs.leave(pairing) }
-            } message: {
-                Text("Joining again needs a new invitation.")
+            Section {
+                Button("Leave Hub", role: .destructive) { leaving = true }
             }
         }
-    }
-
-    private var hubName: String { pairing.status?.hubName ?? pairing.hub?.name ?? "Noodle Hub" }
-
-    private var userName: String {
-        let name = pairing.status?.userName ?? pairing.hub?.userName ?? ""
-        return name.isEmpty ? hubName : name
+        .navigationBarTitleDisplayMode(.inline)
+        .refreshable { await pairing.refresh() }
+        .confirmationDialog("Leave \(pairing.hubName)?", isPresented: $leaving, titleVisibility: .visible) {
+            Button("Leave", role: .destructive) {
+                dismiss()
+                hubs.leave(pairing)
+            }
+        } message: {
+            Text("Joining again needs a new invitation.")
+        }
     }
 
     private var status: some View {
@@ -231,6 +319,16 @@ struct ProfileView: View {
             ("Connected", .green)
         }
         return Text(title).foregroundStyle(color)
+    }
+}
+
+extension HubPairing {
+    var hubName: String { status?.hubName ?? hub?.name ?? "Noodle Hub" }
+
+    /// Who this phone joined as.
+    var userName: String {
+        let name = status?.userName ?? hub?.userName ?? ""
+        return name.isEmpty ? hubName : name
     }
 }
 
