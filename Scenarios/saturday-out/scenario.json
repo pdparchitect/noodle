@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "title": "Alfred maps out Saturday",
+  "clock": "09:10",
+  "settings": {
+    "Noodle.firstBotSetup.dismissed": true,
+    "Noodle.composer.showBotDescriptions": true
+  },
+  "harnesses": {
+    "claude-code": { "models": "builtin" }
+  },
+  "agents": [
+    { "key": "alfred", "name": "Alfred", "harness": "claude-code", "model": "sonnet",
+      "description": "The family butler: plans, lists and everyone's whereabouts",
+      "backstory": "You are the family's butler. You keep one plan, you anticipate, and you are unfailingly courteous.",
+      "avatar": { "image": "cast/alfred.jpg" },
+      "autoReplies": ["Very good. I have added it to the plan.", "Consider it done."] },
+    { "key": "chloe", "name": "Chloe", "harness": "claude-code", "model": "opus", "effort": "high",
+      "description": "Personal assistant for the diary, travel and errands", "avatar": { "image": "cast/chloe.jpg" } }
+  ],
+  "conversations": [
+    { "key": "alfred", "direct": "alfred", "background": { "preset": "ocean" },
+      "messages": [
+        { "at": "08:52", "from": "user",
+          "text": "Leo's match is at Hackney Marshes at 10, and we're meeting Mum at Borough Market afterwards. How long is the drive between them?" },
+        { "at": "08:53", "from": "alfred",
+          "text": "About 25 minutes by car, 8.3 km along Victoria Park Road. The match ends at 11:30, so leaving by 12:00 gets you to the market for 12:30 with time to park.\n\nhttps://maps.apple.com/directions?source=Hackney%20Marshes,%20London&destination=Borough%20Market,%20London&mode=driving" },
+        { "at": "08:54", "from": "user", "text": "Perfect. Leo's boots are in the car?" },
+        { "at": "08:54", "from": "alfred", "text": "In the boot, with his shin pads and a spare pair of socks." }
+      ] },
+    { "key": "chloe", "direct": "chloe",
+      "messages": [
+        { "at": "-1d 18:10", "from": "chloe", "text": "Your Saturday is clear after 10. I told Clara you are offline until Monday." }
+      ] }
+  ],
+  "present": {
+    "window": { "size": [1240, 860], "origin": [100, 70] },
+    "select": "alfred"
+  },
+  "film": {
+    "background": "black",
+    "intro": {
+      "icon": "cast/alfred.jpg",
+      "title": "Saturday, mapped",
+      "subtitle": "Alfred plans the drive, the lunch and the walk with Apple Maps."
+    },
+    "outro": {
+      "tagline": "A workspace for you and your AI agents."
+    }
+  },
+  "timeline": [
+    { "capture": "01-the-drive" },
+    { "wait": 0.8, "focus": "composer" },
+    { "wait": 1.1, "in": "alfred",
+      "type": { "text": "Book lunch near the market for five. Mum can't manage stairs, and she'd love a walk by the river afterwards." } },
+    { "wait": 0.8, "agent": "alfred", "status": { "phase": "working", "detail": "Finding lunch near Borough Market" } },
+    { "wait": 0.6, "agent": "alfred",
+      "toolCall": { "title": "Searching Apple Maps",
+        "input": "messenger tool maps search --query restaurant --near \"Borough Market, London\" --limit 3",
+        "output": "1. Roast, The Floral Hall, Stoney Street, London (51.505576, -0.091179)\n2. Akara, 18 Stoney Street, London (51.506374, -0.09161)\n3. Café François, 14-16 Stoney Street, London (51.505931, -0.091726)",
+        "exit": 0, "duration": 1.1 } },
+    { "wait": 0.6, "agent": "alfred",
+      "reply": { "key": "lunch",
+        "text": "Booked: Roast, in the Floral Hall above the market, a table for five at 12:45. I asked for step-free access and they will seat you by the lift.\n\nhttps://maps.apple.com/?ll=51.505576,-0.091179&q=Roast" } },
+    { "wait": 0.5, "agent": "alfred",
+      "toolCall": { "title": "Planning the walk",
+        "input": "messenger tool maps directions --from \"Borough Market, London\" --to \"Tate Modern, London\" --mode walking",
+        "output": "Borough Market to Tate Modern on foot via Park Street: 800 m (0.5 mi), 10 min.",
+        "exit": 0, "duration": 0.9 } },
+    { "wait": 0.6, "agent": "alfred",
+      "reply": { "key": "walk",
+        "text": "For afterwards, Tate Modern is a flat 10-minute walk via Park Street, and the river is right there when you arrive.\n\nhttps://maps.apple.com/directions?source=Borough%20Market,%20London&destination=Tate%20Modern,%20London&mode=walking" } },
+    { "agent": "alfred", "status": { "phase": "ready" } },
+    { "wait": 3, "capture": "02-lunch-and-walk" }
+  ]
+}
