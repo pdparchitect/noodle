@@ -72,6 +72,30 @@ print "spctl $*" >> "$TEST_LOG"
                     self.assertEqual((root / 'commands').read_text(), commands)
 
 
+class SuitePackagingTests(unittest.TestCase):
+    def test_the_suite_packages_every_companion(self):
+        for count in [3, 4, 5]:
+            with self.subTest(count=count), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / 'scripts').mkdir()
+                shutil.copyfile(ROOT / 'scripts/package-dmg.sh', root / 'scripts/package-dmg.sh')
+                apps = root / 'apps'
+                for name in ['Noodle', 'Noodle Computer', 'Noodle Applet', 'Noodle Browser', 'Noodle Hub'][:count]:
+                    (apps / f'{name}.app').mkdir(parents=True)
+                executable(root / '.build/dmg-tools/bin/python', 'if [[ "$1" == -m ]]; then exit 0; fi\nprint -n image > "$5"\n')
+                executable(root / 'bin/swift', 'print -n background > "${@: -2:1}"\n')
+                for tool in ['codesign', 'spctl']:
+                    executable(root / f'bin/{tool}', 'exit 0\n')
+                executable(root / 'bin/xcrun', 'if [[ "$1 $2" == "stapler staple" ]]; then print -n ticket >> "$3"; fi\n')
+                environment = dict(os.environ, PATH=f'{root}/bin:' + os.environ['PATH'],
+                                   NOODLE_SIGNING_IDENTITY='Developer ID Application: Fixture',
+                                   APPLE_API_KEY_PATH='/fixture/key', APPLE_API_KEY_ID='fixture', APPLE_API_ISSUER_ID='fixture')
+                output = root / 'dist/Noodle-Suite-arm64.dmg'
+                result = subprocess.run(['zsh', str(root / 'scripts/package-dmg.sh'), '--suite', str(apps), str(output)],
+                                        env=environment, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+
 class DiskImagePublicationTests(unittest.TestCase):
     def test_companion_channels_include_verified_disk_images_before_feeds(self):
         for product in ['Computer', 'Applet', 'Browser', 'Hub']:

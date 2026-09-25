@@ -22,7 +22,7 @@ typeset -a bundles builder_options
 builder_options=()
 if (( suite )); then
     bundles=("$app"/*.app(N))
-    (( ${#bundles} >= 3 && ${#bundles} <= 4 )) || { print -u2 'Expected three or four Suite apps'; exit 1; }
+    (( ${#bundles} >= 3 && ${#bundles} <= 5 )) || { print -u2 'Expected three to five Suite apps'; exit 1; }
     builder_options=(--suite)
 else
     [[ "$app" == *.app ]] || { print -u2 'Expected APP'; exit 1; }

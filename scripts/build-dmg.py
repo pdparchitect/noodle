@@ -94,7 +94,7 @@ def verify_image(image, apps, suite=False):
                 (width, height), locations = layout(apps, suite)
                 if (window['WindowBounds'] != f'{{{{200, 200}}, {{{width}, {height}}}}}'
                         or any(window[key] for key in ['ShowToolbar', 'ShowSidebar', 'ShowStatusBar', 'ShowTabView', 'ShowPathbar'])
-                        or icons['iconSize'] != 160 or icons['textSize'] != 16
+                        or icons['iconSize'] != icon_size(apps, suite) or icons['textSize'] != 16
                         or icons['backgroundType'] != 2 or icons['arrangeBy'] != 'none'
                         or any(store[name]['Iloc'] != position for name, position in locations.items())):
                     raise ValueError('DMG Finder layout does not match the installer design')
