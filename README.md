@@ -51,9 +51,10 @@ Agents run on the [harness](docs/harness-setup.md) you choose, using your existi
 | **[Noodle Computer](https://github.com/pdparchitect/noodle/releases/download/computer-latest/Noodle-Computer-arm64.dmg)** | Linux and macOS computers for you and your agents. | 26 |
 | **[Noodle Applet](https://github.com/pdparchitect/noodle/releases/download/applet-latest/Noodle-Applet-arm64.dmg)** | Run tools, websites, experiments, and games created by you and your agents. | 15 |
 | **[Noodle Browser](https://github.com/pdparchitect/noodle/releases/download/browser-latest/Noodle-Browser-arm64.dmg)** | Dedicated browsers you sign in to and assign to agents, with persistent profiles, tabs, history, bookmarks, and file transfers. | 26 |
+| **[Noodle Hub](https://github.com/pdparchitect/noodle/releases/download/hub-latest/Noodle-Hub-arm64.dmg)** | Share your harnesses with family and friends from an always-on Mac. Their bots run there, with your sign-ins kept on the Hub. | 26 |
 
 Each link downloads the DMG. Open it and drag the app to **Applications**. ZIP downloads are on the [releases page](https://github.com/pdparchitect/noodle/releases).
-Noodle Computer, Noodle Applet, and Noodle Browser are optional companions and also work on their own.
+Noodle Computer, Noodle Applet, Noodle Browser, and Noodle Hub are optional companions and also work on their own.
 
 ## Get started
 
@@ -73,6 +74,10 @@ needs. Add it in the bot's **Browsers** tab. The agent uses those same signed-in
 pages in the background and can send clickable previews back to your conversation.
 Each browser keeps its own sign-ins and browsing data.
 
+To use someone's Noodle Hub, ask them for an invitation, then choose **Join** under
+Noodle Hub in **Settings → Companions**. New bots can then run on the harnesses the
+Hub lends you, while still using the tools you give them on your Mac.
+
 ## A quick look
 
 <p align="center">
@@ -87,6 +92,7 @@ Each browser keeps its own sign-ins and browsing data.
 - **Teams** of bots working toward a shared goal.
 - **Restricted by default**, with per-bot folder sharing.
 - **Computers, browsers, and applets** your bots can use and build.
+- **Shared harnesses**: run bots on a Noodle Hub that lends you its sign-ins.
 - **Tools**: dozens of MCP services, on-device OCR, background removal, etc.
 - **On-device models**: Apple Intelligence, Qwen3, Llama, Gemma 4.
 - **Native chat**: voice, screen capture, annotations, Quick Look.

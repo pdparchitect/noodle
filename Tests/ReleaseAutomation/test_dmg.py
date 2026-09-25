@@ -1,5 +1,6 @@
 """Exercise installer signing failures and publication without release credentials."""
 import hashlib
+import importlib.util
 import os
 from pathlib import Path
 import shutil
@@ -135,3 +136,36 @@ fi
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SuiteLayoutTests(unittest.TestCase):
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location('build_dmg', Path(__file__).resolve().parents[2] / 'scripts/build-dmg.py')
+        self.module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(self.module)
+        except ModuleNotFoundError as error:
+            self.skipTest(f'dmgbuild is not installed here: {error}')
+
+    def test_the_suite_takes_its_three_apps_with_any_optional_companions(self):
+        required = self.module.SUITE_NAMES[:3]
+        for optional in [[], ['Noodle Browser.app'], ['Noodle Hub.app'], ['Noodle Browser.app', 'Noodle Hub.app']]:
+            with self.subTest(optional=optional):
+                self.assertEqual(self.module.suite_apps(set(required + optional)),
+                                 [name for name in self.module.SUITE_NAMES if name in required + optional])
+        for names in [required[:2], required + ['Noodle Other.app']]:
+            with self.subTest(names=names), self.assertRaises(ValueError):
+                self.module.suite_apps(set(names))
+
+    def test_every_suite_icon_has_room_left_of_the_arrow(self):
+        for count in range(3, len(self.module.SUITE_NAMES) + 1):
+            with self.subTest(count=count):
+                apps = [Path(name) for name in self.module.SUITE_NAMES[:count]]
+                _, locations = self.module.layout(apps, suite=True)
+                icon = self.module.icon_size(apps, suite=True)
+                points = [locations[app.name] for app in apps]
+                for index, (x, y) in enumerate(points):
+                    # The chevron sits at x = 570; Applications is to its right.
+                    self.assertLess(x + icon / 2, 560)
+                    for other_x, other_y in points[index + 1:]:
+                        self.assertTrue(abs(x - other_x) >= icon + 8 or abs(y - other_y) >= icon + 40)

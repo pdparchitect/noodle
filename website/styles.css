@@ -139,7 +139,7 @@ figure { margin: 0; }
 
 /* ---------- Download ---------- */
 .download { padding: 110px 0 120px; }
-.dl-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 52px; }
+.dl-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-top: 52px; }
 .dl { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 30px 20px 26px; border-radius: 18px; background: var(--bg-alt); transition: background .2s; }
 .dl:hover { background: #ececf0; }
 .dl img { width: 44px; height: 44px; }

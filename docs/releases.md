@@ -100,8 +100,8 @@ the image build workflow. These are native
 
 **Assemble Noodle Suite** runs after a successful main release workflow or verified
 artifact recovery. It can also be run manually on `main`. It packages the latest
-published stable Noodle, Computer, and Applet releases; Browser joins after its
-first stable release. Hub is not part of the suite: it runs on a separate Mac. Drafts,
+published stable Noodle, Computer, and Applet releases; Browser and Hub join after
+their first stable release. Drafts,
 prereleases, and unreleased working-tree versions are excluded. Suite requires macOS 26 and Apple silicon.
 
 App release builds remain version-driven: a Computer patch builds Computer, while

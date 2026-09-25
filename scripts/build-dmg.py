@@ -7,7 +7,21 @@ import subprocess
 import tempfile
 
 
-SUITE_NAMES = ['Noodle.app', 'Noodle Computer.app', 'Noodle Applet.app', 'Noodle Browser.app']
+SUITE_NAMES = ['Noodle.app', 'Noodle Computer.app', 'Noodle Applet.app', 'Noodle Browser.app', 'Noodle Hub.app']
+# Noodle, Computer and Applet always ship; the others join once they have a stable release.
+REQUIRED_SUITE_NAMES = SUITE_NAMES[:3]
+
+
+def suite_apps(names):
+    """The Suite's apps in installer order, or ValueError for a missing or unknown one."""
+    if not set(REQUIRED_SUITE_NAMES) <= names or not names <= set(SUITE_NAMES):
+        raise ValueError('Suite requires Noodle, Computer, and Applet; Browser and Hub join after their first release')
+    return [name for name in SUITE_NAMES if name in names]
+
+
+def icon_size(apps, suite=False):
+    # Five apps need a third column, which only fits left of the arrow at a smaller size.
+    return 128 if suite and len(apps) > 4 else 160
 
 
 def layout(apps, suite=False):
@@ -16,6 +30,8 @@ def layout(apps, suite=False):
     positions = [(165, 160), (405, 160), (165, 380), (405, 380)]
     if len(apps) == 3:
         positions[2] = (285, 380)
+    if len(apps) == 5:
+        positions = [(100, 160), (275, 160), (450, 160), (187, 380), (362, 380)]
     return (900, 560), {**dict(zip((app.name for app in apps), positions)), 'Applications': (745, 270)}
 
 
@@ -29,7 +45,7 @@ def settings(apps, background, suite=False):
         'background': str(background),
         'window_rect': ((200, 200), size),
         'icon_locations': locations,
-        'icon_size': 160,
+        'icon_size': icon_size(apps, suite),
         'text_size': 16,
         'show_icon_preview': True,
         # SetFile's hide-extension flag adds FinderInfo to the app and breaks
@@ -101,10 +117,10 @@ def main():
     # Preserve the bundle name even when the source is a development symlink.
     source = args.app.absolute()
     if args.suite:
-        names = {path.name for path in source.glob('*.app')}
-        if names not in [set(SUITE_NAMES[:3]), set(SUITE_NAMES)]:
-            parser.error('Suite requires Noodle, Computer, and Applet; Browser is optional until its first release')
-        apps = [source / name for name in SUITE_NAMES if name in names]
+        try:
+            apps = [source / name for name in suite_apps({path.name for path in source.glob('*.app')})]
+        except ValueError as error:
+            parser.error(str(error))
     else:
         apps = [source]
     if any(app.suffix != '.app' or not (app / 'Contents/Info.plist').is_file() for app in apps):

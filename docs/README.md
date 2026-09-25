@@ -14,6 +14,7 @@
 - [Noodle in the enterprise](enterprise.md)
 - [Noodle Computer](../Computer/README.md)
 - [Noodle Browser](../Browser/README.md)
+- [Noodle Hub](../Hub/README.md)
 
 ## Contribute
 

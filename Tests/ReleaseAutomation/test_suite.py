@@ -101,6 +101,15 @@ class SuiteTests(unittest.TestCase):
         self.assertEqual(updated['manifest']['components'][-1]['product'], 'browser')
         self.assertEqual(updated['manifest']['components'][:3], initial['manifest']['components'])
 
+    def test_hub_joins_the_suite_after_its_first_stable_release(self):
+        initial = self.plan()
+        self.github.app('hub', '0.2.0', prerelease=True)
+        self.assertEqual(self.plan(), initial)
+        self.github.app('hub', '0.2.0')
+        updated = self.plan()
+        self.assertEqual(updated['manifest']['components'][-1]['product'], 'hub')
+        self.assertEqual(updated['manifest']['components'][-1]['archive'], 'Noodle-Hub-arm64.zip')
+
     def test_channel_failure_reuses_the_existing_snapshot_without_repackaging(self):
         planned = self.plan()
         self.github.snapshot(planned['tag'], planned['manifest'], draft=True)

@@ -23,7 +23,10 @@ PRODUCTS = {
     'computer': ('computer-v', 'Noodle Computer', 'com.pdparchitect.noodle.computer'),
     'applet': ('applet-v', 'Noodle Applet', 'com.pdparchitect.noodle.applet'),
     'browser': ('browser-v', 'Noodle Browser', 'com.pdparchitect.noodle.browser'),
+    'hub': ('hub-v', 'Noodle Hub', 'com.pdparchitect.noodle.hub'),
 }
+# Companions that join the Suite after their first stable release.
+OPTIONAL = {'browser', 'hub'}
 SEMVER = r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
 RECIPE_FILES = ['scripts/suite-release.py', 'scripts/build-dmg.py', 'scripts/package-dmg.sh',
                 'scripts/dmg-background.swift', 'scripts/dmg-requirements.txt']
@@ -98,8 +101,8 @@ def select_releases(releases):
             if match and not release['draft'] and not release['prerelease']:
                 candidates.append((tuple(map(int, match.groups())), release))
         if not candidates:
-            if product == 'browser':
-                continue  # Browser joins automatically after its first stable release.
+            if product in OPTIONAL:
+                continue  # Joins automatically after its first stable release.
             raise ValueError(f'No stable {name} release is available')
         selected[product] = max(candidates, key=lambda item: item[0])[1]
     return selected
