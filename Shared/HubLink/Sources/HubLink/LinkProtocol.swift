@@ -89,6 +89,10 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case upload(conversationID: UUID, attachment: LinkAttachment, offset: Int, data: Data)
     /// One piece of a conversation's file, starting at `offset`.
     case download(conversationID: UUID, attachmentID: UUID, offset: Int)
+    /// The tools this device lends a bot, as it lists them. The Hub writes the bot's skills from it.
+    case publishTools(botID: UUID, catalogue: Data)
+    /// The answer to a pushed `toolCall`.
+    case toolResult(callID: UUID, result: Data?, error: String?)
 }
 
 public enum LinkResponse: Codable, Equatable, Sendable {
@@ -107,6 +111,8 @@ public enum LinkResponse: Codable, Equatable, Sendable {
 public enum LinkEvent: Codable, Equatable, Sendable {
     case conversationChanged(conversationID: UUID, count: Int)
     case botsChanged
+    /// A bot on the Hub calls a tool this device lends it. Answer with `toolResult`.
+    case toolCall(callID: UUID, botID: UUID, request: Data)
 }
 
 public struct LinkStatus: Codable, Equatable, Sendable {

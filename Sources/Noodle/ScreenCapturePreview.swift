@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import NoodleCore
+import NoodleRuntimeSettings
 
 /// Keeps the shortcut scoped to the chat window, including sidebar focus.
 struct CaptureShortcut: NSViewRepresentable {

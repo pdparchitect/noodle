@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import PDFKit
 import NoodleCore
+import NoodleRuntimeSettings
 
 /// Reads saved feedback directly. Original documents still open in Quick Look.
 @MainActor final class AnnotationPreviewController: NSObject, NSWindowDelegate {
@@ -243,64 +244,3 @@ struct AnnotationPreviewContent: View {
 
 /// Uses the same native HUD material and compact chrome as Noodle's other
 /// preview panels. The header is draggable; feedback stays outside the image.
-@MainActor final class AnnotationPreviewFrame: NSVisualEffectView {
-    private let title = NSTextField(labelWithString: "")
-    var filename: String {
-        get { title.stringValue }
-        set { title.stringValue = newValue }
-    }
-
-    init(content: NSView, filename: String, kindLabel: String = "Annotation", closeHint: String = "Close Preview (Esc or ⌘W)",
-         closeLabel: String = "Close Preview") {
-        super.init(frame: .zero)
-        material = .hudWindow; blendingMode = .behindWindow; state = .active
-        appearance = NSAppearance(named: .darkAqua)
-        wantsLayer = true
-        layer?.cornerRadius = 18; layer?.masksToBounds = true
-        layer?.borderWidth = 1; layer?.borderColor = NSColor.white.withAlphaComponent(0.22).cgColor
-
-        let header = AnnotationPreviewHeader()
-        let close = NSButton(image: NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: closeLabel)!,
-                             target: header, action: #selector(AnnotationPreviewHeader.closePreview))
-        close.isBordered = false; close.contentTintColor = .secondaryLabelColor
-        close.toolTip = closeHint; close.setAccessibilityLabel(closeLabel)
-        title.stringValue = filename
-        title.font = .systemFont(ofSize: 13, weight: .semibold); title.lineBreakMode = .byTruncatingMiddle
-        title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let kind = NSTextField(labelWithString: kindLabel)
-        kind.font = .systemFont(ofSize: 11, weight: .medium); kind.textColor = .secondaryLabelColor
-        kind.setContentCompressionResistancePriority(.required, for: .horizontal)
-        let inset = NSView(); inset.wantsLayer = true
-        inset.layer?.cornerRadius = 13; inset.layer?.masksToBounds = true
-        for child in [header, inset] { addSubview(child); child.translatesAutoresizingMaskIntoConstraints = false }
-        for child in [close, title, kind] { header.addSubview(child); child.translatesAutoresizingMaskIntoConstraints = false }
-        inset.addSubview(content); content.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            header.leadingAnchor.constraint(equalTo: leadingAnchor), header.trailingAnchor.constraint(equalTo: trailingAnchor),
-            header.topAnchor.constraint(equalTo: topAnchor), header.heightAnchor.constraint(equalToConstant: 36),
-            close.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 10),
-            close.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            close.widthAnchor.constraint(equalToConstant: 18), close.heightAnchor.constraint(equalToConstant: 18),
-            title.leadingAnchor.constraint(equalTo: close.trailingAnchor, constant: 8),
-            title.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            title.trailingAnchor.constraint(lessThanOrEqualTo: kind.leadingAnchor, constant: -16),
-            kind.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -14),
-            kind.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            inset.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5),
-            inset.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
-            inset.topAnchor.constraint(equalTo: header.bottomAnchor), inset.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -5),
-            content.leadingAnchor.constraint(equalTo: inset.leadingAnchor), content.trailingAnchor.constraint(equalTo: inset.trailingAnchor),
-            content.topAnchor.constraint(equalTo: inset.topAnchor), content.bottomAnchor.constraint(equalTo: inset.bottomAnchor)
-        ])
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-}
-
-@MainActor private final class AnnotationPreviewHeader: NSView {
-    override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        guard let hit = super.hitTest(point) else { return nil }
-        return hit is NSButton ? hit : self
-    }
-    @objc func closePreview() { window?.performClose(nil) }
-}

@@ -56,6 +56,7 @@ import Observation
         key = identity.publicKey
         manualAddress = (try? JSONDecoder().decode(Settings.self, from: Data(contentsOf: directory.appendingPathComponent("link.json"))))?.manualAddress ?? ""
         bots?.onChange = { [weak self] user, event in self?.push(event, to: user) }
+        bots?.sendToDevice = { [weak self] key, event in self?.push(event, toDevice: key) ?? false }
     }
 
     public func start() async {
@@ -146,8 +147,18 @@ import Observation
         let id = ObjectIdentifier(stream)
         streams[id] = stream
         stream.onClose { [weak self] in
-            Task { @MainActor in self?.streams[id] = nil }
+            Task { @MainActor in
+                guard let self else { return }
+                self.streams[id] = nil
+                if !self.streams.values.contains(where: { $0.peer == stream.peer }) { self.bots?.deviceDisconnected(stream.peer) }
+            }
         }
+    }
+
+    private func push(_ event: LinkEvent, toDevice key: LinkPublicKey) -> Bool {
+        guard let stream = streams.values.first(where: { $0.peer == key && !$0.isClosed }) else { return false }
+        stream.send(LinkProtocol.encode(event))
+        return true
     }
 
     private func push(_ event: LinkEvent, to user: UUID) {
@@ -192,6 +203,13 @@ import Observation
         case .download(let conversationID, let attachmentID, let offset):
             let (data, total) = try hubBots().chunk(of: attachmentID, in: conversationID, at: offset, for: try user(key))
             return .chunk(data: data, total: total)
+        case .publishTools(let botID, let catalogue):
+            try hubBots().publishTools(catalogue, for: botID, from: key, for: try user(key))
+            return .done
+        case .toolResult(let callID, let result, let error):
+            _ = try user(key)
+            try hubBots().finishToolCall(callID, result: result, error: error, from: key)
+            return .done
         }
     }
 

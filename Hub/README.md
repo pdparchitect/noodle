@@ -17,4 +17,6 @@ are connected and the addresses invitations carry; Add Address records a domain 
 forwarded port that reaches the Hub from outside your network.
 
 People who joined can keep bots on the Hub from Noodle, on the harnesses their plan
-lends. Those bots run here and keep their conversations here.
+lends. Those bots run here and keep their conversations here, and use the tools their
+owner's Mac lends them while Noodle is open there. Settings > Bots lists them with their
+folder and activity.

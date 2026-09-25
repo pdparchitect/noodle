@@ -8,7 +8,7 @@ import Observation
 import SwiftUI
 
 enum HubSettingsTab: Hashable {
-    case harnesses, users, plans, network, heartbeats, sandbox, tools, companions, updates
+    case harnesses, users, plans, bots, network, heartbeats, sandbox, tools, companions, updates
 }
 
 /// Gives the shared Harness, Heartbeat and Sandbox settings what they need from the Hub.
@@ -18,6 +18,7 @@ enum HubSettingsTab: Hashable {
     let setup: HarnessSetupController
     let mcp: MCPController
     var selectedTab: HubSettingsTab = .harnesses
+    let activityWindows = AgentActivityWindows()
 
     init(hub: Hub) {
         self.hub = hub
@@ -99,6 +100,10 @@ struct HubSettingsView: View {
                 .hubSettingsSize()
                 .tabItem { Label("Plans", systemImage: "rectangle.stack.badge.person.crop") }
                 .tag(HubSettingsTab.plans)
+            HubBotsSettingsView(host: host)
+                .hubSettingsSize()
+                .tabItem { Label("Bots", systemImage: "sparkles") }
+                .tag(HubSettingsTab.bots)
             HubNetworkSettingsView(link: host.hub.link)
                 .hubSettingsSize()
                 .tabItem { Label("Network", systemImage: "network") }

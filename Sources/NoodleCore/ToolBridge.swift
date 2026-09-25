@@ -47,10 +47,48 @@ public struct ToolBridgeAgent: Sendable {
     public init(id: UUID, workspace: URL) { self.id = id; self.workspace = workspace }
 }
 
+/// A provider and its MCP tool list as one bot sees them. A Mac sends these to a Noodle Hub
+/// for the bots it keeps there, so the Hub can write the same skills.
+public struct ToolProviderListing: Codable, Sendable {
+    public var manifest: ToolProviderManifest
+    /// The provider's MCP `tools/list` result; nil when it could not list, such as a connection that needs sign-in.
+    public var tools: Data?
+
+    public init(manifest: ToolProviderManifest, tools: Data?) {
+        self.manifest = manifest
+        self.tools = tools
+    }
+
+    /// The providers a bot's assignments make active, each with its tools.
+    public static func list(registry: ToolProviderRegistry, assignments: ToolAssignments, agentID: UUID,
+                            workspace: URL) async -> [ToolProviderListing] {
+        let context = ToolCallContext(agentID: agentID, workspace: workspace, assignments: assignments)
+        var listings: [ToolProviderListing] = []
+        for provider in registry.active(assignments: assignments) {
+            // A connection that needs sign-in, or a server that is down, cannot list its tools. The bot
+            // still needs the skill, which is how it learns to ask the person to reconnect.
+            let tools = try? await ToolBroker.withTimeout(30, tool: provider.manifest.id, { try await provider.tools(context: context) })
+            listings.append(ToolProviderListing(manifest: provider.manifest, tools: tools))
+        }
+        return listings
+    }
+
+    /// Writes a bot's tool skills from listings.
+    public static func synchronize(workspace: URL, listings: [ToolProviderListing]) {
+        ToolProviderSkills.synchronize(workspace: workspace, listed: listings.map {
+            ($0.manifest, $0.tools.flatMap { try? ToolDescriptor.list(mcp: $0) })
+        })
+    }
+}
+
 /// Runs in the trusted app. `assignments` is consulted for every request, so a
-/// revoked resource stops working without restarting anything.
+/// revoked resource stops working without restarting anything. With a `relay`, requests go
+/// to it instead of local providers, as on a Noodle Hub whose tools live on a paired Mac.
 public final class ToolBridgeBroker: @unchecked Sendable {
+    public typealias Relay = @Sendable (ToolBridgeRequest, _ agentID: UUID) async throws -> Data
+
     private let registry: ToolProviderRegistry
+    private let relay: Relay?
     private let assignments: @Sendable (UUID) -> ToolAssignments
     private let host: ToolHostServices
     private let queue = DispatchQueue(label: "Noodle.tool-broker")
@@ -71,8 +109,14 @@ public final class ToolBridgeBroker: @unchecked Sendable {
     }
 
     public init(registry: ToolProviderRegistry, host: ToolHostServices = .none, assignments: @escaping @Sendable (UUID) -> ToolAssignments) {
-        self.registry = registry; self.assignments = assignments; self.host = host
+        self.registry = registry; self.assignments = assignments; self.host = host; relay = nil
         registry.onChange { [weak self] in self?.synchronizeSkills() }
+    }
+
+    /// Hands every request to `relay`. Skills are written by whoever knows the tools.
+    public init(relay: @escaping Relay) {
+        registry = ToolProviderRegistry(); assignments = { _ in ToolAssignments() }; host = .none
+        self.relay = relay
     }
     deinit { timer?.cancel() }
 
@@ -80,23 +124,15 @@ public final class ToolBridgeBroker: @unchecked Sendable {
     /// change; call it after changing what an agent is assigned.
     @discardableResult public func synchronizeSkills() -> Task<Void, Never> {
         let (agents, generation) = queue.sync { skillsGeneration += 1; return (self.agents, skillsGeneration) }
-        guard !agents.isEmpty else { return Task {} }
+        guard !agents.isEmpty, relay == nil else { return Task {} }
         return Task { [weak self, registry, assignments, queue] in
             for agent in agents {
-                var providers: [(manifest: ToolProviderManifest, tools: [ToolDescriptor]?)] = []
-                let granted = assignments(agent.id)
-                let context = ToolCallContext(agentID: agent.id, workspace: agent.workspace, assignments: granted)
-                for provider in registry.active(assignments: granted) {
-                    // A connection that needs sign-in, or a server that is down, cannot list its tools. The bot
-                    // still needs the skill, which is how it learns to ask the person to reconnect.
-                    let list = try? await ToolBroker.withTimeout(30, tool: provider.manifest.id, { try await provider.tools(context: context) })
-                    providers.append((provider.manifest, list.flatMap { try? ToolDescriptor.list(mcp: $0) }))
-                }
-                let listed = providers
+                let listings = await ToolProviderListing.list(registry: registry, assignments: assignments(agent.id),
+                                                              agentID: agent.id, workspace: agent.workspace)
                 queue.async { [weak self] in
                     guard let self, generation == self.skillsGeneration, self.agents.contains(where: { $0.id == agent.id }) else { return }
                     let before = ToolProviderSkills.generated(workspace: agent.workspace).map { $0.name + "\n" + $0.description }
-                    ToolProviderSkills.synchronize(workspace: agent.workspace, listed: listed)
+                    ToolProviderListing.synchronize(workspace: agent.workspace, listings: listings)
                     if before != ToolProviderSkills.generated(workspace: agent.workspace).map({ $0.name + "\n" + $0.description }) {
                         self.skillsObserver?(agent.id)
                     }
@@ -170,10 +206,12 @@ public final class ToolBridgeBroker: @unchecked Sendable {
                 claimed[id] = request.expiresAt
                 running += 1
                 let context = ToolCallContext(agentID: agent.id, workspace: agent.workspace)
-                Task { [weak self, registry, assignments, queue, host] in
+                Task { [weak self, registry, assignments, queue, host, relay] in
                     let response: ToolBridgeResponse
                     do {
-                        let result = try await ToolBroker.perform(request, registry: registry, assignments: { assignments(agent.id) }, context: context, host: host)
+                        let result = if let relay { try await relay(request, agent.id) } else {
+                            try await ToolBroker.perform(request, registry: registry, assignments: { assignments(agent.id) }, context: context, host: host)
+                        }
                         response = result.count <= ToolBridgeClient.maxResponseBytes / 4 * 3 - 4096
                             ? ToolBridgeResponse(result: result) : ToolBridgeResponse(error: "The tool result is too large. Ask the tool to write a file instead.")
                     } catch { response = ToolBridgeResponse(error: error.localizedDescription) }

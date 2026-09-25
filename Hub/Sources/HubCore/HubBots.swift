@@ -8,6 +8,8 @@ import NoodleRuntime
 @MainActor public final class HubBots {
     /// Where an owner's devices are told that something changed.
     public var onChange: ((_ user: UUID, LinkEvent) -> Void)?
+    /// Pushes an event to one device; false when that device has no open stream.
+    public var sendToDevice: ((LinkPublicKey, LinkEvent) -> Bool)?
 
     private let repository: WorkspaceRepository
     private let runtime: AgentRuntimeCoordinator
@@ -15,6 +17,12 @@ import NoodleRuntime
     private let messenger: MessengerBroker
     /// Files arriving in pieces, until the last one lands.
     private let uploads: URL
+    /// Takes each bot's tool calls and relays them to the device lending the tools.
+    private var toolBroker: ToolBridgeBroker?
+    /// The device whose tools each bot uses: the last to publish them.
+    private var toolDevices: [UUID: LinkPublicKey] = [:]
+    /// Tool calls waiting for their device to answer.
+    private var toolCalls: [UUID: (device: LinkPublicKey, reply: CheckedContinuation<Data, Error>)] = [:]
     private var running = false
     private var loop: Task<Void, Never>?
     /// The last seen size and date of each conversation's messages, and their count.
@@ -38,6 +46,7 @@ import NoodleRuntime
         let now = Date()
         agents.forEach { runtime.seedHeartbeatActivity(for: $0.id, at: now) }
         runtime.startAll(agents: agents, repository: repository)
+        try startTools()
         running = true
         loop = Task { [weak self] in
             while !Task.isCancelled {
@@ -52,7 +61,23 @@ import NoodleRuntime
         }
     }
 
+    /// Lets bots call the tools their owners' devices lend them.
+    public func startTools() throws {
+        if toolBroker == nil {
+            toolBroker = ToolBridgeBroker { [weak self] request, bot in
+                guard let self else { throw LinkError("Noodle Hub is stopping.") }
+                return try await self.relay(request, for: bot)
+            }
+        }
+        try toolBroker?.start(agents: try repository.loadAgents().map {
+            ToolBridgeAgent(id: $0.id, workspace: repository.directory(for: $0))
+        })
+    }
+
     public func stop() {
+        toolBroker?.stop()
+        toolBroker = nil
+        for (id, call) in toolCalls { call.reply.resume(throwing: LinkError("Noodle Hub stopped during the tool call. Verify any action before retrying.")); toolCalls[id] = nil }
         loop?.cancel()
         loop = nil
         messenger.stop()
@@ -86,6 +111,7 @@ import NoodleRuntime
             runtime.refresh(agents: try repository.loadAgents())
             runtime.start(agent: created.agent, repository: repository)
         }
+        if toolBroker != nil { try? startTools() }
         onChange?(user.id, .botsChanged)
         // As saved, so it matches every later read of the same bot.
         guard let saved = try repository.loadAgents().first(where: { $0.id == created.agent.id }),
@@ -212,6 +238,49 @@ import NoodleRuntime
         }
     }
 
+    /// Writes the skills for the tools a device lends one of its user's bots.
+    public func publishTools(_ catalogue: Data, for botID: UUID, from device: LinkPublicKey, for user: HubUser) throws {
+        let agent = try owned(botID, by: user)
+        let listings = try JSONDecoder().decode([ToolProviderListing].self, from: catalogue)
+        ToolProviderListing.synchronize(workspace: repository.directory(for: agent), listings: listings)
+        try repository.synchronizeAgentWorkspace(agent)
+        toolDevices[botID] = device
+    }
+
+    /// The answer to a tool call, from the device it was sent to.
+    public func finishToolCall(_ id: UUID, result: Data?, error: String?, from device: LinkPublicKey) {
+        guard let call = toolCalls[id], call.device == device else { return }
+        toolCalls[id] = nil
+        if let result { call.reply.resume(returning: result) }
+        else { call.reply.resume(throwing: LinkError(error ?? "The tool returned nothing.")) }
+    }
+
+    /// Fails the calls a device can no longer answer.
+    public func deviceDisconnected(_ device: LinkPublicKey) {
+        let name = access.device(for: device)?.name ?? "The device"
+        for (id, call) in toolCalls where call.device == device {
+            toolCalls[id] = nil
+            call.reply.resume(throwing: LinkError("\(name) disconnected during the tool call. Verify any action before retrying."))
+        }
+    }
+
+    private func relay(_ request: ToolBridgeRequest, for bot: UUID) async throws -> Data {
+        guard let device = toolDevices[bot] else {
+            throw LinkError("No Mac lends tools to this bot. Open Noodle on the Mac that keeps it.")
+        }
+        let name = access.device(for: device)?.name ?? "The Mac"
+        let payload = try JSONEncoder().encode(request)
+        let id = UUID()
+        return try await withCheckedThrowingContinuation { reply in
+            toolCalls[id] = (device, reply)
+            guard sendToDevice?(device, .toolCall(callID: id, botID: bot, request: payload)) == true else {
+                toolCalls[id] = nil
+                reply.resume(throwing: LinkError("\(name) is not connected to this Hub, so its tools are unavailable."))
+                return
+            }
+        }
+    }
+
     private func remove(_ agent: AgentRecord) throws {
         if running { runtime.stop(agentID: agent.id, revokeAccess: false) }
         try repository.deleteAgent(agent)
@@ -219,6 +288,8 @@ import NoodleRuntime
             runtime.stop(agentID: agent.id)
             try? messenger.start(agents: try repository.loadAgents())
         }
+        if toolBroker != nil { try? startTools() }
+        toolDevices[agent.id] = nil
         access.setOwner(nil, ofBot: agent.id)
     }
 
