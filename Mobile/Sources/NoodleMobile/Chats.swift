@@ -1,4 +1,5 @@
 import HubLink
+import PhotosUI
 import SwiftUI
 
 /// The bots this phone's user keeps on the Hub and their conversations, kept current from the Hub's events.
@@ -130,17 +131,75 @@ import SwiftUI
         saveCache()
     }
 
-    func send(_ body: String, to agent: LinkBot) async throws {
-        let outgoing = LinkOutgoingMessage(conversationID: agent.conversationID, id: UUID(), body: body)
+    /// Messages shown before the Hub has them, and those it never got.
+    private(set) var sending: Set<UUID> = []
+    private(set) var undelivered: Set<UUID> = []
+
+    /// How far your message got, in the Mac's words.
+    func delivery(of message: LinkMessage) -> String {
+        if undelivered.contains(message.id) { return "Not delivered" }
+        if sending.contains(message.id) { return "Sending…" }
+        return message.delivered ? "Delivered" : "Sent"
+    }
+
+    func send(_ body: String, files: [OutgoingFile] = [], to agent: LinkBot) async throws {
+        let attachments = try files.map { file in
+            LinkAttachment(id: file.id, filename: file.filename, mediaType: file.mediaType,
+                           byteCount: try file.url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0)
+        }
+        // As on the Mac, a message of files alone says how many.
+        let text = body.isEmpty && !files.isEmpty ? "Sent \(files.count) attachment\(files.count == 1 ? "" : "s")" : body
+        let outgoing = LinkOutgoingMessage(conversationID: agent.conversationID, id: UUID(), body: text,
+                                           attachmentIDs: attachments.map(\.id))
         // Shown at once; the Hub's copy replaces it.
-        merge([LinkMessage(id: outgoing.id, conversationID: agent.conversationID, author: .you, body: body,
-                           createdAt: Date(), delivered: false)], into: agent.conversationID)
-        guard case .message(let sent) = try await pairing.request(.send(outgoing)) else {
-            throw LinkError("The Hub sent an unexpected answer.")
+        sending.insert(outgoing.id)
+        defer { sending.remove(outgoing.id) }
+        merge([LinkMessage(id: outgoing.id, conversationID: agent.conversationID, author: .you, body: text,
+                           createdAt: Date(), delivered: false, attachments: attachments)], into: agent.conversationID)
+        let sent: LinkMessage
+        do {
+            // Files first: the Hub refuses a message that points at a file it lacks.
+            for (file, attachment) in zip(files, attachments) {
+                try keep(file.url, as: attachment)
+                try await pairing.upload(file.url, as: attachment, to: agent.conversationID)
+            }
+            guard case .message(let message) = try await pairing.request(.send(outgoing)) else {
+                throw LinkError("The Hub sent an unexpected answer.")
+            }
+            sent = message
+        } catch {
+            undelivered.insert(outgoing.id)
+            throw error
         }
         merge([sent], into: agent.conversationID)
         try await load(agent.conversationID)
         saveCache()
+    }
+
+    /// The file on this phone, downloaded from the Hub the first time it is asked for.
+    func file(for attachment: LinkAttachment, in agent: LinkBot) async throws -> URL {
+        let url = fileURL(for: attachment)
+        if FileManager.default.fileExists(atPath: url.path) { return url }
+        let staging = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: staging) }
+        try await pairing.download(attachment, from: agent.conversationID, to: staging)
+        try keep(staging, as: attachment)
+        return url
+    }
+
+    /// Files live under their ID, keeping their name so Quick Look and sharing show it.
+    private func fileURL(for attachment: LinkAttachment) -> URL {
+        let name = URL(fileURLWithPath: attachment.filename).lastPathComponent
+        return pairing.directory.appendingPathComponent("Files", isDirectory: true)
+            .appendingPathComponent(attachment.id.uuidString, isDirectory: true)
+            .appendingPathComponent(name.isEmpty ? "Attachment" : name)
+    }
+
+    private func keep(_ source: URL, as attachment: LinkAttachment) throws {
+        let url = fileURL(for: attachment)
+        guard !FileManager.default.fileExists(atPath: url.path) else { return }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: source, to: url)
     }
 
     private func load(_ conversationID: UUID) async throws {
@@ -160,6 +219,14 @@ import SwiftUI
         }
         conversations[conversationID] = list
     }
+}
+
+/// A file picked on the phone, waiting to be sent. Its ID becomes the attachment's.
+struct OutgoingFile: Identifiable, Equatable {
+    let id = UUID()
+    let url: URL
+    let filename: String
+    let mediaType: String
 }
 
 /// The home screen once paired: the agents, newest conversation first.
@@ -293,8 +360,13 @@ struct ChatView: View {
     let chats: HubChats
     let agentID: UUID
     @State private var draft = ""
+    @State private var files: [OutgoingFile] = []
     @State private var problem: String?
     @State private var editing = false
+    @State private var pickingPhotos = false
+    @State private var photos: [PhotosPickerItem] = []
+    @State private var takingPhoto = false
+    @State private var importing = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -306,10 +378,15 @@ struct ChatView: View {
     }
 
     private func conversation(with agent: LinkBot) -> some View {
-        ScrollView {
+        let messages = chats.messages(of: agent)
+        // As in Messages, only your latest message says how far it got.
+        let latestOwn = messages.last { $0.author == .you }?.id
+        return ScrollView {
             LazyVStack(spacing: 6) {
-                ForEach(chats.messages(of: agent)) { message in
-                    Bubble(message: message).id(message.id)
+                ForEach(messages) { message in
+                    Bubble(chats: chats, agent: agent, message: message,
+                           delivery: message.id == latestOwn ? chats.delivery(of: message) : nil)
+                        .id(message.id)
                 }
             }
             .padding(.horizontal, 12)
@@ -331,14 +408,52 @@ struct ChatView: View {
             }
         }
         .sheet(isPresented: $editing) { AgentEditor(chats: chats, agent: agent) }
+        .photosPicker(isPresented: $pickingPhotos, selection: $photos, maxSelectionCount: 10,
+                      matching: .any(of: [.images, .videos]))
+        .onChange(of: photos) { _, items in
+            guard !items.isEmpty else { return }
+            photos = []
+            Task { await add(items) }
+        }
+        .fullScreenCover(isPresented: $takingPhoto) {
+            CameraPicker { image in
+                guard let data = image.jpegData(compressionQuality: 0.9) else { return }
+                attach { try PickedFiles.store(data, named: "Photo.jpg", type: .jpeg) }
+            }
+            .ignoresSafeArea()
+        }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            attach { try result.get().map(PickedFiles.copy) }
+        }
     }
 
     private var composer: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             if let problem {
                 Text(problem).font(.footnote).foregroundStyle(.red)
             }
+            if !files.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(files) { file in
+                            PendingFileChip(file: file) { files.removeAll { $0.id == file.id } }
+                        }
+                    }
+                }
+            }
             HStack(alignment: .bottom, spacing: 8) {
+                Menu {
+                    Button("Photo Library", systemImage: "photo.on.rectangle") { pickingPhotos = true }
+                    if CameraPicker.isAvailable {
+                        Button("Take Photo", systemImage: "camera") { takingPhoto = true }
+                    }
+                    Button("Files", systemImage: "folder") { importing = true }
+                } label: {
+                    Image(systemName: "plus").font(.system(size: 18, weight: .semibold))
+                        .frame(width: 34, height: 34)
+                        .background(Color(.secondarySystemBackground), in: Circle())
+                }
+                .accessibilityLabel("Add")
                 TextField("Message", text: $draft, axis: .vertical)
                     .lineLimit(1...6)
                     .padding(.horizontal, 14).padding(.vertical, 8)
@@ -346,7 +461,7 @@ struct ChatView: View {
                 Button(action: send) {
                     Image(systemName: "arrow.up.circle.fill").font(.system(size: 32))
                 }
-                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && files.isEmpty)
                 .accessibilityLabel("Send")
             }
         }
@@ -354,19 +469,41 @@ struct ChatView: View {
         .background(.bar)
     }
 
+    private func attach(_ pick: () throws -> OutgoingFile) { attach { [try pick()] } }
+
+    private func attach(_ pick: () throws -> [OutgoingFile]) {
+        do { files += try pick() } catch { problem = error.localizedDescription }
+    }
+
+    private func add(_ items: [PhotosPickerItem]) async {
+        for item in items {
+            do {
+                if let file = try await PickedFiles.photo(item, number: files.count + 1) { files.append(file) }
+            } catch {
+                problem = error.localizedDescription
+            }
+        }
+    }
+
     private func send() {
         let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !body.isEmpty, let agent = chats.agent(agentID) else { return }
+        guard !body.isEmpty || !files.isEmpty, let agent = chats.agent(agentID) else { return }
+        let sending = files
         draft = ""
+        files = []
         problem = nil
         Task {
-            do { try await chats.send(body, to: agent) } catch { problem = error.localizedDescription }
+            do { try await chats.send(body, files: sending, to: agent) } catch { problem = error.localizedDescription }
         }
     }
 }
 
 private struct Bubble: View {
+    let chats: HubChats
+    let agent: LinkBot
     let message: LinkMessage
+    /// Shown under your latest message only.
+    let delivery: String?
 
     var body: some View {
         switch message.author {
@@ -376,24 +513,61 @@ private struct Bubble: View {
         case .you:
             HStack {
                 Spacer(minLength: 48)
-                text.foregroundStyle(.white).background(Color.accentColor, in: shape)
-                    .opacity(message.delivered ? 1 : 0.6)
+                VStack(alignment: .trailing, spacing: 4) {
+                    content(foreground: .white, background: .accentColor)
+                    if let delivery {
+                        Text(delivery).font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
             }
         case .bot:
             HStack {
-                text.background(Color(.secondarySystemBackground), in: shape)
+                VStack(alignment: .leading, spacing: 4) {
+                    content(foreground: .primary, background: Color(.secondarySystemBackground))
+                }
                 Spacer(minLength: 48)
             }
         }
     }
 
-    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 18, style: .continuous) }
+    @ViewBuilder private func content(foreground: Color, background: Color) -> some View {
+        ForEach(message.attachments) { attachment in
+            AttachmentView(chats: chats, agent: agent, attachment: attachment)
+        }
+        if showsText {
+            text.foregroundStyle(foreground)
+                .background(background, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .contextMenu {
+                    Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = message.body }
+                }
+        }
+        if let url = LinkPreview.firstURL(in: message.body) {
+            LinkPreviewCard(url: url)
+        }
+    }
+
+    /// A message of files alone carries a body like "Sent 2 attachments", which the files already show.
+    private var showsText: Bool {
+        !(message.attachments.count > 0 && message.body.wholeMatch(of: /Sent \d+ attachments?/) != nil)
+    }
 
     private var text: some View {
-        Text((try? AttributedString(markdown: message.body,
-                                    options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(message.body))
+        Text(Self.markdown(message.body))
             .textSelection(.enabled)
             .padding(.horizontal, 12).padding(.vertical, 8)
+    }
+
+    /// Inline markdown, with only web and mail links left tappable, as on the Mac.
+    static func markdown(_ body: String) -> AttributedString {
+        guard var text = try? AttributedString(markdown: body, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) else {
+            return AttributedString(body)
+        }
+        for run in text.runs {
+            if let link = run.link, !["http", "https", "mailto"].contains(link.scheme?.lowercased() ?? "") {
+                text[run.range].link = nil
+            }
+        }
+        return text
     }
 }
 
