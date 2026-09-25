@@ -7,6 +7,10 @@
 - See token use and cost for the Hub's bots by bot, harness or model from Usage… in the menu bar, with the same view as Noodle.
 - Add users in Settings > Users and choose which harnesses and profiles they can use with plans in Settings > Plans. New users start on the Default plan, which lends nothing until you add to it.
 
+### Changed
+
+- Show only Harness, Users, Plans and Update in Settings for now. Heartbeat, Sandbox, Tools and Companions return when the Hub runs shared agents.
+
 ## [0.1.0] - 2026-09-24
 
 ### Added

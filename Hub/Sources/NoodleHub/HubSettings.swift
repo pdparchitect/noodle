@@ -58,6 +58,10 @@ enum HubSettingsTab: Hashable {
 }
 
 struct HubSettingsView: View {
+    /// Heartbeat, Sandbox, Tools and Companions configure the Hub's own bots, which come
+    /// with shared agents; until then their tabs stay out of Settings.
+    static let showsAgentSettings = false
+
     @Bindable var host: HubSettingsHost
     @ObservedObject private var updater = HubUpdater.shared
     private let companionUpdates = CompanionUpdateChecker.shared
@@ -90,22 +94,24 @@ struct HubSettingsView: View {
                 .hubSettingsSize()
                 .tabItem { Label("Plans", systemImage: "rectangle.stack.badge.person.crop") }
                 .tag(HubSettingsTab.plans)
-            HeartbeatsSettingsView(store: host)
-                .hubSettingsSize()
-                .tabItem { Label("Heartbeat", systemImage: "waveform.path.ecg") }
-                .tag(HubSettingsTab.heartbeats)
-            AgentAccessSettingsView(store: host)
-                .hubSettingsSize()
-                .tabItem { Label("Sandbox", systemImage: "lock.shield") }
-                .tag(HubSettingsTab.sandbox)
-            MCPSettingsView(store: host)
-                .hubSettingsSize()
-                .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
-                .tag(HubSettingsTab.tools)
-            CompanionAppsSettingsView(store: host)
-                .hubSettingsSize()
-                .tabItem { Label("Companions", systemImage: "square.stack.3d.up") }
-                .tag(HubSettingsTab.companions)
+            if Self.showsAgentSettings {
+                HeartbeatsSettingsView(store: host)
+                    .hubSettingsSize()
+                    .tabItem { Label("Heartbeat", systemImage: "waveform.path.ecg") }
+                    .tag(HubSettingsTab.heartbeats)
+                AgentAccessSettingsView(store: host)
+                    .hubSettingsSize()
+                    .tabItem { Label("Sandbox", systemImage: "lock.shield") }
+                    .tag(HubSettingsTab.sandbox)
+                MCPSettingsView(store: host)
+                    .hubSettingsSize()
+                    .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
+                    .tag(HubSettingsTab.tools)
+                CompanionAppsSettingsView(store: host)
+                    .hubSettingsSize()
+                    .tabItem { Label("Companions", systemImage: "square.stack.3d.up") }
+                    .tag(HubSettingsTab.companions)
+            }
             HubUpdatesSettingsView()
                 .hubSettingsSize()
                 .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }
@@ -114,12 +120,12 @@ struct HubSettingsView: View {
         .modifier(SettingsWindowResizeAnchor())
         .settingsScrollIndicators(selection: host.selectedTab)
         .background(SettingsTabBadge(counts: ["Harness": harnessesNeedingAttention,
-                                              "Tools": toolsNeedingAttention,
-                                              "Companions": companionUpdates.updates.count,
+                                              "Tools": Self.showsAgentSettings ? toolsNeedingAttention : 0,
+                                              "Companions": Self.showsAgentSettings ? companionUpdates.updates.count : 0,
                                               "Update": updater.availableVersion == nil ? 0 : 1]))
         // Check on opening Settings so the tabs are badged before they are selected.
         .onAppear {
-            companionUpdates.refresh(CompanionApp.installedApps())
+            if Self.showsAgentSettings { companionUpdates.refresh(CompanionApp.installedApps()) }
             updater.probeForUpdate()
         }
         .task { await host.setup.refreshAll(host.runtime) }
