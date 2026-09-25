@@ -131,8 +131,14 @@ public struct UsageView: View {
     @State private var selectedBucket: Date?
 
     /// Categorical hues in fixed order, stepped for the dark surface; anything past them folds into Other.
-    private static let hues: [Color] = [0x3987e5, 0xd95926, 0x199e70, 0xc98500, 0xd55181, 0x008300, 0x9085e9].map {
-        Color(red: Double(($0 >> 16) & 0xff) / 255, green: Double(($0 >> 8) & 0xff) / 255, blue: Double($0 & 0xff) / 255)
+    private static let hues: [Color] = ([0x3987e5, 0xd95926, 0x199e70, 0xc98500, 0xd55181, 0x008300, 0x9085e9] as [Int]).map(color)
+
+    /// Spelled out in steps: as one expression, slower compilers give up type-checking it.
+    private static func color(_ hex: Int) -> Color {
+        let red = Double((hex >> 16) & 0xff) / 255
+        let green = Double((hex >> 8) & 0xff) / 255
+        let blue = Double(hex & 0xff) / 255
+        return Color(red: red, green: green, blue: blue)
     }
 
     public init(history: UsageHistory, agents: [AgentRecord]) {
