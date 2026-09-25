@@ -42,6 +42,7 @@ jobs:
       applet: ${{ steps.versions.outputs.applet }}
       browser: ${{ steps.versions.outputs.browser }}
       hub: ${{ steps.versions.outputs.hub }}
+      mobile: ${{ steps.versions.outputs.mobile }}
       images: ${{ steps.versions.outputs.images }}
       any: ${{ steps.versions.outputs.any }}
       products: ${{ steps.versions.outputs.products }}
@@ -194,6 +195,17 @@ jobs:
       - name: Test Hub
         run: swift test --disable-sandbox --package-path Hub --scratch-path .build/hub
 
+  test-mobile:
+    needs: [versions, checks]
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - name: Test Mobile on an iPhone simulator
+        run: zsh scripts/mobile.sh test
+
   # Each preparation waits only for its own product's tests, so a companion is not signed
   # behind Noodle's long suite. The tag job below still requires every selected test.
   prepare-noodle:
@@ -232,8 +244,14 @@ jobs:
     uses: ./.github/workflows/hub-release.yml
     secrets: inherit
 
+  prepare-mobile:
+    needs: [versions, checks, test-mobile]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.mobile == 'true'
+    uses: ./.github/workflows/mobile-release.yml
+    secrets: inherit
+
   tag:
-    needs: [versions, workflow-lint, checks, test-noodle, test-noodle-macos27, test-computer, test-applet, test-browser, test-hub, test-bridge, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-images]
+    needs: [versions, workflow-lint, checks, test-noodle, test-noodle-macos27, test-computer, test-applet, test-browser, test-hub, test-mobile, test-bridge, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-mobile, prepare-images]
     # Explicitly accept unselected/skipped products, never a failed/cancelled build.
     if: >-
       always() && !cancelled() && github.event_name != 'pull_request' &&
@@ -246,12 +264,14 @@ jobs:
       (needs.versions.outputs.applet != 'true' || needs.test-applet.result == 'success') &&
       (needs.versions.outputs.browser != 'true' || needs.test-browser.result == 'success') &&
       (needs.versions.outputs.hub != 'true' || needs.test-hub.result == 'success') &&
+      (needs.versions.outputs.mobile != 'true' || needs.test-mobile.result == 'success') &&
       (needs.versions.outputs.noodle != 'true' || needs.test-noodle-macos27.result == 'success') &&
       (needs.versions.outputs.noodle != 'true' || needs.prepare-noodle.result == 'success') &&
       (needs.versions.outputs.computer != 'true' || needs.prepare-computer.result == 'success') &&
       (needs.versions.outputs.applet != 'true' || needs.prepare-applet.result == 'success') &&
       (needs.versions.outputs.browser != 'true' || needs.prepare-browser.result == 'success') &&
       (needs.versions.outputs.hub != 'true' || needs.prepare-hub.result == 'success') &&
+      (needs.versions.outputs.mobile != 'true' || needs.prepare-mobile.result == 'success') &&
       (needs.versions.outputs.images != 'true' || needs.prepare-images.result == 'success')
     runs-on: ubuntu-latest
     permissions:
@@ -414,6 +434,38 @@ jobs:
           cd ../..
           zsh scripts/publish-xcode-release.sh Hub "$HUB_VERSION" "dist/hub-$HUB_VERSION/release-notes.md"
 
+  # TestFlight is the phone app's release channel; automatic distribution hands each build to testers.
+  publish-mobile:
+    needs: [versions, tag]
+    if: >-
+      always() && !cancelled() && needs.tag.result == 'success' &&
+      needs.versions.outputs.mobile == 'true'
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Read Mobile version
+        run: echo "MOBILE_VERSION=$(cat Mobile/VERSION)" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v7
+        with:
+          name: mobile-release-assets
+          path: dist/mobile-${{ env.MOBILE_VERSION }}
+      - name: Upload the verified app to TestFlight
+        env:
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          umask 077
+          key="$RUNNER_TEMP/mobile-upload.p8"
+          trap 'rm -f "$key"' EXIT
+          print -rn -- "${APP_STORE_CONNECT_API_KEY_P8:?Missing App Store Connect key}" > "$key"
+          APPLE_API_KEY_PATH="$key" APPLE_API_KEY_ID="$APP_STORE_CONNECT_KEY_ID" \
+            APPLE_API_ISSUER_ID="$APP_STORE_CONNECT_ISSUER_ID" \
+            zsh scripts/mobile.sh upload "dist/mobile-$MOBILE_VERSION/Noodle-Mobile.ipa"
+
   publish-noodle:
     needs: [versions, tag, publish-images, publish-computer, publish-applet, publish-browser]
     if: >-
@@ -455,7 +507,7 @@ jobs:
           gh release edit "$tag" --draft=false --latest
 
   complete:
-    needs: [versions, tag, publish-images, publish-computer, publish-applet, publish-browser, publish-hub, publish-noodle]
+    needs: [versions, tag, publish-images, publish-computer, publish-applet, publish-browser, publish-hub, publish-mobile, publish-noodle]
     if: always() && github.event_name != 'pull_request' && needs.versions.outputs.any == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -467,6 +519,7 @@ jobs:
           APPLET_RESULT: ${{ needs.publish-applet.result }}
           BROWSER_RESULT: ${{ needs.publish-browser.result }}
           HUB_RESULT: ${{ needs.publish-hub.result }}
+          MOBILE_RESULT: ${{ needs.publish-mobile.result }}
           NOODLE_RESULT: ${{ needs.publish-noodle.result }}
         run: |
           python3 - <<'PY'
