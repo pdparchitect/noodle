@@ -40,6 +40,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | prisma.icon | https://www.prisma.io/apple-icon.png?apple-icon.2fqk5558kkh79.png |
 | pulumi.icon | https://www.pulumi.com/images/favicon.ico |
 | ramp.icon | https://ramp.com/favicon.ico |
+| replit.icon (2026-09-25) | https://replit.com/public/icons/favicon-prompt-192-rebrand.png |
 | revenuecat.icon | https://www.revenuecat.com/favicon/favicon-96x96.png |
 | runway.icon | https://runwayml.com/icon.png?icon.35ps9bmugbe1e.png |
 | sanity.icon | https://www.sanity.io/_astro/android-icon-192x192.BtdmbFTD.png |

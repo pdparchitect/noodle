@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Connect Replit in Settings → Tools → Add Tools, so bots can work with your Replit apps.
+
 ## [0.27.0] - 2026-09-25
 
 ### Added
