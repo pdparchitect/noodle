@@ -24,7 +24,7 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
     }
 
     /// Harnesses whose whole login lives in one relocatable configuration home.
-    public var supportsProfiles: Bool { self == .codex || self == .grokBuild || self == .muse || self == .antigravity }
+    public var supportsProfiles: Bool { self == .codex || self == .grokBuild || self == .muse || self == .antigravity || self == .claudeCode }
 
     public var displayName: String {
         switch self {

@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - See what each bot spends in the new Usage window (**Noodle → Usage**, ⇧⌘U), also opened from a bot's profile. It charts tokens or cost over 7 days, 30 days or 12 months, stacked by bot, harness or model, with totals, cache hits and a breakdown table. Tokens are recorded from now on for Claude Code, Codex, Grok Build, FX and OpenCode, and cost for Claude Code.
+- Sign Claude Code in to more than one account. Profiles… under Claude Code in Settings > Harness adds a profile, and Sign In… opens Claude's sign-in page in your browser. Choose the profile for a bot in Edit Bot > Harness. Each profile keeps its own login and Claude Code settings, apart from the ones in your home folder.
 
 ### Changed
 

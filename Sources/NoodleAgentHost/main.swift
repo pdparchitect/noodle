@@ -168,13 +168,12 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
         if restricted {
             let layout = AgentStorageLayout(workspace: workspace)
             let repository = layout.package.deletingLastPathComponent().deletingLastPathComponent()
-            if harnessProfile == nil {
-                try RestrictedHarnessStorage.prepare(provider: provider, workspace: workspace, loginHome: loginHome)
-            } else {
-                // A profile's login is its files alone. The user's Keychain items
-                // belong to the system profile and must never stand in for them.
+            if let harnessProfile {
+                // The user's Keychain items belong to the system profile and must never stand in for a profile's login.
                 try RestrictedHarnessStorage.prepare(provider: provider, workspace: workspace, loginHome: loginHome,
-                                                     secret: { _, _ in nil })
+                                                     secret: profiles.loginSecret(harnessProfile))
+            } else {
+                try RestrictedHarnessStorage.prepare(provider: provider, workspace: workspace, loginHome: loginHome)
             }
             let privateHome = RestrictedHarnessStorage.home(workspace: workspace)
             let codexHome = privateHome.appendingPathComponent(".codex", isDirectory: true)
@@ -589,6 +588,12 @@ private final class HostSession: NSObject, AgentHostService {
                     return self.runCodexAccount(codex.executable, home: codex.home, signIn: true, reply: reply)
                 }
                 let account = try self.profileAccount(profileID, executablePath: executablePath)
+                if account.provider == .claudeCode {
+                    // Claude Code signs in through the browser, as the system profile does.
+                    return self.runLogin(executable: account.executable, arguments: ["auth", "login", "--claudeai"],
+                                         environment: account.environment, name: account.provider.displayName,
+                                         challenge: nil, status: account.status, reply: reply)
+                }
                 guard let arguments = HarnessProfileLogin.arguments(account.provider) else {
                     throw HostError("This harness does not support this sign-in flow.")
                 }
@@ -641,7 +646,7 @@ private final class HostSession: NSObject, AgentHostService {
         let profiles = HostPaths.profiles
         let profile = try profiles.validated(id)
         let provider = profile.provider
-        guard HarnessProfileLogin.arguments(provider) != nil || provider == .antigravity else {
+        guard HarnessProfileLogin.arguments(provider) != nil || provider == .antigravity || provider == .claudeCode else {
             throw HostError("This harness does not support this sign-in flow.")
         }
         let executable = try HostPaths.executable(executablePath, provider: provider)
@@ -658,6 +663,8 @@ private final class HostSession: NSObject, AgentHostService {
                 return MuseAuthentication.inspect(home: HostPaths.home, environment: environment) == .authenticated
             case .antigravity:
                 return try AntigravityInspection.authenticated(executable: executable, environment: environment)
+            case .claudeCode:
+                return try self.claudeAuthenticationStatus(executable, environment: environment)
             default: throw HostError("This harness does not support this sign-in flow.")
             }
         }
@@ -750,7 +757,7 @@ private final class HostSession: NSObject, AgentHostService {
         }
     }
 
-    private func claudeAuthenticationStatus(_ executable: URL) throws -> Bool {
+    private func claudeAuthenticationStatus(_ executable: URL, environment: [String: String]? = nil) throws -> Bool {
         let process = Process(), output = Pipe()
         process.executableURL = executable
         process.arguments = ["auth", "status", "--json"]
@@ -758,7 +765,7 @@ private final class HostSession: NSObject, AgentHostService {
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
-        process.environment = accountEnvironment
+        process.environment = environment ?? accountEnvironment
         try process.run()
         process.waitUntilExit()
         let data = output.fileHandleForReading.readDataToEndOfFile()

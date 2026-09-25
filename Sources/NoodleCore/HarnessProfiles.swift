@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// A separate harness login owned by Noodle. A bot without a profile uses the
@@ -107,8 +108,22 @@ public struct HarnessProfileStore: Sendable {
         // Antigravity has no setting for its folder. A different home also puts the
         // user's Keychain out of reach, so the CLI keeps this login in a file here.
         case .antigravity: ["HOME": loginHome(profile).path]
+        case .claudeCode: ["CLAUDE_CONFIG_DIR": accountHome(profile).path]
         default: [:]
         }
+    }
+
+    /// Where a restricted bot's copy of this profile's login comes from. Claude
+    /// Code keeps it in a Keychain item named after the profile's folder; every
+    /// other harness keeps it in files, and the user's own items belong to System.
+    public func loginSecret(_ profile: HarnessProfile,
+                            read: @escaping (String, String) throws -> Data? = RestrictedHarnessStorage.readSecret)
+        -> (String, String) throws -> Data? {
+        guard profile.provider == .claudeCode else { return { _, _ in nil } }
+        let folder = accountHome(profile).path.precomposedStringWithCanonicalMapping
+        let digest = SHA256.hash(data: Data(folder.utf8)).map { String(format: "%02x", $0) }.joined()
+        let item = "Claude Code-credentials-" + digest.prefix(8)
+        return { service, account in service == "Claude Code-credentials" ? try read(item, account) : nil }
     }
 
     /// Resolves the profile a bot selected in its agent.json. Nil means the
@@ -152,6 +167,7 @@ public struct HarnessProfileStore: Sendable {
         case .grokBuild: ".grok"
         case .muse: ".config/muse"
         case .antigravity: ".gemini/antigravity-cli"
+        case .claudeCode: ".claude"
         default: ".codex"
         }
     }

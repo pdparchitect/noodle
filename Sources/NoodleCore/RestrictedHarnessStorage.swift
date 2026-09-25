@@ -116,7 +116,9 @@ public enum RestrictedHarnessStorage {
         // which leaves only that tool trusted. FX recreates its items on token
         // refresh, which drops Always Allow. A direct read would ask for the
         // login password each time.
-        guard ["Claude Code-credentials", "gemini", "FX_OAUTH_SESSION_V1", "FX_AI_GATEWAY_API_KEY"].contains(service) else {
+        // A Claude Code profile's item carries its folder's digest after the name.
+        guard ["Claude Code-credentials", "gemini", "FX_OAUTH_SESSION_V1", "FX_AI_GATEWAY_API_KEY"].contains(service)
+                || service.hasPrefix("Claude Code-credentials-") else {
             return try readKeychainItem(service: service, account: account)
         }
         let result = try tool(["find-generic-password", "-s", service, "-a", account, "-w"])

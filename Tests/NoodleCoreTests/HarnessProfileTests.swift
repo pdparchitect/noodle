@@ -1,3 +1,4 @@
+import CryptoKit
 import XCTest
 @testable import NoodleCore
 
@@ -34,7 +35,7 @@ final class HarnessProfileTests: XCTestCase {
         XCTAssertEqual(try store.load().map(\.displayName), ["Client"])
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.loginHome(personal).path))
 
-        XCTAssertThrowsError(try store.create(provider: .claudeCode, named: "Other"))
+        XCTAssertThrowsError(try store.create(provider: .fx, named: "Other"))
         XCTAssertThrowsError(try store.create(provider: .codex, named: " \n "))
     }
 
@@ -81,13 +82,14 @@ final class HarnessProfileTests: XCTestCase {
 
     func testEachHarnessIsPointedAtItsOwnProfileFolder() throws {
         let codex = try store.create(provider: .codex, named: "Codex"), grok = try store.create(provider: .grokBuild, named: "Grok")
-        let muse = try store.create(provider: .muse, named: "Muse")
+        let muse = try store.create(provider: .muse, named: "Muse"), claude = try store.create(provider: .claudeCode, named: "Claude")
         XCTAssertEqual(store.environment(codex), ["CODEX_HOME": store.loginHome(codex).appendingPathComponent(".codex").path])
         XCTAssertEqual(store.environment(grok), ["GROK_HOME": store.loginHome(grok).appendingPathComponent(".grok").path])
         XCTAssertEqual(store.environment(muse), ["XDG_CONFIG_HOME": store.loginHome(muse).appendingPathComponent(".config").path,
                                                  "TBH_CREDENTIAL_BACKEND": "file"])
+        XCTAssertEqual(store.environment(claude), ["CLAUDE_CONFIG_DIR": store.loginHome(claude).appendingPathComponent(".claude").path])
         XCTAssertEqual(store.accountHome(muse).path, store.loginHome(muse).appendingPathComponent(".config/muse").path)
-        for profile in [codex, grok, muse] {
+        for profile in [codex, grok, muse, claude] {
             XCTAssertEqual(try store.validated(profile.id), profile)
             XCTAssertTrue(FileManager.default.fileExists(atPath: store.accountHome(profile).path))
         }
@@ -158,5 +160,39 @@ final class HarnessProfileTests: XCTestCase {
         try Data("personal-login".utf8).write(to: store.accountHome(other).appendingPathComponent("auth.json"))
         try RestrictedHarnessStorage.prepare(provider: .codex, workspace: workspace, loginHome: store.loginHome(other))
         XCTAssertEqual(try Data(contentsOf: seeded), Data("personal-login".utf8))
+    }
+
+    func testRestrictedClaudeBotIsSeededOnlyFromItsProfileKeychainItem() throws {
+        let agent = try repository.createAgent(named: "Claude Bot", harnessIdentifier: "claude-code").agent
+        let workspace = repository.storage(for: agent.id).workspace
+        let profile = try store.create(provider: .claudeCode, named: "Work")
+        // Claude Code names the item after its configuration folder.
+        let digest = SHA256.hash(data: Data(store.accountHome(profile).path.utf8)).map { String(format: "%02x", $0) }.joined()
+        let service = "Claude Code-credentials-" + digest.prefix(8)
+        var requested: [String] = []
+        func read(_ name: String, _ account: String) throws -> Data? {
+            requested.append(name)
+            return name == service ? Data(#"{"claudeAiOauth":{"accessToken":"work-token"},"mcpOAuth":{}}"#.utf8) : nil
+        }
+        try RestrictedHarnessStorage.prepare(provider: .claudeCode, workspace: workspace, loginHome: store.loginHome(profile),
+                                             secret: store.loginSecret(profile, read: read))
+        XCTAssertEqual(requested, [service])
+        let seeded = RestrictedHarnessStorage.home(workspace: workspace).appendingPathComponent(".claude/.credentials.json")
+        XCTAssertEqual(try String(contentsOf: seeded, encoding: .utf8), #"{"claudeAiOauth":{"accessToken":"work-token"}}"#)
+
+        // Other harnesses keep a profile's login in its files alone.
+        let codex = try store.create(provider: .codex, named: "Codex")
+        XCTAssertNil(try store.loginSecret(codex, read: { _, _ in XCTFail("A Codex profile must not read the Keychain"); return nil })(
+            "Claude Code-credentials", NSUserName()))
+    }
+
+    func testProfileClaudeKeychainItemIsReadWithTheSecurityTool() throws {
+        var arguments: [String] = []
+        let data = try RestrictedHarnessStorage.readSecret(service: "Claude Code-credentials-0123abcd", account: "me") {
+            arguments = $0
+            return (0, Data("login\n".utf8))
+        }
+        XCTAssertEqual(arguments, ["find-generic-password", "-s", "Claude Code-credentials-0123abcd", "-a", "me", "-w"])
+        XCTAssertEqual(data, Data("login".utf8))
     }
 }

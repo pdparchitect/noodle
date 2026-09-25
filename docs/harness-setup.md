@@ -54,12 +54,12 @@ explains what it covers.
 
 ## Profiles
 
-Codex, Grok Build, Muse Code, and Antigravity can each be signed in to several
-accounts at once. Under the harness in **Settings → Harness**, choose
-**Profiles**, then **Add Profile…**, name it, and choose **Sign In…** beside it.
-Noodle shows a sign-in code and a button for the sign-in page. For Antigravity,
-Noodle instead shows a command to paste into Terminal; run it, then choose
-**Check Again**.
+Claude Code, Codex, Grok Build, Muse Code, and Antigravity can each be signed
+in to several accounts at once. Under the harness in **Settings → Harness**,
+choose **Profiles**, then **Add Profile…**, name it, and choose **Sign In…**
+beside it. Noodle shows a sign-in code and a button for the sign-in page. Claude
+Code instead opens its sign-in page in your browser. For Antigravity, Noodle
+shows a command to paste into Terminal; run it, then choose **Check Again**.
 
 Choose the profile for a bot in **Edit Bot → Harness → Profile**; the row appears
 once that harness has a profile. **System** is the default: the harness sign-in
@@ -68,13 +68,14 @@ already on this Mac, shared with Terminal and other apps.
 - Grok Build sign-ins expire after seven days; sign the profile in again from
   **Profiles**.
 - An unrestricted bot on a profile does not use your usual settings for that
-  harness (in `~/.codex`, `~/.grok`, `~/.config/muse` or `~/.gemini`).
+  harness (in `~/.claude`, `~/.codex`, `~/.grok`, `~/.config/muse` or `~/.gemini`).
   An unrestricted Antigravity bot on a profile also does not see files in your
   home folder by their usual `~` paths, such as `~/.gitconfig` or `~/.ssh`.
-- A Codex conversation starts again when you change the bot's profile.
+- A Codex or Claude Code conversation starts again when you change the bot's
+  profile.
 - The model list in the bot editor comes from the System sign-in.
 - Deleting a profile signs it out of Noodle and moves its bots back to System.
-- Claude Code, FX, OpenCode, and Apple Intelligence use the System sign-in only.
+- FX, OpenCode, and Apple Intelligence use the System sign-in only.
 
 ## OpenCode v2
 
