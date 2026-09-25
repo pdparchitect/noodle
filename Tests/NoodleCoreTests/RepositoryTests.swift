@@ -197,8 +197,6 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: preferencesFile), Data(preferences.utf8))
         XCTAssertEqual(try Data(contentsOf: memoryFile), Data(memory.utf8))
         XCTAssertEqual(try repository.loadAgentBackstory(created.agent), "Updated backstory")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent(".agents/managed-skills.json").path),
-                       "the unread list of managed paths is gone, and removed from existing workspaces")
 
         // An intentionally empty file is still user content.
         try Data().write(to: preferencesFile)

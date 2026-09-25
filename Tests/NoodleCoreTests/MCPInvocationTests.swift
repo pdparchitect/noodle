@@ -18,7 +18,7 @@ final class MCPInvocationTests: XCTestCase {
         try registry.save(root: root)
         XCTAssertEqual(try MCPRegistry.load(root: root).connections[0].skillName, "mcp-notion-2")
 
-        // A real legacy registry and generated folder, including a user's extra file.
+        // A real legacy registry.
         var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(first)) as! [String: Any]
         let oldName = "mcp-notion-" + first.id.uuidString.lowercased().replacingOccurrences(of: "-", with: "")
         object["skillName"] = oldName
@@ -27,26 +27,14 @@ final class MCPInvocationTests: XCTestCase {
         try JSONSerialization.data(withJSONObject: legacyRegistry).write(to: root.appendingPathComponent("MCP/connections.json"))
         let workspace = root.appendingPathComponent("workspace")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
-        // The folder an earlier Noodle wrote for the old name, with its mcpshim link.
         XCTAssertEqual(legacy.id, first.id)
-        let oldFolder = workspace.appendingPathComponent(".agents/skills/" + oldName)
-        try FileManager.default.createDirectory(at: oldFolder, withIntermediateDirectories: true)
-        try Data("old".utf8).write(to: oldFolder.appendingPathComponent("SKILL.md"))
-        try FileManager.default.createSymbolicLink(at: oldFolder.appendingPathComponent("mcpshim"), withDestinationURL: URL(fileURLWithPath: "/bin/echo"))
-        try JSONEncoder().encode([oldName]).write(to: workspace.appendingPathComponent(".agents/mcp-skills.json"))
-        let notes = oldFolder.appendingPathComponent("notes.txt")
-        try "Keep this".write(to: notes, atomically: true, encoding: .utf8)
         var migrated = try MCPRegistry.load(root: root)
         XCTAssertEqual(migrated.connections[0].id, first.id)
         XCTAssertEqual(migrated.assigned(to: agent).map(\.skillName), ["mcp-notion"])
         try migrated.save(root: root)
-        MCPSkillWriter.removeLegacy(workspace: workspace)
         let connection = migrated.connections[0]
         ToolProviderSkills.synchronize(workspace: workspace, providers: [(ConnectionToolProvider(id: connection.skillName, title: connection.name,
             connection: connection.id) { _, _, _, _, _ in Data() }.manifest, [])])
-        XCTAssertEqual(try String(contentsOf: notes), "Keep this")
-        XCTAssertNil(try? FileManager.default.destinationOfSymbolicLink(atPath: oldFolder.appendingPathComponent("mcpshim").path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: oldFolder.appendingPathComponent("SKILL.md").path))
         let skill = try String(contentsOf: workspace.appendingPathComponent(".agents/skills/mcp-notion/SKILL.md"))
         XCTAssertTrue(skill.contains("name: mcp-notion\n"))
         XCTAssertFalse(skill.contains(first.id.uuidString.lowercased()))
@@ -78,7 +66,6 @@ final class MCPInvocationTests: XCTestCase {
         let connection = try MCPConnectionRecord(name: "Notion", endpoint: URL(string: "https://mcp.notion.com/mcp")!)
         ToolProviderSkills.synchronize(workspace: root, providers: [(ConnectionToolProvider(id: connection.skillName, title: connection.name,
             connection: connection.id) { _, _, _, _, _ in Data() }.manifest, [])])
-        MCPSkillWriter.removeLegacy(workspace: root)
         XCTAssertEqual(try String(contentsOf: file), "My own skill")
     }
 }

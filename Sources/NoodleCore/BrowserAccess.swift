@@ -22,19 +22,3 @@ public struct BrowserAssignments: Codable, Sendable {
         return Dictionary(uniqueKeysWithValues: agents.compactMap { key, ids in UUID(uuidString: key).map { ($0, Set(ids.map(\.uuidString))) } })
     }
 }
-// TODO(0.22.0): Remove BrowserAgentSkill, its call in synchronizeAgentWorkspace and its tests after verifying
-// upgrades pass through the published 0.21.0 milestone, which runs this the first time it syncs a bot's workspace.
-public enum BrowserAgentSkill {
-    /// Bots now reach browsers through `messenger tool browser`. Remove what earlier versions
-    /// wrote: the hand-written skill with its command link, and the request mailbox.
-    public static func removeLegacy(workspace: URL) {
-        if let folder = try? WorkspaceMailbox(workspace: workspace, path: ".agents/skills/browser") {
-            if folder.contains(ToolProviderSkills.marker) { folder.remove("browser") }
-            else { try? WorkspaceMailbox.synchronizeSkill(workspace: workspace, name: "browser", enabled: false, instructions: "", command: "browser", executable: nil) }
-        }
-        if let bridge = try? WorkspaceMailbox(workspace: workspace, path: ".noodle/browser-bridge"), let names = try? bridge.names() {
-            names.forEach(bridge.remove)
-            (try? WorkspaceMailbox(workspace: workspace, path: ".noodle"))?.removeEmptyDirectory("browser-bridge")
-        }
-    }
-}

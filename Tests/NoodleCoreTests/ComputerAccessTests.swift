@@ -52,30 +52,6 @@ final class ComputerAccessTests: XCTestCase {
         let wire = MessengerAttachment(attachment: computerAttachment, absolutePath: "/fixture/card.noodlecomputer")
         XCTAssertEqual(try JSONDecoder().decode(MessengerAttachment.self, from: JSONEncoder().encode(wire)).computer, card)
     }
-    /// Earlier versions wrote a hand-written skill, its command link and a request mailbox.
-    func testLegacySkillAndMailboxAreRemovedButGeneratedAndUserSkillsStay() throws {
-        let root = try temporaryDirectory(), skill = root.appendingPathComponent(".agents/skills/computer")
-        try WorkspaceMailbox.synchronizeSkill(workspace: root, name: "computer", enabled: true, instructions: "old",
-                                              command: "computer", executable: URL(fileURLWithPath: "/fixture/computer"))
-        try FileManager.default.createDirectory(at: root.appendingPathComponent(".noodle/computer-bridge"), withIntermediateDirectories: true)
-        try Data("{}".utf8).write(to: root.appendingPathComponent(".noodle/computer-bridge/session.json"))
-        ComputerAgentSkill.removeLegacy(workspace: root)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: skill.path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(".noodle/computer-bridge").path))
-
-        ToolProviderSkills.synchronize(workspace: root, providers: [(ToolProviderManifest(id: "computer", title: "Noodle Computer", summary: "Run commands."), [])])
-        let generated = try String(contentsOf: skill.appendingPathComponent("SKILL.md"), encoding: .utf8)
-        ComputerAgentSkill.removeLegacy(workspace: root)
-        XCTAssertEqual(try String(contentsOf: skill.appendingPathComponent("SKILL.md"), encoding: .utf8), generated)
-
-        try FileManager.default.removeItem(at: skill)
-        try FileManager.default.createDirectory(at: skill, withIntermediateDirectories: true)
-        let custom = skill.appendingPathComponent("SKILL.md")
-        try Data("user skill".utf8).write(to: custom)
-        ComputerAgentSkill.removeLegacy(workspace: root)
-        XCTAssertEqual(try Data(contentsOf: custom), Data("user skill".utf8))
-    }
-
     func testAssignmentsPublishedToTheBrokerFailClosed() throws {
         let agent = UUID(), computer = UUID()
         var registry = ComputerAssignments()

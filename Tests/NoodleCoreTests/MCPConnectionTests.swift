@@ -67,22 +67,6 @@ final class MCPConnectionTests: XCTestCase {
         XCTAssertEqual(try MCPRegistry.load(root: root), registry)
         let workspace = root.appendingPathComponent("agent")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
-        // What an earlier Noodle wrote: a hand-written skill, its mcpshim link, the list that tracked it and a mailbox.
-        let directory = workspace.appendingPathComponent(".agents/skills/\(record.skillName)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: workspace.appendingPathComponent(".noodle/mcp-bridge"), withIntermediateDirectories: true)
-        try Data("old".utf8).write(to: directory.appendingPathComponent("SKILL.md"))
-        try FileManager.default.createSymbolicLink(at: directory.appendingPathComponent("mcpshim"), withDestinationURL: URL(fileURLWithPath: "/bin/echo"))
-        try JSONEncoder().encode([record.skillName]).write(to: workspace.appendingPathComponent(".agents/mcp-skills.json"))
-        let userFile = directory.appendingPathComponent("my-notes.txt")
-        try "Keep me".write(to: userFile, atomically: true, encoding: .utf8)
-        MCPSkillWriter.removeLegacy(workspace: workspace)
-        XCTAssertEqual(try String(contentsOf: userFile, encoding: .utf8), "Keep me")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("SKILL.md").path))
-        XCTAssertNil(try? FileManager.default.destinationOfSymbolicLink(atPath: directory.appendingPathComponent("mcpshim").path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: workspace.appendingPathComponent(".agents/mcp-skills.json").path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: workspace.appendingPathComponent(".noodle/mcp-bridge").path))
-
         let skill = generatedSkill(record)
         XCTAssertTrue(skill.contains("Only use the work account."))
         XCTAssertTrue(skill.contains("messenger tool \(record.skillName) TOOL"))
@@ -108,7 +92,6 @@ final class MCPConnectionTests: XCTestCase {
         try FileManager.default.createSymbolicLink(at: workspace.appendingPathComponent(".agents"), withDestinationURL: outside)
         let connection = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
         ToolProviderSkills.synchronize(workspace: workspace, providers: [provider(connection)])
-        MCPSkillWriter.removeLegacy(workspace: workspace)
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: outside.path).isEmpty)
     }
     func testBridgeRefusesSymlinksAndOversizedFiles() throws {

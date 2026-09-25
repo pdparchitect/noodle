@@ -119,35 +119,3 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
         }
     }
 }
-
-// TODO(0.22.0): Remove MCPSkillWriter, its call in synchronizeAgentWorkspace and its tests after verifying
-// upgrades pass through the published 0.21.0 milestone, which runs this the first time it syncs a bot's workspace.
-public enum MCPSkillWriter {
-    /// Bots now reach tool connections through `messenger tool`. Remove what earlier versions
-    /// wrote: one hand-written skill per connection with its mcpshim link, the list that
-    /// tracked them, and the request mailbox. A generated skill of the same name stays.
-    public static func removeLegacy(workspace: URL) {
-        if let agents = try? WorkspaceMailbox(workspace: workspace, path: ".agents"),
-           let names = try? JSONDecoder().decode([String].self, from: agents.read("mcp-skills.json", limit: 1_048_576)) {
-            let skills = try? WorkspaceMailbox(workspace: workspace, path: ".agents/skills")
-            for name in names where isManagedName(name) {
-                guard let folder = try? WorkspaceMailbox(workspace: workspace, path: ".agents/skills/" + name) else { continue }
-                folder.remove("mcpshim")
-                if !folder.contains(ToolProviderSkills.marker) {
-                    folder.remove("SKILL.md")
-                    skills?.removeEmptyDirectory(name)
-                    if let native = try? WorkspaceMailbox(workspace: workspace, path: ".claude/skills"),
-                       native.linkDestination(name) == "../../.agents/skills/" + name { native.remove(name) }
-                }
-            }
-            agents.remove("mcp-skills.json")
-        }
-        if let bridge = try? WorkspaceMailbox(workspace: workspace, path: ".noodle/mcp-bridge"), let names = try? bridge.names() {
-            names.forEach(bridge.remove)
-            (try? WorkspaceMailbox(workspace: workspace, path: ".noodle"))?.removeEmptyDirectory("mcp-bridge")
-        }
-    }
-    private static func isManagedName(_ value: String) -> Bool {
-        value.hasPrefix("mcp-") && value.count <= 64 && value.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
-    }
-}

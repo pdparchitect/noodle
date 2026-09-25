@@ -27,19 +27,3 @@ public struct ComputerAssignments: Codable, Sendable {
     }
 }
 
-// TODO(0.22.0): Remove ComputerAgentSkill, its call in synchronizeAgentWorkspace and its tests after verifying
-// upgrades pass through the published 0.21.0 milestone, which runs this the first time it syncs a bot's workspace.
-public enum ComputerAgentSkill {
-    /// Bots now reach computers through `messenger tool computer`. Remove what earlier versions
-    /// wrote: the hand-written skill with its command link, and the request mailbox.
-    public static func removeLegacy(workspace: URL) {
-        if let folder = try? WorkspaceMailbox(workspace: workspace, path: ".agents/skills/computer") {
-            if folder.contains(ToolProviderSkills.marker) { folder.remove("computer") }
-            else { try? WorkspaceMailbox.synchronizeSkill(workspace: workspace, name: "computer", enabled: false, instructions: "", command: "computer", executable: nil) }
-        }
-        if let bridge = try? WorkspaceMailbox(workspace: workspace, path: ".noodle/computer-bridge"), let names = try? bridge.names() {
-            names.forEach(bridge.remove)
-            (try? WorkspaceMailbox(workspace: workspace, path: ".noodle"))?.removeEmptyDirectory("computer-bridge")
-        }
-    }
-}

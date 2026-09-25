@@ -288,10 +288,6 @@ public struct WorkspaceRepository: Sendable {
         if !workspaceFiles.contains("preferences.md") {
             try workspaceFiles.writeData(Data(Self.initialAgentPreferences.utf8), named: "preferences.md", replaceExisting: false)
         }
-        // TODO(0.22.0): Remove these three clean-ups of what Noodle wrote before the 0.21.0 milestone.
-        BrowserAgentSkill.removeLegacy(workspace: directory)
-        ComputerAgentSkill.removeLegacy(workspace: directory)
-        MCPSkillWriter.removeLegacy(workspace: directory)
         let appletExecutable = appletExecutableURL
         let appletEnabled = appletExecutable != nil
         let appletInstructions = appletEnabled ? "\n" + AppletGuidance.bootstrap + "\n" : ""
@@ -306,10 +302,6 @@ public struct WorkspaceRepository: Sendable {
         if let launcherExecutableURL {
             try messengerFiles.symlink("messenger", destination: launcherExecutableURL.path)
         }
-
-        // Earlier versions kept a list of managed paths here. Nothing read it.
-        // TODO(0.22.0): Remove this clean-up after upgrades pass through the 0.21.0 milestone.
-        agentsFiles.remove("managed-skills.json")
     }
 
     public func loadAgentBackstory(_ agent: AgentRecord) throws -> String {
