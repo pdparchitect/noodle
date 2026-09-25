@@ -1,3 +1,4 @@
+import CryptoKit
 import XCTest
 @testable import NoodleCore
 
@@ -115,7 +116,7 @@ final class RestrictedHarnessStorageTests: XCTestCase {
         return (root.appendingPathComponent("Home"), repo.directory(for: first.agent), repo.directory(for: second.agent))
     }
 
-    func testCodexAndGrokCopyOnlyLoginAndPreservePrivateRefreshes() throws {
+    func testCodexAndGrokCopyOnlyLoginAndHandARefreshBackToEveryBot() throws {
         for provider in [HarnessProvider.codex, .grokBuild] {
             let (home, first, second) = try fixture()
             let path = provider == .codex ? ".codex" : ".grok"
@@ -132,14 +133,111 @@ final class RestrictedHarnessStorageTests: XCTestCase {
             let b = try WorkspaceMailbox(workspace: second, path: ".noodle/home/" + path)
             XCTAssertFalse(a.contains("sessions.json"))
             if provider == .codex { XCTAssertFalse(try String(decoding: a.read("config.toml", limit: 100), as: UTF8.self).contains("private hooks")) }
+            // A refresh spends the refresh token every copy holds. The new login
+            // must reach the source and the other bot, or they are left signed out.
             try a.writeData(Data("refreshed".utf8), named: "auth.json")
             try RestrictedHarnessStorage.prepare(provider: provider, workspace: first, loginHome: home, secret: { _, _ in nil })
             XCTAssertEqual(try a.read("auth.json", limit: 100), Data("refreshed".utf8))
-            XCTAssertEqual(try b.read("auth.json", limit: 100), Data("login-one".utf8))
-            XCTAssertEqual(try source.read("auth.json", limit: 100), Data("login-one".utf8))
+            XCTAssertEqual(try source.read("auth.json", limit: 100), Data("refreshed".utf8))
+            try RestrictedHarnessStorage.prepare(provider: provider, workspace: second, loginHome: home, secret: { _, _ in nil })
+            XCTAssertEqual(try b.read("auth.json", limit: 100), Data("refreshed".utf8))
             try source.writeData(Data("new-sign-in".utf8), named: "auth.json")
             try RestrictedHarnessStorage.prepare(provider: provider, workspace: first, loginHome: home, secret: { _, _ in nil })
             XCTAssertEqual(try a.read("auth.json", limit: 100), Data("new-sign-in".utf8))
+        }
+    }
+
+    func testANewSignInWinsOverARefreshMadeFromTheOldLogin() throws {
+        let (home, workspace, _) = try fixture()
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let source = try WorkspaceMailbox(workspace: home, path: ".codex", create: true)
+        try source.writeData(Data("old-login".utf8), named: "auth.json")
+        try RestrictedHarnessStorage.prepare(provider: .codex, workspace: workspace, loginHome: home)
+        let copy = try WorkspaceMailbox(workspace: workspace, path: ".noodle/home/.codex")
+        try copy.writeData(Data("old-login-refreshed".utf8), named: "auth.json")
+        try source.writeData(Data("new-sign-in".utf8), named: "auth.json")
+        try RestrictedHarnessStorage.prepare(provider: .codex, workspace: workspace, loginHome: home)
+        XCTAssertEqual(try copy.read("auth.json", limit: 100), Data("new-sign-in".utf8))
+        XCTAssertEqual(try source.read("auth.json", limit: 100), Data("new-sign-in".utf8))
+    }
+
+    func testARunningBotsRefreshReachesTheOtherRunningBotsWithoutARestart() throws {
+        let (home, first, second) = try fixture()
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let source = try WorkspaceMailbox(workspace: home, path: ".codex", create: true)
+        try source.writeData(Data("login-one".utf8), named: "auth.json")
+        for workspace in [first, second] { try RestrictedHarnessStorage.prepare(provider: .codex, workspace: workspace, loginHome: home) }
+        let a = try WorkspaceMailbox(workspace: first, path: ".noodle/home/.codex")
+        let b = try WorkspaceMailbox(workspace: second, path: ".noodle/home/.codex")
+        try a.writeData(Data("refreshed".utf8), named: "auth.json")
+        for workspace in [first, second] { try RestrictedHarnessStorage.exchange(provider: .codex, workspace: workspace, loginHome: home) }
+        XCTAssertEqual(try b.read("auth.json", limit: 100), Data("refreshed".utf8))
+        XCTAssertEqual(try source.read("auth.json", limit: 100), Data("refreshed".utf8))
+        // A bot on another login is left alone.
+        let other = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: other) }
+        try RestrictedHarnessStorage.exchange(provider: .codex, workspace: second, loginHome: other)
+        XCTAssertEqual(try b.read("auth.json", limit: 100), Data("refreshed".utf8))
+    }
+
+    func testALegacyStampStillHandsBackTheBotsRefresh() throws {
+        let (home, workspace, _) = try fixture()
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let source = try WorkspaceMailbox(workspace: home, path: ".codex", create: true)
+        let login = Data("login-one".utf8)
+        try source.writeData(login, named: "auth.json")
+        let copy = try WorkspaceMailbox(workspace: workspace, path: ".noodle/home/.codex", create: true)
+        try copy.writeData(Data("refreshed".utf8), named: "auth.json")
+        let runtime = try WorkspaceMailbox(workspace: AgentStorageLayout(workspace: workspace).package, path: "runtime")
+        let digest = SHA256.hash(data: login).map { String(format: "%02x", $0) }.joined()
+        try runtime.writeData(Data(digest.utf8), named: "auth-seed-codex-auth.json.sha256")
+        try RestrictedHarnessStorage.prepare(provider: .codex, workspace: workspace, loginHome: home)
+        XCTAssertEqual(try source.read("auth.json", limit: 100), Data("refreshed".utf8))
+    }
+
+    func testKeychainLoginsHandARefreshToTheOtherBotsWithoutRewritingTheItem() throws {
+        let (home, first, second) = try fixture()
+        var login = Data(#"{"claudeAiOauth":{"accessToken":"first","refreshToken":"one"}}"#.utf8)
+        func prepare(_ workspace: URL) throws {
+            try RestrictedHarnessStorage.prepare(provider: .claudeCode, workspace: workspace, loginHome: home) { _, _ in login }
+        }
+        try prepare(first); try prepare(second)
+        let a = try WorkspaceMailbox(workspace: first, path: ".noodle/home/.claude")
+        let b = try WorkspaceMailbox(workspace: second, path: ".noodle/home/.claude")
+        let refreshed = Data(#"{"claudeAiOauth":{"accessToken":"refreshed","refreshToken":"two"}}"#.utf8)
+        try a.writeData(refreshed, named: ".credentials.json")
+        try prepare(first); try prepare(second)
+        XCTAssertEqual(try b.read(".credentials.json", limit: 4096), refreshed)
+        // Signing in again changes the item, and that login replaces every copy.
+        login = Data(#"{"claudeAiOauth":{"accessToken":"new-sign-in"}}"#.utf8)
+        try prepare(second)
+        XCTAssertTrue(String(decoding: try b.read(".credentials.json", limit: 4096), as: UTF8.self).contains("new-sign-in"))
+    }
+
+    func testEveryCopiedLoginIsHandedBackAndNotOnlyCodex() throws {
+        // Muse, FX and Antigravity rotate refresh tokens in their copies too.
+        let cases: [(HarnessProvider, String, String, (String, String) throws -> Data?)] = [
+            (.muse, ".config/muse", "auth.json", { _, _ in nil }),
+            (.fx, ".fx", "auth.json", { _, _ in Data("fx-session".utf8) }),
+            (.antigravity, ".gemini/antigravity-cli", "antigravity-oauth-token", { _, _ in Data("agy-login".utf8) }),
+        ]
+        for (provider, path, name, secret) in cases {
+            let (home, first, second) = try fixture()
+            try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+            let source = try WorkspaceMailbox(workspace: home, path: path, create: true)
+            if provider == .muse {
+                try source.writeData(Data(#"{"providers":{"meta":{"storage":"file","access_token":"one"}}}"#.utf8), named: "auth.json")
+            }
+            for workspace in [first, second] {
+                try RestrictedHarnessStorage.prepare(provider: provider, workspace: workspace, loginHome: home, secret: secret)
+            }
+            let a = try WorkspaceMailbox(workspace: first, path: ".noodle/home/" + path)
+            let b = try WorkspaceMailbox(workspace: second, path: ".noodle/home/" + path)
+            try a.writeData(Data("refreshed-\(provider.rawValue)".utf8), named: name)
+            try RestrictedHarnessStorage.prepare(provider: provider, workspace: first, loginHome: home, secret: secret)
+            try RestrictedHarnessStorage.prepare(provider: provider, workspace: second, loginHome: home, secret: secret)
+            XCTAssertEqual(try b.read(name, limit: 4096), Data("refreshed-\(provider.rawValue)".utf8), provider.rawValue)
         }
     }
 

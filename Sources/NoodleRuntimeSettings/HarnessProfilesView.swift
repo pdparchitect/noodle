@@ -98,6 +98,10 @@ public struct HarnessProfilesView: View {
                     Button("Sign In…") { controller.signIn(profile, installation: installation) }
                 }
                 Menu {
+                    if controller.activity[profile.id] == nil, controller.authentication[profile.id] == .authenticated {
+                        // A login can be revoked on the server while still reading as signed in here.
+                        Button("Sign In Again…") { controller.signIn(profile, installation: installation) }
+                    }
                     Button("Rename…") { name = profile.displayName; naming = .rename(profile) }
                     Button("Delete…", role: .destructive) { deleting = profile }
                 } label: {

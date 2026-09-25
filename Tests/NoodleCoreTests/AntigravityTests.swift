@@ -182,7 +182,9 @@ final class AntigravityTests: XCTestCase {
     }
 
     func testRestrictedBotReceivesOnlyTheLoginFile() throws {
-        let layout = AgentStorageLayout(package: root.appendingPathComponent("agent"))
+        // Bots share a login beside their storage folder, so keep it inside root.
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("Agents"), withIntermediateDirectories: true)
+        let layout = AgentStorageLayout(package: root.appendingPathComponent("Agents/agent"))
         try layout.create()
         let login = Data(#"{"refresh_token":"system"}"#.utf8)
         var asked: [String] = []
@@ -206,13 +208,14 @@ final class AntigravityTests: XCTestCase {
 
         let empty = root.appendingPathComponent("empty-home")
         try FileManager.default.createDirectory(at: empty.appendingPathComponent(".gemini/antigravity-cli"), withIntermediateDirectories: true)
-        let other = AgentStorageLayout(package: root.appendingPathComponent("other"))
+        let other = AgentStorageLayout(package: root.appendingPathComponent("Agents/other"))
         try other.create()
         XCTAssertThrowsError(try RestrictedHarnessStorage.prepare(provider: .antigravity, workspace: other.workspace, loginHome: empty) { _, _ in nil })
     }
 
     func testRestrictedSandboxUsesAPrivateHomeAndLetsOnlyTheCLIListenLocally() throws {
-        let layout = AgentStorageLayout(package: root.appendingPathComponent("agent"))
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("Agents"), withIntermediateDirectories: true)
+        let layout = AgentStorageLayout(package: root.appendingPathComponent("Agents/agent"))
         try layout.create()
         try RestrictedHarnessStorage.prepare(provider: .antigravity, workspace: layout.workspace, loginHome: root) { _, _ in Data("login".utf8) }
         let home = RestrictedHarnessStorage.home(workspace: layout.workspace)

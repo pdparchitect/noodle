@@ -135,14 +135,15 @@ public final class WorkspaceMailbox: @unchecked Sendable {
         unlinkat(descriptor, name, 0)
     }
 
-    public func withLock(_ name: String, operation: () throws -> Void) rethrows {
+    /// Skips the operation when the lock is taken, unless asked to wait for it.
+    public func withLock(_ name: String, wait: Bool = false, operation: () throws -> Void) rethrows {
         guard Self.validName(name) else { return }
         let file = openat(descriptor, name, O_CREAT | O_RDWR | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC, 0o600)
         guard file >= 0 else { return }
         defer { close(file) }
         var info = stat()
         guard fstat(file, &info) == 0, info.st_mode & S_IFMT == S_IFREG, info.st_nlink == 1,
-              flock(file, LOCK_EX | LOCK_NB) == 0 else { return }
+              flock(file, wait ? LOCK_EX : LOCK_EX | LOCK_NB) == 0 else { return }
         defer { flock(file, LOCK_UN) }
         try operation()
     }

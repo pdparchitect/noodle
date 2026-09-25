@@ -25,6 +25,8 @@ All notable changes to Noodle are documented here, following
 
 - Open the conversation picker (⇧⌘Space) without a wobble. It now appears at once, like Spotlight.
 - Name noodlets in the Shared list the way their conversation cards do, with the same preview. They used to show as "Noodlet.webloc", and an unavailable one now says so.
+- Keep every bot on a shared harness login signed in. When one bot refreshed the login, the others were left holding a spent token and failed, for example with Codex's "workspace routing discovery unauthorized (401)". A refreshed login now reaches the other bots and the harness itself, and Noodle refreshes a Codex login before its bots would all try at once. This covers Claude Code, Codex, Grok Build, FX, Muse Code and Antigravity.
+- Sign a profile in again from its ⋯ menu in Settings > Harness > Profiles…, for a login the service no longer accepts even though it still reads as signed in.
 
 ## [0.26.0] - 2026-09-24
 

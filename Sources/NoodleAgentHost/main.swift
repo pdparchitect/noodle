@@ -40,6 +40,15 @@ private enum HostPaths {
         home.appendingPathComponent("Library/Containers/\(AgentHostIdentity.application)", isDirectory: true)
     }
 
+    static var accountEnvironment: [String: String] {
+        [
+            "HOME": home.path,
+            "USER": NSUserName(), "LOGNAME": NSUserName(),
+            "PATH": "\(home.path)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
+            "TMPDIR": NSTemporaryDirectory()
+        ]
+    }
+
     static var profiles: HarnessProfileStore {
         HarnessProfileStore(root: container.appendingPathComponent("Data/Library/Application Support/Noodle", isDirectory: true))
     }
@@ -333,8 +342,11 @@ private final class HostSession: NSObject, AgentHostService {
                 guard let provider = HarnessProvider(rawValue: harnessIdentifier) else {
                     throw HostError("Unsupported harness.")
                 }
-                _ = try HostPaths.executable(executablePath, provider: provider)
+                let executable = try HostPaths.executable(executablePath, provider: provider)
                 let workspace = try HostPaths.workspace(agentID)
+                let loginHome = try HostPaths.profiles.selected(workspace: workspace, provider: provider)
+                    .map(HostPaths.profiles.loginHome) ?? HostPaths.home
+                if provider == .codex { SharedLogins.shared.refreshCodexIfDue(loginHome: loginHome, executable: executable) }
                 let child = Process()
                 child.executableURL = Bundle.main.executableURL
                 // Preserve the approved installation path for the child's independent
@@ -373,6 +385,8 @@ private final class HostSession: NSObject, AgentHostService {
                     self?.stop { _ in }
                 }
                 try child.run()
+                SharedLogins.shared.add(self, provider: provider, workspace: workspace, loginHome: loginHome,
+                                        restricted: restricted, executable: executable)
                 self.process = child
                 self.groupID = child.processIdentifier
                 self.input = ProcessInputWriter(handle: stdinPipe.fileHandleForWriting)
@@ -394,6 +408,7 @@ private final class HostSession: NSObject, AgentHostService {
             self.stopReplies.append(reply)
             guard !self.stopping else { return }
             self.stopping = true
+            SharedLogins.shared.remove(self)
             self.accountProcess?.terminationHandler = nil
             if self.accountProcess?.isRunning == true { self.accountProcess?.terminate() }
             self.accountProcess = nil
@@ -726,14 +741,7 @@ private final class HostSession: NSObject, AgentHostService {
         } catch { reply(false, error.localizedDescription) }
     }
 
-    private var accountEnvironment: [String: String] {
-        [
-            "HOME": HostPaths.home.path,
-            "USER": NSUserName(), "LOGNAME": NSUserName(),
-            "PATH": "\(HostPaths.home.path)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
-            "TMPDIR": NSTemporaryDirectory()
-        ]
-    }
+    private var accountEnvironment: [String: String] { HostPaths.accountEnvironment }
 
     func fxModels(executablePath: String, withReply reply: @escaping (Data?, String?) -> Void) {
         queue.async {
@@ -774,6 +782,83 @@ private final class HostSession: NSObject, AgentHostService {
             throw HostError("Claude Code returned an unsupported account response.")
         }
         return loggedIn
+    }
+}
+
+/// Keeps every running bot on a harness login using the same, current copy of it.
+/// A restricted bot's refresh is handed to the others as soon as it lands, and a
+/// Codex login is refreshed here before its bots would each try to.
+private final class SharedLogins: @unchecked Sendable {
+    static let shared = SharedLogins()
+
+    private struct Bot {
+        let provider: HarnessProvider
+        let workspace: URL
+        let loginHome: URL
+        let restricted: Bool
+        let executable: URL
+    }
+
+    private let queue = DispatchQueue(label: "Noodle.shared-logins")
+    private let refreshQueue = DispatchQueue(label: "Noodle.shared-logins.refresh")
+    private var bots: [ObjectIdentifier: Bot] = [:]
+    private var timer: DispatchSourceTimer?
+    /// Guarded by the refresh queue.
+    private var failedRefreshes: [URL: Date] = [:]
+
+    func add(_ owner: AnyObject, provider: HarnessProvider, workspace: URL, loginHome: URL, restricted: Bool, executable: URL) {
+        queue.async { [self] in
+            bots[ObjectIdentifier(owner)] = Bot(provider: provider, workspace: workspace, loginHome: loginHome,
+                                                restricted: restricted, executable: executable)
+            guard timer == nil else { return }
+            let timer = DispatchSource.makeTimerSource(queue: queue)
+            timer.schedule(deadline: .now() + 15, repeating: 15, leeway: .seconds(2))
+            timer.setEventHandler { [weak self] in self?.keepCurrent() }
+            timer.resume()
+            self.timer = timer
+        }
+    }
+
+    /// A bot that refreshed just before stopping still hands its login back.
+    func remove(_ owner: AnyObject) {
+        queue.async { [self] in
+            guard let bot = bots.removeValue(forKey: ObjectIdentifier(owner)) else { return }
+            if bot.restricted { try? RestrictedHarnessStorage.exchange(provider: bot.provider, workspace: bot.workspace, loginHome: bot.loginHome) }
+        }
+    }
+
+    private func keepCurrent() {
+        let running = Array(bots.values)
+        var refreshed = Set<URL>()
+        for bot in running where bot.provider == .codex && refreshed.insert(bot.loginHome).inserted {
+            refreshCodexIfDue(loginHome: bot.loginHome, executable: bot.executable)
+        }
+        // The first pass collects a refresh; the second passes it to the bots before it.
+        for _ in 0..<2 {
+            for bot in running where bot.restricted {
+                try? RestrictedHarnessStorage.exchange(provider: bot.provider, workspace: bot.workspace, loginHome: bot.loginHome)
+            }
+        }
+    }
+
+    /// Waits for the refresh, so a bot starting on a due login starts on the new one.
+    func refreshCodexIfDue(loginHome: URL, executable: URL) {
+        refreshQueue.sync {
+            let home = loginHome.appendingPathComponent(".codex", isDirectory: true)
+            guard let files = try? WorkspaceMailbox(workspace: loginHome, path: ".codex"), files.contains("auth.json"),
+                  let auth = try? files.read("auth.json", limit: 1_048_576), CodexLoginRefresh.isDue(auth),
+                  failedRefreshes[home].map({ Date().timeIntervalSince($0) > 3_600 }) ?? true else { return }
+            let done = DispatchSemaphore(value: 0)
+            nonisolated(unsafe) var succeeded = false
+            Task { @MainActor in
+                let provider = CodexSetupProvider(codexHome: home, environment: HostPaths.accountEnvironment)
+                let status = try? await provider.refresh(for: HarnessInstallation(provider: .codex, executablePath: executable.path))
+                succeeded = status == .authenticated
+                done.signal()
+            }
+            if done.wait(timeout: .now() + 30) == .timedOut { succeeded = false }
+            failedRefreshes[home] = succeeded ? nil : Date()
+        }
     }
 }
 

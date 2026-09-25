@@ -68,6 +68,11 @@ public enum HarnessStorage {
         try await session(for: installation).run(onChallenge: onChallenge)
     }
 
+    /// Spends the login's refresh token now, the way Codex would on its own.
+    public func refresh(for installation: HarnessInstallation) async throws -> HarnessAuthenticationStatus {
+        try await session(for: installation, refresh: true).run()
+    }
+
     public var installationGuide: HarnessInstallationGuide {
         HarnessInstallationGuide(
             command: "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
@@ -76,11 +81,26 @@ public enum HarnessStorage {
         )
     }
 
-    private func session(for installation: HarnessInstallation) throws -> CodexAccountSession {
+    private func session(for installation: HarnessInstallation, refresh: Bool = false) throws -> CodexAccountSession {
         guard installation.provider == .codex, let path = installation.executablePath else {
             throw HarnessSetupError("Install the harness first.")
         }
-        return CodexAccountSession(executableURL: URL(fileURLWithPath: path), codexHome: codexHome, environment: environment)
+        return CodexAccountSession(executableURL: URL(fileURLWithPath: path), codexHome: codexHome, environment: environment, refresh: refresh)
+    }
+}
+
+/// Codex refreshes a login shortly before its access token lapses, ten days after
+/// the last refresh. Every bot on the login lapses at once and would race to spend
+/// the one refresh token, so Noodle refreshes it first, once for all of them.
+public enum CodexLoginRefresh {
+    public static let age: TimeInterval = 7 * 86_400
+
+    /// Reads only the refresh time, never a token.
+    public static func isDue(_ auth: Data, now: Date = Date()) -> Bool {
+        guard let json = try? JSONSerialization.jsonObject(with: auth) as? [String: Any], json["tokens"] is [String: Any],
+              let text = json["last_refresh"] as? String, text.count >= 19,
+              let refreshed = ISO8601DateFormatter().date(from: text.prefix(19) + "Z") else { return false }
+        return now.timeIntervalSince(refreshed) >= age
     }
 }
 
@@ -125,10 +145,13 @@ enum CodexAccountResponse {
         Task { @MainActor in self?.receive(message) }
     }
 
-    init(executableURL: URL, codexHome: URL, environment: [String: String]? = nil) {
+    private let refresh: Bool
+
+    init(executableURL: URL, codexHome: URL, environment: [String: String]? = nil, refresh: Bool = false) {
         self.executableURL = executableURL
         self.codexHome = codexHome
         baseEnvironment = environment
+        self.refresh = refresh
     }
 
     func run(onChallenge: (@MainActor (HarnessSignInChallenge) -> Void)? = nil) async throws -> HarnessAuthenticationStatus {
@@ -206,10 +229,12 @@ enum CodexAccountResponse {
                 switch id {
                 case 1:
                     send("initialized")
-                    send("account/read", id: 2, params: ["refreshToken": false])
+                    send("account/read", id: 2, params: ["refreshToken": refresh])
                 case 2:
                     let status = try CodexAccountResponse.status(result)
-                    if status == .unauthenticated, onChallenge != nil, !loginCompleted {
+                    // Codex reads a stored login as signed in even when the server has
+                    // revoked it, so an explicit sign-in always starts a new one.
+                    if onChallenge != nil, !loginCompleted {
                         send("account/login/start", id: 3, params: ["type": "chatgptDeviceCode"])
                         setTimeout(seconds: 30)
                     } else { finish(.success(status)) }

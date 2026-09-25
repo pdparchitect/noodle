@@ -128,6 +128,40 @@ final class HarnessSetupTests: XCTestCase {
         XCTAssertEqual(status, .authenticated)
     }
 
+    @MainActor func testSignInStartsANewLoginEvenWhenOneIsStored() async throws {
+        // A stored login can be dead on the server while still reading as signed in.
+        let executable = try makeSignInHarness(completes: true, signedIn: true)
+        let provider = CodexSetupProvider(codexHome: root)
+        var displayedCode: String?
+        let status = try await provider.signIn(for: HarnessInstallation(provider: .codex, executablePath: executable.path)) {
+            displayedCode = $0.code
+        }
+        XCTAssertEqual(displayedCode, "TEST-1234")
+        XCTAssertEqual(status, .authenticated)
+    }
+
+    @MainActor func testRefreshAsksCodexToRefreshAndStatusDoesNot() async throws {
+        let executable = root.appendingPathComponent("fake-refresh-codex")
+        let script = #"""
+        #!/bin/sh
+        while IFS= read -r line; do
+          case "$line" in
+            *'"refreshToken":true'*) printf '%s\n' '{"id":2,"result":{"account":{"type":"chatgpt"},"requiresOpenaiAuth":true}}' ;;
+            *account*read*) printf '%s\n' '{"id":2,"result":{"account":null,"requiresOpenaiAuth":true}}' ;;
+            *'"id":1'*) printf '%s\n' '{"id":1,"result":{}}' ;;
+          esac
+        done
+        """#
+        try Data(script.utf8).write(to: executable)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        let provider = CodexSetupProvider(codexHome: root)
+        let installation = HarnessInstallation(provider: .codex, executablePath: executable.path)
+        let refreshed = try await provider.refresh(for: installation)
+        let status = try await provider.status(for: installation)
+        XCTAssertEqual(refreshed, .authenticated)
+        XCTAssertEqual(status, .unauthenticated)
+    }
+
     @MainActor func testStatusErrorIncludesTheHarnessReason() async throws {
         let executable = try makeSignInHarness(completes: false, unreadableAccount: true)
         let provider = CodexSetupProvider(codexHome: root)
@@ -176,11 +210,11 @@ final class HarnessSetupTests: XCTestCase {
         XCTAssertEqual(try CodexExecutableTrust.executable(at: shellCommand.path, home: home), trusted)
     }
 
-    private func makeSignInHarness(completes: Bool, unreadableAccount: Bool = false) throws -> URL {
+    private func makeSignInHarness(completes: Bool, unreadableAccount: Bool = false, signedIn: Bool = false) throws -> URL {
         let executable = root.appendingPathComponent("fake-login-codex")
         let script = #"""
         #!/bin/sh
-        signed_in=0
+        signed_in=\#(signedIn ? 1 : 0)
         while IFS= read -r line; do
           case "$line" in
             *account*read*)
@@ -207,4 +241,17 @@ final class HarnessSetupTests: XCTestCase {
         return executable
     }
 
+
+    func testCodexLoginRefreshIsDueADayBeforeCodexWouldRefreshItSelf() {
+        func login(_ refreshed: String) -> Data {
+            Data(#"{"auth_mode":"chatgpt","tokens":{"refresh_token":"secret"},"last_refresh":"\#(refreshed)"}"#.utf8)
+        }
+        let now = ISO8601DateFormatter().date(from: "2026-09-25T10:00:00Z")!
+        XCTAssertTrue(CodexLoginRefresh.isDue(login("2026-09-15T09:28:55.521160Z"), now: now))
+        XCTAssertTrue(CodexLoginRefresh.isDue(login("2026-09-18T10:00:00Z"), now: now))
+        XCTAssertFalse(CodexLoginRefresh.isDue(login("2026-09-18T10:00:01.5Z"), now: now))
+        // An API key login, or one Codex never refreshed, is left alone.
+        XCTAssertFalse(CodexLoginRefresh.isDue(Data(#"{"OPENAI_API_KEY":"sk"}"#.utf8), now: now))
+        XCTAssertFalse(CodexLoginRefresh.isDue(Data("not json".utf8), now: now))
+    }
 }
