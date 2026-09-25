@@ -214,6 +214,24 @@ import XCTest
         XCTAssertTrue(registry.controllers.isEmpty)
     }
 
+    func testOpeningActivityScrollsToLatest() throws {
+        _ = NSApplication.shared
+        let agent = AgentRecord(displayName: "Scroller")
+        let log = AgentActivityLog(entryLimit: 200)
+        for index in 0..<200 { log.record(.init(title: "Line \(index)", detail: "A short line of output")) }
+        let registry = AgentActivityWindows()
+        let controller = registry.show(agent: agent, log: log)
+        defer { controller.close() }
+        XCTAssertTrue(controller.output.isAtBottom)
+        let range = (controller.output.textView.string as NSString).range(of: "Line 10")
+        controller.output.textView.setSelectedRange(range)
+        controller.output.textView.scrollRangeToVisible(range)
+        XCTAssertFalse(controller.output.isAtBottom)
+        controller.window?.orderOut(nil)
+        XCTAssertTrue(registry.show(agent: agent, log: log) === controller)
+        XCTAssertTrue(controller.output.isAtBottom)
+    }
+
     func testNativeLogKeepsSelectionAndScrollPositionWhileAppendingAndEvicting() throws {
         _ = NSApplication.shared
         let log = AgentActivityLog(entryLimit: 80)

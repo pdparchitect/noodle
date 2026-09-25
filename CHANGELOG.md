@@ -18,6 +18,7 @@ All notable changes to Noodle are documented here, following
 - Write the Noodle wordmark on the website a stroke at a time, as the scenario films do. It shows at once when the visitor asks for reduced motion.
 - Show each harness's location and version on one line in Settings > Harness, so the list is shorter.
 - Open a scenario without its film backdrop and title cards. They now appear only when recording or taking shots with `scripts/scenario.sh --video` or `--shots`.
+- Open a bot's Activity window scrolled to the latest output, so there is no need to scroll down.
 
 ### Fixed
 

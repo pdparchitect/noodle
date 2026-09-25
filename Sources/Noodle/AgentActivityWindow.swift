@@ -20,6 +20,9 @@ final class AgentActivityWindows {
         controller.refresh()
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
+        // Opening always lands on the latest output; follow needs the laid-out size.
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        controller.output.follow()
         return controller
     }
 
