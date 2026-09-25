@@ -87,6 +87,22 @@ class AppIconTests(unittest.TestCase):
                                      (iconset / 'icon_512x512@2x.png').read_bytes())
                     self.package(iconset)
 
+    def test_mobile_symbol_composes_one_opaque_full_bleed_icon(self):
+        # App Store Connect rejects an iOS icon with an alpha channel; iOS rounds the corners itself.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'AppSymbol.svg'
+            shutil.copyfile(ROOT / 'Mobile/Support/AppSymbol.svg', source)
+            iconset = root / 'App.appiconset'
+            result = subprocess.run(['/bin/zsh', str(ROOT / 'scripts/generate-icon.sh'),
+                                     str(source), str(iconset), 'ios'], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(sorted(path.name for path in iconset.glob('*.png')), ['icon_1024.png'])
+            data = (iconset / 'icon_1024.png').read_bytes()
+            # Colour type 2 is RGB with no alpha channel.
+            self.assertEqual(struct.unpack('>IIBB', data[16:26]), (1024, 1024, 8, 2))
+            self.assertEqual((root / 'AppIcon.png').read_bytes(), data)
+
     def test_symbol_edit_refreshes_full_svg_pngs_and_packaged_icon(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

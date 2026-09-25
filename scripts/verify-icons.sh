@@ -6,12 +6,14 @@ project_root="${0:A:h:h}"
 [[ $# == 0 || "$*" == --update ]] || { print -u2 'Usage: scripts/verify-icons.sh [--update]'; exit 1; }
 work="$(mktemp -d "${TMPDIR:-/tmp}/noodle-icons.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
-for app icon in Noodle AppIcon Applet AppletIcon Browser Browser Computer Computer Hub HubIcon; do
+for app icon in Noodle AppIcon Applet AppletIcon Browser Browser Computer Computer Hub HubIcon Mobile AppIcon; do
     # Noodle is the repository itself.
     support="$project_root/$app/Support"
     [[ "$app" != Noodle ]] || support="$project_root/Support"
     committed="$support/Assets.xcassets/$icon.appiconset"
-    zsh "$project_root/scripts/generate-icon.sh" "$support/AppSymbol.svg" "$work/$app.iconset" >&2
+    platform=macos
+    [[ "$app" != Mobile ]] || platform=ios
+    zsh "$project_root/scripts/generate-icon.sh" "$support/AppSymbol.svg" "$work/$app.iconset" $platform >&2
     if [[ "$*" == --update ]]; then
         cp "$work/$app.iconset"/*.png "$committed/"
         print "Updated $committed"

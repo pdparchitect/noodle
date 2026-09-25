@@ -1,7 +1,8 @@
 #!/bin/zsh
 # Tests, packages and uploads the phone app, from the Xcode project Tuist generates from Mobile/Project.swift.
 #   test                       runs its tests on an iPhone simulator
-#   package VERSION BUILD DIR  archives a release and exports Noodle-Mobile.ipa and its checksum into DIR
+#   package VERSION BUILD DIR  archives a release, exports Noodle-Mobile.ipa and its checksum into DIR and
+#                              has App Store Connect validate it
 #   upload IPA                 sends a packaged app to App Store Connect, where TestFlight picks it up
 # package and upload sign in with the App Store Connect key in APPLE_API_KEY_PATH, APPLE_API_KEY_ID and
 # APPLE_API_ISSUER_ID. The archive is unsigned; the export signs it with Apple's cloud-managed
@@ -53,6 +54,9 @@ print(next((d["udid"] for runtime, found in sorted(devices.items(), reverse=True
         ipa=("$output"/*.ipa)
         (( ${#ipa} == 1 )) || { print -u2 "Expected one exported app in $output."; exit 1; }
         mv "$ipa[1]" "$output/Noodle-Mobile.ipa"
+        # App Store Connect's own checks, so a rejected app fails before its version is tagged.
+        xcrun altool --validate-app -f "$output/Noodle-Mobile.ipa" -t ios --api-key "$APPLE_API_KEY_ID" \
+            --api-issuer "$APPLE_API_ISSUER_ID" --p8-file-path "$APPLE_API_KEY_PATH"
         (cd "$output" && shasum -a 256 Noodle-Mobile.ipa > Noodle-Mobile.ipa.sha256)
         print "$output/Noodle-Mobile.ipa"
         ;;
