@@ -10,6 +10,10 @@ All notable changes to Noodle are documented here, following
 
 - Write the Noodle wordmark on the website a stroke at a time, as the scenario films do. It shows at once when the visitor asks for reduced motion.
 
+### Fixed
+
+- Never run two copies of the same bot. A copy left running after Noodle's agent host crashed or was restarted could keep working alongside the new one and overwrite its files. Starting a bot now stops any copy left behind first. If the other copy can't be identified as that bot, the bot doesn't start.
+
 ## [0.26.0] - 2026-09-24
 
 ### Added
