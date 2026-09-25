@@ -160,6 +160,7 @@ struct PasteLinkButton: UIViewRepresentable {
 /// Who this phone joined the Hub as, and whether the Hub answers.
 struct ProfileView: View {
     @Environment(HubMemberships.self) private var hubs
+    @Environment(\.dismiss) private var dismiss
     let pairing: HubPairing
     @State private var leaving = false
 
@@ -179,7 +180,11 @@ struct ProfileView: View {
                     .listRowBackground(Color.clear)
                 }
                 Section {
-                    LabeledContent("Status") { status }
+                    HStack {
+                        Text("Status")
+                        Spacer()
+                        status
+                    }
                     if let plan = pairing.status?.planName, !plan.isEmpty {
                         LabeledContent("Plan", value: plan)
                     }
@@ -197,7 +202,9 @@ struct ProfileView: View {
                     Button("Leave Hub", role: .destructive) { leaving = true }
                 }
             }
-            .navigationTitle("Profile")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
             .refreshable { await pairing.refresh() }
             .confirmationDialog("Leave \(hubName)?", isPresented: $leaving, titleVisibility: .visible) {
                 Button("Leave", role: .destructive) { hubs.leave(pairing) }
@@ -214,14 +221,15 @@ struct ProfileView: View {
         return name.isEmpty ? hubName : name
     }
 
-    @ViewBuilder private var status: some View {
-        if pairing.isWorking || (pairing.status == nil && pairing.error == nil) {
-            Label("Connecting…", systemImage: "circle.dotted").foregroundStyle(.secondary)
+    private var status: some View {
+        let (title, color): (String, Color) = if pairing.isWorking || (pairing.status == nil && pairing.error == nil) {
+            ("Connecting…", .secondary)
         } else if pairing.error != nil {
-            Label("Not connected", systemImage: "exclamationmark.circle.fill").foregroundStyle(.orange)
+            ("Not connected", .orange)
         } else {
-            Label("Connected", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            ("Connected", .green)
         }
+        return Text(title).foregroundStyle(color)
     }
 }
 

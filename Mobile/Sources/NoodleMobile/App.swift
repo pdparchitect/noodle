@@ -12,7 +12,7 @@ struct NoodleMobileApp: App {
         WindowGroup {
             Group {
                 if let pairing = hubs.hubs.first {
-                    ProfileView(pairing: pairing)
+                    AgentsView(pairing: pairing)
                 } else {
                     JoinView()
                 }
