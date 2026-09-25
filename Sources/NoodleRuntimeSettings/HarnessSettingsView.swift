@@ -149,12 +149,8 @@ public struct HarnessInstallationRow: View {
                     statusLabel
                 }
 
-                if let path = installation.executablePath {
-                    Text(id == .apple ? "Local" : (setup.isManaged(installation) ? "Installed by Noodle" : path))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                if installation.executablePath != nil {
+                    if !installation.isAvailable { locationText }
                 } else {
                     Text(setup.snapshots[id] == nil ? "Checking the installation…" : "Install the native harness to use it with Noodle.")
                         .font(.caption).foregroundStyle(.secondary)
@@ -295,11 +291,28 @@ public struct HarnessInstallationRow: View {
         }
     }
 
+    /// Where the harness lives, shown on the version line once it is installed.
+    @ViewBuilder private var locationText: some View {
+        if let path = installation.executablePath {
+            Text(id == .apple ? "Local" : (setup.isManaged(installation) ? "Installed by Noodle" : path))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+    }
+
     @ViewBuilder private var versionDetails: some View {
         let version = setup.snapshots[id]?.version
         HStack(spacing: 8) {
-            Text(version?.installedVersion.map { "Version \($0)" } ?? "Version not checked yet")
+            if installation.executablePath != nil {
+                locationText
+                Text("·").font(.caption).foregroundStyle(.secondary)
+            }
+            Text(version?.installedVersion ?? "Version not checked yet")
                 .font(.caption).foregroundStyle(.secondary)
+                .fixedSize()
             if version?.compatibilityIssue != nil {
                 Label("Update required", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption).foregroundStyle(.orange)
