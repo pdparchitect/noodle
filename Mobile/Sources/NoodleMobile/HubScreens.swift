@@ -68,19 +68,11 @@ struct JoinView: View {
     private func start() {
         switch chosen {
         case .camera: scanning = true
-        case .clipboard: paste()
+        case .pasted(let text): join(text)
         case .photo: pickingPhoto = true
         case nil: break
         }
         chosen = nil
-    }
-
-    private func paste() {
-        guard let text = UIPasteboard.general.string, !text.isEmpty else {
-            problem = "The clipboard holds no invitation."
-            return
-        }
-        join(text)
     }
 
     private func read(_ item: PhotosPickerItem) async {
@@ -97,7 +89,7 @@ struct JoinView: View {
     }
 }
 
-enum PairingSource { case camera, clipboard, photo }
+enum PairingSource { case camera, pasted(String), photo }
 
 /// The ways to hand over an invitation, in a short sheet from the bottom.
 struct PairingSources: View {
@@ -110,7 +102,7 @@ struct PairingSources: View {
             if DataScannerViewController.isSupported {
                 option("Scan QR Code", systemImage: "qrcode.viewfinder", .camera).buttonStyle(.borderedProminent)
             }
-            option("Paste Link", systemImage: "doc.on.clipboard", .clipboard).buttonStyle(.bordered)
+            PasteLinkButton { choose(.pasted($0)) }.frame(height: 50)
             option("Choose Photo", systemImage: "photo", .photo).buttonStyle(.bordered)
         }
         .controlSize(.large)
@@ -122,6 +114,45 @@ struct PairingSources: View {
     private func option(_ title: String, systemImage: String, _ source: PairingSource) -> some View {
         Button { choose(source) } label: {
             Label(title, systemImage: systemImage).frame(maxWidth: .infinity)
+        }
+    }
+}
+
+/// iOS's own paste control. A paste the person starts is always allowed; reading the clipboard from
+/// code is refused without asking, as it is in the simulator.
+struct PasteLinkButton: UIViewRepresentable {
+    let pasted: (String) -> Void
+
+    func makeUIView(context: Context) -> UIPasteControl {
+        let configuration = UIPasteControl.Configuration()
+        configuration.displayMode = .iconAndLabel
+        configuration.cornerStyle = .capsule
+        configuration.baseBackgroundColor = .tintColor.withAlphaComponent(0.15)
+        configuration.baseForegroundColor = .tintColor
+        let control = UIPasteControl(configuration: configuration)
+        control.target = context.coordinator
+        return control
+    }
+
+    func updateUIView(_ control: UIPasteControl, context: Context) {}
+
+    func makeCoordinator() -> Receiver { Receiver(pasted: pasted) }
+
+    final class Receiver: UIResponder {
+        private let pasted: (String) -> Void
+
+        init(pasted: @escaping (String) -> Void) {
+            self.pasted = pasted
+            super.init()
+            pasteConfiguration = UIPasteConfiguration(forAccepting: String.self)
+        }
+
+        override func paste(itemProviders: [NSItemProvider]) {
+            guard let provider = itemProviders.first(where: { $0.canLoadObject(ofClass: String.self) }) else { return }
+            _ = provider.loadObject(ofClass: String.self) { text, _ in
+                guard let text else { return }
+                Task { @MainActor in self.pasted(text) }
+            }
         }
     }
 }
