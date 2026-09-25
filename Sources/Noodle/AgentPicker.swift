@@ -235,12 +235,14 @@ enum AgentPickerLayout {
         pick(visible[model.selection].id)
     }
 
-    private func makePanel() -> AgentPickerPanel {
+    func makePanel() -> AgentPickerPanel {
         let panel = AgentPickerPanel(contentRect: NSRect(x: 0, y: 0, width: AgentPickerLayout.width, height: AgentPickerLayout.height(items: 1)),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false
         panel.title = "Conversations"
         panel.level = .modalPanel
+        // AppKit would pop a modal-level panel in with an overshoot, which reads as a wobble.
+        panel.animationBehavior = .none
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
         panel.hidesOnDeactivate = false
@@ -260,7 +262,7 @@ enum AgentPickerLayout {
     func windowDidResignKey(_ notification: Notification) { close() }
 }
 
-private final class AgentPickerPanel: NSPanel {
+final class AgentPickerPanel: NSPanel {
     enum Key { case move(AgentPickerItem.Direction), pick, cancel }
     var onKey: ((Key) -> Void)?
     override var canBecomeKey: Bool { true }

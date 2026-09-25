@@ -18,6 +18,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Open the conversation picker (⇧⌘Space) without a wobble. It now appears at once, like Spotlight.
 - Name noodlets in the Shared list the way their conversation cards do, with the same preview. They used to show as "Noodlet.webloc", and an unavailable one now says so.
 
 ## [0.26.0] - 2026-09-24

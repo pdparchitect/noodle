@@ -227,6 +227,11 @@ import NoodleCore
         XCTAssertEqual(frame.height, one + 2 * step)
     }
 
+    func testPickerAppearsWithoutTheModalPanelPopAnimation() {
+        // Left to AppKit, a modal-level panel pops in with an overshoot that reads as a wobble.
+        XCTAssertEqual(AgentPickerController.shared.makePanel().animationBehavior, .none)
+    }
+
     func testPickerHeightIsChosenOnceWhenItOpensAndNeverChangesWhileFiltering() {
         let model = AgentPickerModel()
         let items = (0..<9).map { AgentPickerItem(id: UUID(), title: "Bot \($0)", lastActivity: Date(timeIntervalSince1970: Double($0)), isFloating: false) }
