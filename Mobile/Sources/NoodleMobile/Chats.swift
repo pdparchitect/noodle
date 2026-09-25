@@ -53,6 +53,10 @@ import SwiftUI
 
     func togglePin(_ agent: LinkBot) {
         if pinned.remove(agent.id) == nil { pinned.insert(agent.id) }
+        savePins()
+    }
+
+    private func savePins() {
         try? JSONEncoder().encode(pinned.sorted { $0.uuidString < $1.uuidString })
             .write(to: pairing.directory.appendingPathComponent("pins.json"), options: .atomic)
     }
@@ -72,6 +76,18 @@ import SwiftUI
             throw LinkError("The Hub sent an unexpected answer.")
         }
         if let index = agents.firstIndex(where: { $0.id == bot.id }) { agents[index] = bot }
+        saveCache()
+    }
+
+    /// Deletes the bot and its conversation on the Hub, for every device.
+    func delete(_ agent: LinkBot) async throws {
+        guard case .done = try await pairing.request(.deleteBot(id: agent.id)) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        agents.removeAll { $0.id == agent.id }
+        conversations[agent.conversationID] = nil
+        read[agent.conversationID] = nil
+        if pinned.remove(agent.id) != nil { savePins() }
         saveCache()
     }
 
@@ -149,6 +165,9 @@ import SwiftUI
 /// The home screen once paired: the agents, newest conversation first.
 struct AgentsView: View {
     @State private var chats: HubChats
+    @State private var showingMore = false
+    /// What was picked in the … sheet; it opens once that sheet has gone.
+    @State private var chosen: MoreChoice?
     @State private var showingProfile = false
     @State private var creating = false
 
@@ -160,6 +179,8 @@ struct AgentsView: View {
                 NavigationLink(value: agent.id) {
                     AgentRow(agent: agent, latest: chats.latestMessage(of: agent), pinned: chats.isPinned(agent))
                 }
+                // As in Messages: dividers between rows, none above the first.
+                .listRowSeparator(agent.id == chats.sortedAgents.first?.id ? .hidden : .visible, edges: .top)
                 .swipeActions(edge: .leading) {
                     Button { chats.togglePin(agent) } label: {
                         Label(chats.isPinned(agent) ? "Unpin" : "Pin", systemImage: chats.isPinned(agent) ? "pin.slash.fill" : "pin.fill")
@@ -175,29 +196,66 @@ struct AgentsView: View {
                     } else if let error = chats.error {
                         ContentUnavailableView("Not Connected", systemImage: "wifi.exclamationmark", description: Text(error))
                     } else {
-                        ContentUnavailableView("No Agents", systemImage: "bubble.left.and.bubble.right")
+                        ContentUnavailableView("No Bots", systemImage: "bubble.left.and.bubble.right")
                     }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: UUID.self) { id in ChatView(chats: chats, agentID: id) }
             .toolbar {
-                // Plain text buttons, as in Messages, not the round glass default.
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Profile") { showingProfile = true }.foregroundStyle(.tint)
-                }
-                .sharedBackgroundVisibility(.hidden)
+                // A plain button, as in Messages, not the round glass default.
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("New") { creating = true }.foregroundStyle(.tint)
-                        .accessibilityLabel("New Agent")
+                    Button { showingMore = true } label: { Image(systemName: "ellipsis") }
+                        .foregroundStyle(.tint)
+                        .accessibilityLabel("More")
                 }
                 .sharedBackgroundVisibility(.hidden)
             }
             .refreshable { try? await chats.reload() }
+            .sheet(isPresented: $showingMore, onDismiss: openChosen) {
+                MoreSheet { choice in
+                    chosen = choice
+                    showingMore = false
+                }
+            }
             .sheet(isPresented: $showingProfile) { ProfileView(pairing: chats.pairing) }
             .sheet(isPresented: $creating) { AgentEditor(chats: chats, agent: nil) }
         }
         .task { await chats.follow() }
+    }
+
+    private func openChosen() {
+        switch chosen {
+        case .createBot: creating = true
+        case .profiles: showingProfile = true
+        case nil: break
+        }
+        chosen = nil
+    }
+}
+
+enum MoreChoice { case createBot, profiles }
+
+/// The rarely used actions, in a short sheet from the bottom.
+struct MoreSheet: View {
+    let choose: (MoreChoice) -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            option("New Bot", systemImage: "plus", .createBot)
+            option("Profiles", systemImage: "person.crop.circle", .profiles)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+        .padding(24)
+        .presentationDetents([.height(170)])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func option(_ title: String, systemImage: String, _ choice: MoreChoice) -> some View {
+        Button { choose(choice) } label: {
+            Label(title, systemImage: systemImage).frame(maxWidth: .infinity)
+        }
     }
 }
 
@@ -237,9 +295,14 @@ struct ChatView: View {
     @State private var draft = ""
     @State private var problem: String?
     @State private var editing = false
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        if let agent = chats.agent(agentID) { conversation(with: agent) }
+        Group {
+            if let agent = chats.agent(agentID) { conversation(with: agent) }
+        }
+        // Deleted here or on another device.
+        .onChange(of: chats.agent(agentID) == nil) { _, gone in if gone { dismiss() } }
     }
 
     private func conversation(with agent: LinkBot) -> some View {
@@ -342,6 +405,7 @@ struct AgentEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draft: LinkBotDraft
     @State private var saving = false
+    @State private var confirmingDelete = false
     @State private var problem: String?
 
     init(chats: HubChats, agent: LinkBot?) {
@@ -412,6 +476,17 @@ struct AgentEditor: View {
                 if let problem {
                     Section { Text(problem).foregroundStyle(.red) }
                 }
+                if agent != nil {
+                    Section {
+                        Button("Delete Bot", role: .destructive) { confirmingDelete = true }
+                            .disabled(saving)
+                    }
+                }
+            }
+            .confirmationDialog("Delete \(agent?.draft.name ?? "")?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button("Delete", role: .destructive, action: delete)
+            } message: {
+                Text("The bot and its conversation are deleted from the Hub for all your devices.")
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -425,6 +500,21 @@ struct AgentEditor: View {
                 }
             }
             .task { if chats.pairing.status == nil { await chats.pairing.refresh(quietly: true) } }
+        }
+    }
+
+    private func delete() {
+        guard let agent else { return }
+        saving = true
+        problem = nil
+        Task {
+            defer { saving = false }
+            do {
+                try await chats.delete(agent)
+                dismiss()
+            } catch {
+                problem = error.localizedDescription
+            }
         }
     }
 

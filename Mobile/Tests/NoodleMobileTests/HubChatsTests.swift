@@ -28,6 +28,9 @@ private actor FakeHub {
         case .success(.updateBot(let id, let draft)) where id == bot.id:
             bot.draft = draft
             return .bot(bot)
+        case .success(.deleteBot(let id)):
+            created.removeAll { $0.id == id }
+            return .done
         case .success(.createBot(let draft)):
             let new = LinkBot(id: UUID(), conversationID: UUID(), draft: draft, createdAt: Date())
             created.append(new)
@@ -156,5 +159,24 @@ private actor FakeHub {
             .appendingPathComponent(UUID().uuidString), deviceName: "iPhone"))
         #expect(chats.agents.isEmpty)
         #expect(!chats.isLoaded)
+    }
+
+    @Test func aDeletedBotLeavesTheListThePinsAndTheSavedCopy() async throws {
+        let hub = FakeHub()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let (chats, server) = try await paired(to: hub, directory: directory)
+        defer { server.stop() }
+        try await chats.reload()
+        let atlas = try await chats.create(LinkBotDraft(name: "Atlas", provider: "codex"))
+        chats.togglePin(atlas)
+
+        try await chats.delete(atlas)
+
+        #expect(!chats.agents.contains { $0.id == atlas.id })
+        #expect(!chats.isPinned(atlas))
+        #expect(await hub.created.isEmpty)
+        let relaunched = HubChats(pairing: HubPairing(directory: directory, deviceName: "iPhone"))
+        #expect(!relaunched.agents.contains { $0.id == atlas.id })
+        #expect(!relaunched.isPinned(atlas))
     }
 }
