@@ -176,6 +176,7 @@ private final class AgentActivityPanel: NSPanel {
 @MainActor
 final class AgentActivityTextView: NSScrollView {
     let textView = ActivityLogTextView()
+    let latestButton = NSGlassEffectView()
     private var rendered: [AgentActivityEntry] = []
 
     init() {
@@ -198,6 +199,20 @@ final class AgentActivityTextView: NSScrollView {
         textView.textContainer?.containerSize = NSSize(width: 760, height: CGFloat.greatestFiniteMagnitude)
         textView.setAccessibilityLabel("Agent Activity")
         documentView = textView
+
+        let button = NSButton(image: NSImage(systemSymbolName: "arrow.down", accessibilityDescription: nil)!
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))!, target: self, action: #selector(followLatest))
+        button.isBordered = false
+        button.contentTintColor = .labelColor
+        button.toolTip = "Follow Latest"
+        button.setAccessibilityLabel("Follow Latest")
+        latestButton.contentView = button
+        latestButton.cornerRadius = Self.latestButtonSize / 2
+        latestButton.isHidden = true
+        addSubview(latestButton)
+        contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(clipViewScrolled),
+                                               name: NSView.boundsDidChangeNotification, object: contentView)
     }
 
     required init?(coder: NSCoder) { nil }
@@ -207,6 +222,26 @@ final class AgentActivityTextView: NSScrollView {
         // Make the whole log area available to the context menu, even when empty.
         if textView.minSize.height != contentSize.height {
             textView.minSize = NSSize(width: 0, height: contentSize.height)
+        }
+        let size = Self.latestButtonSize
+        latestButton.frame = NSRect(x: (bounds.width - size) / 2, y: isFlipped ? bounds.height - size - 16 : 16,
+                                    width: size, height: size)
+        updateLatestButton()
+    }
+
+    private static let latestButtonSize: CGFloat = 34
+
+    @objc private func clipViewScrolled() { updateLatestButton() }
+    @objc private func followLatest() { follow() }
+
+    /// Floats over the log only while the newest output is out of view.
+    private func updateLatestButton() {
+        let hidden = isAtBottom || rendered.isEmpty
+        guard hidden != latestButton.isHidden else { return }
+        latestButton.isHidden = hidden
+        if !hidden {
+            latestButton.alphaValue = 0
+            NSAnimationContext.runAnimationGroup { $0.duration = 0.15; latestButton.animator().alphaValue = 1 }
         }
     }
 
@@ -252,6 +287,7 @@ final class AgentActivityTextView: NSScrollView {
             contentView.scroll(to: NSPoint(x: origin.x, y: max(0, origin.y - removedHeight)))
             reflectScrolledClipView(contentView)
         }
+        updateLatestButton()
     }
 }
 

@@ -232,6 +232,27 @@ import XCTest
         XCTAssertTrue(controller.output.isAtBottom)
     }
 
+    func testFollowLatestButtonShowsOnlyAwayFromBottom() throws {
+        _ = NSApplication.shared
+        let agent = AgentRecord(displayName: "Follower")
+        let log = AgentActivityLog(entryLimit: 200)
+        for index in 0..<200 { log.record(.init(title: "Line \(index)", detail: "A short line of output")) }
+        let controller = AgentActivityWindows().show(agent: agent, log: log)
+        defer { controller.close() }
+        let output = controller.output
+        XCTAssertTrue(output.latestButton.isHidden)
+        output.textView.scrollRangeToVisible((output.textView.string as NSString).range(of: "Line 10"))
+        XCTAssertFalse(output.latestButton.isHidden)
+        let button = try XCTUnwrap(output.latestButton.contentView as? NSButton)
+        XCTAssertEqual(button.accessibilityLabel(), "Follow Latest")
+        let frame = output.latestButton.frame
+        XCTAssertEqual(frame.midX, output.bounds.midX, accuracy: 1)
+        XCTAssertEqual(output.isFlipped ? output.bounds.maxY - frame.maxY : frame.minY, 16, accuracy: 1)
+        button.performClick(nil)
+        XCTAssertTrue(output.isAtBottom)
+        XCTAssertTrue(output.latestButton.isHidden)
+    }
+
     func testNativeLogKeepsSelectionAndScrollPositionWhileAppendingAndEvicting() throws {
         _ = NSApplication.shared
         let log = AgentActivityLog(entryLimit: 80)
