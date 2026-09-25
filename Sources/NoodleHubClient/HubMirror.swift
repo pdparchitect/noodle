@@ -128,6 +128,9 @@ import Observation
                     case .toolCall(let callID, let botID, let request):
                         // Tools can take minutes; other events keep flowing meanwhile.
                         Task { await runTool(callID, for: botID, request: request) }
+                    // Hub reactions and bot status are not shown on the Mac yet.
+                    case .messageChanged, .botPhase:
+                        break
                     }
                 }
             } catch {
@@ -225,7 +228,9 @@ import Observation
                 for id in message.attachmentIDs ?? [] {
                     guard let file = files[id], file.url == nil else { continue }
                     try await pairing.upload(repository.attachmentFileURL(file), as: LinkAttachment(
-                        id: file.id, filename: file.originalFilename, mediaType: file.mediaType, byteCount: Int(file.byteCount)),
+                        id: file.id, filename: file.originalFilename, mediaType: file.mediaType, byteCount: Int(file.byteCount),
+                        voice: file.voice.map { LinkVoice(transcript: $0.transcript, duration: $0.duration, waveform: $0.waveform,
+                                                          localeIdentifier: $0.localeIdentifier) }),
                         to: entry.remoteConversation)
                 }
                 let sent = (message.attachmentIDs ?? []).filter { files[$0]?.url == nil }
@@ -245,8 +250,11 @@ import Observation
             defer { try? FileManager.default.removeItem(at: staging) }
             try await pairing.download(attachment, from: entry.remoteConversation, to: staging)
             let name = URL(fileURLWithPath: attachment.filename).lastPathComponent
+            let voice = attachment.voice.map {
+                VoiceMessage(transcript: $0.transcript, duration: $0.duration, waveform: $0.waveform, localeIdentifier: $0.localeIdentifier)
+            }
             _ = try repository.importAttachment(from: staging, into: entry.conversation, mediaType: attachment.mediaType,
-                                                id: attachment.id, originalFilename: name.isEmpty ? "Attachment" : name)
+                                                voice: voice, id: attachment.id, originalFilename: name.isEmpty ? "Attachment" : name)
         }
     }
 

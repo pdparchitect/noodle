@@ -1,4 +1,5 @@
 import HubLink
+import NoodleWallpaperCore
 import PhotosUI
 import SwiftUI
 
@@ -16,6 +17,8 @@ import SwiftUI
     private var seen: [UUID: Date]?
     /// Unsent text, by conversation, kept on this phone.
     private var drafts: [UUID: String] = [:]
+    /// Each conversation's backdrop. Like on the Mac, only this device's look: the Hub never sees it.
+    private var backgrounds: [UUID: ConversationBackground] = [:]
     private var conversations: [UUID: [LinkMessage]] = [:]
     /// How far each conversation has been read. It stops at a message the bot has not taken yet,
     /// so that message is read again until it shows as delivered.
@@ -33,6 +36,8 @@ import SwiftUI
         pinned = Set((try? JSONDecoder().decode([UUID].self, from: Data(contentsOf: pairing.directory.appendingPathComponent("pins.json")))) ?? [])
         seen = try? JSONDecoder().decode([UUID: Date].self, from: Data(contentsOf: seenURL))
         drafts = (try? JSONDecoder().decode([UUID: String].self, from: Data(contentsOf: draftsURL))) ?? [:]
+        backgrounds = (try? JSONDecoder().decode([UUID: ConversationBackground].self,
+                                                 from: Data(contentsOf: pairing.directory.appendingPathComponent("backgrounds.json")))) ?? [:]
         if let cache = try? JSONDecoder().decode(Cache.self, from: Data(contentsOf: cacheURL)) {
             agents = cache.agents
             conversations = cache.conversations
@@ -44,6 +49,35 @@ import SwiftUI
     private var cacheURL: URL { pairing.directory.appendingPathComponent("chats.json") }
     private var seenURL: URL { pairing.directory.appendingPathComponent("read.json") }
     private var draftsURL: URL { pairing.directory.appendingPathComponent("drafts.json") }
+
+    func background(for agent: LinkBot) -> ConversationBackground {
+        backgrounds[agent.conversationID] ?? ConversationBackground()
+    }
+
+    func backgroundImageURL(for agent: LinkBot) -> URL? {
+        background(for: agent).imageFilename.map { backgroundsFolder.appendingPathComponent($0) }
+    }
+
+    /// A preset or the default. Any photo the conversation had is removed.
+    func setBackground(_ background: ConversationBackground, for agent: LinkBot) throws {
+        if let old = backgroundImageURL(for: agent), old.lastPathComponent != background.imageFilename {
+            try? FileManager.default.removeItem(at: old)
+        }
+        backgrounds[agent.conversationID] = background.isDefault ? nil : background
+        try JSONEncoder().encode(backgrounds).write(to: pairing.directory.appendingPathComponent("backgrounds.json"), options: .atomic)
+    }
+
+    /// A photo, converted as Noodle converts every still background.
+    func setBackground(photo: Data, for agent: LinkBot) throws {
+        let jpeg = try BackgroundMedia.jpegData(from: photo)
+        try FileManager.default.createDirectory(at: backgroundsFolder, withIntermediateDirectories: true)
+        // A new name each time, so views showing the old picture reload.
+        let name = "\(agent.conversationID.uuidString)-\(UUID().uuidString).jpg"
+        try jpeg.write(to: backgroundsFolder.appendingPathComponent(name), options: .atomic)
+        try setBackground(ConversationBackground(imageFilename: name, mediaKind: .image), for: agent)
+    }
+
+    private var backgroundsFolder: URL { pairing.directory.appendingPathComponent("Backgrounds", isDirectory: true) }
 
     func draft(for agent: LinkBot) -> String { drafts[agent.conversationID] ?? "" }
 
@@ -140,21 +174,43 @@ import SwiftUI
         while !Task.isCancelled {
             do {
                 try await reload()
-                for try await event in try await pairing.subscribe() {
-                    switch event {
-                    case .botsChanged: try await reload()
-                    case .conversationChanged(let id, _):
-                        try await load(id)
-                        saveCache()
-                    // Tools are lent by a Mac; this phone lends none.
-                    case .toolCall: break
-                    }
-                }
+                for try await event in try await pairing.subscribe() { try await apply(event) }
             } catch {
                 self.error = error.localizedDescription
             }
             try? await Task.sleep(for: .seconds(5))
         }
+    }
+
+    func apply(_ event: LinkEvent) async throws {
+        switch event {
+        case .botsChanged:
+            try await reload()
+        case .conversationChanged(let id, _):
+            try await load(id)
+        case .messageChanged(let message):
+            // Only a message already here; a new one arrives with its conversation's change.
+            guard conversations[message.conversationID]?.contains(where: { $0.id == message.id }) == true else { return }
+            merge([message], into: message.conversationID)
+        case .botPhase(let id, let phase):
+            guard let index = agents.firstIndex(where: { $0.id == id }) else { return }
+            agents[index].phase = phase
+        // Tools are lent by a Mac; this phone lends none.
+        case .toolCall:
+            return
+        }
+        saveCache()
+    }
+
+    /// Adds your reaction, or takes it back if it is there.
+    func toggleReaction(_ emoji: String, on message: LinkMessage, in agent: LinkBot) async throws {
+        let present = !message.reactions.contains(LinkReaction(author: .you, emoji: emoji))
+        guard case .message(let changed) = try await pairing.request(.react(LinkReactionChange(
+            conversationID: agent.conversationID, messageID: message.id, emoji: emoji, present: present))) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        merge([changed], into: agent.conversationID)
+        saveCache()
     }
 
     func reload() async throws {
@@ -186,7 +242,7 @@ import SwiftUI
     func send(_ body: String, files: [OutgoingFile] = [], to agent: LinkBot) async throws {
         let attachments = try files.map { file in
             LinkAttachment(id: file.id, filename: file.filename, mediaType: file.mediaType,
-                           byteCount: try file.url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0)
+                           byteCount: try file.url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0, voice: file.voice)
         }
         // As on the Mac, a message of files alone says how many.
         let text = body.isEmpty && !files.isEmpty ? "Sent \(files.count) attachment\(files.count == 1 ? "" : "s")" : body
@@ -216,6 +272,14 @@ import SwiftUI
         try await load(agent.conversationID)
         saveCache()
     }
+
+    /// A recording, sent as the Mac sends one: the audio with its transcript, under "Voice message".
+    func sendVoice(_ audio: URL, voice: LinkVoice, to agent: LinkBot) async throws {
+        try await send(Self.voiceBody, files: [OutgoingFile(url: audio, filename: "Voice message.caf", mediaType: "audio/x-caf",
+                                                            voice: voice)], to: agent)
+    }
+
+    static let voiceBody = "Voice message"
 
     /// The file on this phone, downloaded from the Hub the first time it is asked for.
     func file(for attachment: LinkAttachment, in agent: LinkBot) async throws -> URL {
@@ -268,6 +332,7 @@ struct OutgoingFile: Identifiable, Equatable {
     let url: URL
     let filename: String
     let mediaType: String
+    var voice: LinkVoice?
 }
 
 /// The home screen once paired: the agents, newest conversation first.
@@ -376,7 +441,7 @@ private struct AgentRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AgentAvatar(draft: agent.draft, size: 48)
+            AgentAvatar(draft: agent.draft, size: 48, phase: agent.phase)
                 // In the margin left of the picture, as in Messages.
                 .overlay(alignment: .leading) {
                     if unread {
@@ -412,6 +477,7 @@ struct ChatView: View {
     let chats: HubChats
     let agentID: UUID
     @State private var draft = ""
+    @State private var caret = 0
     @State private var files: [OutgoingFile] = []
     @State private var problem: String?
     @State private var editing = false
@@ -419,7 +485,15 @@ struct ChatView: View {
     @State private var photos: [PhotosPickerItem] = []
     @State private var takingPhoto = false
     @State private var importing = false
+    @State private var recorder: VoiceRecorder
     @Environment(\.dismiss) private var dismiss
+
+    init(chats: HubChats, agentID: UUID) {
+        self.chats = chats
+        self.agentID = agentID
+        _recorder = State(initialValue: VoiceRecorder(directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent("Recordings", isDirectory: true).appendingPathComponent(agentID.uuidString, isDirectory: true)))
+    }
 
     var body: some View {
         Group {
@@ -446,6 +520,7 @@ struct ChatView: View {
         }
         .defaultScrollAnchor(.bottom)
         .scrollDismissesKeyboard(.interactively)
+        .background { ConversationBackdrop(background: chats.background(for: agent), imageURL: chats.backgroundImageURL(for: agent)) }
         // Open means read, including replies that arrive while it is open.
         .onAppear {
             chats.markRead(agent)
@@ -459,7 +534,7 @@ struct ChatView: View {
             ToolbarItem(placement: .principal) {
                 Button { editing = true } label: {
                     HStack(spacing: 8) {
-                        AgentAvatar(draft: agent.draft, size: 28)
+                        AgentAvatar(draft: agent.draft, size: 28, phase: agent.phase)
                         Text(agent.draft.name).font(.headline).foregroundStyle(.primary)
                     }
                 }
@@ -488,6 +563,24 @@ struct ChatView: View {
 
     private var composer: some View {
         VStack(spacing: 6) {
+            if recorder.phase != .idle, let agent = chats.agent(agentID) {
+                VoiceRecordingBar(recorder: recorder) { audio, voice in
+                    try await chats.sendVoice(audio, voice: voice, to: agent)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 4)
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            } else {
+                messageComposer
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        // No bar behind the composer: the conversation's background runs to the bottom, as in Messages.
+        .onDisappear { Task { await recorder.discard() } }
+    }
+
+    private var messageComposer: some View {
+        VStack(spacing: 6) {
+            mentions
             if let problem {
                 Text(problem).font(.footnote).foregroundStyle(.red)
             }
@@ -511,28 +604,66 @@ struct ChatView: View {
                     Image(systemName: "plus").font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .frame(width: Self.controlHeight, height: Self.controlHeight)
-                        .background(Color(.secondarySystemFill), in: Circle())
+                        .glassEffect(.regular.interactive(), in: Circle())
                 }
                 // A menu otherwise drops the circle and tints the plus.
                 .buttonStyle(.plain)
                 .menuIndicator(.hidden)
                 .accessibilityLabel("Add")
-                ComposerField(text: $draft, placeholder: "Message") { image in
+                ComposerField(text: $draft, caret: $caret, placeholder: "Message") { image in
                     attach { try PickedFiles.store(image.pngData() ?? Data(), named: "Image.png", type: .png) }
                 }
                     .padding(.horizontal, 14).padding(.vertical, 8)
                     .frame(minHeight: Self.controlHeight)
-                    .background(RoundedRectangle(cornerRadius: Self.controlHeight / 2, style: .continuous).strokeBorder(.quaternary))
-                Button(action: send) {
-                    Image(systemName: "arrow.up.circle.fill").font(.system(size: 30))
-                        .frame(width: Self.controlHeight, height: Self.controlHeight)
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: Self.controlHeight / 2, style: .continuous))
+                // As in Messages: the microphone until there is something to send.
+                if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && files.isEmpty {
+                    Button { recorder.start() } label: {
+                        Image(systemName: "mic.fill").font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: Self.controlHeight, height: Self.controlHeight)
+                            .glassEffect(.regular.interactive(), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Record Voice Message")
+                } else {
+                    Button(action: send) {
+                        Image(systemName: "arrow.up.circle.fill").font(.system(size: 30))
+                            .frame(width: Self.controlHeight, height: Self.controlHeight)
+                    }
+                    .accessibilityLabel("Send")
                 }
-                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && files.isEmpty)
-                .accessibilityLabel("Send")
             }
         }
-        .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(.bar)
+    }
+
+    /// Bots matching an @ being typed, this conversation's first.
+    @ViewBuilder private var mentions: some View {
+        if let request = MentionCompletion.request(in: draft, caret: caret) {
+            let bots = request.matches(chats.agents, preferred: agentID)
+            if !bots.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(bots) { bot in
+                            Button {
+                                // After the name, and after the space added when it ends the message.
+                                let atEnd = NSMaxRange(request.range) == draft.utf16.count
+                                caret = request.range.location + bot.draft.name.utf16.count + (atEnd ? 1 : 0)
+                                draft = request.replacing(with: bot.draft.name, in: draft)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    AgentAvatar(draft: bot.draft, size: 22)
+                                    Text(bot.draft.name).font(.subheadline)
+                                }
+                                .padding(.horizontal, 8).padding(.vertical, 5)
+                                .background(Color(.secondarySystemBackground), in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private func attach(_ pick: () throws -> OutgoingFile) { attach { [try pick()] } }
@@ -614,6 +745,33 @@ private struct Bubble: View {
         }
     }
 
+    /// The Mac's quick reactions.
+    static let quickReactions = [["❤️", "👍", "👎", "😂", "🎉", "❓"], ["👀", "⏳", "✅", "🙏", "🔥", "💡"]]
+
+    private func react(_ emoji: String) {
+        Task { try? await chats.toggleReaction(emoji, on: message, in: agent) }
+    }
+
+    /// One badge per emoji, with a count; yours are tinted, and tapping one adds or takes back yours.
+    @ViewBuilder private var reactions: some View {
+        let counts = Dictionary(grouping: message.reactions, by: \.emoji)
+        let emojis = message.reactions.map(\.emoji).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        if !emojis.isEmpty {
+            HStack(spacing: 4) {
+                ForEach(emojis, id: \.self) { emoji in
+                    let mine = counts[emoji]?.contains { $0.author == .you } == true
+                    Button { react(emoji) } label: {
+                        Text("\(emoji) \(counts[emoji]?.count ?? 0)").font(.caption)
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(mine ? AnyShapeStyle(.tint.opacity(0.2)) : AnyShapeStyle(Color(.secondarySystemBackground)),
+                                        in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
     @ViewBuilder private func content(foreground: Color, background: Color) -> some View {
         ForEach(message.attachments) { attachment in
             AttachmentView(chats: chats, agent: agent, attachment: attachment)
@@ -622,9 +780,15 @@ private struct Bubble: View {
             text.foregroundStyle(foreground)
                 .background(background, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .contextMenu {
+                    // One strip across the top of the menu, which scrolls sideways.
+                    ControlGroup {
+                        ForEach(Self.quickReactions.flatMap { $0 }, id: \.self) { emoji in Button(emoji) { react(emoji) } }
+                    }
+                    .controlGroupStyle(.palette)
                     Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = message.body }
                 }
         }
+        reactions
         if let url = LinkPreview.firstURL(in: message.body) {
             LinkPreviewCard(url: url)
         }
@@ -633,6 +797,7 @@ private struct Bubble: View {
     /// A message of files alone carries a body like "Sent 2 attachments", which the files already show.
     private var showsText: Bool {
         !(message.attachments.count > 0 && message.body.wholeMatch(of: /Sent \d+ attachments?/) != nil)
+            && !(message.attachments.contains { $0.voice != nil } && message.body == HubChats.voiceBody)
     }
 
     private var text: some View {
@@ -705,24 +870,18 @@ struct AgentEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    VStack(spacing: 16) {
-                        AgentAvatar(draft: draft, size: 88)
-                        HStack(spacing: 12) {
-                            ForEach(0..<AgentAvatar.colourCount, id: \.self) { index in
-                                Button { draft.avatarColorIndex = index } label: {
-                                    AgentAvatar.swatch(index)
-                                        .frame(width: 30, height: 30)
-                                        .overlay { if AgentAvatar.colourIndex(draft.avatarColorIndex) == index {
-                                            Circle().strokeBorder(.primary, lineWidth: 2).padding(-4)
-                                        } }
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Colour \(index + 1)")
-                            }
+                    NavigationLink {
+                        BotPictureEditor(draft: $draft)
+                    } label: {
+                        VStack(spacing: 8) {
+                            AgentAvatar(draft: draft, size: 88)
+                            Text("Edit").font(.subheadline).foregroundStyle(.tint)
                         }
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
+                    .buttonStyle(.plain)
                     .listRowBackground(Color.clear)
+                    .accessibilityLabel("Edit Picture")
                 }
                 Section {
                     TextField("Name", text: $draft.name)
@@ -743,7 +902,10 @@ struct AgentEditor: View {
                 if let problem {
                     Section { Text(problem).foregroundStyle(.red) }
                 }
-                if agent != nil {
+                if let agent {
+                    Section {
+                        NavigationLink("Background") { BackgroundEditor(chats: chats, agent: agent) }
+                    }
                     Section {
                         Button("Delete Bot", role: .destructive) { confirmingDelete = true }
                             .disabled(saving)
@@ -814,8 +976,20 @@ struct AgentAvatar: View {
     ]
     let draft: LinkBotDraft
     let size: CGFloat
+    /// Shown as a dot in the corner, as on the Mac. Nil shows none.
+    var phase: LinkBotPhase?
 
     static var colourCount: Int { gradients.count }
+
+    /// The Mac's colours: working blue, failed red, ready green, anything else grey.
+    static func colour(of phase: LinkBotPhase) -> Color {
+        switch phase {
+        case .working: .blue
+        case .failed: .red
+        case .ready: .green
+        case .offline, .starting: .gray
+        }
+    }
 
     /// Bots may store any integer; it wraps onto the palette.
     static func colourIndex(_ colour: Int) -> Int { Int(colour.magnitude % UInt(gradients.count)) }
@@ -838,6 +1012,15 @@ struct AgentAvatar: View {
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
-        .accessibilityHidden(true)
+        .overlay(alignment: .bottomTrailing) {
+            if let phase {
+                let dot = max(8, size * 0.24)
+                Circle().fill(Self.colour(of: phase))
+                    .frame(width: dot, height: dot)
+                    .overlay { Circle().strokeBorder(Color(.systemBackground), lineWidth: 2) }
+                    .accessibilityLabel(phase.rawValue.capitalized)
+            }
+        }
+        .accessibilityHidden(phase == nil)
     }
 }

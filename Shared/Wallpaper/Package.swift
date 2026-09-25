@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Wallpaper",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS(.v15), .iOS("26.0")],
     products: [
         .library(name: "NoodleWallpaperCore", targets: ["NoodleWallpaperCore"]),
         .library(name: "NoodleWallpaper", targets: ["NoodleWallpaper"])

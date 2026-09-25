@@ -5,6 +5,8 @@
 ### Added
 
 - Reach the Hub away from home. Open Port on Router in Settings > Network asks the router, through UPnP or NAT-PMP, to forward the Hub's port and keeps it open; the router's public address joins the addresses invitations carry, and paired devices pick it up when they next connect. Network says when the router cannot, for example when it sits behind another router or your provider shares its address.
+- React to your bots' messages from Noodle for iPhone, and see their reactions there as they happen. Paired devices also see what each bot is doing: working, ready, failed or offline.
+- Keep the transcript of voice messages sent to the Hub's bots, so bots read what was said.
 
 ## [0.2.0] - 2026-09-25
 

@@ -102,6 +102,50 @@ import XCTest
         XCTAssertEqual(page.messages.first?.author, .bot(bot.id))
     }
 
+    func testReactionsTravelBothWays() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        let events = try await f.device.subscribe()
+        let reply = try f.hub.repository.sendAgentMessage(agentID: bot.id, conversationID: bot.conversationID, body: "Done.")
+        f.hub.bots.checkForChanges()
+
+        guard case .message(let reacted) = try await f.device.request(.react(LinkReactionChange(
+            conversationID: bot.conversationID, messageID: reply.id, emoji: "👍", present: true))) else {
+            return XCTFail("no message")
+        }
+        XCTAssertEqual(reacted.reactions, [LinkReaction(author: .you, emoji: "👍")])
+        XCTAssertEqual(try f.hub.repository.loadMessages(conversationID: bot.conversationID).first?.reactions?.map(\.emoji), ["👍"])
+
+        // The bot reacts through the messenger; the owner's devices hear about it.
+        _ = try f.hub.repository.setReaction(conversationID: bot.conversationID, messageID: reply.id,
+                                             author: .agent(bot.id), emoji: "🎉", present: true)
+        f.hub.bots.checkForChanges()
+        var changed: LinkMessage?
+        for try await event in events {
+            if case .messageChanged(let message) = event, message.reactions.contains(LinkReaction(author: .bot(bot.id), emoji: "🎉")) {
+                changed = message
+                break
+            }
+        }
+        XCTAssertEqual(changed?.id, reply.id)
+        XCTAssertEqual(changed?.reactions.count, 2)
+
+        guard case .message(let removed) = try await f.device.request(.react(LinkReactionChange(
+            conversationID: bot.conversationID, messageID: reply.id, emoji: "👍", present: false))) else {
+            return XCTFail("no message")
+        }
+        XCTAssertEqual(removed.reactions, [LinkReaction(author: .bot(bot.id), emoji: "🎉")])
+    }
+
+    func testBotsSayWhatTheyAreDoing() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        // The runtime is not started here, so the bot is offline.
+        XCTAssertEqual(bot.phase, .offline)
+        guard case .bots(let listed) = try await f.device.request(.bots) else { return XCTFail("no bots") }
+        XCTAssertEqual(listed.first?.phase, .offline)
+    }
+
     func testOtherUsersCannotReachABot() async throws {
         let f = try await fixture()
         let bot = try await createBot(f)
@@ -172,6 +216,24 @@ import XCTest
         addTeardownBlock { try? FileManager.default.removeItem(at: copy) }
         try await f.device.download(attachment, from: bot.conversationID, to: copy)
         XCTAssertEqual(try Data(contentsOf: copy), bytes)
+    }
+
+    func testVoiceMessagesKeepTheirTranscript() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        let audio = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID()).caf")
+        try Data([1, 2, 3]).write(to: audio)
+        let voice = LinkVoice(transcript: "Book a table", duration: 2, waveform: [0.2, 0.8], localeIdentifier: "en_GB")
+        let attachment = LinkAttachment(id: UUID(), filename: "Voice message.caf", mediaType: "audio/x-caf", byteCount: 3, voice: voice)
+        try await f.device.upload(audio, as: attachment, to: bot.conversationID)
+        guard case .message(let sent) = try await f.device.request(.send(LinkOutgoingMessage(
+            conversationID: bot.conversationID, id: UUID(), body: "Voice message", attachmentIDs: [attachment.id]))) else {
+            return XCTFail("no message")
+        }
+        XCTAssertEqual(sent.attachments.first?.voice, voice)
+        // The bot reads the transcript from the stored file.
+        let stored = try XCTUnwrap(f.hub.repository.loadAttachments(conversationID: bot.conversationID).first)
+        XCTAssertEqual(stored.voice?.transcript, "Book a table")
     }
 
     func testMessagesCannotPointAtFilesThatNeverArrived() async throws {

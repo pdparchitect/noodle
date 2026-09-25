@@ -24,7 +24,7 @@ import UIKit
 
     /// iOS refuses the camera and the Hub's local address to an app that does not say why it needs them.
     @Test func permissionsSayWhyTheyAreNeeded() {
-        for key in ["NSCameraUsageDescription", "NSLocalNetworkUsageDescription"] {
+        for key in ["NSCameraUsageDescription", "NSLocalNetworkUsageDescription", "NSMicrophoneUsageDescription"] {
             #expect((Bundle.main.object(forInfoDictionaryKey: key) as? String)?.isEmpty == false, "\(key)")
         }
     }

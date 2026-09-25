@@ -1,5 +1,7 @@
 import Foundation
 import HubLink
+import NoodleWallpaperCore
+import UIKit
 @testable import NoodleMobile
 import Testing
 
@@ -57,6 +59,12 @@ private actor FakeHub {
         case .success(.messages(let conversationID, let after)):
             let messages = messages.filter { $0.conversationID == conversationID }
             return .messages(LinkMessages(messages: Array(messages.dropFirst(after)), count: messages.count))
+        case .success(.react(let change)):
+            guard let index = messages.firstIndex(where: { $0.id == change.messageID }) else { return .failure("No such message.") }
+            let reaction = LinkReaction(author: .you, emoji: change.emoji)
+            messages[index].reactions.removeAll { $0 == reaction }
+            if change.present { messages[index].reactions.append(reaction) }
+            return .message(messages[index])
         case .success(.upload(_, let attachment, let offset, let data)):
             var file = files[attachment.id] ?? (attachment, Data())
             guard offset == file.data.count else { return .failure("Pieces out of order.") }
@@ -323,5 +331,114 @@ private actor FakeHub {
         #expect(!MessageFolding.isLong(Array(repeating: "line", count: 12).joined(separator: "\n")))
         #expect(MessageFolding.isLong(Array(repeating: "line", count: 13).joined(separator: "\n")))
         #expect(MessageFolding.isLong(String(repeating: "a", count: 1201)))
+    }
+
+    @Test func myReactionReachesTheHubAndComesBack() async throws {
+        let hub = FakeHub()
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+        let hello = try #require(chats.messages(of: scout).first)
+
+        try await chats.toggleReaction("👍", on: hello, in: scout)
+        #expect(chats.messages(of: scout).first?.reactions == [LinkReaction(author: .you, emoji: "👍")])
+
+        try await chats.toggleReaction("👍", on: try #require(chats.messages(of: scout).first), in: scout)
+        #expect(chats.messages(of: scout).first?.reactions == [])
+    }
+
+    @Test func pushedChangesUpdateMessagesAndStatus() async throws {
+        let hub = FakeHub()
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+        var hello = try #require(chats.messages(of: scout).first)
+        hello.reactions = [LinkReaction(author: .bot(scout.id), emoji: "🎉")]
+
+        try await chats.apply(.messageChanged(hello))
+        try await chats.apply(.botPhase(botID: scout.id, phase: .working))
+
+        #expect(chats.messages(of: scout).first?.reactions == hello.reactions)
+        #expect(chats.agent(scout.id)?.phase == .working)
+    }
+
+    @Test func aVoiceMessageTravelsWithItsTranscript() async throws {
+        let hub = FakeHub()
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+        let audio = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).caf")
+        try Data([1, 2, 3]).write(to: audio)
+        let voice = LinkVoice(transcript: "Book a table", duration: 2, waveform: [0.2, 0.8], localeIdentifier: "en_GB")
+
+        try await chats.sendVoice(audio, voice: voice, to: scout)
+
+        let sent = try #require(chats.messages(of: scout).first { $0.attachments.first?.voice != nil })
+        #expect(sent.body == "Voice message")
+        #expect(sent.attachments.first?.voice == voice)
+        #expect(sent.attachments.first?.mediaType == "audio/x-caf")
+    }
+
+    @Test func typingAtOffersBotsByNameAsOnTheMac() {
+        let scout = LinkBot(id: UUID(), conversationID: UUID(), draft: LinkBotDraft(name: "Scout", provider: "codex"), createdAt: Date())
+        let atlas = LinkBot(id: UUID(), conversationID: UUID(), draft: LinkBotDraft(name: "Atlas", provider: "codex"), createdAt: Date())
+        let sam = LinkBot(id: UUID(), conversationID: UUID(), draft: LinkBotDraft(name: "Sam", provider: "codex"), createdAt: Date())
+
+        let text = "Ask @s"
+        let request = try? #require(MentionCompletion.request(in: text, caret: text.utf16.count))
+        #expect(request?.query == "s")
+        // This conversation's bot first, then by name.
+        #expect(request?.matches([atlas, sam, scout], preferred: scout.id).map(\.draft.name) == ["Scout", "Atlas", "Sam"])
+        #expect(request?.replacing(with: "Scout", in: text) == "Ask Scout ")
+
+        #expect(MentionCompletion.request(in: "mail@home", caret: 9) == nil)
+        #expect(MentionCompletion.request(in: "Hi", caret: 2) == nil)
+    }
+
+    @Test func eachConversationKeepsItsOwnBackground() async throws {
+        let hub = FakeHub()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let (chats, server) = try await paired(to: hub, directory: directory)
+        defer { server.stop() }
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+        #expect(chats.background(for: scout).isDefault)
+
+        try chats.setBackground(ConversationBackground(preset: .ocean), for: scout)
+        #expect(HubChats(pairing: HubPairing(directory: directory, deviceName: "iPhone")).background(for: scout).preset == .ocean)
+
+        let photo = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 30)).image { context in
+            UIColor.orange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 40, height: 30))
+        }.jpegData(compressionQuality: 0.9)!
+        try chats.setBackground(photo: photo, for: scout)
+        let relaunched = HubChats(pairing: HubPairing(directory: directory, deviceName: "iPhone"))
+        let image = try #require(relaunched.backgroundImageURL(for: scout))
+        #expect(relaunched.background(for: scout).imageFilename != nil)
+        #expect(FileManager.default.fileExists(atPath: image.path))
+
+        try chats.setBackground(ConversationBackground(), for: scout)
+        #expect(chats.background(for: scout).isDefault)
+        #expect(!FileManager.default.fileExists(atPath: image.path))
+    }
+
+    @Test func botPicturesAreShrunkAndStoredAsTheMacStoresThem() throws {
+        let big = UIGraphicsImageRenderer(size: CGSize(width: 1600, height: 1200), format: {
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            return format
+        }()).image { context in
+            UIColor.purple.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 1600, height: 1200))
+        }.pngData()!
+
+        let stored = try BotPicture.prepare(big)
+
+        let image = try #require(UIImage(data: stored)?.cgImage)
+        #expect(max(image.width, image.height) == 512)
+        #expect(stored.starts(with: [0xFF, 0xD8]))
     }
 }

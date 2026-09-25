@@ -21,6 +21,15 @@ struct AttachmentView: View {
     private var isImage: Bool { attachment.mediaType.hasPrefix("image/") }
 
     var body: some View {
+        if let voice = attachment.voice {
+            VoiceMessagePlayer(url: url, voice: voice)
+                .task(id: attachment.id) { url = try? await chats.file(for: attachment, in: agent) }
+        } else {
+            file
+        }
+    }
+
+    private var file: some View {
         Button { previewing = url } label: {
             if isImage { picture } else { card }
         }
@@ -29,6 +38,12 @@ struct AttachmentView: View {
         .quickLookPreview($previewing)
         .contextMenu {
             if let url { ShareLink(item: url) }
+            // As on the Mac: a picture in the conversation can become its backdrop.
+            if isImage, let url {
+                Button("Use as Background", systemImage: "photo.on.rectangle") {
+                    try? chats.setBackground(photo: Data(contentsOf: url), for: agent)
+                }
+            }
         }
         .task(id: attachment.id) { await load() }
     }
@@ -280,6 +295,8 @@ struct CameraPicker: UIViewControllerRepresentable {
 /// as in Messages. It grows to six lines, then scrolls.
 struct ComposerField: UIViewRepresentable {
     @Binding var text: String
+    /// Where the caret is, in UTF-16 units, as `NSRange` counts.
+    @Binding var caret: Int
     let placeholder: String
     let pasted: (UIImage) -> Void
 
@@ -298,10 +315,14 @@ struct ComposerField: UIViewRepresentable {
     }
 
     func updateUIView(_ view: PastingTextView, context: Context) {
-        if view.text != text { view.text = text }
+        if view.text != text {
+            view.text = text
+            view.selectedRange = NSRange(location: min(caret, text.utf16.count), length: 0)
+        }
         view.placeholder.isHidden = !text.isEmpty
         view.pasted = pasted
         context.coordinator.text = $text
+        context.coordinator.caret = $caret
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: PastingTextView, context: Context) -> CGSize? {
@@ -312,16 +333,25 @@ struct ComposerField: UIViewRepresentable {
         return CGSize(width: width, height: min(fitting, limit))
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text, caret: $caret) }
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var text: Binding<String>
+        var caret: Binding<Int>
 
-        init(text: Binding<String>) { self.text = text }
+        init(text: Binding<String>, caret: Binding<Int>) {
+            self.text = text
+            self.caret = caret
+        }
 
         func textViewDidChange(_ textView: UITextView) {
             text.wrappedValue = textView.text
             (textView as? PastingTextView)?.placeholder.isHidden = !textView.text.isEmpty
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            // A selection is not a place to complete a name.
+            caret.wrappedValue = textView.selectedRange.length == 0 ? textView.selectedRange.location : -1
         }
     }
 }
@@ -359,5 +389,63 @@ final class PastingTextView: UITextView {
         } else {
             super.paste(sender)
         }
+    }
+}
+
+/// Typing @ and part of a bot's name offers the bot, as on the Mac. Choosing one writes its plain name.
+struct MentionCompletion: Equatable {
+    let range: NSRange
+    let query: String
+
+    static func request(in text: String, caret: Int) -> Self? {
+        let utf16 = text.utf16
+        guard caret >= 0, caret <= utf16.count,
+              let caretIndex = utf16.index(utf16.startIndex, offsetBy: caret, limitedBy: utf16.endIndex)
+                .flatMap({ $0.samePosition(in: text) }) else { return nil }
+        let prefix = text[..<caretIndex]
+        guard let at = prefix.lastIndex(of: "@") else { return nil }
+        if at != text.startIndex {
+            let preceding = text[text.index(before: at)]
+            guard preceding.isWhitespace || "([{,:".contains(preceding) else { return nil }
+        }
+        let query = String(text[text.index(after: at)..<caretIndex])
+        guard query.count <= 64, !query.contains(where: \.isNewline),
+              query.allSatisfy({ $0.isLetter || $0.isNumber || " '-_.".contains($0) }) else { return nil }
+        var end = caretIndex
+        while end < text.endIndex, text[end].isLetter || text[end].isNumber || "-_".contains(text[end]) {
+            end = text.index(after: end)
+        }
+        return Self(range: NSRange(at..<end, in: text), query: query)
+    }
+
+    /// Bots whose name contains what was typed; `preferred` first, then by name.
+    func matches(_ bots: [LinkBot], preferred: UUID?) -> [LinkBot] {
+        bots.filter { query.isEmpty || $0.draft.name.localizedCaseInsensitiveContains(query) }
+            .sorted {
+                let left = $0.id == preferred, right = $1.id == preferred
+                if left != right { return left }
+                return $0.draft.name.localizedStandardCompare($1.draft.name) == .orderedAscending
+            }
+    }
+
+    func replacing(with name: String, in text: String) -> String {
+        guard let range = Range(range, in: text) else { return text }
+        return text.replacingCharacters(in: range, with: name + (range.upperBound == text.endIndex ? " " : ""))
+    }
+}
+
+/// A bot's picture as Noodle on the Mac stores one: fitted within 512 pixels, upright, as JPEG.
+enum BotPicture {
+    static func prepare(_ data: Data) throws -> Data {
+        guard data.count <= 50 * 1024 * 1024 else { throw LinkError("Choose an image smaller than 50 MB.") }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 512,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+              ] as CFDictionary),
+              let jpeg = UIImage(cgImage: image).jpegData(compressionQuality: 0.86) else {
+            throw LinkError("That image could not be used.")
+        }
+        return jpeg
     }
 }

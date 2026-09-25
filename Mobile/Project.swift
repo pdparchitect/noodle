@@ -7,7 +7,7 @@ let version = (try? String(contentsOfFile: "VERSION", encoding: .utf8))?
 
 let project = Project(
     name: "NoodleMobile",
-    packages: [.local(path: "../Shared/HubLink")],
+    packages: [.local(path: "../Shared/HubLink"), .local(path: "../Shared/Wallpaper")],
     settings: .settings(
         base: [
             "DEVELOPMENT_TEAM": "S8VNVK39LH",
@@ -46,10 +46,11 @@ let project = Project(
                 "CFBundleURLTypes": [["CFBundleURLName": "$(MOBILE_APP_BUNDLE_ID)", "CFBundleURLSchemes": ["noodle"]]],
                 "NSCameraUsageDescription": "Noodle scans the QR code of a Noodle Hub invitation.",
                 "NSLocalNetworkUsageDescription": "Noodle connects to your Noodle Hub on this network.",
+                "NSMicrophoneUsageDescription": "Record voice messages you choose to send in your conversations. Speech is transcribed on this device.",
             ]),
             sources: ["Sources/NoodleMobile/**"],
             resources: ["Support/Assets.xcassets"],
-            dependencies: [.package(product: "HubLink")],
+            dependencies: [.package(product: "HubLink"), .package(product: "NoodleWallpaperCore")],
             settings: .settings(base: [
                 "PRODUCT_BUNDLE_IDENTIFIER": "$(MOBILE_APP_BUNDLE_ID)",
                 "CODE_SIGN_STYLE": "Automatic",

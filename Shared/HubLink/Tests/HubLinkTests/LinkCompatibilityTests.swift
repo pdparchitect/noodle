@@ -13,7 +13,16 @@ final class LinkCompatibilityTests: XCTestCase {
         let message = try decode(LinkMessage.self,
             #"{"id":"\#(id)","conversationID":"\#(conversation)","author":{"you":{}},"body":"Hi","createdAt":0}"#)
         XCTAssertEqual(message.attachments, [])
+        XCTAssertEqual(message.reactions, [])
         XCTAssertFalse(message.delivered)
+
+        let draftJSON = #""draft":{"name":"Alfred","provider":"codex"}"#
+        let bot = try decode(LinkBot.self, #"{"id":"\#(id)","conversationID":"\#(conversation)",\#(draftJSON),"createdAt":0}"#)
+        XCTAssertNil(bot.phase)
+        // A phase added after this app was built reads as unknown rather than failing the whole bot.
+        let napping = try decode(LinkBot.self,
+            #"{"id":"\#(id)","conversationID":"\#(conversation)",\#(draftJSON),"createdAt":0,"phase":"napping"}"#)
+        XCTAssertNil(napping.phase)
 
         let status = try decode(LinkStatus.self, #"{"hubName":"Hub","userName":"Ada","planName":"Default"}"#)
         XCTAssertEqual(status.harnesses, [])
@@ -22,6 +31,12 @@ final class LinkCompatibilityTests: XCTestCase {
 
         let draft = try decode(LinkBotDraft.self, #"{"name":"Alfred","provider":"codex"}"#)
         XCTAssertEqual(draft, LinkBotDraft(name: "Alfred", provider: "codex"))
+
+        let file = try decode(LinkAttachment.self, #"{"id":"\#(id)","filename":"a.caf","mediaType":"audio/x-caf","byteCount":3}"#)
+        XCTAssertNil(file.voice)
+        let voice = LinkVoice(transcript: "Hello", duration: 2.5, waveform: [0.1, 0.9], localeIdentifier: "en_GB")
+        let spoken = LinkAttachment(id: id, filename: "a.caf", mediaType: "audio/x-caf", byteCount: 3, voice: voice)
+        XCTAssertEqual(try decode(LinkAttachment.self, String(decoding: try LinkProtocol.encoder.encode(spoken), as: UTF8.self)), spoken)
 
         let send = try decode(LinkOutgoingMessage.self, #"{"conversationID":"\#(conversation)","id":"\#(id)","body":"Hi"}"#)
         XCTAssertEqual(send.attachmentIDs, [])
@@ -56,7 +71,8 @@ final class LinkVersion1Tests: XCTestCase {
         "upload": #"{"request":{"upload":{"attachment":{"filename":"Report.pdf","mediaType":"application\/pdf","byteCount":7,"id":"00000000-0000-0000-0000-00000000000C"},"data":"CQ==","conversationID":"00000000-0000-0000-0000-00000000000B","offset":0}},"version":1}"#,
         "download": #"{"version":1,"request":{"download":{"attachmentID":"00000000-0000-0000-0000-00000000000C","offset":0,"conversationID":"00000000-0000-0000-0000-00000000000B"}}}"#,
         "publishTools": #"{"version":1,"request":{"publishTools":{"botID":"00000000-0000-0000-0000-00000000000A","catalogue":"W10="}}}"#,
-        "toolResult": #"{"version":1,"request":{"toolResult":{"result":"e30=","callID":"00000000-0000-0000-0000-00000000000A"}}}"#
+        "toolResult": #"{"version":1,"request":{"toolResult":{"result":"e30=","callID":"00000000-0000-0000-0000-00000000000A"}}}"#,
+        "react": #"{"version":1,"request":{"react":{"_0":{"conversationID":"00000000-0000-0000-0000-00000000000B","messageID":"00000000-0000-0000-0000-00000000000A","emoji":"👍","present":true}}}}"#
     ]
     private static let responses: [String: String] = [
         "status": #"{"status":{"_0":{"endpoints":[{"host":"hub.local","port":38415}],"harnesses":[{"profile":"00000000-0000-0000-0000-00000000000B","profileName":"Work","provider":"codex","providerName":"Codex"}],"hubName":"Hub","planName":"Family","protocolVersion":1,"userName":"Ada"}}}"#,
@@ -71,7 +87,9 @@ final class LinkVersion1Tests: XCTestCase {
     private static let events: [String: String] = [
         "conversationChanged": #"{"conversationChanged":{"conversationID":"00000000-0000-0000-0000-00000000000B","count":2}}"#,
         "botsChanged": #"{"botsChanged":{}}"#,
-        "toolCall": #"{"toolCall":{"botID":"00000000-0000-0000-0000-00000000000B","callID":"00000000-0000-0000-0000-00000000000A","request":"e30="}}"#
+        "toolCall": #"{"toolCall":{"botID":"00000000-0000-0000-0000-00000000000B","callID":"00000000-0000-0000-0000-00000000000A","request":"e30="}}"#,
+        "messageChanged": #"{"messageChanged":{"_0":{"attachments":[],"author":{"bot":{"_0":"00000000-0000-0000-0000-00000000000C"}},"body":"Hi","conversationID":"00000000-0000-0000-0000-00000000000B","createdAt":1790000000,"delivered":true,"id":"00000000-0000-0000-0000-00000000000A","reactions":[{"author":{"you":{}},"emoji":"👍"}]}}}"#,
+        "botPhase": #"{"botPhase":{"botID":"00000000-0000-0000-0000-00000000000A","phase":"working"}}"#
     ]
     private static let invitation = #"{"endpoints":[{"host":"hub.local","port":38415}],"expires":1790000000,"hubKey":"BEhnsDZStQfLMoSoKK4ZQvb0rOhU49qIX51h+o1GRTuRTSdeWLgusF4zPaU7KyvfPYKhUFhsFaMUDl8p2MoP7s8=","hubName":"Hub","token":"t","userName":"Ada","version":1}"#
 
@@ -95,6 +113,7 @@ final class LinkVersion1Tests: XCTestCase {
             "download": .download(conversationID: b, attachmentID: c, offset: 0),
             "publishTools": .publishTools(botID: a, catalogue: Data("[]".utf8)),
             "toolResult": .toolResult(callID: a, result: Data("{}".utf8), error: nil),
+            "react": .react(LinkReactionChange(conversationID: b, messageID: a, emoji: "👍", present: true)),
         ]
         XCTAssertEqual(Set(Self.requests.keys), Set(expected.keys))
         for (name, json) in Self.requests {
@@ -122,6 +141,9 @@ final class LinkVersion1Tests: XCTestCase {
         let expected: [String: LinkEvent] = [
             "conversationChanged": .conversationChanged(conversationID: b, count: 2), "botsChanged": .botsChanged,
             "toolCall": .toolCall(callID: a, botID: b, request: Data("{}".utf8)),
+            "messageChanged": .messageChanged(LinkMessage(id: a, conversationID: b, author: .bot(c), body: "Hi", createdAt: date,
+                                                          delivered: true, reactions: [LinkReaction(author: .you, emoji: "👍")])),
+            "botPhase": .botPhase(botID: a, phase: .working),
         ]
         for (name, json) in Self.events {
             XCTAssertEqual(LinkProtocol.decodeEvent(Data(json.utf8)), expected[name], name)

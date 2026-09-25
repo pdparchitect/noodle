@@ -94,6 +94,8 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case publishTools(botID: UUID, catalogue: Data)
     /// The answer to a pushed `toolCall`.
     case toolResult(callID: UUID, result: Data?, error: String?)
+    /// Adds or removes this user's reaction to a message. Answers with the message.
+    case react(LinkReactionChange)
 }
 
 public enum LinkResponse: Codable, Equatable, Sendable {
@@ -114,6 +116,10 @@ public enum LinkEvent: Codable, Equatable, Sendable {
     case botsChanged
     /// A bot on the Hub calls a tool this device lends it. Answer with `toolResult`.
     case toolCall(callID: UUID, botID: UUID, request: Data)
+    /// A message already sent changed, as when someone reacted to it.
+    case messageChanged(LinkMessage)
+    /// What a bot is doing now.
+    case botPhase(botID: UUID, phase: LinkBotPhase)
 }
 
 public struct LinkStatus: Codable, Equatable, Sendable {
@@ -227,17 +233,62 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
     public var conversationID: UUID
     public var draft: LinkBotDraft
     public var createdAt: Date
+    /// What it was doing when listed. Nil from a Hub that does not say, or in a way this app does not know.
+    public var phase: LinkBotPhase?
 
-    public init(id: UUID, conversationID: UUID, draft: LinkBotDraft, createdAt: Date) {
+    public init(id: UUID, conversationID: UUID, draft: LinkBotDraft, createdAt: Date, phase: LinkBotPhase? = nil) {
         self.id = id
         self.conversationID = conversationID
         self.draft = draft
         self.createdAt = createdAt
+        self.phase = phase
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, conversationID, draft, createdAt, phase }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        conversationID = try c.decode(UUID.self, forKey: .conversationID)
+        draft = try c.decode(LinkBotDraft.self, forKey: .draft)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        phase = try c.decodeIfPresent(String.self, forKey: .phase).flatMap(LinkBotPhase.init(rawValue:))
+    }
+}
+
+/// What a bot's harness is doing, as Noodle's runtime reports it.
+public enum LinkBotPhase: String, Codable, Sendable {
+    case offline, starting, ready, working, failed
+}
+
+/// One person's or bot's reaction to a message.
+public struct LinkReaction: Codable, Hashable, Sendable {
+    public var author: LinkMessage.Author
+    public var emoji: String
+
+    public init(author: LinkMessage.Author, emoji: String) {
+        self.author = author
+        self.emoji = emoji
+    }
+}
+
+/// Adds or removes the sender's reaction.
+public struct LinkReactionChange: Codable, Equatable, Sendable {
+    public var conversationID: UUID
+    public var messageID: UUID
+    public var emoji: String
+    public var present: Bool
+
+    public init(conversationID: UUID, messageID: UUID, emoji: String, present: Bool) {
+        self.conversationID = conversationID
+        self.messageID = messageID
+        self.emoji = emoji
+        self.present = present
     }
 }
 
 public struct LinkMessage: Codable, Equatable, Identifiable, Sendable {
-    public enum Author: Codable, Equatable, Sendable {
+    public enum Author: Codable, Hashable, Sendable {
         case you, bot(UUID), system
     }
 
@@ -249,10 +300,12 @@ public struct LinkMessage: Codable, Equatable, Identifiable, Sendable {
     /// Whether the bot has taken the message yet.
     public var delivered: Bool
     public var attachments: [LinkAttachment]
+    public var reactions: [LinkReaction]
 
     public init(id: UUID, conversationID: UUID, author: Author, body: String, createdAt: Date, delivered: Bool,
-                attachments: [LinkAttachment] = []) {
+                attachments: [LinkAttachment] = [], reactions: [LinkReaction] = []) {
         self.attachments = attachments
+        self.reactions = reactions
         self.id = id
         self.conversationID = conversationID
         self.author = author
@@ -261,7 +314,7 @@ public struct LinkMessage: Codable, Equatable, Identifiable, Sendable {
         self.delivered = delivered
     }
 
-    private enum CodingKeys: String, CodingKey { case id, conversationID, author, body, createdAt, delivered, attachments }
+    private enum CodingKeys: String, CodingKey { case id, conversationID, author, body, createdAt, delivered, attachments, reactions }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -272,6 +325,7 @@ public struct LinkMessage: Codable, Equatable, Identifiable, Sendable {
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         delivered = try c.decode(.delivered, or: false)
         attachments = try c.decode(.attachments, or: [])
+        reactions = try c.decode(.reactions, or: [])
     }
 }
 
@@ -281,15 +335,18 @@ public struct LinkAttachment: Codable, Equatable, Identifiable, Sendable {
     public var filename: String
     public var mediaType: String
     public var byteCount: Int
+    /// Set when the file is a voice message.
+    public var voice: LinkVoice?
 
-    public init(id: UUID, filename: String, mediaType: String, byteCount: Int) {
+    public init(id: UUID, filename: String, mediaType: String, byteCount: Int, voice: LinkVoice? = nil) {
         self.id = id
         self.filename = filename
         self.mediaType = mediaType
         self.byteCount = byteCount
+        self.voice = voice
     }
 
-    private enum CodingKeys: String, CodingKey { case id, filename, mediaType, byteCount }
+    private enum CodingKeys: String, CodingKey { case id, filename, mediaType, byteCount, voice }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -297,6 +354,23 @@ public struct LinkAttachment: Codable, Equatable, Identifiable, Sendable {
         filename = try c.decode(.filename, or: "Attachment")
         mediaType = try c.decode(.mediaType, or: "application/octet-stream")
         byteCount = try c.decode(Int.self, forKey: .byteCount)
+        voice = try c.decodeIfPresent(LinkVoice.self, forKey: .voice)
+    }
+}
+
+/// What a voice message said and how it sounded, so bots read the words and devices draw the waveform.
+public struct LinkVoice: Codable, Equatable, Sendable {
+    public var transcript: String?
+    public var duration: Double
+    /// Levels from 0 to 1 across the recording.
+    public var waveform: [Float]
+    public var localeIdentifier: String?
+
+    public init(transcript: String?, duration: Double, waveform: [Float], localeIdentifier: String?) {
+        self.transcript = transcript
+        self.duration = duration
+        self.waveform = waveform
+        self.localeIdentifier = localeIdentifier
     }
 }
 

@@ -25,8 +25,10 @@ import NoodleRuntime
     private var toolCalls: [UUID: (device: LinkPublicKey, reply: CheckedContinuation<Data, Error>)] = [:]
     private var running = false
     private var loop: Task<Void, Never>?
-    /// The last seen size and date of each conversation's messages, and their count.
-    private var transcripts: [UUID: (size: Int, modified: Date, count: Int)] = [:]
+    /// The last seen size and date of each conversation's messages, their count, and the latest reaction change.
+    private var transcripts: [UUID: (size: Int, modified: Date, count: Int, reactions: Int)] = [:]
+    /// What each bot was last reported doing.
+    private var phases: [UUID: AgentRuntimePhase] = [:]
 
     public init(repository: WorkspaceRepository, runtime: AgentRuntimeCoordinator, access: HubAccess, uploads: URL) {
         self.uploads = uploads
@@ -177,7 +179,10 @@ import NoodleRuntime
         guard offset + data.count == attachment.byteCount else { return }
         defer { try? FileManager.default.removeItem(at: part) }
         let filename = URL(fileURLWithPath: attachment.filename).lastPathComponent
-        _ = try repository.importAttachment(from: part, into: conversationID, mediaType: attachment.mediaType,
+        let voice = attachment.voice.map {
+            VoiceMessage(transcript: $0.transcript, duration: $0.duration, waveform: $0.waveform, localeIdentifier: $0.localeIdentifier)
+        }
+        _ = try repository.importAttachment(from: part, into: conversationID, mediaType: attachment.mediaType, voice: voice,
                                             id: attachment.id, originalFilename: filename.isEmpty ? "Attachment" : filename)
     }
 
@@ -231,11 +236,42 @@ import NoodleRuntime
                   let size = (attributes[.size] as? NSNumber)?.intValue,
                   let modified = attributes[.modificationDate] as? Date else { continue }
             if let known = transcripts[conversation.id], known.size == size, known.modified == modified { continue }
-            guard let count = try? repository.loadMessages(conversationID: conversation.id).count else { continue }
-            let changed = transcripts[conversation.id].map { $0.count != count } ?? true
-            transcripts[conversation.id] = (size, modified, count)
-            if changed { onChange?(owner, .conversationChanged(conversationID: conversation.id, count: count)) }
+            guard let messages = try? repository.loadMessages(conversationID: conversation.id) else { continue }
+            let latestReaction = messages.flatMap { $0.reactionChanges ?? [] }.map(\.sequence).max() ?? 0
+            let known = transcripts[conversation.id]
+            transcripts[conversation.id] = (size, modified, messages.count, latestReaction)
+            if known.map({ $0.count != messages.count }) ?? true {
+                onChange?(owner, .conversationChanged(conversationID: conversation.id, count: messages.count))
+            }
+            // Reactions change messages already sent, which a device reading on from its count would miss.
+            if let known, latestReaction > known.reactions, let files = try? attachments(in: conversation.id) {
+                for message in messages where (message.reactionChanges ?? []).contains(where: { $0.sequence > known.reactions }) {
+                    onChange?(owner, .messageChanged(Self.message(message, files: files)))
+                }
+            }
         }
+        for agent in agents {
+            guard let owner = access.owner(ofBot: agent.id) else { continue }
+            let phase = runtime.snapshot(for: agent.id).phase
+            if let known = phases[agent.id], known != phase, let link = LinkBotPhase(rawValue: phase.rawValue) {
+                onChange?(owner, .botPhase(botID: agent.id, phase: link))
+            }
+            phases[agent.id] = phase
+        }
+    }
+
+    /// Adds or removes the owner's reaction to a message in one of their bots' conversations.
+    public func react(_ change: LinkReactionChange, for user: HubUser) throws -> LinkMessage {
+        _ = try ownedConversation(change.conversationID, by: user)
+        let message: ChatMessage
+        do {
+            message = try repository.setReaction(conversationID: change.conversationID, messageID: change.messageID,
+                                                 author: .user, emoji: change.emoji, present: change.present)
+        } catch WorkspaceError.invalidReaction {
+            throw LinkError("Reactions are a single emoji.")
+        }
+        checkForChanges()
+        return Self.message(message, files: try attachments(in: change.conversationID))
     }
 
     /// Writes the skills for the tools a device lends one of its user's bots.
@@ -335,7 +371,8 @@ import NoodleRuntime
             model: agent.modelIdentifier, reasoningEffort: agent.reasoningEffort, publicDescription: agent.publicDescription ?? "",
             backstory: try repository.loadAgentBackstory(agent), avatarSymbolName: agent.avatarSymbolName,
             avatarColorIndex: agent.avatarColorIndex ?? agent.accentSeed, avatarImageData: agent.avatarImageData)
-        return LinkBot(id: agent.id, conversationID: conversation.id, draft: draft, createdAt: agent.createdAt)
+        return LinkBot(id: agent.id, conversationID: conversation.id, draft: draft, createdAt: agent.createdAt,
+                       phase: LinkBotPhase(rawValue: runtime.snapshot(for: agent.id).phase.rawValue))
     }
 
     private static func message(_ message: ChatMessage, files: [UUID: ConversationAttachment]) -> LinkMessage {
@@ -345,9 +382,19 @@ import NoodleRuntime
         case .system: .system
         }
         let attachments = (message.attachmentIDs ?? []).compactMap { files[$0] }.map {
-            LinkAttachment(id: $0.id, filename: $0.originalFilename, mediaType: $0.mediaType, byteCount: Int($0.byteCount))
+            LinkAttachment(id: $0.id, filename: $0.originalFilename, mediaType: $0.mediaType, byteCount: Int($0.byteCount),
+                           voice: $0.voice.map { LinkVoice(transcript: $0.transcript, duration: $0.duration, waveform: $0.waveform,
+                                                           localeIdentifier: $0.localeIdentifier) })
+        }
+        let reactions = (message.reactions ?? []).compactMap { reaction -> LinkReaction? in
+            switch reaction.author {
+            case .user: LinkReaction(author: .you, emoji: reaction.emoji)
+            case .agent(let id): LinkReaction(author: .bot(id), emoji: reaction.emoji)
+            case .system: nil
+            }
         }
         return LinkMessage(id: message.id, conversationID: message.conversationID, author: author, body: message.body,
-                           createdAt: message.createdAt, delivered: message.delivery == .delivered, attachments: attachments)
+                           createdAt: message.createdAt, delivered: message.delivery == .delivered, attachments: attachments,
+                           reactions: reactions)
     }
 }

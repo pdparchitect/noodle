@@ -235,6 +235,8 @@ import Observation
         case .publishTools(let botID, let catalogue):
             try hubBots().publishTools(catalogue, for: botID, from: key, for: try user(key))
             return .done
+        case .react(let change):
+            return .message(try hubBots().react(change, for: try user(key)))
         case .toolResult(let callID, let result, let error):
             _ = try user(key)
             try hubBots().finishToolCall(callID, result: result, error: error, from: key)
