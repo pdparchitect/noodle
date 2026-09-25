@@ -8,7 +8,7 @@ import Observation
 import SwiftUI
 
 enum HubSettingsTab: Hashable {
-    case harnesses, heartbeats, sandbox, tools, companions, updates
+    case harnesses, users, plans, heartbeats, sandbox, tools, companions, updates
 }
 
 /// Gives the shared Harness, Heartbeat and Sandbox settings what they need from the Hub.
@@ -35,6 +35,7 @@ enum HubSettingsTab: Hashable {
         let affected = agents.filter { (try? repository.loadAgentHarnessProfile($0)) == profile.id }
         for agent in affected { try? repository.updateAgentHarnessProfile(agent, profile: nil) }
         try? harnessProfiles.delete(profile)
+        hub.access.removeProfile(profile.id)
         for agent in affected { runtime.restart(agent: agent, repository: repository) }
     }
 
@@ -81,6 +82,14 @@ struct HubSettingsView: View {
                 .hubSettingsSize()
                 .tabItem { Label("Harness", systemImage: "terminal") }
                 .tag(HubSettingsTab.harnesses)
+            HubUsersSettingsView(host: host)
+                .hubSettingsSize()
+                .tabItem { Label("Users", systemImage: "person.2") }
+                .tag(HubSettingsTab.users)
+            HubPlansSettingsView(host: host)
+                .hubSettingsSize()
+                .tabItem { Label("Plans", systemImage: "rectangle.stack.badge.person.crop") }
+                .tag(HubSettingsTab.plans)
             HeartbeatsSettingsView(store: host)
                 .hubSettingsSize()
                 .tabItem { Label("Heartbeat", systemImage: "waveform.path.ecg") }

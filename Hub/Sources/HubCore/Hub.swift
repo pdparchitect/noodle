@@ -11,6 +11,7 @@ import NoodleRuntime
     public let runtime: AgentRuntimeCoordinator
     public let harnessProfiles: HarnessProfilesController
     public let usage: UsageHistory
+    public let access: HubAccess
 
     public init(root: URL, messenger: URL?) {
         repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: messenger)
@@ -21,6 +22,7 @@ import NoodleRuntime
         harnessProfiles = HarnessProfilesController(store: repository.harnessProfiles)
         usage = UsageHistory(url: root.appendingPathComponent("usage.sqlite"))
         runtime.onUsage = { [usage] in usage.record($0) }
+        access = HubAccess(url: root.appendingPathComponent("access.json"))
     }
 
     public static func root(applicationSupport: URL) -> URL {
