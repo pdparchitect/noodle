@@ -1,5 +1,7 @@
 import CoreImage
+import ImageIO
 import NoodleCore
+import UniformTypeIdentifiers
 import XCTest
 @testable import NoodleVisionTools
 
@@ -49,17 +51,18 @@ final class VisionToolsTests: XCTestCase {
         XCTAssertEqual(provider.manifest.activation, .always)
         let listed = try await provider.tools(context: context)
         let tools = try ToolDescriptor.list(mcp: listed)
-        XCTAssertEqual(tools.map(\.name), ["ocr", "classify", "barcodes", "cutout"])
+        XCTAssertEqual(tools.map(\.name), ["ocr", "classify", "barcodes", "cutout", "convert"])
         for tool in tools {
-            let expected = tool.name == "cutout"
+            let expected = ["cutout", "convert"].contains(tool.name)
                 ? [ToolFileParameter(name: "image", access: .read), ToolFileParameter(name: "output", access: .write)]
                 : [ToolFileParameter(name: "image", access: .read)]
             XCTAssertEqual(tool.fileParameters, expected, tool.name)
             XCTAssertTrue(tool.retryable, "\(tool.name) repeats without side effects, so a timed-out call may be repeated")
             XCTAssertFalse(tool.description.isEmpty)
         }
-        let cutout = try XCTUnwrap(tools.first { $0.name == "cutout" })
-        XCTAssertEqual(Set(cutout.required), ["image", "output"])
+        for name in ["cutout", "convert"] {
+            XCTAssertEqual(Set(try XCTUnwrap(tools.first { $0.name == name }).required), ["image", "output"], name)
+        }
     }
 
     func testBarcodesReadsAGeneratedQRCode() async throws {
@@ -112,5 +115,46 @@ final class VisionToolsTests: XCTestCase {
         let output = root.appendingPathComponent("cutout.png")
         let result = try await call("cutout", image: try subjectImage(), arguments: "{\"subject\": 99}", output: output)
         XCTAssertEqual(result["isError"] as? Bool, true)
+    }
+
+    /// A 400×300 HEIC stored sideways: EXIF orientation 6 shows it 300 wide and 400 tall.
+    private func sidewaysHEIC() throws -> Data {
+        let space = CGColorSpaceCreateDeviceRGB()
+        let canvas = try XCTUnwrap(CGContext(data: nil, width: 400, height: 300, bitsPerComponent: 8, bytesPerRow: 0,
+                                             space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+        canvas.setFillColor(CGColor(colorSpace: space, components: [0.2, 0.5, 0.3, 1])!)
+        canvas.fill(CGRect(x: 0, y: 0, width: 400, height: 300))
+        let data = NSMutableData()
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithData(data, UTType.heic.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, try XCTUnwrap(canvas.makeImage()), [kCGImagePropertyOrientation: 6] as CFDictionary)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        return data as Data
+    }
+
+    func testConvertTurnsAHEICIntoAnUprightJPEG() async throws {
+        let output = root.appendingPathComponent("photo.jpg")
+        let result = try await call("convert", image: try sidewaysHEIC(), arguments: "{\"max-size\": 200, \"quality\": 0.8}", output: output)
+        XCTAssertEqual(result["isError"] as? Bool, false, (((result["content"] as? [[String: Any]])?.first)?["text"] as? String ?? ""))
+        let structured = try XCTUnwrap(result["structuredContent"] as? [String: Any])
+        XCTAssertEqual(structured["path"] as? String, "photo.jpg")
+        XCTAssertEqual(structured["width"] as? Int, 150)
+        XCTAssertEqual(structured["height"] as? Int, 200)
+        let source = try XCTUnwrap(CGImageSourceCreateWithURL(output as CFURL, nil))
+        XCTAssertEqual(CGImageSourceGetType(source) as String?, UTType.jpeg.identifier)
+        let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
+        XCTAssertEqual(properties[kCGImagePropertyPixelWidth] as? Int, 150)
+        XCTAssertEqual(properties[kCGImagePropertyPixelHeight] as? Int, 200)
+        XCTAssertEqual(properties[kCGImagePropertyOrientation] as? Int ?? 1, 1, "the pixels are turned, so no viewer turns them again")
+    }
+
+    func testConvertKeepsFullSizeAndRefusesAnUnknownFormat() async throws {
+        let png = root.appendingPathComponent("photo.png")
+        let full = try await call("convert", image: try sidewaysHEIC(), output: png)
+        let structured = try XCTUnwrap(full["structuredContent"] as? [String: Any])
+        XCTAssertEqual(structured["width"] as? Int, 300)
+        XCTAssertEqual(structured["height"] as? Int, 400)
+        XCTAssertEqual(CGImageSourceGetType(try XCTUnwrap(CGImageSourceCreateWithURL(png as CFURL, nil))) as String?, UTType.png.identifier)
+        let unknown = try await call("convert", image: try sidewaysHEIC(), output: root.appendingPathComponent("photo.txt"))
+        XCTAssertEqual(unknown["isError"] as? Bool, true)
     }
 }

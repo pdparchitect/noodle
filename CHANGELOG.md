@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - Connect Replit in Settings → Tools → Add Tools, so bots can work with your Replit apps.
+- Let bots convert images with the Vision tool. It writes a JPEG, PNG, HEIC or TIFF copy that is turned upright and can be shrunk, so a bot can use an HEIC photo you send even when its model or tools cannot open HEIC. Your original is kept.
 
 ### Changed
 
