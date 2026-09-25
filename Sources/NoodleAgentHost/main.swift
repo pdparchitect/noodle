@@ -127,6 +127,8 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
         let loginHome = harnessProfile.map(profiles.loginHome) ?? HostPaths.home
         try isolateProcessGroup()
         guard chdir(workspace.path) == 0 else { throw HostError("Could not open the bot workspace: \(String(cString: strerror(errno)))") }
+        // Taken before any storage is prepared and kept open through execv.
+        _ = try AgentRuntimeLock.acquire(layout: AgentStorageLayout(workspace: workspace))
         var strings: [String]
         switch provider {
         case .apple:
