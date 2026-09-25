@@ -7,6 +7,10 @@
 - Move a noodlet to the Trash from the library's context menu. Its saved data, secrets and permissions are deleted with it.
 - Browse noodlets by category. A noodlet can declare one category in `noodlet.json` (games, productivity, utilities, developer, data, creativity, media, writing, learning or lifestyle), and the library sidebar gains a collapsible Categories section listing only the categories that hold a visible noodlet.
 
+### Changed
+
+- Keep a fixed-size noodlet's shape on a TV. **Play On** used to stretch a noodlet made at a fixed size, such as a game, across the whole screen. It now keeps its own size, scaled up as far as it fits and centred on black, stays sharp and keeps keyboard focus. A resizable noodlet still fills the screen.
+
 ### Fixed
 
 - Keep every card in a library row the same height. A long noodlet title now stays on one line and shows in full on hover, instead of wrapping and making its card taller than the rest.

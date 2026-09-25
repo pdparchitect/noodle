@@ -42,6 +42,10 @@ Displays settings. Then, with the noodlet in front, choose the TV from
 library. To end it, choose **Bring Back to This Mac** or leave full screen.
 Keyboards, mice and trackpads stay connected to the Mac.
 
+A noodlet whose window can be resized fills the TV. One made at a fixed size,
+such as a game, keeps its shape: it is scaled up as far as it fits and centred,
+with black around it.
+
 ## What bots can do
 
 Bots build noodlets, open and use them, take screenshots, and record short videos
