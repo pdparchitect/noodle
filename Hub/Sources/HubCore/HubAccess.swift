@@ -1,4 +1,5 @@
 import Foundation
+import HubLink
 import NoodleCore
 import Observation
 
@@ -44,15 +45,36 @@ public struct HubUser: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
-/// The Hub's users and plans, kept in one file beside its bots.
+/// A paired device, known by the key it proved at pairing.
+public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public let user: UUID
+    public var name: String
+    public let key: LinkPublicKey
+    public let paired: Date
+    public var lastSeen: Date?
+
+    public init(id: UUID = UUID(), user: UUID, name: String, key: LinkPublicKey, paired: Date, lastSeen: Date? = nil) {
+        self.id = id
+        self.user = user
+        self.name = name
+        self.key = key
+        self.paired = paired
+        self.lastSeen = lastSeen
+    }
+}
+
+/// The Hub's users, their devices and plans, kept in one file beside its bots.
 @MainActor @Observable public final class HubAccess {
     public private(set) var users: [HubUser] = []
     public private(set) var plans: [HubPlan] = []
+    public private(set) var devices: [HubDevice] = []
     @ObservationIgnored private let url: URL
 
     private struct Stored: Codable {
         var users: [HubUser]
         var plans: [HubPlan]
+        var devices: [HubDevice]?
     }
 
     public init(url: URL) {
@@ -60,6 +82,7 @@ public struct HubUser: Identifiable, Codable, Hashable, Sendable {
         if let data = try? Data(contentsOf: url), let stored = try? JSONDecoder().decode(Stored.self, from: data) {
             users = stored.users
             plans = stored.plans
+            devices = stored.devices ?? []
         }
         if !plans.contains(where: \.isDefault) {
             plans.insert(HubPlan(id: HubPlan.defaultID, name: "Default"), at: 0)
@@ -91,8 +114,38 @@ public struct HubUser: Identifiable, Codable, Hashable, Sendable {
         update(user) { $0.plan = plan.id }
     }
 
+    /// Their devices go too.
     public func remove(_ user: HubUser) {
         users.removeAll { $0.id == user.id }
+        devices.removeAll { $0.user == user.id }
+        save()
+    }
+
+    public func devices(of user: HubUser) -> [HubDevice] {
+        devices.filter { $0.user == user.id }
+    }
+
+    public func device(for key: LinkPublicKey) -> HubDevice? {
+        devices.first { $0.key == key }
+    }
+
+    /// A key pairs once; pairing it again moves it to the new user and name.
+    @discardableResult public func addDevice(named name: String, key: LinkPublicKey, for user: HubUser, at date: Date) -> HubDevice {
+        devices.removeAll { $0.key == key }
+        let device = HubDevice(user: user.id, name: name, key: key, paired: date, lastSeen: date)
+        devices.append(device)
+        save()
+        return device
+    }
+
+    public func remove(_ device: HubDevice) {
+        devices.removeAll { $0.id == device.id }
+        save()
+    }
+
+    public func markSeen(_ device: HubDevice, at date: Date) {
+        guard let index = devices.firstIndex(where: { $0.id == device.id }) else { return }
+        devices[index].lastSeen = date
         save()
     }
 
@@ -143,7 +196,7 @@ public struct HubUser: Identifiable, Codable, Hashable, Sendable {
     private func save() {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(Stored(users: users, plans: plans)) else { return }
+        guard let data = try? encoder.encode(Stored(users: users, plans: plans, devices: devices)) else { return }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? AtomicFile.write(data, to: url)
     }

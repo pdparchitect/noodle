@@ -83,7 +83,7 @@ struct NoodleApp: App {
                 .preferredColorScheme(.dark)
                 .background(WindowConfiguration())
         } onOpenURL: {
-            store.mcp.receiveAuthorizationCallback($0)
+            if !store.receiveHubInvitation($0) { store.mcp.receiveAuthorizationCallback($0) }
         }
         .defaultSize(width: 1160, height: 810)
         .windowResizability(.contentMinSize)
@@ -304,6 +304,10 @@ struct RootView: View {
                 if FloatingConversations.shared.contains(id) { store.floatConversation(id) }
                 else { openWindow(id: "conversation", value: id) }
             }
+        }
+        // An invitation link waits in Settings > Hub.
+        .onChange(of: store.pendingHubInvitation) { _, invitation in
+            if invitation != nil { openSettings() }
         }
     }
 

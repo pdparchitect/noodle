@@ -22,5 +22,10 @@ Settings reuse Noodle's Harness, Heartbeat, Sandbox, Tools and Companions views 
 does not run bots yet, has no bot editor, and opens companions directly rather than
 connecting to them.
 
+Devices pair and talk to the Hub through `Shared/HubLink`, which Noodle uses too: QUIC
+with each side pinned by its P-256 key, one request per connection. A device’s key is its
+identity; `HubAccess` maps it to a user, whose plan decides what the Hub lends. Test the
+link over real addresses, never a loopback-only path in the apps.
+
 README.md is for people using the Hub; do not document code in it. Follow the
 `no-code-docs` skill.

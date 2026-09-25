@@ -8,7 +8,7 @@ import Observation
 import SwiftUI
 
 enum HubSettingsTab: Hashable {
-    case harnesses, users, plans, heartbeats, sandbox, tools, companions, updates
+    case harnesses, users, plans, network, heartbeats, sandbox, tools, companions, updates
 }
 
 /// Gives the shared Harness, Heartbeat and Sandbox settings what they need from the Hub.
@@ -80,6 +80,11 @@ struct HubSettingsView: View {
         host.mcp.registry.connections.filter { host.mcp.errors[$0.id] != nil }.count
     }
 
+    private var networkNeedsAttention: Bool {
+        if case .failed = host.hub.link.state { return true }
+        return false
+    }
+
     var body: some View {
         TabView(selection: $host.selectedTab.animation(.easeInOut(duration: 0.22))) {
             HarnessesSettingsView(store: host, setup: host.setup)
@@ -94,6 +99,10 @@ struct HubSettingsView: View {
                 .hubSettingsSize()
                 .tabItem { Label("Plans", systemImage: "rectangle.stack.badge.person.crop") }
                 .tag(HubSettingsTab.plans)
+            HubNetworkSettingsView(link: host.hub.link)
+                .hubSettingsSize()
+                .tabItem { Label("Network", systemImage: "network") }
+                .tag(HubSettingsTab.network)
             if Self.showsAgentSettings {
                 HeartbeatsSettingsView(store: host)
                     .hubSettingsSize()
@@ -121,6 +130,7 @@ struct HubSettingsView: View {
         .settingsScrollIndicators(selection: host.selectedTab)
         .background(SettingsTabBadge(counts: ["Harness": harnessesNeedingAttention,
                                               "Tools": Self.showsAgentSettings ? toolsNeedingAttention : 0,
+                                              "Network": networkNeedsAttention ? 1 : 0,
                                               "Companions": Self.showsAgentSettings ? companionUpdates.updates.count : 0,
                                               "Update": updater.availableVersion == nil ? 0 : 1]))
         // Check on opening Settings so the tabs are badged before they are selected.

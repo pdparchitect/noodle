@@ -1,4 +1,5 @@
 import Foundation
+import HubLink
 import NoodleCore
 import NoodleRuntime
 
@@ -12,6 +13,7 @@ import NoodleRuntime
     public let harnessProfiles: HarnessProfilesController
     public let usage: UsageHistory
     public let access: HubAccess
+    public let link: HubLinkService
 
     public init(root: URL, messenger: URL?) {
         repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: messenger)
@@ -23,6 +25,9 @@ import NoodleRuntime
         usage = UsageHistory(url: root.appendingPathComponent("usage.sqlite"))
         runtime.onUsage = { [usage] in usage.record($0) }
         access = HubAccess(url: root.appendingPathComponent("access.json"))
+        link = HubLinkService(hubName: Host.current().localizedName ?? "Noodle Hub",
+                              directory: root.appendingPathComponent("Link", isDirectory: true),
+                              access: access, profiles: harnessProfiles)
     }
 
     public static func root(applicationSupport: URL) -> URL {

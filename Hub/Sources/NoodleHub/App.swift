@@ -39,6 +39,7 @@ import SwiftUI
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         HubUpdater.shared.start()
+        Task { await settings.hub.link.start() }
     }
 }
 

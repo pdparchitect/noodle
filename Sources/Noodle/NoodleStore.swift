@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import HubLink
 import Observation
 import NoodleCalendarTools
 import NoodleCore
@@ -131,10 +132,15 @@ final class NoodleStore {
     let harnessProfiles: HarnessProfilesController
     let runtime: AgentRuntimeCoordinator
     let usage: UsageHistory
+    /// The Noodle Hubs this Mac joined.
+    let hubs: HubMemberships
+    /// An invitation opened from a link, waiting in Settings > Companions to be joined.
+    var pendingHubInvitation: String?
     let harnessSetup: HarnessSetupController
     private let connectsServices: Bool
     private var transcriptRefreshTask: Task<Void, Never>?
     private var harnessUpdateTask: Task<Void, Never>?
+    private var hubCheckInTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptGeneration: UInt = 0
     private var attachmentLookupByConversation: [UUID: [UUID: ConversationAttachment]] = [:]
     @ObservationIgnored private var transcriptRevisions: [UUID: TranscriptRevision] = [:]
@@ -170,6 +176,8 @@ final class NoodleStore {
         }
         usage = UsageHistory(url: self.repository.rootURL.appendingPathComponent("usage.sqlite"))
         self.runtime.onUsage = { [usage] in usage.record($0) }
+        hubs = HubMemberships(directory: self.repository.rootURL.appendingPathComponent("Hubs", isDirectory: true),
+                              deviceName: Host.current().localizedName ?? "Mac")
         harnessSetup = HarnessSetupController(versionChecker: HarnessVersionChecker(),
             installer: repository == nil ? ManagedHarnessInstaller(store: self.repository.managedHarnesses) : nil)
 
@@ -360,6 +368,14 @@ final class NoodleStore {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Takes a Noodle Hub invitation link to Settings > Companions. Returns false for any other link.
+    func receiveHubInvitation(_ url: URL) -> Bool {
+        guard url.host == LinkInvitation.urlHost else { return false }
+        pendingHubInvitation = url.absoluteString
+        selectedSettingsTab = .companions
+        return true
     }
 
     func createAgent(
@@ -1432,6 +1448,7 @@ final class NoodleStore {
                 try? await Task.sleep(for: .seconds(6 * 60 * 60))
             }
         }
+        hubCheckInTask = Task { [hubs] in await hubs.stayConnected() }
     }
 
     func recoverAgentsAfterWake() {
@@ -1443,6 +1460,8 @@ final class NoodleStore {
         transcriptRefreshTask = nil
         harnessUpdateTask?.cancel()
         harnessUpdateTask = nil
+        hubCheckInTask?.cancel()
+        hubCheckInTask = nil
         runtime.stopAll()
     }
 }

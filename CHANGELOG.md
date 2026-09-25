@@ -12,6 +12,7 @@ All notable changes to Noodle are documented here, following
 - Sign Claude Code in to more than one account. Profiles… under Claude Code in Settings > Harness adds a profile, and Sign In… opens Claude's sign-in page in your browser. Choose the profile for a bot in Edit Bot > Harness. Each profile keeps its own login and Claude Code settings, apart from the ones in your home folder.
 - Show Apple Maps links in a conversation as a map: directions draw the route, places and searches show a pin. Click the card to open it in Maps.
 - Give every bot a Maps tool. It finds places, turns addresses into coordinates and back, and plans driving, walking, cycling and transit routes with Apple Maps, with distances, travel times and turn-by-turn steps. Each answer carries an Apple Maps link that shows as a map in the conversation.
+- Join Noodle Hubs from Settings > Companions, such as a friend's and one of your own. Join takes the invitation as a link to paste, a picture of its QR code to choose, drop or paste, or the camera; opening an invitation link starts the same. Each Hub you join gets its own row showing whether it is connected, your user and plan, and which harnesses your plan lends, and Leave forgets it. While Noodle runs it checks in with every Hub each minute. Scanning asks for camera access the first time.
 
 ### Changed
 

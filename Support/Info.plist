@@ -50,12 +50,16 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan the QR code of a Noodle Hub invitation when you choose Scan with Camera.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Let the bots you assign a calendar read and change that calendar. No bot sees a calendar you have not assigned.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 Petko D. Petkov</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Reach the Noodle Hub you join when it is on your network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Record voice messages you choose to send in your conversations. Speech is transcribed on this Mac.</string>
 	<key>NSPrincipalClass</key>

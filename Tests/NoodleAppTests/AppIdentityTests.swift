@@ -19,6 +19,14 @@ final class AppIdentityTests: XCTestCase {
         XCTAssertTrue(keys.contains("com.apple.security.personal-information.reminders"))
     }
 
+    /// Joining a Noodle Hub can scan the invitation's QR code with the camera. A sandboxed app
+    /// without the entitlement never gets a camera, and one without the usage text is killed.
+    func testSandboxPolicyGrantsTheCameraForScanningInvitations() throws {
+        XCTAssertTrue(try Set(Self.sandboxPolicy().keys).contains("com.apple.security.device.camera"))
+        let info = try String(contentsOf: Self.repository.appendingPathComponent("Support/Info.plist"), encoding: .utf8)
+        XCTAssertTrue(info.contains("<key>NSCameraUsageDescription</key>"))
+    }
+
     /// Release verification pins how many entitlements the reviewed policy has, so an unreviewed one
     /// cannot ship. The pin has to follow the policy when it changes.
     func testReleaseVerifiersPinTheNumberOfEntitlementsThePolicyHas() throws {

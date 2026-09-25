@@ -75,7 +75,8 @@ struct NoodleSettingsView: View {
                 .settingsContentSize()
                 .tabItem { Label("Permissions", systemImage: "hand.raised") }
                 .tag(NoodleSettingsTab.permissions)
-            CompanionAppsSettingsView(store: store)
+            CompanionAppsSettingsView(store: store, extraRow: AnyView(HubCompanionRows().environment(store)),
+                                      onCheckAgain: { Task { await store.hubs.refreshAll() } })
                 .settingsContentSize()
                 .tabItem { Label("Companions", systemImage: "square.stack.3d.up") }
                 .tag(NoodleSettingsTab.companions)

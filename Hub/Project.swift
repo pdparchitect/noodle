@@ -80,6 +80,7 @@ let project = Project(
         .local(path: "."),
         .local(path: ".."),
         .local(path: "../Shared/SettingsUI"),
+        .local(path: "../Shared/HubLink"),
         .remote(url: "https://github.com/sparkle-project/Sparkle", requirement: .exact("2.9.4")),
     ],
     settings: .settings(
@@ -127,6 +128,7 @@ let project = Project(
             scripts: [embedHelpers, trimSparkle],
             dependencies: [
                 .package(product: "HubCore"),
+                .package(product: "HubLink"),
                 .package(product: "NoodleRuntimeSettings"),
                 .package(product: "NoodleSettingsUI"),
                 .package(product: "Sparkle"),
