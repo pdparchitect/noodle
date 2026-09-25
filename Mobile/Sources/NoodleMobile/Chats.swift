@@ -14,6 +14,8 @@ import SwiftUI
     /// When each conversation was last read on this phone. Nil until the first sync after
     /// installing, which counts everything already there as read.
     private var seen: [UUID: Date]?
+    /// Unsent text, by conversation, kept on this phone.
+    private var drafts: [UUID: String] = [:]
     private var conversations: [UUID: [LinkMessage]] = [:]
     /// How far each conversation has been read. It stops at a message the bot has not taken yet,
     /// so that message is read again until it shows as delivered.
@@ -30,6 +32,7 @@ import SwiftUI
         self.pairing = pairing
         pinned = Set((try? JSONDecoder().decode([UUID].self, from: Data(contentsOf: pairing.directory.appendingPathComponent("pins.json")))) ?? [])
         seen = try? JSONDecoder().decode([UUID: Date].self, from: Data(contentsOf: seenURL))
+        drafts = (try? JSONDecoder().decode([UUID: String].self, from: Data(contentsOf: draftsURL))) ?? [:]
         if let cache = try? JSONDecoder().decode(Cache.self, from: Data(contentsOf: cacheURL)) {
             agents = cache.agents
             conversations = cache.conversations
@@ -40,6 +43,15 @@ import SwiftUI
 
     private var cacheURL: URL { pairing.directory.appendingPathComponent("chats.json") }
     private var seenURL: URL { pairing.directory.appendingPathComponent("read.json") }
+    private var draftsURL: URL { pairing.directory.appendingPathComponent("drafts.json") }
+
+    func draft(for agent: LinkBot) -> String { drafts[agent.conversationID] ?? "" }
+
+    func setDraft(_ text: String, for agent: LinkBot) {
+        guard drafts[agent.conversationID, default: ""] != text else { return }
+        drafts[agent.conversationID] = text.isEmpty ? nil : text
+        try? JSONEncoder().encode(drafts).write(to: draftsURL, options: .atomic)
+    }
 
     /// Whether the bot has written since the conversation was last opened here.
     func isUnread(_ agent: LinkBot) -> Bool {
@@ -435,7 +447,11 @@ struct ChatView: View {
         .defaultScrollAnchor(.bottom)
         .scrollDismissesKeyboard(.interactively)
         // Open means read, including replies that arrive while it is open.
-        .onAppear { chats.markRead(agent) }
+        .onAppear {
+            chats.markRead(agent)
+            draft = chats.draft(for: agent)
+        }
+        .onChange(of: draft) { chats.setDraft(draft, for: agent) }
         .onChange(of: messages.last?.id) { chats.markRead(agent) }
         .safeAreaInset(edge: .bottom) { composer }
         .navigationBarTitleDisplayMode(.inline)
@@ -501,9 +517,10 @@ struct ChatView: View {
                 .buttonStyle(.plain)
                 .menuIndicator(.hidden)
                 .accessibilityLabel("Add")
-                TextField("Message", text: $draft, axis: .vertical)
-                    .lineLimit(1...6)
-                    .padding(.horizontal, 14).padding(.vertical, 7)
+                ComposerField(text: $draft, placeholder: "Message") { image in
+                    attach { try PickedFiles.store(image.pngData() ?? Data(), named: "Image.png", type: .png) }
+                }
+                    .padding(.horizontal, 14).padding(.vertical, 8)
                     .frame(minHeight: Self.controlHeight)
                     .background(RoundedRectangle(cornerRadius: Self.controlHeight / 2, style: .continuous).strokeBorder(.quaternary))
                 Button(action: send) {
@@ -547,12 +564,30 @@ struct ChatView: View {
     }
 }
 
+/// Long replies fold so they do not take over the conversation. The limits are the Mac's.
+enum MessageFolding {
+    static let foldedLines = 8
+
+    static func isLong(_ text: String) -> Bool {
+        var lines = 1
+        for (index, character) in text.enumerated() {
+            if index >= 1_200 { return true }
+            if character.isNewline {
+                lines += 1
+                if lines > 12 { return true }
+            }
+        }
+        return false
+    }
+}
+
 private struct Bubble: View {
     let chats: HubChats
     let agent: LinkBot
     let message: LinkMessage
     /// Shown under your latest message only.
     let delivery: String?
+    @State private var expanded = false
 
     var body: some View {
         switch message.author {
@@ -601,9 +636,18 @@ private struct Bubble: View {
     }
 
     private var text: some View {
-        Text(Self.markdown(message.body))
-            .textSelection(.enabled)
-            .padding(.horizontal, 12).padding(.vertical, 8)
+        let folded = !expanded && MessageFolding.isLong(message.body)
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(Self.markdown(message.body))
+                .lineLimit(folded ? MessageFolding.foldedLines : nil)
+                .textSelection(.enabled)
+            if folded {
+                Button("Read more") { expanded = true }
+                    .font(.subheadline.weight(.semibold))
+                    .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
     }
 
     /// Inline markdown, with only web and mail links left tappable, as on the Mac.

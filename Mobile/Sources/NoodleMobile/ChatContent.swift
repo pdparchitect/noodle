@@ -275,3 +275,89 @@ struct CameraPicker: UIViewControllerRepresentable {
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { picker.dismiss(animated: true) }
     }
 }
+
+/// The message field. A text view rather than a SwiftUI field, so pasting a copied image attaches it,
+/// as in Messages. It grows to six lines, then scrolls.
+struct ComposerField: UIViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let pasted: (UIImage) -> Void
+
+    func makeUIView(context: Context) -> PastingTextView {
+        let view = PastingTextView()
+        view.delegate = context.coordinator
+        view.font = .preferredFont(forTextStyle: .body)
+        view.adjustsFontForContentSizeCategory = true
+        view.backgroundColor = .clear
+        view.textContainerInset = .zero
+        view.textContainer.lineFragmentPadding = 0
+        view.isScrollEnabled = false
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        view.placeholder.text = placeholder
+        return view
+    }
+
+    func updateUIView(_ view: PastingTextView, context: Context) {
+        if view.text != text { view.text = text }
+        view.placeholder.isHidden = !text.isEmpty
+        view.pasted = pasted
+        context.coordinator.text = $text
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: PastingTextView, context: Context) -> CGSize? {
+        let width = proposal.width ?? 240
+        let fitting = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
+        let limit = ceil((uiView.font?.lineHeight ?? 22) * 6)
+        uiView.isScrollEnabled = fitting > limit
+        return CGSize(width: width, height: min(fitting, limit))
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var text: Binding<String>
+
+        init(text: Binding<String>) { self.text = text }
+
+        func textViewDidChange(_ textView: UITextView) {
+            text.wrappedValue = textView.text
+            (textView as? PastingTextView)?.placeholder.isHidden = !textView.text.isEmpty
+        }
+    }
+}
+
+/// Offers Paste for copied images too, and hands them over instead of inserting them.
+/// A paste the person chooses from the edit menu is always allowed; reading the clipboard
+/// from code is not.
+final class PastingTextView: UITextView {
+    var pasted: ((UIImage) -> Void)?
+    let placeholder = UILabel()
+
+    override init(frame: CGRect, textContainer: NSTextContainer?) {
+        super.init(frame: frame, textContainer: textContainer)
+        placeholder.font = .preferredFont(forTextStyle: .body)
+        placeholder.adjustsFontForContentSizeCategory = true
+        placeholder.textColor = .placeholderText
+        placeholder.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(placeholder)
+        NSLayoutConstraint.activate([
+            placeholder.leadingAnchor.constraint(equalTo: leadingAnchor),
+            placeholder.topAnchor.constraint(equalTo: topAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("Not used from a storyboard.") }
+
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(paste(_:)), UIPasteboard.general.hasImages { return true }
+        return super.canPerformAction(action, withSender: sender)
+    }
+
+    override func paste(_ sender: Any?) {
+        if UIPasteboard.general.hasImages, let images = UIPasteboard.general.images, !images.isEmpty {
+            images.forEach { pasted?($0) }
+        } else {
+            super.paste(sender)
+        }
+    }
+}

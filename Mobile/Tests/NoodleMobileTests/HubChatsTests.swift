@@ -302,4 +302,26 @@ private actor FakeHub {
 
         #expect(chats.isUnread(scout))
     }
+
+    @Test func unsentTextIsKeptPerConversation() async throws {
+        let hub = FakeHub()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let (chats, server) = try await paired(to: hub, directory: directory)
+        defer { server.stop() }
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+
+        chats.setDraft("Half a thought", for: scout)
+
+        #expect(HubChats(pairing: HubPairing(directory: directory, deviceName: "iPhone")).draft(for: scout) == "Half a thought")
+        chats.setDraft("", for: scout)
+        #expect(HubChats(pairing: HubPairing(directory: directory, deviceName: "iPhone")).draft(for: scout) == "")
+    }
+
+    @Test func longMessagesFoldAtTheMacsLimits() {
+        #expect(!MessageFolding.isLong("A short reply."))
+        #expect(!MessageFolding.isLong(Array(repeating: "line", count: 12).joined(separator: "\n")))
+        #expect(MessageFolding.isLong(Array(repeating: "line", count: 13).joined(separator: "\n")))
+        #expect(MessageFolding.isLong(String(repeating: "a", count: 1201)))
+    }
 }

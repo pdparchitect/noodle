@@ -9,6 +9,7 @@
 - Make bots on the Hub with New Bot in the … menu, choosing a name, a colour and one of the harnesses your plan lends. Tap a bot's picture at the top of its chat to edit or delete it. Profiles in the same menu shows the Hub you joined.
 - Send photos, videos, camera shots and files with the + button next to the message field. Pictures show in the conversation, other files as cards that open in Quick Look, and web links show a preview. Your latest message says whether it was sent and delivered.
 - See which bots replied since you last opened their conversation: a blue dot marks them in the list.
+- Long replies fold after eight lines with Read more. Unsent text stays in each conversation, and a copied image can be pasted into the message field.
 - Pin bots to the top of the list by swiping right. Pins stay on this phone.
 
 ## [0.1.0] - 2026-09-25
