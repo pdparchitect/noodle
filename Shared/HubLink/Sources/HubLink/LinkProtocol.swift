@@ -2,8 +2,10 @@ import CryptoKit
 import Foundation
 
 /// The version of the requests below. A Hub serves the versions it knows and names the app
-/// to update for any other, rather than failing mid-conversation. Adding a request or a
-/// field keeps the version; changing what one means raises it.
+/// to update for any other, rather than failing mid-conversation. Adding a request, an event
+/// or a field keeps the version; changing what one means raises it. A field added later must
+/// decode with a default when missing, and a request that may grow takes a struct, since an
+/// enum case cannot. `LinkCompatibilityTests` holds version 1 as sent and must keep decoding.
 public enum LinkProtocol {
     public static let version = 1
     /// Files travel in pieces this size, each one request, so no request nears the message limit.
@@ -82,9 +84,8 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case deleteBot(id: UUID)
     /// Messages of one of this user's conversations, from position `after` on.
     case messages(conversationID: UUID, after: Int)
-    /// Sends as this user. `id` is chosen by the device, so a retried send is not doubled.
-    /// Attachments are uploaded first.
-    case send(conversationID: UUID, id: UUID, body: String, attachmentIDs: [UUID])
+    /// Sends as this user. Attachments are uploaded first.
+    case send(LinkOutgoingMessage)
     /// One piece of a file for a conversation, starting at `offset`. Pieces go in order.
     case upload(conversationID: UUID, attachment: LinkAttachment, offset: Int, data: Data)
     /// One piece of a conversation's file, starting at `offset`.
@@ -134,6 +135,18 @@ public struct LinkStatus: Codable, Equatable, Sendable {
         self.endpoints = endpoints
         self.protocolVersion = protocolVersion
     }
+
+    private enum CodingKeys: String, CodingKey { case hubName, userName, planName, harnesses, endpoints, protocolVersion }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        hubName = try c.decode(String.self, forKey: .hubName)
+        userName = try c.decode(.userName, or: "")
+        planName = try c.decode(.planName, or: "")
+        harnesses = try c.decode(.harnesses, or: [])
+        endpoints = try c.decode(.endpoints, or: [])
+        protocolVersion = try c.decode(.protocolVersion, or: 1)
+    }
 }
 
 /// A harness login the Hub lends. `profile` and `profileName` are nil for the harness's own login.
@@ -148,6 +161,16 @@ public struct LinkHarness: Codable, Hashable, Sendable {
         self.providerName = providerName
         self.profile = profile
         self.profileName = profileName
+    }
+
+    private enum CodingKeys: String, CodingKey { case provider, providerName, profile, profileName }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        provider = try c.decode(String.self, forKey: .provider)
+        providerName = try c.decode(.providerName, or: provider)
+        profile = try c.decodeIfPresent(UUID.self, forKey: .profile)
+        profileName = try c.decodeIfPresent(String.self, forKey: .profileName)
     }
 }
 
@@ -177,6 +200,24 @@ public struct LinkBotDraft: Codable, Equatable, Sendable {
         self.avatarSymbolName = avatarSymbolName
         self.avatarColorIndex = avatarColorIndex
         self.avatarImageData = avatarImageData
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name, provider, profile, model, reasoningEffort, publicDescription, backstory, avatarSymbolName, avatarColorIndex, avatarImageData
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        provider = try c.decode(String.self, forKey: .provider)
+        profile = try c.decodeIfPresent(UUID.self, forKey: .profile)
+        model = try c.decodeIfPresent(String.self, forKey: .model)
+        reasoningEffort = try c.decodeIfPresent(String.self, forKey: .reasoningEffort)
+        publicDescription = try c.decode(.publicDescription, or: "")
+        backstory = try c.decode(.backstory, or: "")
+        avatarSymbolName = try c.decodeIfPresent(String.self, forKey: .avatarSymbolName)
+        avatarColorIndex = try c.decode(.avatarColorIndex, or: 0)
+        avatarImageData = try c.decodeIfPresent(Data.self, forKey: .avatarImageData)
     }
 }
 
@@ -219,6 +260,19 @@ public struct LinkMessage: Codable, Equatable, Identifiable, Sendable {
         self.createdAt = createdAt
         self.delivered = delivered
     }
+
+    private enum CodingKeys: String, CodingKey { case id, conversationID, author, body, createdAt, delivered, attachments }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        conversationID = try c.decode(UUID.self, forKey: .conversationID)
+        author = try c.decode(Author.self, forKey: .author)
+        body = try c.decode(.body, or: "")
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        delivered = try c.decode(.delivered, or: false)
+        attachments = try c.decode(.attachments, or: [])
+    }
 }
 
 /// A file in a conversation.
@@ -233,6 +287,41 @@ public struct LinkAttachment: Codable, Equatable, Identifiable, Sendable {
         self.filename = filename
         self.mediaType = mediaType
         self.byteCount = byteCount
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, filename, mediaType, byteCount }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        filename = try c.decode(.filename, or: "Attachment")
+        mediaType = try c.decode(.mediaType, or: "application/octet-stream")
+        byteCount = try c.decode(Int.self, forKey: .byteCount)
+    }
+}
+
+/// A message a device sends. `id` is chosen by the device, so a retried send is not doubled.
+public struct LinkOutgoingMessage: Codable, Equatable, Sendable {
+    public var conversationID: UUID
+    public var id: UUID
+    public var body: String
+    public var attachmentIDs: [UUID]
+
+    public init(conversationID: UUID, id: UUID, body: String, attachmentIDs: [UUID] = []) {
+        self.conversationID = conversationID
+        self.id = id
+        self.body = body
+        self.attachmentIDs = attachmentIDs
+    }
+
+    private enum CodingKeys: String, CodingKey { case conversationID, id, body, attachmentIDs }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        conversationID = try c.decode(UUID.self, forKey: .conversationID)
+        id = try c.decode(UUID.self, forKey: .id)
+        body = try c.decode(String.self, forKey: .body)
+        attachmentIDs = try c.decode(.attachmentIDs, or: [])
     }
 }
 
@@ -260,6 +349,19 @@ public struct LinkInvitation: Codable, Equatable, Sendable {
     public var expires: Date
     /// The request version the inviting Hub speaks.
     public var version: Int
+
+    private enum CodingKeys: String, CodingKey { case hubName, hubKey, endpoints, userName, token, expires, version }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        hubName = try c.decode(.hubName, or: "Noodle Hub")
+        hubKey = try c.decode(LinkPublicKey.self, forKey: .hubKey)
+        endpoints = try c.decode(.endpoints, or: [])
+        userName = try c.decode(.userName, or: "")
+        token = try c.decode(String.self, forKey: .token)
+        expires = try c.decode(Date.self, forKey: .expires)
+        version = try c.decode(.version, or: 1)
+    }
 
     public init(hubName: String, hubKey: LinkPublicKey, endpoints: [LinkEndpoint], userName: String, token: String, expires: Date,
                 version: Int = LinkProtocol.version) {
@@ -332,5 +434,12 @@ extension Data {
         var text = base64URL.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
         text += String(repeating: "=", count: (4 - text.count % 4) % 4)
         self.init(base64Encoded: text)
+    }
+}
+
+extension KeyedDecodingContainer {
+    /// A field that may be missing, as when it was added after the sender was built.
+    func decode<T: Decodable>(_ key: Key, or fallback: @autoclosure () -> T) throws -> T {
+        try decodeIfPresent(T.self, forKey: key) ?? fallback()
     }
 }

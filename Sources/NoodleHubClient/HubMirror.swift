@@ -229,8 +229,8 @@ import Observation
                         to: entry.remoteConversation)
                 }
                 let sent = (message.attachmentIDs ?? []).filter { files[$0]?.url == nil }
-                _ = try await pairing.request(.send(conversationID: entry.remoteConversation, id: message.id, body: message.body,
-                                                    attachmentIDs: sent))
+                _ = try await pairing.request(.send(LinkOutgoingMessage(conversationID: entry.remoteConversation, id: message.id, body: message.body,
+                                                    attachmentIDs: sent)))
                 acknowledged.insert(message.id)
             }
         }

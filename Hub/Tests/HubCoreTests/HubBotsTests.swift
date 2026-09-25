@@ -71,8 +71,8 @@ import XCTest
         let f = try await fixture()
         let bot = try await createBot(f)
         let id = UUID()
-        _ = try await f.device.request(.send(conversationID: bot.conversationID, id: id, body: "Hello", attachmentIDs: []))
-        _ = try await f.device.request(.send(conversationID: bot.conversationID, id: id, body: "Hello", attachmentIDs: []))
+        _ = try await f.device.request(.send(LinkOutgoingMessage(conversationID: bot.conversationID, id: id, body: "Hello", attachmentIDs: [])))
+        _ = try await f.device.request(.send(LinkOutgoingMessage(conversationID: bot.conversationID, id: id, body: "Hello", attachmentIDs: [])))
         guard case .messages(let page) = try await f.device.request(.messages(conversationID: bot.conversationID, after: 0)) else {
             return XCTFail("no messages")
         }
@@ -85,7 +85,7 @@ import XCTest
         let f = try await fixture()
         let bot = try await createBot(f)
         let events = try await f.device.subscribe()
-        _ = try await f.device.request(.send(conversationID: bot.conversationID, id: UUID(), body: "Hello", attachmentIDs: []))
+        _ = try await f.device.request(.send(LinkOutgoingMessage(conversationID: bot.conversationID, id: UUID(), body: "Hello", attachmentIDs: [])))
         _ = try f.hub.repository.sendAgentMessage(agentID: bot.id, conversationID: bot.conversationID, body: "Good evening.")
         f.hub.bots.checkForChanges()
 
@@ -112,7 +112,7 @@ import XCTest
         let listed = try await other.request(.bots)
         XCTAssertEqual(listed, .bots([]))
         do {
-            _ = try await other.request(.send(conversationID: bot.conversationID, id: UUID(), body: "Hi", attachmentIDs: []))
+            _ = try await other.request(.send(LinkOutgoingMessage(conversationID: bot.conversationID, id: UUID(), body: "Hi", attachmentIDs: [])))
             XCTFail("Reached another user's bot")
         } catch {}
         do {
@@ -126,7 +126,7 @@ import XCTest
         let bot = try await createBot(f)
         f.hub.access.move(f.ada, to: f.hub.access.plans[0])
         do {
-            _ = try await f.device.request(.send(conversationID: bot.conversationID, id: UUID(), body: "Hello", attachmentIDs: []))
+            _ = try await f.device.request(.send(LinkOutgoingMessage(conversationID: bot.conversationID, id: UUID(), body: "Hello", attachmentIDs: [])))
             XCTFail("Sent through a harness the plan no longer lends")
         } catch {
             XCTAssertEqual((error as? LinkError)?.message, "Your plan no longer lends Claude Code.")
@@ -156,8 +156,8 @@ import XCTest
         let attachment = LinkAttachment(id: UUID(), filename: "Report.pdf", mediaType: "application/pdf", byteCount: bytes.count)
 
         try await f.device.upload(file, as: attachment, to: bot.conversationID)
-        _ = try await f.device.request(.send(conversationID: bot.conversationID, id: UUID(), body: "What is in this file?",
-                                             attachmentIDs: [attachment.id]))
+        _ = try await f.device.request(.send(LinkOutgoingMessage(conversationID: bot.conversationID, id: UUID(), body: "What is in this file?",
+                                             attachmentIDs: [attachment.id])))
         let stored = try XCTUnwrap(f.hub.repository.loadAttachments(conversationID: bot.conversationID).first)
         XCTAssertEqual(stored.id, attachment.id)
         XCTAssertEqual(stored.originalFilename, "Report.pdf")
@@ -178,8 +178,8 @@ import XCTest
         let f = try await fixture()
         let bot = try await createBot(f)
         do {
-            _ = try await f.device.request(.send(conversationID: bot.conversationID, id: UUID(), body: "See file",
-                                                 attachmentIDs: [UUID()]))
+            _ = try await f.device.request(.send(LinkOutgoingMessage(conversationID: bot.conversationID, id: UUID(), body: "See file",
+                                                 attachmentIDs: [UUID()])))
             XCTFail("Sent a message pointing at a missing file")
         } catch {
             XCTAssertEqual((error as? LinkError)?.message, "An attachment has not reached the Hub yet.")

@@ -24,7 +24,8 @@ companions directly rather than connecting to them.
 
 Devices pair and talk to the Hub through `Shared/HubLink`, which Noodle uses too: QUIC
 with each side pinned by its P-256 key, one request per connection plus one open event
-stream per device. Requests carry `LinkProtocol.version`; Noodle mirrors Hub bots locally
+stream per device. Requests carry `LinkProtocol.version`; fields added later must decode with a default,
+and `LinkVersion1Tests` hold version 1 as released and must keep passing; Noodle mirrors Hub bots locally
 (`NoodleHubClient`), and its runtime never starts a mirrored bot. A device’s key is its
 identity; `HubAccess` maps it to a user, whose plan decides what the Hub lends. Test the
 link over real addresses, never a loopback-only path in the apps.

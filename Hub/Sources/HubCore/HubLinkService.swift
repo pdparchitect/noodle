@@ -195,8 +195,9 @@ import Observation
             return .done
         case .messages(let conversationID, let after):
             return .messages(try hubBots().messages(in: conversationID, after: after, for: try user(key)))
-        case .send(let conversationID, let id, let body, let attachmentIDs):
-            return .message(try hubBots().send(body, id: id, attachmentIDs: attachmentIDs, in: conversationID, for: try user(key)))
+        case .send(let message):
+            return .message(try hubBots().send(message.body, id: message.id, attachmentIDs: message.attachmentIDs,
+                                               in: message.conversationID, for: try user(key)))
         case .upload(let conversationID, let attachment, let offset, let data):
             try hubBots().receive(data, at: offset, of: attachment, in: conversationID, for: try user(key))
             return .done
