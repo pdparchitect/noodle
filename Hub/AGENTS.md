@@ -17,7 +17,8 @@ helpers and trim Sparkle; everything else is target settings. `scripts/verify-hu
 checks the result against `Support/Hub.entitlements` and the Agent Host rules.
 
 Settings reuse Noodle's Harness, Heartbeat, Sandbox, Tools and Companions views from
-`NoodleRuntimeSettings` through `BotSettingsHost`; change them there, not here. The Hub
+`NoodleRuntimeSettings` through `BotSettingsHost`, and its Usage window is Noodle's
+`UsageView`; change them there, not here. The Hub
 does not run bots yet, has no bot editor, and opens companions directly rather than
 connecting to them.
 

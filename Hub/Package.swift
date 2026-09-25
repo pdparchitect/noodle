@@ -29,7 +29,7 @@ let package = Package(
                 .product(name: "NoodleSettingsUI", package: "SettingsUI"),
                 .product(name: "Sparkle", package: "Sparkle"),
             ]),
-        .testTarget(name: "HubCoreTests", dependencies: ["HubCore"]),
+        .testTarget(name: "HubCoreTests", dependencies: ["HubCore", .product(name: "NoodleCore", package: "noodle")]),
     ],
     swiftLanguageModes: [.v5]
 )

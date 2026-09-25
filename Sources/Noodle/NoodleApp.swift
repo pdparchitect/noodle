@@ -2,6 +2,7 @@ import AppKit
 import Darwin
 import SwiftUI
 import NoodleCore
+import NoodleRuntimeSettings
 import NoodleSettingsUI
 import UserNotifications
 #if NOODLE_DEV_HOOKS
@@ -142,7 +143,7 @@ struct NoodleApp: App {
         .windowToolbarStyle(.unified(showsTitle: false))
 
         Window("Usage", id: UsageView.windowID) {
-            UsageView()
+            NoodleUsageView()
                 .environment(store)
                 .preferredColorScheme(.dark)
         }

@@ -1,5 +1,6 @@
 import AppKit
 import HubCore
+import NoodleRuntimeSettings
 import SwiftUI
 
 @main struct NoodleHubApp: App {
@@ -7,8 +8,14 @@ import SwiftUI
 
     var body: some Scene {
         MenuBarExtra("Noodle Hub", systemImage: "server.rack") {
-            HubMenu()
+            HubMenu(hub: delegate.settings.hub)
         }
+        Window("Usage", id: UsageView.windowID) {
+            UsageView(history: delegate.settings.hub.usage, agents: delegate.settings.agents)
+                .preferredColorScheme(.dark)
+        }
+        .defaultSize(width: 860, height: 680)
+        .windowResizability(.contentMinSize)
         Settings {
             HubSettingsView(host: delegate.settings)
                 .preferredColorScheme(.dark)
@@ -37,8 +44,16 @@ import SwiftUI
 
 struct HubMenu: View {
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
+    let hub: Hub
 
     var body: some View {
+        Button("Usage…") {
+            hub.usage.agentFilter = nil
+            NSApp.activate()
+            openWindow(id: UsageView.windowID)
+        }
+        .keyboardShortcut("u", modifiers: [.command, .shift])
         Button("Settings…") {
             // A menu bar app is never frontmost on its own; bring Settings forward.
             NSApp.activate()

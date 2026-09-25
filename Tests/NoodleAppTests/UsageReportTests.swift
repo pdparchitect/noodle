@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import Noodle
+@testable import NoodleRuntimeSettings
 @testable import NoodleCore
 
 final class UsageReportTests: XCTestCase {

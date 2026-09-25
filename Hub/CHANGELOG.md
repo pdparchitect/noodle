@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- See token use and cost for the Hub's bots by bot, harness or model from Usage… in the menu bar, with the same view as Noodle.
+
 ## [0.1.0] - 2026-09-24
 
 ### Added
