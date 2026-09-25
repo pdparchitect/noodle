@@ -68,6 +68,34 @@ final class CastTests: XCTestCase {
         XCTAssertEqual(changes, 2)
     }
 
+    /// A fixed-size game keeps its own size on the TV: scaled up as far as it fits without
+    /// stretching and centred. A resizable one takes the whole screen and adapts itself.
+    @MainActor func testAFixedSizeNoodletScalesToFitWhileAResizableOneFills() throws {
+        let (fixed, fixedRoot) = try makeRunner(window: #"{"type":"standard","resizable":false}"#)
+        defer { try? FileManager.default.removeItem(at: fixedRoot) }
+        defer { fixed.stop() }
+        let cast = NoodletCast(fixed.window)
+        fixed.window.makeFirstResponder(fixed.web)
+        cast.lift(onto: try XCTUnwrap(NSScreen.screens.first))
+        fixed.window.setContentSize(CGSize(width: 800, height: 480))
+        XCTAssertEqual(fixed.web.bounds.size, CGSize(width: 320, height: 240))
+        XCTAssertEqual(fixed.web.convert(fixed.web.bounds, to: nil), CGRect(x: 80, y: 0, width: 640, height: 480))
+        XCTAssertTrue(fixed.window.firstResponder === fixed.web)
+        cast.bringBack()
+        XCTAssertTrue(fixed.window.contentView === fixed.web)
+        XCTAssertEqual(fixed.web.frame.size, CGSize(width: 320, height: 240))
+        XCTAssertTrue(fixed.window.firstResponder === fixed.web)
+
+        let (dynamic, dynamicRoot) = try makeRunner(window: #"{"type":"standard"}"#)
+        defer { try? FileManager.default.removeItem(at: dynamicRoot) }
+        defer { dynamic.stop() }
+        let fill = NoodletCast(dynamic.window)
+        fill.lift(onto: try XCTUnwrap(NSScreen.screens.first))
+        dynamic.window.setContentSize(CGSize(width: 800, height: 480))
+        XCTAssertTrue(dynamic.window.contentView === dynamic.web)
+        XCTAssertEqual(dynamic.web.frame.size, CGSize(width: 800, height: 480))
+    }
+
     /// A quick-look panel is not something to play on a TV, whichever runtime draws it.
     @MainActor func testPreviewPanelsCannotBeCast() throws {
         let (web, webRoot) = try makeRunner(window: #"{"type":"preview"}"#)

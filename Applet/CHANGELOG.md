@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Keep a fixed-size noodlet's shape on a TV. **Play On** used to stretch a noodlet made at a fixed size, such as a game, across the whole screen. It now keeps its own size, scaled up as far as it fits and centred on black, stays sharp and keeps keyboard focus. A resizable noodlet still fills the screen.
+
 ## [0.9.0] - 2026-09-24
 
 ### Added

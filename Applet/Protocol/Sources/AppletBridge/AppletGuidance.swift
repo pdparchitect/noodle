@@ -162,7 +162,9 @@ public enum AppletGuidance {
         For transparent/translucent HTML, set html and body background:transparent.
         titlebar controls title visibility/full-size content; native close controls remain.
         Dimensions are content points, 120–4096; minimum cannot exceed maximum.
-        Resizing defaults on. Remembering size and position defaults off; headless runs
+        Resizing defaults on. Played on a TV, a resizable window fills the screen; a fixed
+        one (resizable false, or equal min and max) keeps its size, scaled to fit on black.
+        Remembering size and position defaults off; headless runs
         and explicit CLI dimensions ignore saved frames. CLI dimensions respect min/max.
         HTML drag regions use `--noodle-app-region: drag` in CSS; use no-drag for
         exclusions. Buttons, links, inputs and editable content remain interactive.
