@@ -58,6 +58,7 @@ let package = Package(
         .library(name: "NoodleComputerTools", targets: ["NoodleComputerTools"]),
         .library(name: "NoodleRemindersTools", targets: ["NoodleRemindersTools"]),
         .library(name: "NoodleVisionTools", targets: ["NoodleVisionTools"]),
+        .library(name: "NoodleMapsTools", targets: ["NoodleMapsTools"]),
         .executable(name: "Noodle", targets: ["Noodle"]),
         .executable(name: "NoodleMessenger", targets: ["NoodleMessenger"])
     ],
@@ -154,6 +155,7 @@ let package = Package(
 )
 
 package.targets += tool("Vision")
+    + tool("Maps")
     + builtInTool("Calendar")
     + builtInTool("Reminders")
     + tool("Browser", dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol")])

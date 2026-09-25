@@ -202,6 +202,7 @@ let project = Project(
                 .target(name: "NoodleAgentHost"),
                 .target(name: "NoodleShareExtension"),
                 .target(name: "NoodleVisionToolsExtension"),
+                .target(name: "NoodleMapsToolsExtension"),
                 .target(name: "NoodleBrowserToolsExtension"),
                 .target(name: "NoodleComputerToolsExtension"),
                 .target(name: "messenger"),
@@ -267,6 +268,7 @@ let project = Project(
             ]) { $1 })
         ),
         toolExtension("Vision"),
+        toolExtension("Maps"),
         toolExtension("Browser"),
         toolExtension("Computer"),
         helper("messenger", sources: ["Sources/NoodleMessenger/**"],
