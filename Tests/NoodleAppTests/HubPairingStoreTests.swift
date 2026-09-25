@@ -47,9 +47,15 @@ final class HubHarnessChoiceTests: XCTestCase {
     }
 }
 
-/// A bot kept on a Hub still takes its tools from this Mac.
+/// A bot kept on a Hub uses only the Hub's tools, never this Mac's.
 @MainActor final class HubBotAssignmentTests: XCTestCase {
-    func testToolsGivenToAHubBotAreKeptHere() throws {
+    func testTheEditorOffersAHubBotNoToolsFromThisMac() {
+        let choice = HubHarnessChoice(hub: LinkIdentity().publicKey, provider: "claude-code", profile: nil)
+        XCTAssertEqual(BotEditorTab.shown(onHub: HubHarnessChoice(identifier: choice.identifier) != nil), [.general, .runtime])
+        XCTAssertEqual(BotEditorTab.shown(onHub: false), BotEditorTab.allCases)
+    }
+
+    func testThisMacsToolsAreNotGivenToAHubBot() throws {
         let f = try StoreFixture()
         defer { f.cleanUp() }
         // Pretend Fixture bot A was made on a joined Hub.
@@ -70,6 +76,6 @@ final class HubHarnessChoiceTests: XCTestCase {
                                         modelIdentifier: nil, reasoningEffort: nil, avatarSymbolName: nil, avatarColorIndex: 0,
                                         avatarImageData: nil, publicDescription: "", backstory: "",
                                         mcpConnectionIDs: [account.id]))
-        XCTAssertEqual(store.mcp.selectedIDs(for: f.a), [account.id])
+        XCTAssertEqual(store.mcp.selectedIDs(for: f.a), [])
     }
 }

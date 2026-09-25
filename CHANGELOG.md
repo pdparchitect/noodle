@@ -16,6 +16,10 @@ All notable changes to Noodle are documented here, following
 - Voice messages to bots on a Noodle Hub keep their transcript and waveform, both ways.
 - Choose a Noodle Hub harness for a bot as soon as Noodle opens. Noodle remembers what each Hub last said it lends instead of waiting for the Hub to answer again.
 
+### Removed
+
+- Bots on a Noodle Hub no longer use the tools on this Mac, so they work with this Mac closed. Edit Bot shows only General and Harness for them.
+
 ## [0.27.0] - 2026-09-25
 
 ### Added

@@ -9,17 +9,23 @@ import NoodleRuntimeSettings
 
 enum BotEditorTab: String, CaseIterable {
     case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers", browsers = "Browsers"
+
+    /// A bot on a Noodle Hub cannot use this Mac's tools, so only its own settings show.
+    static func shown(onHub: Bool) -> [BotEditorTab] { onHub ? [.general, .runtime] : allCases }
 }
 
 private struct BotEditorTabPicker: View {
     @Binding var selection: BotEditorTab
+    let harnessIdentifier: String
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private var tabs: [BotEditorTab] { BotEditorTab.shown(onHub: HubHarnessChoice(identifier: harnessIdentifier) != nil) }
     var body: some View {
         Picker("Bot settings", selection: $selection.animation(reduceMotion ? nil : .easeInOut(duration: 0.22))) {
-            ForEach(BotEditorTab.allCases, id: \.self) { tab in Text(tab.rawValue).tag(tab) }
+            ForEach(tabs, id: \.self) { tab in Text(tab.rawValue).tag(tab) }
         }.pickerStyle(.segmented).labelsHidden()
             .fixedSize(horizontal: true, vertical: false)
             .frame(maxWidth: .infinity, alignment: .center)
+            .onChange(of: tabs) { if !tabs.contains(selection) { selection = .general } }
     }
 }
 
@@ -123,7 +129,7 @@ struct NewBotSheet: View {
 
                 NameValidationMessage(name: name)
 
-                BotEditorTabPicker(selection: $selectedTab)
+                BotEditorTabPicker(selection: $selectedTab, harnessIdentifier: selectedHarnessIdentifier)
                 switch selectedTab {
                 case .general:
                     BotPublicDescriptionEditor(publicDescription: $publicDescription)
@@ -327,7 +333,7 @@ struct EditBotSheet: View {
 
                 NameValidationMessage(name: name)
 
-                BotEditorTabPicker(selection: $selectedTab)
+                BotEditorTabPicker(selection: $selectedTab, harnessIdentifier: selectedHarnessIdentifier)
                 switch selectedTab {
                 case .general:
                     BotPublicDescriptionEditor(publicDescription: $publicDescription)

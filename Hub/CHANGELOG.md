@@ -8,6 +8,10 @@
 - React to your bots' messages from Noodle for iPhone, and see their reactions there as they happen. Paired devices also see what each bot is doing: working, ready, failed or offline.
 - Keep the transcript of voice messages sent to the Hub's bots, so bots read what was said.
 
+### Removed
+
+- The Hub's bots no longer call tools on their owner's Mac. Update Noodle on paired Macs along with the Hub.
+
 ## [0.2.0] - 2026-09-25
 
 ### Added

@@ -70,8 +70,6 @@ final class LinkVersion1Tests: XCTestCase {
         "send": #"{"version":1,"request":{"send":{"_0":{"body":"Hi","conversationID":"00000000-0000-0000-0000-00000000000B","id":"00000000-0000-0000-0000-00000000000A","attachmentIDs":["00000000-0000-0000-0000-00000000000C"]}}}}"#,
         "upload": #"{"request":{"upload":{"attachment":{"filename":"Report.pdf","mediaType":"application\/pdf","byteCount":7,"id":"00000000-0000-0000-0000-00000000000C"},"data":"CQ==","conversationID":"00000000-0000-0000-0000-00000000000B","offset":0}},"version":1}"#,
         "download": #"{"version":1,"request":{"download":{"attachmentID":"00000000-0000-0000-0000-00000000000C","offset":0,"conversationID":"00000000-0000-0000-0000-00000000000B"}}}"#,
-        "publishTools": #"{"version":1,"request":{"publishTools":{"botID":"00000000-0000-0000-0000-00000000000A","catalogue":"W10="}}}"#,
-        "toolResult": #"{"version":1,"request":{"toolResult":{"result":"e30=","callID":"00000000-0000-0000-0000-00000000000A"}}}"#,
         "react": #"{"version":1,"request":{"react":{"_0":{"conversationID":"00000000-0000-0000-0000-00000000000B","messageID":"00000000-0000-0000-0000-00000000000A","emoji":"👍","present":true}}}}"#
     ]
     private static let responses: [String: String] = [
@@ -87,7 +85,6 @@ final class LinkVersion1Tests: XCTestCase {
     private static let events: [String: String] = [
         "conversationChanged": #"{"conversationChanged":{"conversationID":"00000000-0000-0000-0000-00000000000B","count":2}}"#,
         "botsChanged": #"{"botsChanged":{}}"#,
-        "toolCall": #"{"toolCall":{"botID":"00000000-0000-0000-0000-00000000000B","callID":"00000000-0000-0000-0000-00000000000A","request":"e30="}}"#,
         "messageChanged": #"{"messageChanged":{"_0":{"attachments":[],"author":{"bot":{"_0":"00000000-0000-0000-0000-00000000000C"}},"body":"Hi","conversationID":"00000000-0000-0000-0000-00000000000B","createdAt":1790000000,"delivered":true,"id":"00000000-0000-0000-0000-00000000000A","reactions":[{"author":{"you":{}},"emoji":"👍"}]}}}"#,
         "botPhase": #"{"botPhase":{"botID":"00000000-0000-0000-0000-00000000000A","phase":"working"}}"#
     ]
@@ -111,8 +108,6 @@ final class LinkVersion1Tests: XCTestCase {
             "send": .send(LinkOutgoingMessage(conversationID: b, id: a, body: "Hi", attachmentIDs: [c])),
             "upload": .upload(conversationID: b, attachment: attachment, offset: 0, data: Data([9])),
             "download": .download(conversationID: b, attachmentID: c, offset: 0),
-            "publishTools": .publishTools(botID: a, catalogue: Data("[]".utf8)),
-            "toolResult": .toolResult(callID: a, result: Data("{}".utf8), error: nil),
             "react": .react(LinkReactionChange(conversationID: b, messageID: a, emoji: "👍", present: true)),
         ]
         XCTAssertEqual(Set(Self.requests.keys), Set(expected.keys))
@@ -140,7 +135,6 @@ final class LinkVersion1Tests: XCTestCase {
     func testVersion1EventsStillRead() {
         let expected: [String: LinkEvent] = [
             "conversationChanged": .conversationChanged(conversationID: b, count: 2), "botsChanged": .botsChanged,
-            "toolCall": .toolCall(callID: a, botID: b, request: Data("{}".utf8)),
             "messageChanged": .messageChanged(LinkMessage(id: a, conversationID: b, author: .bot(c), body: "Hi", createdAt: date,
                                                           delivered: true, reactions: [LinkReaction(author: .you, emoji: "👍")])),
             "botPhase": .botPhase(botID: a, phase: .working),
@@ -148,6 +142,19 @@ final class LinkVersion1Tests: XCTestCase {
         for (name, json) in Self.events {
             XCTAssertEqual(LinkProtocol.decodeEvent(Data(json.utf8)), expected[name], name)
         }
+    }
+
+    /// Devices no longer lend tools to the Hub's bots; the Hub's bots use only the Hub's own.
+    func testDeviceToolMessagesAreRetired() {
+        let requests = [
+            #"{"version":1,"request":{"publishTools":{"botID":"00000000-0000-0000-0000-00000000000A","catalogue":"W10="}}}"#,
+            #"{"version":1,"request":{"toolResult":{"result":"e30=","callID":"00000000-0000-0000-0000-00000000000A"}}}"#,
+        ]
+        for json in requests {
+            XCTAssertThrowsError(try LinkProtocol.decode(Data(json.utf8)).get(), json)
+        }
+        let call = #"{"toolCall":{"botID":"00000000-0000-0000-0000-00000000000B","callID":"00000000-0000-0000-0000-00000000000A","request":"e30="}}"#
+        XCTAssertNil(LinkProtocol.decodeEvent(Data(call.utf8)))
     }
 
     func testVersion1InvitationsStillRead() throws {

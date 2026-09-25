@@ -322,8 +322,6 @@ final class NoodleStore {
                     Task { @MainActor in
                         guard let self, let agent = self.agents.first(where: { $0.id == id }) else { return }
                         try? self.repository.synchronizeAgentWorkspace(agent)
-                        // A bot on a Hub gets the same tools there.
-                        if let mirror = self.hubMirror(forAgent: id) { try? await mirror.publishTools() }
                     }
                 }
                 try tools.start(agents: toolAgents)
@@ -390,11 +388,6 @@ final class NoodleStore {
             hubMirrors.first { $0.pairing === pairing } ?? {
                 let mirror = HubMirror(pairing: pairing, repository: repository, directory: pairing.directory)
                 mirror.onChange = { [weak self] in self?.hubBotsChanged() }
-                mirror.toolCatalogue = { [weak self] id in await self?.hubToolCatalogue(for: id) ?? [] }
-                mirror.toolRunner = { [weak self] id, request in
-                    guard let self else { throw ToolProviderError("Noodle is closing.") }
-                    return try await self.runHubTool(request, for: id)
-                }
                 return mirror
             }()
         }
@@ -408,22 +401,6 @@ final class NoodleStore {
         for mirror in kept where hubMirrorTasks[ObjectIdentifier(mirror)] == nil {
             hubMirrorTasks[ObjectIdentifier(mirror)] = Task { await mirror.run() }
         }
-    }
-
-    /// The tools this Mac lends a bot on a Hub: what its local stand-in is assigned here.
-    private func hubToolCatalogue(for id: UUID) async -> [ToolProviderListing] {
-        guard let agent = agents.first(where: { $0.id == id }) else { return [] }
-        return await ToolProviderListing.list(registry: toolProviders, assignments: toolAssignments.assignments(for: id),
-                                              agentID: id, workspace: repository.directory(for: agent))
-    }
-
-    /// Runs a Hub bot's tool call here, as its local stand-in and within its assignments.
-    private func runHubTool(_ request: ToolBridgeRequest, for id: UUID) async throws -> Data {
-        guard let agent = agents.first(where: { $0.id == id }) else { throw ToolProviderError("That bot is not on this Mac.") }
-        let assignments = toolAssignments
-        return try await ToolBroker.perform(request, registry: toolProviders, assignments: { assignments.assignments(for: id) },
-                                            context: ToolCallContext(agentID: id, workspace: repository.directory(for: agent)),
-                                            host: toolHost)
     }
 
     func hubMirror(forAgent id: UUID) -> HubMirror? {
@@ -452,8 +429,7 @@ final class NoodleStore {
     }
 
     /// `tools` stores, on this Mac, what the new bot may use here.
-    private func createHubAgent(on choice: HubHarnessChoice, draft: LinkBotDraft,
-                                tools: @escaping (AgentRecord) throws -> Void) -> Bool {
+    private func createHubAgent(on choice: HubHarnessChoice, draft: LinkBotDraft) -> Bool {
         guard let mirror = hubMirrors.first(where: { $0.pairing.hub?.key == choice.hub }) else {
             errorMessage = "Join that Noodle Hub again before creating a bot on it."
             return false
@@ -462,8 +438,6 @@ final class NoodleStore {
         Task {
             do {
                 let agent = try await mirror.createBot(draft)
-                try tools(agent)
-                try await mirror.publishTools()
                 selectedConversationID = conversations.first { $0.kind == .direct && $0.participantIDs == [agent.id] }?.id
                 refreshAppShortcuts()
             } catch {
@@ -511,14 +485,7 @@ final class NoodleStore {
                 model: modelIdentifier.flatMap { $0.isEmpty ? nil : $0 },
                 reasoningEffort: reasoningEffort.flatMap { $0.isEmpty ? nil : $0 }, publicDescription: publicDescription,
                 backstory: backstory, avatarSymbolName: avatarSymbolName, avatarColorIndex: avatarColorIndex,
-                avatarImageData: avatarImageData), tools: { [weak self] agent in
-                    guard let self else { return }
-                    try self.mcp.assign(mcpConnectionIDs, to: agent, synchronizeWorkspace: false)
-                    try self.computers.assign(computerIDs, to: agent, synchronizeWorkspace: false)
-                    try self.browsers.assign(browserIDs, to: agent, synchronizeWorkspace: false)
-                    try self.calendars.assign(calendarIDs, to: agent, synchronizeWorkspace: false)
-                    try self.reminders.assign(reminderListIDs, to: agent, synchronizeWorkspace: false)
-                })
+                avatarImageData: avatarImageData))
         }
         guard runtime.availableInstallations.contains(where: { $0.provider.rawValue == harnessIdentifier }) else {
             errorMessage = "Set up a supported harness in Settings before creating a bot."
@@ -605,27 +572,10 @@ final class NoodleStore {
                                      reasoningEffort: reasoningEffort.flatMap { $0.isEmpty ? nil : $0 },
                                      publicDescription: publicDescription, backstory: backstory, avatarSymbolName: avatarSymbolName,
                                      avatarColorIndex: avatarColorIndex, avatarImageData: avatarImageData)
-            // The Hub keeps the bot; the tools it may use are this Mac's, kept here.
-            do {
-                if let mcpConnectionIDs { try mcp.validateAssignment(mcpConnectionIDs) }
-                if let computerIDs { try computers.validate(computerIDs) }
-                if let browserIDs { try browsers.validate(browserIDs) }
-                if let calendarIDs { try calendars.validate(calendarIDs) }
-                if let reminderListIDs { try reminders.validate(reminderListIDs) }
-                if let mcpConnectionIDs { try mcp.assign(mcpConnectionIDs, to: agent, synchronizeWorkspace: false) }
-                if let computerIDs { try computers.assign(computerIDs, to: agent, synchronizeWorkspace: false) }
-                if let browserIDs { try browsers.assign(browserIDs, to: agent, synchronizeWorkspace: false) }
-                if let calendarIDs { try calendars.assign(calendarIDs, to: agent, synchronizeWorkspace: false) }
-                if let reminderListIDs { try reminders.assign(reminderListIDs, to: agent, synchronizeWorkspace: false) }
-            } catch {
-                errorMessage = error.localizedDescription
-                return false
-            }
             agentBeingEdited = nil
             Task {
                 do {
                     try await mirror.updateBot(localAgentID: agent.id, with: draft)
-                    try await mirror.publishTools()
                 } catch {
                     errorMessage = error.localizedDescription
                 }

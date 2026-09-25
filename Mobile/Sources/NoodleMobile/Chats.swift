@@ -200,9 +200,6 @@ import SwiftUI
         case .botPhase(let id, let phase):
             guard let index = agents.firstIndex(where: { $0.id == id }) else { return }
             agents[index].phase = phase
-        // Tools are lent by a Mac; this phone lends none.
-        case .toolCall:
-            return
         }
         saveCache()
     }

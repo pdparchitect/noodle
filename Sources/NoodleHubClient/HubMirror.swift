@@ -25,10 +25,6 @@ import Observation
     /// New messages need no call: they land in the conversation files the app already watches.
     @ObservationIgnored public var onChange: (() -> Void)?
 
-    /// The tools this Mac lends a bot, by its local stand-in. Nil lends none.
-    @ObservationIgnored public var toolCatalogue: ((UUID) async -> [ToolProviderListing])?
-    /// Runs a tool call for a bot's local stand-in, with that stand-in's assignments.
-    @ObservationIgnored public var toolRunner: ((UUID, ToolBridgeRequest) async throws -> Data)?
 
     public let pairing: HubPairing
     @ObservationIgnored private let repository: WorkspaceRepository
@@ -93,7 +89,6 @@ import Observation
             try await syncBots()
             for entry in entries { try await syncMessages(entry) }
             try await sendPending()
-            try await publishTools()
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -125,9 +120,6 @@ import Observation
                         try await syncBots()
                     case .conversationChanged(let id, _):
                         if let entry = entries.first(where: { $0.remoteConversation == id }) { try await syncMessages(entry) }
-                    case .toolCall(let callID, let botID, let request):
-                        // Tools can take minutes; other events keep flowing meanwhile.
-                        Task { await runTool(callID, for: botID, request: request) }
                     // Hub reactions and bot status are not shown on the Mac yet.
                     case .messageChanged, .botPhase:
                         break
@@ -141,28 +133,6 @@ import Observation
             delay = min(delay * 2, .seconds(60))
         }
         isConnected = false
-    }
-
-    /// Tells the Hub which tools this Mac lends each bot, so it can write their skills.
-    public func publishTools() async throws {
-        guard let toolCatalogue else { return }
-        for entry in entries {
-            let catalogue = try JSONEncoder().encode(await toolCatalogue(entry.agent))
-            _ = try await pairing.request(.publishTools(botID: entry.remote, catalogue: catalogue))
-        }
-    }
-
-    private func runTool(_ callID: UUID, for botID: UUID, request: Data) async {
-        var result: Data?, failure: String?
-        do {
-            guard let entry = entries.first(where: { $0.remote == botID }), let toolRunner else {
-                throw LinkError("This Mac does not lend tools to that bot.")
-            }
-            result = try await toolRunner(entry.agent, try JSONDecoder().decode(ToolBridgeRequest.self, from: request))
-        } catch {
-            failure = error.localizedDescription
-        }
-        _ = try? await pairing.request(.toolResult(callID: callID, result: result, error: failure))
     }
 
     private func syncBots() async throws {
