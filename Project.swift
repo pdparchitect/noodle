@@ -72,7 +72,7 @@ let trimSparkle: TargetScript = .post(script: """
     resources="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
     for dependency in "$packages/SourcePackages/checkouts"/*; do
         for license in LICENSE LICENSE.txt; do
-            if [ -f "$dependency/$license" ]; then cp "$dependency/$license" "$resources/$(basename "$dependency")-LICENSE.txt"; break; fi
+            if [ -f "$dependency/$license" ]; then cp -f "$dependency/$license" "$resources/$(basename "$dependency")-LICENSE.txt"; break; fi
         done
     done
     cp "$packages/SourcePackages/checkouts/mlx-swift-lm/Libraries/MLXCXGrammar/xgrammar/LICENSE" "$resources/xgrammar-LICENSE.txt"

@@ -25,7 +25,7 @@ let embedHelpers: TargetScript = .post(script: """
         --identifier "$PRODUCT_BUNDLE_IDENTIFIER.cli" "$helpers/noodlet"
     if [ "$APPLET_DOCUMENT_EXTENSION" != noodlet ]; then
         for example in "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Resources/Examples"/*.noodlet; do
-            [ -e "$example" ] && mv "$example" "${example%.noodlet}.$APPLET_DOCUMENT_EXTENSION"
+            if [ -e "$example" ]; then mv "$example" "${example%.noodlet}.$APPLET_DOCUMENT_EXTENSION"; fi
         done
     fi
     """, name: "Embed Helpers", basedOnDependencyAnalysis: false)
@@ -56,7 +56,7 @@ let trimSparkle: TargetScript = .post(script: """
         [ "$packages" != / ] || { echo "error: no Swift package checkouts above $BUILD_DIR" >&2; exit 1; }
         packages="$(dirname "$packages")"
     done
-    cp "$packages/SourcePackages/checkouts/Sparkle/LICENSE" \\
+    cp -f "$packages/SourcePackages/checkouts/Sparkle/LICENSE" \\
        "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Sparkle-LICENSE.txt"
     """, name: "Trim Sparkle", basedOnDependencyAnalysis: false)
 

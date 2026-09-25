@@ -21,11 +21,13 @@ case "${(P)container_setting:-${NOODLE_DATA_CONTAINER:-development}}" in
 esac
 tuist="$(zsh "$project_root/scripts/install-tuist.sh")"
 (cd "$folder" && "$tuist" generate --no-open >&2)
+# Not $folder/Derived: that is Tuist's, and generating empties it, which would rebuild everything each time.
+derived_data="$project_root/.build/DerivedData/$app"
 xcodebuild -workspace "$folder/${name// /}.xcworkspace" -scheme "${name// /}" -configuration "$configuration" \
-    -derivedDataPath "$folder/Derived" -destination 'platform=macOS' -allowProvisioningUpdates \
+    -derivedDataPath "$derived_data" -destination 'platform=macOS' -allowProvisioningUpdates \
     -skipPackagePluginValidation -skipMacroValidation "$@" build >&2
 destination="$project_root/.build/$app_name.app"
 rm -rf "$destination"
-ditto "$folder/Derived/Build/Products/$configuration/$app_name.app" "$destination"
+ditto "$derived_data/Build/Products/$configuration/$app_name.app" "$destination"
 codesign --verify --deep --strict "$destination"
 print "$destination"

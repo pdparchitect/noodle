@@ -32,7 +32,7 @@ let trimSparkle: TargetScript = .post(script: """
         [ "$packages" != / ] || { echo "error: no Swift package checkouts above $BUILD_DIR" >&2; exit 1; }
         packages="$(dirname "$packages")"
     done
-    cp "$packages/SourcePackages/checkouts/Sparkle/LICENSE" \\
+    cp -f "$packages/SourcePackages/checkouts/Sparkle/LICENSE" \\
        "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Sparkle-LICENSE.txt"
     """, name: "Trim Sparkle", basedOnDependencyAnalysis: false)
 

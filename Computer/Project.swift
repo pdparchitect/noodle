@@ -92,7 +92,7 @@ let trimSparkle: TargetScript = .post(script: """
     done
     for dependency in "$packages/SourcePackages/checkouts"/*; do
         for license in LICENSE LICENSE.txt COPYING; do
-            [ -f "$dependency/$license" ] && cp "$dependency/$license" \\
+            [ -f "$dependency/$license" ] && cp -f "$dependency/$license" \\
                 "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/$(basename "$dependency")-$license.txt"
         done
     done
