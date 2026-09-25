@@ -16,7 +16,7 @@ import NoodleRuntime
     public let bots: HubBots
     public let link: HubLinkService
 
-    public init(root: URL, messenger: URL?) {
+    public init(root: URL, messenger: URL?, linkPort: UInt16 = LinkEndpoint.defaultPort) {
         repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: messenger)
         // Only the Hub's own storage holds harnesses its Agent Host will trust.
         let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses)
@@ -30,7 +30,7 @@ import NoodleRuntime
                        uploads: root.appendingPathComponent("Uploads", isDirectory: true))
         link = HubLinkService(hubName: Host.current().localizedName ?? "Noodle Hub",
                               directory: root.appendingPathComponent("Link", isDirectory: true),
-                              access: access, profiles: harnessProfiles, bots: bots)
+                              access: access, profiles: harnessProfiles, bots: bots, port: linkPort)
     }
 
     /// Removes a user with their devices and the bots they keep here.

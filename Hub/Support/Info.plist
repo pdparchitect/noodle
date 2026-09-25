@@ -61,6 +61,8 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>NoodleAgentHostService</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER).agent-host</string>
+	<key>NoodleHubLinkPort</key>
+	<string>$(HUB_LINK_PORT)</string>
 	<!-- Preprocessed: true only for public releases. -->
 	<key>NoodleUpdatesEnabled</key>
 	<HUB_UPDATES_ENABLED/>

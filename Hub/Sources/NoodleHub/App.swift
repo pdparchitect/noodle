@@ -1,5 +1,6 @@
 import AppKit
 import HubCore
+import HubLink
 import NoodleRuntimeSettings
 import SwiftUI
 
@@ -29,8 +30,11 @@ import SwiftUI
     let settings: HubSettingsHost = {
         let applicationSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let messenger = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/messenger")
+        // Development builds listen on their own port so they can run beside a released Hub.
+        let port = (Bundle.main.object(forInfoDictionaryKey: "NoodleHubLinkPort") as? String).flatMap(UInt16.init)
         return HubSettingsHost(hub: Hub(root: Hub.root(applicationSupport: applicationSupport),
-            messenger: FileManager.default.isExecutableFile(atPath: messenger.path) ? messenger : nil))
+            messenger: FileManager.default.isExecutableFile(atPath: messenger.path) ? messenger : nil,
+            linkPort: port ?? LinkEndpoint.defaultPort))
     }()
 
     func applicationWillFinishLaunching(_ notification: Notification) {

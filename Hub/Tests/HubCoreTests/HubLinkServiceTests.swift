@@ -126,6 +126,15 @@ import XCTest
         XCTAssertTrue(invitation.endpoints.contains(try XCTUnwrap(pairing.endpoint)))
     }
 
+    /// A development Hub listens on its own port so it can run beside the released one.
+    func testTheHubListensOnThePortItIsGiven() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-link-\(UUID())")
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        let hub = Hub(root: root, messenger: nil, linkPort: 38_416)
+        hub.link.manualAddress = "hub.example.com"
+        XCTAssertEqual(hub.link.manualEndpoint, LinkEndpoint(host: "hub.example.com", port: 38_416))
+    }
+
     func testDevicesThatCheckedInRecentlyCountAsConnected() async throws {
         let (hub, link, device) = try await fixture()
         let ada = try hub.access.addUser(named: "Ada")

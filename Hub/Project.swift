@@ -97,10 +97,12 @@ let project = Project(
             .debug(name: "Debug", settings: [
                 "HUB_APP_BUNDLE_ID": "com.pdparchitect.noodle.hub.local",
                 "HUB_APP_NAME": "Noodle Hub Dev",
+                "HUB_LINK_PORT": "38416",
             ]),
             .release(name: "Release", settings: [
                 "HUB_APP_BUNDLE_ID": "com.pdparchitect.noodle.hub",
                 "HUB_APP_NAME": "Noodle Hub",
+                "HUB_LINK_PORT": "38415",
                 // Signing adds get-task-allow for the debugger; a release carries only its own entitlements.
                 "CODE_SIGN_INJECT_BASE_ENTITLEMENTS": "NO",
             ]),
