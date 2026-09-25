@@ -8,13 +8,13 @@ import XCTest
 @MainActor final class HubLinkServiceTests: XCTestCase {
     private var clock = Date()
 
-    private func fixture() async throws -> (Hub, HubLinkService, URL) {
+    private func fixture(router: (any RouterPortMapper)? = nil) async throws -> (Hub, HubLinkService, URL) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-link-\(UUID())")
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
         let hub = Hub(root: root.appendingPathComponent("Hub"), messenger: nil)
         // Loopback stands in for the Mac's own addresses, which a CI runner may not have.
         let link = HubLinkService(hubName: "Mac mini", directory: root.appendingPathComponent("Hub/Link"),
-                                  access: hub.access, profiles: hub.harnessProfiles, port: 0,
+                                  access: hub.access, profiles: hub.harnessProfiles, port: 0, router: router,
                                   localEndpoints: { [LinkEndpoint(host: "::1", port: $0)] }, now: { [unowned self] in clock })
         await link.start()
         addTeardownBlock { await MainActor.run { link.stop() } }
@@ -189,4 +189,64 @@ import XCTest
         XCTAssertTrue(hubs.hubs.isEmpty)
         XCTAssertTrue(HubMemberships(directory: device, deviceName: "Mac").hubs.isEmpty)
     }
+
+    func testTheRoutersOutsideAddressReachesInvitationsAndPairedDevices() async throws {
+        let outside = LinkEndpoint(host: "203.0.113.9", port: 38_415)
+        let router = StandInRouter(.success(RouterMapping(endpoint: outside, method: .natPMP, lifetime: 3600)))
+        let (hub, link, device) = try await fixture(router: router)
+        XCTAssertEqual(link.router, .open(RouterMapping(endpoint: outside, method: .natPMP, lifetime: 3600)))
+        let invitation = link.invite(try hub.access.addUser(named: "Ada"))
+        XCTAssertTrue(invitation.endpoints.contains(outside))
+
+        let pairing = HubPairing(directory: device, deviceName: "Phone")
+        await pairing.join(invitation.url().absoluteString)
+        XCTAssertEqual(pairing.hub?.endpoints.contains(outside), true)
+    }
+
+    func testTurningTheRouterPortOffClosesIt() async throws {
+        let outside = LinkEndpoint(host: "203.0.113.9", port: 38_415)
+        let router = StandInRouter(.success(RouterMapping(endpoint: outside, method: .upnp, lifetime: 0)))
+        let (_, link, _) = try await fixture(router: router)
+        let closed = expectation(description: "The router port is closed")
+        await router.onUnmap { closed.fulfill() }
+
+        link.opensRouterPort = false
+        XCTAssertEqual(link.router, .off)
+        XCTAssertFalse(link.endpoints.contains(outside))
+        await fulfillment(of: [closed], timeout: 10)
+    }
+
+    func testTheRouterChoiceIsRemembered() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-link-\(UUID())")
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        let hub = Hub(root: root, messenger: nil)
+        let link = HubLinkService(hubName: "Mac mini", directory: root.appendingPathComponent("Link"),
+                                  access: hub.access, profiles: hub.harnessProfiles, port: 0)
+        XCTAssertTrue(link.opensRouterPort)
+        link.opensRouterPort = false
+        let relaunched = HubLinkService(hubName: "Mac mini", directory: root.appendingPathComponent("Link"),
+                                        access: hub.access, profiles: hub.harnessProfiles, port: 0)
+        XCTAssertFalse(relaunched.opensRouterPort)
+    }
+
+    func testARouterThatCannotOpenThePortSaysWhy() async throws {
+        let router = StandInRouter(.failure(RouterMappingError("The router has no public address.")))
+        let (_, link, _) = try await fixture(router: router)
+        XCTAssertEqual(link.router, .failed("The router has no public address."))
+        XCTAssertEqual(link.endpoints, [LinkEndpoint(host: "::1", port: link.endpoints[0].port)])
+    }
+}
+
+/// A router that answers from a script, so no test touches the real one.
+private actor StandInRouter: RouterPortMapper {
+    private let result: Result<RouterMapping, Error>
+    private var unmapped: (@Sendable () -> Void)?
+
+    init(_ result: Result<RouterMapping, Error>) { self.result = result }
+
+    func onUnmap(_ action: @escaping @Sendable () -> Void) { unmapped = action }
+
+    func map(port: UInt16) async throws -> RouterMapping { try result.get() }
+
+    func unmap(_ mapping: RouterMapping) async { unmapped?() }
 }

@@ -104,6 +104,20 @@ struct HubNetworkSettingsView: View {
                     }
                 }
             }
+            Section {
+                Toggle("Open Port on Router", isOn: $link.opensRouterPort)
+                    .help("Asks the router, through UPnP or NAT-PMP, to forward the Hub’s port so devices can reach it away from home")
+                if link.opensRouterPort {
+                    LabeledContent("Router") {
+                        switch link.router {
+                        case .off: Text("Waiting for the Hub")
+                        case .opening: Text("Opening…")
+                        case .open(let mapping): Text("Open through \(mapping.method.rawValue)")
+                        case .failed(let message): Text(message).foregroundStyle(.red).textSelection(.enabled)
+                        }
+                    }
+                }
+            }
             Section("Addresses") {
                 ForEach(link.endpoints.filter { $0 != link.manualEndpoint }, id: \.self) { endpoint in
                     Text(endpoint.description).font(.body.monospaced()).textSelection(.enabled)

@@ -13,11 +13,26 @@ import Observation
         case failed(String)
     }
 
+    public enum RouterState: Equatable, Sendable {
+        case off, opening
+        case open(RouterMapping)
+        case failed(String)
+    }
+
     public private(set) var state = State.stopped
     /// An address the owner knows reaches this Mac, such as a domain or a forwarded port.
     public var manualAddress: String {
         didSet { saveSettings() }
     }
+    /// Whether the Hub asks the router to forward its port, for devices away from home.
+    public var opensRouterPort: Bool {
+        didSet {
+            guard opensRouterPort != oldValue else { return }
+            saveSettings()
+            if opensRouterPort { Task { await openRouterPort() } } else { closeRouterPort() }
+        }
+    }
+    public private(set) var router = RouterState.off
     public let key: LinkPublicKey
     public let hubName: String
 
@@ -32,15 +47,19 @@ import Observation
     @ObservationIgnored private let localEndpoints: (UInt16) -> [LinkEndpoint]
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var server: LinkServer?
+    @ObservationIgnored private let routerMapper: (any RouterPortMapper)?
+    /// Keeps the router's port open until cancelled.
+    @ObservationIgnored private var routerRenewal: Task<Void, Never>?
     /// Token digests of unused invitations. Kept in memory: an invitation outlives no relaunch.
     @ObservationIgnored private var invitations: [Data: (user: UUID, expires: Date)] = [:]
 
     private struct Settings: Codable {
         var manualAddress: String
+        var opensRouterPort: Bool?
     }
 
     public init(hubName: String, directory: URL, access: HubAccess, profiles: HarnessProfilesController,
-                bots: HubBots? = nil, port: UInt16 = LinkEndpoint.defaultPort,
+                bots: HubBots? = nil, port: UInt16 = LinkEndpoint.defaultPort, router: (any RouterPortMapper)? = nil,
                 localEndpoints: @escaping (UInt16) -> [LinkEndpoint] = LinkEndpoint.local(port:),
                 now: @escaping () -> Date = Date.init) {
         self.hubName = hubName
@@ -49,12 +68,15 @@ import Observation
         self.profiles = profiles
         self.bots = bots
         self.port = port
+        routerMapper = router
         self.localEndpoints = localEndpoints
         self.now = now
         // A Hub that cannot keep its key cannot be paired with; a fresh key each launch would say so loudly.
         identity = (try? LinkIdentity.loadOrCreate(at: directory.appendingPathComponent("hub.key"))) ?? LinkIdentity()
         key = identity.publicKey
-        manualAddress = (try? JSONDecoder().decode(Settings.self, from: Data(contentsOf: directory.appendingPathComponent("link.json"))))?.manualAddress ?? ""
+        let settings = try? JSONDecoder().decode(Settings.self, from: Data(contentsOf: directory.appendingPathComponent("link.json")))
+        manualAddress = settings?.manualAddress ?? ""
+        opensRouterPort = settings?.opensRouterPort ?? true
         bots?.onChange = { [weak self] user, event in self?.push(event, to: user) }
         bots?.sendToDevice = { [weak self] key, event in self?.push(event, toDevice: key) ?? false }
     }
@@ -71,10 +93,13 @@ import Observation
             state = .listening(port: server.port ?? port)
         } catch {
             state = .failed(error.localizedDescription)
+            return
         }
+        await openRouterPort()
     }
 
     public func stop() {
+        closeRouterPort()
         streams.values.forEach { $0.close() }
         streams.removeAll()
         server?.stop()
@@ -84,7 +109,10 @@ import Observation
 
     /// What invitations and paired devices are told to try, in order.
     public var endpoints: [LinkEndpoint] {
-        localEndpoints(listeningPort) + (manualEndpoint.map { [$0] } ?? [])
+        var endpoints = localEndpoints(listeningPort)
+        if case .open(let mapping) = router { endpoints.append(mapping.endpoint) }
+        if let manualEndpoint, !endpoints.contains(manualEndpoint) { endpoints.append(manualEndpoint) }
+        return endpoints
     }
 
     /// The manual address, with this Hub's port when it names none.
@@ -248,8 +276,49 @@ import Observation
                           harnesses: harnesses, endpoints: endpoints)
     }
 
+    /// Opens the port on the router, then renews it halfway through each lease, or every
+    /// few minutes while the router refuses, so a router that restarts gets it back.
+    private func openRouterPort() async {
+        guard let routerMapper, opensRouterPort, case .listening(let port) = state, router == .off else { return }
+        router = .opening
+        var delay = await mapRouterPort(port, with: routerMapper)
+        // Turned off, or off and on again, while the router was answering.
+        guard opensRouterPort, case .listening = state, routerRenewal == nil else { return }
+        routerRenewal = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled, let self else { return }
+                delay = await self.mapRouterPort(port, with: routerMapper)
+            }
+        }
+    }
+
+    /// Returns when to ask again.
+    private func mapRouterPort(_ port: UInt16, with mapper: any RouterPortMapper) async -> Duration {
+        do {
+            let mapping = try await mapper.map(port: port)
+            guard opensRouterPort, case .listening = state else {
+                await mapper.unmap(mapping)
+                return .zero
+            }
+            router = .open(mapping)
+            return .seconds(mapping.lifetime > 0 ? max(60, mapping.lifetime / 2) : 1800)
+        } catch {
+            guard opensRouterPort else { return .zero }
+            router = .failed(error.localizedDescription)
+            return .seconds(300)
+        }
+    }
+
+    private func closeRouterPort() {
+        routerRenewal?.cancel()
+        routerRenewal = nil
+        if case .open(let mapping) = router, let routerMapper { Task { await routerMapper.unmap(mapping) } }
+        router = .off
+    }
+
     private func saveSettings() {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try? JSONEncoder().encode(Settings(manualAddress: manualAddress)).write(to: directory.appendingPathComponent("link.json"), options: .atomic)
+        try? JSONEncoder().encode(Settings(manualAddress: manualAddress, opensRouterPort: opensRouterPort)).write(to: directory.appendingPathComponent("link.json"), options: .atomic)
     }
 }

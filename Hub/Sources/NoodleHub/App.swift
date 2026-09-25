@@ -37,7 +37,7 @@ let hubAppName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName")
         let port = (Bundle.main.object(forInfoDictionaryKey: "NoodleHubLinkPort") as? String).flatMap(UInt16.init)
         return HubSettingsHost(hub: Hub(root: Hub.root(applicationSupport: applicationSupport),
             messenger: FileManager.default.isExecutableFile(atPath: messenger.path) ? messenger : nil,
-            linkPort: port ?? LinkEndpoint.defaultPort))
+            linkPort: port ?? LinkEndpoint.defaultPort, router: SystemRouterPortMapper()))
     }()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
