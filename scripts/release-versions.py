@@ -15,6 +15,7 @@ PRODUCTS = {
     "applet": ("Applet/VERSION", "Applet/CHANGELOG.md", "applet-v"),
     "browser": ("Browser/VERSION", "Browser/CHANGELOG.md", "browser-v"),
     "hub": ("Hub/VERSION", "Hub/CHANGELOG.md", "hub-v"),
+    "mobile": ("Mobile/VERSION", "Mobile/CHANGELOG.md", "mobile-v"),
     "images": ("Computer/Images/VERSION", "Computer/Images/CHANGELOG.md", "computer-images-v"),
 }
 SEMVER = r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
@@ -52,7 +53,8 @@ def notes(product):
 
 def release_notes(product):
     body = notes(product)
-    if product == 'images':
+    # Container images and the phone app have no macOS installer to link to.
+    if product in ('images', 'mobile'):
         return body
     _, tag = version(product)
     basename = 'Noodle' if product == 'noodle' else f'Noodle-{product.title()}'
