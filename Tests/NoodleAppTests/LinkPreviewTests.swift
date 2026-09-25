@@ -9,14 +9,19 @@ import XCTest
     let clock = RuntimeClockFixture()
     var metadata: [(URL, (LPLinkMetadata?) -> Void)] = []
     var images: [(NSItemProvider, (NSImage?) -> Void)] = []
+    var maps: [(MapLink, (NSImage?) -> Void)] = []
     var metadataCancellations = 0
     var imageCancellations = 0
+    var mapCancellations = 0
     lazy var cache = LinkPreviewMetadataCache(fetchMetadata: { [weak self] url, _, completion in
         self?.metadata.append((url, completion))
         return { [weak self] in self?.metadataCancellations += 1 }
     }, fetchImage: { [weak self] provider, completion in
         self?.images.append((provider, completion))
         return { [weak self] in self?.imageCancellations += 1 }
+    }, fetchMap: { [weak self] link, _, completion in
+        self?.maps.append((link, completion))
+        return { [weak self] in self?.mapCancellations += 1 }
     }, sleep: { [clock] in try await clock.sleep($0) })
     func result(_ title: String, image: Bool = false, icon: Bool = false) -> LPLinkMetadata {
         let value = LPLinkMetadata(); value.title = title
@@ -225,6 +230,65 @@ import XCTest
         try await wait { f.metadata.count == 2 }
         f.metadata[1].1(nil)
         _ = try await control("Open link: other.example.com", in: view)
+    }
+
+    func testAppleMapsLinksDescribeTheirPlaceOrRoute() {
+        func link(_ string: String) -> MapLink? { MapLink(URL(string: string)!) }
+        XCTAssertEqual(link("https://maps.apple.com/?saddr=Oakland&daddr=Ferry+Building&dirflg=w"),
+                       MapLink(from: .address("Oakland"), to: .address("Ferry Building"), directions: true, transport: .walking))
+        XCTAssertEqual(link("https://maps.apple.com/?daddr=37.7955,-122.3937"),
+                       MapLink(from: nil, to: .coordinate(37.7955, -122.3937), directions: true, transport: .driving))
+        XCTAssertEqual(link("https://maps.apple.com/directions?source=Oakland&destination=San+Jose&mode=cycling"),
+                       MapLink(from: .address("Oakland"), to: .address("San Jose"), directions: true, transport: .cycling))
+        XCTAssertEqual(link("https://maps.apple.com/?ll=51.5007,-0.1246&q=Big%20Ben"),
+                       MapLink(from: nil, to: .coordinate(51.5007, -0.1246), name: "Big Ben"))
+        XCTAssertEqual(link("https://maps.apple.com/place?coordinate=48.8584,2.2945&name=Eiffel+Tower"),
+                       MapLink(from: nil, to: .coordinate(48.8584, 2.2945), name: "Eiffel Tower"))
+        XCTAssertEqual(link("https://maps.apple.com/?q=coffee+near+Soho"), MapLink(from: nil, to: .address("coffee near Soho")))
+        XCTAssertEqual(link("https://maps.apple.com/search?query=Tate+Modern"), MapLink(from: nil, to: .address("Tate Modern")))
+        XCTAssertEqual(link("https://maps.apple.com/?saddr=Current+Location&daddr=Paris")?.from, nil)
+        XCTAssertEqual(link("https://maps.apple.com/?ll=95,10")?.to, nil)
+
+        XCTAssertEqual(link("https://maps.apple.com/?saddr=Oakland&daddr=Ferry+Building")?.title, "Directions to Ferry Building")
+        XCTAssertEqual(link("https://maps.apple.com/?daddr=37.7955,-122.3937")?.title, "Directions")
+        XCTAssertEqual(link("https://maps.apple.com/?ll=51.5007,-0.1246")?.title, "Map")
+        XCTAssertEqual(link("https://maps.apple.com/?address=1+Infinite+Loop")?.title, "1 Infinite Loop")
+
+        XCTAssertNil(link("https://maps.apple.com/"))
+        XCTAssertNil(link("https://example.com/?daddr=Paris"))
+        XCTAssertNil(link("https://maps.google.com/?q=Paris"))
+    }
+
+    func testAppleMapsLinkRendersAMapInsteadOfFetchingThePage() async throws {
+        let f = loader(); var results: [LinkPreviewMetadataCache.Result] = []
+        let url = URL(string: "https://maps.apple.com/?saddr=Oakland&daddr=Ferry+Building")!
+        f.cache.load(url) { results.append($0) }
+        XCTAssertTrue(f.metadata.isEmpty)
+        XCTAssertEqual(f.maps.map(\.0.to), [.address("Ferry Building")])
+        let image = NSImage(size: .init(width: 20, height: 20))
+        f.maps[0].1(image)
+        try await wait { results.count == 1 }
+        XCTAssertTrue(results[0].image === image); XCTAssertEqual(f.mapCancellations, 1)
+        f.cache.load(url) { results.append($0) }
+        XCTAssertTrue(results[1].image === image); XCTAssertEqual(f.maps.count, 1)
+    }
+
+    func testMapRenderingIsBoundByTheSameDeadline() async throws {
+        let f = loader(); var result: LinkPreviewMetadataCache.Result?
+        f.cache.load(URL(string: "https://maps.apple.com/?q=Paris")!, timeout: 5) { result = $0 }
+        let deadline = try await f.clock.next(.seconds(5)); deadline.resolve(.success(()))
+        try await wait { result != nil }
+        XCTAssertNil(result?.image); XCTAssertEqual(f.mapCancellations, 1)
+    }
+
+    func testMapCardIsTitledFromItsLinkAndOpensIt() async throws {
+        let f = loader(), selection = LinkSelection(); var opened: [URL] = []
+        selection.url = URL(string: "https://maps.apple.com/directions?destination=Ferry+Building&mode=walking")!
+        selection.visible = true
+        let view = host(LinkFixtureView(selection: selection, cache: f.cache, openURL: { opened.append($0) }))
+        try await wait { f.maps.count == 1 }
+        press(try await control("Open in Maps: Directions to Ferry Building", in: view))
+        XCTAssertEqual(opened, [selection.url])
     }
 }
 

@@ -1,4 +1,5 @@
 import AppKit
+import MapKit
 import SwiftUI
 @preconcurrency import LinkPresentation
 
@@ -48,7 +49,7 @@ struct MessageLinkPreview: View {
                         ProgressView()
                             .controlSize(.small)
                     } else {
-                        Image(systemName: "link")
+                        Image(systemName: mapLink == nil ? "link" : "map")
                             .font(.system(size: 26, weight: .light))
                             .foregroundStyle(.secondary)
                     }
@@ -88,7 +89,7 @@ struct MessageLinkPreview: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Open link: \(title)")
+        .accessibilityLabel(mapLink == nil ? "Open link: \(title)" : "Open in Maps: \(title)")
         .onChange(of: url) { _, _ in
             requestID = UUID()
             restoreCachedResult()
@@ -130,11 +131,14 @@ struct MessageLinkPreview: View {
         }
     }
 
+    private var mapLink: MapLink? { MapLink(url) }
+
     private var title: String {
-        metadata?.title ?? url.host ?? url.absoluteString
+        mapLink?.title ?? metadata?.title ?? url.host ?? url.absoluteString
     }
 
     private var siteLabel: String {
+        if mapLink != nil { return "Apple Maps" }
         let host = url.host ?? url.absoluteString
         return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
     }
@@ -174,17 +178,21 @@ final class LinkPreviewMetadataCache {
     }
     typealias MetadataLoader = (URL, TimeInterval, @escaping (LPLinkMetadata?) -> Void) -> (() -> Void)
     typealias ImageLoader = (NSItemProvider, @escaping (NSImage?) -> Void) -> (() -> Void)
+    typealias MapLoader = (MapLink, TimeInterval, @escaping (NSImage?) -> Void) -> (() -> Void)
     private let fetchMetadata: MetadataLoader
     private let fetchImage: ImageLoader
+    private let fetchMap: MapLoader
     private let sleep: (Duration) async throws -> Void
     private let cache = NSCache<NSURL, Result>()
     private var pending: [URL: Request] = [:]
 
     init(fetchMetadata: @escaping MetadataLoader = LinkPreviewMetadataCache.nativeMetadata,
          fetchImage: @escaping ImageLoader = LinkPreviewMetadataCache.nativeImage,
+         fetchMap: @escaping MapLoader = MapSnapshot.render,
          sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         self.fetchMetadata = fetchMetadata
         self.fetchImage = fetchImage
+        self.fetchMap = fetchMap
         self.sleep = sleep
         cache.countLimit = 128
     }
@@ -210,6 +218,16 @@ final class LinkPreviewMetadataCache {
             try? await sleep(.seconds(max(0.01, timeout)))
             guard !Task.isCancelled, let request else { return }
             self?.finish(url, request: request, image: nil)
+        }
+        // The Apple Maps page has no useful preview; draw the place or route instead.
+        if let link = MapLink(url) {
+            request.cancellations.append(fetchMap(link, timeout) { [weak self, weak request] image in
+                Task { @MainActor in
+                    guard let request else { return }
+                    self?.finish(url, request: request, image: image)
+                }
+            })
+            return
         }
         request.cancellations.append(fetchMetadata(url, timeout) { [weak self, weak request] metadata in
             Task { @MainActor in
@@ -251,5 +269,185 @@ final class LinkPreviewMetadataCache {
             completion(object as? NSImage)
         }
         return { progress.cancel() }
+    }
+}
+
+/// A place or route described by an Apple Maps link, in both the classic query form and
+/// the newer `/directions`, `/place` and `/search` paths.
+struct MapLink: Equatable {
+    enum Place: Equatable {
+        case coordinate(Double, Double)
+        case address(String)
+        init?(_ text: String?) {
+            guard let text = text?.trimmingCharacters(in: .whitespaces), !text.isEmpty,
+                  text.caseInsensitiveCompare("Current Location") != .orderedSame else { return nil }
+            let parts = text.split(separator: ",").map { Double($0.trimmingCharacters(in: .whitespaces)) }
+            if parts.count == 2, let latitude = parts[0], let longitude = parts[1] {
+                guard abs(latitude) <= 90, abs(longitude) <= 180 else { return nil }
+                self = .coordinate(latitude, longitude)
+            } else {
+                self = .address(text)
+            }
+        }
+    }
+    enum Transport: Equatable { case driving, walking, transit, cycling }
+
+    var from: Place?
+    var to: Place
+    var directions = false
+    var transport = Transport.driving
+    var name: String?
+
+    init(from: Place?, to: Place, directions: Bool = false, transport: Transport = .driving, name: String? = nil) {
+        self.from = from; self.to = to; self.directions = directions; self.transport = transport; self.name = name
+    }
+
+    init?(_ url: URL) {
+        guard url.host?.lowercased() == "maps.apple.com",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        var query: [String: String] = [:]
+        for item in components.queryItems ?? [] where query[item.name] == nil {
+            query[item.name] = item.value?.replacingOccurrences(of: "+", with: " ")
+        }
+        let name = query["name"] ?? query["q"]
+        switch url.path.lowercased() {
+        case "/directions":
+            guard let to = Place(query["destination"]) else { return nil }
+            let transport: Transport = switch query["mode"]?.lowercased() {
+            case "walking": .walking
+            case "transit": .transit
+            case "cycling": .cycling
+            default: .driving
+            }
+            self.init(from: Place(query["source"]), to: to, directions: true, transport: transport)
+        case "/place":
+            guard let to = Place(query["coordinate"]) ?? Place(query["address"]) ?? Place(query["name"]) else { return nil }
+            self.init(from: nil, to: to, name: name)
+        case "/search":
+            guard let to = Place(query["query"]) else { return nil }
+            self.init(from: nil, to: to)
+        case "", "/":
+            if query["daddr"] != nil {
+                guard let to = Place(query["daddr"]) else { return nil }
+                let transport: Transport = switch query["dirflg"]?.lowercased() {
+                case "w": .walking
+                case "r": .transit
+                case "c": .cycling
+                default: .driving
+                }
+                self.init(from: Place(query["saddr"]), to: to, directions: true, transport: transport)
+            } else if query["ll"] != nil {
+                guard let to = Place(query["ll"]), case .coordinate = to else { return nil }
+                self.init(from: nil, to: to, name: name)
+            } else if let to = Place(query["address"]) ?? Place(query["q"]) {
+                self.init(from: nil, to: to, name: query["address"] == nil ? nil : query["q"])
+            } else {
+                return nil
+            }
+        default:
+            return nil
+        }
+    }
+
+    var title: String {
+        var label: String? { if case let .address(text) = to { text } else { nil } }
+        if directions { return label.map { "Directions to \($0)" } ?? "Directions" }
+        return name ?? label ?? "Map"
+    }
+}
+
+/// Draws a map link into a card image: the route when Maps can plan one, otherwise pins.
+enum MapSnapshot {
+    static let size = CGSize(width: 280, height: 158)
+
+    nonisolated static func render(_ link: MapLink, timeout: TimeInterval, completion: @escaping (NSImage?) -> Void) -> (() -> Void) {
+        let task = Task { completion(await image(for: link)) }
+        return { task.cancel() }
+    }
+
+    private static func image(for link: MapLink) async -> NSImage? {
+        guard let destination = await mapItem(link.to) else { return nil }
+        let origin = await link.from.asyncFlatMap(mapItem)
+        var route: MKPolyline?
+        if link.directions, let origin, link.transport != .transit {
+            let request = MKDirections.Request()
+            request.source = origin; request.destination = destination
+            request.transportType = switch link.transport {
+            case .walking: .walking
+            case .cycling: .cycling
+            default: .automobile
+            }
+            route = try? await MKDirections(request: request).calculate().routes.first?.polyline
+        }
+        let points = [origin, destination].compactMap { $0?.location.coordinate }
+        guard !Task.isCancelled else { return nil }
+
+        let options = MKMapSnapshotter.Options()
+        options.size = size
+        let appearance = await MainActor.run { NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) }
+        options.appearance = appearance.flatMap(NSAppearance.init(named:))
+        if let route {
+            options.mapRect = route.boundingMapRect.insetBy(dx: -route.boundingMapRect.width * 0.15,
+                                                            dy: -route.boundingMapRect.height * 0.15)
+        } else {
+            options.mapRect = region(around: points)
+        }
+        guard let snapshot = try? await MKMapSnapshotter(options: options).start() else { return nil }
+        return NSImage(size: size, flipped: false) { rect in
+            snapshot.image.draw(in: rect)
+            if let route {
+                let path = NSBezierPath()
+                let coordinates = route.coordinates
+                for (index, coordinate) in coordinates.enumerated() {
+                    let point = snapshot.point(for: coordinate)
+                    index == 0 ? path.move(to: point) : path.line(to: point)
+                }
+                path.lineJoinStyle = .round; path.lineCapStyle = .round
+                NSColor.white.withAlphaComponent(0.9).setStroke(); path.lineWidth = 6; path.stroke()
+                NSColor.systemBlue.setStroke(); path.lineWidth = 3.5; path.stroke()
+            }
+            for (index, coordinate) in points.enumerated() {
+                let center = snapshot.point(for: coordinate)
+                let dot = NSBezierPath(ovalIn: CGRect(x: center.x - 6, y: center.y - 6, width: 12, height: 12))
+                (index == points.count - 1 ? NSColor.systemRed : NSColor.white).setFill(); dot.fill()
+                (index == points.count - 1 ? NSColor.white : NSColor.systemBlue).setStroke(); dot.lineWidth = 2.5; dot.stroke()
+            }
+            return true
+        }
+    }
+
+    private static func mapItem(_ place: MapLink.Place) async -> MKMapItem? {
+        switch place {
+        case let .coordinate(latitude, longitude):
+            return MKMapItem(location: CLLocation(latitude: latitude, longitude: longitude), address: nil)
+        case let .address(text):
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = text
+            return try? await MKLocalSearch(request: request).start().mapItems.first
+        }
+    }
+
+    /// A neighbourhood around one point, or every point with some margin.
+    private static func region(around points: [CLLocationCoordinate2D]) -> MKMapRect {
+        let rects = points.map { MKMapRect(origin: MKMapPoint($0), size: MKMapSize(width: 0, height: 0)) }
+        let bounds = rects.dropFirst().reduce(rects.first ?? .null) { $0.union($1) }
+        let minimum = MKMapPointsPerMeterAtLatitude(points.first?.latitude ?? 0) * 1_500
+        let width = max(bounds.width * 1.3, minimum), height = max(bounds.height * 1.3, minimum * size.height / size.width)
+        return MKMapRect(x: bounds.midX - width / 2, y: bounds.midY - height / 2, width: width, height: height)
+    }
+}
+
+private extension MKPolyline {
+    var coordinates: [CLLocationCoordinate2D] {
+        var coordinates = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: pointCount)
+        getCoordinates(&coordinates, range: NSRange(location: 0, length: pointCount))
+        return coordinates
+    }
+}
+
+private extension Optional {
+    func asyncFlatMap<T>(_ transform: (Wrapped) async -> T?) async -> T? {
+        guard let self else { return nil }
+        return await transform(self)
     }
 }
