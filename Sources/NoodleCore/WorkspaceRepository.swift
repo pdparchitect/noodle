@@ -697,12 +697,15 @@ public struct WorkspaceRepository: Sendable {
         )
     }
 
+    /// `id` and `originalFilename` let a copy from elsewhere, such as a Noodle Hub, keep the original's.
     public func importAttachment(
         from sourceURL: URL,
         into conversationID: UUID,
         mediaType: String,
         now: Date = Date(),
-        voice: VoiceMessage? = nil
+        voice: VoiceMessage? = nil,
+        id: UUID = UUID(),
+        originalFilename: String? = nil
     ) throws -> ConversationAttachment {
         if let voice {
             guard sourceURL.isFileURL, mediaType.hasPrefix("audio/"), voice.isValid else {
@@ -718,13 +721,14 @@ public struct WorkspaceRepository: Sendable {
         let values = try sourceURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
         guard values.isRegularFile == true else { throw WorkspaceError.invalidAttachment }
 
-        let attachmentID = UUID()
+        let attachmentID = id
+        let filename = originalFilename ?? sourceURL.lastPathComponent
         let resolvedMediaType = detectedImageMediaType(at: sourceURL) ?? mediaType
         let attachment = ConversationAttachment(
             id: attachmentID,
             conversationID: conversationID,
-            originalFilename: sourceURL.lastPathComponent,
-            storedFilename: storedAttachmentName(id: attachmentID, originalFilename: sourceURL.lastPathComponent),
+            originalFilename: filename,
+            storedFilename: storedAttachmentName(id: attachmentID, originalFilename: filename),
             mediaType: resolvedMediaType,
             byteCount: Int64(values.fileSize ?? 0),
             createdAt: now,
@@ -1097,6 +1101,19 @@ public struct WorkspaceRepository: Sendable {
         return deliveries
     }
 
+    /// Marks the user's messages a bot elsewhere, such as on a Noodle Hub, has taken.
+    public func markDelivered(conversationID: UUID, messageIDs: Set<UUID>) throws {
+        try withConversationLock(conversationID) {
+            var messages = try loadMessages(conversationID: conversationID)
+            let queued = messages.indices.filter {
+                messageIDs.contains(messages[$0].id) && messages[$0].author == .user && messages[$0].delivery == .queued
+            }
+            guard !queued.isEmpty else { return }
+            for index in queued { messages[index].delivery = .delivered }
+            try write(messages, to: conversationDirectory(id: conversationID).appendingPathComponent("messages.json"))
+        }
+    }
+
     /// A user's message is delivered once any recipient's harness has fetched it.
     private func markDelivered(conversationID: UUID, upTo count: Int) throws {
         try withConversationLock(conversationID) {
@@ -1250,10 +1267,12 @@ public struct WorkspaceRepository: Sendable {
         return recipientIDs
     }
 
+    /// `id` lets a sender that retries, such as a Hub device, keep one message.
     public func sendUserMessage(
         conversationID: UUID,
         body: String,
         attachmentIDs: [UUID] = [],
+        id: UUID = UUID(),
         now: Date = Date()
     ) throws -> ChatMessage {
         let text = try validatedName(body)
@@ -1261,6 +1280,7 @@ public struct WorkspaceRepository: Sendable {
             throw WorkspaceError.missingConversation(conversationID)
         }
         let message = ChatMessage(
+            id: id,
             conversationID: conversationID,
             author: .user,
             body: text,

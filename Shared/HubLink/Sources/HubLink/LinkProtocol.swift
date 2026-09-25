@@ -1,16 +1,112 @@
 import CryptoKit
 import Foundation
 
+/// The version of the requests below. A Hub serves the versions it knows and names the app
+/// to update for any other, rather than failing mid-conversation. Adding a request or a
+/// field keeps the version; changing what one means raises it.
+public enum LinkProtocol {
+    public static let version = 1
+    /// Files travel in pieces this size, each one request, so no request nears the message limit.
+    public static let chunkSize = 512 * 1024
+    public static let supportedVersions: ClosedRange<Int> = 1...1
+
+    public static func encode(_ request: LinkRequest) throws -> Data {
+        try encoder.encode(Envelope(version: version, request: request))
+    }
+
+    /// The request, or the failure to answer with when it cannot be served.
+    public static func decode(_ data: Data) -> Result<LinkRequest, LinkError> {
+        guard let header = try? decoder.decode(Header.self, from: data) else {
+            return .failure(LinkError("The request could not be read."))
+        }
+        if header.version > supportedVersions.upperBound {
+            return .failure(LinkError("This device needs a newer Noodle Hub. Update Noodle Hub."))
+        }
+        if header.version < supportedVersions.lowerBound {
+            return .failure(LinkError("This Noodle Hub needs a newer Noodle. Update Noodle."))
+        }
+        guard let envelope = try? decoder.decode(Envelope.self, from: data) else {
+            return .failure(LinkError("This Noodle Hub does not know that request. Update Noodle Hub."))
+        }
+        return .success(envelope.request)
+    }
+
+    public static func encode(_ response: LinkResponse) -> Data {
+        (try? encoder.encode(response)) ?? Data()
+    }
+
+    public static func decodeResponse(_ data: Data) throws -> LinkResponse {
+        do { return try decoder.decode(LinkResponse.self, from: data) }
+        catch { throw LinkError("This Noodle Hub sent an answer this Noodle does not know. Update Noodle.") }
+    }
+
+    public static func encode(_ event: LinkEvent) -> Data {
+        (try? encoder.encode(event)) ?? Data()
+    }
+
+    /// Events this Noodle does not know yet are skipped.
+    public static func decodeEvent(_ data: Data) -> LinkEvent? {
+        try? decoder.decode(LinkEvent.self, from: data)
+    }
+
+    private struct Header: Decodable { var version: Int }
+    private struct Envelope: Codable {
+        var version: Int
+        var request: LinkRequest
+    }
+
+    static var encoder: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .secondsSince1970
+        return encoder
+    }
+
+    static var decoder: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        return decoder
+    }
+}
+
 public enum LinkRequest: Codable, Equatable, Sendable {
     /// Pairs the key this request arrives with to the invitation's user. The token works once.
     case enroll(token: String, deviceName: String)
     /// What the Hub lends this device's user.
     case status
+    /// Keeps a stream open that the Hub pushes `LinkEvent`s down.
+    case subscribe
+    /// This user's bots on the Hub.
+    case bots
+    case createBot(LinkBotDraft)
+    case updateBot(id: UUID, LinkBotDraft)
+    case deleteBot(id: UUID)
+    /// Messages of one of this user's conversations, from position `after` on.
+    case messages(conversationID: UUID, after: Int)
+    /// Sends as this user. `id` is chosen by the device, so a retried send is not doubled.
+    /// Attachments are uploaded first.
+    case send(conversationID: UUID, id: UUID, body: String, attachmentIDs: [UUID])
+    /// One piece of a file for a conversation, starting at `offset`. Pieces go in order.
+    case upload(conversationID: UUID, attachment: LinkAttachment, offset: Int, data: Data)
+    /// One piece of a conversation's file, starting at `offset`.
+    case download(conversationID: UUID, attachmentID: UUID, offset: Int)
 }
 
 public enum LinkResponse: Codable, Equatable, Sendable {
     case status(LinkStatus)
+    case bots([LinkBot])
+    case bot(LinkBot)
+    case messages(LinkMessages)
+    case message(LinkMessage)
+    /// A piece of a file, and the file's full size.
+    case chunk(data: Data, total: Int)
+    case done
     case failure(String)
+}
+
+/// Pushed down a subscription. Devices fetch what changed with ordinary requests.
+public enum LinkEvent: Codable, Equatable, Sendable {
+    case conversationChanged(conversationID: UUID, count: Int)
+    case botsChanged
 }
 
 public struct LinkStatus: Codable, Equatable, Sendable {
@@ -20,26 +116,128 @@ public struct LinkStatus: Codable, Equatable, Sendable {
     public var harnesses: [LinkHarness]
     /// The Hub's current addresses, so a device keeps up when they change.
     public var endpoints: [LinkEndpoint]
+    /// The newest request version this Hub serves.
+    public var protocolVersion: Int
 
-    public init(hubName: String, userName: String, planName: String, harnesses: [LinkHarness], endpoints: [LinkEndpoint]) {
+    public init(hubName: String, userName: String, planName: String, harnesses: [LinkHarness], endpoints: [LinkEndpoint],
+                protocolVersion: Int = LinkProtocol.version) {
         self.hubName = hubName
         self.userName = userName
         self.planName = planName
         self.harnesses = harnesses
         self.endpoints = endpoints
+        self.protocolVersion = protocolVersion
     }
 }
 
-/// A harness login the Hub lends. `profileName` is nil for the harness's own login.
+/// A harness login the Hub lends. `profile` and `profileName` are nil for the harness's own login.
 public struct LinkHarness: Codable, Hashable, Sendable {
     public var provider: String
     public var providerName: String
+    public var profile: UUID?
     public var profileName: String?
 
-    public init(provider: String, providerName: String, profileName: String?) {
+    public init(provider: String, providerName: String, profile: UUID? = nil, profileName: String?) {
         self.provider = provider
         self.providerName = providerName
+        self.profile = profile
         self.profileName = profileName
+    }
+}
+
+/// What a device sets on a bot it keeps on the Hub.
+public struct LinkBotDraft: Codable, Equatable, Sendable {
+    public var name: String
+    public var provider: String
+    public var profile: UUID?
+    public var model: String?
+    public var reasoningEffort: String?
+    public var publicDescription: String
+    public var backstory: String
+    public var avatarSymbolName: String?
+    public var avatarColorIndex: Int
+    public var avatarImageData: Data?
+
+    public init(name: String, provider: String, profile: UUID? = nil, model: String? = nil, reasoningEffort: String? = nil,
+                publicDescription: String = "", backstory: String = "", avatarSymbolName: String? = nil,
+                avatarColorIndex: Int = 0, avatarImageData: Data? = nil) {
+        self.name = name
+        self.provider = provider
+        self.profile = profile
+        self.model = model
+        self.reasoningEffort = reasoningEffort
+        self.publicDescription = publicDescription
+        self.backstory = backstory
+        self.avatarSymbolName = avatarSymbolName
+        self.avatarColorIndex = avatarColorIndex
+        self.avatarImageData = avatarImageData
+    }
+}
+
+/// A bot on the Hub and its conversation with its owner.
+public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var conversationID: UUID
+    public var draft: LinkBotDraft
+    public var createdAt: Date
+
+    public init(id: UUID, conversationID: UUID, draft: LinkBotDraft, createdAt: Date) {
+        self.id = id
+        self.conversationID = conversationID
+        self.draft = draft
+        self.createdAt = createdAt
+    }
+}
+
+public struct LinkMessage: Codable, Equatable, Identifiable, Sendable {
+    public enum Author: Codable, Equatable, Sendable {
+        case you, bot(UUID), system
+    }
+
+    public var id: UUID
+    public var conversationID: UUID
+    public var author: Author
+    public var body: String
+    public var createdAt: Date
+    /// Whether the bot has taken the message yet.
+    public var delivered: Bool
+    public var attachments: [LinkAttachment]
+
+    public init(id: UUID, conversationID: UUID, author: Author, body: String, createdAt: Date, delivered: Bool,
+                attachments: [LinkAttachment] = []) {
+        self.attachments = attachments
+        self.id = id
+        self.conversationID = conversationID
+        self.author = author
+        self.body = body
+        self.createdAt = createdAt
+        self.delivered = delivered
+    }
+}
+
+/// A file in a conversation.
+public struct LinkAttachment: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var filename: String
+    public var mediaType: String
+    public var byteCount: Int
+
+    public init(id: UUID, filename: String, mediaType: String, byteCount: Int) {
+        self.id = id
+        self.filename = filename
+        self.mediaType = mediaType
+        self.byteCount = byteCount
+    }
+}
+
+/// Messages from a position on, and how many the conversation holds in all.
+public struct LinkMessages: Codable, Equatable, Sendable {
+    public var messages: [LinkMessage]
+    public var count: Int
+
+    public init(messages: [LinkMessage], count: Int) {
+        self.messages = messages
+        self.count = count
     }
 }
 
@@ -54,8 +252,12 @@ public struct LinkInvitation: Codable, Equatable, Sendable {
     public var userName: String
     public var token: String
     public var expires: Date
+    /// The request version the inviting Hub speaks.
+    public var version: Int
 
-    public init(hubName: String, hubKey: LinkPublicKey, endpoints: [LinkEndpoint], userName: String, token: String, expires: Date) {
+    public init(hubName: String, hubKey: LinkPublicKey, endpoints: [LinkEndpoint], userName: String, token: String, expires: Date,
+                version: Int = LinkProtocol.version) {
+        self.version = version
         self.hubName = hubName
         self.hubKey = hubKey
         self.endpoints = endpoints
@@ -90,6 +292,10 @@ public struct LinkInvitation: Codable, Equatable, Sendable {
         } ?? text
         guard let data = Data(base64URL: code), let invitation = try? Self.decoder.decode(Self.self, from: data) else {
             throw LinkError("This is not a Noodle Hub invitation.")
+        }
+        guard LinkProtocol.supportedVersions.contains(invitation.version) else {
+            throw LinkError(invitation.version > LinkProtocol.version
+                            ? "This invitation needs a newer Noodle. Update Noodle." : "This invitation is from an older Noodle Hub. Update Noodle Hub.")
         }
         self = invitation
     }

@@ -18,12 +18,14 @@ checks the result against `Support/Hub.entitlements` and the Agent Host rules.
 
 Settings reuse Noodle's Harness, Heartbeat, Sandbox, Tools and Companions views from
 `NoodleRuntimeSettings` through `BotSettingsHost`, and its Usage window is Noodle's
-`UsageView`; change them there, not here. The Hub
-does not run bots yet, has no bot editor, and opens companions directly rather than
-connecting to them.
+`UsageView`; change them there, not here. The Hub runs the bots paired users keep on
+it (`HubBots`), made and edited from Noodle; it has no bot editor of its own and opens
+companions directly rather than connecting to them.
 
 Devices pair and talk to the Hub through `Shared/HubLink`, which Noodle uses too: QUIC
-with each side pinned by its P-256 key, one request per connection. A device’s key is its
+with each side pinned by its P-256 key, one request per connection plus one open event
+stream per device. Requests carry `LinkProtocol.version`; Noodle mirrors Hub bots locally
+(`NoodleHubClient`), and its runtime never starts a mirrored bot. A device’s key is its
 identity; `HubAccess` maps it to a user, whose plan decides what the Hub lends. Test the
 link over real addresses, never a loopback-only path in the apps.
 

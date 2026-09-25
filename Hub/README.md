@@ -15,3 +15,6 @@ or scan the QR code. The invitation works once and expires
 after 15 minutes. Users marks the devices connected now. Network shows how many people
 are connected and the addresses invitations carry; Add Address records a domain or
 forwarded port that reaches the Hub from outside your network.
+
+People who joined can keep bots on the Hub from Noodle, on the harnesses their plan
+lends. Those bots run here and keep their conversations here.

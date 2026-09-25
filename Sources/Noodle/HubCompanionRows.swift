@@ -87,10 +87,10 @@ private struct HubRow: View {
         .padding(.vertical, 4)
         .task(id: pairing.hub?.key) { await pairing.refresh() }
         .alert("Leave \(pairing.hub?.name ?? "Hub")?", isPresented: $confirmingLeave) {
-            Button("Leave", role: .destructive) { store.hubs.leave(pairing) }
+            Button("Leave", role: .destructive) { store.leaveHub(pairing) }
             Button("Cancel", role: .cancel) {}.keyboardShortcut(.defaultAction)
         } message: {
-            Text("Joining again needs a new invitation.")
+            Text("Its bots stay on the Hub for your other devices. Joining again needs a new invitation.")
         }
     }
 
@@ -191,7 +191,7 @@ struct HubJoinSheet: View {
         guard !text.isEmpty, !hubs.isJoining else { return }
         problem = nil
         Task {
-            await hubs.join(text)
+            await store.joinHub(text)
             if hubs.joinError == nil { dismiss() }
         }
     }

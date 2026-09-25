@@ -5,7 +5,7 @@ import XCTest
 final class LinkTransportTests: XCTestCase {
     private func server(_ identity: LinkIdentity) async throws -> LinkServer {
         let server = try LinkServer(identity: identity, port: 0) { key, request in
-            key.x963 + request
+            .response(key.x963 + request)
         }
         try await server.start()
         addTeardownBlock { server.stop() }
@@ -40,4 +40,56 @@ final class LinkTransportTests: XCTestCase {
             endpoints: [LinkEndpoint(host: "unreachable.invalid", port: port), LinkEndpoint(host: "127.0.0.1", port: port)])
         XCTAssertEqual(used.host, "127.0.0.1")
     }
+}
+
+final class LinkStreamTests: XCTestCase {
+    func testTheHubPushesFramesDownAnOpenStream() async throws {
+        let hub = LinkIdentity(), device = LinkIdentity()
+        let opened = expectation(description: "stream opened")
+        let box = StreamBox()
+        let server = try LinkServer(identity: hub, port: 0, handler: { _, request in
+            request == Data("subscribe".utf8) ? .stream({ stream in box.stream = stream; opened.fulfill() }) : .response(Data())
+        })
+        try await server.start()
+        addTeardownBlock { server.stop() }
+        let endpoint = LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))
+
+        let frames = try await LinkClient.subscribe(Data("subscribe".utf8), identity: device, hubKey: hub.publicKey, endpoints: [endpoint])
+        await fulfillment(of: [opened], timeout: 5)
+        let stream = try XCTUnwrap(box.stream)
+        XCTAssertEqual(stream.peer, device.publicKey)
+        stream.send(Data("one".utf8))
+        stream.send(Data(repeating: 7, count: 200_000))
+        stream.send(Data("three".utf8))
+
+        var received: [Data] = []
+        for try await frame in frames.frames {
+            received.append(frame)
+            if received.count == 3 { break }
+        }
+        XCTAssertEqual(received, [Data("one".utf8), Data(repeating: 7, count: 200_000), Data("three".utf8)])
+        frames.cancel()
+    }
+
+    func testClosingTheStreamOnTheHubEndsItOnTheDevice() async throws {
+        let hub = LinkIdentity()
+        let box = StreamBox()
+        let opened = expectation(description: "stream opened")
+        let server = try LinkServer(identity: hub, port: 0, handler: { _, _ in
+            .stream({ stream in box.stream = stream; opened.fulfill() })
+        })
+        try await server.start()
+        addTeardownBlock { server.stop() }
+        let frames = try await LinkClient.subscribe(Data(), identity: LinkIdentity(), hubKey: hub.publicKey,
+                                                    endpoints: [LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))])
+        await fulfillment(of: [opened], timeout: 5)
+        box.stream?.close()
+        var count = 0
+        do { for try await _ in frames.frames { count += 1 } } catch {}
+        XCTAssertEqual(count, 0)
+    }
+}
+
+final class StreamBox: @unchecked Sendable {
+    var stream: LinkStream?
 }

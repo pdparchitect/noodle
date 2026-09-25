@@ -198,6 +198,7 @@ let project = Project(
                 .package(product: "NoodleLaunchChecks"),
                 .package(product: "NoodleSettingsUI"),
                 .package(product: "HubLink"),
+                .package(product: "NoodleHubClient"),
                 .package(product: "NoodleWallpaper"),
                 .package(product: "Sparkle"),
                 .package(product: "ComputerBridge"),

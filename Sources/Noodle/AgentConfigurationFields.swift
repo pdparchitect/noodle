@@ -1,5 +1,7 @@
 import SwiftUI
+import HubLink
 import NoodleCore
+import NoodleHubClient
 import NoodleRuntimeSettings
 
 struct AgentConfigurationFields: View {
@@ -12,8 +14,30 @@ struct AgentConfigurationFields: View {
     @State private var choosingProfile = false
     @State private var choosingModel = false
 
+    /// A harness a joined Hub lends, when one is chosen: the bot then runs on that Hub.
+    private var hubChoice: HubHarnessChoice? { HubHarnessChoice(identifier: selectedHarnessIdentifier) }
+
+    /// What each joined Hub lends, for the harness chooser.
+    private var hubHarnesses: [HubHarnessSection] {
+        store.hubs.hubs.compactMap { pairing in
+            guard let hub = pairing.hub, let harnesses = pairing.status?.harnesses, !harnesses.isEmpty else { return nil }
+            return HubHarnessSection(name: hub.name, choices: harnesses.map {
+                (HubHarnessChoice(hub: hub.key, provider: $0.provider, profile: $0.profile), $0)
+            })
+        }
+    }
+
+    private var harnessName: String {
+        guard let hubChoice else { return selectedProvider?.displayName ?? "Choose a harness" }
+        let hub = store.hubs.hubs.first { $0.hub?.key == hubChoice.hub }
+        let lent = hub?.status?.harnesses.first { $0.provider == hubChoice.provider && $0.profile == hubChoice.profile }
+        let name = lent.map { harness in harness.profileName.map { "\(harness.providerName) (\($0))" } ?? harness.providerName }
+            ?? selectedProvider?.displayName ?? hubChoice.provider
+        return "\(name) · \(hub?.hub?.name ?? "Noodle Hub")"
+    }
+
     private var profiles: [HarnessProfile] {
-        guard let selectedProvider, selectedProvider.supportsProfiles else { return [] }
+        guard hubChoice == nil, let selectedProvider, selectedProvider.supportsProfiles else { return [] }
         return store.harnessProfiles.profiles(for: selectedProvider)
     }
 
@@ -27,7 +51,7 @@ struct AgentConfigurationFields: View {
     }
 
     private var selectedProvider: HarnessProvider? {
-        HarnessProvider(rawValue: selectedHarnessIdentifier)
+        HarnessProvider(rawValue: hubChoice?.provider ?? selectedHarnessIdentifier)
     }
 
     private var selectedInstallation: HarnessInstallation? {
@@ -51,7 +75,7 @@ struct AgentConfigurationFields: View {
                 Button { choosingHarness = true } label: {
                     RuntimeSelectionRow(
                         title: "Harness",
-                        value: selectedProvider?.displayName ?? "Choose a harness",
+                        value: harnessName,
                         icon: AnyView(providerIcon)
                     )
                 }
@@ -59,6 +83,7 @@ struct AgentConfigurationFields: View {
                 .popover(isPresented: $choosingHarness, arrowEdge: .leading) {
                     HarnessChooser(
                         installations: store.runtime.availableInstallations,
+                        hubs: hubHarnesses,
                         selection: $selectedHarnessIdentifier
                     )
                 }
@@ -79,6 +104,7 @@ struct AgentConfigurationFields: View {
                     }
                 }
 
+                if hubChoice == nil {
                 Divider().padding(.leading, 44)
 
                 Button { choosingModel = true } label: {
@@ -104,6 +130,7 @@ struct AgentConfigurationFields: View {
                     Divider().padding(.leading, 44)
                     EffortControl(model: selectedModel, selection: $selectedEffort)
                 }
+                }
             }
             .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
@@ -113,7 +140,7 @@ struct AgentConfigurationFields: View {
 
             HarnessExperimentalWarning(provider: selectedProvider)
 
-            if let selectedProvider, !selectedProvider.supportsRestrictedAccess {
+            if hubChoice == nil, let selectedProvider, !selectedProvider.supportsRestrictedAccess {
                 Text("\(selectedProvider.displayName) always uses unrestricted access and can work beyond this bot's private workspace.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -145,8 +172,8 @@ struct AgentConfigurationFields: View {
 
     @ViewBuilder
     private var providerIcon: some View {
-        if let selectedInstallation {
-            HarnessProviderIcon(provider: selectedInstallation.provider)
+        if let provider = selectedInstallation?.provider ?? (hubChoice == nil ? nil : selectedProvider) {
+            HarnessProviderIcon(provider: provider)
         } else {
             Image(systemName: "terminal")
         }
@@ -190,10 +217,19 @@ private struct RuntimeSelectionRow: View {
     }
 }
 
+/// The harnesses one joined Hub lends.
+struct HubHarnessSection {
+    let name: String
+    let choices: [(choice: HubHarnessChoice, harness: LinkHarness)]
+}
+
 struct HarnessChooser: View {
     let installations: [HarnessInstallation]
+    var hubs: [HubHarnessSection] = []
     @Binding var selection: String
     @Environment(\.dismiss) private var dismiss
+
+    private var rows: Int { installations.count + hubs.reduce(0) { $0 + $1.choices.count + 1 } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -203,34 +239,70 @@ struct HarnessChooser: View {
 
             Divider()
 
-            List(installations) { installation in
-                Button {
-                    selection = installation.provider.rawValue
-                    dismiss()
-                } label: {
-                    HStack(spacing: 10) {
-                        HarnessProviderIcon(provider: installation.provider)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 22, height: 22)
-                        Text(installation.provider.displayName)
-                        if installation.provider.isExperimental {
-                            Text("Experimental")
-                                .font(.caption)
-                                .foregroundStyle(.orange)
-                        }
-                        Spacer()
-                        if selection == installation.provider.rawValue {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
+            List {
+                if !installations.isEmpty, !hubs.isEmpty {
+                    Section("This Mac") { localRows }
+                } else {
+                    localRows
+                }
+                ForEach(hubs, id: \.name) { hub in
+                    Section(hub.name) {
+                        ForEach(hub.choices, id: \.choice.identifier) { item in
+                            Button {
+                                selection = item.choice.identifier
+                                dismiss()
+                            } label: {
+                                HStack(spacing: 10) {
+                                    if let provider = HarnessProvider(rawValue: item.harness.provider) {
+                                        HarnessProviderIcon(provider: provider)
+                                            .foregroundStyle(.secondary)
+                                            .frame(width: 22, height: 22)
+                                    }
+                                    Text(item.harness.profileName.map { "\(item.harness.providerName) (\($0))" } ?? item.harness.providerName)
+                                    Spacer()
+                                    if selection == item.choice.identifier {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(.tint)
+                                    }
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
             }
             .listStyle(.inset)
         }
-        .frame(width: 300, height: max(110, min(320, 62 + CGFloat(installations.count) * 44)))
+        .frame(width: 300, height: max(110, min(420, 62 + CGFloat(rows) * 44)))
+    }
+
+    @ViewBuilder private var localRows: some View {
+        ForEach(installations) { installation in
+            Button {
+                selection = installation.provider.rawValue
+                dismiss()
+            } label: {
+                HStack(spacing: 10) {
+                    HarnessProviderIcon(provider: installation.provider)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 22)
+                    Text(installation.provider.displayName)
+                    if installation.provider.isExperimental {
+                        Text("Experimental")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                    Spacer()
+                    if selection == installation.provider.rawValue {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(.tint)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
     }
 }
 

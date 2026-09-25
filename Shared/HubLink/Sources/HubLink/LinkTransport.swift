@@ -59,6 +59,30 @@ enum LinkQUIC {
         }
     }
 
+    /// Reads exactly `count` bytes, or nil if the peer finished before sending any.
+    static func read(_ count: Int, from connection: NWConnection) async throws -> Data? {
+        var data = Data()
+        while data.count < count {
+            let (chunk, complete) = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<(Data?, Bool), Error>) in
+                connection.receive(minimumIncompleteLength: 1, maximumLength: count - data.count) { chunk, _, complete, error in
+                    if let error { continuation.resume(throwing: error) } else { continuation.resume(returning: (chunk, complete)) }
+                }
+            }
+            if let chunk { data.append(chunk) }
+            if complete && data.count < count {
+                if data.isEmpty { return nil }
+                throw LinkError("The Hub closed the stream mid-message.")
+            }
+        }
+        return data
+    }
+
+    /// A pushed frame: its length as four big-endian bytes, then the bytes. An empty frame keeps the stream alive.
+    static func frame(_ payload: Data) -> Data {
+        var length = UInt32(payload.count).bigEndian
+        return Data(bytes: &length, count: 4) + payload
+    }
+
     static func send(_ data: Data, on connection: NWConnection) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             connection.send(content: data, contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { error in
@@ -68,15 +92,87 @@ enum LinkQUIC {
     }
 }
 
+/// What the Hub does with a request: answer it once, or keep the stream open to push frames.
+public enum LinkReply: Sendable {
+    case response(Data)
+    case stream(@Sendable (LinkStream) -> Void)
+}
+
+/// An open stream the Hub pushes frames down until either side closes it.
+public final class LinkStream: @unchecked Sendable {
+    public static let keepAliveInterval: TimeInterval = 10
+
+    public let peer: LinkPublicKey
+    private let connection: NWConnection
+    private let lock = NSLock()
+    private var closed = false
+    private var closeHandlers: [@Sendable () -> Void] = []
+    private var timer: DispatchSourceTimer?
+
+    init(peer: LinkPublicKey, connection: NWConnection) {
+        self.peer = peer
+        self.connection = connection
+        connection.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .failed, .cancelled: self?.finish()
+            default: break
+            }
+        }
+        let timer = DispatchSource.makeTimerSource(queue: LinkQUIC.queue)
+        timer.schedule(deadline: .now() + Self.keepAliveInterval, repeating: Self.keepAliveInterval)
+        timer.setEventHandler { [weak self] in self?.send(Data()) }
+        timer.resume()
+        self.timer = timer
+    }
+
+    public var isClosed: Bool { lock.withLock { closed } }
+
+    /// Runs once when the stream ends, at once if it already has.
+    public func onClose(_ handler: @escaping @Sendable () -> Void) {
+        let run = lock.withLock { () -> Bool in
+            if closed { return true }
+            closeHandlers.append(handler)
+            return false
+        }
+        if run { handler() }
+    }
+
+    public func send(_ payload: Data) {
+        guard !isClosed else { return }
+        connection.send(content: LinkQUIC.frame(payload), completion: .contentProcessed { [weak self] error in
+            if error != nil { self?.connection.cancel() }
+        })
+    }
+
+    public func close() {
+        guard !isClosed else { return }
+        connection.send(content: nil, contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { [weak self] _ in
+            self?.finish()
+        })
+    }
+
+    private func finish() {
+        let handlers = lock.withLock { () -> [@Sendable () -> Void] in
+            guard !closed else { return [] }
+            closed = true
+            defer { closeHandlers = [] }
+            return closeHandlers
+        }
+        timer?.cancel()
+        handlers.forEach { $0() }
+    }
+}
+
 /// Accepts QUIC connections from any key and hands each request to `handler` with the
 /// sender's key, which is how the Hub knows which device is asking.
 public final class LinkServer: @unchecked Sendable {
-    public typealias Handler = @Sendable (LinkPublicKey, Data) async -> Data
+    public typealias Handler = @Sendable (LinkPublicKey, Data) async -> LinkReply
 
     private let listener: NWListener
     private let handler: Handler
     private let lock = NSLock()
     private var streams: [ObjectIdentifier: NWConnection] = [:]
+    private var pushed: [ObjectIdentifier: LinkStream] = [:]
 
     public init(identity: LinkIdentity, port: UInt16, handler: @escaping Handler) throws {
         guard let port = NWEndpoint.Port(rawValue: port) else { throw LinkError("The port is not valid.") }
@@ -106,7 +202,13 @@ public final class LinkServer: @unchecked Sendable {
 
     public func stop() {
         listener.cancel()
-        lock.withLock { streams.values.forEach { $0.cancel() }; streams.removeAll() }
+        let open = lock.withLock { () -> [LinkStream] in
+            streams.values.forEach { $0.cancel() }
+            streams.removeAll()
+            defer { pushed.removeAll() }
+            return Array(pushed.values)
+        }
+        open.forEach { $0.close() }
     }
 
     private func accept(_ stream: NWConnection) {
@@ -129,13 +231,73 @@ public final class LinkServer: @unchecked Sendable {
             stream.cancel()
             return
         }
-        let response = await handler(key, request)
-        try? await LinkQUIC.send(response, on: stream)
+        switch await handler(key, request) {
+        case .response(let response):
+            try? await LinkQUIC.send(response, on: stream)
+        case .stream(let open):
+            lock.withLock { _ = streams.removeValue(forKey: ObjectIdentifier(stream)) }
+            let pushed = LinkStream(peer: key, connection: stream)
+            lock.withLock { self.pushed[ObjectIdentifier(pushed)] = pushed }
+            pushed.onClose { [weak self] in
+                self?.lock.withLock { _ = self?.pushed.removeValue(forKey: ObjectIdentifier(pushed)) }
+                stream.cancel()
+            }
+            open(pushed)
+        }
     }
+}
+
+/// Frames the Hub pushes, until the stream ends or `cancel` is called.
+public final class LinkSubscription: Sendable {
+    public let frames: AsyncThrowingStream<Data, Error>
+    public let endpoint: LinkEndpoint
+    private let connection: NWConnection
+
+    init(connection: NWConnection, endpoint: LinkEndpoint) {
+        self.connection = connection
+        self.endpoint = endpoint
+        frames = AsyncThrowingStream { continuation in
+            let reader = Task {
+                do {
+                    while let header = try await LinkQUIC.read(4, from: connection) {
+                        let length = Int(header.withUnsafeBytes { UInt32(bigEndian: $0.loadUnaligned(as: UInt32.self)) })
+                        guard length <= LinkQUIC.messageLimit else { throw LinkError("The message is too large.") }
+                        // Empty frames only keep the stream alive.
+                        guard length > 0 else { continue }
+                        guard let payload = try await LinkQUIC.read(length, from: connection) else { break }
+                        continuation.yield(payload)
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in
+                reader.cancel()
+                connection.cancel()
+            }
+        }
+    }
+
+    public func cancel() { connection.cancel() }
 }
 
 /// Sends one request to a Hub whose key is pinned, trying every endpoint at once.
 public enum LinkClient {
+    /// Opens a stream the Hub keeps pushing frames down.
+    public static func subscribe(_ request: Data, identity: LinkIdentity, hubKey: LinkPublicKey,
+                                 endpoints: [LinkEndpoint], timeout: Duration = .seconds(10)) async throws -> LinkSubscription {
+        guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.") }
+        let (connection, endpoint) = try await firstReady(endpoints, identity: identity, hubKey: hubKey, timeout: timeout)
+        do {
+            try await LinkQUIC.send(request, on: connection)
+        } catch {
+            connection.cancel()
+            throw error
+        }
+        return LinkSubscription(connection: connection, endpoint: endpoint)
+    }
+
     public static func exchange(_ request: Data, identity: LinkIdentity, hubKey: LinkPublicKey,
                                 endpoints: [LinkEndpoint], timeout: Duration = .seconds(10)) async throws -> (response: Data, endpoint: LinkEndpoint) {
         guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.") }

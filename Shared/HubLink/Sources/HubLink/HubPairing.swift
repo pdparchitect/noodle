@@ -17,7 +17,8 @@ import Observation
     public private(set) var endpoint: LinkEndpoint?
     public private(set) var error: String?
     public private(set) var isWorking = false
-    @ObservationIgnored private let directory: URL
+    /// Where this pairing keeps its key and what it knows of the Hub.
+    @ObservationIgnored public let directory: URL
     @ObservationIgnored private let deviceName: String
 
     public init(directory: URL, deviceName: String) {
@@ -83,15 +84,80 @@ import Observation
         }
     }
 
+    /// Sends any request to the joined Hub, as this device.
+    public func request(_ request: LinkRequest) async throws -> LinkResponse {
+        guard let hub else { throw LinkError("This Mac has not joined a Noodle Hub.") }
+        return try await send(request, key: hub.key, endpoints: hub.endpoints)
+    }
+
+    /// Sends a file to one of this user's conversations on the Hub, piece by piece.
+    public func upload(_ file: URL, as attachment: LinkAttachment, to conversationID: UUID) async throws {
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        var offset = 0
+        repeat {
+            let data = try handle.read(upToCount: LinkProtocol.chunkSize) ?? Data()
+            _ = try await request(.upload(conversationID: conversationID, attachment: attachment, offset: offset, data: data))
+            offset += data.count
+        } while offset < attachment.byteCount
+    }
+
+    /// Saves one of a conversation's files from the Hub to `destination`.
+    public func download(_ attachment: LinkAttachment, from conversationID: UUID, to destination: URL) async throws {
+        FileManager.default.createFile(atPath: destination.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: destination)
+        defer { try? handle.close() }
+        var offset = 0
+        while true {
+            guard case .chunk(let data, let total) = try await request(.download(conversationID: conversationID,
+                                                                                 attachmentID: attachment.id, offset: offset)) else {
+                throw LinkError("The Hub sent an unexpected answer.")
+            }
+            try handle.write(contentsOf: data)
+            offset += data.count
+            if offset >= total || data.isEmpty { break }
+        }
+    }
+
+    /// Opens the stream the joined Hub pushes events down.
+    public func subscribe() async throws -> AsyncThrowingStream<LinkEvent, Error> {
+        guard let hub else { throw LinkError("This Mac has not joined a Noodle Hub.") }
+        let subscription = try await LinkClient.subscribe(try LinkProtocol.encode(.subscribe), identity: try identity(),
+                                                          hubKey: hub.key, endpoints: hub.endpoints)
+        endpoint = subscription.endpoint
+        return AsyncThrowingStream { continuation in
+            let reader = Task {
+                do {
+                    for try await frame in subscription.frames {
+                        if let event = LinkProtocol.decodeEvent(frame) { continuation.yield(event) }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in
+                reader.cancel()
+                subscription.cancel()
+            }
+        }
+    }
+
     private func exchange(_ request: LinkRequest, key: LinkPublicKey, endpoints: [LinkEndpoint]) async throws -> LinkStatus {
-        let identity = try identity()
-        let (data, endpoint) = try await LinkClient.exchange(try JSONEncoder().encode(request), identity: identity,
-                                                             hubKey: key, endpoints: endpoints)
-        self.endpoint = endpoint
-        switch try JSONDecoder().decode(LinkResponse.self, from: data) {
+        switch try await send(request, key: key, endpoints: endpoints) {
         case .status(let status): return status
         case .failure(let message): throw LinkError(message)
+        default: throw LinkError("The Hub sent an unexpected answer.")
         }
+    }
+
+    private func send(_ request: LinkRequest, key: LinkPublicKey, endpoints: [LinkEndpoint]) async throws -> LinkResponse {
+        let (data, endpoint) = try await LinkClient.exchange(try LinkProtocol.encode(request), identity: try identity(),
+                                                             hubKey: key, endpoints: endpoints)
+        self.endpoint = endpoint
+        let response = try LinkProtocol.decodeResponse(data)
+        if case .failure(let message) = response { throw LinkError(message) }
+        return response
     }
 
     private func identity() throws -> LinkIdentity {

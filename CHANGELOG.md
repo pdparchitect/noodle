@@ -13,6 +13,7 @@ All notable changes to Noodle are documented here, following
 - Show Apple Maps links in a conversation as a map: directions draw the route, places and searches show a pin. Click the card to open it in Maps.
 - Give every bot a Maps tool. It finds places, turns addresses into coordinates and back, and plans driving, walking, cycling and transit routes with Apple Maps, with distances, travel times and turn-by-turn steps. Each answer carries an Apple Maps link that shows as a map in the conversation.
 - Join Noodle Hubs from Settings > Companions, such as a friend's and one of your own. Join takes the invitation as a link to paste, a picture of its QR code to choose, drop or paste, or the camera; opening an invitation link starts the same. Each Hub you join gets its own row showing whether it is connected, your user and plan, and which harnesses your plan lends, and Leave forgets it. While Noodle runs it checks in with every Hub each minute. Scanning asks for camera access the first time.
+- Keep a bot on a Noodle Hub. New Bot's harness list includes what each joined Hub lends; a bot made with one runs on the Hub, keeps its conversation there, and appears here like any other bot, with replies arriving as they are written. It is yours alone on the Hub and follows you to your other devices. Editing or deleting it here changes it on the Hub. Files you attach travel to the bot, and files it sends come back.
 
 ### Changed
 

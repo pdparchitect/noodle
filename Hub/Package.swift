@@ -33,7 +33,8 @@ let package = Package(
                 .product(name: "Sparkle", package: "Sparkle"),
             ]),
         .testTarget(name: "HubCoreTests", dependencies: ["HubCore", .product(name: "NoodleCore", package: "noodle"),
-                                                        .product(name: "HubLink", package: "HubLink")]),
+                                                        .product(name: "HubLink", package: "HubLink"),
+                                                        .product(name: "NoodleHubClient", package: "noodle")]),
     ],
     swiftLanguageModes: [.v5]
 )

@@ -50,10 +50,10 @@ struct HubUsersSettingsView: View {
         } failed: { error = $0 }
         .alert("Remove User?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
                presenting: removing) { user in
-            Button("Remove", role: .destructive) { access.remove(user) }
+            Button("Remove", role: .destructive) { host.hub.remove(user) }
             Button("Cancel", role: .cancel) {}.keyboardShortcut(.defaultAction)
         } message: { user in
-            Text("“\(user.name)” and their devices can no longer use this Hub.")
+            Text("“\(user.name)”, their devices and their bots are removed from this Hub.")
         }
         .alert("Remove Device?", isPresented: Binding(get: { removingDevice != nil }, set: { if !$0 { removingDevice = nil } }),
                presenting: removingDevice) { device in

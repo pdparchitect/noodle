@@ -13,6 +13,7 @@ import NoodleRuntime
     public let harnessProfiles: HarnessProfilesController
     public let usage: UsageHistory
     public let access: HubAccess
+    public let bots: HubBots
     public let link: HubLinkService
 
     public init(root: URL, messenger: URL?) {
@@ -25,9 +26,17 @@ import NoodleRuntime
         usage = UsageHistory(url: root.appendingPathComponent("usage.sqlite"))
         runtime.onUsage = { [usage] in usage.record($0) }
         access = HubAccess(url: root.appendingPathComponent("access.json"))
+        bots = HubBots(repository: repository, runtime: runtime, access: access,
+                       uploads: root.appendingPathComponent("Uploads", isDirectory: true))
         link = HubLinkService(hubName: Host.current().localizedName ?? "Noodle Hub",
                               directory: root.appendingPathComponent("Link", isDirectory: true),
-                              access: access, profiles: harnessProfiles)
+                              access: access, profiles: harnessProfiles, bots: bots)
+    }
+
+    /// Removes a user with their devices and the bots they keep here.
+    public func remove(_ user: HubUser) {
+        bots.removeBots(of: user)
+        access.remove(user)
     }
 
     public static func root(applicationSupport: URL) -> URL {

@@ -4,6 +4,7 @@ import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 import NoodleCore
+import NoodleHubClient
 import NoodleRuntimeSettings
 
 enum BotEditorTab: String, CaseIterable {
@@ -175,10 +176,10 @@ struct NewBotSheet: View {
     }
 
     private var canCreate: Bool {
-        ConversationName.error(for: name) == nil &&
+        ConversationName.error(for: name) == nil && (HubHarnessChoice(identifier: selectedHarnessIdentifier) != nil ||
             store.runtime.availableInstallations.contains {
                 $0.provider.rawValue == selectedHarnessIdentifier
-            }
+            })
     }
 
     private func selectAvailableHarnessIfNeeded() {
@@ -377,6 +378,10 @@ struct EditBotSheet: View {
             })
             folders = store.folders(for: agent)
             selectedProfileID = store.harnessProfile(for: agent)
+            // A bot on a Noodle Hub runs on that Hub's harness.
+            if let choice = store.hubMirror(forAgent: agent.id)?.harness(ofAgent: agent.id) {
+                selectedHarnessIdentifier = choice.identifier
+            }
             if selectedHarnessIdentifier.isEmpty {
                 selectedHarnessIdentifier = store.runtime.availableInstallations.first?.provider.rawValue ?? ""
             }
@@ -414,10 +419,10 @@ struct EditBotSheet: View {
     }
 
     private var canSave: Bool {
-        ConversationName.error(for: name) == nil &&
+        ConversationName.error(for: name) == nil && (HubHarnessChoice(identifier: selectedHarnessIdentifier) != nil ||
             store.runtime.availableInstallations.contains {
                 $0.provider.rawValue == selectedHarnessIdentifier
-            }
+            })
     }
 
     private var previewAgent: AgentRecord {

@@ -25,6 +25,9 @@ import Observation
     @ObservationIgnored private let directory: URL
     @ObservationIgnored private let access: HubAccess
     @ObservationIgnored private let profiles: HarnessProfilesController
+    @ObservationIgnored private let bots: HubBots?
+    /// Open event streams, by the key of the device holding each.
+    @ObservationIgnored private var streams: [ObjectIdentifier: LinkStream] = [:]
     @ObservationIgnored private let port: UInt16
     @ObservationIgnored private let localEndpoints: (UInt16) -> [LinkEndpoint]
     @ObservationIgnored private let now: () -> Date
@@ -37,13 +40,14 @@ import Observation
     }
 
     public init(hubName: String, directory: URL, access: HubAccess, profiles: HarnessProfilesController,
-                port: UInt16 = LinkEndpoint.defaultPort,
+                bots: HubBots? = nil, port: UInt16 = LinkEndpoint.defaultPort,
                 localEndpoints: @escaping (UInt16) -> [LinkEndpoint] = LinkEndpoint.local(port:),
                 now: @escaping () -> Date = Date.init) {
         self.hubName = hubName
         self.directory = directory
         self.access = access
         self.profiles = profiles
+        self.bots = bots
         self.port = port
         self.localEndpoints = localEndpoints
         self.now = now
@@ -51,6 +55,7 @@ import Observation
         identity = (try? LinkIdentity.loadOrCreate(at: directory.appendingPathComponent("hub.key"))) ?? LinkIdentity()
         key = identity.publicKey
         manualAddress = (try? JSONDecoder().decode(Settings.self, from: Data(contentsOf: directory.appendingPathComponent("link.json"))))?.manualAddress ?? ""
+        bots?.onChange = { [weak self] user, event in self?.push(event, to: user) }
     }
 
     public func start() async {
@@ -58,7 +63,7 @@ import Observation
         state = .starting
         do {
             let server = try LinkServer(identity: identity, port: port) { [weak self] key, request in
-                await self?.respond(to: request, from: key) ?? Data()
+                await self?.reply(to: request, from: key) ?? .response(Data())
             }
             try await server.start()
             self.server = server
@@ -69,6 +74,8 @@ import Observation
     }
 
     public func stop() {
+        streams.values.forEach { $0.close() }
+        streams.removeAll()
         server?.stop()
         server = nil
         state = .stopped
@@ -90,6 +97,7 @@ import Observation
     public static let presenceWindow: TimeInterval = 90
 
     public func isConnected(_ device: HubDevice) -> Bool {
+        if streams.values.contains(where: { $0.peer == device.key }) { return true }
         guard let lastSeen = device.lastSeen else { return false }
         return now().timeIntervalSince(lastSeen) <= Self.presenceWindow
     }
@@ -110,14 +118,42 @@ import Observation
                               token: token, expires: expires)
     }
 
-    private func respond(to data: Data, from key: LinkPublicKey) -> Data {
+    private func reply(to data: Data, from key: LinkPublicKey) -> LinkReply {
+        let request: LinkRequest
+        switch LinkProtocol.decode(data) {
+        case .success(let decoded): request = decoded
+        case .failure(let error): return .response(LinkProtocol.encode(LinkResponse.failure(error.message)))
+        }
+        if case .subscribe = request {
+            guard let device = access.device(for: key) else {
+                return .response(LinkProtocol.encode(LinkResponse.failure("This device is not paired with \(hubName).")))
+            }
+            access.markSeen(device, at: now())
+            return .stream { [weak self] stream in
+                Task { @MainActor in self?.register(stream) }
+            }
+        }
         let response: LinkResponse
         do {
-            response = try handle(try JSONDecoder().decode(LinkRequest.self, from: data), from: key)
+            response = try handle(request, from: key)
         } catch {
             response = .failure(error.localizedDescription)
         }
-        return (try? JSONEncoder().encode(response)) ?? Data()
+        return .response(LinkProtocol.encode(response))
+    }
+
+    private func register(_ stream: LinkStream) {
+        let id = ObjectIdentifier(stream)
+        streams[id] = stream
+        stream.onClose { [weak self] in
+            Task { @MainActor in self?.streams[id] = nil }
+        }
+    }
+
+    private func push(_ event: LinkEvent, to user: UUID) {
+        let keys = Set(access.devices.filter { $0.user == user }.map(\.key))
+        let payload = LinkProtocol.encode(event)
+        for stream in streams.values where keys.contains(stream.peer) { stream.send(payload) }
     }
 
     private func handle(_ request: LinkRequest, from key: LinkPublicKey) throws -> LinkResponse {
@@ -132,12 +168,47 @@ import Observation
             let device = access.addDevice(named: name.isEmpty ? "Device" : String(name.prefix(80)), key: key, for: user, at: now())
             return .status(status(for: device))
         case .status:
-            guard let device = access.device(for: key) else {
-                throw LinkError("This device is not paired with \(hubName).")
-            }
+            let device = try paired(key)
             access.markSeen(device, at: now())
             return .status(status(for: device))
+        case .subscribe:
+            throw LinkError("Subscriptions open a stream.")
+        case .bots:
+            return .bots(try hubBots().bots(for: try user(key)))
+        case .createBot(let draft):
+            return .bot(try hubBots().create(draft, for: try user(key)))
+        case .updateBot(let id, let draft):
+            return .bot(try hubBots().update(id, with: draft, for: try user(key)))
+        case .deleteBot(let id):
+            try hubBots().delete(id, for: try user(key))
+            return .done
+        case .messages(let conversationID, let after):
+            return .messages(try hubBots().messages(in: conversationID, after: after, for: try user(key)))
+        case .send(let conversationID, let id, let body, let attachmentIDs):
+            return .message(try hubBots().send(body, id: id, attachmentIDs: attachmentIDs, in: conversationID, for: try user(key)))
+        case .upload(let conversationID, let attachment, let offset, let data):
+            try hubBots().receive(data, at: offset, of: attachment, in: conversationID, for: try user(key))
+            return .done
+        case .download(let conversationID, let attachmentID, let offset):
+            let (data, total) = try hubBots().chunk(of: attachmentID, in: conversationID, at: offset, for: try user(key))
+            return .chunk(data: data, total: total)
         }
+    }
+
+    private func paired(_ key: LinkPublicKey) throws -> HubDevice {
+        guard let device = access.device(for: key) else { throw LinkError("This device is not paired with \(hubName).") }
+        return device
+    }
+
+    private func user(_ key: LinkPublicKey) throws -> HubUser {
+        let device = try paired(key)
+        guard let user = access.user(for: device) else { throw LinkError("This device is not paired with \(hubName).") }
+        return user
+    }
+
+    private func hubBots() throws -> HubBots {
+        guard let bots else { throw LinkError("This Noodle Hub does not keep bots.") }
+        return bots
     }
 
     private func status(for device: HubDevice) -> LinkStatus {
@@ -150,7 +221,8 @@ import Observation
                 guard let profile = profiles.profile(id) else { return nil }
                 profileName = profile.displayName
             }
-            return LinkHarness(provider: harness.provider.rawValue, providerName: harness.provider.displayName, profileName: profileName)
+            return LinkHarness(provider: harness.provider.rawValue, providerName: harness.provider.displayName,
+                               profile: harness.profile, profileName: profileName)
         }
         .sorted { ($0.providerName, $0.profileName ?? "") < ($1.providerName, $1.profileName ?? "") }
         return LinkStatus(hubName: hubName, userName: user?.name ?? "", planName: plan?.name ?? "",

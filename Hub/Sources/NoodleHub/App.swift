@@ -39,7 +39,14 @@ import SwiftUI
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         HubUpdater.shared.start()
+        do { try settings.hub.bots.start() }
+        catch { NSLog("Noodle Hub could not start its bots: \(error.localizedDescription)") }
         Task { await settings.hub.link.start() }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        settings.hub.link.stop()
+        settings.hub.bots.stop()
     }
 }
 

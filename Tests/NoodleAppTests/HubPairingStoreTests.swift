@@ -1,5 +1,6 @@
 import Foundation
 import HubLink
+import NoodleHubClient
 @testable import Noodle
 import XCTest
 
@@ -28,5 +29,18 @@ import XCTest
         defer { f.cleanUp() }
         XCTAssertTrue(f.store.hubs.hubs.isEmpty)
         XCTAssertNil(f.store.hubs.joinError)
+    }
+}
+
+final class HubHarnessChoiceTests: XCTestCase {
+    /// The bot editor keeps a Hub harness in the same string as a local one.
+    func testAHubHarnessSurvivesTheEditorsSelection() throws {
+        let hub = LinkIdentity().publicKey
+        let profile = UUID()
+        let choice = HubHarnessChoice(hub: hub, provider: "claude-code", profile: profile)
+        XCTAssertEqual(HubHarnessChoice(identifier: choice.identifier), choice)
+        let system = HubHarnessChoice(hub: hub, provider: "codex", profile: nil)
+        XCTAssertEqual(HubHarnessChoice(identifier: system.identifier), system)
+        XCTAssertNil(HubHarnessChoice(identifier: "claude-code"))
     }
 }

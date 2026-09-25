@@ -1,0 +1,188 @@
+import Foundation
+import HubCore
+import HubLink
+import NoodleCore
+import XCTest
+
+/// A paired device keeping a bot on the Hub, over real QUIC on this Mac.
+@MainActor final class HubBotsTests: XCTestCase {
+    private struct Fixture {
+        let hub: Hub
+        let link: HubLinkService
+        let ada: HubUser
+        let device: HubPairing
+    }
+
+    private let claude = HubHarness(provider: .claudeCode, profile: nil)
+
+    private func fixture() async throws -> Fixture {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-bots-\(UUID())")
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        let hub = Hub(root: root.appendingPathComponent("Hub"), messenger: nil)
+        try hub.repository.prepare()
+        let link = HubLinkService(hubName: "Mac mini", directory: root.appendingPathComponent("Hub/Link"),
+                                  access: hub.access, profiles: hub.harnessProfiles, bots: hub.bots, port: 0,
+                                  localEndpoints: { [LinkEndpoint(host: "::1", port: $0)] })
+        await link.start()
+        addTeardownBlock { await MainActor.run { link.stop() } }
+        guard case .listening = link.state else { throw XCTSkip("Could not listen: \(link.state)") }
+        let family = try hub.access.addPlan(named: "Family")
+        hub.access.set(claude, included: true, in: family)
+        let ada = try hub.access.addUser(named: "Ada")
+        hub.access.move(ada, to: family)
+        let device = HubPairing(directory: root.appendingPathComponent("Device"), deviceName: "Mac")
+        await device.join(link.invite(ada).url().absoluteString)
+        XCTAssertNil(device.error)
+        return Fixture(hub: hub, link: link, ada: ada, device: device)
+    }
+
+    private func createBot(_ f: Fixture, provider: String = "claude-code") async throws -> LinkBot {
+        guard case .bot(let bot) = try await f.device.request(.createBot(LinkBotDraft(name: "Alfred", provider: provider,
+                                                                                     backstory: "A butler."))) else {
+            throw XCTSkip("unexpected answer")
+        }
+        return bot
+    }
+
+    func testABotIsCreatedOnTheHubForItsUser() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        XCTAssertEqual(bot.draft.name, "Alfred")
+        let agent = try XCTUnwrap(f.hub.repository.loadAgents().first { $0.id == bot.id })
+        XCTAssertEqual(agent.harnessIdentifier, "claude-code")
+        XCTAssertEqual(try f.hub.repository.loadAgentBackstory(agent), "A butler.")
+        XCTAssertEqual(f.hub.access.owner(ofBot: bot.id), f.ada.id)
+        let listed = try await f.device.request(.bots)
+        XCTAssertEqual(listed, .bots([bot]))
+    }
+
+    func testBotsOnlyUseHarnessesTheirUsersPlanLends() async throws {
+        let f = try await fixture()
+        do {
+            _ = try await createBot(f, provider: "codex")
+            XCTFail("Created a bot on a harness the plan does not lend")
+        } catch {
+            XCTAssertEqual((error as? LinkError)?.message, "Your plan does not lend Codex.")
+        }
+        XCTAssertTrue(try f.hub.repository.loadAgents().isEmpty)
+    }
+
+    func testSendingTwiceWithOneIDKeepsOneMessage() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        let id = UUID()
+        _ = try await f.device.request(.send(conversationID: bot.conversationID, id: id, body: "Hello", attachmentIDs: []))
+        _ = try await f.device.request(.send(conversationID: bot.conversationID, id: id, body: "Hello", attachmentIDs: []))
+        guard case .messages(let page) = try await f.device.request(.messages(conversationID: bot.conversationID, after: 0)) else {
+            return XCTFail("no messages")
+        }
+        XCTAssertEqual(page.messages.map(\.id), [id])
+        XCTAssertEqual(page.messages.first?.author, .you)
+        XCTAssertEqual(page.count, 1)
+    }
+
+    func testBotRepliesArePushedToTheOwnersDevices() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        let events = try await f.device.subscribe()
+        _ = try await f.device.request(.send(conversationID: bot.conversationID, id: UUID(), body: "Hello", attachmentIDs: []))
+        _ = try f.hub.repository.sendAgentMessage(agentID: bot.id, conversationID: bot.conversationID, body: "Good evening.")
+        f.hub.bots.checkForChanges()
+
+        var counts: [Int] = []
+        for try await event in events {
+            if case .conversationChanged(bot.conversationID, let count) = event { counts.append(count) }
+            if counts.last == 2 { break }
+        }
+        XCTAssertEqual(counts.last, 2)
+        guard case .messages(let page) = try await f.device.request(.messages(conversationID: bot.conversationID, after: 1)) else {
+            return XCTFail("no messages")
+        }
+        XCTAssertEqual(page.messages.map(\.body), ["Good evening."])
+        XCTAssertEqual(page.messages.first?.author, .bot(bot.id))
+    }
+
+    func testOtherUsersCannotReachABot() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        let grace = try f.hub.access.addUser(named: "Grace")
+        let other = HubPairing(directory: FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-other-\(UUID())"),
+                               deviceName: "Other")
+        await other.join(f.link.invite(grace).url().absoluteString)
+        let listed = try await other.request(.bots)
+        XCTAssertEqual(listed, .bots([]))
+        do {
+            _ = try await other.request(.send(conversationID: bot.conversationID, id: UUID(), body: "Hi", attachmentIDs: []))
+            XCTFail("Reached another user's bot")
+        } catch {}
+        do {
+            _ = try await other.request(.deleteBot(id: bot.id))
+            XCTFail("Deleted another user's bot")
+        } catch {}
+    }
+
+    func testABotStopsWhenThePlanNoLongerLendsItsHarness() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        f.hub.access.move(f.ada, to: f.hub.access.plans[0])
+        do {
+            _ = try await f.device.request(.send(conversationID: bot.conversationID, id: UUID(), body: "Hello", attachmentIDs: []))
+            XCTFail("Sent through a harness the plan no longer lends")
+        } catch {
+            XCTAssertEqual((error as? LinkError)?.message, "Your plan no longer lends Claude Code.")
+        }
+    }
+
+    func testDeletingABotOrItsUserRemovesItFromTheHub() async throws {
+        let f = try await fixture()
+        let first = try await createBot(f)
+        let deleted = try await f.device.request(.deleteBot(id: first.id))
+        XCTAssertEqual(deleted, .done)
+        XCTAssertTrue(try f.hub.repository.loadAgents().isEmpty)
+
+        let second = try await createBot(f)
+        f.hub.remove(f.ada)
+        XCTAssertTrue(try f.hub.repository.loadAgents().isEmpty)
+        XCTAssertNil(f.hub.access.owner(ofBot: second.id))
+    }
+
+    func testFilesTravelToAndFromABotInPieces() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        let bytes = Data("%PDF-1.4\n".utf8) + Data((0..<1_300_000).map { UInt8($0 % 251) })
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("hub-upload-\(UUID()).pdf")
+        try bytes.write(to: file)
+        addTeardownBlock { try? FileManager.default.removeItem(at: file) }
+        let attachment = LinkAttachment(id: UUID(), filename: "Report.pdf", mediaType: "application/pdf", byteCount: bytes.count)
+
+        try await f.device.upload(file, as: attachment, to: bot.conversationID)
+        _ = try await f.device.request(.send(conversationID: bot.conversationID, id: UUID(), body: "What is in this file?",
+                                             attachmentIDs: [attachment.id]))
+        let stored = try XCTUnwrap(f.hub.repository.loadAttachments(conversationID: bot.conversationID).first)
+        XCTAssertEqual(stored.id, attachment.id)
+        XCTAssertEqual(stored.originalFilename, "Report.pdf")
+        XCTAssertEqual(try Data(contentsOf: f.hub.repository.attachmentFileURL(stored)), bytes)
+        XCTAssertEqual(try f.hub.repository.loadMessages(conversationID: bot.conversationID).first?.attachmentIDs, [attachment.id])
+
+        guard case .messages(let page) = try await f.device.request(.messages(conversationID: bot.conversationID, after: 0)) else {
+            return XCTFail("no messages")
+        }
+        XCTAssertEqual(page.messages.first?.attachments, [attachment])
+        let copy = FileManager.default.temporaryDirectory.appendingPathComponent("hub-download-\(UUID())")
+        addTeardownBlock { try? FileManager.default.removeItem(at: copy) }
+        try await f.device.download(attachment, from: bot.conversationID, to: copy)
+        XCTAssertEqual(try Data(contentsOf: copy), bytes)
+    }
+
+    func testMessagesCannotPointAtFilesThatNeverArrived() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        do {
+            _ = try await f.device.request(.send(conversationID: bot.conversationID, id: UUID(), body: "See file",
+                                                 attachmentIDs: [UUID()]))
+            XCTFail("Sent a message pointing at a missing file")
+        } catch {
+            XCTAssertEqual((error as? LinkError)?.message, "An attachment has not reached the Hub yet.")
+        }
+    }
+}

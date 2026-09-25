@@ -69,12 +69,15 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
     public private(set) var users: [HubUser] = []
     public private(set) var plans: [HubPlan] = []
     public private(set) var devices: [HubDevice] = []
+    /// Which user each bot on the Hub belongs to.
+    public private(set) var botOwners: [UUID: UUID] = [:]
     @ObservationIgnored private let url: URL
 
     private struct Stored: Codable {
         var users: [HubUser]
         var plans: [HubPlan]
         var devices: [HubDevice]?
+        var botOwners: [UUID: UUID]?
     }
 
     public init(url: URL) {
@@ -83,6 +86,7 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
             users = stored.users
             plans = stored.plans
             devices = stored.devices ?? []
+            botOwners = stored.botOwners ?? [:]
         }
         if !plans.contains(where: \.isDefault) {
             plans.insert(HubPlan(id: HubPlan.defaultID, name: "Default"), at: 0)
@@ -114,11 +118,27 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         update(user) { $0.plan = plan.id }
     }
 
-    /// Their devices go too.
+    /// Their devices go too. Remove a user through `Hub.remove`, which deletes their bots first.
     public func remove(_ user: HubUser) {
         users.removeAll { $0.id == user.id }
         devices.removeAll { $0.user == user.id }
+        botOwners = botOwners.filter { $0.value != user.id }
         save()
+    }
+
+    public func owner(ofBot bot: UUID) -> UUID? { botOwners[bot] }
+
+    public func bots(of user: HubUser) -> [UUID] {
+        botOwners.filter { $0.value == user.id }.map(\.key)
+    }
+
+    public func setOwner(_ user: HubUser?, ofBot bot: UUID) {
+        botOwners[bot] = user?.id
+        save()
+    }
+
+    public func user(for device: HubDevice) -> HubUser? {
+        users.first { $0.id == device.user }
     }
 
     public func devices(of user: HubUser) -> [HubDevice] {
@@ -196,7 +216,7 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
     private func save() {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(Stored(users: users, plans: plans, devices: devices)) else { return }
+        guard let data = try? encoder.encode(Stored(users: users, plans: plans, devices: devices, botOwners: botOwners)) else { return }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? AtomicFile.write(data, to: url)
     }

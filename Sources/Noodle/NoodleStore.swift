@@ -4,6 +4,7 @@ import HubLink
 import Observation
 import NoodleCalendarTools
 import NoodleCore
+import NoodleHubClient
 import NoodleRemindersTools
 import UniformTypeIdentifiers
 import NoodleRuntime
@@ -136,6 +137,9 @@ final class NoodleStore {
     let hubs: HubMemberships
     /// An invitation opened from a link, waiting in Settings > Companions to be joined.
     var pendingHubInvitation: String?
+    /// This Mac's copy of the bots it keeps on each joined Hub.
+    private(set) var hubMirrors: [HubMirror] = []
+    @ObservationIgnored private var hubMirrorTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     let harnessSetup: HarnessSetupController
     private let connectsServices: Bool
     private var transcriptRefreshTask: Task<Void, Never>?
@@ -225,6 +229,8 @@ final class NoodleStore {
         try? toolProviders.register(ReminderToolProvider(store: reminderStore))
         applets = AppletController(repository: self.repository)
         harnessProfiles = HarnessProfilesController(store: self.repository.harnessProfiles)
+        // Before any bot starts, so bots on a Hub never run here.
+        refreshHubMirrors()
         reload()
         Self.active = self
     }
@@ -233,7 +239,9 @@ final class NoodleStore {
         conversations.first(where: { $0.id == selectedConversationID })
     }
 
-    var canCreateBot: Bool { storageReady && !runtime.availableInstallations.isEmpty }
+    var canCreateBot: Bool {
+        storageReady && (!runtime.availableInstallations.isEmpty || hubs.hubs.contains { $0.status?.harnesses.isEmpty == false })
+    }
 
     /// Once, for someone with no bots yet. Afterwards the empty window offers it.
     func offerFirstBotSetup(defaults: UserDefaults = .standard) {
@@ -370,6 +378,78 @@ final class NoodleStore {
         }
     }
 
+    /// Keeps one mirror per joined Hub, keeps their bots out of this Mac's runtime, and
+    /// follows each Hub while Noodle monitors its bots.
+    func refreshHubMirrors() {
+        let pairings = hubs.hubs
+        let kept = pairings.map { pairing in
+            hubMirrors.first { $0.pairing === pairing } ?? {
+                let mirror = HubMirror(pairing: pairing, repository: repository, directory: pairing.directory)
+                mirror.onChange = { [weak self] in self?.hubBotsChanged() }
+                return mirror
+            }()
+        }
+        for (id, task) in hubMirrorTasks where !kept.contains(where: { ObjectIdentifier($0) == id }) {
+            task.cancel()
+            hubMirrorTasks[id] = nil
+        }
+        hubMirrors = kept
+        runtime.remoteAgentIDs = kept.reduce(into: Set<UUID>()) { $0.formUnion($1.localAgentIDs) }
+        guard transcriptRefreshTask != nil else { return }
+        for mirror in kept where hubMirrorTasks[ObjectIdentifier(mirror)] == nil {
+            hubMirrorTasks[ObjectIdentifier(mirror)] = Task { await mirror.run() }
+        }
+    }
+
+    func hubMirror(forAgent id: UUID) -> HubMirror? {
+        hubMirrors.first { $0.localAgentIDs.contains(id) }
+    }
+
+    func joinHub(_ invitation: String) async {
+        await hubs.join(invitation)
+        refreshHubMirrors()
+    }
+
+    /// Forgets the Hub here. Bots kept on it stay there for this user's other devices.
+    func leaveHub(_ pairing: HubPairing) {
+        hubMirrors.first { $0.pairing === pairing }?.forgetLocalCopies()
+        hubs.leave(pairing)
+        refreshHubMirrors()
+        reload()
+    }
+
+    private func hubBotsChanged() {
+        runtime.remoteAgentIDs = hubMirrors.reduce(into: Set<UUID>()) { $0.formUnion($1.localAgentIDs) }
+        if let selectedConversationID, !((try? repository.loadConversations()) ?? []).contains(where: { $0.id == selectedConversationID }) {
+            self.selectedConversationID = nil
+        }
+        reload()
+    }
+
+    private func createHubAgent(on choice: HubHarnessChoice, draft: LinkBotDraft) -> Bool {
+        guard let mirror = hubMirrors.first(where: { $0.pairing.hub?.key == choice.hub }) else {
+            errorMessage = "Join that Noodle Hub again before creating a bot on it."
+            return false
+        }
+        creationSheet = nil
+        Task {
+            do {
+                let agent = try await mirror.createBot(draft)
+                selectedConversationID = conversations.first { $0.kind == .direct && $0.participantIDs == [agent.id] }?.id
+                refreshAppShortcuts()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+        return true
+    }
+
+    /// Sends what was just written in a conversation with a bot on a Hub.
+    private func sendToHub(_ conversationID: UUID) {
+        guard let mirror = hubMirrors.first(where: { $0.owns(conversation: conversationID) }) else { return }
+        Task { await mirror.pushPending() }
+    }
+
     /// Takes a Noodle Hub invitation link to Settings > Companions. Returns false for any other link.
     func receiveHubInvitation(_ url: URL) -> Bool {
         guard url.host == LinkInvitation.urlHost else { return false }
@@ -396,6 +476,12 @@ final class NoodleStore {
         folders: [AgentFolder] = [],
         harnessProfile: UUID? = nil
     ) -> Bool {
+        if let choice = HubHarnessChoice(identifier: harnessIdentifier) {
+            return createHubAgent(on: choice, draft: LinkBotDraft(
+                name: name, provider: choice.provider, profile: choice.profile, publicDescription: publicDescription,
+                backstory: backstory, avatarSymbolName: avatarSymbolName, avatarColorIndex: avatarColorIndex,
+                avatarImageData: avatarImageData))
+        }
         guard runtime.availableInstallations.contains(where: { $0.provider.rawValue == harnessIdentifier }) else {
             errorMessage = "Set up a supported harness in Settings before creating a bot."
             return false
@@ -474,6 +560,21 @@ final class NoodleStore {
         folders: [AgentFolder]? = nil,
         harnessProfile: UUID?? = nil
     ) -> Bool {
+        if let mirror = hubMirror(forAgent: agent.id) {
+            let choice = HubHarnessChoice(identifier: harnessIdentifier) ?? mirror.harness(ofAgent: agent.id)
+            let draft = LinkBotDraft(name: name, provider: choice?.provider ?? harnessIdentifier, profile: choice?.profile,
+                                     publicDescription: publicDescription, backstory: backstory, avatarSymbolName: avatarSymbolName,
+                                     avatarColorIndex: avatarColorIndex, avatarImageData: avatarImageData)
+            agentBeingEdited = nil
+            Task {
+                do {
+                    try await mirror.updateBot(localAgentID: agent.id, with: draft)
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+            return true
+        }
         var checkpoint: AgentSettingsCheckpoint?
         let updated: AgentRecord
         let previousBackstory: String
@@ -654,6 +755,20 @@ final class NoodleStore {
             ? participants(for: conversation).first
             : nil
 
+        if let agent, let mirror = hubMirror(forAgent: agent.id) {
+            Task {
+                do {
+                    try await mirror.deleteBot(localAgentID: agent.id)
+                    drafts.clear(conversation.id)
+                    if selectedConversationID == conversation.id { selectedConversationID = nil }
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+            agentBeingEdited = nil
+            return true
+        }
+
         if let agent {
             runtime.stop(agentID: agent.id, revokeAccess: false)
         }
@@ -710,6 +825,7 @@ final class NoodleStore {
         }
         // The text draft is independent and remains untouched.
         runtime.notify(participants(for: conversation), repository: repository)
+        sendToHub(conversationID)
     }
 
     func sendDraft() {
@@ -740,6 +856,7 @@ final class NoodleStore {
 
             drafts.clear(conversation.id)
             runtime.notify(participants(for: conversation), repository: repository)
+            sendToHub(conversation.id)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -761,6 +878,7 @@ final class NoodleStore {
             conversations.sort { $0.updatedAt > $1.updatedAt }
         }
         runtime.notify(participants(for: conversation), repository: repository)
+        sendToHub(conversation.id)
         return message
     }
 
@@ -1449,6 +1567,7 @@ final class NoodleStore {
             }
         }
         hubCheckInTask = Task { [hubs] in await hubs.stayConnected() }
+        refreshHubMirrors()
     }
 
     func recoverAgentsAfterWake() {
@@ -1462,6 +1581,8 @@ final class NoodleStore {
         harnessUpdateTask = nil
         hubCheckInTask?.cancel()
         hubCheckInTask = nil
+        hubMirrorTasks.values.forEach { $0.cancel() }
+        hubMirrorTasks.removeAll()
         runtime.stopAll()
     }
 }
