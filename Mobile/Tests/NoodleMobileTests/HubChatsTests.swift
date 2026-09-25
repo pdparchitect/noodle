@@ -19,6 +19,11 @@ private actor FakeHub {
 
     func data(of id: UUID) -> Data? { files[id]?.data }
 
+    func botSays(_ body: String) {
+        messages.append(LinkMessage(id: UUID(), conversationID: bot.conversationID, author: .bot(bot.id), body: body,
+                                    createdAt: Date(), delivered: true))
+    }
+
     /// A message from the bot carrying a file.
     func botSends(_ data: Data, named filename: String, mediaType: String) -> LinkAttachment {
         let attachment = LinkAttachment(id: UUID(), filename: filename, mediaType: mediaType, byteCount: data.count)
@@ -253,5 +258,48 @@ private actor FakeHub {
         for text in ["http://localhost:8080", "http://192.168.1.4/admin", "mailto:a@b.com", "ftp://example.com", "no links"] {
             #expect(LinkPreview.firstURL(in: text) == nil, "\(text)")
         }
+    }
+
+    @Test func conversationsAlreadyThereAreNotUnread() async throws {
+        let hub = FakeHub()
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+
+        try await chats.reload()
+
+        #expect(!chats.isUnread(try #require(chats.agents.first)))
+    }
+
+    @Test func aReplyIsUnreadUntilTheConversationIsOpened() async throws {
+        let hub = FakeHub()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let (chats, server) = try await paired(to: hub, directory: directory)
+        defer { server.stop() }
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+
+        await hub.botSays("Done")
+        try await chats.reload()
+        #expect(chats.isUnread(scout))
+        #expect(HubChats(pairing: HubPairing(directory: directory, deviceName: "iPhone")).isUnread(scout))
+
+        chats.markRead(scout)
+
+        #expect(!chats.isUnread(scout))
+        #expect(!HubChats(pairing: HubPairing(directory: directory, deviceName: "iPhone")).isUnread(scout))
+    }
+
+    @Test func aLaterReplyIsUnreadAgain() async throws {
+        let hub = FakeHub()
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+        chats.markRead(scout)
+
+        await hub.botSays("Hello again")
+        try await chats.reload()
+
+        #expect(chats.isUnread(scout))
     }
 }

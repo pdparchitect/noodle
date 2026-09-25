@@ -11,6 +11,9 @@ import SwiftUI
     private(set) var isLoaded = false
     /// Pins belong to this phone alone; the Hub never sees them.
     private var pinned: Set<UUID>
+    /// When each conversation was last read on this phone. Nil until the first sync after
+    /// installing, which counts everything already there as read.
+    private var seen: [UUID: Date]?
     private var conversations: [UUID: [LinkMessage]] = [:]
     /// How far each conversation has been read. It stops at a message the bot has not taken yet,
     /// so that message is read again until it shows as delivered.
@@ -26,6 +29,7 @@ import SwiftUI
     init(pairing: HubPairing) {
         self.pairing = pairing
         pinned = Set((try? JSONDecoder().decode([UUID].self, from: Data(contentsOf: pairing.directory.appendingPathComponent("pins.json")))) ?? [])
+        seen = try? JSONDecoder().decode([UUID: Date].self, from: Data(contentsOf: seenURL))
         if let cache = try? JSONDecoder().decode(Cache.self, from: Data(contentsOf: cacheURL)) {
             agents = cache.agents
             conversations = cache.conversations
@@ -35,6 +39,26 @@ import SwiftUI
     }
 
     private var cacheURL: URL { pairing.directory.appendingPathComponent("chats.json") }
+    private var seenURL: URL { pairing.directory.appendingPathComponent("read.json") }
+
+    /// Whether the bot has written since the conversation was last opened here.
+    func isUnread(_ agent: LinkBot) -> Bool {
+        guard let seen, let reply = messages(of: agent).last(where: { if case .bot = $0.author { true } else { false } }) else {
+            return false
+        }
+        return seen[agent.conversationID].map { reply.createdAt > $0 } ?? true
+    }
+
+    func markRead(_ agent: LinkBot) {
+        guard let latest = messages(of: agent).last?.createdAt, (seen?[agent.conversationID] ?? .distantPast) < latest else { return }
+        seen = (seen ?? [:]).merging([agent.conversationID: latest]) { $1 }
+        saveSeen()
+    }
+
+    private func saveSeen() {
+        guard let seen else { return }
+        try? JSONEncoder().encode(seen).write(to: seenURL, options: .atomic)
+    }
 
     private func saveCache() {
         try? JSONEncoder().encode(Cache(agents: agents, conversations: conversations, read: read))
@@ -88,6 +112,7 @@ import SwiftUI
         agents.removeAll { $0.id == agent.id }
         conversations[agent.conversationID] = nil
         read[agent.conversationID] = nil
+        if seen?.removeValue(forKey: agent.conversationID) != nil { saveSeen() }
         if pinned.remove(agent.id) != nil { savePins() }
         saveCache()
     }
@@ -126,6 +151,10 @@ import SwiftUI
         for bot in bots { try await load(bot.conversationID) }
         // Conversations of bots that are gone.
         conversations = conversations.filter { id, _ in bots.contains { $0.conversationID == id } }
+        if seen == nil {
+            seen = conversations.compactMapValues { $0.last?.createdAt }
+            saveSeen()
+        }
         isLoaded = true
         error = nil
         saveCache()
@@ -244,7 +273,8 @@ struct AgentsView: View {
         NavigationStack {
             List(chats.sortedAgents) { agent in
                 NavigationLink(value: agent.id) {
-                    AgentRow(agent: agent, latest: chats.latestMessage(of: agent), pinned: chats.isPinned(agent))
+                    AgentRow(agent: agent, latest: chats.latestMessage(of: agent), pinned: chats.isPinned(agent),
+                             unread: chats.isUnread(agent))
                 }
                 // As in Messages: dividers between rows, none above the first.
                 .listRowSeparator(agent.id == chats.sortedAgents.first?.id ? .hidden : .visible, edges: .top)
@@ -330,10 +360,18 @@ private struct AgentRow: View {
     let agent: LinkBot
     let latest: LinkMessage?
     let pinned: Bool
+    let unread: Bool
 
     var body: some View {
         HStack(spacing: 12) {
             AgentAvatar(draft: agent.draft, size: 48)
+                // In the margin left of the picture, as in Messages.
+                .overlay(alignment: .leading) {
+                    if unread {
+                        Circle().fill(.tint).frame(width: 10, height: 10).offset(x: -16)
+                            .accessibilityLabel("Unread")
+                    }
+                }
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(agent.draft.name).font(.headline).lineLimit(1)
@@ -357,6 +395,8 @@ private struct AgentRow: View {
 
 /// One agent's conversation, laid out like Messages.
 struct ChatView: View {
+    /// The height of a one-line message field, which the buttons beside it match.
+    private static let controlHeight: CGFloat = 36
     let chats: HubChats
     let agentID: UUID
     @State private var draft = ""
@@ -394,6 +434,9 @@ struct ChatView: View {
         }
         .defaultScrollAnchor(.bottom)
         .scrollDismissesKeyboard(.interactively)
+        // Open means read, including replies that arrive while it is open.
+        .onAppear { chats.markRead(agent) }
+        .onChange(of: messages.last?.id) { chats.markRead(agent) }
         .safeAreaInset(edge: .bottom) { composer }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -449,17 +492,23 @@ struct ChatView: View {
                     }
                     Button("Files", systemImage: "folder") { importing = true }
                 } label: {
-                    Image(systemName: "plus").font(.system(size: 18, weight: .semibold))
-                        .frame(width: 34, height: 34)
-                        .background(Color(.secondarySystemBackground), in: Circle())
+                    Image(systemName: "plus").font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: Self.controlHeight, height: Self.controlHeight)
+                        .background(Color(.secondarySystemFill), in: Circle())
                 }
+                // A menu otherwise drops the circle and tints the plus.
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
                 .accessibilityLabel("Add")
                 TextField("Message", text: $draft, axis: .vertical)
                     .lineLimit(1...6)
-                    .padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(Capsule().strokeBorder(.quaternary))
+                    .padding(.horizontal, 14).padding(.vertical, 7)
+                    .frame(minHeight: Self.controlHeight)
+                    .background(RoundedRectangle(cornerRadius: Self.controlHeight / 2, style: .continuous).strokeBorder(.quaternary))
                 Button(action: send) {
-                    Image(systemName: "arrow.up.circle.fill").font(.system(size: 32))
+                    Image(systemName: "arrow.up.circle.fill").font(.system(size: 30))
+                        .frame(width: Self.controlHeight, height: Self.controlHeight)
                 }
                 .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && files.isEmpty)
                 .accessibilityLabel("Send")
