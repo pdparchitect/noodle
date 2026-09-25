@@ -30,9 +30,12 @@ struct UsageMenuButton: View {
     let history: UsageHistory
 
     var body: some View {
-        Button("Usage") {
+        Button {
             history.agentFilter = nil
             openWindow(id: UsageView.windowID)
+        } label: {
+            Label("Usage", systemImage: "chart.bar")
+                .labelStyle(.titleAndIcon)
         }
         .appShortcut(.showUsage)
     }

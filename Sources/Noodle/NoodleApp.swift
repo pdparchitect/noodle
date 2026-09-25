@@ -96,7 +96,11 @@ struct NoodleApp: App {
             }
             CommandGroup(after: .appSettings) {
                 CheckForUpdatesButton()
+            }
+            // "After Settings" draws above it; this section sits between Settings and Services.
+            CommandGroup(before: .systemServices) {
                 UsageMenuButton(history: store.usage)
+                Divider()
             }
             CommandGroup(replacing: .newItem) {
                 Button("New Bot") {
