@@ -232,6 +232,8 @@ struct UsageView: View {
                 .help("Only harnesses that report cost are included.")
             tile("Cache Hits", report.cacheHitRate.formatted(.percent.precision(.fractionLength(0))))
                 .help("Share of input tokens read from the cache.")
+            tile("Input", Self.tokenText(report.tokens.input + report.tokens.cacheWrite))
+                .help("Input tokens not read from the cache.")
             tile("Output", Self.tokenText(report.tokens.output))
             tile("Daily Average", text(report.dailyAverage))
         }
@@ -241,6 +243,7 @@ struct UsageView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(.caption).foregroundStyle(.secondary)
             Text(value).font(.title2.weight(.semibold)).monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.6)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
