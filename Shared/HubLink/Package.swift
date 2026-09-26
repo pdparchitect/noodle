@@ -12,7 +12,7 @@ let package = Package(
     targets: [
         .target(name: "HubLink", dependencies: [.product(name: "X509", package: "swift-certificates"),
                                                 .product(name: "Surface", package: "Surface")]),
-        .testTarget(name: "HubLinkTests", dependencies: ["HubLink"]),
+        .testTarget(name: "HubLinkTests", dependencies: ["HubLink", .product(name: "X509", package: "swift-certificates")]),
     ],
     swiftLanguageModes: [.v5]
 )
