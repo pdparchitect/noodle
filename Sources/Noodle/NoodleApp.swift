@@ -43,12 +43,11 @@ struct NoodleApp: App {
             NSApplication.shared.run()
             Darwin.exit(1)
         }
-        if checks.contains(DevelopmentHook.computerIntegration) || checks.contains(DevelopmentHook.computerDiscovery) || checks.contains(DevelopmentHook.computerPicker) || checks.contains(DevelopmentHook.computerDocumentPreview) {
+        if checks.contains(DevelopmentHook.computerIntegration) || checks.contains(DevelopmentHook.computerDiscovery) || checks.contains(DevelopmentHook.computerPicker) {
             NSApplication.shared.setActivationPolicy(.regular)
             Task { @MainActor in
                 do {
-                    if checks.contains(DevelopmentHook.computerDocumentPreview) { try await ComputerIntegrationTest.checkDocumentPreview() }
-                    else if checks.contains(DevelopmentHook.computerPicker) { try await ComputerIntegrationTest.checkPicker() }
+                    if checks.contains(DevelopmentHook.computerPicker) { try await ComputerIntegrationTest.checkPicker() }
                     else if checks.contains(DevelopmentHook.computerDiscovery) { try await ComputerIntegrationTest.checkDiscovery() }
                     else { try await ComputerIntegrationTest.run() }
                     Darwin.exit(0)
@@ -513,7 +512,6 @@ enum DevelopmentHook {
     static let computerDiscovery = "cb8afdc7be7ca2bbf1fa773ff3e29a701f87b9fa5ff0829f2cee308842592486"  // --computer-discovery-test
     static let computerPicker = "9eb302341e8dcfc228f18b55db833f42b50920ce005f9aed554f4b7a1ff521af"  // --computer-picker-test
     static let computerUpdateNotice = "279a6cb632bdc55fe04c2cde06fd18eaa9e3f6c2fdc262a4f749ffe4b39b7f16"  // --computer-update-notice-test
-    static let computerDocumentPreview = "376dcdd0ffa2dca5cf431ccd16a1a02f611c881259e6e50afd5472beb4692681"  // --computer-document-preview-test
     static let computerDownload = "241600d7fee4a10ff34b7caabd58bd674fe8d13183a01a0e50469b9081eb5585"  // --computer-download-test
     static let computerWeb = "a15d161557b60e252aff873db33a8a522c76e0fee123068f282b14e5791384d8"  // --computer-web-test
     static let scenario = "fc882b0401601368259a54b753ab1714b761d5cf88bf2069356700f6a2fd580e"  // --scenario

@@ -206,7 +206,8 @@ import SwiftUI
         try await expectDenied(["present", "--computer", UUID().uuidString, "--terminal", idA, "--conversation", a.conversation.id.uuidString], a.agent)
         _ = try await cli(["present"] + terminalA + ["--conversation", a.conversation.id.uuidString, "--message", "Here is the saved terminal preview."])
         let attachment = try repository.loadAttachments(conversationID: a.conversation.id).first!
-        guard let card = attachment.computer, card.terminalID?.uuidString == idA, card.view == "terminal" else { throw ComputerBridgeError("No typed computer attachment.") }
+        guard case .computer(_, let terminal, let view)? = attachment.companion, attachment.card != nil,
+              terminal?.uuidString == idA, view == "terminal" else { throw ComputerBridgeError("No computer link attachment.") }
         if controller.registry.computers.first(where: { $0.id == computer.id })?.hasWebDisplay != true {
             let single = try await cli(["present"] + base + ["--conversation", a.conversation.id.uuidString])
             guard single["terminalID"] as? String == idA else { throw ComputerBridgeError("Sole terminal not inferred.") }
@@ -234,8 +235,8 @@ import SwiftUI
             try await Task.sleep(for: .seconds(1))
             await controller.refresh()
             _ = try await cli(["present"] + base + ["--conversation", a.conversation.id.uuidString])
-            let webCard = try repository.loadAttachments(conversationID: a.conversation.id).last!.computer!
-            guard webCard.view == "web", webCard.terminalID == nil else { throw ComputerBridgeError("Web card unexpectedly requires a terminal.") }
+            guard case .computer(_, let terminal, let view)? = try repository.loadAttachments(conversationID: a.conversation.id).last!.companion,
+                  view == "web", terminal == nil else { throw ComputerBridgeError("Web link unexpectedly requires a terminal.") }
             _ = try await controller.call(.init(.display, computerID: computer.id, agentID: a.agent.id))
             print("PASS: web presentation reference resolves through the authorized broker")
         }

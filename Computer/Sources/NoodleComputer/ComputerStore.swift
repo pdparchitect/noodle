@@ -200,13 +200,13 @@ enum ComputerDisplayMode: String {
     var selected: ComputerSession? { sessions.first { $0.id == selection } }
     /// Reference files identify a computer; the normal library owns its UI and
     /// current terminal. Historical terminal IDs do not create another viewer.
-    func selectComputer(_ reference: ComputerReference) throws -> ComputerSession {
-        guard let session = sessions.first(where: { $0.id == reference.computer.id }) else {
+    func selectComputer(_ id: UUID, view: String?) throws -> ComputerSession {
+        guard let session = sessions.first(where: { $0.id == id }) else {
             throw ComputerError("This computer is no longer in your library.")
         }
         selection = session.id
         session.showingFiles = false
-        if reference.view == "web" { session.showingTerminal = false }
+        if view == "web" { session.showingTerminal = false }
         return session
     }
     var kernel: URL { Bundle.main.resourceURL!.appendingPathComponent("Runtime/vmlinux-arm64") }

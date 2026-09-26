@@ -8,43 +8,36 @@ import NoodleCore
 import UniformTypeIdentifiers
 
 extension ConversationAttachment {
-    var isBrowserDocument: Bool {
-        annotation == nil && (browser != nil || mediaType == BrowserReference.mediaType
-            || BrowserBuildIdentity.allCases.contains { $0.fileExtension == (originalFilename as NSString).pathExtension.lowercased() })
-    }
-    var isComputerDocument: Bool {
-        annotation == nil && (computer != nil || mediaType == ComputerCard.mediaType
-            || ComputerBuildIdentity.allCases.contains { $0.fileExtension == (originalFilename as NSString).pathExtension.lowercased() })
-    }
+    var isBrowserLink: Bool { if case .browser = companion { return true } else { return false } }
+    var isComputerLink: Bool { if case .computer = companion { return true } else { return false } }
+    var isNoodletLink: Bool { if case .noodlet = companion { return true } else { return false } }
 
-    /// Computers, browser pages and noodlets open in a companion app instead of Quick Look.
+    /// Computers, browser tabs and noodlets open in a companion app instead of Quick Look.
     private var companionKey: String? {
-        if let computer { return "computer:\(computer.computer.id)" }
-        if let browser { return "browser:\(browser.reference.url)" }
-        if let url, let link = NoodletLink.canonical(url) { return "noodlet:\(link)" }
-        if isComputerDocument || isBrowserDocument { return "file:\(originalFilename)" }
-        return nil
+        switch companion {
+        case .browser(let id, let tab): "browser:\(id):\(tab?.uuidString ?? "")"
+        case .computer(let id, _, _): "computer:\(id)"
+        case .noodlet(let id): "noodlet:\(id)"
+        case nil: nil
+        }
     }
 
     var opensInCompanion: Bool { companionKey != nil }
 
     var companionKind: String {
-        if isComputerDocument { return "Computer" }
-        if isBrowserDocument { return "Browser" }
-        return "Noodlet"
+        switch companion {
+        case .browser: "Browser"
+        case .computer: "Computer"
+        default: "Noodlet"
+        }
     }
 
     /// Noodlet previews live with the applet and are resolved on demand.
-    var companionPreviewImage: Data? { computer?.previewImage ?? browser?.reference.previewImage }
+    var companionPreviewImage: Data? { card?.image }
 
-    var companionSymbolName: String {
-        url.flatMap(NoodletLink.id) != nil ? "square.grid.2x2" : previewSymbolName
-    }
+    var companionSymbolName: String { isNoodletLink ? "square.grid.2x2" : previewSymbolName }
 
-    var companionTitle: String {
-        computer?.computer.name ?? browser.map { $0.reference.title.isEmpty ? $0.reference.url : $0.reference.title }
-            ?? (url.flatMap(NoodletLink.id) != nil ? (originalFilename as NSString).deletingPathExtension : originalFilename)
-    }
+    var companionTitle: String { card?.title ?? (originalFilename as NSString).deletingPathExtension }
 
     /// One entry per computer, page or noodlet, keeping its most recent share.
     static func companions(newestFirst attachments: [ConversationAttachment]) -> [ConversationAttachment] {
@@ -54,8 +47,8 @@ extension ConversationAttachment {
 
     var previewSymbolName: String {
         if annotation != nil { return "text.bubble.fill" }
-        if let computer { return computer.computer.symbol }
-        if let browser { return browser.reference.browser.symbol }
+        if isBrowserLink { return card?.symbol ?? "globe" }
+        if isComputerLink { return card?.symbol ?? "desktopcomputer" }
         if mediaType.hasPrefix("image/") { return "photo.fill" }
         if mediaType == "application/pdf" { return "doc.richtext.fill" }
         if mediaType.hasPrefix("audio/") { return "waveform" }
@@ -70,17 +63,18 @@ extension NoodleStore {
     }
 
     func openCompanion(_ attachment: ConversationAttachment) async throws {
-        // Browsers, computers and noodlets on a Noodle Hub run on the Hub's Mac; their cards open a live view instead.
-        if attachment.isBrowserDocument || attachment.isComputerDocument || attachment.url.flatMap(NoodletLink.id(in:)) != nil,
-           hubMirrors.contains(where: { $0.owns(conversation: attachment.conversationID) }) {
+        guard let link = attachment.companion, let url = attachment.url else { return }
+        // On a Noodle Hub they run on the Hub's Mac, so their links open a live view instead.
+        if hubMirrors.contains(where: { $0.owns(conversation: attachment.conversationID) }) {
             openSurfaceWindow?(HubSurfaceTarget(conversationID: attachment.conversationID, attachmentID: attachment.id,
-                                                title: attachment.browser?.reference.title ?? attachment.computer?.computer.name
-                                                    ?? (attachment.originalFilename as NSString).deletingPathExtension))
+                                                title: attachment.companionTitle))
             return
         }
-        if attachment.isBrowserDocument { try await browsers.openDocument(at: attachmentFileURL(attachment)) }
-        else if attachment.isComputerDocument { try await computers.openDocument(at: attachmentFileURL(attachment)) }
-        else if let url = attachment.url { try await applets.openNoodlet(url) }
+        switch link {
+        case .browser: try await browsers.open(url)
+        case .computer: try await computers.open(url)
+        case .noodlet: try await applets.openNoodlet(url)
+        }
     }
 }
 
@@ -226,6 +220,8 @@ struct AttachmentInlinePreview: View {
 
             } else if let url = attachment.url, NoodletLink.id(in: url) != nil {
                 NoodletAttachmentCard(url: url, shouldLoad: shouldLoad)
+            } else if let card = attachment.card {
+                linkCardPreview(card)
             } else if displaysAsImage {
                 imagePreview
             } else {
@@ -269,10 +265,42 @@ struct AttachmentInlinePreview: View {
     }
 
     private var openHint: String {
-        if attachment.isBrowserDocument { return "Click or press Space to open in Noodle Browser" }
-        if attachment.isComputerDocument { return "Click or press Space to open in Noodle Computer" }
-        if attachment.url.flatMap(NoodletLink.id) != nil { return "Click or press Space to open in \(AppletBuildIdentity.current.appName)" }
+        if attachment.isBrowserLink { return "Click or press Space to open in Noodle Browser" }
+        if attachment.isComputerLink { return "Click or press Space to open in Noodle Computer" }
+        if attachment.isNoodletLink { return "Click or press Space to open in \(AppletBuildIdentity.current.appName)" }
         return "Click or press Space to preview"
+    }
+
+    /// A browser tab or computer a bot shared: the picture taken then, and what it is.
+    private func linkCardPreview(_ card: LinkCard) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            ZStack {
+                Color.black.opacity(0.16)
+                if let thumbnail {
+                    Image(nsImage: thumbnail).resizable().scaledToFit().padding(6).transition(.opacity)
+                } else if let detail = card.detail, attachment.isComputerLink {
+                    Text(detail).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.8))
+                        .lineLimit(10).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading).padding(10)
+                } else {
+                    Image(systemName: attachment.previewSymbolName)
+                        .font(.system(size: 38, weight: .light)).foregroundStyle(.white.opacity(0.42))
+                }
+            }
+            .frame(maxWidth: .infinity).frame(height: 165)
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .accessibilityHidden(true)
+            HStack(spacing: 8) {
+                Image(systemName: attachment.previewSymbolName).font(.system(size: 16, weight: .medium))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(card.title).font(.system(size: 11.5, weight: .semibold)).lineLimit(1)
+                    Text(attachment.isBrowserLink ? (card.detail.flatMap { URL(string: $0)?.host } ?? "Browser") : "Computer")
+                        .font(.system(size: 9.5)).opacity(0.72)
+                }
+                Spacer(minLength: 3)
+            }
+            .foregroundStyle(.primary).padding(.horizontal, 2)
+        }
+        .frame(idealWidth: 280, maxWidth: 280)
     }
 
     private func annotationPreview(_ note: AttachmentAnnotation) -> some View {
@@ -354,11 +382,10 @@ struct AttachmentInlinePreview: View {
                     .font(.system(size: 16, weight: .medium))
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(attachment.browser?.reference.title ?? attachment.originalFilename)
+                    Text(attachment.originalFilename)
                         .font(.system(size: 11.5, weight: .semibold))
                         .lineLimit(1)
-                    Text(attachment.browser.map { $0.reference.browser.name + " · " + (URL(string: $0.reference.url)?.host ?? "") }
-                        ?? ByteCountFormatter.string(fromByteCount: attachment.byteCount, countStyle: .file))
+                    Text(ByteCountFormatter.string(fromByteCount: attachment.byteCount, countStyle: .file))
                     .font(.system(size: 9.5))
                     .opacity(0.72)
                 }
@@ -378,9 +405,8 @@ struct AttachmentInlinePreview: View {
             thumbnail = cached
             return
         }
-        if attachment.isBrowserDocument {
-            let reference = attachment.browser?.reference ?? (try? BrowserReference.read(fileURL))
-            if let data = reference?.previewImage,
+        if let card = attachment.card {
+            if let data = card.image,
                let source = CGImageSourceCreateWithData(data as CFData, nil),
                let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,

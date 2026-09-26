@@ -195,7 +195,7 @@ final class ComputerToolProviderTests: XCTestCase {
         let result = try await call("present", ["computer": mine.uuidString, "terminal": terminal.uuidString, "conversation": conversation.uuidString], conversations: [conversation])
         XCTAssertEqual(result["isError"] as? Bool, false, String(describing: result["content"]))
         let post = try XCTUnwrap(posts.values.first)
-        XCTAssertEqual([post.post.mediaType, post.post.filename, post.post.message], [ComputerCard.mediaType, "Build box." + ComputerBuildIdentity.current.fileExtension, "Open Build box"])
+        XCTAssertEqual([post.post.mediaType, post.post.filename, post.post.message], [ComputerCard.mediaType, "Build box", "Open Build box"])
         let reference = try JSONDecoder().decode(ComputerReference.self, from: post.post.data)
         XCTAssertEqual([reference.computer.id, reference.terminalID], [mine, terminal])
         XCTAssertEqual(reference.terminalPreview, "ok done", "terminal colour codes are not stored in a card")

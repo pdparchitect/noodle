@@ -129,10 +129,9 @@ import NoodleLaunchChecks
             let presented = try await cli(["present"] + tab + ["--conversation", createdAgent.conversation.id.uuidString, "--message", "Browser fixture page"])
             guard let attachmentID = (presented["attachmentID"] as? String).flatMap(UUID.init(uuidString:)),
                   let attachment = try repository.loadAttachments(conversationID: createdAgent.conversation.id).first(where: { $0.id == attachmentID }),
-                  let card = attachment.browser, card.reference.browser.id == browserID,
-                  card.reference.tabID.uuidString.lowercased() == tabID.lowercased(),
-                  let preview = card.reference.previewImage, NSImage(data: preview) != nil,
-                  try BrowserReference.read(repository.attachmentFileURL(attachment)) == card.reference else {
+                  case .browser(let id, let tab)? = attachment.companion, id == browserID,
+                  tab?.uuidString.lowercased() == tabID.lowercased(),
+                  let preview = attachment.card?.image, NSImage(data: preview) != nil else {
                 throw BrowserError("CLI did not send a valid browser preview attachment.")
             }
             guard try repository.loadMessages(conversationID: createdAgent.conversation.id).last?.attachmentIDs == [attachmentID] else {

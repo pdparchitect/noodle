@@ -163,7 +163,7 @@ public struct ComputerToolProvider: ToolProvider {
         let reference = ComputerReference(computer: computer, terminalID: terminal, terminalPreview: text, view: view,
                                           previewImage: view == "web" ? response.previewImage : nil)
         let name = computer.name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: "\0", with: "")
-        let filename = (name.isEmpty || name == "." || name == ".." ? "Computer" : String(name.prefix(120))) + "." + ComputerBuildIdentity.current.fileExtension
+        let filename = name.isEmpty || name == "." || name == ".." ? "Computer" : String(name.prefix(120))
         let post: [String: Any] = ["message": message ?? "Open \(computer.name)",
             "attachment": ["filename": filename, "mediaType": ComputerCard.mediaType, "data": try JSONEncoder().encode(reference).base64EncodedString()]]
         var structured: [String: Any] = ["view": view]

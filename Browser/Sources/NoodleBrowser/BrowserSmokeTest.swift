@@ -192,23 +192,14 @@ import SwiftUI
                 let presentation = try await runtime.perform(.init(.present, browserID: profile.id, tabID: tab.id))
                 guard let reference = presentation.reference, let image = reference.previewImage else { throw BrowserError("Missing page reference preview") }
                 try require(NSImage(data: image) != nil, "Invalid reference snapshot")
-                let referenceFile = root.appendingPathComponent("Page." + BrowserBuildIdentity.current.fileExtension)
-                try JSONEncoder().encode(reference).write(to: referenceFile)
-                let saved = try BrowserReference.read(referenceFile)
-                try require(try runtime.openReference(saved) == tab.id, "Reference duplicated an existing tab")
-                var closed = saved; closed.tabID = UUID()
-                let restoredID = try runtime.openReference(closed)
-                try require(restoredID != tab.id, "Closed reference did not create a new tab")
-                let restoredTab = try runtime.tab(browserID: profile.id, tabID: restoredID)
-                try await eventually("reference preserves authentication") {
-                    try await restoredTab.evaluate("return (await (await fetch('/auth-state')).json()).authenticated;") as? Bool == true
+                guard let shared = BrowserLink.target(in: BrowserLink.url(browser: profile.id, tab: reference.tabID)), let sharedTab = shared.tab else {
+                    throw BrowserError("Link did not name its tab")
                 }
-                try runtime.closeTab(browserID: profile.id, tabID: restoredID)
-                var missing = saved; missing.browser.id = UUID()
-                var rejected = false
-                do { _ = try runtime.openReference(missing) } catch { rejected = true }
-                try require(rejected && library.profiles.count == 2, "Reference recreated a deleted browser")
-                print("PASS preview reference, exact-tab reuse, closed-tab restoration, signed-in profile and missing-browser rejection")
+                try require(try runtime.tab(browserID: shared.browser, tabID: sharedTab) === tab, "Link did not reach the shared tab")
+                var missing = false
+                do { _ = try runtime.tab(browserID: UUID(), tabID: tab.id) } catch { missing = true }
+                try require(missing && library.profiles.count == 2, "A link recreated a deleted browser")
+                print("PASS preview reference, links to the shared tab and missing-browser rejection")
                 for kind in [BrowserRecordsKind.history, .bookmarks] {
                     let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 476, height: 496), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
                     panel.isReleasedWhenClosed = false

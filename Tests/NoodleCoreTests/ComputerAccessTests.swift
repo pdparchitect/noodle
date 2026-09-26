@@ -3,22 +3,24 @@ import XCTest
 @testable import NoodleCore
 
 final class ComputerAccessTests: XCTestCase {
-    func testSavedWebPresentationDoesNotDependOnLiveCatalogue() throws {
+    func testASavedComputerLinkDoesNotDependOnTheLiveCatalogue() throws {
         let root = try temporaryDirectory()
         let computer = RemoteComputer(id: UUID(), name: "Saved Desktop", kind: "Desktop", state: "Running", symbol: "desktopcomputer", icon: Data([1, 2]))
-        let card = ComputerCard(computer: computer, agentID: UUID(), terminalPreview: "", view: "web", previewImage: Data([3, 4]))
-        let attachment = ConversationAttachment(conversationID: UUID(), originalFilename: "Desktop.noodlecomputer",
-            storedFilename: "card.noodlecomputer", mediaType: ComputerCard.mediaType, byteCount: 1, computer: card)
+        let agent = UUID()
+        let attachment = ConversationAttachment(conversationID: UUID(), originalFilename: "Saved Desktop.webloc",
+            storedFilename: "link.webloc", mediaType: "application/x-webloc", byteCount: 1,
+            url: ComputerLink.url(computer: computer.id, terminal: nil, view: "web"),
+            card: LinkCard(title: computer.name, image: Data([3, 4]), symbol: computer.symbol, icon: computer.icon))
         let saved = try JSONEncoder().encode(attachment)
         var registry = ComputerAssignments()
-        registry.computers = [computer]; registry.agents[card.agentID.uuidString] = [computer.id]
+        registry.computers = [computer]; registry.agents[agent.uuidString] = [computer.id]
         try registry.save(root: root)
         registry.computers = []; registry.agents = [:]
         try registry.save(root: root)
         let restored = try JSONDecoder().decode(ConversationAttachment.self, from: saved)
-        XCTAssertEqual(restored.computer, card)
-        XCTAssertNil(restored.computer?.terminalID)
-        XCTAssertFalse(try ComputerAssignments.load(root: root).permits(computer.id, agent: card.agentID))
+        XCTAssertEqual(restored, attachment)
+        XCTAssertEqual(restored.companion, .computer(computer.id, terminal: nil, view: "web"))
+        XCTAssertFalse(try ComputerAssignments.load(root: root).permits(computer.id, agent: agent))
     }
     private func temporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -40,17 +42,16 @@ final class ComputerAccessTests: XCTestCase {
         registry.version = 99; try registry.save(root: root)
         XCTAssertThrowsError(try ComputerAssignments.load(root: root))
     }
-    func testLegacyAttachmentRemainsReadableAndComputerRoundTrips() throws {
+    func testAFileHasNoCardAndAComputerLinkReachesBotsWithItsCard() throws {
         let attachment = ConversationAttachment(conversationID: UUID(), originalFilename: "a.txt", storedFilename: "a.txt", mediaType: "text/plain", byteCount: 1)
-        let old = try JSONEncoder().encode(attachment)
-        XCTAssertFalse(String(decoding: old, as: UTF8.self).contains("computer"))
-        XCTAssertNil(try JSONDecoder().decode(ConversationAttachment.self, from: old).computer)
-        let card = ComputerCard(computer: .init(id: UUID(), name: "Shared", kind: "Shell", state: "Running", symbol: "terminal"),
-            agentID: UUID(), terminalID: UUID(), terminalPreview: "$")
-        let computerAttachment = ConversationAttachment(conversationID: UUID(), originalFilename: "Shell.noodlecomputer",
-            storedFilename: "card.noodlecomputer", mediaType: ComputerCard.mediaType, byteCount: 1, computer: card)
-        let wire = MessengerAttachment(attachment: computerAttachment, absolutePath: "/fixture/card.noodlecomputer")
-        XCTAssertEqual(try JSONDecoder().decode(MessengerAttachment.self, from: JSONEncoder().encode(wire)).computer, card)
+        XCTAssertNil(try JSONDecoder().decode(ConversationAttachment.self, from: JSONEncoder().encode(attachment)).card)
+        let card = LinkCard(title: "Shared", detail: "$", symbol: "terminal")
+        let link = ConversationAttachment(conversationID: UUID(), originalFilename: "Shared.webloc", storedFilename: "link.webloc",
+            mediaType: "application/x-webloc", byteCount: 1, url: ComputerLink.url(computer: UUID(), terminal: UUID(), view: "terminal"), card: card)
+        let wire = MessengerAttachment(attachment: link, absolutePath: "/fixture/link.webloc")
+        let decoded = try JSONDecoder().decode(MessengerAttachment.self, from: JSONEncoder().encode(wire))
+        XCTAssertEqual(decoded.card, card)
+        XCTAssertEqual(decoded.url, link.url)
     }
     func testAssignmentsPublishedToTheBrokerFailClosed() throws {
         let agent = UUID(), computer = UUID()

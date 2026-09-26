@@ -98,26 +98,6 @@ let trimSparkle: TargetScript = .post(script: """
     done
     """, name: "Trim Sparkle", basedOnDependencyAnalysis: false)
 
-/// A Quick Look extension for computer references, sandboxed with nothing else.
-func quickLook(_ kind: String) -> Target {
-    .target(
-        name: "Computer\(kind)",
-        destinations: .macOS,
-        product: .appExtension,
-        bundleId: "com.pdparchitect.noodle.computer.\(kind.lowercased())",
-        deploymentTargets: .macOS("26.0"),
-        infoPlist: .file(path: "Support/\(kind)-Info.plist"),
-        sources: ["Sources/Computer\(kind)Extension/**"],
-        entitlements: .file(path: "Support/Preview.entitlements"),
-        dependencies: [.package(product: "ComputerDocument")],
-        settings: .settings(base: signing.merging([
-            "PRODUCT_BUNDLE_IDENTIFIER": "$(COMPUTER_APP_BUNDLE_ID).\(kind.lowercased())",
-            "PRODUCT_NAME": "Computer\(kind)",
-            "EXECUTABLE_NAME": "Computer\(kind)Extension",
-        ]) { $1 })
-    )
-}
-
 /// A Local Mac helper, built unsigned; embedHelpers signs it where it ships.
 func localMac(_ name: String, product: Product, infoPlist: InfoPlist? = nil, resources: ResourceFileElements? = nil) -> Target {
     .target(
@@ -143,7 +123,6 @@ let project = Project(
     packages: [
         .local(path: "."),
         .local(path: "Bridge"),
-        .local(path: "Presentation"),
         .local(path: "LocalMac"),
         .local(path: "../Shared/SettingsUI"),
         .local(path: "../Shared/LaunchChecks"),
@@ -213,7 +192,6 @@ let project = Project(
                 .package(product: "ComputerCore"),
                 .package(product: "NoodleLaunchChecks"),
                 .package(product: "NoodleSettingsUI"),
-                .package(product: "ComputerDocument"),
                 .package(product: "NoodleWallpaper"),
                 .package(product: "Sparkle"),
                 .package(product: "ComputerBridge"),
@@ -223,8 +201,6 @@ let project = Project(
                 .package(product: "ContainerizationEXT4"),
                 .package(product: "ContainerizationExtras"),
                 .package(product: "ContainerizationOCI"),
-                .target(name: "ComputerPreview"),
-                .target(name: "ComputerThumbnail"),
                 .target(name: "LocalMacSetup"),
                 .target(name: "LocalMacService"),
                 .target(name: "LocalMacDesktop"),
@@ -251,8 +227,6 @@ let project = Project(
                 ]
             )
         ),
-        quickLook("Preview"),
-        quickLook("Thumbnail"),
         localMac("LocalMacSetup", product: .app, infoPlist: .file(path: "Support/LocalMacSetup-Info.plist")),
         localMac("LocalMacDesktop", product: .app, infoPlist: .file(path: "Support/LocalMacDesktop-Info.plist"),
                  resources: ["Images/shared/noodle-welcome"]),

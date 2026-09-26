@@ -22,7 +22,7 @@ import SwiftUI
     @ObservationIgnored private var refreshID = UUID()
     @ObservationIgnored private var launch: Task<Void, Error>?
     @ObservationIgnored private let applicationLookup: @MainActor () -> URL?
-    @ObservationIgnored private let documentOpener: (URL, URL) async throws -> Void
+    @ObservationIgnored private let linkOpener: (URL, URL) async throws -> Void
     /// Injectable connection boundary for deterministic broker failure tests.
     /// Normal app construction always uses the authenticated signed-app socket.
     @ObservationIgnored private let connection: (@Sendable (ComputerRequest) async throws -> ComputerResponse)?
@@ -30,7 +30,7 @@ import SwiftUI
 
     init(repository: WorkspaceRepository, socket: URL? = nil,
          applicationLookup: @escaping @MainActor () -> URL? = { ComputerApplication.locate() },
-         documentOpener: @escaping (URL, URL) async throws -> Void = { document, application in
+         linkOpener: @escaping (URL, URL) async throws -> Void = { document, application in
              let configuration = NSWorkspace.OpenConfiguration()
              configuration.activates = true
              configuration.hides = false
@@ -42,7 +42,7 @@ import SwiftUI
         self.repository = repository
         self.socket = socket
         self.applicationLookup = applicationLookup
-        self.documentOpener = documentOpener
+        self.linkOpener = linkOpener
         self.connection = connection
         do { registry = try ComputerAssignments.load(root: repository.rootURL) }
         catch { readable = false; failure = "Could not read Computer assignments; they were not changed." }
@@ -153,16 +153,17 @@ import SwiftUI
     }
     /// A human opens the owned attachment through Computer's document handler.
     /// This does not use the agent broker or depend on any bot assignment.
-    func openDocument(at fileURL: URL) async throws {
-        guard fileURL.isFileURL, FileManager.default.isReadableFile(atPath: fileURL.path) else {
-            throw ComputerBridgeError("This computer attachment is no longer available.")
+    /// Opens a computer link in Noodle Computer, which selects and starts that computer.
+    func open(_ link: URL) async throws {
+        guard ComputerLink.build(in: link) == .current, ComputerLink.target(in: link) != nil else {
+            throw ComputerBridgeError("This computer belongs to the other environment and is unavailable in \(ComputerBuildIdentity.current.appName).")
         }
         if let launch { try await launch.value }
         try Task.checkCancellation()
         guard let application = applicationLookup() else {
-            throw ComputerBridgeError("Install \(ComputerBuildIdentity.current.appName) to open this computer attachment.")
+            throw ComputerBridgeError("Install \(ComputerBuildIdentity.current.appName) to open this computer.")
         }
-        try await documentOpener(fileURL, application)
+        try await linkOpener(link, application)
     }
     func openDownload() async throws {
         guard ComputerBuildIdentity.current != .development else {

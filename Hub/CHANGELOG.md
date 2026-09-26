@@ -13,6 +13,10 @@
 - Run computers for the Hub's bots in Noodle Computer on the Hub's Mac. People make and delete them from Noodle; each belongs to the person who made it and reaches only the bots they choose. Install Noodle Computer on the Hub's Mac to use them.
 - Keep people's tool connections on the Hub. Each connection belongs to the person who added it from Noodle, reaches only the bots they choose, and keeps its sign-in in the Hub's Keychain, where bots never see it.
 
+### Changed
+
+- Send links to the browsers, computers and noodlets the Hub's bots share as links with their pictures, so devices open them live. Cards the Hub saved earlier become links when it starts.
+
 ### Removed
 
 - The Hub's bots no longer call tools on their owner's Mac. Update Noodle on paired Macs along with the Hub.

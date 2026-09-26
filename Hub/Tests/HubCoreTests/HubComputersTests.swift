@@ -147,10 +147,10 @@ import XCTest
         let made = try await f.hub.computers.create(ComputerDraft(template: "ubuntu", name: "Workbench"), for: f.ada)
         let bot = try f.hub.bots.create(LinkBotDraft(name: "Alfred", provider: "claude-code"), for: f.ada)
         let terminal = UUID()
-        let card = ComputerCard(computer: made, agentID: bot.id, terminalID: terminal, terminalPreview: "$ ls")
-        let attachment = try f.hub.repository.importAttachment(data: JSONEncoder().encode(card.reference), originalFilename: "Workbench.noodlecomputer",
-                                                             into: bot.conversationID, mediaType: ComputerCard.mediaType,
-                                                             computer: card, browser: nil)
+        let attachment = try f.hub.repository.importLinkAttachment(ComputerLink.url(computer: made.id, terminal: terminal, view: "terminal"),
+                                                                 into: bot.conversationID, card: LinkCard(title: made.name, detail: "$ ls"))
+        _ = try f.hub.repository.sendAgentMessage(agentID: bot.id, conversationID: bot.conversationID, body: "Workbench",
+                                                   attachmentIDs: [attachment.id])
 
         let events = try await device.stream(.openSurface(conversationID: bot.conversationID, attachmentID: attachment.id))
         var session: UUID?

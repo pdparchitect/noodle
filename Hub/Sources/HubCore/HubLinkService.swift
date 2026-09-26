@@ -185,15 +185,20 @@ import Observation
         if case .openSurface(let conversationID, let attachmentID) = request {
             do {
                 let user = try user(key)
-                let card = try hubBots().card(attachmentID, in: conversationID, for: user)
+                let (link, bot) = try hubBots().companionLink(attachmentID, in: conversationID, for: user)
                 let target: SurfaceTarget
-                if let browser = card.browser {
-                    guard try hubBrowsers().browsers(for: user).contains(where: { $0.id == browser.reference.browser.id }) else {
+                switch link {
+                case .browser(let browser, let tab):
+                    guard let tab, try hubBrowsers().browsers(for: user).contains(where: { $0.id == browser }) else {
                         throw LinkError("That browser is not yours or no longer exists.")
                     }
-                    target = .browser(browser.reference.browser.id, tab: browser.reference.tabID)
-                } else if card.url != nil {
-                    let noodlet = try hubBots().noodlet(attachmentID, in: conversationID, for: user)
+                    target = .browser(browser, tab: tab)
+                case .computer(let computer, let terminal, _):
+                    guard try hubComputers().computers(for: user).contains(where: { $0.id == computer }) else {
+                        throw LinkError("That computer is not yours or no longer exists.")
+                    }
+                    target = .computer(computer, terminal: terminal, bot: bot)
+                case .noodlet(let noodlet):
                     var open = AppletRequest(.open)
                     open.noodletID = noodlet
                     open.mode = "background"
@@ -201,13 +206,6 @@ import Observation
                         throw LinkError("Noodle Applet did not start the noodlet.")
                     }
                     target = .noodlet(session: session)
-                } else if let computer = card.computer {
-                    guard try hubComputers().computers(for: user).contains(where: { $0.id == computer.computer.id }) else {
-                        throw LinkError("That computer is not yours or no longer exists.")
-                    }
-                    target = .computer(computer.computer.id, terminal: computer.terminalID, bot: computer.agentID)
-                } else {
-                    throw LinkError("That card cannot be opened.")
                 }
                 return .stream { [weak self] stream in
                     Task { @MainActor in self?.openSurface(stream, for: user, showing: target) }

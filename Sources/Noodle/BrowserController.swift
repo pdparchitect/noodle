@@ -81,13 +81,16 @@ import SwiftUI
         configuration.allowsRunningApplicationSubstitution = false
         _ = try await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
     }
-    func openDocument(at fileURL: URL) async throws {
-        _ = try BrowserReference.read(fileURL)
+    /// Opens a browser link in Noodle Browser, which shows that browser and tab.
+    func open(_ link: URL) async throws {
+        guard BrowserLink.build(in: link) == .current, BrowserLink.target(in: link) != nil else {
+            throw BrowserError("This browser belongs to the other environment and is unavailable in \(BrowserBuildIdentity.current.appName).")
+        }
         try Task.checkCancellation()
         guard let app = BrowserApplication.locate() else { throw BrowserError("Install \(BrowserBuildIdentity.current.appName) to open this page.") }
         let configuration = NSWorkspace.OpenConfiguration(); configuration.activates = true
         configuration.allowsRunningApplicationSubstitution = false
-        _ = try await NSWorkspace.shared.open([fileURL], withApplicationAt: app, configuration: configuration)
+        _ = try await NSWorkspace.shared.open([link], withApplicationAt: app, configuration: configuration)
     }
     private func call(_ request: BrowserRequest, launchIfNeeded: Bool = true, authorize: () throws -> Void = {}) async throws -> BrowserResponse {
         try authorize()

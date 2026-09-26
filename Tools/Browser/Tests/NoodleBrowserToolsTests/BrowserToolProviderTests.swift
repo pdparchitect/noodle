@@ -64,7 +64,7 @@ final class BrowserToolProviderTests: XCTestCase {
         XCTAssertNotNil((result["structuredContent"] as? [String: Any])?["attachmentID"])
         XCTAssertFalse(String(describing: result).contains("previewImage"), "the snapshot stays in the attachment, out of the result")
         let post = try XCTUnwrap(posts.first)
-        XCTAssertEqual([post.post.mediaType, post.post.filename, post.post.message], [BrowserReference.mediaType, "Pricing - Plans." + BrowserBuildIdentity.current.fileExtension, "Pricing / Plans"])
+        XCTAssertEqual([post.post.mediaType, post.post.filename, post.post.message], [BrowserReference.mediaType, "Pricing - Plans", "Pricing / Plans"])
         let card = try BrowserReference.decode(post.post.data)
         XCTAssertEqual([card.browser.id, card.tabID], [mine, tab])
         XCTAssertNil(card.browser.description, "every conversation member can read a card")

@@ -14,12 +14,8 @@ entitlements="$(mktemp /tmp/computer-entitlements.XXXXXX)"
 trap 'rm -f "$entitlements"' EXIT
 codesign -d --entitlements :- "$app" > "$entitlements" 2>/dev/null
 swift "$project_root/Computer/Tests/VerifyRelease.swift" "$info" "$entitlements" "$project_root/Computer/VERSION"
-for kind in Preview Thumbnail; do
-    extension="$app/Contents/PlugIns/Computer$kind.appex"
-    codesign --verify --strict "$extension"
-    codesign -d --entitlements :- "$extension" > "$entitlements" 2>/dev/null
-    swift "$project_root/Computer/Tests/VerifyPreviewExtension.swift" "$extension/Contents/Info.plist" "$entitlements" "$info" "$kind"
-done
+# Computers are shared as links; the app ships no Quick Look extensions.
+[[ ! -e "$app/Contents/PlugIns" ]] || [[ -z "$(ls "$app/Contents/PlugIns")" ]]
 cmp "$project_root/Computer/Images/shared/noodle-welcome" "$app/Contents/Helpers/LocalMacDesktop.app/Contents/Resources/noodle-welcome"
 service_path="${app:A}/Contents/Helpers/LocalMacSetup.app/Contents/Library/LaunchServices/LocalMacService"
 "$service_path" --check-layout

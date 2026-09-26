@@ -1,6 +1,7 @@
 import Foundation
 
-/// A saved page reference. It contains no cookies, credentials or agent authority.
+/// What Noodle Browser reports when a bot shares a tab: the browser, tab, page and a picture.
+/// It contains no cookies, credentials or agent authority.
 public struct BrowserReference: Codable, Hashable, Sendable {
     public static let maximumBytes = 900_000
     public static let mediaType = "application/vnd.noodle.browser+json"
@@ -34,25 +35,40 @@ public struct BrowserReference: Codable, Hashable, Sendable {
         let reference = try JSONDecoder().decode(Self.self, from: data)
         try reference.validate(); return reference
     }
-    public static func read(_ url: URL, build: BrowserBuildIdentity = .current) throws -> Self {
-        guard url.isFileURL, url.pathExtension.lowercased() == build.fileExtension else {
-            throw BrowserError("Open a .\(build.fileExtension) file in \(build.appName).")
-        }
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-        guard values.isRegularFile == true, let size = values.fileSize, size <= maximumBytes else {
-            throw BrowserError("This browser reference is not a supported file.")
-        }
-        let file = try FileHandle(forReadingFrom: url)
-        defer { try? file.close() }
-        return try decode(file.read(upToCount: maximumBytes + 1) ?? Data())
-    }
 }
 
-/// The presenting agent belongs to conversation metadata, never to the file.
+// TODO(0.29.0): Remove with CompanionCardMigration, which is its last reader.
+/// How versions up to 0.27 saved a shared browser tab beside its file.
 public struct BrowserCard: Codable, Hashable, Sendable {
     public var reference: BrowserReference
     public var agentID: UUID
     public init(reference: BrowserReference, agentID: UUID) { self.reference = reference; self.agentID = agentID }
+}
+
+/// A link to a browser, and to one of its tabs: noodlebrowser://BROWSER?tab=TAB. It carries no
+/// cookies, credentials or authority; whoever opens it decides whether it may.
+public enum BrowserLink {
+    public static func url(browser: UUID, tab: UUID?, build: BrowserBuildIdentity = .current) -> URL {
+        var parts = URLComponents()
+        parts.scheme = build.urlScheme
+        parts.host = browser.uuidString.lowercased()
+        if let tab { parts.queryItems = [URLQueryItem(name: "tab", value: tab.uuidString.lowercased())] }
+        return parts.url!
+    }
+    public static func build(in url: URL) -> BrowserBuildIdentity? {
+        BrowserBuildIdentity.allCases.first { $0.urlScheme == url.scheme?.lowercased() }
+    }
+    /// The browser and tab a link names, in either build. Nil for anything else.
+    public static func target(in url: URL) -> (browser: UUID, tab: UUID?)? {
+        guard build(in: url) != nil, let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              parts.user == nil, parts.password == nil, parts.port == nil, parts.path.isEmpty, parts.fragment == nil,
+              let browser = parts.host.flatMap(UUID.init(uuidString:)) else { return nil }
+        let items = parts.queryItems ?? []
+        guard items.allSatisfy({ $0.name == "tab" }), items.count <= 1 else { return nil }
+        if let value = items.first?.value {
+            guard let tab = UUID(uuidString: value) else { return nil }
+            return (browser, tab)
+        }
+        return (browser, nil)
+    }
 }

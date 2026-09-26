@@ -162,25 +162,24 @@ import XCTest
         XCTAssertEqual(try f.local.loadMessages(conversationID: local.id).last?.attachmentIDs, [answer.id])
     }
 
-    /// A browser card from a bot on the Hub stays a card here, so it can open live.
-    func testCardsFromTheHubStayCards() async throws {
+    /// A link a bot on the Hub shares arrives as the same link with its card, so it opens live here.
+    func testLinksFromTheHubStayLinks() async throws {
         let f = try await fixture()
         let mirror = f.mirror()
         let agent = try await mirror.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code"))
         let local = try conversation(of: agent.id, in: f.local)
         let remoteBot = try XCTUnwrap(f.hub.repository.loadAgents().first)
         let remote = try conversation(of: remoteBot.id, in: f.hub.repository)
-        let reference = BrowserReference(browser: RemoteBrowser(id: UUID(), name: "Work"), tabID: UUID(),
-                                         url: "https://news.ycombinator.com", title: "Hacker News")
-        let card = try f.hub.repository.importAttachment(data: JSONEncoder().encode(reference), originalFilename: "Hacker News.noodlebrowser",
-                                                         into: remote.id, mediaType: BrowserReference.mediaType, computer: nil,
-                                                         browser: BrowserCard(reference: reference, agentID: remoteBot.id))
+        let tab = UUID()
+        let card = try f.hub.repository.importLinkAttachment(BrowserLink.url(browser: UUID(), tab: tab), into: remote.id,
+                                                             card: LinkCard(title: "Hacker News", detail: "https://news.ycombinator.com"))
         _ = try f.hub.repository.sendAgentMessage(agentID: remoteBot.id, conversationID: remote.id, body: "Here it is.",
                                                    attachmentIDs: [card.id])
         await mirror.sync()
         let arrived = try XCTUnwrap(f.local.loadAttachments(conversationID: local.id).first { $0.id == card.id })
-        XCTAssertEqual(arrived.browser?.reference.tabID, reference.tabID)
-        XCTAssertEqual(arrived.browser?.agentID, agent.id)
+        guard case .browser(_, let arrivedTab)? = arrived.companion else { return XCTFail("the link did not arrive as a link") }
+        XCTAssertEqual(arrivedTab, tab)
+        XCTAssertEqual(arrived.card?.title, "Hacker News")
     }
 
     func testEditsTravelBothWays() async throws {

@@ -36,10 +36,8 @@ assert entitlements==expected, 'Unexpected Browser entitlements'
 suffix='.local' if identifier.endswith('.local') else ''
 assert info['NoodleBrowserGroup']==info['NoodleSigningTeam']+'.com.pdparchitect.noodle.browsers'+suffix
 assert info['CFBundleURLTypes'][0]['CFBundleURLSchemes']==['noodlebrowser-dev' if suffix else 'noodlebrowser']
-reference_type='com.pdparchitect.noodle.browser-reference'+('.dev' if suffix else '')
-assert info['CFBundleDocumentTypes'][0]['LSItemContentTypes']==[reference_type]
-assert info['UTExportedTypeDeclarations'][0]['UTTypeIdentifier']==reference_type
-assert info['UTExportedTypeDeclarations'][0]['UTTypeTagSpecification']['public.filename-extension']==['noodlebrowser-dev' if suffix else 'noodlebrowser']
+# Browsers are shared as links; the app opens no documents.
+assert 'CFBundleDocumentTypes' not in info and 'UTExportedTypeDeclarations' not in info
 assert (app/'Contents/Resources/Browser.icns').stat().st_size>0
 assert info['SUFeedURL']=='https://github.com/pdparchitect/noodle/releases/download/browser-latest/appcast.xml'
 assert info['SUPublicEDKey']=='1ZT5NrPiDPaQ54iHGSI1a9JIn6kTrmjQvzZRBA9f/sk='

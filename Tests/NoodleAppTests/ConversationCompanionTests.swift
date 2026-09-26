@@ -8,30 +8,25 @@ import NoodleCore
 final class ConversationCompanionTests: XCTestCase {
     private let conversationID = UUID()
 
-    private func attachment(_ name: String, mediaType: String = "application/octet-stream", url: URL? = nil,
-                            computer: ComputerCard? = nil, browser: BrowserCard? = nil) -> ConversationAttachment {
+    private func attachment(_ name: String, mediaType: String = "application/x-webloc", url: URL? = nil,
+                            card: LinkCard? = nil) -> ConversationAttachment {
         ConversationAttachment(conversationID: conversationID, originalFilename: name, storedFilename: name,
-            mediaType: mediaType, byteCount: 1, url: url, computer: computer, browser: browser)
+            mediaType: mediaType, byteCount: 1, url: url, card: card)
     }
 
-    func testListsEachComputerBrowserPageAndNoodletOnceNewestFirst() {
-        let computer = RemoteComputer(id: UUID(), name: "Build Box", kind: "vm", state: "running", symbol: "desktopcomputer")
-        let browser = RemoteBrowser(id: UUID(), name: "Research")
+    func testListsEachComputerBrowserTabAndNoodletOnceNewestFirst() {
+        let computer = ComputerLink.url(computer: UUID(), terminal: nil, view: "web")
+        let browser = UUID(), tabA = UUID(), tabB = UUID()
         let noodlet = NoodletLink.url(for: UUID())
-        func page(_ url: String, _ title: String) -> BrowserCard {
-            BrowserCard(reference: BrowserReference(browser: browser, tabID: UUID(), url: url, title: title), agentID: UUID())
-        }
         let newestFirst = [
-            attachment("box.noodlecomputer", mediaType: ComputerCard.mediaType,
-                       computer: ComputerCard(computer: computer, agentID: UUID(), terminalPreview: "new")),
+            attachment("Build Box.webloc", url: computer, card: LinkCard(title: "Build Box", detail: "new")),
             attachment("photo.png", mediaType: "image/png"),
-            attachment("Timer", url: noodlet),
-            attachment("a.noodlebrowser", mediaType: BrowserReference.mediaType, browser: page("https://a.example", "A")),
-            attachment("box-old.noodlecomputer", mediaType: ComputerCard.mediaType,
-                       computer: ComputerCard(computer: computer, agentID: UUID(), terminalPreview: "old")),
-            attachment("Timer", url: noodlet),
-            attachment("b.noodlebrowser", mediaType: BrowserReference.mediaType, browser: page("https://b.example", "B")),
-            attachment("https://example.com", url: URL(string: "https://example.com")),
+            attachment("Timer.webloc", url: noodlet),
+            attachment("A.webloc", url: BrowserLink.url(browser: browser, tab: tabA), card: LinkCard(title: "A")),
+            attachment("Build Box.webloc", url: computer, card: LinkCard(title: "Build Box", detail: "old")),
+            attachment("Timer.webloc", url: noodlet),
+            attachment("B.webloc", url: BrowserLink.url(browser: browser, tab: tabB), card: LinkCard(title: "B")),
+            attachment("example.com.webloc", url: URL(string: "https://example.com")),
         ]
 
         let companions = ConversationAttachment.companions(newestFirst: newestFirst)
@@ -42,18 +37,31 @@ final class ConversationCompanionTests: XCTestCase {
 
     func testEachCompanionNamesItsKindAndCarriesItsPreview() {
         let image = Data([1, 2, 3])
-        let computer = ComputerCard(computer: RemoteComputer(id: UUID(), name: "Mac", kind: "host", state: "running",
-            symbol: "desktopcomputer"), agentID: UUID(), terminalPreview: "", previewImage: image)
-        let page = BrowserCard(reference: BrowserReference(browser: RemoteBrowser(id: UUID(), name: "Local"),
-            tabID: UUID(), url: "https://example.com", title: "Example", previewImage: image), agentID: UUID())
-        let items = [attachment("m.noodlecomputer", computer: computer), attachment("p.noodlebrowser", browser: page),
-                     attachment("Timer", url: NoodletLink.url(for: UUID()))]
+        let items = [attachment("Mac.webloc", url: ComputerLink.url(computer: UUID(), terminal: nil, view: "web"),
+                                card: LinkCard(title: "Mac", image: image)),
+                     attachment("Example.webloc", url: BrowserLink.url(browser: UUID(), tab: UUID()), card: LinkCard(title: "Example", image: image)),
+                     attachment("Timer.webloc", url: NoodletLink.url(for: UUID()))]
         XCTAssertEqual(items.map(\.companionKind), ["Computer", "Browser", "Noodlet"])
         XCTAssertEqual(items.map(\.companionPreviewImage), [image, image, nil])
     }
 
     func testNoodletTitleBeforeItsPreviewResolvesIsNotTheBookmarkFilename() {
-        XCTAssertEqual(attachment("Noodlet.webloc", mediaType: "application/x-webloc",
-                                  url: NoodletLink.url(for: UUID())).companionTitle, "Noodlet")
+        XCTAssertEqual(attachment("Noodlet.webloc", url: NoodletLink.url(for: UUID())).companionTitle, "Noodlet")
+    }
+
+    /// Every kind is recognised from its link alone, in either build, and nothing else is.
+    func testCompanionLinksRoundTrip() {
+        let browser = UUID(), tab = UUID(), computer = UUID(), terminal = UUID(), noodlet = UUID()
+        for link in [CompanionLink.browser(browser, tab: tab), .browser(browser, tab: nil),
+                     .computer(computer, terminal: terminal, view: "terminal"), .computer(computer, terminal: nil, view: "web"),
+                     .noodlet(noodlet)] {
+            XCTAssertEqual(CompanionLink(link.url), link)
+            XCTAssertEqual(CompanionLink.canonical(link.url), link.url)
+        }
+        XCTAssertEqual(CompanionLink(BrowserLink.url(browser: browser, tab: tab, build: .development)), .browser(browser, tab: tab))
+        for foreign in ["https://example.com", "noodlebrowser://not-a-uuid", "noodlecomputer://\(computer)?view=shell",
+                        "noodlebrowser://\(browser)?tab=\(tab)&extra=1", "noodlecomputer://\(computer)/path"] {
+            XCTAssertNil(CompanionLink(URL(string: foreign)!), foreign)
+        }
     }
 }

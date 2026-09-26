@@ -138,18 +138,14 @@ enum BrowserLaunchCheck {
                 BrowserUpdater.shared.start(); BrowserUpdater.shared.check()
                 continue
             }
-            if url.isFileURL {
-                do {
-                    let reference = try BrowserReference.read(url)
-                    let tabID = try runtime.openReference(reference)
-                    presentation.selection = reference.browser.id; presentation.selectTab(tabID)
-                    reopenLibrary()
-                } catch { runtime.failure = error.localizedDescription; reopenLibrary() }
-                continue
+            // A link to a browser, and to the tab a bot shared if it is still open.
+            guard BrowserLink.build(in: url) == .current, let target = BrowserLink.target(in: url) else { continue }
+            if let tab = target.tab, (try? runtime.tab(browserID: target.browser, tabID: tab)) != nil {
+                presentation.selection = target.browser; presentation.selectTab(tab)
+                reopenLibrary()
+            } else {
+                showBrowser(target.browser)
             }
-            guard url.scheme == BrowserBuildIdentity.current.urlScheme,
-                  let id = url.host.flatMap(UUID.init(uuidString:)) else { continue }
-            showBrowser(id)
         }
     }
     func showBrowser(_ id: UUID) {

@@ -1,7 +1,6 @@
 import AppKit
 import ComputerBridge
 import ComputerCore
-import ComputerDocument
 import NoodleLaunchChecks
 import NoodleWallpaper
 import SwiftUI
@@ -145,9 +144,11 @@ enum ComputerLaunchCheck {
         continue
       }
       do {
-        let card = try ComputerReferenceDocument.read(url)
+        guard ComputerLink.build(in: url) == .current, let target = ComputerLink.target(in: url) else {
+          throw ComputerError("This link is not for \(ComputerAppIdentity.name).")
+        }
         let store = try Self.loadLibrary()
-        let session = try store.selectComputer(card)
+        let session = try store.selectComputer(target.computer, view: target.view)
         openedDocument = true
         application.unhide(nil)
         application.activate(ignoringOtherApps: true)
@@ -162,7 +163,7 @@ enum ComputerLaunchCheck {
         Task {
           await start.value
           guard documentRequest == request, store.selection == session.id else { return }
-          await store.selectDisplay(card.view == "web" ? .desktop : .terminal, in: session)
+          await store.selectDisplay(target.view == "web" ? .desktop : .terminal, in: session)
         }
       } catch {
         let alert = NSAlert(error: error)

@@ -7,6 +7,10 @@
 - Let Noodle Hub show a tab live to the person who owns the browser and take their clicks, typing and scrolling, even while bots are paused.
 - Let Noodle and Noodle Hub make, rename and delete browsers, so you can set up a bot's browser without switching apps. Bots themselves still cannot.
 
+### Removed
+
+- Stop opening .noodlebrowser files. Noodle shares tabs as links now, which open the browser and the tab a bot shared.
+
 ## [0.5.1] - 2026-09-24
 
 ### Fixed

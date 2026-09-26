@@ -46,12 +46,9 @@ public enum ComputerBuildIdentity: String, CaseIterable, Sendable {
     public var groupSuffix: String {
         "com.pdparchitect.noodle.computers" + (self == .production ? "" : self == .development ? ".local" : ".tests")
     }
-    public var fileExtension: String {
+    /// Computer links, as Noodle shares them: noodlecomputer://COMPUTER.
+    public var urlScheme: String {
         "noodlecomputer" + (self == .production ? "" : self == .development ? "-dev" : "-tests")
-    }
-    public var urlScheme: String { fileExtension }
-    public var contentType: String {
-        "com.pdparchitect.noodle.computer-reference" + (self == .production ? "" : self == .development ? "-dev" : "-tests")
     }
     /// Storage identity predates the visible Dev label. Never derive persisted
     /// account records from a display name or relocate them during an app rename.
@@ -60,7 +57,7 @@ public enum ComputerBuildIdentity: String, CaseIterable, Sendable {
     }
     public static func identify(_ bundleIdentifier: String?) -> Self? {
         allCases.first {
-            [$0.providerID, $0.providerID + ".preview", $0.providerID + ".thumbnail"].contains(bundleIdentifier ?? "")
+            $0.providerID == bundleIdentifier
                 || $0.clientIDs.contains(bundleIdentifier ?? "")
         }
     }

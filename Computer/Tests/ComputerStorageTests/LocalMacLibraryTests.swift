@@ -19,8 +19,7 @@ import XCTest
         XCTAssertEqual(session.displayMode, .desktop)
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.library.directory(for: computer.id).appendingPathComponent("Disk.img").path))
         XCTAssertEqual(try store.library.load().first?.kind, .localMac)
-        let reference = ComputerReference(computer: .init(id: computer.id, name: computer.name, kind: "Local Mac", state: "Stopped", symbol: "person.crop.rectangle"), terminalPreview: "", view: "web")
-        XCTAssertTrue(try store.selectComputer(reference) === session)
+        XCTAssertTrue(try store.selectComputer(computer.id, view: "web") === session)
         XCTAssertEqual(session.phase, .stopped)
     }
 }

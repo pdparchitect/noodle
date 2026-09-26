@@ -33,11 +33,14 @@ final class ToolHostServicesTests: XCTestCase {
         XCTAssertFalse(host.isMember(UUID(), conversation.id))
     }
 
-    func testABrowserCardIsPostedAsTheBotOnlyForAnAssignedBrowser() throws {
+    func testABrowserIsSharedAsALinkByTheBotOnlyForAnAssignedBrowser() throws {
         let id = try host.post(try card(assigned), agent.id, conversation.id)
         let attachment = try XCTUnwrap(repository.loadAttachments(conversationID: conversation.id).first { $0.id == id })
-        XCTAssertEqual(attachment.browser?.agentID, agent.id)
-        XCTAssertEqual(attachment.browser?.reference.browser.id, assigned)
+        guard case .browser(let browser, let tab)? = attachment.companion else { return XCTFail("not a browser link") }
+        XCTAssertEqual(browser, assigned)
+        XCTAssertNotNil(tab)
+        XCTAssertEqual(attachment.card?.title, "Example")
+        XCTAssertEqual(attachment.card?.detail, "https://example.com")
         let message = try XCTUnwrap(repository.loadMessages(conversationID: conversation.id).last)
         XCTAssertEqual(message.body, "See this")
         XCTAssertEqual(message.attachmentIDs, [id])
@@ -49,7 +52,7 @@ final class ToolHostServicesTests: XCTestCase {
         XCTAssertTrue(try repository.loadAttachments(conversationID: othersConversation.id).isEmpty)
     }
 
-    func testAComputerCardIsPostedOnlyForAnAssignedComputerAndKeepsItsCaptureTime() throws {
+    func testAComputerIsSharedAsALinkOnlyForAnAssignedComputerAndKeepsItsCaptureTime() throws {
         let computers = ToolHostServices.repository(repository) { [assigned] _ in ["computer": [assigned.uuidString]] }
         func card(_ computer: UUID) throws -> ToolPost {
             let reference = ComputerReference(computer: RemoteComputer(id: computer, name: "Build box", kind: "Shell", state: "Running", symbol: "terminal"),
@@ -59,10 +62,12 @@ final class ToolHostServicesTests: XCTestCase {
         }
         let id = try computers.post(try card(assigned), agent.id, conversation.id)
         let attachment = try XCTUnwrap(repository.loadAttachments(conversationID: conversation.id).first { $0.id == id })
-        XCTAssertEqual(attachment.computer?.agentID, agent.id)
-        XCTAssertEqual(attachment.computer?.computer.id, assigned)
-        XCTAssertEqual(attachment.computer?.capturedAt, Date(timeIntervalSince1970: 1_700_000_000), "the card and its file describe the same capture")
-        XCTAssertEqual(try JSONDecoder().decode(ComputerReference.self, from: Data(contentsOf: repository.attachmentFileURL(attachment))), attachment.computer?.reference)
+        guard case .computer(let computer, let terminal, let view)? = attachment.companion else { return XCTFail("not a computer link") }
+        XCTAssertEqual(computer, assigned)
+        XCTAssertNotNil(terminal)
+        XCTAssertEqual(view, "terminal")
+        XCTAssertEqual(attachment.card?.capturedAt, Date(timeIntervalSince1970: 1_700_000_000))
+        XCTAssertEqual(attachment.card?.detail, "ok")
         XCTAssertThrowsError(try computers.post(try card(unassigned), agent.id, conversation.id))
         XCTAssertThrowsError(try host.post(try card(assigned), agent.id, conversation.id), "assigned as a browser is not assigned as a computer")
 
@@ -74,7 +79,7 @@ final class ToolHostServicesTests: XCTestCase {
         let leaked = try computers.post(try ToolPost(["attachment": ["filename": "Build box.noodlecomputer", "mediaType": ComputerCard.mediaType,
             "data": try JSONSerialization.data(withJSONObject: fields).base64EncodedString()]]), agent.id, conversation.id)
         let stored = try XCTUnwrap(repository.loadAttachments(conversationID: conversation.id).first { $0.id == leaked })
-        XCTAssertNil(stored.computer?.computer.description)
+        XCTAssertFalse(String(decoding: try JSONEncoder().encode(stored), as: UTF8.self).contains("Release builds only."))
         XCTAssertFalse(String(decoding: try Data(contentsOf: repository.attachmentFileURL(stored)), as: UTF8.self).contains("Release builds only."))
     }
 
@@ -82,7 +87,7 @@ final class ToolHostServicesTests: XCTestCase {
         let file = try ToolPost(["attachment": ["filename": "notes.txt", "mediaType": "text/plain", "data": Data("hello".utf8).base64EncodedString()]])
         let id = try host.post(file, agent.id, conversation.id)
         let attachment = try XCTUnwrap(repository.loadAttachments(conversationID: conversation.id).first { $0.id == id })
-        XCTAssertNil(attachment.browser)
+        XCTAssertNil(attachment.card)
         XCTAssertEqual(try repository.loadMessages(conversationID: conversation.id).last?.body, "notes.txt")
         let spoof = try ToolPost(["attachment": ["filename": "a.noodleapplet", "mediaType": "application/vnd.noodle.applet+json", "data": "e30="]])
         XCTAssertThrowsError(try host.post(spoof, agent.id, conversation.id))

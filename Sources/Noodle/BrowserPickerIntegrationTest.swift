@@ -29,11 +29,11 @@ import SwiftUI
         }
         let png = NSBitmapImageRep(data: page.tiffRepresentation!)!.representation(using: .png, properties: [:])!
         let reference = BrowserReference(browser: browser, tabID: UUID(), url: "https://example.com/notes", title: "Project notes", previewImage: png)
-        let file = root.appendingPathComponent("Project notes." + BrowserBuildIdentity.current.fileExtension)
-        let bytes = try JSONEncoder().encode(reference); try bytes.write(to: file)
+        let file = root.appendingPathComponent("Project notes.webloc")
+        let bytes = Data("bookmark".utf8); try bytes.write(to: file)
         let attachment = ConversationAttachment(conversationID: UUID(), originalFilename: file.lastPathComponent,
-            storedFilename: file.lastPathComponent, mediaType: BrowserReference.mediaType, byteCount: Int64(bytes.count),
-            browser: .init(reference: reference, agentID: UUID()))
+            storedFilename: file.lastPathComponent, mediaType: "application/x-webloc", byteCount: Int64(bytes.count),
+            url: BrowserLink.url(browser: browser.id, tab: reference.tabID), card: LinkCard(reference))
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 850, height: 470), styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.title = "Browser assignment and attachment verification"
         window.appearance = NSAppearance(named: .darkAqua)

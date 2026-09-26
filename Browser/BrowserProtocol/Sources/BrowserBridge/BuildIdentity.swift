@@ -16,8 +16,6 @@ public enum BrowserBuildIdentity: String, CaseIterable, Sendable {
     public var groupSuffix: String { "com.pdparchitect.noodle.browsers" + suffix }
     public var appName: String { "Noodle Browser" + (self == .development ? " Dev" : "") }
     public var urlScheme: String { self == .development ? "noodlebrowser-dev" : "noodlebrowser" }
-    public var fileExtension: String { self == .development ? "noodlebrowser-dev" : "noodlebrowser" }
-    public var contentType: String { "com.pdparchitect.noodle.browser-reference" + (self == .development ? ".dev" : "") }
     private var suffix: String { self == .development ? ".local" : "" }
 
     public static func identify(_ identifier: String?) -> Self? {

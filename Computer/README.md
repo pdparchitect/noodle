@@ -32,11 +32,10 @@ Assign the same computer to several agents when they need to work on shared file
 and services. Each gets its own terminal sessions. Agents can copy files between
 their work area and the computer, up to 8 GB each.
 
-An agent can show you a terminal or desktop in the conversation as an attachment
-with a saved preview, which Quick Look can also show. Click the attachment, or
-double-click the file in Finder, to select and start that computer in Noodle
-Computer. You get the computer's normal desktop or terminal, not the agent's own
-session. Closing the window leaves the computer running.
+An agent can show you a terminal or desktop in the conversation as a link with a
+picture of what it showed. Click the link to select and start that computer in
+Noodle Computer. You get the computer's normal desktop or terminal, not the
+agent's own session. Closing the window leaves the computer running.
 
 ## Use the terminal
 

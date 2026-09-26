@@ -162,8 +162,8 @@ public struct MessengerReactionChange: Codable, Hashable, Sendable {
 
 public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable {
     public let annotation: AttachmentAnnotation?
-    public let computer: ComputerCard?
-    public let browser: BrowserCard?
+    /// Present for a link to a browser tab, computer or noodlet: its label and last picture.
+    public let card: LinkCard?
     public let id: UUID
     public let conversationID: UUID
     public let originalFilename: String
@@ -185,8 +185,7 @@ public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable 
         createdAt: Date = Date(),
         url: URL? = nil,
         voice: VoiceMessage? = nil,
-        computer: ComputerCard? = nil,
-        browser: BrowserCard? = nil,
+        card: LinkCard? = nil,
         annotation: AttachmentAnnotation? = nil
     ) {
         self.id = id
@@ -198,10 +197,12 @@ public struct ConversationAttachment: Identifiable, Codable, Hashable, Sendable 
         self.createdAt = createdAt
         self.url = url
         self.voice = voice
-        self.computer = computer
-        self.browser = browser
+        self.card = card
         self.annotation = annotation
     }
+
+    /// What a companion link points at; nil for files and web links.
+    public var companion: CompanionLink? { url.flatMap(CompanionLink.init) }
 }
 
 public struct AgentInbox: Codable, Hashable, Sendable {
@@ -234,8 +235,7 @@ public struct MessengerIdentity: Codable, Hashable, Sendable {
 
 public struct MessengerAttachment: Codable, Hashable, Sendable {
     public let annotation: AttachmentAnnotation?
-    public let computer: ComputerCard?
-    public let browser: BrowserCard?
+    public let card: LinkCard?
     public let id: UUID
     public let conversationID: UUID
     public let originalFilename: String
@@ -258,8 +258,7 @@ public struct MessengerAttachment: Codable, Hashable, Sendable {
         self.absolutePath = absolutePath
         url = attachment.url
         voice = attachment.voice
-        computer = attachment.computer
-        browser = attachment.browser
+        card = attachment.card
         annotation = attachment.annotation
     }
 }

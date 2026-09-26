@@ -313,6 +313,7 @@ final class NoodleStore {
         storageReady = false
         do {
             try repository.prepare()
+            CompanionCardMigration.run(repository)
             agents = try repository.loadAgents()
             activityWindows.synchronize(agents: agents)
             runtime.prepareAccessForExistingAgents()

@@ -743,13 +743,12 @@ public struct WorkspaceRepository: Sendable {
         mediaType: String,
         now: Date = Date(),
         linkURL: URL? = nil,
-        computer: ComputerCard? = nil,
-        browser: BrowserCard? = nil,
+        card: LinkCard? = nil,
         annotation: AttachmentAnnotation? = nil,
         id: UUID = UUID()
     ) throws -> ConversationAttachment {
         if let annotation {
-            guard annotation.isValid, computer == nil, browser == nil, linkURL == nil, mediaType == annotation.mediaType,
+            guard annotation.isValid, card == nil, linkURL == nil, mediaType == annotation.mediaType,
                   let source = try loadAttachments(conversationID: conversationID).first(where: { $0.id == annotation.sourceAttachmentID }),
                   source.originalFilename == annotation.sourceFilename else { throw WorkspaceError.invalidAttachment }
             if let messageID = annotation.sourceMessageID {
@@ -767,18 +766,11 @@ public struct WorkspaceRepository: Sendable {
                 guard data == Data(annotation.textRepresentation.utf8) else { throw WorkspaceError.invalidAttachment }
             }
         }
-        if let computer {
-            guard computer.version == 1, mediaType == ComputerCard.mediaType, linkURL == nil, browser == nil,
-                  data.count <= 900_000, (try? JSONDecoder().decode(ComputerReference.self, from: data)) == computer.reference else {
-                throw WorkspaceError.invalidAttachment
-            }
-        }
-        if let browser {
-            guard computer == nil, annotation == nil, linkURL == nil, mediaType == BrowserReference.mediaType,
-                  (try? BrowserReference.decode(data)) == browser.reference else { throw WorkspaceError.invalidAttachment }
+        if let card {
+            guard card.isValid, let linkURL, CompanionLink(linkURL) != nil else { throw WorkspaceError.invalidAttachment }
         }
         if let linkURL {
-            guard MessageLink.publicWebURL(from: linkURL, preservingFragment: true) == linkURL || NoodletLink.id(in: linkURL) != nil,
+            guard MessageLink.publicWebURL(from: linkURL, preservingFragment: true) == linkURL || CompanionLink.canonical(linkURL) == linkURL,
                   mediaType == "application/x-webloc",
                   let bookmark = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String],
                   bookmark["URL"] == linkURL.absoluteString else { throw WorkspaceError.invalidAttachment }
@@ -802,8 +794,7 @@ public struct WorkspaceRepository: Sendable {
             byteCount: Int64(data.count),
             createdAt: now,
             url: linkURL,
-            computer: computer,
-            browser: browser,
+            card: card,
             annotation: annotation
         )
         let directory = attachmentsDirectory(conversationID: conversationID)
@@ -821,12 +812,27 @@ public struct WorkspaceRepository: Sendable {
         return attachment
     }
 
-    public func importLinkAttachment(_ url: URL, into conversationID: UUID, now: Date = Date()) throws -> ConversationAttachment {
-        guard let url = NoodletLink.canonical(url)
+    /// A web link, or a link to a companion's browser tab, computer or noodlet with its card.
+    public func importLinkAttachment(_ url: URL, into conversationID: UUID, now: Date = Date(), card: LinkCard? = nil,
+                                     id: UUID = UUID()) throws -> ConversationAttachment {
+        guard let url = CompanionLink.canonical(url)
             ?? MessageLink.publicWebURL(from: url, preservingFragment: true) else { throw AttachmentSource.InvalidSource() }
         let data = try PropertyListSerialization.data(fromPropertyList: ["URL": url.absoluteString], format: .xml, options: 0)
-        return try importAttachment(data: data, originalFilename: NoodletLink.id(in: url) != nil ? "Noodlet.webloc" : "\(url.host ?? "Link").webloc", into: conversationID,
-            mediaType: "application/x-webloc", now: now, linkURL: url)
+        let name: String
+        switch CompanionLink(url) {
+        case .noodlet: name = "Noodlet"
+        case .browser, .computer: name = Self.linkFilename(card?.title) ?? (BrowserLink.target(in: url) != nil ? "Browser" : "Computer")
+        case nil: name = url.host ?? "Link"
+        }
+        return try importAttachment(data: data, originalFilename: name + ".webloc", into: conversationID,
+            mediaType: "application/x-webloc", now: now, linkURL: url, card: card, id: id)
+    }
+
+    /// A card's title as a file name, when it makes one.
+    private static func linkFilename(_ title: String?) -> String? {
+        let name = (title ?? "").components(separatedBy: CharacterSet(charactersIn: "/:\\\0").union(.newlines)).joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? nil : String(name.prefix(80))
     }
 
     /// Only unsent annotations can change. Check message references under the
@@ -892,8 +898,7 @@ public struct WorkspaceRepository: Sendable {
                 byteCount: attachment.byteCount,
                 createdAt: attachment.createdAt,
                 voice: attachment.voice,
-                computer: attachment.computer,
-                browser: attachment.browser,
+                card: attachment.card,
                 annotation: attachment.annotation
             )
             try? write(repaired, to: metadataURL)

@@ -64,14 +64,12 @@ let project = Project(
                 "BROWSER_APP_NAME": "Noodle Browser Dev",
                 "BROWSER_GROUP_SUFFIX": "com.pdparchitect.noodle.browsers.local",
                 "BROWSER_URL_SCHEME": "noodlebrowser-dev",
-                "BROWSER_REFERENCE_TYPE": "com.pdparchitect.noodle.browser-reference.dev",
             ]),
             .release(name: "Release", settings: [
                 "BROWSER_APP_BUNDLE_ID": "com.pdparchitect.noodle.browser",
                 "BROWSER_APP_NAME": "Noodle Browser",
                 "BROWSER_GROUP_SUFFIX": "com.pdparchitect.noodle.browsers",
                 "BROWSER_URL_SCHEME": "noodlebrowser",
-                "BROWSER_REFERENCE_TYPE": "com.pdparchitect.noodle.browser-reference",
                 // Signing adds get-task-allow for the debugger; a release carries only its own entitlements.
                 "CODE_SIGN_INJECT_BASE_ENTITLEMENTS": "NO",
             ]),

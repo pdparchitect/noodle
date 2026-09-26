@@ -12,10 +12,6 @@ final class BrowserLibraryTests: XCTestCase {
         let metadataEncoder = JSONEncoder(); metadataEncoder.dateEncodingStrategy = .iso8601
         let metadataDecoder = JSONDecoder(); metadataDecoder.dateDecodingStrategy = .iso8601
         XCTAssertEqual(try metadataDecoder.decode(BrowserReference.self, from: metadataEncoder.encode(reference)), reference)
-        let file = directory.appendingPathComponent("Page.noodlebrowser-dev")
-        try JSONEncoder().encode(reference).write(to: file)
-        XCTAssertEqual(try BrowserReference.read(file, build: .development), reference)
-        XCTAssertThrowsError(try BrowserReference.read(file, build: .production))
         reference.url = "https://user:password@example.com"
         XCTAssertThrowsError(try reference.validate())
         reference.url = "javascript:alert(1)"
@@ -92,9 +88,11 @@ final class BrowserLibraryTests: XCTestCase {
         let loose = URL(fileURLWithPath: "/tmp/Loose.appex")
         XCTAssertEqual(BrowserApplication.containingApplication(of: loose).path, loose.path, "an extension outside an app is left alone")
     }
-    func testOnlyNoodleAndItsBrowserToolExtensionAreSocketClientsPerChannel() {
-        XCTAssertEqual(BrowserBuildIdentity.production.clientIDs, ["com.pdparchitect.noodle", "com.pdparchitect.noodle.tools.browser"])
-        XCTAssertEqual(BrowserBuildIdentity.development.clientIDs, ["com.pdparchitect.noodle.local", "com.pdparchitect.noodle.local.tools.browser"])
+    func testOnlyNoodleItsBrowserToolExtensionAndNoodleHubAreSocketClientsPerChannel() {
+        XCTAssertEqual(BrowserBuildIdentity.production.clientIDs,
+                       ["com.pdparchitect.noodle", "com.pdparchitect.noodle.tools.browser", "com.pdparchitect.noodle.hub"])
+        XCTAssertEqual(BrowserBuildIdentity.development.clientIDs,
+                       ["com.pdparchitect.noodle.local", "com.pdparchitect.noodle.local.tools.browser", "com.pdparchitect.noodle.hub.local"])
         // The extension resolves its own channel from its signed identifier, as Noodle does.
         XCTAssertEqual(BrowserBuildIdentity.identify("com.pdparchitect.noodle.tools.browser"), .production)
         XCTAssertEqual(BrowserBuildIdentity.identify("com.pdparchitect.noodle.local.tools.browser"), .development)

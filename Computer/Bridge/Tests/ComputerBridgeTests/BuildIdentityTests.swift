@@ -2,15 +2,14 @@ import XCTest
 @testable import ComputerBridge
 
 final class BuildIdentityTests: XCTestCase {
-    func testDocumentRegistrationsAndExtensionIdentitiesStayInTheirChannel() {
-        XCTAssertEqual(ComputerBuildIdentity.development.fileExtension, "noodlecomputer-dev")
+    func testLinksAndStorageStayInTheirChannel() {
+        XCTAssertEqual(ComputerBuildIdentity.development.urlScheme, "noodlecomputer-dev")
         XCTAssertEqual(ComputerBuildIdentity.development.storageName, "Noodle Computer Local")
         for build in ComputerBuildIdentity.allCases {
-            XCTAssertEqual(ComputerBuildIdentity.identify(build.providerID + ".preview"), build)
-            XCTAssertEqual(ComputerBuildIdentity.identify(build.providerID + ".thumbnail"), build)
+            XCTAssertEqual(ComputerBuildIdentity.identify(build.providerID), build)
             for other in ComputerBuildIdentity.allCases where other != build {
-                XCTAssertNotEqual(build.fileExtension, other.fileExtension)
-                XCTAssertNotEqual(build.contentType, other.contentType)
+                XCTAssertNotEqual(build.urlScheme, other.urlScheme)
+                XCTAssertNotEqual(ComputerLink.build(in: ComputerLink.url(computer: UUID(), terminal: nil, view: nil, build: build)), other)
             }
         }
     }

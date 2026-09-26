@@ -144,10 +144,9 @@ import XCTest
         let made = try await hub.browsers.create(BrowserDraft(name: "Work"), for: ada)
         let bot = try hub.bots.create(LinkBotDraft(name: "Alfred", provider: "claude-code"), for: ada)
         let tab = UUID()
-        let reference = BrowserReference(browser: made, tabID: tab, url: "https://example.com", title: "Example")
-        let card = try hub.repository.importAttachment(data: JSONEncoder().encode(reference), originalFilename: "Example.noodlebrowser",
-                                                       into: bot.conversationID, mediaType: BrowserReference.mediaType,
-                                                       computer: nil, browser: BrowserCard(reference: reference, agentID: bot.id))
+        let card = try hub.repository.importLinkAttachment(BrowserLink.url(browser: made.id, tab: tab), into: bot.conversationID,
+                                                           card: LinkCard(title: "Example", detail: "https://example.com"))
+        _ = try hub.repository.sendAgentMessage(agentID: bot.id, conversationID: bot.conversationID, body: "Example", attachmentIDs: [card.id])
 
         let events = try await device.stream(.openSurface(conversationID: bot.conversationID, attachmentID: card.id))
         var session: UUID?

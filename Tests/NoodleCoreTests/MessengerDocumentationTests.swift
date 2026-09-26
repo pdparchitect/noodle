@@ -76,10 +76,7 @@ final class MessengerDocumentationTests: XCTestCase {
             storedFilename: "link.webloc", mediaType: "application/x-webloc", byteCount: 100,
             url: URL(string: "https://example.com/page")!,
             voice: VoiceMessage(transcript: "Encoding coverage", duration: 1, waveform: [0.5], localeIdentifier: "en-GB"),
-            computer: ComputerCard(computer: .init(id: UUID(), name: "Shell", kind: "Shell", state: "Running", symbol: "terminal"),
-                agentID: botID, terminalID: UUID(), terminalPreview: "$"),
-            browser: BrowserCard(reference: .init(browser: .init(id: UUID(), name: "Browser"), tabID: UUID(),
-                url: "https://example.com", title: "Example"), agentID: botID),
+            card: LinkCard(title: "Example", detail: "https://example.com"),
             annotation: AttachmentAnnotation(source: ConversationAttachment(conversationID: conversation.id,
                 originalFilename: "source.pdf", storedFilename: "source.pdf", mediaType: "application/pdf", byteCount: 10),
                 quote: "Source text", comment: "Feedback"))

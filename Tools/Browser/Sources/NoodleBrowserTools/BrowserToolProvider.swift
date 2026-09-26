@@ -202,7 +202,7 @@ public struct BrowserToolProvider: ToolProvider {
         reference.browser.description = nil
         try reference.validate()
         let name = String(reference.title.prefix(120)).replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: "\0", with: "")
-        let filename = (name.isEmpty || name == "." || name == ".." ? "Browser Page" : name) + "." + BrowserBuildIdentity.current.fileExtension
+        let filename = name.isEmpty || name == "." || name == ".." ? "Browser Page" : name
         let post: [String: Any] = ["message": message ?? reference.title,
             "attachment": ["filename": filename, "mediaType": BrowserReference.mediaType, "data": try JSONEncoder().encode(reference).base64EncodedString()]]
         let structured: [String: Any] = ["tabID": reference.tabID.uuidString]

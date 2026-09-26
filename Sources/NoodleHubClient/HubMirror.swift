@@ -1,5 +1,3 @@
-import BrowserBridge
-import ComputerBridge
 import Foundation
 import HubLink
 import NoodleCore
@@ -392,6 +390,14 @@ import Observation
         guard !attachments.isEmpty else { return }
         let present = Set(try repository.loadAttachments(conversationID: entry.conversation).map(\.id))
         for attachment in attachments where !present.contains(attachment.id) {
+            // A link travels as its address; one to something live keeps its card, and opens live here.
+            if let url = attachment.url {
+                _ = try repository.importLinkAttachment(url, into: entry.conversation, card: attachment.card.map {
+                    LinkCard(title: $0.title, detail: $0.detail, image: $0.image, symbol: $0.symbol, colour: $0.colour,
+                             icon: $0.icon, capturedAt: $0.capturedAt)
+                }, id: attachment.id)
+                continue
+            }
             let staging = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-\(attachment.id.uuidString)")
             defer { try? FileManager.default.removeItem(at: staging) }
             try await pairing.download(attachment, from: entry.remoteConversation, to: staging)
@@ -400,23 +406,8 @@ import Observation
                 VoiceMessage(transcript: $0.transcript, duration: $0.duration, waveform: $0.waveform, localeIdentifier: $0.localeIdentifier)
             }
             let filename = name.isEmpty ? "Attachment" : name
-            // Cards stay cards here, presented by this bot's stand-in, so they show and open as they do on the Hub.
-            if attachment.mediaType == BrowserReference.mediaType, let data = try? Data(contentsOf: staging),
-               let reference = try? BrowserReference.decode(data) {
-                _ = try repository.importAttachment(data: data, originalFilename: filename, into: entry.conversation,
-                                                    mediaType: attachment.mediaType,
-                                                    browser: BrowserCard(reference: reference, agentID: entry.agent), id: attachment.id)
-            } else if attachment.mediaType == ComputerCard.mediaType, let data = try? Data(contentsOf: staging),
-                      let reference = try? JSONDecoder().decode(ComputerReference.self, from: data) {
-                var card = ComputerCard(computer: reference.computer, agentID: entry.agent, terminalID: reference.terminalID,
-                                        terminalPreview: reference.terminalPreview, view: reference.view, previewImage: reference.previewImage)
-                card.capturedAt = reference.capturedAt
-                _ = try repository.importAttachment(data: data, originalFilename: filename, into: entry.conversation,
-                                                    mediaType: attachment.mediaType, computer: card, id: attachment.id)
-            } else {
-                _ = try repository.importAttachment(from: staging, into: entry.conversation, mediaType: attachment.mediaType,
-                                                    voice: voice, id: attachment.id, originalFilename: filename)
-            }
+            _ = try repository.importAttachment(from: staging, into: entry.conversation, mediaType: attachment.mediaType,
+                                                voice: voice, id: attachment.id, originalFilename: filename)
         }
     }
 

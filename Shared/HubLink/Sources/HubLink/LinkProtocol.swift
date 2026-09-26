@@ -531,16 +531,24 @@ public struct LinkAttachment: Codable, Equatable, Identifiable, Sendable {
     public var byteCount: Int
     /// Set when the file is a voice message.
     public var voice: LinkVoice?
+    /// Set for a link, which travels as its address rather than as a file: a web page, or a
+    /// browser tab, computer or noodlet, which opens live.
+    public var url: URL?
+    /// What a link to a browser tab, computer or noodlet shows.
+    public var card: LinkCardInfo?
 
-    public init(id: UUID, filename: String, mediaType: String, byteCount: Int, voice: LinkVoice? = nil) {
+    public init(id: UUID, filename: String, mediaType: String, byteCount: Int, voice: LinkVoice? = nil,
+                url: URL? = nil, card: LinkCardInfo? = nil) {
         self.id = id
         self.filename = filename
         self.mediaType = mediaType
         self.byteCount = byteCount
         self.voice = voice
+        self.url = url
+        self.card = card
     }
 
-    private enum CodingKeys: String, CodingKey { case id, filename, mediaType, byteCount, voice }
+    private enum CodingKeys: String, CodingKey { case id, filename, mediaType, byteCount, voice, url, card }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -549,6 +557,30 @@ public struct LinkAttachment: Codable, Equatable, Identifiable, Sendable {
         mediaType = try c.decode(.mediaType, or: "application/octet-stream")
         byteCount = try c.decode(Int.self, forKey: .byteCount)
         voice = try c.decodeIfPresent(LinkVoice.self, forKey: .voice)
+        url = try c.decodeIfPresent(URL.self, forKey: .url)
+        card = try c.decodeIfPresent(LinkCardInfo.self, forKey: .card)
+    }
+}
+
+/// The label and last picture of a link to something live, as shared in the conversation.
+public struct LinkCardInfo: Codable, Equatable, Sendable {
+    public var title: String
+    public var detail: String?
+    public var image: Data?
+    public var symbol: String?
+    public var colour: Int?
+    public var icon: Data?
+    public var capturedAt: Date?
+
+    public init(title: String, detail: String? = nil, image: Data? = nil, symbol: String? = nil, colour: Int? = nil,
+                icon: Data? = nil, capturedAt: Date? = nil) {
+        self.title = title
+        self.detail = detail
+        self.image = image
+        self.symbol = symbol
+        self.colour = colour
+        self.icon = icon
+        self.capturedAt = capturedAt
     }
 }
 

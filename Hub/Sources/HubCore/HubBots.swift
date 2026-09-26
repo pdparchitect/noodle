@@ -53,6 +53,7 @@ import NoodleRuntime
     public func start() throws {
         guard !running else { return }
         try repository.prepare()
+        CompanionCardMigration.run(repository)
         let agents = try repository.loadAgents()
         try repository.synchronizeAgentWorkspaces(agents)
         try messenger.start(agents: agents)
@@ -338,28 +339,21 @@ import NoodleRuntime
     }
 
     /// The bot of a direct conversation the user owns.
-    /// A card a message in one of the user's conversations carries.
-    public func card(_ attachmentID: UUID, in conversationID: UUID, for user: HubUser) throws -> ConversationAttachment {
-        _ = try ownedConversation(conversationID, by: user)
-        guard let card = try attachments(in: conversationID)[attachmentID],
-              card.browser != nil || card.computer != nil || card.url.flatMap(NoodletLink.id(in:)) != nil else {
-            throw LinkError("That is not a card that opens live in this conversation.")
-        }
-        return card
-    }
-
-    /// The noodlet a link in the user's conversation points at, when the conversation's bot posted
-    /// that link and is the bot that shared the noodlet. Anything else opens nothing.
-    public func noodlet(_ attachmentID: UUID, in conversationID: UUID, for user: HubUser) throws -> UUID {
+    /// The browser tab, computer or noodlet a link in the user's conversation names, and the
+    /// conversation's bot. Only a link that bot posted counts, and a noodlet only if that bot shared it:
+    /// Noodle Applet does not know whose a noodlet is. Anything else opens nothing.
+    public func companionLink(_ attachmentID: UUID, in conversationID: UUID, for user: HubUser) throws -> (link: CompanionLink, bot: UUID) {
         let bot = try ownedConversation(conversationID, by: user)
-        guard let link = try attachments(in: conversationID)[attachmentID]?.url, let noodlet = NoodletLink.id(in: link),
+        guard let link = try attachments(in: conversationID)[attachmentID]?.companion,
               try repository.loadMessages(conversationID: conversationID).contains(where: {
                   $0.author == .agent(bot.id) && ($0.attachmentIDs ?? []).contains(attachmentID)
-              }),
-              access.bot(ofNoodlet: noodlet) == bot.id else {
+              }) else {
+            throw LinkError("That is not something this bot shared.")
+        }
+        if case .noodlet(let noodlet) = link, access.bot(ofNoodlet: noodlet) != bot.id {
             throw LinkError("That noodlet is not this bot's.")
         }
-        return noodlet
+        return (link, bot.id)
     }
 
     private func ownedConversation(_ id: UUID, by user: HubUser) throws -> AgentRecord {
@@ -393,7 +387,10 @@ import NoodleRuntime
         let attachments = (message.attachmentIDs ?? []).compactMap { files[$0] }.map {
             LinkAttachment(id: $0.id, filename: $0.originalFilename, mediaType: $0.mediaType, byteCount: Int($0.byteCount),
                            voice: $0.voice.map { LinkVoice(transcript: $0.transcript, duration: $0.duration, waveform: $0.waveform,
-                                                           localeIdentifier: $0.localeIdentifier) })
+                                                           localeIdentifier: $0.localeIdentifier) },
+                           url: $0.url,
+                           card: $0.card.map { LinkCardInfo(title: $0.title, detail: $0.detail, image: $0.image, symbol: $0.symbol,
+                                                            colour: $0.colour, icon: $0.icon, capturedAt: $0.capturedAt) })
         }
         let reactions = (message.reactions ?? []).compactMap { reaction -> LinkReaction? in
             switch reaction.author {

@@ -61,18 +61,6 @@ import WebKit
         if profile.tabs.isEmpty { _ = try makeTab(browserID: id) }
         else if let tabID = profile.selectedTabID ?? profile.tabs.first?.id { _ = try tab(browserID: id, tabID: tabID) }
     }
-    func openReference(_ reference: BrowserReference) throws -> UUID {
-        try reference.validate()
-        var profile = try library.profile(reference.browser.id)
-        if let existing = profile.tabs.first(where: { $0.id == reference.tabID && $0.url == reference.url }) {
-            profile.selectedTabID = existing.id; try library.update(profile)
-            _ = try tab(browserID: profile.id, tabID: existing.id)
-            return existing.id
-        }
-        let restored = try makeTab(browserID: profile.id)
-        restored.navigate(try BrowserRequest.navigationURL(reference.url))
-        return restored.id
-    }
     func closeTab(browserID: UUID, tabID: UUID) throws {
         var profile = try library.profile(browserID)
         guard profile.tabs.contains(where: { $0.id == tabID }) else { throw BrowserError("Tab not found in this browser.") }
