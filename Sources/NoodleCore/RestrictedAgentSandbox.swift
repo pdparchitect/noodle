@@ -40,11 +40,20 @@ public enum RestrictedAgentSandbox {
             executablePaths: [executable.path], application: application,
             readFiles: Array(Set(readFiles)).sorted(), folders: folders)
         guard provider == .openCode || provider == .antigravity else { return base }
+        // Antigravity runs every shell command in a pseudo-terminal. The pty
+        // extension limits the tree to terminals it opened itself.
+        let terminals = provider != .antigravity ? "" : """
+
+        (allow pseudo-tty)
+        (allow file-read* file-write* file-ioctl (literal "/dev/ptmx"))
+        (allow file-read* file-write* file-ioctl
+          (require-all (regex #"^/dev/ttys[0-9]+$") (extension "com.apple.sandbox.pty")))
+        """
         // OpenCode v2's ACP implementation and Antigravity's language server each
         // listen on 127.0.0.1. Only that verified executable can listen; tools cannot.
         // Seatbelt's "localhost" token also matches this machine's LAN addresses,
         // so it must not be described as an OS-enforced loopback-only boundary.
-        return base + """
+        return base + terminals + """
 
         (allow network-bind network-inbound
           (require-all

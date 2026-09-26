@@ -232,6 +232,39 @@ final class AntigravityTests: XCTestCase {
         XCTAssertEqual(layout.sessionState(provider: .antigravity, extendedAccess: false).lastPathComponent, "antigravity-runtime.json")
     }
 
+    /// Antigravity runs every shell command through a pseudo-terminal it opens.
+    func testRestrictedSandboxOpensItsOwnTerminalsButNotOthers() throws {
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("Agents"), withIntermediateDirectories: true)
+        let layout = AgentStorageLayout(package: root.appendingPathComponent("Agents/agent"))
+        try layout.create()
+        let profile = try RestrictedAgentSandbox.profile(provider: .antigravity, workspace: layout.workspace, repository: root,
+            home: root, executable: URL(fileURLWithPath: "/usr/bin/script"), application: root.appendingPathComponent("Noodle.app"),
+            temporary: layout.workspace.appendingPathComponent(".noodle/tmp"))
+        var primary: Int32 = 0, secondary: Int32 = 0
+        var name = [CChar](repeating: 0, count: 128)
+        XCTAssertEqual(openpty(&primary, &secondary, &name, nil, nil), 0)
+        defer { close(primary); close(secondary) }
+        let outside = String(cString: name)
+
+        func run(_ arguments: [String]) throws -> (Int32, String) {
+            let process = Process(), output = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
+            process.arguments = ["-p", profile] + arguments
+            process.standardInput = FileHandle.nullDevice
+            process.standardOutput = output
+            process.standardError = output
+            try process.run()
+            let text = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            process.waitUntilExit()
+            return (process.terminationStatus, text)
+        }
+        let own = try run(["/usr/bin/script", "-q", "/dev/null", "/bin/echo", "inside"])
+        XCTAssertEqual(own.0, 0, own.1)
+        XCTAssertTrue(own.1.contains("inside"), own.1)
+        let other = try run(["/bin/sh", "-c", "echo intrusion > \"$1\"", "probe", outside])
+        XCTAssertNotEqual(other.0, 0, other.1)
+    }
+
     func testInspectionReportsSignInFromTheModelListing() throws {
         func fixture(_ body: String) throws -> URL {
             let url = root.appendingPathComponent("agy-\(UUID().uuidString)")

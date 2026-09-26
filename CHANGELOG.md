@@ -32,6 +32,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Sandboxed Antigravity bots can run commands again. They can open only their own terminals, not yours.
 - Settings no longer grows taller than your screen: a long tab, such as Harness with many harnesses, now scrolls so you can reach the bottom. Harness setup actions such as Install and Install Manually… are compact links.
 - Opening Noodle, Noodle Browser, Noodle Computer, Noodle Applet or Noodle Hub again brings the copy already running to the front instead of starting a second one on the same data, however it is started.
 - Delete a removed tool connection's sign-in from Keychain even when the first try fails. Noodle tries again until it is gone.
