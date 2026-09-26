@@ -161,6 +161,11 @@ private struct CompanionRow: View {
     @ViewBuilder private var preview: some View {
         if let image = attachment.companionPreviewImage.flatMap(NSImage.init(data:)) ?? noodletPreview {
             Image(nsImage: image).resizable().scaledToFill()
+        } else if attachment.isComputerLink, let terminal = attachment.card?.detail {
+            // A computer shared as its terminal shows its latest lines, as its card does.
+            Text(terminal).font(.system(size: 4, design: .monospaced)).foregroundStyle(.white.opacity(0.8))
+                .lineLimit(12).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading).padding(4)
+                .background(.black)
         } else {
             Image(systemName: noodletUnavailable ? "exclamationmark.link" : attachment.companionSymbolName)
                 .font(.system(size: 20))
