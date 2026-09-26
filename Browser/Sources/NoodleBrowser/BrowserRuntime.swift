@@ -21,11 +21,16 @@ import WebKit
     init(library: BrowserLibrary, transferRoot: URL? = nil) { self.library = library; self.transferRoot = transferRoot; super.init() }
     func startServer(socket: URL? = nil) {
         do {
-            server = try BrowserConnectionServer(socket: socket ?? BrowserConnection.socketURL(), team: BrowserConnection.signingTeam()) { [weak self] request, _ in
+            server = try BrowserConnectionServer(socket: socket ?? BrowserConnection.socketURL(), team: BrowserConnection.signingTeam(),
+                                                 handler: { [weak self] request, _ in
                 guard let self else { return .init(error: "Browser stopped.") }
                 do { return try await self.perform(request) }
                 catch { return .init(error: error.localizedDescription) }
-            }
+            }, surface: { [weak self] request, _, socket in
+                guard let self else { return .init(error: "Browser stopped.") }
+                do { return try await self.perform(request, surface: socket) }
+                catch { return .init(error: error.localizedDescription) }
+            })
         } catch { failure = error.localizedDescription }
     }
     func saveTab(_ tab: BrowserTab) {
@@ -127,7 +132,7 @@ import WebKit
         for tab in tabs.values { tab.stop() }
         tabs.removeAll()
     }
-    func perform(_ request: BrowserRequest) async throws -> BrowserResponse {
+    func perform(_ request: BrowserRequest, surface: SurfaceSocket? = nil) async throws -> BrowserResponse {
         try request.validate()
         var response = BrowserResponse()
         if request.operation == .list {
@@ -174,15 +179,13 @@ import WebKit
             return response
         }
         // A person may watch and use a tab while bots are paused, and alongside a bot's own call.
-        if request.operation == .surfaceFrame {
+        if request.operation == .surfaceStream {
+            guard let surface else { throw BrowserError("A live view needs a connection of its own.") }
             let tab = try tab(browserID: id, tabID: request.tabID!)
-            let streamer = surfaces[tab.id] ?? SurfaceStreamer { [weak tab] in try await tab?.surfacePicture() }
+            let streamer = surfaces[tab.id] ?? SurfaceStreamer(capture: { [weak tab] in try await tab?.surfacePicture() },
+                                                              apply: { [weak tab] in try tab?.apply($0) })
             surfaces[tab.id] = streamer
-            response.surfacePackets = SurfacePacket.encode(try streamer.read(after: request.surfaceAfter ?? 0))
-            return response
-        }
-        if request.operation == .surfaceInput {
-            try tab(browserID: id, tabID: request.tabID!).apply(request.surfaceInput!)
+            streamer.attach(surface)
             return response
         }
         guard !profile.paused else { throw BrowserError("Agent control is paused for this browser. Wait for the user to resume it.") }

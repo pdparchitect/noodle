@@ -158,9 +158,8 @@ import XCTest
         do { _ = try await failed.openNoodlet(NoodletLink.url(for: id)); XCTFail("Missing package appeared to open") }
         catch { XCTAssertEqual(error.localizedDescription, "This noodlet is no longer available.") }
     }
-    /// Showing a noodlet to people is the app's; sharing one names the bot that shared it, which a
-    /// Noodle Hub uses to decide who may open it.
-    func testBotsCannotShowNoodletsToPeopleAndSharingNamesTheBot() async throws {
+    /// Showing a noodlet to people is the app's; a bot shares one as a link.
+    func testBotsCannotShowNoodletsToPeopleButShareThemAsLinks() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let repository = WorkspaceRepository(rootURL: root)
         try repository.prepare()
@@ -174,25 +173,49 @@ import XCTest
             if request.operation == .present { response.url = NoodletLink.url(for: id); response.title = "Game" }
             return response
         })
-        var shared: [(UUID, UUID, UUID)] = []
-        controller.onShared = { shared.append(($0, $1, $2)) }
         controller.start(agents: [bot])
         defer { controller.start(agents: []); try? FileManager.default.removeItem(at: root) }
         func invoke(_ request: AppletRequest, in conversation: UUID? = nil) async throws -> AppletResponse {
             try await controller.perform(AppletAgentEnvelope(token: try token(for: bot, repository: repository), request: request,
                                                              conversationID: conversation), agent: bot)
         }
-        for operation in [AppletOperation.surfaceFrame, .surfaceInput] {
-            var request = AppletRequest(operation, sessionID: UUID())
-            request.surfaceInput = .text("x")
-            do { _ = try await invoke(request); XCTFail("A bot used \(operation.rawValue)") } catch {}
-        }
+        do {
+            _ = try await invoke(AppletRequest(.surfaceStream, sessionID: UUID()))
+            XCTFail("A bot opened a live view")
+        } catch {}
         let before = await recorder.requests
         XCTAssertEqual(before.count, 0)
         _ = try await invoke(AppletRequest(.present, sessionID: UUID()), in: group.id)
-        XCTAssertEqual(shared.map(\.0), [id])
-        XCTAssertEqual(shared.map(\.1), [bot.id])
-        XCTAssertEqual(shared.map(\.2), [group.id])
+        let posted = try repository.loadAttachments(conversationID: group.id)
+        XCTAssertEqual(posted.compactMap(\.url).compactMap(NoodletLink.id), [id])
+    }
+
+    /// A bot builds and opens noodlets from its own folder only, which is what makes a noodlet
+    /// that bot's wherever it is linked; another bot's folder, or one outside, is refused.
+    func testABotOpensNoodletsFromItsOwnFolderOnly() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let repository = WorkspaceRepository(rootURL: root)
+        try repository.prepare()
+        let kai = try repository.createAgent(named: "Kai").agent, eli = try repository.createAgent(named: "Eli").agent
+        let recorder = AppletRequestRecorder()
+        let controller = AppletController(repository: repository, connection: { await recorder.respond($0) })
+        controller.start(agents: [kai, eli])
+        defer { controller.start(agents: []); try? FileManager.default.removeItem(at: root) }
+        func open(_ path: URL) async throws {
+            var request = AppletRequest(.open)
+            request.path = path.path
+            request.files = ["index.html": Data("hi".utf8)]
+            _ = try await controller.perform(AppletAgentEnvelope(token: try token(for: kai, repository: repository), request: request,
+                                                                 conversationID: nil), agent: kai)
+        }
+        try await open(repository.directory(for: kai).appendingPathComponent("Counter.noodlet"))
+        for elsewhere in [repository.directory(for: eli).appendingPathComponent("Counter.noodlet"),
+                          repository.directory(for: kai).appendingPathComponent("../Eli/Counter.noodlet"),
+                          URL(fileURLWithPath: "/tmp/Counter.noodlet")] {
+            do { try await open(elsewhere); XCTFail("Kai opened \(elsewhere.path)") } catch {}
+        }
+        let requests = await recorder.requests
+        XCTAssertEqual(requests.count, 1)
     }
 
     func testOnlySentLinksGrantParticipantsSharedAccessAndNeverExposeBookmarks() async throws {

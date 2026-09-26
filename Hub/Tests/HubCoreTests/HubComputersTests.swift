@@ -12,6 +12,7 @@ import XCTest
         let ada: HubUser
         let bob: HubUser
         let computer: FakeComputer
+        let surfaces: FakeSurfaces
     }
 
     /// Noodle Computer on the Hub's Mac, as far as the Hub can tell.
@@ -19,7 +20,6 @@ import XCTest
         private let lock = NSLock()
         private var computers: [RemoteComputer] = []
         private(set) var revoked: [(UUID, UUID)] = []
-        private(set) var inputs: [(UUID?, UUID?, UUID?, SurfaceInput)] = []
 
         func call(_ request: ComputerRequest) throws -> ComputerResponse {
             try lock.withLock {
@@ -39,10 +39,6 @@ import XCTest
                     response.computers = [computers[index]]
                 case .delete:
                     computers.removeAll { $0.id == request.computerID }
-                case .surfaceFrame:
-                    response.surfacePackets = SurfacePacket.encode([SurfacePacket(sequence: 1, keyFrame: true, width: 1024, height: 768, parameterSets: [Data([1]), Data([2])], sample: Data([3]))])
-                case .surfaceInput:
-                    inputs.append((request.computerID, request.terminalID, request.agentID, try XCTUnwrap(request.surfaceInput)))
                 case .revoke:
                     revoked.append((try XCTUnwrap(request.computerID), try XCTUnwrap(request.agentID)))
                 default:
@@ -56,15 +52,16 @@ import XCTest
     private func fixture() throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-computers-\(UUID())")
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
-        let computer = FakeComputer()
-        let hub = Hub(root: root.appendingPathComponent("Hub"), messenger: nil, computer: { try computer.call($0) })
+        let computer = FakeComputer(), surfaces = FakeSurfaces(width: 1024)
+        let hub = Hub(root: root.appendingPathComponent("Hub"), messenger: nil, computer: { try computer.call($0) },
+                      surfaces: SurfaceOpeners(computer: { surfaces.open("\($0.computerID!) \($0.terminalID!) \($0.agentID!)") }))
         try hub.repository.prepare()
         let family = try hub.access.addPlan(named: "Family")
         hub.access.set(HubHarness(provider: .claudeCode, profile: nil), included: true, in: family)
         let ada = try hub.access.addUser(named: "Ada"), bob = try hub.access.addUser(named: "Bob")
         hub.access.move(ada, to: family)
         hub.access.move(bob, to: family)
-        return Fixture(hub: hub, ada: ada, bob: bob, computer: computer)
+        return Fixture(hub: hub, ada: ada, bob: bob, computer: computer, surfaces: surfaces)
     }
 
     func testAComputerMadeForAUserReachesOnlyTheBotsItIsAssignedTo() async throws {
@@ -155,11 +152,9 @@ import XCTest
         let (channel, packets) = try await device.firstSurfacePackets(.openSurface(conversationID: bot.conversationID, attachmentID: attachment.id))
         defer { channel.cancel() }
         XCTAssertEqual(packets.first?.width, 1024)
-        channel.send(LinkSurface.input(.key(.enter)))
-        await waitUntil { !f.computer.inputs.isEmpty }
-        XCTAssertEqual(f.computer.inputs.map(\.0), [made.id])
-        XCTAssertEqual(f.computer.inputs.map(\.1), [terminal])
-        XCTAssertEqual(f.computer.inputs.map(\.2), [bot.id])
-        XCTAssertEqual(f.computer.inputs.map(\.3), [.key(.enter)])
+        channel.send(LinkSurface.control(.input(.key(.enter))))
+        await waitUntil { !f.surfaces.inputs.isEmpty }
+        XCTAssertEqual(f.surfaces.inputs.map(\.view), ["\(made.id) \(terminal) \(bot.id)"])
+        XCTAssertEqual(f.surfaces.inputs.map(\.input), [.key(.enter)])
     }
 }

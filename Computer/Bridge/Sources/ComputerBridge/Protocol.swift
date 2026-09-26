@@ -32,8 +32,9 @@ public enum ComputerOperation: String, Codable, Sendable {
     case fileUpload, fileDownload
     /// Managing computers: what can be made, making one, changing one and deleting one.
     case templates, create, update, delete
-    /// A person watching and using a computer from Noodle or Noodle Hub.
-    case surfaceFrame, surfaceInput
+    /// A person watching and using a computer from Noodle or Noodle Hub: the connection stays
+    /// open, video coming down it and what they do going up.
+    case surfaceStream
     public var isFileTransfer: Bool { self == .fileUpload || self == .fileDownload }
     /// A new computer may first download its image.
     public var timeout: Int { self == .create ? 1800 : isFileTransfer ? 600 : (self == .start ? 180 : 120) }
@@ -80,9 +81,6 @@ public struct ComputerRequest: Codable, Sendable {
     /// Broker-generated reference in the shared App Group, never a host path.
     public var transferID: UUID?
     public var computer: ComputerDraft?
-    public var surfaceInput: SurfaceInput?
-    /// For surfaceFrame: the last packet this viewer has, 0 for none.
-    public var surfaceAfter: UInt64?
     public init(_ operation: ComputerOperation, computerID: UUID? = nil, agentID: UUID? = nil,
                 terminalID: UUID? = nil, data: Data? = nil, offset: Int64? = nil, columns: Int? = nil, rows: Int? = nil) {
         self.operation = operation; self.computerID = computerID; self.agentID = agentID
@@ -104,7 +102,6 @@ public struct ComputerRequest: Codable, Sendable {
         if operation == .terminalResize && (!(1...500).contains(columns ?? 0) || !(1...200).contains(rows ?? 0)) {
             throw ComputerBridgeError("Invalid terminal dimensions.")
         }
-        if operation == .surfaceInput, surfaceInput == nil { throw ComputerBridgeError("Specify what the person did.") }
         if [.create, .update].contains(operation) {
             guard let computer else { throw ComputerBridgeError("Specify the computer's name.") }
             let name = computer.name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -147,8 +144,6 @@ public struct ComputerResponse: Codable, Sendable {
     public var path: String?
     public var byteCount: Int64?
     public var templates: [ComputerTemplateSummary]?
-    /// Encoded video packets, as `SurfacePacket.encode` writes them.
-    public var surfacePackets: Data?
     public init(computers: [RemoteComputer]? = nil, terminalID: UUID? = nil, data: Data? = nil,
                 offset: Int64? = nil, truncated: Bool? = nil, exited: Bool? = nil, error: String? = nil) {
         self.computers = computers; self.terminalID = terminalID; self.data = data; self.offset = offset

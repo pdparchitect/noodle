@@ -14,15 +14,19 @@ import NoodleCore
     private let access: HubAccess
     private let assignments: ToolAssignmentStore
     private let call: BrowserToolProvider.Transport
+    private let surface: @Sendable (BrowserRequest) async throws -> SurfaceSocket
     private var registry: BrowserAssignments
 
+    /// `surface` opens a live view of a tab; by default in Noodle Browser on this Mac.
     public init(root: URL, access: HubAccess, tools: ToolProviderRegistry, assignments: ToolAssignmentStore,
                 stagingRoot: @escaping @Sendable () throws -> URL = BrowserToolProvider.liveStagingRoot,
-                call: @escaping BrowserToolProvider.Transport) {
+                call: @escaping BrowserToolProvider.Transport,
+                surface: (@Sendable (BrowserRequest) async throws -> SurfaceSocket)? = nil) {
         self.root = root
         self.access = access
         self.assignments = assignments
         self.call = call
+        self.surface = surface ?? { try await BrowserConnection.openSurface($0, socket: BrowserConnection.socketURL(), team: BrowserConnection.signingTeam()) }
         registry = (try? BrowserAssignments.load(root: root)) ?? BrowserAssignments()
         try? tools.register(BrowserToolProvider(stagingRoot: stagingRoot, transport: call))
         publish()
@@ -81,21 +85,11 @@ import NoodleCore
         publish()
     }
 
-    /// A tab of one of the user's browsers as video, the packets after `sequence`. Reading keeps
-    /// the browser's bots off it while the person watches.
-    public func surfacePackets(browser: UUID, tab: UUID, after sequence: UInt64, for user: HubUser) async throws -> [SurfacePacket] {
+    /// A live view of a tab of one of the user's browsers: video down the socket, what the person
+    /// does up it. While it is open, the browser's bots wait.
+    public func openSurface(browser: UUID, tab: UUID, for user: HubUser) async throws -> SurfaceSocket {
         try owned(browser, by: user)
-        var request = BrowserRequest(.surfaceFrame, browserID: browser, tabID: tab)
-        request.surfaceAfter = sequence
-        return try await call(request).checked().surfacePackets.flatMap(SurfacePacket.decode) ?? []
-    }
-
-    /// What a person watching one of the user's tabs did.
-    public func surfaceInput(_ input: SurfaceInput, browser: UUID, tab: UUID, for user: HubUser) async throws {
-        try owned(browser, by: user)
-        var request = BrowserRequest(.surfaceInput, browserID: browser, tabID: tab)
-        request.surfaceInput = input
-        _ = try await call(request).checked()
+        return try await surface(BrowserRequest(.surfaceStream, browserID: browser, tabID: tab))
     }
 
     /// Replaces which of the user's browsers one of their bots may use.

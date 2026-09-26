@@ -127,6 +127,7 @@ public final class LinkStream: @unchecked Sendable {
     /// Frames a channel's client sent before anyone listened, and who listens.
     private var received: [Data] = []
     private var frameHandler: (@Sendable (Data) -> Void)?
+    private var unsent = 0
 
     init(peer: LinkPublicKey, connection: NWConnection) {
         self.peer = peer
@@ -145,6 +146,9 @@ public final class LinkStream: @unchecked Sendable {
     }
 
     public var isClosed: Bool { lock.withLock { closed } }
+
+    /// Bytes sent that the network has not taken yet: how far behind the device is.
+    public var pendingBytes: Int { lock.withLock { unsent } }
 
     /// Takes the frames a channel's client sends, including any sent before this was set.
     public func onFrame(_ handler: @escaping @Sendable (Data) -> Void) {
@@ -186,7 +190,10 @@ public final class LinkStream: @unchecked Sendable {
 
     public func send(_ payload: Data) {
         guard !isClosed else { return }
-        connection.send(content: LinkQUIC.frame(payload), completion: .contentProcessed { [weak self] error in
+        let frame = LinkQUIC.frame(payload)
+        lock.withLock { unsent += frame.count }
+        connection.send(content: frame, completion: .contentProcessed { [weak self] error in
+            self?.lock.withLock { self?.unsent -= frame.count }
             if error != nil { self?.connection.cancel() }
         })
     }
@@ -308,6 +315,12 @@ public final class LinkSubscription: Sendable {
             let reader = Task {
                 do {
                     while let header = try await LinkQUIC.read(4, from: connection) {
+                        // A Hub that refuses answers once, in JSON, instead of opening the stream.
+                        if header.first == UInt8(ascii: "{") {
+                            let response = try LinkProtocol.decodeResponse(header + (try await LinkQUIC.receive(connection)))
+                            if case .failure(let message) = response { throw LinkError(message) }
+                            throw LinkError("The Hub sent an unexpected answer.")
+                        }
                         let length = Int(header.withUnsafeBytes { UInt32(bigEndian: $0.loadUnaligned(as: UInt32.self)) })
                         guard length <= LinkQUIC.messageLimit else { throw LinkError("The message is too large.") }
                         // Empty frames only keep the stream alive.

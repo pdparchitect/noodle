@@ -55,7 +55,7 @@ import Observation
     public func owns(conversation id: UUID) -> Bool { entries.contains { $0.conversation == id } }
 
     /// Opens the live view of what a link in a conversation here points at, kept on the Hub. Video
-    /// comes down the channel as `LinkSurface` messages; send input up it with `LinkSurface.input`.
+    /// comes down the channel as `LinkSurface` messages; send the viewer's controls up it with `LinkSurface.control`.
     public func openSurface(attachment: UUID, in conversation: UUID) async throws -> LinkChannel {
         guard let entry = entries.first(where: { $0.conversation == conversation }) else { throw LinkError("That conversation is not on this Hub.") }
         return try await pairing.channel(.openSurface(conversationID: entry.remoteConversation, attachmentID: attachment))

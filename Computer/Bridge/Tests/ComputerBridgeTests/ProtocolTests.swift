@@ -211,13 +211,9 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(decoded.templates, response.templates)
     }
     /// A person watching a computer from Noodle or the Hub, whatever its bots are doing.
-    func testSurfacesNameTheirComputerAndCarryInput() throws {
-        XCTAssertThrowsError(try ComputerRequest(.surfaceFrame).validate())
-        XCTAssertNoThrow(try ComputerRequest(.surfaceFrame, computerID: UUID()).validate())
-        var input = ComputerRequest(.surfaceInput, computerID: UUID())
-        XCTAssertThrowsError(try input.validate(), "Input carried nothing")
-        input.surfaceInput = .text("ls")
-        XCTAssertNoThrow(try input.validate())
+    func testSurfacesNameTheirComputer() throws {
+        XCTAssertThrowsError(try ComputerRequest(.surfaceStream).validate())
+        XCTAssertNoThrow(try ComputerRequest(.surfaceStream, computerID: UUID()).validate())
     }
     /// A terminal shows its latest output, without colour codes, and takes keys as the bytes a shell expects.
     func testTerminalsBecomeSurfaces() throws {

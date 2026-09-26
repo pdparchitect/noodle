@@ -9,7 +9,7 @@
 
 ### Changed
 
-- Stream live views to Noodle Hub as video. While someone watches a computer, bots cannot use it until they close the view.
+- Stream live views to Noodle Hub as video, pushing each picture as soon as it is ready, at the size of the viewer's window, and skipping old pictures for a viewer that falls behind. While someone watches a computer, bots cannot use it until they close the view.
 
 ### Removed
 

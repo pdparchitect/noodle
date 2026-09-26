@@ -42,7 +42,6 @@ import NoodleRuntime
         self.computers = computers
         self.browsers = browsers
         self.applets = applets
-        applets.onShared = { [access] noodlet, bot, _ in access.setBot(bot, ofNoodlet: noodlet) }
         messenger = MessengerBroker(repository: repository)
         connections.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
         computers.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
@@ -310,7 +309,6 @@ import NoodleRuntime
         connections.forget(bot: agent.id)
         computers.forget(bot: agent.id)
         browsers.forget(bot: agent.id)
-        access.forgetNoodlets(of: agent.id)
         if running { applets.start(agents: (try? repository.loadAgents()) ?? []) }
         access.setOwner(nil, ofBot: agent.id)
     }
@@ -340,9 +338,9 @@ import NoodleRuntime
 
     /// The bot of a direct conversation the user owns.
     /// The browser tab, computer or noodlet a link in the user's conversation names, and the
-    /// conversation's bot. Only a link that bot posted counts, and a noodlet only if that bot shared it:
-    /// Noodle Applet does not know whose a noodlet is. Anything else opens nothing.
-    public func companionLink(_ attachmentID: UUID, in conversationID: UUID, for user: HubUser) throws -> (link: CompanionLink, bot: UUID) {
+    /// conversation's bot. Only a link that bot posted counts, and a noodlet only if it came from
+    /// that bot's folder. Anything else opens nothing.
+    public func companionLink(_ attachmentID: UUID, in conversationID: UUID, for user: HubUser) async throws -> (link: CompanionLink, bot: UUID) {
         let bot = try ownedConversation(conversationID, by: user)
         guard let link = try attachments(in: conversationID)[attachmentID]?.companion,
               try repository.loadMessages(conversationID: conversationID).contains(where: {
@@ -350,8 +348,17 @@ import NoodleRuntime
               }) else {
             throw LinkError("That is not something this bot shared.")
         }
-        if case .noodlet(let noodlet) = link, access.bot(ofNoodlet: noodlet) != bot.id {
-            throw LinkError("That noodlet is not this bot's.")
+        if case .noodlet(let noodlet) = link {
+            // A noodlet is the bot's whose folder it came from; Applet says which folder.
+            var info = AppletRequest(.info)
+            info.noodletID = noodlet
+            let workspace = repository.directory(for: bot).resolvingSymlinksInPath().standardizedFileURL.pathComponents
+            let source = try await applets.companion(info).sourcePath.map {
+                URL(fileURLWithPath: $0).resolvingSymlinksInPath().standardizedFileURL.pathComponents
+            }
+            guard let source, source.count > workspace.count, Array(source.prefix(workspace.count)) == workspace else {
+                throw LinkError("That noodlet is not this bot's.")
+            }
         }
         return (link, bot.id)
     }

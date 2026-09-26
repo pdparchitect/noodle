@@ -159,6 +159,34 @@ public enum BrowserConnection {
             return try JSONDecoder().decode(BrowserResponse.self, from: receive(fd))
         }.value
     }
+
+    /// Opens a live view of a tab: once the browser agrees, the connection carries its video down
+    /// and the viewer's controls up until either side closes it.
+    public static func openSurface(
+        _ request: BrowserRequest, socket url: URL, team: String,
+        providerID: String = providerID
+    ) async throws -> SurfaceSocket {
+        try request.validate()
+        return try await Task.detached(priority: .userInitiated) {
+            let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+            guard fd >= 0 else { throw BrowserError("Cannot open browser connection.") }
+            do {
+                configure(fd, seconds: request.operation.timeout)
+                var address = try address(url)
+                guard withAddress(&address, { Darwin.connect(fd, $0, $1) }) == 0 else {
+                    throw BrowserError("Browser is unavailable.", unavailable: true)
+                }
+                _ = try authenticate(fd, team: team, identifiers: [providerID])
+                try send(JSONEncoder().encode(request), fd)
+                let reply = try JSONDecoder().decode(BrowserResponse.self, from: receive(fd))
+                if let message = reply.error { throw BrowserError(message) }
+                return SurfaceSocket(fd: fd)
+            } catch {
+                Darwin.close(fd)
+                throw error
+            }
+        }.value
+    }
 }
 
 public final class BrowserConnectionServer: @unchecked Sendable {
@@ -167,7 +195,8 @@ public final class BrowserConnectionServer: @unchecked Sendable {
     private let url: URL
     public init(
         socket url: URL, team: String, clientIDs: [String] = BrowserConnection.clientIDs,
-        handler: @escaping @Sendable (BrowserRequest, String) async -> BrowserResponse
+        handler: @escaping @Sendable (BrowserRequest, String) async -> BrowserResponse,
+        surface: (@Sendable (BrowserRequest, String, SurfaceSocket) async -> BrowserResponse)? = nil
     ) throws {
         self.url = url
         var address = try BrowserConnection.address(url)
@@ -218,6 +247,20 @@ public final class BrowserConnectionServer: @unchecked Sendable {
                     let request = try JSONDecoder().decode(
                         BrowserRequest.self, from: BrowserConnection.receive(peer))
                     try request.validate()
+                    if request.operation == .surfaceStream {
+                        // The answer goes first; then the socket belongs to the live view and
+                        // stops counting against the connections served at once.
+                        let socket = SurfaceSocket(fd: peer, held: true)
+                        Task {
+                            let response = await surface?(request, identity, socket)
+                                ?? BrowserResponse(error: "This browser cannot show tabs live.")
+                            let answer = (try? JSONEncoder().encode(response)) ?? Data()
+                            socket.start(with: answer)
+                            if response.error != nil { socket.close() }
+                            permits.signal()
+                        }
+                        return
+                    }
                     Task {
                         let response = await handler(request, identity)
                         try? BrowserConnection.send(JSONEncoder().encode(response), peer)

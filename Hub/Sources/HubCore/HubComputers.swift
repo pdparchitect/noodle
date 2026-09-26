@@ -14,15 +14,19 @@ import NoodleCore
     private let access: HubAccess
     private let assignments: ToolAssignmentStore
     private let call: ComputerToolProvider.Transport
+    private let surface: @Sendable (ComputerRequest) async throws -> SurfaceSocket
     private var registry: ComputerAssignments
 
+    /// `surface` opens a live view of a computer; by default in Noodle Computer on this Mac.
     public init(root: URL, access: HubAccess, tools: ToolProviderRegistry, assignments: ToolAssignmentStore,
                 stagingRoot: @escaping @Sendable () throws -> URL = ComputerToolProvider.liveStagingRoot,
-                call: @escaping ComputerToolProvider.Transport) {
+                call: @escaping ComputerToolProvider.Transport,
+                surface: (@Sendable (ComputerRequest) async throws -> SurfaceSocket)? = nil) {
         self.root = root
         self.access = access
         self.assignments = assignments
         self.call = call
+        self.surface = surface ?? { try await ComputerConnection.openSurface($0, socket: ComputerConnection.socketURL(), team: ComputerConnection.signingTeam()) }
         registry = (try? ComputerAssignments.load(root: root)) ?? ComputerAssignments()
         try? tools.register(ComputerToolProvider(stagingRoot: stagingRoot, transport: call))
         publish()
@@ -84,22 +88,11 @@ import NoodleCore
         publish()
     }
 
-    /// One of the user's computers as video, its display or the bot's terminal, the packets after
-    /// `sequence`. Reading keeps the computer's bots off it while the person watches.
-    public func surfacePackets(computer: UUID, terminal: UUID?, bot: UUID, after sequence: UInt64,
-                               for user: HubUser) async throws -> [SurfacePacket] {
+    /// A live view of one of the user's computers, its display or the bot's terminal: video down
+    /// the socket, what the person does up it. While it is open, the computer's bots wait.
+    public func openSurface(computer: UUID, terminal: UUID?, bot: UUID, for user: HubUser) async throws -> SurfaceSocket {
         try owned(computer, by: user)
-        var request = ComputerRequest(.surfaceFrame, computerID: computer, agentID: bot, terminalID: terminal)
-        request.surfaceAfter = sequence
-        return try await call(request).checked().surfacePackets.flatMap(SurfacePacket.decode) ?? []
-    }
-
-    /// What a person watching one of the user's computers did.
-    public func surfaceInput(_ input: SurfaceInput, computer: UUID, terminal: UUID?, bot: UUID, for user: HubUser) async throws {
-        try owned(computer, by: user)
-        var request = ComputerRequest(.surfaceInput, computerID: computer, agentID: bot, terminalID: terminal)
-        request.surfaceInput = input
-        _ = try await call(request).checked()
+        return try await surface(ComputerRequest(.surfaceStream, computerID: computer, agentID: bot, terminalID: terminal))
     }
 
     /// Replaces which of the user's computers one of their bots may use.

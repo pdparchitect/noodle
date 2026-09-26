@@ -17,11 +17,12 @@ public enum BrowserOperation: String, Codable, CaseIterable, Sendable {
     case bookmarkAdd = "bookmark-add", bookmarkUpdate = "bookmark-update", bookmarkRemove = "bookmark-remove"
     /// Managing browsers, for Noodle and Noodle Hub only: making one, changing one and deleting one.
     case create = "browser-create", update = "browser-update", delete = "browser-delete"
-    /// A person watching and using a tab from Noodle or Noodle Hub, whatever bots are allowed.
-    case surfaceFrame = "surface-frame", surfaceInput = "surface-input"
+    /// A person watching and using a tab from Noodle or Noodle Hub, whatever bots are allowed:
+    /// the connection stays open, video coming down it and what they do going up.
+    case surfaceStream = "surface-stream"
     public var timeout: Int { isFileTransfer ? 600 : 60 }
     public var isFileTransfer: Bool { self == .upload || self == .download || self == .screenshot }
-    public var isManagement: Bool { [.create, .update, .delete, .surfaceFrame, .surfaceInput].contains(self) }
+    public var isManagement: Bool { [.create, .update, .delete, .surfaceStream].contains(self) }
     public var needsTab: Bool { ![.list, .status, .tabs, .open, .downloads, .download, .show, .history, .bookmarks, .bookmarkAdd, .bookmarkUpdate, .bookmarkRemove, .create, .update, .delete].contains(self) }
     /// What bots may call.
     public static var agentCases: [Self] { allCases.filter { !$0.isManagement } }
@@ -142,9 +143,6 @@ public struct BrowserRequest: Codable, Sendable {
     /// JSON object encoded as UTF-8 text; never interpreted as JavaScript source.
     public var arguments: String?
     public var profile: BrowserDraft?
-    public var surfaceInput: SurfaceInput?
-    /// For surface-frame: the last packet this viewer has, 0 for none.
-    public var surfaceAfter: UInt64?
     public init(_ operation: BrowserOperation, browserID: UUID? = nil, tabID: UUID? = nil) {
         self.operation = operation; self.browserID = browserID; self.tabID = tabID
     }
@@ -152,7 +150,6 @@ public struct BrowserRequest: Codable, Sendable {
         try validateWebMCP()
         guard version == 1 else { throw BrowserError("Update Noodle and Noodle Browser to compatible versions.") }
         guard operation == .list || operation == .create || browserID != nil else { throw BrowserError("Specify --browser UUID.") }
-        if operation == .surfaceInput, surfaceInput == nil { throw BrowserError("Specify what the person did.") }
         if [.create, .update].contains(operation) {
             let name = profile?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !name.isEmpty, name.count <= 120 else { throw BrowserError("Enter a browser name of 1–120 characters.") }
@@ -215,8 +212,6 @@ public struct BrowserResponse: Codable, Sendable {
     public var totalCount: Int?
     public var offset: Int?
     public var limit: Int?
-    /// Encoded video packets, as `SurfacePacket.encode` writes them.
-    public var surfacePackets: Data?
     public var error: String?
     public init(error: String? = nil) { self.error = error }
     public func checked() throws -> Self {

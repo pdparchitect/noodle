@@ -8,9 +8,6 @@ import Observation
 /// CLI arguments never choose another bot's sessions or artifacts.
 @MainActor @Observable public final class AppletController {
     public private(set) var failure: String?
-    /// Told which bot shared which noodlet into which conversation, as on a Noodle Hub, which
-    /// decides who may open it: Applet itself does not know.
-    @ObservationIgnored public var onShared: ((_ noodlet: UUID, _ agent: UUID, _ conversation: UUID) -> Void)?
     @ObservationIgnored private let repository: WorkspaceRepository
     @ObservationIgnored private var agents: [AgentRecord] = []
     @ObservationIgnored private var tokens: [UUID: String] = [:]
@@ -25,12 +22,16 @@ import Observation
     @ObservationIgnored private var lastSkillRefresh = Date.distantPast
     @ObservationIgnored private let connection:
         (@Sendable (AppletRequest) async throws -> AppletResponse)?
+    @ObservationIgnored private let surface: (@Sendable (AppletRequest) async throws -> SurfaceSocket)?
+    /// `connection` and `surface` reach Noodle Applet on this Mac unless given.
     public init(
         repository: WorkspaceRepository,
-        connection: (@Sendable (AppletRequest) async throws -> AppletResponse)? = nil
+        connection: (@Sendable (AppletRequest) async throws -> AppletResponse)? = nil,
+        surface: (@Sendable (AppletRequest) async throws -> SurfaceSocket)? = nil
     ) {
         self.repository = repository
         self.connection = connection
+        self.surface = surface
     }
     public func start(agents: [AgentRecord]) {
         mailboxMonitor.reset()
@@ -103,6 +104,12 @@ import Observation
     /// A request of the app itself, trusted by Applet as a local caller. Never on a bot's behalf.
     public func companion(_ request: AppletRequest) async throws -> AppletResponse {
         try await call(request).checked()
+    }
+    /// A live view of a noodlet session for a person, never for a bot: video down the socket,
+    /// what the person does up it.
+    public func companionSurface(_ request: AppletRequest) async throws -> SurfaceSocket {
+        if let surface { return try await surface(request) }
+        return try await AppletConnection.openSurface(request, socket: AppletConnection.socketURL(), team: AppletConnection.signingTeam())
     }
     private func call(_ request: AppletRequest, authorize: () throws -> Void = {}) async throws -> AppletResponse {
         try authorize()
@@ -214,6 +221,14 @@ import Observation
         request.includePreview = nil
         request.owner = agent.id.uuidString.lowercased()
         try request.validate()
+        // A bot's noodlets come from its own folder: that is what makes them its own wherever they are linked.
+        if let path = request.path {
+            let workspace = repository.directory(for: agent).resolvingSymlinksInPath().standardizedFileURL.pathComponents
+            let package = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.pathComponents
+            guard package.count > workspace.count, Array(package.prefix(workspace.count)) == workspace else {
+                throw AppletError("Build and open noodlets inside your own workspace.")
+            }
+        }
         if let conversation = envelope.conversationID {
             if request.operation == .artifact {
                 guard let id = request.artifactID, let grant = sharedArtifacts[id],
@@ -266,7 +281,6 @@ import Observation
                 try? repository.removeAttachment(attachment)
                 throw error
             }
-            if let noodlet = NoodletLink.id(in: url) { onShared?(noodlet, agent.id, conversation) }
         }
         return response
     }

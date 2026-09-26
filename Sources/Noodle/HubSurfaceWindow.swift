@@ -22,7 +22,7 @@ struct HubSurfaceWindow: View {
 
     var body: some View {
         ZStack {
-            SurfaceView(feed: feed) { input in channel?.send(LinkSurface.input(input)) }
+            SurfaceView(feed: feed) { control in channel?.send(LinkSurface.control(control)) }
             if !showing {
                 if let failure { Text(failure).foregroundStyle(.secondary).padding() }
                 else { ProgressView() }

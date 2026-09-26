@@ -164,6 +164,34 @@ public enum AppletConnection {
             return try JSONDecoder().decode(AppletResponse.self, from: receive(fd))
         }.value
     }
+
+    /// Opens a live view of a noodlet session: once Applet agrees, the connection carries its
+    /// video down and the viewer's controls up until either side closes it.
+    public static func openSurface(
+        _ request: AppletRequest, socket url: URL, team: String,
+        providerID: String = providerID
+    ) async throws -> SurfaceSocket {
+        try request.validate()
+        return try await Task.detached(priority: .userInitiated) {
+            let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+            guard fd >= 0 else { throw AppletError("Cannot open applet connection.") }
+            do {
+                configure(fd, seconds: 30)
+                var address = try address(url)
+                guard withAddress(&address, { Darwin.connect(fd, $0, $1) }) == 0 else {
+                    throw AppletError("Applet is unavailable.", unavailable: true)
+                }
+                _ = try authenticate(fd, team: team, identifiers: [providerID])
+                try send(JSONEncoder().encode(request), fd)
+                let reply = try JSONDecoder().decode(AppletResponse.self, from: receive(fd))
+                if let message = reply.error { throw AppletError(message) }
+                return SurfaceSocket(fd: fd)
+            } catch {
+                Darwin.close(fd)
+                throw error
+            }
+        }.value
+    }
 }
 
 public final class AppletConnectionServer: @unchecked Sendable {
@@ -172,7 +200,8 @@ public final class AppletConnectionServer: @unchecked Sendable {
     private let url: URL
     public init(
         socket url: URL, team: String, clientIDs: [String] = AppletConnection.clientIDs,
-        handler: @escaping @Sendable (AppletRequest, String) async -> AppletResponse
+        handler: @escaping @Sendable (AppletRequest, String) async -> AppletResponse,
+        surface: (@Sendable (AppletRequest, String, SurfaceSocket) async -> AppletResponse)? = nil
     ) throws {
         self.url = url
         var address = try AppletConnection.address(url)
@@ -223,6 +252,19 @@ public final class AppletConnectionServer: @unchecked Sendable {
                     let request = try JSONDecoder().decode(
                         AppletRequest.self, from: AppletConnection.receive(peer))
                     try request.validate()
+                    if request.operation == .surfaceStream {
+                        // The answer goes first; then the socket belongs to the live view and
+                        // stops counting against the connections served at once.
+                        let socket = SurfaceSocket(fd: peer, held: true)
+                        Task {
+                            let response = await surface?(request, identity, socket)
+                                ?? AppletResponse(error: "Noodle Applet cannot show noodlets live.")
+                            socket.start(with: (try? JSONEncoder().encode(response)) ?? Data())
+                            if response.error != nil { socket.close() }
+                            permits.signal()
+                        }
+                        return
+                    }
                     Task {
                         let response = await handler(request, identity)
                         try? AppletConnection.send(JSONEncoder().encode(response), peer)

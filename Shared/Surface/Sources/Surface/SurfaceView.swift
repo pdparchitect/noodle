@@ -25,12 +25,13 @@ import SwiftUI
     }
 }
 
-/// Shows a surface's live video and turns what the person does over it into `SurfaceInput`.
+/// Shows a surface's live video and turns what the person does over it into controls, with the
+/// pixels it shows the surface at whenever that changes.
 public struct SurfaceView: View {
     let feed: SurfaceFeed
-    let send: (SurfaceInput) -> Void
+    let send: (SurfaceControl) -> Void
 
-    public init(feed: SurfaceFeed, send: @escaping (SurfaceInput) -> Void) {
+    public init(feed: SurfaceFeed, send: @escaping (SurfaceControl) -> Void) {
         self.feed = feed
         self.send = send
     }
@@ -63,17 +64,27 @@ import AppKit
 
 private struct SurfaceCanvas: NSViewRepresentable {
     let feed: SurfaceFeed
-    let send: (SurfaceInput) -> Void
+    let send: (SurfaceControl) -> Void
 
     func makeNSView(context: Context) -> SurfaceNSView { SurfaceNSView(feed: feed) }
 
-    func updateNSView(_ view: SurfaceNSView, context: Context) { view.send = send }
+    func updateNSView(_ view: SurfaceNSView, context: Context) { view.control = send }
 }
 
 final class SurfaceNSView: NSView {
-    var send: (SurfaceInput) -> Void = { _ in }
+    var control: (SurfaceControl) -> Void = { _ in } { didSet { reportSize() } }
     private let feed: SurfaceFeed
     private let display = SurfaceDisplay()
+    private var reported: CGSize?
+
+    private func send(_ input: SurfaceInput) { control(.input(input)) }
+
+    private func reportSize() {
+        let pixels = convertToBacking(bounds).size
+        guard pixels.width > 0, pixels.height > 0, pixels != reported else { return }
+        reported = pixels
+        control(.view(width: pixels.width, height: pixels.height))
+    }
 
     init(feed: SurfaceFeed) {
         self.feed = feed
@@ -91,6 +102,12 @@ final class SurfaceNSView: NSView {
     override func layout() {
         super.layout()
         display.layer.frame = bounds
+        reportSize()
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        reportSize()
     }
 
     override func updateTrackingAreas() {
@@ -130,18 +147,29 @@ import UIKit
 
 private struct SurfaceCanvas: UIViewRepresentable {
     let feed: SurfaceFeed
-    let send: (SurfaceInput) -> Void
+    let send: (SurfaceControl) -> Void
 
     func makeUIView(context: Context) -> SurfaceUIView { SurfaceUIView(feed: feed) }
 
-    func updateUIView(_ view: SurfaceUIView, context: Context) { view.send = send }
+    func updateUIView(_ view: SurfaceUIView, context: Context) { view.control = send }
 }
 
 /// Taps click and a finger drag scrolls, as in Safari; the keyboard types into what is focused.
 final class SurfaceUIView: UIView, UIKeyInput {
-    var send: (SurfaceInput) -> Void = { _ in }
+    var control: (SurfaceControl) -> Void = { _ in } { didSet { reportSize() } }
     private let feed: SurfaceFeed
     private let display = SurfaceDisplay()
+    private var reported: CGSize?
+
+    private func send(_ input: SurfaceInput) { control(.input(input)) }
+
+    private func reportSize() {
+        let scale = window?.screen.scale ?? traitCollection.displayScale
+        let pixels = CGSize(width: bounds.width * scale, height: bounds.height * scale)
+        guard pixels.width > 0, pixels.height > 0, pixels != reported else { return }
+        reported = pixels
+        control(.view(width: pixels.width, height: pixels.height))
+    }
 
     init(feed: SurfaceFeed) {
         self.feed = feed
@@ -158,6 +186,7 @@ final class SurfaceUIView: UIView, UIKeyInput {
     override func layoutSubviews() {
         super.layoutSubviews()
         display.layer.frame = bounds
+        reportSize()
     }
 
     override var canBecomeFirstResponder: Bool { true }

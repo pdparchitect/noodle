@@ -106,6 +106,25 @@ final class LinkStreamTests: XCTestCase {
         channel.cancel()
     }
 
+    /// A Hub that refuses answers once instead of opening a stream; the device hears why.
+    func testARefusedChannelSaysWhy() async throws {
+        let hub = LinkIdentity()
+        let server = try LinkServer(identity: hub, port: 0, handler: { _, _ in
+            .response(LinkProtocol.encode(LinkResponse.failure("That noodlet is not this bot's.")))
+        })
+        try await server.start()
+        addTeardownBlock { server.stop() }
+        let channel = try await LinkClient.channel(Data(#"{"open":1}"#.utf8), identity: LinkIdentity(), hubKey: hub.publicKey,
+                                                   endpoints: [LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))])
+        defer { channel.cancel() }
+        do {
+            for try await _ in channel.frames { XCTFail("a refusal arrived as a frame") }
+            XCTFail("a refusal ended the stream without an error")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "That noodlet is not this bot's.")
+        }
+    }
+
     func testClosingTheStreamOnTheHubEndsItOnTheDevice() async throws {
         let hub = LinkIdentity()
         let box = StreamBox()

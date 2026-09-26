@@ -11,7 +11,6 @@ import XCTest
     final class FakeBrowser: @unchecked Sendable {
         private let lock = NSLock()
         private var browsers: [RemoteBrowser] = []
-        private(set) var inputs: [(UUID?, UUID?, SurfaceInput)] = []
 
         func call(_ request: BrowserRequest) throws -> BrowserResponse {
             try lock.withLock {
@@ -28,10 +27,6 @@ import XCTest
                     response.browser = browsers[index]
                 case .delete:
                     browsers.removeAll { $0.id == request.browserID }
-                case .surfaceFrame:
-                    response.surfacePackets = SurfacePacket.encode([SurfacePacket(sequence: 1, keyFrame: true, width: 800, height: 600, parameterSets: [Data([1]), Data([2])], sample: Data([3]))])
-                case .surfaceInput:
-                    inputs.append((request.browserID, request.tabID, try XCTUnwrap(request.surfaceInput)))
                 default:
                     break
                 }
@@ -42,13 +37,15 @@ import XCTest
     }
 
     private var browser = FakeBrowser()
+    private let surfaces = FakeSurfaces(width: 800)
 
     private func hub() throws -> (Hub, HubUser, HubUser) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-browsers-\(UUID())")
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
-        let browser = self.browser
+        let browser = self.browser, surfaces = self.surfaces
         let hub = Hub(root: root.appendingPathComponent("Hub"), messenger: nil,
-                      computer: { try HubComputersTests.FakeComputer().call($0) }, browser: { try browser.call($0) })
+                      computer: { try HubComputersTests.FakeComputer().call($0) }, browser: { try browser.call($0) },
+                      surfaces: SurfaceOpeners(browser: { surfaces.open("\($0.browserID!) \($0.tabID!)") }))
         try hub.repository.prepare()
         let family = try hub.access.addPlan(named: "Family")
         hub.access.set(HubHarness(provider: .claudeCode, profile: nil), included: true, in: family)
@@ -151,11 +148,36 @@ import XCTest
         let (channel, packets) = try await device.firstSurfacePackets(.openSurface(conversationID: bot.conversationID, attachmentID: card.id))
         defer { channel.cancel() }
         XCTAssertEqual(packets.first?.width, 800)
-        channel.send(LinkSurface.input(.text("hi")))
-        await waitUntil { !browser.inputs.isEmpty }
-        XCTAssertEqual(browser.inputs.map(\.0), [made.id])
-        XCTAssertEqual(browser.inputs.map(\.1), [tab])
-        XCTAssertEqual(browser.inputs.map(\.2), [.text("hi")])
+        channel.send(LinkSurface.control(.input(.text("hi"))))
+        await waitUntil { !surfaces.inputs.isEmpty }
+        XCTAssertEqual(surfaces.inputs.map(\.view), ["\(made.id) \(tab)"])
+        XCTAssertEqual(surfaces.inputs.map(\.input), [.text("hi")])
+    }
+}
+
+/// Live views as a companion serves them: a picture pushed down each as it opens, and what the
+/// viewer does recorded as it comes back up, with which view it was for.
+final class FakeSurfaces: @unchecked Sendable {
+    private let lock = NSLock()
+    private let width: Double
+    private var received: [(view: String, input: SurfaceInput)] = []
+
+    init(width: Double) { self.width = width }
+
+    var inputs: [(view: String, input: SurfaceInput)] { lock.withLock { received } }
+
+    func open(_ view: String) -> SurfaceSocket {
+        var fds: [Int32] = [0, 0]
+        precondition(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds) == 0)
+        let companion = SurfaceSocket(fd: fds[0])
+        companion.send(SurfacePacket.encode([SurfacePacket(sequence: 1, keyFrame: true, width: width, height: 480,
+                                                           parameterSets: [Data([1]), Data([2])], sample: Data([3]))]))
+        Task {
+            for await frame in companion.frames {
+                if case .input(let input)? = SurfaceControl(frame) { lock.withLock { received.append((view, input)) } }
+            }
+        }
+        return SurfaceSocket(fd: fds[1])
     }
 }
 

@@ -19,9 +19,10 @@ public enum AppletOperation: String, Codable, CaseIterable, Sendable {
     case recordStart = "record-start"
     case recordStop = "record-stop"
     case show, hide, close, terminate, restart, artifact, present
-    /// A person watching and using a noodlet from Noodle Hub; never a bot's command.
-    case surfaceFrame = "surface-frame", surfaceInput = "surface-input"
-    public var isSurface: Bool { self == .surfaceFrame || self == .surfaceInput }
+    /// A person watching and using a noodlet from Noodle Hub; never a bot's command. The
+    /// connection stays open, video coming down it and what they do going up.
+    case surfaceStream = "surface-stream"
+    public var isSurface: Bool { self == .surfaceStream }
     public var timeout: Int {
         switch self {
         case .build, .typecheck, .open, .restart: return 180
@@ -57,9 +58,6 @@ public struct AppletRequest: Codable, Sendable {
     public var duration: Double?
     public var offset: Int?
     public var artifactID: UUID?
-    public var surfaceInput: SurfaceInput?
-    /// For surface-frame: the last packet this viewer has, 0 for none.
-    public var surfaceAfter: UInt64?
     public init(_ operation: AppletOperation, sessionID: UUID? = nil) {
         self.operation = operation
         self.sessionID = sessionID
@@ -70,7 +68,6 @@ public struct AppletRequest: Codable, Sendable {
             throw AppletError("Use --id without --path or package files.")
         }
         if operation.isSurface, sessionID == nil { throw AppletError("Specify --session.") }
-        if operation == .surfaceInput, surfaceInput == nil { throw AppletError("Specify what the person did.") }
         if sessionID != nil, [.open, .build, .validate, .typecheck, .list].contains(operation) {
             throw AppletError("This command does not accept --session.")
         }
@@ -127,8 +124,9 @@ public struct AppletResponse: Codable, Sendable {
     public var errorCode: String?
     public var sessionID: UUID?
     public var noodletID: UUID?
-    /// Encoded video packets, as `SurfacePacket.encode` writes them.
-    public var surfacePackets: Data?
+    /// The folder a noodlet sent as files came from, as its sender named it. Applet runs its own
+    /// copy (`path`); this says whose it is.
+    public var sourcePath: String?
     public var url: URL?
     public var title: String?
     public var runtime: String?

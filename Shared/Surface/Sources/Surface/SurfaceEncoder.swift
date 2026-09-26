@@ -21,9 +21,16 @@ public final class SurfaceEncoder {
     deinit { if let session { VTCompressionSessionInvalidate(session) } }
 
     /// The encoded frame, with the parameter sets when it is a key frame. `size` is the surface's
-    /// size in points. `keyFrame` asks for one now, as when a new viewer arrives.
-    public func encode(_ image: CGImage, size: CGSize, keyFrame: Bool = false) throws -> (sample: Data, parameterSets: [Data], keyFrame: Bool)? {
-        let scale = min(1, Double(maxPixelSize) / Double(max(image.width, image.height)))
+    /// size in points. `keyFrame` asks for one now, as when a new viewer arrives. `fitting` is the
+    /// most pixels a viewer shows, rounded up in steps of 128 so resizing a window does not
+    /// restart the encoder at every pixel; a new size starts at a key frame.
+    public func encode(_ image: CGImage, size: CGSize, keyFrame: Bool = false,
+                       fitting: CGSize? = nil) throws -> (sample: Data, parameterSets: [Data], keyFrame: Bool)? {
+        var scale = min(1, Double(maxPixelSize) / Double(max(image.width, image.height)))
+        if let fitting, fitting.width > 0, fitting.height > 0 {
+            let box = (width: (fitting.width / 128).rounded(.up) * 128, height: (fitting.height / 128).rounded(.up) * 128)
+            scale = min(scale, box.width / Double(image.width), box.height / Double(image.height))
+        }
         // H.264 wants even dimensions.
         let width = max(2, Int(Double(image.width) * scale) & ~1), height = max(2, Int(Double(image.height) * scale) & ~1)
         if session == nil || pixels != (width, height) { try start(width: width, height: height) }

@@ -133,6 +133,31 @@ public enum ComputerConnection {
             return try JSONDecoder().decode(ComputerResponse.self, from: receive(fd)).checked()
         }.value
     }
+
+    /// Opens a live view of a computer: once it agrees, the connection carries its video down and
+    /// the viewer's controls up until either side closes it.
+    public static func openSurface(_ request: ComputerRequest, socket url: URL, team: String,
+                                   providerID: String = providerID) async throws -> SurfaceSocket {
+        try request.validate()
+        return try await Task.detached(priority: .userInitiated) {
+            let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+            guard fd >= 0 else { throw ComputerBridgeError("Cannot open computer connection.") }
+            do {
+                configure(fd, seconds: 30)
+                var address = try address(url)
+                guard withAddress(&address, { Darwin.connect(fd, $0, $1) }) == 0 else {
+                    throw ComputerBridgeError("Computer is unavailable.", unavailable: true)
+                }
+                _ = try authenticate(fd, team: team, identifiers: [providerID])
+                try send(JSONEncoder().encode(request), fd)
+                _ = try JSONDecoder().decode(ComputerResponse.self, from: receive(fd)).checked()
+                return SurfaceSocket(fd: fd)
+            } catch {
+                Darwin.close(fd)
+                throw error
+            }
+        }.value
+    }
 }
 
 public final class ComputerConnectionServer: @unchecked Sendable {
@@ -140,7 +165,8 @@ public final class ComputerConnectionServer: @unchecked Sendable {
     private let permits = DispatchSemaphore(value: 16)
     private let url: URL
     public init(socket url: URL, team: String, clientIDs: [String] = ComputerConnection.clientIDs,
-                handler: @escaping @Sendable (ComputerRequest, String) async -> ComputerResponse) throws {
+                handler: @escaping @Sendable (ComputerRequest, String) async -> ComputerResponse,
+                surface: (@Sendable (ComputerRequest, String, SurfaceSocket) async -> ComputerResponse)? = nil) throws {
         self.url = url
         var address = try ComputerConnection.address(url)
         var info = stat()
@@ -180,6 +206,19 @@ public final class ComputerConnectionServer: @unchecked Sendable {
                     let identity = try ComputerConnection.authenticate(peer, team: team, identifiers: clientIDs)
                     let request = try JSONDecoder().decode(ComputerRequest.self, from: ComputerConnection.receive(peer))
                     try request.validate()
+                    if request.operation == .surfaceStream {
+                        // The answer goes first; then the socket belongs to the live view and
+                        // stops counting against the connections served at once.
+                        let socket = SurfaceSocket(fd: peer, held: true)
+                        Task {
+                            let response = await surface?(request, identity, socket)
+                                ?? ComputerResponse(error: "This computer cannot be shown live.")
+                            socket.start(with: (try? JSONEncoder().encode(response)) ?? Data())
+                            if response.error != nil { socket.close() }
+                            permits.signal()
+                        }
+                        return
+                    }
                     Task {
                         let response = await handler(request, identity)
                         try? ComputerConnection.send(JSONEncoder().encode(response), peer)

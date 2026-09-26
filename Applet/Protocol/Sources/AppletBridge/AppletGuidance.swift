@@ -92,7 +92,7 @@ public enum AppletGuidance {
         case .artifact: "Read a capture using --artifact UUID and --offset; CLI normally handles transfer via --output."
         case .present: "With --conversation UUID, capture the running noodlet for its preview and attach its noodlet:// URL to the conversation. Shares the live package by reference; inspect content before sharing. Requires a Noodle bot workspace."
         // Never a bot's command: Noodle Hub shows noodlets to people with these.
-        case .surfaceFrame, .surfaceInput: ""
+        case .surfaceStream: ""
         }
     }
     public static var skill: String {

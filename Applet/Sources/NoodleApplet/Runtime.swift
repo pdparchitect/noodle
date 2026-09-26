@@ -133,14 +133,18 @@ import AppletCore
     }
     do {
       server = try AppletConnectionServer(
-        socket: AppletConnection.socketURL(), team: AppletConnection.signingTeam()
-      ) { [weak self] request, identity in
-        await self?.handle(request, identity: identity)
-          ?? AppletResponse(error: "Noodle Applet is shutting down.")
-      }
+        socket: AppletConnection.socketURL(), team: AppletConnection.signingTeam(),
+        handler: { [weak self] request, identity in
+          await self?.handle(request, identity: identity)
+            ?? AppletResponse(error: "Noodle Applet is shutting down.")
+        },
+        surface: { [weak self] request, identity, socket in
+          await self?.handle(request, identity: identity, surface: socket)
+            ?? AppletResponse(error: "Noodle Applet is shutting down.")
+        })
     } catch { self.error = error.localizedDescription }
   }
-  func handle(_ input: AppletRequest, identity: String) async -> AppletResponse {
+  func handle(_ input: AppletRequest, identity: String, surface socket: SurfaceSocket? = nil) async -> AppletResponse {
     var resolvedSession: AppletSession?
     var archivedResponse: AppletResponse?
     do {
@@ -356,20 +360,20 @@ import AppletCore
       }
       resolvedSession = session
       switch request.operation {
-      case .surfaceFrame:
-        let streamer = surfaceStreamers[session.id] ?? SurfaceStreamer { [weak session] in
+      case .surfaceStream:
+        guard let socket else { throw AppletError("A live view needs a connection of its own.") }
+        let streamer = surfaceStreamers[session.id] ?? SurfaceStreamer(capture: { [weak session] in
           guard let session else { return nil }
           guard let picture = try await session.snapshot().cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             throw AppletError("The noodlet cannot be shown.")
           }
           return (picture, session.size)
-        }
+        }, apply: { [weak self, weak session] input in
+          guard let self, let session else { return }
+          try await self.deliver(input, to: session)
+        })
         surfaceStreamers[session.id] = streamer
-        var response = status(session)
-        response.surfacePackets = SurfacePacket.encode(try streamer.read(after: request.surfaceAfter ?? 0))
-        return response
-      case .surfaceInput:
-        try await deliver(request.surfaceInput!, to: session)
+        streamer.attach(socket)
         return status(session)
       case .status: return status(session)
       case .logs:
@@ -487,6 +491,8 @@ import AppletCore
     response.noodletID = try library.linkID(for: package)
     response.url = response.noodletID.map(NoodletLink.url)
     response.path = package.url.path
+    response.sourcePath = origins.first { $0.value == package.url.path }.map { String($0.key.split(separator: "\0", maxSplits: 1).last ?? "") }
+      ?? package.url.path
     response.title = package.manifest.title
     response.runtime = package.manifest.runtime
     response.permissions = AppletPermissions.status(package, defaults: defaults)

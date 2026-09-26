@@ -25,10 +25,11 @@ import NoodleRuntime
     public let bots: HubBots
     public let link: HubLinkService
 
-    /// `computer`, `browser` and `applet` reach Noodle Computer, Browser and Applet on this Mac; tests pass their own.
+    /// `computer`, `browser` and `applet` reach Noodle Computer, Browser and Applet on this Mac, and
+    /// `surfaces` opens their live views; tests pass their own.
     public init(root: URL, messenger: URL?, linkPort: UInt16 = LinkEndpoint.defaultPort, router: (any RouterPortMapper)? = nil,
                 computer: ComputerToolProvider.Transport? = nil, browser: BrowserToolProvider.Transport? = nil,
-                applet: (@Sendable (AppletRequest) async throws -> AppletResponse)? = nil) {
+                applet: (@Sendable (AppletRequest) async throws -> AppletResponse)? = nil, surfaces: SurfaceOpeners = SurfaceOpeners()) {
         repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: messenger)
         // Only the Hub's own storage holds harnesses its Agent Host will trust.
         let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses)
@@ -44,11 +45,11 @@ import NoodleRuntime
                                      service: MCPService(namespace: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle.hub"),
                                      tools: tools, assignments: assignments)
         computers = HubComputers(root: root, access: access, tools: tools, assignments: assignments,
-                                 call: computer ?? ComputerToolProvider.liveTransport())
+                                 call: computer ?? ComputerToolProvider.liveTransport(), surface: surfaces.computer)
         browsers = HubBrowsers(root: root, access: access, tools: tools, assignments: assignments,
-                               call: browser ?? BrowserToolProvider.liveTransport())
+                               call: browser ?? BrowserToolProvider.liveTransport(), surface: surfaces.browser)
         bots = HubBots(repository: repository, runtime: runtime, access: access, connections: connections, computers: computers, browsers: browsers,
-                       applets: AppletController(repository: repository, connection: applet),
+                       applets: AppletController(repository: repository, connection: applet, surface: surfaces.applet),
                        uploads: root.appendingPathComponent("Uploads", isDirectory: true))
         link = HubLinkService(hubName: Host.current().localizedName ?? "Noodle Hub",
                               directory: root.appendingPathComponent("Link", isDirectory: true),
@@ -67,5 +68,20 @@ import NoodleRuntime
 
     public static func root(applicationSupport: URL) -> URL {
         applicationSupport.appendingPathComponent(folderName, isDirectory: true)
+    }
+}
+
+/// How the Hub opens live views in Noodle Computer, Browser and Applet; nil for each app's own.
+public struct SurfaceOpeners {
+    public var computer: (@Sendable (ComputerRequest) async throws -> SurfaceSocket)?
+    public var browser: (@Sendable (BrowserRequest) async throws -> SurfaceSocket)?
+    public var applet: (@Sendable (AppletRequest) async throws -> SurfaceSocket)?
+
+    public init(computer: (@Sendable (ComputerRequest) async throws -> SurfaceSocket)? = nil,
+                browser: (@Sendable (BrowserRequest) async throws -> SurfaceSocket)? = nil,
+                applet: (@Sendable (AppletRequest) async throws -> SurfaceSocket)? = nil) {
+        self.computer = computer
+        self.browser = browser
+        self.applet = applet
     }
 }

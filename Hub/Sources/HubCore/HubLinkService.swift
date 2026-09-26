@@ -49,15 +49,6 @@ import Observation
     @ObservationIgnored private let browsers: HubBrowsers?
     /// Open event streams, by the key of the device holding each.
     @ObservationIgnored private var streams: [ObjectIdentifier: LinkStream] = [:]
-    /// What a surface shows: a browser tab, or a computer with the terminal a bot's card shows.
-    private enum SurfaceTarget {
-        case browser(UUID, tab: UUID)
-        case computer(UUID, terminal: UUID?, bot: UUID)
-        /// A running session of a noodlet in Noodle Applet.
-        case noodlet(session: UUID)
-    }
-    /// Open surfaces: what each shows, the device watching it, and the pump feeding it.
-    @ObservationIgnored private var surfaces: [UUID: (device: LinkPublicKey, user: HubUser, target: SurfaceTarget, pump: Task<Void, Never>)] = [:]
     @ObservationIgnored private let port: UInt16
     @ObservationIgnored private let localEndpoints: (UInt16) -> [LinkEndpoint]
     @ObservationIgnored private let now: () -> Date
@@ -185,19 +176,20 @@ import Observation
         if case .openSurface(let conversationID, let attachmentID) = request {
             do {
                 let user = try user(key)
-                let (link, bot) = try hubBots().companionLink(attachmentID, in: conversationID, for: user)
-                let target: SurfaceTarget
+                let (link, bot) = try await hubBots().companionLink(attachmentID, in: conversationID, for: user)
+                // Opened before answering, so a companion's refusal reaches the device as one.
+                let companion: SurfaceSocket
                 switch link {
                 case .browser(let browser, let tab):
                     guard let tab, try hubBrowsers().browsers(for: user).contains(where: { $0.id == browser }) else {
                         throw LinkError("That browser is not yours or no longer exists.")
                     }
-                    target = .browser(browser, tab: tab)
+                    companion = try await hubBrowsers().openSurface(browser: browser, tab: tab, for: user)
                 case .computer(let computer, let terminal, _):
                     guard try hubComputers().computers(for: user).contains(where: { $0.id == computer }) else {
                         throw LinkError("That computer is not yours or no longer exists.")
                     }
-                    target = .computer(computer, terminal: terminal, bot: bot)
+                    companion = try await hubComputers().openSurface(computer: computer, terminal: terminal, bot: bot, for: user)
                 case .noodlet(let noodlet):
                     var open = AppletRequest(.open)
                     open.noodletID = noodlet
@@ -205,10 +197,10 @@ import Observation
                     guard let session = try await hubBots().applets.companion(open).sessionID else {
                         throw LinkError("Noodle Applet did not start the noodlet.")
                     }
-                    target = .noodlet(session: session)
+                    companion = try await hubBots().applets.companionSurface(AppletRequest(.surfaceStream, sessionID: session))
                 }
-                return .stream { [weak self] stream in
-                    Task { @MainActor in self?.openSurface(stream, for: user, showing: target) }
+                return .stream { stream in
+                    Task { @MainActor in Self.relay(companion, to: stream) }
                 }
             } catch {
                 return .response(LinkProtocol.encode(LinkResponse.failure(error.localizedDescription)))
@@ -231,60 +223,37 @@ import Observation
         }
     }
 
-    /// Streams a surface's video down `stream` while it is open, and applies what the person
-    /// does, which arrives on the same stream. Reading keeps the companion's lease, which keeps
-    /// the bot off it; when the stream ends the lease lapses and the bot may go on.
-    private func openSurface(_ stream: LinkStream, for user: HubUser, showing target: SurfaceTarget) {
-        guard let browsers, let computers, let applets = bots?.applets else { return stream.close() }
-        let id = UUID()
-        stream.send(LinkProtocol.encode(LinkEvent.surfaceOpened(sessionID: id)))
-        func read(after sequence: UInt64) async throws -> [SurfacePacket] {
-            switch target {
-            case .browser(let browser, let tab):
-                return try await browsers.surfacePackets(browser: browser, tab: tab, after: sequence, for: user)
-            case .computer(let computer, let terminal, let bot):
-                return try await computers.surfacePackets(computer: computer, terminal: terminal, bot: bot, after: sequence, for: user)
-            case .noodlet(let session):
-                var request = AppletRequest(.surfaceFrame, sessionID: session)
-                request.surfaceAfter = sequence
-                return try await applets.companion(request).surfacePackets.flatMap(SurfacePacket.decode) ?? []
-            }
+    /// Relays a live view between the companion showing it and the device watching it, both
+    /// ways and as it happens: video down as the companion encodes it, the person's controls up
+    /// in the order they sent them. A device that falls behind misses frames rather than getting
+    /// old ones late, and picks up again at a key frame. While the view is open, bots wait.
+    private static func relay(_ companion: SurfaceSocket, to stream: LinkStream) {
+        stream.send(LinkProtocol.encode(LinkEvent.surfaceOpened(sessionID: UUID())))
+        stream.onFrame { data in
+            if SurfaceControl(data) != nil { companion.send(data) }
         }
-        let pump = Task { @MainActor in
-            var last: UInt64 = 0
-            do {
-                while !Task.isCancelled, !stream.isClosed {
-                    let packets = try await read(after: last)
-                    for batch in LinkSurface.batches(packets) { stream.send(LinkSurface.frame(batch)) }
-                    last = packets.last?.sequence ?? last
-                    try await Task.sleep(for: .milliseconds(packets.isEmpty ? 25 : 10))
+        stream.onClose { companion.close() }
+        Task {
+            var waiting = false
+            for await frame in companion.frames {
+                guard !stream.isClosed else { break }
+                let keyFrame = SurfacePacket.decode(frame)?.first?.keyFrame ?? false
+                if waiting, !keyFrame { continue }
+                if stream.pendingBytes > behindBytes {
+                    waiting = true
+                    companion.send(SurfaceControl.keyFrame.encoded)
+                    continue
                 }
-            } catch {}
+                waiting = false
+                stream.send(frame)
+            }
+            companion.close()
             stream.close()
-        }
-        surfaces[id] = (stream.peer, user, target, pump)
-        stream.onFrame { [weak self] data in
-            guard let input = try? JSONDecoder().decode(SurfaceInput.self, from: data) else { return }
-            Task { @MainActor in try? await self?.deliver(input, to: id) }
-        }
-        stream.onClose { [weak self] in
-            Task { @MainActor in self?.surfaces.removeValue(forKey: id)?.pump.cancel() }
         }
     }
 
-    private func deliver(_ input: SurfaceInput, to session: UUID) async throws {
-        guard let surface = surfaces[session] else { return }
-        switch surface.target {
-        case .browser(let browser, let tab):
-            try await hubBrowsers().surfaceInput(input, browser: browser, tab: tab, for: surface.user)
-        case .computer(let computer, let terminal, let bot):
-            try await hubComputers().surfaceInput(input, computer: computer, terminal: terminal, bot: bot, for: surface.user)
-        case .noodlet(let noodlet):
-            var request = AppletRequest(.surfaceInput, sessionID: noodlet)
-            request.surfaceInput = input
-            _ = try await hubBots().applets.companion(request)
-        }
-    }
+    /// Video a device may have waiting before it counts as behind.
+    private static let behindBytes = 512_000
 
     private func push(_ event: LinkEvent, toDevice key: LinkPublicKey) -> Bool {
         guard let stream = streams.values.first(where: { $0.peer == key && !$0.isClosed }) else { return false }

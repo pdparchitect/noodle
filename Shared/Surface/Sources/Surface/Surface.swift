@@ -13,6 +13,22 @@ public enum SurfaceInput: Codable, Equatable, Sendable {
     case text(String)
 }
 
+/// What travels up a live view, from the viewer to the surface: what the person does, how many
+/// pixels the viewer shows it at, so video is never sent larger, or a request to start again at
+/// a key frame after missing some.
+public enum SurfaceControl: Codable, Equatable, Sendable {
+    case input(SurfaceInput)
+    case view(width: Double, height: Double)
+    case keyFrame
+
+    public init?(_ data: Data) {
+        guard let control = try? JSONDecoder().decode(Self.self, from: data) else { return nil }
+        self = control
+    }
+
+    public var encoded: Data { (try? JSONEncoder().encode(self)) ?? Data() }
+}
+
 /// Where a surface sits in a viewer that shows all of it, keeping its shape.
 public enum SurfaceGeometry {
     public static func fitted(_ surface: CGSize, in view: CGSize) -> CGRect {
