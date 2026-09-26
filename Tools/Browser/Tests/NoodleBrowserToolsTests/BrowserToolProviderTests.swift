@@ -86,7 +86,7 @@ final class BrowserToolProviderTests: XCTestCase {
         XCTAssertEqual(provider.manifest.activation, .whenAssigned("browser"))
         let listed = try await provider.tools(context: .init(agentID: UUID(), workspace: workspace))
         let tools = try ToolDescriptor.list(mcp: listed)
-        XCTAssertEqual(Set(tools.map(\.name)), Set(BrowserOperation.allCases.map(\.rawValue)))
+        XCTAssertEqual(Set(tools.map(\.name)), Set(BrowserOperation.agentCases.map(\.rawValue)))
         XCTAssertEqual(tools.first { $0.name == "present" }?.conversationParameter, "conversation")
         for tool in tools {
             XCTAssertFalse(tool.description.isEmpty, tool.name)
@@ -189,7 +189,32 @@ final class BrowserToolProviderTests: XCTestCase {
         XCTAssertTrue(instructions.contains("needs-user-action"))
         XCTAssertTrue(instructions.contains("messenger tool browser present"))
         XCTAssertFalse(instructions.contains("skills/browser/browser"), "nothing points bots at the removed command")
-        for operation in BrowserOperation.allCases { XCTAssertFalse(BrowserToolGuidance.tool(operation).isEmpty, operation.rawValue) }
+        for operation in BrowserOperation.agentCases { XCTAssertFalse(BrowserToolGuidance.tool(operation).isEmpty, operation.rawValue) }
+    }
+
+    /// Noodle and the Hub make, edit and delete browsers; bots never do.
+    func testManagingBrowsersGoesThroughTheConnectionButIsNoBotTool() async throws {
+        let listed = try await provider.tools(context: .init(agentID: UUID(), workspace: workspace))
+        let names = Set(try ToolDescriptor.list(mcp: listed).map(\.name))
+        for operation in [BrowserOperation.create, .update, .delete] {
+            XCTAssertTrue(operation.isManagement)
+            XCTAssertFalse(names.contains(operation.rawValue), operation.rawValue)
+        }
+        var create = BrowserRequest(.create)
+        XCTAssertThrowsError(try create.validate(), "A browser was made from nothing")
+        create.profile = BrowserDraft(name: "Work", description: "Accounts.", symbol: "briefcase", colour: 2)
+        XCTAssertNoThrow(try create.validate())
+        create.profile?.name = " "
+        XCTAssertThrowsError(try create.validate())
+        var update = BrowserRequest(.update)
+        update.profile = BrowserDraft(name: "Renamed")
+        XCTAssertThrowsError(try update.validate(), "An edit named no browser")
+        update.browserID = UUID()
+        XCTAssertNoThrow(try update.validate())
+        XCTAssertThrowsError(try BrowserRequest(.delete).validate())
+        XCTAssertNoThrow(try BrowserRequest(.delete, browserID: UUID()).validate())
+        XCTAssertEqual(BrowserBuildIdentity.identify("com.pdparchitect.noodle.hub.local"), .development)
+        XCTAssertTrue(BrowserBuildIdentity.production.clientIDs.contains("com.pdparchitect.noodle.hub"))
     }
 
     func testScriptsAndWebMCPArgumentsCanComeFromWorkspaceFiles() async throws {

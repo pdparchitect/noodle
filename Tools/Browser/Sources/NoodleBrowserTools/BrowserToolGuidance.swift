@@ -35,6 +35,8 @@ enum BrowserToolGuidance {
         case .bookmarkAdd: "Save --url HTTP[S]_URL and optional --title TEXT (defaults to URL). Returns bookmark with durable ID and ISO 8601 creation/update timestamps."
         case .bookmarkUpdate: "Edit --bookmark UUID using --title TEXT and/or --url HTTP[S]_URL. The bookmark must belong to this browser."
         case .bookmarkRemove: "Delete --bookmark UUID from this browser."
+        // Never offered to bots: Noodle and the Hub manage browsers.
+        case .create, .update, .delete: ""
         case .show: "Open this browser's window when the user explicitly needs to see or authenticate it. Accepts --browser only; sends no chat attachment."
         case .present: "Capture and send a clickable browser preview card using --conversation UUID and optional --message TEXT; requires --browser UUID and --tab UUID. Returns attachmentID after sending; keeps the browser window in the background."
         }

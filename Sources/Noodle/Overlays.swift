@@ -9,25 +9,20 @@ import NoodleRuntimeSettings
 
 enum BotEditorTab: String, CaseIterable {
     case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers", browsers = "Browsers"
-
-    /// A bot on a Noodle Hub uses only the Hub's connections and computers, never this Mac's.
-    static func shown(onHub: Bool) -> [BotEditorTab] { onHub ? [.general, .runtime, .mcp, .computers] : allCases }
 }
 
 private struct BotEditorTabPicker: View {
     @Binding var selection: BotEditorTab
     let harnessIdentifier: String
-    /// Connections chosen on this Mac mean nothing on a Hub, and one Hub's mean nothing on another.
+    /// What was chosen on this Mac means nothing on a Hub, and one Hub's means nothing on another.
     var onToolsHomeChange: () -> Void = {}
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private var tabs: [BotEditorTab] { BotEditorTab.shown(onHub: HubHarnessChoice(identifier: harnessIdentifier) != nil) }
     var body: some View {
         Picker("Bot settings", selection: $selection.animation(reduceMotion ? nil : .easeInOut(duration: 0.22))) {
-            ForEach(tabs, id: \.self) { tab in Text(tab.rawValue).tag(tab) }
+            ForEach(BotEditorTab.allCases, id: \.self) { tab in Text(tab.rawValue).tag(tab) }
         }.pickerStyle(.segmented).labelsHidden()
             .fixedSize(horizontal: true, vertical: false)
             .frame(maxWidth: .infinity, alignment: .center)
-            .onChange(of: tabs) { if !tabs.contains(selection) { selection = .general } }
             .onChange(of: HubHarnessChoice(identifier: harnessIdentifier)?.hub) { onToolsHomeChange() }
     }
 }
@@ -133,7 +128,7 @@ struct NewBotSheet: View {
                 NameValidationMessage(name: name)
 
                 BotEditorTabPicker(selection: $selectedTab, harnessIdentifier: selectedHarnessIdentifier) {
-                    mcpConnectionIDs = []; computerIDs = []
+                    mcpConnectionIDs = []; computerIDs = []; browserIDs = []
                 }
                 switch selectedTab {
                 case .general:
@@ -160,7 +155,11 @@ struct NewBotSheet: View {
                                             builtIn: $builtInTools)
                     }
                 case .browsers:
-                    BrowserAssignmentPicker(controller: store.browsers, selectedIDs: $browserIDs)
+                    if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
+                        HubBrowserPicker(mirror: mirror, selectedIDs: $browserIDs)
+                    } else {
+                        BrowserAssignmentPicker(controller: store.browsers, selectedIDs: $browserIDs)
+                    }
                 case .computers:
                     if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
                         HubComputerPicker(mirror: mirror, selectedIDs: $computerIDs)
@@ -380,7 +379,11 @@ struct EditBotSheet: View {
                                             builtIn: $builtInTools)
                     }
                 case .browsers:
-                    BrowserAssignmentPicker(controller: store.browsers, selectedIDs: $browserIDs)
+                    if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
+                        HubBrowserPicker(mirror: mirror, selectedIDs: $browserIDs)
+                    } else {
+                        BrowserAssignmentPicker(controller: store.browsers, selectedIDs: $browserIDs)
+                    }
                 case .computers:
                     if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
                         HubComputerPicker(mirror: mirror, selectedIDs: $computerIDs)
@@ -410,6 +413,7 @@ struct EditBotSheet: View {
                 selectedHarnessIdentifier = choice.identifier
                 mcpConnectionIDs = mirror.connectionIDs(forAgent: agent.id)
                 computerIDs = mirror.computerIDs(forAgent: agent.id)
+                browserIDs = mirror.browserIDs(forAgent: agent.id)
             }
             if selectedHarnessIdentifier.isEmpty {
                 selectedHarnessIdentifier = store.runtime.availableInstallations.first?.provider.rawValue ?? ""

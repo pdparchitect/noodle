@@ -28,6 +28,8 @@ import Observation
     public private(set) var connections: [LinkConnection] = []
     /// This Mac's user's computers on the Hub, as last listed.
     public private(set) var computers: [LinkComputer] = []
+    /// This Mac's user's browsers on the Hub, as last listed.
+    public private(set) var browsers: [LinkBrowser] = []
     /// Computers being made, waiting for the Hub to say they are done.
     @ObservationIgnored private var making: [UUID: CheckedContinuation<LinkComputer, Error>] = [:]
     /// Opens a connection's sign-in page in the browser and returns the address it came back to.
@@ -169,6 +171,38 @@ import Observation
         try await syncComputers()
     }
 
+    public func createBrowser(_ draft: LinkBrowserDraft) async throws -> LinkBrowser {
+        guard case .browser(let made) = try await pairing.request(.createBrowser(draft)) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        try await syncBrowsers()
+        return made
+    }
+
+    public func deleteBrowser(_ id: UUID) async throws {
+        _ = try await pairing.request(.deleteBrowser(id: id))
+        try await syncBrowsers()
+    }
+
+    /// The Hub browsers a bot kept there may use, by its local stand-in.
+    public func browserIDs(forAgent id: UUID) -> Set<UUID> {
+        guard let entry = entries.first(where: { $0.agent == id }) else { return [] }
+        return Set(browsers.filter { $0.botIDs.contains(entry.remote) }.map(\.id))
+    }
+
+    public func assignBrowsers(_ ids: Set<UUID>, toAgent id: UUID) async throws {
+        guard let entry = entries.first(where: { $0.agent == id }) else { throw LinkError("That bot is not on this Hub.") }
+        _ = try await pairing.request(.assignBrowsers(botID: entry.remote, browserIDs: ids.sorted { $0.uuidString < $1.uuidString }))
+        try await syncBrowsers()
+    }
+
+    private func syncBrowsers() async throws {
+        guard case .browsers(let listed) = try await pairing.request(.browsers) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        browsers = listed
+    }
+
     private func syncComputers() async throws {
         guard case .computers(let listed) = try await pairing.request(.computers) else {
             throw LinkError("The Hub sent an unexpected answer.")
@@ -201,6 +235,7 @@ import Observation
             try await syncBots()
             try await syncConnections()
             try await syncComputers()
+            try await syncBrowsers()
             for entry in entries { try await syncMessages(entry) }
             try await sendPending()
             error = nil
@@ -238,6 +273,8 @@ import Observation
                         try await syncConnections()
                     case .computersChanged:
                         try await syncComputers()
+                    case .browsersChanged:
+                        try await syncBrowsers()
                     case .computerCreated(let id, let computer, let error):
                         if let computer { making.removeValue(forKey: id)?.resume(returning: computer) }
                         else { making.removeValue(forKey: id)?.resume(throwing: LinkError(error ?? "The Hub could not make the computer.")) }

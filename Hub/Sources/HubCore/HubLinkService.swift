@@ -1,3 +1,4 @@
+import BrowserBridge
 import ComputerBridge
 import Foundation
 import HubLink
@@ -44,6 +45,7 @@ import Observation
     @ObservationIgnored private let bots: HubBots?
     @ObservationIgnored private let connections: HubConnections?
     @ObservationIgnored private let computers: HubComputers?
+    @ObservationIgnored private let browsers: HubBrowsers?
     /// Open event streams, by the key of the device holding each.
     @ObservationIgnored private var streams: [ObjectIdentifier: LinkStream] = [:]
     @ObservationIgnored private let port: UInt16
@@ -63,6 +65,7 @@ import Observation
 
     public init(hubName: String, directory: URL, access: HubAccess, profiles: HarnessProfilesController,
                 bots: HubBots? = nil, connections: HubConnections? = nil, computers: HubComputers? = nil,
+                browsers: HubBrowsers? = nil,
                 port: UInt16 = LinkEndpoint.defaultPort, router: (any RouterPortMapper)? = nil,
                 localEndpoints: @escaping (UInt16) -> [LinkEndpoint] = LinkEndpoint.local(port:),
                 now: @escaping () -> Date = Date.init) {
@@ -73,6 +76,7 @@ import Observation
         self.bots = bots
         self.connections = connections
         self.computers = computers
+        self.browsers = browsers
         self.port = port
         routerMapper = router
         self.localEndpoints = localEndpoints
@@ -290,6 +294,30 @@ import Observation
             let changed = try await computers.update(id, with: ComputerDraft(draft), for: user)
             push(.computersChanged, to: user.id)
             return .computer(computers.link(changed, for: user))
+        case .browsers:
+            let browsers = try hubBrowsers()
+            await browsers.refresh()
+            return .browsers(browsers.link(for: try user(key)))
+        case .createBrowser(let draft):
+            let browsers = try hubBrowsers(), user = try user(key)
+            let made = try await browsers.create(BrowserDraft(draft), for: user)
+            push(.browsersChanged, to: user.id)
+            return .browser(browsers.link(made, for: user))
+        case .updateBrowser(let id, let draft):
+            let browsers = try hubBrowsers(), user = try user(key)
+            let changed = try await browsers.update(id, with: BrowserDraft(draft), for: user)
+            push(.browsersChanged, to: user.id)
+            return .browser(browsers.link(changed, for: user))
+        case .deleteBrowser(let id):
+            let user = try user(key)
+            try await hubBrowsers().delete(id, for: user)
+            push(.browsersChanged, to: user.id)
+            return .done
+        case .assignBrowsers(let botID, let browserIDs):
+            let user = try user(key)
+            try hubBrowsers().assign(Set(browserIDs), to: botID, for: user)
+            push(.browsersChanged, to: user.id)
+            return .done
         case .deleteComputer(let id):
             let user = try user(key)
             try await hubComputers().delete(id, for: user)
@@ -301,6 +329,11 @@ import Observation
             push(.computersChanged, to: user.id)
             return .done
         }
+    }
+
+    private func hubBrowsers() throws -> HubBrowsers {
+        guard let browsers else { throw LinkError("This Noodle Hub does not keep browsers.") }
+        return browsers
     }
 
     private func hubComputers() throws -> HubComputers {

@@ -77,7 +77,7 @@ Each browser keeps its own sign-ins and browsing data.
 To use someone's Noodle Hub, ask them for an invitation, then choose **Join** under
 Noodle Hub in **Settings → Companions**. New bots can then run on the harnesses the
 Hub lends you. They run entirely on the Hub, so they do not use the tools on your Mac;
-tools and computers you add to them in **Edit Bot** are kept on the Hub.
+tools, computers and browsers you add to them in **Edit Bot** are kept on the Hub.
 
 ## A quick look
 

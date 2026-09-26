@@ -118,6 +118,16 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case assignComputers(botID: UUID, computerIDs: [UUID])
     /// Moves one of this user's computers to the Trash on the Hub's Mac.
     case deleteComputer(id: UUID)
+    /// This user's browsers on the Hub.
+    case browsers
+    /// Makes a browser for this user. Answers with it; it reaches no bot until assigned.
+    case createBrowser(LinkBrowserDraft)
+    /// Changes one of this user's browsers. Answers with it.
+    case updateBrowser(id: UUID, LinkBrowserDraft)
+    /// Deletes one of this user's browsers, with its sign-ins and history.
+    case deleteBrowser(id: UUID)
+    /// Replaces which of this user's browsers one of their bots may use.
+    case assignBrowsers(botID: UUID, browserIDs: [UUID])
 }
 
 public enum LinkResponse: Codable, Equatable, Sendable {
@@ -131,6 +141,8 @@ public enum LinkResponse: Codable, Equatable, Sendable {
     case computers([LinkComputer])
     case computer(LinkComputer)
     case computerTemplates([LinkComputerTemplate])
+    case browsers([LinkBrowser])
+    case browser(LinkBrowser)
     /// A piece of a file, and the file's full size.
     case chunk(data: Data, total: Int)
     case done
@@ -153,6 +165,49 @@ public enum LinkEvent: Codable, Equatable, Sendable {
     case computersChanged
     /// A computer asked for with `createComputer` was made, or why it was not.
     case computerCreated(requestID: UUID, computer: LinkComputer?, error: String?)
+    /// This user's browsers or their bots changed.
+    case browsersChanged
+}
+
+/// What a device sets on a browser it makes or edits on the Hub. Nil fields stay as they are.
+public struct LinkBrowserDraft: Codable, Equatable, Sendable {
+    public var name: String
+    public var description: String?
+    public var symbol: String?
+    public var colour: Int?
+
+    public init(name: String, description: String? = nil, symbol: String? = nil, colour: Int? = nil) {
+        self.name = name
+        self.description = description
+        self.symbol = symbol
+        self.colour = colour
+    }
+}
+
+/// A browser one user keeps on the Hub.
+public struct LinkBrowser: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var name: String
+    public var description: String?
+    public var symbol: String
+    public var colour: Int
+    public var icon: Data?
+    /// Bots may not use it while its owner has paused them.
+    public var paused: Bool
+    /// The bots it is assigned to.
+    public var botIDs: [UUID]
+
+    public init(id: UUID, name: String, description: String? = nil, symbol: String = "globe", colour: Int = 0,
+                icon: Data? = nil, paused: Bool = false, botIDs: [UUID] = []) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.symbol = symbol
+        self.colour = colour
+        self.icon = icon
+        self.paused = paused
+        self.botIDs = botIDs
+    }
 }
 
 /// What a device sets on a computer it makes or edits on the Hub. Nil fields stay as they are.

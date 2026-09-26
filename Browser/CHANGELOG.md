@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Let Noodle and Noodle Hub make, rename and delete browsers, so you can set up a bot's browser without switching apps. Bots themselves still cannot.
+
 ## [0.5.1] - 2026-09-24
 
 ### Fixed

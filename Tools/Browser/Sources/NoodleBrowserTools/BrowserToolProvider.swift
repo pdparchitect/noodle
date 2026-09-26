@@ -29,7 +29,7 @@ public struct BrowserToolProvider: ToolProvider {
 
     // MARK: Tool list
 
-    static var operations: [BrowserOperation] { BrowserOperation.allCases }
+    static var operations: [BrowserOperation] { BrowserOperation.agentCases }
 
     public func tools(context: ToolCallContext) async throws -> Data {
         try JSONSerialization.data(withJSONObject: ["tools": Self.operations.map(Self.tool)], options: [.sortedKeys])

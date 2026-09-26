@@ -439,8 +439,9 @@ final class NoodleStore {
     }
 
     /// `tools` stores, on this Mac, what the new bot may use here.
-    /// `connectionIDs` and `computerIDs` are the person's on that Hub, not this Mac's.
-    private func createHubAgent(on choice: HubHarnessChoice, draft: LinkBotDraft, connectionIDs: Set<UUID>, computerIDs: Set<UUID>) -> Bool {
+    /// `connectionIDs`, `computerIDs` and `browserIDs` are the person's on that Hub, not this Mac's.
+    private func createHubAgent(on choice: HubHarnessChoice, draft: LinkBotDraft, connectionIDs: Set<UUID>,
+                                computerIDs: Set<UUID>, browserIDs: Set<UUID>) -> Bool {
         guard let mirror = hubMirrors.first(where: { $0.pairing.hub?.key == choice.hub }) else {
             errorMessage = "Join that Noodle Hub again before creating a bot on it."
             return false
@@ -451,6 +452,7 @@ final class NoodleStore {
                 let agent = try await mirror.createBot(draft)
                 if !connectionIDs.isEmpty { try await mirror.assignConnections(connectionIDs, toAgent: agent.id) }
                 if !computerIDs.isEmpty { try await mirror.assignComputers(computerIDs, toAgent: agent.id) }
+                if !browserIDs.isEmpty { try await mirror.assignBrowsers(browserIDs, toAgent: agent.id) }
                 selectedConversationID = conversations.first { $0.kind == .direct && $0.participantIDs == [agent.id] }?.id
                 refreshAppShortcuts()
             } catch {
@@ -498,7 +500,7 @@ final class NoodleStore {
                 model: modelIdentifier.flatMap { $0.isEmpty ? nil : $0 },
                 reasoningEffort: reasoningEffort.flatMap { $0.isEmpty ? nil : $0 }, publicDescription: publicDescription,
                 backstory: backstory, avatarSymbolName: avatarSymbolName, avatarColorIndex: avatarColorIndex,
-                avatarImageData: avatarImageData), connectionIDs: mcpConnectionIDs, computerIDs: computerIDs)
+                avatarImageData: avatarImageData), connectionIDs: mcpConnectionIDs, computerIDs: computerIDs, browserIDs: browserIDs)
         }
         guard runtime.availableInstallations.contains(where: { $0.provider.rawValue == harnessIdentifier }) else {
             errorMessage = "Set up a supported harness in Settings before creating a bot."
@@ -589,12 +591,15 @@ final class NoodleStore {
             Task {
                 do {
                     try await mirror.updateBot(localAgentID: agent.id, with: draft)
-                    // The Hub's connections and computers, chosen in its Tools and Computers tabs.
+                    // The Hub's connections, computers and browsers, chosen in their tabs.
                     if let mcpConnectionIDs, mcpConnectionIDs != mirror.connectionIDs(forAgent: agent.id) {
                         try await mirror.assignConnections(mcpConnectionIDs, toAgent: agent.id)
                     }
                     if let computerIDs, computerIDs != mirror.computerIDs(forAgent: agent.id) {
                         try await mirror.assignComputers(computerIDs, toAgent: agent.id)
+                    }
+                    if let browserIDs, browserIDs != mirror.browserIDs(forAgent: agent.id) {
+                        try await mirror.assignBrowsers(browserIDs, toAgent: agent.id)
                     }
                 } catch {
                     errorMessage = error.localizedDescription

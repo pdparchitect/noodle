@@ -108,6 +108,33 @@ import XCTest
         XCTAssertEqual(sent.value.last(where: { $0.operation == .create })?.computer?.name, "Workbench")
         XCTAssertEqual(computers.registry.computers, [made])
     }
+
+    /// A browser made or deleted from the bot editor is Noodle Browser's own, listed like any other.
+    func testABrowserIsMadeAndDeletedThroughNoodleBrowser() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = WorkspaceRepository(rootURL: root); try repository.prepare()
+        let listed = LockedBox<[RemoteBrowser]>([])
+        let browsers = BrowserController(repository: repository, connection: { request in
+            var response = BrowserResponse()
+            switch request.operation {
+            case .create:
+                let made = RemoteBrowser(id: UUID(), name: request.profile?.name ?? "", colour: request.profile?.colour ?? 0)
+                listed.mutate { $0.append(made) }
+                response.browser = made
+            case .delete:
+                listed.mutate { $0.removeAll { $0.id == request.browserID } }
+            default: break
+            }
+            response.browsers = listed.value
+            return response
+        })
+        let made = try await browsers.create(BrowserDraft(name: "Work"))
+        XCTAssertEqual(made.name, "Work")
+        XCTAssertEqual(browsers.registry.browsers.map(\.id), [made.id])
+        try await browsers.delete(made.id)
+        XCTAssertEqual(browsers.registry.browsers, [])
+    }
 }
 
 private final class LockedBox<Value>: @unchecked Sendable {

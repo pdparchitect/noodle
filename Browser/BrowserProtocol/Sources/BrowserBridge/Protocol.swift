@@ -14,9 +14,25 @@ public enum BrowserOperation: String, Codable, CaseIterable, Sendable {
     case history, bookmarks
     case webMCPList = "webmcp-list", webMCPCall = "webmcp-call"
     case bookmarkAdd = "bookmark-add", bookmarkUpdate = "bookmark-update", bookmarkRemove = "bookmark-remove"
+    /// Managing browsers, for Noodle and Noodle Hub only: making one, changing one and deleting one.
+    case create = "browser-create", update = "browser-update", delete = "browser-delete"
     public var timeout: Int { isFileTransfer ? 600 : 60 }
     public var isFileTransfer: Bool { self == .upload || self == .download || self == .screenshot }
-    public var needsTab: Bool { ![.list, .status, .tabs, .open, .downloads, .download, .show, .history, .bookmarks, .bookmarkAdd, .bookmarkUpdate, .bookmarkRemove].contains(self) }
+    public var isManagement: Bool { [.create, .update, .delete].contains(self) }
+    public var needsTab: Bool { ![.list, .status, .tabs, .open, .downloads, .download, .show, .history, .bookmarks, .bookmarkAdd, .bookmarkUpdate, .bookmarkRemove, .create, .update, .delete].contains(self) }
+    /// What bots may call.
+    public static var agentCases: [Self] { allCases.filter { !$0.isManagement } }
+}
+
+/// What a client sets on a browser it makes or edits. Nil fields stay as they are.
+public struct BrowserDraft: Codable, Equatable, Sendable {
+    public var name: String
+    public var description: String?
+    public var symbol: String?
+    public var colour: Int?
+    public init(name: String, description: String? = nil, symbol: String? = nil, colour: Int? = nil) {
+        self.name = name; self.description = description; self.symbol = symbol; self.colour = colour
+    }
 }
 
 public struct BrowserPointerState: Codable, Equatable, Sendable {
@@ -122,13 +138,23 @@ public struct BrowserRequest: Codable, Sendable {
     public var toolID: String?
     /// JSON object encoded as UTF-8 text; never interpreted as JavaScript source.
     public var arguments: String?
+    public var profile: BrowserDraft?
     public init(_ operation: BrowserOperation, browserID: UUID? = nil, tabID: UUID? = nil) {
         self.operation = operation; self.browserID = browserID; self.tabID = tabID
     }
     public func validate() throws {
         try validateWebMCP()
         guard version == 1 else { throw BrowserError("Update Noodle and Noodle Browser to compatible versions.") }
-        guard operation == .list || browserID != nil else { throw BrowserError("Specify --browser UUID.") }
+        guard operation == .list || operation == .create || browserID != nil else { throw BrowserError("Specify --browser UUID.") }
+        if [.create, .update].contains(operation) {
+            let name = profile?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !name.isEmpty, name.count <= 120 else { throw BrowserError("Enter a browser name of 1–120 characters.") }
+            guard (profile?.description?.count ?? 0) <= RemoteBrowser.maximumDescriptionLength else {
+                throw BrowserError("Enter a browser description of at most \(RemoteBrowser.maximumDescriptionLength) characters.")
+            }
+        } else if profile != nil {
+            throw BrowserError("Browser details require a create or update operation.")
+        }
         guard !operation.needsTab || tabID != nil else { throw BrowserError("Specify --tab UUID from tabs or open.") }
         for value in [target, frame, filename] { if let value, value.utf8.count > 4096 || value.utf8.contains(0) { throw BrowserError("Invalid browser argument.") } }
         if let text, text.utf8.count > 1_048_576 { throw BrowserError("Browser script or text exceeds 1 MiB.") }

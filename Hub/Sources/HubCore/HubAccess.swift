@@ -75,6 +75,8 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
     public private(set) var connectionOwners: [UUID: UUID] = [:]
     /// Which user each computer the Hub lends belongs to.
     public private(set) var computerOwners: [UUID: UUID] = [:]
+    /// Which user each browser the Hub lends belongs to.
+    public private(set) var browserOwners: [UUID: UUID] = [:]
     @ObservationIgnored private let url: URL
 
     private struct Stored: Codable {
@@ -84,6 +86,7 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         var botOwners: [UUID: UUID]?
         var connectionOwners: [UUID: UUID]?
         var computerOwners: [UUID: UUID]?
+        var browserOwners: [UUID: UUID]?
     }
 
     public init(url: URL) {
@@ -95,6 +98,7 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
             botOwners = stored.botOwners ?? [:]
             connectionOwners = stored.connectionOwners ?? [:]
             computerOwners = stored.computerOwners ?? [:]
+            browserOwners = stored.browserOwners ?? [:]
         }
         if !plans.contains(where: \.isDefault) {
             plans.insert(HubPlan(id: HubPlan.defaultID, name: "Default"), at: 0)
@@ -133,6 +137,7 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         botOwners = botOwners.filter { $0.value != user.id }
         connectionOwners = connectionOwners.filter { $0.value != user.id }
         computerOwners = computerOwners.filter { $0.value != user.id }
+        browserOwners = browserOwners.filter { $0.value != user.id }
         save()
     }
 
@@ -150,6 +155,13 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
     public func owner(ofConnection connection: UUID) -> UUID? { connectionOwners[connection] }
 
     public func owner(ofComputer computer: UUID) -> UUID? { computerOwners[computer] }
+
+    public func owner(ofBrowser browser: UUID) -> UUID? { browserOwners[browser] }
+
+    public func setOwner(_ user: HubUser?, ofBrowser browser: UUID) {
+        browserOwners[browser] = user?.id
+        save()
+    }
 
     public func setOwner(_ user: HubUser?, ofComputer computer: UUID) {
         computerOwners[computer] = user?.id
@@ -241,7 +253,8 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(Stored(users: users, plans: plans, devices: devices, botOwners: botOwners,
-                                                         connectionOwners: connectionOwners, computerOwners: computerOwners)) else { return }
+                                                         connectionOwners: connectionOwners, computerOwners: computerOwners,
+                                                         browserOwners: browserOwners)) else { return }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? AtomicFile.write(data, to: url)
     }

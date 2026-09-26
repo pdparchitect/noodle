@@ -1,7 +1,9 @@
 import AppKit
 import BrowserBridge
 import Foundation
+import HubLink
 import NoodleCore
+import NoodleHubClient
 import Observation
 import SwiftUI
 
@@ -58,6 +60,21 @@ import SwiftUI
             available = true; if readable { failure = nil }
         } catch { available = false; if launchIfNeeded { failure = error.localizedDescription } }
     }
+    /// Makes a browser in Noodle Browser and lists it here.
+    func create(_ draft: BrowserDraft) async throws -> RemoteBrowser {
+        var request = BrowserRequest(.create)
+        request.profile = draft
+        guard let made = try await call(request).checked().browser else {
+            throw BrowserError("\(BrowserBuildIdentity.current.appName) did not return the new browser. Update it and try again.")
+        }
+        await refresh()
+        return made
+    }
+    /// Deletes a browser in Noodle Browser, with its signed-in sessions and history.
+    func delete(_ id: UUID) async throws {
+        _ = try await call(BrowserRequest(.delete, browserID: id)).checked()
+        await refresh()
+    }
     func openLibrary() async throws {
         guard let url = BrowserApplication.locate() else { throw BrowserError("Build or install \(BrowserBuildIdentity.current.appName) first.") }
         let configuration = NSWorkspace.OpenConfiguration(); configuration.activates = true
@@ -103,6 +120,7 @@ struct BrowserAssignmentPicker: View {
     @Binding var selectedIDs: Set<UUID>
     @State private var openingLibrary = false
     @State private var openError: String?
+    @State private var creating = false
 
     var body: some View {
         CompanionAssignmentPicker(title: "Browsers", noun: "browser", symbol: "globe",
@@ -111,7 +129,17 @@ struct BrowserAssignmentPicker: View {
                     state: controller.available ? ($0.paused ? "Paused" : "Ready") : "Unavailable",
                     symbol: $0.symbol, colour: $0.colour, icon: $0.icon, detail: $0.description)
             }, selectedIDs: $selectedIDs, createPrompt: createPrompt, openLibraryButton: openLibraryButton,
-            notice: EmptyView(), failure: controller.failure)
+            notice: EmptyView(), failure: controller.failure,
+            onNew: controller.installed ? { creating = true } : nil,
+            onDelete: { item in
+                Task {
+                    do { try await controller.delete(item.id) }
+                    catch { openError = error.localizedDescription }
+                }
+            })
+        .sheet(isPresented: $creating) {
+            NewBrowserSheet(create: controller.create) { selectedIDs.insert($0.id) }
+        }
         .task { await controller.refresh(launchIfNeeded: true) }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await controller.refresh(launchIfNeeded: true) }
@@ -142,5 +170,88 @@ struct BrowserAssignmentPicker: View {
                 catch { openError = error.localizedDescription }
             }
         }.disabled(openingLibrary)
+    }
+}
+
+/// Makes a browser, on this Mac or on a Noodle Hub.
+struct NewBrowserSheet: View {
+    let create: (BrowserDraft) async throws -> RemoteBrowser
+    let onCreated: (RemoteBrowser) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = "Browser"
+    @State private var description = ""
+    @State private var making = false
+    @State private var failure: String?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).disabled(making)
+                Spacer()
+                Text("New Browser").font(.headline)
+                Spacer()
+                Button("Create", action: make).keyboardShortcut(.defaultAction)
+                    .disabled(making || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }.padding(16)
+            Divider()
+            Form {
+                TextField("Name", text: $name)
+                TextField("Description", text: $description, prompt: Text("Optional"), axis: .vertical).lineLimit(2...3)
+                if let failure { Text(failure).font(.caption).foregroundStyle(.red) }
+            }.formStyle(.grouped).disabled(making)
+        }
+        .frame(width: 420)
+    }
+
+    private func make() {
+        making = true
+        failure = nil
+        let text = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task { @MainActor in
+            defer { making = false }
+            do {
+                let made = try await create(BrowserDraft(name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                                                         description: text.isEmpty ? nil : text))
+                onCreated(made)
+                dismiss()
+            } catch { failure = error.localizedDescription }
+        }
+    }
+}
+
+/// The Browsers tab of a bot kept on a Noodle Hub: the person's browsers there, in Noodle
+/// Browser on the Hub's Mac.
+struct HubBrowserPicker: View {
+    let mirror: HubMirror
+    @Binding var selectedIDs: Set<UUID>
+    @State private var creating = false
+    @State private var failure: String?
+
+    var body: some View {
+        CompanionAssignmentPicker(title: "Browsers", noun: "browser", symbol: "globe",
+            items: mirror.browsers.map {
+                CompanionAssignmentItem(id: $0.id, name: $0.name, state: $0.paused ? "Paused" : "Ready", symbol: $0.symbol,
+                                        colour: $0.colour, icon: $0.icon, detail: $0.description)
+            }, selectedIDs: $selectedIDs,
+            createPrompt: VStack(spacing: 10) {
+                Image(systemName: "globe").font(.largeTitle)
+                Text("No browsers on this Hub")
+            }.foregroundStyle(.secondary).frame(maxWidth: .infinity),
+            openLibraryButton: EmptyView(), notice: EmptyView(), failure: failure, onNew: { creating = true },
+            onDelete: { item in
+                failure = nil
+                Task {
+                    do { try await mirror.deleteBrowser(item.id) }
+                    catch { failure = error.localizedDescription }
+                }
+            })
+        .sheet(isPresented: $creating) {
+            NewBrowserSheet(create: { draft in
+                let made = try await mirror.createBrowser(LinkBrowserDraft(name: draft.name, description: draft.description,
+                                                                           symbol: draft.symbol, colour: draft.colour))
+                return RemoteBrowser(id: made.id, name: made.name, description: made.description, symbol: made.symbol,
+                                     colour: made.colour, icon: made.icon, paused: made.paused)
+            }) { selectedIDs.insert($0.id) }
+        }
     }
 }

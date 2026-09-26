@@ -14,6 +14,7 @@ import NoodleRuntime
     private let access: HubAccess
     private let connections: HubConnections
     private let computers: HubComputers
+    private let browsers: HubBrowsers
     /// Serves bots the tools their owners assigned them from the Hub's own connections.
     private var toolBroker: ToolBridgeBroker?
     private let messenger: MessengerBroker
@@ -27,16 +28,18 @@ import NoodleRuntime
     private var phases: [UUID: AgentRuntimePhase] = [:]
 
     public init(repository: WorkspaceRepository, runtime: AgentRuntimeCoordinator, access: HubAccess,
-                connections: HubConnections, computers: HubComputers, uploads: URL) {
+                connections: HubConnections, computers: HubComputers, browsers: HubBrowsers, uploads: URL) {
         self.uploads = uploads
         self.repository = repository
         self.runtime = runtime
         self.access = access
         self.connections = connections
         self.computers = computers
+        self.browsers = browsers
         messenger = MessengerBroker(repository: repository)
         connections.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
         computers.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
+        browsers.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
     }
 
     /// Runs every bot, the messenger they reply through, and the checks that keep them going.
@@ -295,6 +298,7 @@ import NoodleRuntime
         if toolBroker != nil { try? startTools() }
         connections.forget(bot: agent.id)
         computers.forget(bot: agent.id)
+        browsers.forget(bot: agent.id)
         access.setOwner(nil, ofBot: agent.id)
     }
 

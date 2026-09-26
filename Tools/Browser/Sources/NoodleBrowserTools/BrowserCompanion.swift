@@ -6,8 +6,14 @@ extension BrowserToolProvider {
     /// The provider as it runs inside Noodle's Browser tool extension: the companion's
     /// signed socket in the shared group container, starting Noodle Browser when needed.
     public static func live() -> BrowserToolProvider {
+        BrowserToolProvider(stagingRoot: liveStagingRoot, transport: liveTransport())
+    }
+    /// Where the signed socket and file transfers live, in the shared group container.
+    public static let liveStagingRoot: @Sendable () throws -> URL = { try BrowserConnection.socketURL().deletingLastPathComponent() }
+    /// The signed socket, starting Noodle Browser when needed.
+    public static func liveTransport() -> Transport {
         let companion = BrowserCompanion()
-        return BrowserToolProvider(stagingRoot: { try BrowserConnection.socketURL().deletingLastPathComponent() }) { try await companion.call($0) }
+        return { try await companion.call($0) }
     }
 }
 

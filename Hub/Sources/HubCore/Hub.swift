@@ -1,6 +1,8 @@
+import BrowserBridge
 import ComputerBridge
 import Foundation
 import HubLink
+import NoodleBrowserTools
 import NoodleComputerTools
 import NoodleCore
 import NoodleMCP
@@ -18,12 +20,13 @@ import NoodleRuntime
     public let access: HubAccess
     public let connections: HubConnections
     public let computers: HubComputers
+    public let browsers: HubBrowsers
     public let bots: HubBots
     public let link: HubLinkService
 
-    /// `computer` reaches Noodle Computer on this Mac; tests pass their own.
+    /// `computer` and `browser` reach Noodle Computer and Noodle Browser on this Mac; tests pass their own.
     public init(root: URL, messenger: URL?, linkPort: UInt16 = LinkEndpoint.defaultPort, router: (any RouterPortMapper)? = nil,
-                computer: ComputerToolProvider.Transport? = nil) {
+                computer: ComputerToolProvider.Transport? = nil, browser: BrowserToolProvider.Transport? = nil) {
         repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: messenger)
         // Only the Hub's own storage holds harnesses its Agent Host will trust.
         let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses)
@@ -40,12 +43,14 @@ import NoodleRuntime
                                      tools: tools, assignments: assignments)
         computers = HubComputers(root: root, access: access, tools: tools, assignments: assignments,
                                  call: computer ?? ComputerToolProvider.liveTransport())
-        bots = HubBots(repository: repository, runtime: runtime, access: access, connections: connections, computers: computers,
+        browsers = HubBrowsers(root: root, access: access, tools: tools, assignments: assignments,
+                               call: browser ?? BrowserToolProvider.liveTransport())
+        bots = HubBots(repository: repository, runtime: runtime, access: access, connections: connections, computers: computers, browsers: browsers,
                        uploads: root.appendingPathComponent("Uploads", isDirectory: true))
         link = HubLinkService(hubName: Host.current().localizedName ?? "Noodle Hub",
                               directory: root.appendingPathComponent("Link", isDirectory: true),
                               access: access, profiles: harnessProfiles, bots: bots, connections: connections,
-                              computers: computers, port: linkPort, router: router)
+                              computers: computers, browsers: browsers, port: linkPort, router: router)
     }
 
     /// Removes a user with their devices and the bots they keep here.
@@ -53,6 +58,7 @@ import NoodleRuntime
         bots.removeBots(of: user)
         connections.removeConnections(of: user)
         computers.removeComputers(of: user)
+        browsers.removeBrowsers(of: user)
         access.remove(user)
     }
 

@@ -139,8 +139,27 @@ import WebKit
             guard library.failure == nil else { throw BrowserError(library.failure!) }
             response.browsers = library.profiles.map(\.remote); return response
         }
+        if request.operation == .create, let draft = request.profile {
+            response.browser = try library.create(name: draft.name, description: draft.description,
+                                                  symbol: draft.symbol ?? "globe", colour: draft.colour).remote
+            return response
+        }
         let id = request.browserID!
         let profile = try library.profile(id)
+        if request.operation == .update, let draft = request.profile {
+            var changed = profile
+            changed.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let description = draft.description { changed.description = description }
+            if let symbol = draft.symbol { changed.symbol = symbol }
+            if let colour = draft.colour { changed.colour = colour }
+            try library.update(changed)
+            response.browser = try library.profile(id).remote
+            return response
+        }
+        if request.operation == .delete {
+            try await removeBrowser(id)
+            return response
+        }
         if request.operation == .history || request.operation == .bookmarks {
             let limit = request.limit ?? 50, offset = request.offset ?? 0
             response.limit = limit; response.offset = offset

@@ -200,8 +200,8 @@ import SwiftUI
         case .botPhase(let id, let phase):
             guard let index = agents.firstIndex(where: { $0.id == id }) else { return }
             agents[index].phase = phase
-        // Tool connections and computers are managed from Noodle on the Mac for now.
-        case .connectionsChanged, .signInPage, .computersChanged, .computerCreated:
+        // Tool connections, computers and browsers are managed from Noodle on the Mac for now.
+        case .connectionsChanged, .signInPage, .computersChanged, .computerCreated, .browsersChanged:
             return
         }
         saveCache()
