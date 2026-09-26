@@ -11,9 +11,11 @@ struct LiveLinkTests {
 
     @Test func browserComputerAndNoodletLinksOpenLiveInEveryBuild() {
         let id = UUID().uuidString.lowercased()
-        for url in ["noodlebrowser://\(id)?tab=\(id)", "noodlebrowser-dev://\(id)", "noodlecomputer://\(id)?view=web",
-                    "noodlecomputer-dev://\(id)", "noodlet://\(id)", "noodlet-dev://\(id)"] {
+        for (url, kind) in [("noodlebrowser://\(id)?tab=\(id)", LinkAttachment.LiveKind.browser), ("noodlebrowser-dev://\(id)", .browser),
+                            ("noodlecomputer://\(id)?view=web", .computer), ("noodlecomputer-dev://\(id)", .computer),
+                            ("noodlet://\(id)", .noodlet), ("noodlet-dev://\(id)", .noodlet)] {
             #expect(attachment(url).isLive, "\(url)")
+            #expect(attachment(url).liveKind == kind, "\(url)")
         }
         for url in ["https://example.com", "noodle://join-hub", nil] {
             #expect(!attachment(url).isLive, "\(url ?? "a file")")

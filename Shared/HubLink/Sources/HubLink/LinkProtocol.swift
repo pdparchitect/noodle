@@ -132,6 +132,9 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     /// Opens a channel showing what a link in one of this user's conversations points at, live.
     /// See `LinkSurface` for what travels on it.
     case openSurface(conversationID: UUID, attachmentID: UUID)
+    /// The latest picture of what a link a bot shared points at, for its card, when the link
+    /// itself carries none, as a noodlet's does not. Answered with `picture`.
+    case linkPreview(conversationID: UUID, attachmentID: UUID)
 }
 
 public enum LinkResponse: Codable, Equatable, Sendable {
@@ -149,6 +152,8 @@ public enum LinkResponse: Codable, Equatable, Sendable {
     case browser(LinkBrowser)
     /// A piece of a file, and the file's full size.
     case chunk(data: Data, total: Int)
+    /// A picture, or none when there is nothing to show yet.
+    case picture(Data?)
     case done
     case failure(String)
 }

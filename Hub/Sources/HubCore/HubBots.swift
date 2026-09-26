@@ -363,6 +363,18 @@ import NoodleRuntime
         return (link, bot.id)
     }
 
+    /// The latest picture of what a link points at, by the same rule as opening it: a noodlet's
+    /// from Noodle Applet, anything else the one its card carries.
+    public func picture(of attachmentID: UUID, in conversationID: UUID, for user: HubUser) async throws -> Data? {
+        let (link, _) = try await companionLink(attachmentID, in: conversationID, for: user)
+        guard case .noodlet(let noodlet) = link else { return try attachments(in: conversationID)[attachmentID]?.card?.image }
+        var info = AppletRequest(.info)
+        info.noodletID = noodlet
+        info.includePreview = true
+        let response = try await applets.companion(info)
+        return response.mediaType == "image/png" ? response.data : nil
+    }
+
     private func ownedConversation(_ id: UUID, by user: HubUser) throws -> AgentRecord {
         guard let conversation = try repository.loadConversations().first(where: { $0.id == id }),
               conversation.kind == .direct, let bot = conversation.participantIDs.first else {

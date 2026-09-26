@@ -18,6 +18,7 @@ struct AttachmentView: View {
     @State private var failed = false
     @State private var previewing: URL?
     @State private var watching = false
+    @State private var livePicture: Data?
 
     private var isImage: Bool { attachment.mediaType.hasPrefix("image/") }
 
@@ -57,8 +58,13 @@ struct AttachmentView: View {
             VStack(alignment: .leading, spacing: 6) {
                 ZStack {
                     Color(.secondarySystemBackground)
-                    if let data = attachment.card?.image, let image = UIImage(data: data) {
+                    if let data = attachment.card?.image ?? livePicture, let image = UIImage(data: data) {
                         Image(uiImage: image).resizable().scaledToFit()
+                    } else if attachment.liveKind == .computer, let terminal = attachment.card?.detail {
+                        // A computer shared as its terminal shows its latest lines, as on the Mac.
+                        Text(terminal).font(.system(size: 7, design: .monospaced)).foregroundStyle(.white.opacity(0.8))
+                            .lineLimit(14).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading).padding(8)
+                            .background(.black)
                     } else {
                         Image(systemName: attachment.card?.symbol ?? "rectangle.on.rectangle").font(.largeTitle).foregroundStyle(.secondary)
                     }
@@ -73,6 +79,11 @@ struct AttachmentView: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint("Opens it live")
+        .task(id: attachment.id) {
+            // A noodlet's link carries no picture; the Hub has its latest.
+            guard attachment.card?.image == nil, attachment.liveKind == .noodlet else { return }
+            livePicture = try? await chats.picture(for: attachment, in: agent)
+        }
         .fullScreenCover(isPresented: $watching) {
             LiveSurfaceScreen(chats: chats, agent: agent, attachment: attachment)
         }

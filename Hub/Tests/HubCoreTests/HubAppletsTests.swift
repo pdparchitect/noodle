@@ -25,6 +25,7 @@ import XCTest
                     response.sessionID = session
                 case .info:
                     response.sourcePath = request.noodletID.flatMap { sources[$0] }
+                    if request.includePreview == true { response.data = Data("picture".utf8); response.mediaType = "image/png" }
                 default:
                     break
                 }
@@ -150,6 +151,22 @@ import XCTest
             if case .failed(let why)? = LinkSurface.message(frame) { reason = why; break }
         }
         XCTAssertEqual(reason, "The noodlet stopped.")
+    }
+
+    /// A phone has no Applet of its own, so a noodlet's card asks the Hub for its picture, with
+    /// the same rule as opening it.
+    func testANoodletCardGetsItsPictureFromTheHub() async throws {
+        let f = try await fixture()
+        let kai = try f.hub.bots.create(LinkBotDraft(name: "Kai", provider: "claude-code"), for: f.ada)
+        let eli = try f.hub.bots.create(LinkBotDraft(name: "Eli", provider: "claude-code"), for: f.ada)
+        let own = try post(made(in: folder(of: kai, f), f), in: kai, byBot: true, hub: f.hub)
+        let borrowed = try post(made(in: folder(of: eli, f), f), in: kai, byBot: true, hub: f.hub)
+        let picture = try await f.device.request(.linkPreview(conversationID: kai.conversationID, attachmentID: own))
+        XCTAssertEqual(picture, .picture(Data("picture".utf8)))
+        do {
+            _ = try await f.device.request(.linkPreview(conversationID: kai.conversationID, attachmentID: borrowed))
+            XCTFail("another bot's noodlet showed its picture")
+        } catch { XCTAssertEqual(error.localizedDescription, "That noodlet is not this bot's.") }
     }
 
     func testNoodletsOfAnotherBotOrPostedByAPersonNeverOpen() async throws {

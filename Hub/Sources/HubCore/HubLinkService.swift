@@ -313,6 +313,8 @@ import Observation
         case .upload(let conversationID, let attachment, let offset, let data):
             try hubBots().receive(data, at: offset, of: attachment, in: conversationID, for: try user(key))
             return .done
+        case .linkPreview(let conversationID, let attachmentID):
+            return .picture(try await hubBots().picture(of: attachmentID, in: conversationID, for: try user(key)))
         case .download(let conversationID, let attachmentID, let offset):
             let (data, total) = try hubBots().chunk(of: attachmentID, in: conversationID, at: offset, for: try user(key))
             return .chunk(data: data, total: total)

@@ -120,6 +120,13 @@ extension HubChats {
     func openSurface(_ attachment: LinkAttachment, in agent: LinkBot) async throws -> LinkChannel {
         try await pairing.channel(.openSurface(conversationID: agent.conversationID, attachmentID: attachment.id))
     }
+
+    /// The latest picture of what a link points at, for a card that carries none, as a noodlet's.
+    func picture(for attachment: LinkAttachment, in agent: LinkBot) async throws -> Data? {
+        guard case .picture(let data) = try await pairing.request(.linkPreview(conversationID: agent.conversationID, attachmentID: attachment.id))
+        else { throw LinkError("The Hub sent an unexpected answer.") }
+        return data
+    }
 }
 
 enum HubTool { case connection, computer, browser }
@@ -342,20 +349,36 @@ struct LiveSurfaceScreen: View {
     @State private var channel: LinkChannel?
     @State private var showing = false
     @State private var failure: String?
+    @Environment(\.verticalSizeClass) private var verticalSize
+
+    /// Sideways, the picture gets the whole screen and the buttons float over its corners.
+    private var fullScreen: Bool { verticalSize == .compact }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 SurfaceView(feed: feed) { control in channel?.send(LinkSurface.control(control)) }
-                    .ignoresSafeArea(edges: .bottom)
+                    .ignoresSafeArea(edges: fullScreen ? .all : .bottom)
                 if !showing {
                     if let failure { Text(failure).foregroundStyle(.secondary).padding() }
                     else { ProgressView().tint(.white) }
                 }
             }
             .background(.black)
+            .overlay(alignment: .top) {
+                if fullScreen {
+                    HStack {
+                        Button("Done") { dismiss() }
+                        Spacer()
+                        Button("Keyboard", systemImage: "keyboard") { feed.toggleKeyboard() }.labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.glass).padding(.horizontal, 12)
+                }
+            }
             .navigationTitle(attachment.card?.title ?? "Live")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar(fullScreen ? .hidden : .visible, for: .navigationBar)
+            .statusBarHidden(fullScreen)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
                 ToolbarItem(placement: .primaryAction) {
@@ -388,9 +411,14 @@ struct LiveSurfaceScreen: View {
 }
 
 extension LinkAttachment {
-    /// A link to something live a bot shared: a browser tab, a computer or a noodlet.
-    var isLive: Bool {
-        guard let scheme = url?.scheme?.lowercased() else { return false }
-        return ["noodlet", "noodlebrowser", "noodlecomputer"].contains { scheme == $0 || scheme.hasPrefix($0 + "-") }
+    enum LiveKind { case browser, computer, noodlet }
+
+    /// What a link to something live a bot shared points at: a browser, a computer or a noodlet.
+    var liveKind: LiveKind? {
+        guard let scheme = url?.scheme?.lowercased() else { return nil }
+        let kinds: [(String, LiveKind)] = [("noodlebrowser", .browser), ("noodlecomputer", .computer), ("noodlet", .noodlet)]
+        return kinds.first { scheme == $0.0 || scheme.hasPrefix($0.0 + "-") }?.1
     }
+
+    var isLive: Bool { liveKind != nil }
 }

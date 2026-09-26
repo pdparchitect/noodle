@@ -207,13 +207,17 @@ import AppletCore
           response = status(session)
         }
         if request.includePreview == true {
-          guard owner == "local", identity == AppletBuildIdentity.current.noodleID else {
+          let hub = identity == AppletBuildIdentity.current.hubID
+          guard owner == "local", identity == AppletBuildIdentity.current.noodleID || hub else {
             throw AppletError("Preview access is reserved for the Noodle interface.")
           }
           // A plain bookmark carries an ephemeral scope for cross-process handoff.
-          // App-scoped persistent bookmarks belong to the creating application.
-          response.previewBookmark = try package.url.bookmarkData(options: [],
-            includingResourceValuesForKeys: nil, relativeTo: nil)
+          // App-scoped persistent bookmarks belong to the creating application. Noodle Hub
+          // shows only the picture, on cards on its devices, and gets no way into the package.
+          if !hub {
+            response.previewBookmark = try package.url.bookmarkData(options: [],
+              includingResourceValuesForKeys: nil, relativeTo: nil)
+          }
           if let cached = PreviewCache.file(for: package.url),
              let size = try? cached.resourceValues(forKeys: [.fileSizeKey]).fileSize,
              size <= 4 * 1_048_576 {

@@ -49,6 +49,12 @@ import XCTest
         let described = await runtime.handle(info, identity: current.noodleID)
         XCTAssertNil(described.error)
         XCTAssertEqual(described.sourcePath, request.path)
+
+        // Noodle Hub may show its picture on a card, but gets no way into the package.
+        info.includePreview = true
+        let hubPreview = await runtime.handle(info, identity: current.hubID)
+        XCTAssertNil(hubPreview.error)
+        XCTAssertNil(hubPreview.previewBookmark)
     }
 
     /// Each digest must match the argument named beside it in App.swift.
