@@ -13,6 +13,7 @@ let package = Package(
         .package(path: ".."),
         .package(path: "../Shared/SettingsUI"),
         .package(path: "../Shared/HubLink"),
+        .package(path: "../Computer/Bridge"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
     ],
     targets: [
@@ -22,6 +23,8 @@ let package = Package(
                 .product(name: "NoodleCore", package: "noodle"),
                 .product(name: "NoodleRuntime", package: "noodle"),
                 .product(name: "NoodleMCP", package: "noodle"),
+                .product(name: "NoodleComputerTools", package: "noodle"),
+                .product(name: "ComputerBridge", package: "Bridge"),
                 .product(name: "HubLink", package: "HubLink"),
             ]),
         .executableTarget(
@@ -36,7 +39,8 @@ let package = Package(
         .testTarget(name: "HubCoreTests", dependencies: ["HubCore", .product(name: "NoodleCore", package: "noodle"),
                                                         .product(name: "HubLink", package: "HubLink"),
                                                         .product(name: "NoodleHubClient", package: "noodle"),
-                                                        .product(name: "NoodleMCP", package: "noodle")]),
+                                                        .product(name: "NoodleMCP", package: "noodle"),
+                                                        .product(name: "ComputerBridge", package: "Bridge")]),
     ],
     swiftLanguageModes: [.v5]
 )

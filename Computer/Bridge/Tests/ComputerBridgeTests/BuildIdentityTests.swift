@@ -33,18 +33,28 @@ final class BuildIdentityTests: XCTestCase {
     }
 
     func testNoodlesComputerToolExtensionIsAClientAndTheSamePrincipalAsNoodle() {
-        XCTAssertEqual(ComputerBuildIdentity.production.clientIDs, ["com.pdparchitect.noodle", "com.pdparchitect.noodle.tools.computer"])
-        XCTAssertEqual(ComputerBuildIdentity.development.clientIDs, ["com.pdparchitect.noodle.local", "com.pdparchitect.noodle.local.tools.computer"])
+        XCTAssertEqual(ComputerBuildIdentity.production.noodleIDs, ["com.pdparchitect.noodle", "com.pdparchitect.noodle.tools.computer"])
+        XCTAssertEqual(ComputerBuildIdentity.development.noodleIDs, ["com.pdparchitect.noodle.local", "com.pdparchitect.noodle.local.tools.computer"])
         XCTAssertEqual(ComputerBuildIdentity.identify("com.pdparchitect.noodle.local.tools.computer"), .development)
         // Terminals belong to a bot, not to whichever Noodle process opened them: Noodle must
         // be able to revoke a terminal its tool extension opened.
         for build in ComputerBuildIdentity.allCases {
-            for client in build.clientIDs { XCTAssertEqual(ComputerBuildIdentity.principal(for: client), build.clientIDs[0], client) }
+            for client in build.noodleIDs { XCTAssertEqual(ComputerBuildIdentity.principal(for: client), build.noodleIDs[0], client) }
         }
         XCTAssertEqual(ComputerBuildIdentity.principal(for: "com.example.other"), "com.example.other")
         for other in ["com.pdparchitect.noodle.tools.browser", "com.pdparchitect.noodle.tools.computer.evil", "com.pdparchitect.noodle.tools"] {
             XCTAssertNil(ComputerBuildIdentity.identify(other), other)
         }
+    }
+
+    /// Noodle Hub runs its bots' computers on its own Mac, as a separate owner of their terminals.
+    func testNoodleHubIsAClientInItsChannelAndItsOwnPrincipal() {
+        XCTAssertTrue(ComputerBuildIdentity.production.clientIDs.contains("com.pdparchitect.noodle.hub"))
+        XCTAssertTrue(ComputerBuildIdentity.development.clientIDs.contains("com.pdparchitect.noodle.hub.local"))
+        XCTAssertFalse(ComputerBuildIdentity.production.clientIDs.contains("com.pdparchitect.noodle.hub.local"))
+        XCTAssertEqual(ComputerBuildIdentity.identify("com.pdparchitect.noodle.hub.local"), .development)
+        XCTAssertEqual(ComputerBuildIdentity.principal(for: "com.pdparchitect.noodle.hub"), "com.pdparchitect.noodle.hub")
+        XCTAssertNil(ComputerBuildIdentity.identify("com.pdparchitect.noodle.hub.agent-host"))
     }
 
     func testMispackagedLocalAppCannotUseProductionSocket() throws {

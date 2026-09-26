@@ -13,6 +13,7 @@ import NoodleRuntime
     private let runtime: AgentRuntimeCoordinator
     private let access: HubAccess
     private let connections: HubConnections
+    private let computers: HubComputers
     /// Serves bots the tools their owners assigned them from the Hub's own connections.
     private var toolBroker: ToolBridgeBroker?
     private let messenger: MessengerBroker
@@ -26,14 +27,16 @@ import NoodleRuntime
     private var phases: [UUID: AgentRuntimePhase] = [:]
 
     public init(repository: WorkspaceRepository, runtime: AgentRuntimeCoordinator, access: HubAccess,
-                connections: HubConnections, uploads: URL) {
+                connections: HubConnections, computers: HubComputers, uploads: URL) {
         self.uploads = uploads
         self.repository = repository
         self.runtime = runtime
         self.access = access
         self.connections = connections
+        self.computers = computers
         messenger = MessengerBroker(repository: repository)
         connections.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
+        computers.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
     }
 
     /// Runs every bot, the messenger they reply through, and the checks that keep them going.
@@ -65,7 +68,12 @@ import NoodleRuntime
     public func startTools() throws {
         if toolBroker == nil {
             let assignments = connections.assignments
-            let broker = ToolBridgeBroker(registry: connections.tools) { assignments.assignments(for: $0) }
+            // Tools post into the bot's conversations here and read its files, as in Noodle.
+            let host = ToolHostServices.repository(repository, revoked: { [weak self] kind, id, agent in
+                guard kind == "computer", let computer = UUID(uuidString: id) else { return }
+                Task { @MainActor in self?.computers.revoke(computer: computer, agent: agent) }
+            }) { assignments.assignments(for: $0) }
+            let broker = ToolBridgeBroker(registry: connections.tools, host: host) { assignments.assignments(for: $0) }
             // A bot's AGENTS.md lists its tool skills once they are written.
             broker.onSkillsChanged = { [weak self] id in
                 Task { @MainActor in
@@ -286,6 +294,7 @@ import NoodleRuntime
         }
         if toolBroker != nil { try? startTools() }
         connections.forget(bot: agent.id)
+        computers.forget(bot: agent.id)
         access.setOwner(nil, ofBot: agent.id)
     }
 

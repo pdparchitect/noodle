@@ -7,9 +7,9 @@ import NoodleMCP
 /// when that user assigns it, and keeps its sign-in in the Hub's Keychain, where bots never see it.
 @MainActor public final class HubConnections {
     /// The providers the Hub's tool broker serves bots from.
-    public let tools = ToolProviderRegistry()
+    public let tools: ToolProviderRegistry
     /// What each bot is granted, read by the broker for every call.
-    public let assignments = ToolAssignmentStore()
+    public let assignments: ToolAssignmentStore
     /// Called after grants change, so bots' skills follow.
     public var onAssignmentsChange: (() -> Void)?
     /// Called with the owner when a sign-in ends, whether it worked or not.
@@ -29,7 +29,10 @@ import NoodleMCP
     /// Sign-ins waiting for the device's browser to come back.
     private var pages: [UUID: (token: UUID, reply: CheckedContinuation<URL, Error>)] = [:]
 
-    public init(root: URL, access: HubAccess, service: MCPService) {
+    public init(root: URL, access: HubAccess, service: MCPService,
+                tools: ToolProviderRegistry = ToolProviderRegistry(), assignments: ToolAssignmentStore = ToolAssignmentStore()) {
+        self.tools = tools
+        self.assignments = assignments
         self.root = root
         self.access = access
         self.service = service

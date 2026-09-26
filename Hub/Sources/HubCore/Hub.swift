@@ -1,5 +1,7 @@
+import ComputerBridge
 import Foundation
 import HubLink
+import NoodleComputerTools
 import NoodleCore
 import NoodleMCP
 import NoodleRuntime
@@ -15,10 +17,13 @@ import NoodleRuntime
     public let usage: UsageHistory
     public let access: HubAccess
     public let connections: HubConnections
+    public let computers: HubComputers
     public let bots: HubBots
     public let link: HubLinkService
 
-    public init(root: URL, messenger: URL?, linkPort: UInt16 = LinkEndpoint.defaultPort, router: (any RouterPortMapper)? = nil) {
+    /// `computer` reaches Noodle Computer on this Mac; tests pass their own.
+    public init(root: URL, messenger: URL?, linkPort: UInt16 = LinkEndpoint.defaultPort, router: (any RouterPortMapper)? = nil,
+                computer: ComputerToolProvider.Transport? = nil) {
         repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: messenger)
         // Only the Hub's own storage holds harnesses its Agent Host will trust.
         let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses)
@@ -28,9 +33,14 @@ import NoodleRuntime
         usage = UsageHistory(url: root.appendingPathComponent("usage.sqlite"))
         runtime.onUsage = { [usage] in usage.record($0) }
         access = HubAccess(url: root.appendingPathComponent("access.json"))
+        // One broker serves every tool a bot is given here, whichever kind it is.
+        let tools = ToolProviderRegistry(), assignments = ToolAssignmentStore()
         connections = HubConnections(root: root, access: access,
-                                     service: MCPService(namespace: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle.hub"))
-        bots = HubBots(repository: repository, runtime: runtime, access: access, connections: connections,
+                                     service: MCPService(namespace: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle.hub"),
+                                     tools: tools, assignments: assignments)
+        computers = HubComputers(root: root, access: access, tools: tools, assignments: assignments,
+                                 call: computer ?? ComputerToolProvider.liveTransport())
+        bots = HubBots(repository: repository, runtime: runtime, access: access, connections: connections, computers: computers,
                        uploads: root.appendingPathComponent("Uploads", isDirectory: true))
         link = HubLinkService(hubName: Host.current().localizedName ?? "Noodle Hub",
                               directory: root.appendingPathComponent("Link", isDirectory: true),
@@ -41,6 +51,7 @@ import NoodleRuntime
     public func remove(_ user: HubUser) {
         bots.removeBots(of: user)
         connections.removeConnections(of: user)
+        computers.removeComputers(of: user)
         access.remove(user)
     }
 

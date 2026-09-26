@@ -62,6 +62,8 @@
 	<!-- The Hub and its Agent Host accept only each other. -->
 	<key>NoodleSigningTeam</key>
 	<string>$(DEVELOPMENT_TEAM)</string>
+	<key>NoodleComputerGroup</key>
+	<string>$(DEVELOPMENT_TEAM).com.pdparchitect.noodle.computers$(HUB_COMPANION_SUFFIX)</string>
 	<key>NoodleApplicationIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>NoodleAgentHostService</key>

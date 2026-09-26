@@ -6,8 +6,14 @@ extension ComputerToolProvider {
     /// The provider as it runs inside Noodle's Computer tool extension: the companion's
     /// signed socket in the shared group container, starting Noodle Computer when needed.
     public static func live() -> ComputerToolProvider {
+        ComputerToolProvider(stagingRoot: liveStagingRoot, transport: liveTransport())
+    }
+    /// Where the signed socket and file transfers live, in the shared group container.
+    public static let liveStagingRoot: @Sendable () throws -> URL = { try ComputerConnection.socketURL().deletingLastPathComponent() }
+    /// The signed socket, starting Noodle Computer when needed.
+    public static func liveTransport() -> Transport {
         let companion = ComputerCompanion()
-        return ComputerToolProvider(stagingRoot: { try ComputerConnection.socketURL().deletingLastPathComponent() }) { try await companion.call($0) }
+        return { try await companion.call($0) }
     }
 }
 

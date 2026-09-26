@@ -14,16 +14,21 @@ cmp "$project_root/Hub/Support/AppSymbol.svg" "$app/Contents/Resources/AppSymbol
 if [[ "$bundle" == com.pdparchitect.noodle.hub ]]; then zsh "$project_root/scripts/verify-launch-hooks.sh" "$app"; fi
 zsh "$project_root/scripts/verify-updater.sh" "$app"
 zsh "$project_root/scripts/verify-agent-host.sh" "$app"
-# The signed app holds exactly Hub/Support/Hub.entitlements, with its bundle identifier filled in.
+# The signed app holds exactly Hub/Support/Hub.entitlements, with its bundle identifier, team and
+# Computer pairing filled in.
+team="$(codesign -dv --verbose=4 "$app" 2>&1 | awk -F= '/^TeamIdentifier=/ { print $2 }')"
+suffix=""; [[ "$bundle" == *.local ]] && suffix=".local"
 signed="$(mktemp /tmp/hub-entitlements.XXXXXX)"
 trap 'rm -f "$signed"' EXIT
 codesign -d --entitlements :- "$app" > "$signed" 2>/dev/null
-python3 - "$signed" "$project_root/Hub/Support/Hub.entitlements" "$bundle" <<'PY'
+python3 - "$signed" "$project_root/Hub/Support/Hub.entitlements" "$bundle" "$team" "$suffix" <<'PY'
 import plistlib, sys
 signed, expected = (plistlib.load(open(path, 'rb')) for path in sys.argv[1:3])
-bundle = sys.argv[3]
+bundle, team, suffix = sys.argv[3:6]
 def fill(value):
-    if isinstance(value, str): return value.replace('$(PRODUCT_BUNDLE_IDENTIFIER)', bundle)
+    if isinstance(value, str):
+        return (value.replace('$(PRODUCT_BUNDLE_IDENTIFIER)', bundle).replace('$(TeamIdentifierPrefix)', team + '.')
+                .replace('$(HUB_COMPANION_SUFFIX)', suffix))
     if isinstance(value, list): return [fill(item) for item in value]
     if isinstance(value, dict): return {key: fill(item) for key, item in value.items()}
     return value

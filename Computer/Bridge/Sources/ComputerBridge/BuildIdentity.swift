@@ -14,7 +14,7 @@ public enum ComputerBuildIdentity: String, CaseIterable, Sendable {
     }
     /// Noodle, then its bundled Computer tool extension. The extension forwards calls the
     /// Noodle broker already authorized; assignment decisions never move into it.
-    public var clientIDs: [String] {
+    public var noodleIDs: [String] {
         let noodle = switch self {
         case .production: "com.pdparchitect.noodle"
         case .development: "com.pdparchitect.noodle.local"
@@ -22,10 +22,19 @@ public enum ComputerBuildIdentity: String, CaseIterable, Sendable {
         }
         return [noodle, noodle + ".tools.computer"]
     }
+    /// Noodle Hub, which runs the computers of the bots people keep on it.
+    public var hubID: String {
+        switch self {
+        case .production: "com.pdparchitect.noodle.hub"
+        case .development: "com.pdparchitect.noodle.hub.local"
+        case .testing: "com.pdparchitect.noodle.hub.tests"
+        }
+    }
+    public var clientIDs: [String] { noodleIDs + [hubID] }
     /// Every Noodle client of one channel is the same owner of a bot's terminals, so
-    /// Noodle can revoke what its tool extension opened.
+    /// Noodle can revoke what its tool extension opened. The Hub owns its own.
     public static func principal(for clientID: String) -> String {
-        allCases.first { $0.clientIDs.contains(clientID) }?.clientIDs[0] ?? clientID
+        allCases.first { $0.noodleIDs.contains(clientID) }?.noodleIDs[0] ?? clientID
     }
     public var appName: String {
         switch self {
