@@ -23,7 +23,7 @@ import XCTest
         try hub.repository.prepare()
         let link = HubLinkService(hubName: "Mac mini", directory: root.appendingPathComponent("Hub/Link"),
                                   access: hub.access, profiles: hub.harnessProfiles, bots: hub.bots,
-                                  connections: hub.connections, port: 0,
+                                  connections: hub.connections, computers: hub.computers, port: 0,
                                   localEndpoints: { [LinkEndpoint(host: "::1", port: $0)] })
         await link.start()
         addTeardownBlock { await MainActor.run { link.stop() } }

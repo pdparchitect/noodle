@@ -105,6 +105,17 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case signIn(connectionID: UUID, redirect: URL)
     /// The address the browser returned to, which carries the sign-in's answer.
     case finishSignIn(connectionID: UUID, callback: URL)
+    /// This user's computers on the Hub.
+    case computers
+    /// The kinds of computer the Hub can make.
+    case computerTemplates
+    /// Starts making a computer for this user. Making one can take many minutes, so the Hub
+    /// answers at once and pushes `computerCreated` with the same `requestID` when it is done.
+    case createComputer(requestID: UUID, LinkComputerDraft)
+    /// Changes one of this user's computers. Answers with it.
+    case updateComputer(id: UUID, LinkComputerDraft)
+    /// Replaces which of this user's computers one of their bots may use.
+    case assignComputers(botID: UUID, computerIDs: [UUID])
 }
 
 public enum LinkResponse: Codable, Equatable, Sendable {
@@ -115,6 +126,9 @@ public enum LinkResponse: Codable, Equatable, Sendable {
     case message(LinkMessage)
     case connections([LinkConnection])
     case connection(LinkConnection)
+    case computers([LinkComputer])
+    case computer(LinkComputer)
+    case computerTemplates([LinkComputerTemplate])
     /// A piece of a file, and the file's full size.
     case chunk(data: Data, total: Int)
     case done
@@ -133,6 +147,70 @@ public enum LinkEvent: Codable, Equatable, Sendable {
     case connectionsChanged
     /// Open this page in the browser to sign a connection in, then send `finishSignIn`.
     case signInPage(connectionID: UUID, url: URL)
+    /// This user's computers or their bots changed.
+    case computersChanged
+    /// A computer asked for with `createComputer` was made, or why it was not.
+    case computerCreated(requestID: UUID, computer: LinkComputer?, error: String?)
+}
+
+/// What a device sets on a computer it makes or edits on the Hub. Nil fields stay as they are.
+public struct LinkComputerDraft: Codable, Equatable, Sendable {
+    /// The template a new computer is made from; ignored when editing.
+    public var template: String?
+    public var name: String
+    public var description: String?
+    public var symbol: String?
+    public var colour: Int?
+
+    public init(template: String? = nil, name: String, description: String? = nil, symbol: String? = nil, colour: Int? = nil) {
+        self.template = template
+        self.name = name
+        self.description = description
+        self.symbol = symbol
+        self.colour = colour
+    }
+}
+
+/// A computer one user keeps on the Hub.
+public struct LinkComputer: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var name: String
+    public var description: String?
+    public var kind: String
+    public var state: String
+    public var symbol: String
+    public var colour: Int
+    public var icon: Data?
+    /// The bots it is assigned to.
+    public var botIDs: [UUID]
+
+    public init(id: UUID, name: String, description: String? = nil, kind: String, state: String, symbol: String,
+                colour: Int = 0, icon: Data? = nil, botIDs: [UUID] = []) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.kind = kind
+        self.state = state
+        self.symbol = symbol
+        self.colour = colour
+        self.icon = icon
+        self.botIDs = botIDs
+    }
+}
+
+/// A kind of computer the Hub can make.
+public struct LinkComputerTemplate: Codable, Equatable, Identifiable, Sendable {
+    public var id: String
+    public var name: String
+    public var description: String
+    public var symbol: String
+
+    public init(id: String, name: String, description: String, symbol: String) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.symbol = symbol
+    }
 }
 
 /// What a device sets on a tool connection it keeps on the Hub.

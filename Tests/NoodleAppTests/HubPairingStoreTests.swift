@@ -49,10 +49,10 @@ final class HubHarnessChoiceTests: XCTestCase {
 
 /// A bot kept on a Hub uses only the Hub's tools, never this Mac's.
 @MainActor final class HubBotAssignmentTests: XCTestCase {
-    /// Its Tools tab lists the Hub's connections; this Mac's computers and browsers are not offered.
+    /// Its Tools and Computers tabs list the Hub's; this Mac's browsers are not offered.
     func testTheEditorOffersAHubBotOnlyTheHubsTools() {
         let choice = HubHarnessChoice(hub: LinkIdentity().publicKey, provider: "claude-code", profile: nil)
-        XCTAssertEqual(BotEditorTab.shown(onHub: HubHarnessChoice(identifier: choice.identifier) != nil), [.general, .runtime, .mcp])
+        XCTAssertEqual(BotEditorTab.shown(onHub: HubHarnessChoice(identifier: choice.identifier) != nil), [.general, .runtime, .mcp, .computers])
         XCTAssertEqual(BotEditorTab.shown(onHub: false), BotEditorTab.allCases)
     }
 

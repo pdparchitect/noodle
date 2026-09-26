@@ -26,6 +26,10 @@ import Observation
     @ObservationIgnored public var onChange: (() -> Void)?
     /// This Mac's user's tool connections on the Hub, as last listed.
     public private(set) var connections: [LinkConnection] = []
+    /// This Mac's user's computers on the Hub, as last listed.
+    public private(set) var computers: [LinkComputer] = []
+    /// Computers being made, waiting for the Hub to say they are done.
+    @ObservationIgnored private var making: [UUID: CheckedContinuation<LinkComputer, Error>] = [:]
     /// Opens a connection's sign-in page in the browser and returns the address it came back to.
     @ObservationIgnored public var onSignInPage: ((LinkConnection, URL) async throws -> URL)?
 
@@ -118,6 +122,55 @@ import Observation
         _ = try await pairing.request(.signIn(connectionID: id, redirect: redirect))
     }
 
+    public func computerTemplates() async throws -> [LinkComputerTemplate] {
+        guard case .computerTemplates(let templates) = try await pairing.request(.computerTemplates) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        return templates
+    }
+
+    /// Makes a computer on the Hub, which may first download its image. Needs `run` to be
+    /// following the Hub, which says when the computer is ready.
+    public func createComputer(_ draft: LinkComputerDraft) async throws -> LinkComputer {
+        let id = UUID()
+        let made = try await withCheckedThrowingContinuation { continuation in
+            making[id] = continuation
+            Task {
+                do { _ = try await pairing.request(.createComputer(requestID: id, draft)) }
+                catch { making.removeValue(forKey: id)?.resume(throwing: error) }
+            }
+        }
+        try await syncComputers()
+        return made
+    }
+
+    public func updateComputer(_ id: UUID, with draft: LinkComputerDraft) async throws -> LinkComputer {
+        guard case .computer(let changed) = try await pairing.request(.updateComputer(id: id, draft)) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        try await syncComputers()
+        return changed
+    }
+
+    /// The Hub computers a bot kept there may use, by its local stand-in.
+    public func computerIDs(forAgent id: UUID) -> Set<UUID> {
+        guard let entry = entries.first(where: { $0.agent == id }) else { return [] }
+        return Set(computers.filter { $0.botIDs.contains(entry.remote) }.map(\.id))
+    }
+
+    public func assignComputers(_ ids: Set<UUID>, toAgent id: UUID) async throws {
+        guard let entry = entries.first(where: { $0.agent == id }) else { throw LinkError("That bot is not on this Hub.") }
+        _ = try await pairing.request(.assignComputers(botID: entry.remote, computerIDs: ids.sorted { $0.uuidString < $1.uuidString }))
+        try await syncComputers()
+    }
+
+    private func syncComputers() async throws {
+        guard case .computers(let listed) = try await pairing.request(.computers) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        computers = listed
+    }
+
     private func syncConnections() async throws {
         guard case .connections(let listed) = try await pairing.request(.connections) else {
             throw LinkError("The Hub sent an unexpected answer.")
@@ -142,6 +195,7 @@ import Observation
         do {
             try await syncBots()
             try await syncConnections()
+            try await syncComputers()
             for entry in entries { try await syncMessages(entry) }
             try await sendPending()
             error = nil
@@ -177,6 +231,11 @@ import Observation
                         if let entry = entries.first(where: { $0.remoteConversation == id }) { try await syncMessages(entry) }
                     case .connectionsChanged:
                         try await syncConnections()
+                    case .computersChanged:
+                        try await syncComputers()
+                    case .computerCreated(let id, let computer, let error):
+                        if let computer { making.removeValue(forKey: id)?.resume(returning: computer) }
+                        else { making.removeValue(forKey: id)?.resume(throwing: LinkError(error ?? "The Hub could not make the computer.")) }
                     case .signInPage(let id, let url):
                         // The person may take minutes in the browser; other events keep flowing meanwhile.
                         Task { await openSignInPage(id, url: url) }

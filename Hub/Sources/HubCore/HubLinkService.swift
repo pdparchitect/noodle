@@ -1,3 +1,4 @@
+import ComputerBridge
 import Foundation
 import HubLink
 import NoodleCore
@@ -42,6 +43,7 @@ import Observation
     @ObservationIgnored private let profiles: HarnessProfilesController
     @ObservationIgnored private let bots: HubBots?
     @ObservationIgnored private let connections: HubConnections?
+    @ObservationIgnored private let computers: HubComputers?
     /// Open event streams, by the key of the device holding each.
     @ObservationIgnored private var streams: [ObjectIdentifier: LinkStream] = [:]
     @ObservationIgnored private let port: UInt16
@@ -60,7 +62,8 @@ import Observation
     }
 
     public init(hubName: String, directory: URL, access: HubAccess, profiles: HarnessProfilesController,
-                bots: HubBots? = nil, connections: HubConnections? = nil, port: UInt16 = LinkEndpoint.defaultPort, router: (any RouterPortMapper)? = nil,
+                bots: HubBots? = nil, connections: HubConnections? = nil, computers: HubComputers? = nil,
+                port: UInt16 = LinkEndpoint.defaultPort, router: (any RouterPortMapper)? = nil,
                 localEndpoints: @escaping (UInt16) -> [LinkEndpoint] = LinkEndpoint.local(port:),
                 now: @escaping () -> Date = Date.init) {
         self.hubName = hubName
@@ -69,6 +72,7 @@ import Observation
         self.profiles = profiles
         self.bots = bots
         self.connections = connections
+        self.computers = computers
         self.port = port
         routerMapper = router
         self.localEndpoints = localEndpoints
@@ -149,7 +153,7 @@ import Observation
                               token: token, expires: expires)
     }
 
-    private func reply(to data: Data, from key: LinkPublicKey) -> LinkReply {
+    private func reply(to data: Data, from key: LinkPublicKey) async -> LinkReply {
         let request: LinkRequest
         switch LinkProtocol.decode(data) {
         case .success(let decoded): request = decoded
@@ -166,7 +170,7 @@ import Observation
         }
         let response: LinkResponse
         do {
-            response = try handle(request, from: key)
+            response = try await handle(request, from: key)
         } catch {
             response = .failure(error.localizedDescription)
         }
@@ -193,7 +197,7 @@ import Observation
         for stream in streams.values where keys.contains(stream.peer) { stream.send(payload) }
     }
 
-    private func handle(_ request: LinkRequest, from key: LinkPublicKey) throws -> LinkResponse {
+    private func handle(_ request: LinkRequest, from key: LinkPublicKey) async throws -> LinkResponse {
         switch request {
         case .enroll(let token, let deviceName):
             let digest = LinkInvitation.tokenDigest(token)
@@ -261,7 +265,42 @@ import Observation
         case .finishSignIn(let connectionID, let callback):
             try hubConnections().finishSignIn(connectionID, callback: callback, for: try user(key))
             return .done
+        case .computers:
+            let computers = try hubComputers()
+            await computers.refresh()
+            return .computers(computers.link(for: try user(key)))
+        case .computerTemplates:
+            return .computerTemplates(try await hubComputers().templates().map {
+                LinkComputerTemplate(id: $0.id, name: $0.name, description: $0.description, symbol: $0.symbol)
+            })
+        case .createComputer(let requestID, let draft):
+            let computers = try hubComputers(), user = try user(key)
+            Task { [weak self] in
+                do {
+                    let made = try await computers.create(ComputerDraft(draft), for: user)
+                    self?.push(.computerCreated(requestID: requestID, computer: computers.link(made, for: user), error: nil), to: user.id)
+                    self?.push(.computersChanged, to: user.id)
+                } catch {
+                    self?.push(.computerCreated(requestID: requestID, computer: nil, error: error.localizedDescription), to: user.id)
+                }
+            }
+            return .done
+        case .updateComputer(let id, let draft):
+            let computers = try hubComputers(), user = try user(key)
+            let changed = try await computers.update(id, with: ComputerDraft(draft), for: user)
+            push(.computersChanged, to: user.id)
+            return .computer(computers.link(changed, for: user))
+        case .assignComputers(let botID, let computerIDs):
+            let user = try user(key)
+            try hubComputers().assign(Set(computerIDs), to: botID, for: user)
+            push(.computersChanged, to: user.id)
+            return .done
         }
+    }
+
+    private func hubComputers() throws -> HubComputers {
+        guard let computers else { throw LinkError("This Noodle Hub does not keep computers.") }
+        return computers
     }
 
     private func hubConnections() throws -> HubConnections {

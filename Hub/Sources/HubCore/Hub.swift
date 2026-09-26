@@ -44,7 +44,8 @@ import NoodleRuntime
                        uploads: root.appendingPathComponent("Uploads", isDirectory: true))
         link = HubLinkService(hubName: Host.current().localizedName ?? "Noodle Hub",
                               directory: root.appendingPathComponent("Link", isDirectory: true),
-                              access: access, profiles: harnessProfiles, bots: bots, connections: connections, port: linkPort, router: router)
+                              access: access, profiles: harnessProfiles, bots: bots, connections: connections,
+                              computers: computers, port: linkPort, router: router)
     }
 
     /// Removes a user with their devices and the bots they keep here.

@@ -10,8 +10,8 @@ import NoodleRuntimeSettings
 enum BotEditorTab: String, CaseIterable {
     case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers", browsers = "Browsers"
 
-    /// A bot on a Noodle Hub uses only the Hub's tool connections, never this Mac's computers or browsers.
-    static func shown(onHub: Bool) -> [BotEditorTab] { onHub ? [.general, .runtime, .mcp] : allCases }
+    /// A bot on a Noodle Hub uses only the Hub's connections and computers, never this Mac's.
+    static func shown(onHub: Bool) -> [BotEditorTab] { onHub ? [.general, .runtime, .mcp, .computers] : allCases }
 }
 
 private struct BotEditorTabPicker: View {
@@ -132,7 +132,9 @@ struct NewBotSheet: View {
 
                 NameValidationMessage(name: name)
 
-                BotEditorTabPicker(selection: $selectedTab, harnessIdentifier: selectedHarnessIdentifier) { mcpConnectionIDs = [] }
+                BotEditorTabPicker(selection: $selectedTab, harnessIdentifier: selectedHarnessIdentifier) {
+                    mcpConnectionIDs = []; computerIDs = []
+                }
                 switch selectedTab {
                 case .general:
                     BotPublicDescriptionEditor(publicDescription: $publicDescription)
@@ -160,7 +162,11 @@ struct NewBotSheet: View {
                 case .browsers:
                     BrowserAssignmentPicker(controller: store.browsers, selectedIDs: $browserIDs)
                 case .computers:
-                    ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
+                    if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
+                        HubComputerPicker(mirror: mirror, selectedIDs: $computerIDs)
+                    } else {
+                        ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
+                    }
                 }
                 if selectedTab != .runtime {
                     HarnessExperimentalWarning(provider: HarnessProvider(rawValue: selectedHarnessIdentifier))
@@ -376,7 +382,11 @@ struct EditBotSheet: View {
                 case .browsers:
                     BrowserAssignmentPicker(controller: store.browsers, selectedIDs: $browserIDs)
                 case .computers:
-                    ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
+                    if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
+                        HubComputerPicker(mirror: mirror, selectedIDs: $computerIDs)
+                    } else {
+                        ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
+                    }
                 }
             }
             .padding(20)
@@ -399,6 +409,7 @@ struct EditBotSheet: View {
             if let mirror = store.hubMirror(forAgent: agent.id), let choice = mirror.harness(ofAgent: agent.id) {
                 selectedHarnessIdentifier = choice.identifier
                 mcpConnectionIDs = mirror.connectionIDs(forAgent: agent.id)
+                computerIDs = mirror.computerIDs(forAgent: agent.id)
             }
             if selectedHarnessIdentifier.isEmpty {
                 selectedHarnessIdentifier = store.runtime.availableInstallations.first?.provider.rawValue ?? ""

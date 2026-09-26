@@ -32,6 +32,21 @@ import NoodleCore
         registry.computers.filter { access.owner(ofComputer: $0.id) == user.id }
     }
 
+    /// The user's computers as their devices see them.
+    public func link(for user: HubUser) -> [LinkComputer] {
+        computers(for: user).map { link($0, for: user) }
+    }
+
+    public func link(_ computer: RemoteComputer, for user: HubUser) -> LinkComputer {
+        let bots = registry.agents.compactMap { key, ids -> UUID? in
+            guard ids.contains(computer.id), let bot = UUID(uuidString: key), access.owner(ofBot: bot) == user.id else { return nil }
+            return bot
+        }
+        return LinkComputer(id: computer.id, name: computer.name, description: computer.description, kind: computer.kind,
+                            state: computer.state, symbol: computer.symbol, colour: computer.colour, icon: computer.icon,
+                            botIDs: bots.sorted { $0.uuidString < $1.uuidString })
+    }
+
     /// The kinds of computer Noodle Computer on this Mac can make.
     public func templates() async throws -> [ComputerTemplateSummary] {
         try await manage(ComputerRequest(.templates)).templates ?? []
@@ -144,5 +159,11 @@ import NoodleCore
     private func publish() {
         assignments.replace("computer", with: registry.toolAssignments(readable: true))
         onAssignmentsChange?()
+    }
+}
+
+extension ComputerDraft {
+    public init(_ draft: LinkComputerDraft) {
+        self.init(template: draft.template, name: draft.name, description: draft.description, symbol: draft.symbol, colour: draft.colour)
     }
 }

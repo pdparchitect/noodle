@@ -1,8 +1,10 @@
 import AppKit
 import ComputerBridge
 import Foundation
+import HubLink
 import NoodleComputerTools
 import NoodleCore
+import NoodleHubClient
 import Observation
 import SwiftUI
 
@@ -380,6 +382,39 @@ struct NewComputerSheet: View {
                 onCreated(made)
                 dismiss()
             } catch { failure = error.localizedDescription }
+        }
+    }
+}
+
+/// The Computers tab of a bot kept on a Noodle Hub: the person's computers there, made in
+/// Noodle Computer on the Hub's Mac.
+struct HubComputerPicker: View {
+    let mirror: HubMirror
+    @Binding var selectedIDs: Set<UUID>
+    @State private var creating = false
+
+    var body: some View {
+        CompanionAssignmentPicker(title: "Computers", noun: "computer", symbol: "desktopcomputer",
+            items: mirror.computers.map {
+                CompanionAssignmentItem(id: $0.id, name: $0.name, state: $0.state, symbol: $0.symbol, colour: $0.colour,
+                                        icon: $0.icon, detail: $0.description)
+            }, selectedIDs: $selectedIDs,
+            createPrompt: VStack(spacing: 10) {
+                Image(systemName: "desktopcomputer").font(.largeTitle)
+                Text("No computers on this Hub")
+            }.foregroundStyle(.secondary).frame(maxWidth: .infinity),
+            openLibraryButton: EmptyView(), notice: EmptyView(), onNew: { creating = true })
+        .sheet(isPresented: $creating) {
+            NewComputerSheet(templates: {
+                try await mirror.computerTemplates().map {
+                    ComputerTemplateSummary(id: $0.id, name: $0.name, description: $0.description, symbol: $0.symbol)
+                }
+            }, create: { draft in
+                let made = try await mirror.createComputer(LinkComputerDraft(template: draft.template, name: draft.name,
+                    description: draft.description, symbol: draft.symbol, colour: draft.colour))
+                return RemoteComputer(id: made.id, name: made.name, description: made.description, kind: made.kind,
+                                      state: made.state, symbol: made.symbol, colour: made.colour, icon: made.icon)
+            }) { selectedIDs.insert($0.id) }
         }
     }
 }
