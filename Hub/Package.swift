@@ -15,6 +15,7 @@ let package = Package(
         .package(path: "../Shared/HubLink"),
         .package(path: "../Computer/Bridge"),
         .package(path: "../Browser/BrowserProtocol"),
+        .package(path: "../Applet/Protocol"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
     ],
     targets: [
@@ -28,6 +29,7 @@ let package = Package(
                 .product(name: "NoodleBrowserTools", package: "noodle"),
                 .product(name: "ComputerBridge", package: "Bridge"),
                 .product(name: "BrowserBridge", package: "BrowserProtocol"),
+                .product(name: "AppletBridge", package: "Protocol"),
                 .product(name: "HubLink", package: "HubLink"),
             ]),
         .executableTarget(
@@ -44,7 +46,8 @@ let package = Package(
                                                         .product(name: "NoodleHubClient", package: "noodle"),
                                                         .product(name: "NoodleMCP", package: "noodle"),
                                                         .product(name: "ComputerBridge", package: "Bridge"),
-                                                        .product(name: "BrowserBridge", package: "BrowserProtocol")]),
+                                                        .product(name: "BrowserBridge", package: "BrowserProtocol"),
+                                                        .product(name: "AppletBridge", package: "Protocol")]),
     ],
     swiftLanguageModes: [.v5]
 )

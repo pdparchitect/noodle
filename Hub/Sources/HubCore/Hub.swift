@@ -1,3 +1,4 @@
+import AppletBridge
 import BrowserBridge
 import ComputerBridge
 import Foundation
@@ -24,9 +25,10 @@ import NoodleRuntime
     public let bots: HubBots
     public let link: HubLinkService
 
-    /// `computer` and `browser` reach Noodle Computer and Noodle Browser on this Mac; tests pass their own.
+    /// `computer`, `browser` and `applet` reach Noodle Computer, Browser and Applet on this Mac; tests pass their own.
     public init(root: URL, messenger: URL?, linkPort: UInt16 = LinkEndpoint.defaultPort, router: (any RouterPortMapper)? = nil,
-                computer: ComputerToolProvider.Transport? = nil, browser: BrowserToolProvider.Transport? = nil) {
+                computer: ComputerToolProvider.Transport? = nil, browser: BrowserToolProvider.Transport? = nil,
+                applet: (@Sendable (AppletRequest) async throws -> AppletResponse)? = nil) {
         repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: messenger)
         // Only the Hub's own storage holds harnesses its Agent Host will trust.
         let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses)
@@ -46,6 +48,7 @@ import NoodleRuntime
         browsers = HubBrowsers(root: root, access: access, tools: tools, assignments: assignments,
                                call: browser ?? BrowserToolProvider.liveTransport())
         bots = HubBots(repository: repository, runtime: runtime, access: access, connections: connections, computers: computers, browsers: browsers,
+                       applets: AppletController(repository: repository, connection: applet),
                        uploads: root.appendingPathComponent("Uploads", isDirectory: true))
         link = HubLinkService(hubName: Host.current().localizedName ?? "Noodle Hub",
                               directory: root.appendingPathComponent("Link", isDirectory: true),

@@ -1,3 +1,4 @@
+import AppletBridge
 import BrowserBridge
 import ComputerBridge
 import Foundation
@@ -52,6 +53,8 @@ import Observation
     private enum SurfaceTarget {
         case browser(UUID, tab: UUID)
         case computer(UUID, terminal: UUID?, bot: UUID)
+        /// A running session of a noodlet in Noodle Applet.
+        case noodlet(session: UUID)
     }
     /// Open surfaces: what each shows, the device watching it, and the pump feeding it.
     @ObservationIgnored private var surfaces: [UUID: (device: LinkPublicKey, user: HubUser, target: SurfaceTarget, pump: Task<Void, Never>)] = [:]
@@ -189,6 +192,15 @@ import Observation
                         throw LinkError("That browser is not yours or no longer exists.")
                     }
                     target = .browser(browser.reference.browser.id, tab: browser.reference.tabID)
+                } else if card.url != nil {
+                    let noodlet = try hubBots().noodlet(attachmentID, in: conversationID, for: user)
+                    var open = AppletRequest(.open)
+                    open.noodletID = noodlet
+                    open.mode = "background"
+                    guard let session = try await hubBots().applets.companion(open).sessionID else {
+                        throw LinkError("Noodle Applet did not start the noodlet.")
+                    }
+                    target = .noodlet(session: session)
                 } else if let computer = card.computer {
                     guard try hubComputers().computers(for: user).contains(where: { $0.id == computer.computer.id }) else {
                         throw LinkError("That computer is not yours or no longer exists.")
@@ -233,6 +245,8 @@ import Observation
                     try await browsers.surfaceFrame(browser: browser, tab: tab, for: user)
                 case .computer(let computer, let terminal, let bot):
                     try await computers.surfaceFrame(computer: computer, terminal: terminal, bot: bot, for: user)
+                case .noodlet(let session):
+                    try await self.bots?.applets.companion(AppletRequest(.surfaceFrame, sessionID: session)).surfaceFrame
                 }
             }
             do {
@@ -360,6 +374,10 @@ import Observation
                 try await hubBrowsers().surfaceInput(input, browser: browser, tab: tab, for: surface.user)
             case .computer(let computer, let terminal, let bot):
                 try await hubComputers().surfaceInput(input, computer: computer, terminal: terminal, bot: bot, for: surface.user)
+            case .noodlet(let session):
+                var request = AppletRequest(.surfaceInput, sessionID: session)
+                request.surfaceInput = input
+                _ = try await hubBots().applets.companion(request)
             }
             return .done
         case .browsers:

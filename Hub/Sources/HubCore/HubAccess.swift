@@ -77,6 +77,9 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
     public private(set) var computerOwners: [UUID: UUID] = [:]
     /// Which user each browser the Hub lends belongs to.
     public private(set) var browserOwners: [UUID: UUID] = [:]
+    /// Which bot shared each noodlet. Noodle Applet does not know; the Hub opens a noodlet only
+    /// from that bot's conversation.
+    public private(set) var noodletBots: [UUID: UUID] = [:]
     @ObservationIgnored private let url: URL
 
     private struct Stored: Codable {
@@ -87,6 +90,7 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         var connectionOwners: [UUID: UUID]?
         var computerOwners: [UUID: UUID]?
         var browserOwners: [UUID: UUID]?
+        var noodletBots: [UUID: UUID]?
     }
 
     public init(url: URL) {
@@ -99,6 +103,7 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
             connectionOwners = stored.connectionOwners ?? [:]
             computerOwners = stored.computerOwners ?? [:]
             browserOwners = stored.browserOwners ?? [:]
+            noodletBots = stored.noodletBots ?? [:]
         }
         if !plans.contains(where: \.isDefault) {
             plans.insert(HubPlan(id: HubPlan.defaultID, name: "Default"), at: 0)
@@ -157,6 +162,20 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
     public func owner(ofComputer computer: UUID) -> UUID? { computerOwners[computer] }
 
     public func owner(ofBrowser browser: UUID) -> UUID? { browserOwners[browser] }
+
+    public func bot(ofNoodlet noodlet: UUID) -> UUID? { noodletBots[noodlet] }
+
+    /// The first bot to share a noodlet keeps it; another bot sharing the same one does not take it over.
+    public func setBot(_ bot: UUID, ofNoodlet noodlet: UUID) {
+        guard noodletBots[noodlet] == nil else { return }
+        noodletBots[noodlet] = bot
+        save()
+    }
+
+    public func forgetNoodlets(of bot: UUID) {
+        noodletBots = noodletBots.filter { $0.value != bot }
+        save()
+    }
 
     public func setOwner(_ user: HubUser?, ofBrowser browser: UUID) {
         browserOwners[browser] = user?.id
@@ -254,7 +273,7 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(Stored(users: users, plans: plans, devices: devices, botOwners: botOwners,
                                                          connectionOwners: connectionOwners, computerOwners: computerOwners,
-                                                         browserOwners: browserOwners)) else { return }
+                                                         browserOwners: browserOwners, noodletBots: noodletBots)) else { return }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? AtomicFile.write(data, to: url)
     }

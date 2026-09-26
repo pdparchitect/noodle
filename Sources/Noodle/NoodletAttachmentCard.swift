@@ -1,5 +1,6 @@
 import AppKit
 import AppletBridge
+import NoodleRuntime
 import QuickLookThumbnailing
 import SwiftUI
 

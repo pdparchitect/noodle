@@ -1,6 +1,7 @@
 #if NOODLE_DEV_HOOKS
 import AppKit
 import AppletBridge
+import NoodleRuntime
 import NoodleCore
 import NoodleLaunchChecks
 import QuickLookUI

@@ -70,8 +70,8 @@ extension NoodleStore {
     }
 
     func openCompanion(_ attachment: ConversationAttachment) async throws {
-        // Browsers and computers on a Noodle Hub run on the Hub's Mac; their cards open a live view instead.
-        if attachment.isBrowserDocument || attachment.isComputerDocument,
+        // Browsers, computers and noodlets on a Noodle Hub run on the Hub's Mac; their cards open a live view instead.
+        if attachment.isBrowserDocument || attachment.isComputerDocument || attachment.url.flatMap(NoodletLink.id(in:)) != nil,
            hubMirrors.contains(where: { $0.owns(conversation: attachment.conversationID) }) {
             openSurfaceWindow?(HubSurfaceTarget(conversationID: attachment.conversationID, attachmentID: attachment.id,
                                                 title: attachment.browser?.reference.title ?? attachment.computer?.computer.name

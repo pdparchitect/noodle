@@ -96,7 +96,8 @@ let package = Package(
         .target(name: "NoodleSharing", dependencies: ["NoodleCore"]),
         /// Runs bots: harness processes, their discovery probes and message delivery. Shared by the
         /// apps that host bots, with none of their interface.
-        .target(name: "NoodleRuntime", dependencies: ["NoodleCore", "NoodleAgentBridge"], swiftSettings: developmentHooks),
+        .target(name: "NoodleRuntime", dependencies: ["NoodleCore", "NoodleAgentBridge", .product(name: "AppletBridge", package: "Protocol")],
+                swiftSettings: developmentHooks),
         /// The Harness, Heartbeat and Sandbox settings, shared by the apps that run bots.
         .target(name: "NoodleHubClient", dependencies: ["NoodleCore", .product(name: "HubLink", package: "HubLink"),
                                                        .product(name: "BrowserBridge", package: "BrowserProtocol"),

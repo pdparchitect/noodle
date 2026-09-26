@@ -7,6 +7,7 @@
 - Reach the Hub away from home. Open Port on Router in Settings > Network asks the router, through UPnP or NAT-PMP, to forward the Hub's port and keeps it open; the router's public address joins the addresses invitations carry, and paired devices pick it up when they next connect. Network says when the router cannot, for example when it sits behind another router or your provider shares its address.
 - React to your bots' messages from Noodle for iPhone, and see their reactions there as they happen. Paired devices also see what each bot is doing: working, ready, failed or offline.
 - Keep the transcript of voice messages sent to the Hub's bots, so bots read what was said.
+- Let the Hub's bots build and share noodlets with Noodle Applet on the Hub's Mac, as they do in Noodle. A shared noodlet opens live only for the owner of the bot that shared it. Install Noodle Applet on the Hub's Mac to use them.
 - Show what a bot's browser or computer card points at live to its owner in Noodle, and pass on their clicks, typing and scrolling.
 - Run browsers for the Hub's bots in Noodle Browser on the Hub's Mac. People make and delete them from Noodle; each belongs to the person who made it and reaches only the bots they choose. Install Noodle Browser on the Hub's Mac to use them.
 - Run computers for the Hub's bots in Noodle Computer on the Hub's Mac. People make and delete them from Noodle; each belongs to the person who made it and reaches only the bots they choose. Install Noodle Computer on the Hub's Mac to use them.

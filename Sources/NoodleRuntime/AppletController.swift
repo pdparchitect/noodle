@@ -6,8 +6,11 @@ import Observation
 
 /// Bot-bound filesystem mailbox. The signed Noodle process owns caller identity;
 /// CLI arguments never choose another bot's sessions or artifacts.
-@MainActor @Observable final class AppletController {
-    private(set) var failure: String?
+@MainActor @Observable public final class AppletController {
+    public private(set) var failure: String?
+    /// Told which bot shared which noodlet into which conversation, as on a Noodle Hub, which
+    /// decides who may open it: Applet itself does not know.
+    @ObservationIgnored public var onShared: ((_ noodlet: UUID, _ agent: UUID, _ conversation: UUID) -> Void)?
     @ObservationIgnored private let repository: WorkspaceRepository
     @ObservationIgnored private var agents: [AgentRecord] = []
     @ObservationIgnored private var tokens: [UUID: String] = [:]
@@ -22,14 +25,14 @@ import Observation
     @ObservationIgnored private var lastSkillRefresh = Date.distantPast
     @ObservationIgnored private let connection:
         (@Sendable (AppletRequest) async throws -> AppletResponse)?
-    init(
+    public init(
         repository: WorkspaceRepository,
         connection: (@Sendable (AppletRequest) async throws -> AppletResponse)? = nil
     ) {
         self.repository = repository
         self.connection = connection
     }
-    func start(agents: [AgentRecord]) {
+    public func start(agents: [AgentRecord]) {
         mailboxMonitor.reset()
         self.agents = agents
         tokens = tokens.filter { id, _ in agents.contains { $0.id == id } }
@@ -56,7 +59,7 @@ import Observation
     }
     /// Every bot gets the managed integration while the companion is installed.
     /// Refresh without restarting harnesses or interrupting their current work.
-    func refreshSkills() {
+    public func refreshSkills() {
         lastSkillRefresh = Date()
         let executable = repository.appletExecutableURL
         if executable != skillExecutableURL {
@@ -73,14 +76,14 @@ import Observation
             }
         }
     }
-    func openLibrary() async throws {
+    public func openLibrary() async throws {
         guard
             let url = AppletApplication.locate()
         else { throw AppletError("Build or install \(AppletBuildIdentity.current.appName) first.") }
         _ = try await NSWorkspace.shared.openApplication(
             at: url, configuration: NSWorkspace.OpenConfiguration())
     }
-    func resolvePreview(_ url: URL) async throws -> NoodletPreviewAccess {
+    public func resolvePreview(_ url: URL) async throws -> NoodletPreviewAccess {
         let id = try NoodletLink.requireID(in: url)
         var request = AppletRequest(.info)
         request.noodletID = id
@@ -89,13 +92,17 @@ import Observation
         return try NoodletPreviewAccess(response: response, expectedID: id)
     }
     @discardableResult
-    func openNoodlet(_ url: URL) async throws -> AppletResponse {
+    public func openNoodlet(_ url: URL) async throws -> AppletResponse {
         let id = try NoodletLink.requireID(in: url)
         var request = AppletRequest(.open)
         request.noodletID = id
         request.mode = "foreground"
         try Task.checkCancellation()
         return try await call(request).checked()
+    }
+    /// A request of the app itself, trusted by Applet as a local caller. Never on a bot's behalf.
+    public func companion(_ request: AppletRequest) async throws -> AppletResponse {
+        try await call(request).checked()
     }
     private func call(_ request: AppletRequest, authorize: () throws -> Void = {}) async throws -> AppletResponse {
         try authorize()
@@ -189,7 +196,7 @@ import Observation
             }
         }
     }
-    func perform(_ envelope: AppletAgentEnvelope, agent: AgentRecord) async throws -> AppletResponse
+    public func perform(_ envelope: AppletAgentEnvelope, agent: AgentRecord) async throws -> AppletResponse
     {
         func checkAccess() throws {
             guard agents.contains(where: { $0.id == agent.id }), tokens[agent.id] == envelope.token else {
@@ -202,6 +209,8 @@ import Observation
         }
         try checkAccess()
         var request = envelope.request
+        // Showing a noodlet to people is the app's, never a bot's.
+        guard !request.operation.isSurface else { throw AppletError("Unknown command. Use --help.") }
         request.includePreview = nil
         request.owner = agent.id.uuidString.lowercased()
         try request.validate()
@@ -257,6 +266,7 @@ import Observation
                 try? repository.removeAttachment(attachment)
                 throw error
             }
+            if let noodlet = NoodletLink.id(in: url) { onShared?(noodlet, agent.id, conversation) }
         }
         return response
     }

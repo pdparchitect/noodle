@@ -9,7 +9,10 @@ public enum AppletBuildIdentity: String, CaseIterable, Sendable {
     public var noodleID: String { "com.pdparchitect.noodle" + suffix }
     public var cliID: String { providerID + ".cli" }
     public var previewID: String { providerID + ".preview" }
-    public var clientIDs: [String] { [noodleID, cliID] }
+    /// Noodle Hub, which runs the noodlets of the bots people keep on it. Applet treats it as a
+    /// trusted local caller; the Hub decides which bot a noodlet belongs to.
+    public var hubID: String { "com.pdparchitect.noodle.hub" + suffix }
+    public var clientIDs: [String] { [noodleID, cliID, hubID] }
     public var groupSuffix: String { "com.pdparchitect.noodle.applets" + suffix }
     public var appName: String { "Noodle Applet" + (self == .development ? " Dev" : "") }
     public var fileExtension: String { self == .development ? "noodlet-dev" : "noodlet" }
@@ -18,7 +21,7 @@ public enum AppletBuildIdentity: String, CaseIterable, Sendable {
     private var suffix: String { self == .development ? ".local" : "" }
 
     public static func identify(_ identifier: String?) -> Self? {
-        allCases.first { [$0.providerID, $0.noodleID, $0.cliID, $0.previewID].contains(identifier ?? "") }
+        allCases.first { [$0.providerID, $0.noodleID, $0.cliID, $0.previewID, $0.hubID].contains(identifier ?? "") }
     }
     public static func document(_ url: URL) -> Self? {
         guard url.isFileURL else { return nil }

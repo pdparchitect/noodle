@@ -1,5 +1,6 @@
 import AppletBridge
 import NoodleCore
+import NoodleRuntime
 import XCTest
 
 @testable import Noodle
@@ -157,6 +158,43 @@ import XCTest
         do { _ = try await failed.openNoodlet(NoodletLink.url(for: id)); XCTFail("Missing package appeared to open") }
         catch { XCTAssertEqual(error.localizedDescription, "This noodlet is no longer available.") }
     }
+    /// Showing a noodlet to people is the app's; sharing one names the bot that shared it, which a
+    /// Noodle Hub uses to decide who may open it.
+    func testBotsCannotShowNoodletsToPeopleAndSharingNamesTheBot() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let repository = WorkspaceRepository(rootURL: root)
+        try repository.prepare()
+        let bot = try repository.createAgent(named: "Author").agent
+        let group = try repository.createGroup(named: "Shared", participantIDs: [bot.id], existingAgents: [bot])
+        let id = UUID()
+        let recorder = AppletRequestRecorder()
+        let controller = AppletController(repository: repository, connection: { request in
+            _ = await recorder.respond(request)
+            var response = AppletResponse()
+            if request.operation == .present { response.url = NoodletLink.url(for: id); response.title = "Game" }
+            return response
+        })
+        var shared: [(UUID, UUID, UUID)] = []
+        controller.onShared = { shared.append(($0, $1, $2)) }
+        controller.start(agents: [bot])
+        defer { controller.start(agents: []); try? FileManager.default.removeItem(at: root) }
+        func invoke(_ request: AppletRequest, in conversation: UUID? = nil) async throws -> AppletResponse {
+            try await controller.perform(AppletAgentEnvelope(token: try token(for: bot, repository: repository), request: request,
+                                                             conversationID: conversation), agent: bot)
+        }
+        for operation in [AppletOperation.surfaceFrame, .surfaceInput] {
+            var request = AppletRequest(operation, sessionID: UUID())
+            request.surfaceInput = .text("x")
+            do { _ = try await invoke(request); XCTFail("A bot used \(operation.rawValue)") } catch {}
+        }
+        let before = await recorder.requests
+        XCTAssertEqual(before.count, 0)
+        _ = try await invoke(AppletRequest(.present, sessionID: UUID()), in: group.id)
+        XCTAssertEqual(shared.map(\.0), [id])
+        XCTAssertEqual(shared.map(\.1), [bot.id])
+        XCTAssertEqual(shared.map(\.2), [group.id])
+    }
+
     func testOnlySentLinksGrantParticipantsSharedAccessAndNeverExposeBookmarks() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let repository = WorkspaceRepository(rootURL: root)

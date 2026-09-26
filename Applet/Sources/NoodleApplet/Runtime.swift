@@ -82,6 +82,8 @@ import AppletCore
   @Published private(set) var frontPackage: NoodletPackage?
   private var server: AppletConnectionServer?
   private var artifacts: [UUID: (owner: String, url: URL)] = [:]
+  /// Where a person watching an HTML noodlet remotely clicks and types, one per session.
+  private var surfaceInjectors: [UUID: (view: NSView, injector: SurfaceEventInjector)] = [:]
   private var origins: [String: String]
   private var owners: [String: String]
   private let defaults: UserDefaults
@@ -147,6 +149,9 @@ import AppletCore
       }
       if let path = request.path, AppletBuildIdentity.document(URL(fileURLWithPath: path)) != .current {
         throw AppletError("Use a .\(AppletBuildIdentity.current.fileExtension) package in this environment.", code: "environment-mismatch")
+      }
+      if request.operation.isSurface, identity == AppletBuildIdentity.current.cliID {
+        throw AppletError("Unknown command. Use --help.")
       }
       let owner =
         identity == AppletBuildIdentity.current.noodleID
@@ -349,6 +354,18 @@ import AppletCore
       }
       resolvedSession = session
       switch request.operation {
+      case .surfaceFrame:
+        let image = try await session.snapshot()
+        guard let picture = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+              let frame = SurfaceFrame(image: picture, size: session.size) else {
+          throw AppletError("The noodlet cannot be shown.")
+        }
+        var response = status(session)
+        response.surfaceFrame = frame
+        return response
+      case .surfaceInput:
+        try await deliver(request.surfaceInput!, to: session)
+        return status(session)
       case .status: return status(session)
       case .logs:
         let (data, next) = try session.log.read(offset: request.offset ?? 0)
@@ -467,6 +484,33 @@ import AppletCore
     response.permissions = AppletPermissions.status(package, defaults: defaults)
     response.state = "available"
     return response
+  }
+  /// What a person watching remotely did: real events in an HTML noodlet, the noodlet's own
+  /// controls in a native one.
+  private func deliver(_ input: SurfaceInput, to session: AppletSession) async throws {
+    guard session.state == "running" else {
+      throw AppletError("Session \(session.id) is \(session.state).", code: "session-not-running")
+    }
+    if let web = session.web {
+      if surfaceInjectors[session.id]?.view !== web.web {
+        surfaceInjectors[session.id] = (web.web, SurfaceEventInjector(view: web.web))
+      }
+      try surfaceInjectors[session.id]?.injector.deliver(input)
+      return
+    }
+    guard let native = session.native else { throw AppletError("The noodlet has no view.") }
+    var request = AppletRequest(.click, sessionID: session.id)
+    switch input {
+    case .pointer(.up, let x, let y, _): request.x = x; request.y = y
+    case .pointer: return
+    case .scroll(_, _, let dx, let dy): request = AppletRequest(.scroll, sessionID: session.id); request.toX = dx; request.toY = dy
+    case .text(let text): request = AppletRequest(.type, sessionID: session.id); request.text = text
+    case .key(let key):
+      let names: [SurfaceInput.Key: String] = [.enter: "Enter", .tab: "Tab", .escape: "Escape", .backspace: "Backspace", .space: " ",
+                                               .left: "ArrowLeft", .right: "ArrowRight", .up: "ArrowUp", .down: "ArrowDown"]
+      request = AppletRequest(.key, sessionID: session.id); request.text = names[key]
+    }
+    _ = try await native.perform(request)
   }
   private func belongs(_ package: NoodletPackage, owner: String) -> Bool {
     package.url.path.hasPrefix(

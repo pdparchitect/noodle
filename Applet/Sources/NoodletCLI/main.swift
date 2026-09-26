@@ -55,7 +55,7 @@ import Foundation
             name += "-" + sub
             args.removeFirst()
         }
-        guard let operation = AppletOperation(rawValue: name) else {
+        guard let operation = AppletOperation(rawValue: name), !operation.isSurface else {
             throw AppletError("Unknown command. Use --help.")
         }
         let booleans: Set<String> = ["--follow", "--text-output", "--test-clock"]

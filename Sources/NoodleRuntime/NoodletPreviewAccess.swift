@@ -2,12 +2,12 @@ import Foundation
 import AppletBridge
 
 /// Holds the provider's temporary file access while the attachment thumbnail loads.
-final class NoodletPreviewAccess {
-    let url: URL
-    let title: String
-    let imageData: Data?
+public final class NoodletPreviewAccess {
+    public let url: URL
+    public let title: String
+    public let imageData: Data?
     private let accessing: Bool
-    init(response: AppletResponse, expectedID: UUID) throws {
+    public init(response: AppletResponse, expectedID: UUID) throws {
         guard response.noodletID == expectedID, let bookmark = response.previewBookmark,
               bookmark.count <= 1_048_576 else { throw AppletError("Invalid noodlet preview response.") }
         var stale = false

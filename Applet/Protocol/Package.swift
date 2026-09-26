@@ -4,4 +4,5 @@ import PackageDescription
 let package = Package(
     name: "AppletProtocol", platforms: [.macOS(.v15)],
     products: [.library(name: "AppletBridge", targets: ["AppletBridge"])],
-    targets: [.target(name: "AppletBridge")], swiftLanguageModes: [.v5])
+    dependencies: [.package(path: "../../Shared/Surface")],
+    targets: [.target(name: "AppletBridge", dependencies: [.product(name: "Surface", package: "Surface")])], swiftLanguageModes: [.v5])

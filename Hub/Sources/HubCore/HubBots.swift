@@ -1,3 +1,4 @@
+import AppletBridge
 import BrowserBridge
 import Foundation
 import HubLink
@@ -16,6 +17,8 @@ import NoodleRuntime
     private let connections: HubConnections
     private let computers: HubComputers
     private let browsers: HubBrowsers
+    /// Passes the Hub's bots' `noodlet` commands to Noodle Applet on this Mac, as Noodle does.
+    public let applets: AppletController
     /// Serves bots the tools their owners assigned them from the Hub's own connections.
     private var toolBroker: ToolBridgeBroker?
     private let messenger: MessengerBroker
@@ -29,7 +32,8 @@ import NoodleRuntime
     private var phases: [UUID: AgentRuntimePhase] = [:]
 
     public init(repository: WorkspaceRepository, runtime: AgentRuntimeCoordinator, access: HubAccess,
-                connections: HubConnections, computers: HubComputers, browsers: HubBrowsers, uploads: URL) {
+                connections: HubConnections, computers: HubComputers, browsers: HubBrowsers,
+                applets: AppletController, uploads: URL) {
         self.uploads = uploads
         self.repository = repository
         self.runtime = runtime
@@ -37,6 +41,8 @@ import NoodleRuntime
         self.connections = connections
         self.computers = computers
         self.browsers = browsers
+        self.applets = applets
+        applets.onShared = { [access] noodlet, bot, _ in access.setBot(bot, ofNoodlet: noodlet) }
         messenger = MessengerBroker(repository: repository)
         connections.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
         computers.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
@@ -53,6 +59,7 @@ import NoodleRuntime
         let now = Date()
         agents.forEach { runtime.seedHeartbeatActivity(for: $0.id, at: now) }
         runtime.startAll(agents: agents, repository: repository)
+        applets.start(agents: agents)
         try startTools()
         running = true
         loop = Task { [weak self] in
@@ -93,6 +100,7 @@ import NoodleRuntime
     }
 
     public func stop() {
+        applets.start(agents: [])
         toolBroker?.stop()
         toolBroker = nil
         loop?.cancel()
@@ -129,6 +137,7 @@ import NoodleRuntime
             runtime.start(agent: created.agent, repository: repository)
         }
         if toolBroker != nil { try? startTools() }
+        if running { applets.start(agents: (try? repository.loadAgents()) ?? []) }
         onChange?(user.id, .botsChanged)
         // As saved, so it matches every later read of the same bot.
         guard let saved = try repository.loadAgents().first(where: { $0.id == created.agent.id }),
@@ -300,6 +309,8 @@ import NoodleRuntime
         connections.forget(bot: agent.id)
         computers.forget(bot: agent.id)
         browsers.forget(bot: agent.id)
+        access.forgetNoodlets(of: agent.id)
+        if running { applets.start(agents: (try? repository.loadAgents()) ?? []) }
         access.setOwner(nil, ofBot: agent.id)
     }
 
@@ -330,10 +341,25 @@ import NoodleRuntime
     /// A card a message in one of the user's conversations carries.
     public func card(_ attachmentID: UUID, in conversationID: UUID, for user: HubUser) throws -> ConversationAttachment {
         _ = try ownedConversation(conversationID, by: user)
-        guard let card = try attachments(in: conversationID)[attachmentID], card.browser != nil || card.computer != nil else {
-            throw LinkError("That is not a browser or computer card in this conversation.")
+        guard let card = try attachments(in: conversationID)[attachmentID],
+              card.browser != nil || card.computer != nil || card.url.flatMap(NoodletLink.id(in:)) != nil else {
+            throw LinkError("That is not a card that opens live in this conversation.")
         }
         return card
+    }
+
+    /// The noodlet a link in the user's conversation points at, when the conversation's bot posted
+    /// that link and is the bot that shared the noodlet. Anything else opens nothing.
+    public func noodlet(_ attachmentID: UUID, in conversationID: UUID, for user: HubUser) throws -> UUID {
+        let bot = try ownedConversation(conversationID, by: user)
+        guard let link = try attachments(in: conversationID)[attachmentID]?.url, let noodlet = NoodletLink.id(in: link),
+              try repository.loadMessages(conversationID: conversationID).contains(where: {
+                  $0.author == .agent(bot.id) && ($0.attachmentIDs ?? []).contains(attachmentID)
+              }),
+              access.bot(ofNoodlet: noodlet) == bot.id else {
+            throw LinkError("That noodlet is not this bot's.")
+        }
+        return noodlet
     }
 
     private func ownedConversation(_ id: UUID, by user: HubUser) throws -> AgentRecord {

@@ -4,11 +4,12 @@
 <dict>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
-	<!-- Reaches Noodle Computer and Noodle Browser on this Mac to run the computers and browsers of the Hub's bots. -->
+	<!-- Reaches Noodle Computer, Browser and Applet on this Mac to run the computers, browsers and noodlets of the Hub's bots. -->
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>$(TeamIdentifierPrefix)com.pdparchitect.noodle.computers$(HUB_COMPANION_SUFFIX)</string>
 		<string>$(TeamIdentifierPrefix)com.pdparchitect.noodle.browsers$(HUB_COMPANION_SUFFIX)</string>
+		<string>$(TeamIdentifierPrefix)com.pdparchitect.noodle.applets$(HUB_COMPANION_SUFFIX)</string>
 	</array>
 	<key>com.apple.security.network.client</key>
 	<true/>

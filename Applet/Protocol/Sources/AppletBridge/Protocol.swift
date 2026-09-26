@@ -1,4 +1,5 @@
 import Foundation
+@_exported import Surface
 
 public struct AppletError: Error, LocalizedError, Sendable {
     public let message: String
@@ -18,6 +19,9 @@ public enum AppletOperation: String, Codable, CaseIterable, Sendable {
     case recordStart = "record-start"
     case recordStop = "record-stop"
     case show, hide, close, terminate, restart, artifact, present
+    /// A person watching and using a noodlet from Noodle Hub; never a bot's command.
+    case surfaceFrame = "surface-frame", surfaceInput = "surface-input"
+    public var isSurface: Bool { self == .surfaceFrame || self == .surfaceInput }
     public var timeout: Int {
         switch self {
         case .build, .typecheck, .open, .restart: return 180
@@ -53,6 +57,7 @@ public struct AppletRequest: Codable, Sendable {
     public var duration: Double?
     public var offset: Int?
     public var artifactID: UUID?
+    public var surfaceInput: SurfaceInput?
     public init(_ operation: AppletOperation, sessionID: UUID? = nil) {
         self.operation = operation
         self.sessionID = sessionID
@@ -62,6 +67,8 @@ public struct AppletRequest: Codable, Sendable {
         if noodletID != nil, path != nil || files != nil {
             throw AppletError("Use --id without --path or package files.")
         }
+        if operation.isSurface, sessionID == nil { throw AppletError("Specify --session.") }
+        if operation == .surfaceInput, surfaceInput == nil { throw AppletError("Specify what the person did.") }
         if sessionID != nil, [.open, .build, .validate, .typecheck, .list].contains(operation) {
             throw AppletError("This command does not accept --session.")
         }
@@ -118,6 +125,7 @@ public struct AppletResponse: Codable, Sendable {
     public var errorCode: String?
     public var sessionID: UUID?
     public var noodletID: UUID?
+    public var surfaceFrame: SurfaceFrame?
     public var url: URL?
     public var title: String?
     public var runtime: String?
