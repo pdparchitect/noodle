@@ -91,6 +91,17 @@ import XCTest
         XCTAssertTrue(mirror.localAgentIDs.isEmpty)
     }
 
+    /// A bot on the Hub shows here whether it is working, as its runtime there reports.
+    func testABotShowsWhatItIsDoingOnTheHub() async throws {
+        let f = try await fixture()
+        let mirror = f.mirror()
+        let remote = try f.hub.bots.create(LinkBotDraft(name: "Jeeves", provider: "claude-code"), for: f.ada)
+        await mirror.sync()
+        let local = try XCTUnwrap(mirror.localAgentIDs.first)
+        XCTAssertEqual(mirror.phase(ofAgent: local), f.hub.runtime.snapshot(for: remote.id).phase)
+        XCTAssertNil(mirror.phase(ofAgent: UUID()), "a bot not on the Hub had a phase")
+    }
+
     func testTheMirrorSurvivesARelaunchWithoutDoubling() async throws {
         let f = try await fixture()
         let agent = try await f.mirror().createBot(LinkBotDraft(name: "Alfred", provider: "claude-code"))

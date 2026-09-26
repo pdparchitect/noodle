@@ -30,6 +30,8 @@ import Observation
     public private(set) var computers: [LinkComputer] = []
     /// This Mac's user's browsers on the Hub, as last listed.
     public private(set) var browsers: [LinkBrowser] = []
+    /// What each bot is doing on the Hub, by its stand-in here.
+    private var phases: [UUID: AgentRuntimePhase] = [:]
     /// Computers being made, waiting for the Hub to say they are done.
     @ObservationIgnored private var making: [UUID: CheckedContinuation<LinkComputer, Error>] = [:]
     /// Opens a connection's sign-in page in the browser and returns the address it came back to.
@@ -53,6 +55,14 @@ import Observation
     public var localAgentIDs: Set<UUID> { Set(entries.map(\.agent)) }
 
     public func owns(conversation id: UUID) -> Bool { entries.contains { $0.conversation == id } }
+
+    /// What the bot a stand-in here keeps on the Hub is doing there, as last heard.
+    public func phase(ofAgent id: UUID) -> AgentRuntimePhase? { phases[id] }
+
+    private func record(_ phase: LinkBotPhase?, ofBot remote: UUID) {
+        guard let agent = entries.first(where: { $0.remote == remote })?.agent else { return }
+        phases[agent] = phase.flatMap { AgentRuntimePhase(rawValue: $0.rawValue) }
+    }
 
     /// Opens the live view of what a link in a conversation here points at, kept on the Hub. Video
     /// comes down the channel as `LinkSurface` messages; send the viewer's controls up it with `LinkSurface.control`.
@@ -291,8 +301,10 @@ import Observation
                     case .signInPage(let id, let url):
                         // The person may take minutes in the browser; other events keep flowing meanwhile.
                         Task { await openSignInPage(id, url: url) }
-                    // Hub reactions and bot status are not shown on the Mac yet.
-                    case .messageChanged, .botPhase:
+                    case .botPhase(let bot, let phase):
+                        record(phase, ofBot: bot)
+                    // Reactions made on the Hub are not shown on the Mac yet.
+                    case .messageChanged:
                         break
                     }
                 }
@@ -321,6 +333,7 @@ import Observation
             try forget(entry)
             changed = true
         }
+        for bot in bots { record(bot.phase, ofBot: bot.id) }
         if changed { onChange?() }
     }
 

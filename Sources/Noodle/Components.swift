@@ -83,8 +83,8 @@ enum ConversationRuntimeStatus: Equatable {
 extension NoodleStore {
     func runtimeStatus(for conversation: BotConversation) -> ConversationRuntimeStatus {
         ConversationRuntimeStatus(phases: participants(for: conversation).map { agent in
-            // A bot on a Noodle Hub runs there; here it is ready while the Hub is reachable.
-            if let mirror = hubMirror(forAgent: agent.id) { return mirror.isConnected ? .ready : .offline }
+            // A bot on a Noodle Hub runs there; here it shows what the Hub last said, while it is reachable.
+            if let mirror = hubMirror(forAgent: agent.id) { return mirror.isConnected ? mirror.phase(ofAgent: agent.id) ?? .ready : .offline }
             return runtime.snapshot(for: agent.id).phase
         })
     }
@@ -93,7 +93,8 @@ extension NoodleStore {
         participants(for: conversation).map { agent in
             if let mirror = hubMirror(forAgent: agent.id) {
                 let hub = mirror.pairing.hub?.name ?? "Noodle Hub"
-                return "\(agent.displayName): Runs on \(hub)" + (mirror.isConnected ? "" : " (not connected)")
+                let working = mirror.isConnected && mirror.phase(ofAgent: agent.id) == .working
+                return "\(agent.displayName): " + (working ? "Working on \(hub)" : "Runs on \(hub)") + (mirror.isConnected ? "" : " (not connected)")
             }
             return "\(agent.displayName): \(runtime.snapshot(for: agent.id).detail)"
         }.joined(separator: "\n")
