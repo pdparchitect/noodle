@@ -1,3 +1,5 @@
+import BrowserBridge
+import ComputerBridge
 import Foundation
 import HubLink
 import NoodleCore
@@ -53,6 +55,16 @@ import Observation
     public var localAgentIDs: Set<UUID> { Set(entries.map(\.agent)) }
 
     public func owns(conversation id: UUID) -> Bool { entries.contains { $0.conversation == id } }
+
+    /// Opens the live view of what a card in a conversation here points at, kept on the Hub.
+    public func openSurface(attachment: UUID, in conversation: UUID) async throws -> AsyncThrowingStream<LinkEvent, Error> {
+        guard let entry = entries.first(where: { $0.conversation == conversation }) else { throw LinkError("That conversation is not on this Hub.") }
+        return try await pairing.stream(.openSurface(conversationID: entry.remoteConversation, attachmentID: attachment))
+    }
+
+    public func sendSurfaceInput(_ input: SurfaceInput, session: UUID) async throws {
+        _ = try await pairing.request(.surfaceInput(sessionID: session, input))
+    }
 
     /// The Hub harness a local stand-in runs on.
     public func harness(ofAgent id: UUID) -> HubHarnessChoice? {
@@ -275,6 +287,9 @@ import Observation
                         try await syncComputers()
                     case .browsersChanged:
                         try await syncBrowsers()
+                    // Surfaces have their own streams.
+                    case .surfaceOpened, .surfaceFrame:
+                        break
                     case .computerCreated(let id, let computer, let error):
                         if let computer { making.removeValue(forKey: id)?.resume(returning: computer) }
                         else { making.removeValue(forKey: id)?.resume(throwing: LinkError(error ?? "The Hub could not make the computer.")) }
@@ -384,8 +399,24 @@ import Observation
             let voice = attachment.voice.map {
                 VoiceMessage(transcript: $0.transcript, duration: $0.duration, waveform: $0.waveform, localeIdentifier: $0.localeIdentifier)
             }
-            _ = try repository.importAttachment(from: staging, into: entry.conversation, mediaType: attachment.mediaType,
-                                                voice: voice, id: attachment.id, originalFilename: name.isEmpty ? "Attachment" : name)
+            let filename = name.isEmpty ? "Attachment" : name
+            // Cards stay cards here, presented by this bot's stand-in, so they show and open as they do on the Hub.
+            if attachment.mediaType == BrowserReference.mediaType, let data = try? Data(contentsOf: staging),
+               let reference = try? BrowserReference.decode(data) {
+                _ = try repository.importAttachment(data: data, originalFilename: filename, into: entry.conversation,
+                                                    mediaType: attachment.mediaType,
+                                                    browser: BrowserCard(reference: reference, agentID: entry.agent), id: attachment.id)
+            } else if attachment.mediaType == ComputerCard.mediaType, let data = try? Data(contentsOf: staging),
+                      let reference = try? JSONDecoder().decode(ComputerReference.self, from: data) {
+                var card = ComputerCard(computer: reference.computer, agentID: entry.agent, terminalID: reference.terminalID,
+                                        terminalPreview: reference.terminalPreview, view: reference.view, previewImage: reference.previewImage)
+                card.capturedAt = reference.capturedAt
+                _ = try repository.importAttachment(data: data, originalFilename: filename, into: entry.conversation,
+                                                    mediaType: attachment.mediaType, computer: card, id: attachment.id)
+            } else {
+                _ = try repository.importAttachment(from: staging, into: entry.conversation, mediaType: attachment.mediaType,
+                                                    voice: voice, id: attachment.id, originalFilename: filename)
+            }
         }
     }
 

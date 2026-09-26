@@ -178,6 +178,15 @@ import WebKit
             response.pointer = request.tabID.flatMap { tabs[$0]?.browserID == id ? tabs[$0]?.pointer.state : nil }
             return response
         }
+        // A person may watch and use a tab while bots are paused, and alongside a bot's own call.
+        if request.operation == .surfaceFrame {
+            response.surfaceFrame = try await tab(browserID: id, tabID: request.tabID!).surfaceFrame()
+            return response
+        }
+        if request.operation == .surfaceInput {
+            try await tab(browserID: id, tabID: request.tabID!).apply(request.surfaceInput!)
+            return response
+        }
         guard !profile.paused else { throw BrowserError("Agent control is paused for this browser. Wait for the user to resume it.") }
         // Dialog replies must remain available while a JS command is waiting.
         if request.operation == .dialog {

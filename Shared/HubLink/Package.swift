@@ -7,9 +7,11 @@ let package = Package(
     products: [.library(name: "HubLink", targets: ["HubLink"])],
     dependencies: [
         .package(url: "https://github.com/apple/swift-certificates", from: "1.10.0"),
+        .package(path: "../Surface"),
     ],
     targets: [
-        .target(name: "HubLink", dependencies: [.product(name: "X509", package: "swift-certificates")]),
+        .target(name: "HubLink", dependencies: [.product(name: "X509", package: "swift-certificates"),
+                                                .product(name: "Surface", package: "Surface")]),
         .testTarget(name: "HubLinkTests", dependencies: ["HubLink"]),
     ],
     swiftLanguageModes: [.v5]

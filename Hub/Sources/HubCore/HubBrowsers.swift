@@ -81,6 +81,20 @@ import NoodleCore
         publish()
     }
 
+    /// A tab of one of the user's browsers, as a person watching it sees it.
+    public func surfaceFrame(browser: UUID, tab: UUID, for user: HubUser) async throws -> SurfaceFrame? {
+        try owned(browser, by: user)
+        return try await call(BrowserRequest(.surfaceFrame, browserID: browser, tabID: tab)).checked().surfaceFrame
+    }
+
+    /// What a person watching one of the user's tabs did.
+    public func surfaceInput(_ input: SurfaceInput, browser: UUID, tab: UUID, for user: HubUser) async throws {
+        try owned(browser, by: user)
+        var request = BrowserRequest(.surfaceInput, browserID: browser, tabID: tab)
+        request.surfaceInput = input
+        _ = try await call(request).checked()
+    }
+
     /// Replaces which of the user's browsers one of their bots may use.
     public func assign(_ ids: Set<UUID>, to bot: UUID, for user: HubUser) throws {
         guard access.owner(ofBot: bot) == user.id else { throw LinkError("That bot is not yours.") }

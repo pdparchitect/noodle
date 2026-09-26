@@ -48,6 +48,8 @@ import Observation
     @ObservationIgnored private let browsers: HubBrowsers?
     /// Open event streams, by the key of the device holding each.
     @ObservationIgnored private var streams: [ObjectIdentifier: LinkStream] = [:]
+    /// Open surfaces: what each shows, the device watching it, and the pump feeding it.
+    @ObservationIgnored private var surfaces: [UUID: (device: LinkPublicKey, user: HubUser, browser: UUID, tab: UUID, pump: Task<Void, Never>)] = [:]
     @ObservationIgnored private let port: UInt16
     @ObservationIgnored private let localEndpoints: (UInt16) -> [LinkEndpoint]
     @ObservationIgnored private let now: () -> Date
@@ -172,6 +174,21 @@ import Observation
                 Task { @MainActor in self?.register(stream) }
             }
         }
+        if case .openSurface(let conversationID, let attachmentID) = request {
+            do {
+                let user = try user(key)
+                let card = try hubBots().browserCard(attachmentID, in: conversationID, for: user)
+                let browser = card.reference.browser.id, tab = card.reference.tabID
+                guard try hubBrowsers().browsers(for: user).contains(where: { $0.id == browser }) else {
+                    throw LinkError("That browser is not yours or no longer exists.")
+                }
+                return .stream { [weak self] stream in
+                    Task { @MainActor in self?.openSurface(stream, for: user, browser: browser, tab: tab) }
+                }
+            } catch {
+                return .response(LinkProtocol.encode(LinkResponse.failure(error.localizedDescription)))
+            }
+        }
         let response: LinkResponse
         do {
             response = try await handle(request, from: key)
@@ -186,6 +203,26 @@ import Observation
         streams[id] = stream
         stream.onClose { [weak self] in
             Task { @MainActor in self?.streams[id] = nil }
+        }
+    }
+
+    /// Sends a tab's frames down `stream` while it is open, only when the picture changes.
+    private func openSurface(_ stream: LinkStream, for user: HubUser, browser: UUID, tab: UUID) {
+        guard let browsers else { return stream.close() }
+        let id = UUID()
+        stream.send(LinkProtocol.encode(LinkEvent.surfaceOpened(sessionID: id)))
+        let pump = Task { @MainActor in
+            let frames = SurfacePump.frames(every: .milliseconds(100)) {
+                try await browsers.surfaceFrame(browser: browser, tab: tab, for: user)
+            }
+            do {
+                for try await frame in frames { stream.send(LinkProtocol.encode(LinkEvent.surfaceFrame(sessionID: id, frame))) }
+            } catch {}
+            stream.close()
+        }
+        surfaces[id] = (stream.peer, user, browser, tab, pump)
+        stream.onClose { [weak self] in
+            Task { @MainActor in self?.surfaces.removeValue(forKey: id)?.pump.cancel() }
         }
     }
 
@@ -294,6 +331,12 @@ import Observation
             let changed = try await computers.update(id, with: ComputerDraft(draft), for: user)
             push(.computersChanged, to: user.id)
             return .computer(computers.link(changed, for: user))
+        case .openSurface:
+            throw LinkError("Surfaces open a stream.")
+        case .surfaceInput(let sessionID, let input):
+            guard let surface = surfaces[sessionID], surface.device == key else { throw LinkError("That surface is closed.") }
+            try await hubBrowsers().surfaceInput(input, browser: surface.browser, tab: surface.tab, for: surface.user)
+            return .done
         case .browsers:
             let browsers = try hubBrowsers()
             await browsers.refresh()

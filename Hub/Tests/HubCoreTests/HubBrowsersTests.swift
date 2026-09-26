@@ -11,6 +11,7 @@ import XCTest
     final class FakeBrowser: @unchecked Sendable {
         private let lock = NSLock()
         private var browsers: [RemoteBrowser] = []
+        private(set) var inputs: [(UUID?, UUID?, SurfaceInput)] = []
 
         func call(_ request: BrowserRequest) throws -> BrowserResponse {
             try lock.withLock {
@@ -27,6 +28,10 @@ import XCTest
                     response.browser = browsers[index]
                 case .delete:
                     browsers.removeAll { $0.id == request.browserID }
+                case .surfaceFrame:
+                    response.surfaceFrame = SurfaceFrame(jpeg: Data([1, 2, 3]), width: 800, height: 600)
+                case .surfaceInput:
+                    inputs.append((request.browserID, request.tabID, try XCTUnwrap(request.surfaceInput)))
                 default:
                     break
                 }
@@ -36,10 +41,12 @@ import XCTest
         }
     }
 
+    private var browser = FakeBrowser()
+
     private func hub() throws -> (Hub, HubUser, HubUser) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-browsers-\(UUID())")
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
-        let browser = FakeBrowser()
+        let browser = self.browser
         let hub = Hub(root: root.appendingPathComponent("Hub"), messenger: nil,
                       computer: { try HubComputersTests.FakeComputer().call($0) }, browser: { try browser.call($0) })
         try hub.repository.prepare()
@@ -117,5 +124,44 @@ import XCTest
         _ = try await device.request(.deleteBrowser(id: made.id))
         guard case .browsers(let left) = try await device.request(.browsers) else { return XCTFail("not listed") }
         XCTAssertEqual(left, [])
+    }
+
+    /// Clicking a browser card in a Hub bot's conversation shows its tab live and takes the person's input.
+    func testAPersonWatchesAndUsesTheTabACardPointsAt() async throws {
+        let (hub, ada, _) = try hub()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-surface-\(UUID())")
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        let link = HubLinkService(hubName: "Mac mini", directory: root.appendingPathComponent("Link"),
+                                  access: hub.access, profiles: hub.harnessProfiles, bots: hub.bots,
+                                  connections: hub.connections, computers: hub.computers, browsers: hub.browsers, port: 0,
+                                  localEndpoints: { [LinkEndpoint(host: "::1", port: $0)] })
+        await link.start()
+        addTeardownBlock { await MainActor.run { link.stop() } }
+        guard case .listening = link.state else { throw XCTSkip("Could not listen: \(link.state)") }
+        let device = HubPairing(directory: root.appendingPathComponent("Device"), deviceName: "Mac")
+        await device.join(link.invite(ada).url().absoluteString)
+
+        let made = try await hub.browsers.create(BrowserDraft(name: "Work"), for: ada)
+        let bot = try hub.bots.create(LinkBotDraft(name: "Alfred", provider: "claude-code"), for: ada)
+        let tab = UUID()
+        let reference = BrowserReference(browser: made, tabID: tab, url: "https://example.com", title: "Example")
+        let card = try hub.repository.importAttachment(data: JSONEncoder().encode(reference), originalFilename: "Example.noodlebrowser",
+                                                       into: bot.conversationID, mediaType: BrowserReference.mediaType,
+                                                       computer: nil, browser: BrowserCard(reference: reference, agentID: bot.id))
+
+        let events = try await device.stream(.openSurface(conversationID: bot.conversationID, attachmentID: card.id))
+        var session: UUID?
+        for try await event in events {
+            if case .surfaceOpened(let id) = event { session = id }
+            if case .surfaceFrame(let id, let frame) = event {
+                XCTAssertEqual(id, session)
+                XCTAssertEqual(frame.width, 800)
+                break
+            }
+        }
+        _ = try await device.request(.surfaceInput(sessionID: try XCTUnwrap(session), .text("hi")))
+        XCTAssertEqual(browser.inputs.map(\.0), [made.id])
+        XCTAssertEqual(browser.inputs.map(\.1), [tab])
+        XCTAssertEqual(browser.inputs.map(\.2), [.text("hi")])
     }
 }

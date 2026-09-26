@@ -745,7 +745,8 @@ public struct WorkspaceRepository: Sendable {
         linkURL: URL? = nil,
         computer: ComputerCard? = nil,
         browser: BrowserCard? = nil,
-        annotation: AttachmentAnnotation? = nil
+        annotation: AttachmentAnnotation? = nil,
+        id: UUID = UUID()
     ) throws -> ConversationAttachment {
         if let annotation {
             guard annotation.isValid, computer == nil, browser == nil, linkURL == nil, mediaType == annotation.mediaType,
@@ -790,7 +791,7 @@ public struct WorkspaceRepository: Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !filename.isEmpty else { throw WorkspaceError.invalidAttachment }
 
-        let attachmentID = UUID()
+        let attachmentID = id
         let resolvedMediaType = detectedImageMediaType(in: data) ?? mediaType
         let attachment = ConversationAttachment(
             id: attachmentID,

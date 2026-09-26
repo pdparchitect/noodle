@@ -1,3 +1,4 @@
+import BrowserBridge
 import Foundation
 import HubCore
 import HubLink
@@ -159,6 +160,27 @@ import XCTest
         XCTAssertEqual(try Data(contentsOf: f.local.attachmentFileURL(arrived)), Data("Summary".utf8))
         XCTAssertEqual(arrived.originalFilename, answer.originalFilename)
         XCTAssertEqual(try f.local.loadMessages(conversationID: local.id).last?.attachmentIDs, [answer.id])
+    }
+
+    /// A browser card from a bot on the Hub stays a card here, so it can open live.
+    func testCardsFromTheHubStayCards() async throws {
+        let f = try await fixture()
+        let mirror = f.mirror()
+        let agent = try await mirror.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code"))
+        let local = try conversation(of: agent.id, in: f.local)
+        let remoteBot = try XCTUnwrap(f.hub.repository.loadAgents().first)
+        let remote = try conversation(of: remoteBot.id, in: f.hub.repository)
+        let reference = BrowserReference(browser: RemoteBrowser(id: UUID(), name: "Work"), tabID: UUID(),
+                                         url: "https://news.ycombinator.com", title: "Hacker News")
+        let card = try f.hub.repository.importAttachment(data: JSONEncoder().encode(reference), originalFilename: "Hacker News.noodlebrowser",
+                                                         into: remote.id, mediaType: BrowserReference.mediaType, computer: nil,
+                                                         browser: BrowserCard(reference: reference, agentID: remoteBot.id))
+        _ = try f.hub.repository.sendAgentMessage(agentID: remoteBot.id, conversationID: remote.id, body: "Here it is.",
+                                                   attachmentIDs: [card.id])
+        await mirror.sync()
+        let arrived = try XCTUnwrap(f.local.loadAttachments(conversationID: local.id).first { $0.id == card.id })
+        XCTAssertEqual(arrived.browser?.reference.tabID, reference.tabID)
+        XCTAssertEqual(arrived.browser?.agentID, agent.id)
     }
 
     func testEditsTravelBothWays() async throws {

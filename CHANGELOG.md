@@ -10,6 +10,7 @@ All notable changes to Noodle are documented here, following
 
 - Connect Replit in Settings → Tools → Add Tools, so bots can work with your Replit apps.
 - Give a bot on a Noodle Hub tools from that Hub in Edit Bot > Tools. Connections you add there are yours on the Hub and are signed in there, so they work with this Mac closed; your browser opens here only to sign in. Choose which of them each bot may use.
+- Open a browser card from a bot on a Noodle Hub to watch its tab live in a window here, and click, type and scroll in it. The browser keeps running on the Hub's Mac.
 - Give a bot on a Noodle Hub browsers on that Hub in Edit Bot > Browsers. New Browser… makes one in Noodle Browser on the Hub's Mac; it is yours there and reaches only the bots you choose.
 - Make and delete browsers from Edit Bot > Browsers: New Browser… sits next to the browsers you add, and right-clicking a browser deletes it with its sign-ins and history. It needs the latest Noodle Browser.
 - Give a bot on a Noodle Hub computers on that Hub in Edit Bot > Computers. New Computer… makes one in Noodle Computer on the Hub's Mac; it is yours there and reaches only the bots you choose.

@@ -124,8 +124,13 @@ import Observation
 
     /// Opens the stream the joined Hub pushes events down.
     public func subscribe() async throws -> AsyncThrowingStream<LinkEvent, Error> {
+        try await stream(.subscribe)
+    }
+
+    /// Opens a stream for a request the Hub answers with a stream, such as `openSurface`.
+    public func stream(_ request: LinkRequest) async throws -> AsyncThrowingStream<LinkEvent, Error> {
         guard let hub else { throw LinkError("This Mac has not joined a Noodle Hub.") }
-        let subscription = try await LinkClient.subscribe(try LinkProtocol.encode(.subscribe), identity: try identity(),
+        let subscription = try await LinkClient.subscribe(try LinkProtocol.encode(request), identity: try identity(),
                                                           hubKey: hub.key, endpoints: hub.endpoints)
         endpoint = subscription.endpoint
         return AsyncThrowingStream { continuation in

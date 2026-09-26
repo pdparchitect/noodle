@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+@_exported import Surface
 
 /// The version of the requests below. A Hub serves the versions it knows and names the app
 /// to update for any other, rather than failing mid-conversation. Adding a request, an event
@@ -128,6 +129,11 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case deleteBrowser(id: UUID)
     /// Replaces which of this user's browsers one of their bots may use.
     case assignBrowsers(botID: UUID, browserIDs: [UUID])
+    /// Opens a stream showing what a card in one of this user's conversations points at, live.
+    /// The Hub sends `surfaceOpened`, then `surfaceFrame` whenever the picture changes.
+    case openSurface(conversationID: UUID, attachmentID: UUID)
+    /// What the person did in an open surface.
+    case surfaceInput(sessionID: UUID, SurfaceInput)
 }
 
 public enum LinkResponse: Codable, Equatable, Sendable {
@@ -167,6 +173,9 @@ public enum LinkEvent: Codable, Equatable, Sendable {
     case computerCreated(requestID: UUID, computer: LinkComputer?, error: String?)
     /// This user's browsers or their bots changed.
     case browsersChanged
+    /// A surface stream is ready; send input with this session.
+    case surfaceOpened(sessionID: UUID)
+    case surfaceFrame(sessionID: UUID, SurfaceFrame)
 }
 
 /// What a device sets on a browser it makes or edits on the Hub. Nil fields stay as they are.

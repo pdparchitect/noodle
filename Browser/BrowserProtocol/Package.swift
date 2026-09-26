@@ -3,4 +3,5 @@ import PackageDescription
 
 let package = Package(name: "BrowserProtocol", platforms: [.macOS(.v15)],
     products: [.library(name: "BrowserBridge", targets: ["BrowserBridge"])],
-    targets: [.target(name: "BrowserBridge")], swiftLanguageModes: [.v5])
+    dependencies: [.package(path: "../../Shared/Surface")],
+    targets: [.target(name: "BrowserBridge", dependencies: [.product(name: "Surface", package: "Surface")])], swiftLanguageModes: [.v5])

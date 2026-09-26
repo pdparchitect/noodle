@@ -70,6 +70,13 @@ extension NoodleStore {
     }
 
     func openCompanion(_ attachment: ConversationAttachment) async throws {
+        // A browser on a Noodle Hub runs on the Hub's Mac; its card opens a live view instead.
+        if attachment.isBrowserDocument, hubMirrors.contains(where: { $0.owns(conversation: attachment.conversationID) }) {
+            openSurfaceWindow?(HubSurfaceTarget(conversationID: attachment.conversationID, attachmentID: attachment.id,
+                                                title: attachment.browser?.reference.title
+                                                    ?? (attachment.originalFilename as NSString).deletingPathExtension))
+            return
+        }
         if attachment.isBrowserDocument { try await browsers.openDocument(at: attachmentFileURL(attachment)) }
         else if attachment.isComputerDocument { try await computers.openDocument(at: attachmentFileURL(attachment)) }
         else if let url = attachment.url { try await applets.openNoodlet(url) }
