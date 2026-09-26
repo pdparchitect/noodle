@@ -210,7 +210,10 @@ struct ScrollableChatComposer: NSViewRepresentable {
         [.fileURL] + super.acceptableDragTypes.filter { $0 != .fileURL }
     }
     override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        // Image data alone, as Preview copies a selection, would otherwise leave
+        // Paste disabled before the conversation gets to attach it.
         [.fileURL] + super.readablePasteboardTypes.filter { $0 != .fileURL }
+            + (pasteAttachments == nil ? [] : [.png, .tiff])
     }
     override func dragOperation(for draggingInfo: NSDraggingInfo, type: NSPasteboard.PasteboardType) -> NSDragOperation {
         if dropFiles != nil, draggingInfo.draggingPasteboard.canReadObject(forClasses: [NSURL.self],

@@ -35,6 +35,7 @@ All notable changes to Noodle are documented here, following
 - Settings no longer grows taller than your screen: a long tab, such as Harness with many harnesses, now scrolls so you can reach the bottom. Harness setup actions such as Install and Install Manually… are compact links.
 - Opening Noodle, Noodle Browser, Noodle Computer, Noodle Applet or Noodle Hub again brings the copy already running to the front instead of starting a second one on the same data, however it is started.
 - Delete a removed tool connection's sign-in from Keychain even when the first try fails. Noodle tries again until it is gone.
+- Paste an image copied from Preview or another app with ⌘V to attach it. Paste used to stay greyed out unless a file was copied.
 
 ## [0.27.0] - 2026-09-25
 

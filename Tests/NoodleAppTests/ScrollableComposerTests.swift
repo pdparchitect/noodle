@@ -123,6 +123,23 @@ import NoodleCore
         }
     }
 
+    /// Image data alone on the clipboard, as Preview copies a selection, is
+    /// offered for Paste and handed over as an attachment.
+    func testPastingImageDataHandsItToAttachments() async throws {
+        let (_, composer) = try await mount(text: "")
+        let editor = composer.editor
+        let board = NSPasteboard.withUniqueName()
+        defer { board.releaseGlobally() }
+        board.declareTypes([.png], owner: nil)
+        XCTAssertTrue(board.setData(Data([0x89, 0x50, 0x4E, 0x47]), forType: .png))
+        var received: NSPasteboard?
+        editor.pasteAttachments = { received = $0; return true }
+        XCTAssertTrue(editor.readablePasteboardTypes.contains(.png), "Paste must be enabled for image data")
+        XCTAssertTrue(editor.readSelection(from: board), "Image paste must be accepted")
+        XCTAssertIdentical(received, board)
+        XCTAssertEqual(editor.string, "")
+    }
+
     /// The overlay that turns the composer's padding into a focus target lets
     /// clicks on the text itself through to the editor.
     func testPaddingFocusTargetPassesTextClicksThrough() async throws {
