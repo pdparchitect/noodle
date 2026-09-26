@@ -236,9 +236,10 @@ private struct BrowserDetailView: View {
     }
 }
 
-/// What can be clicked in a tab strip.
+/// What can be clicked in a tab strip, and in the navigation row a live view adds below it.
 enum BrowserTabStripTarget: Hashable {
     case tab(UUID), close(UUID), newTab
+    case back, forward, reload, address
 }
 
 /// A browser's tabs, as its window shows them above the page and as a live view of it does.
@@ -299,9 +300,9 @@ struct BrowserTabStrip: View {
     }
 }
 
-private enum BrowserTabStripSpace { static let name = "BrowserTabStrip" }
+enum BrowserTabStripSpace { static let name = "BrowserTabStrip" }
 
-private extension View {
+extension View {
     func located(_ target: BrowserTabStripTarget, in targets: Binding<[BrowserTabStripTarget: CGRect]>) -> some View {
         onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BrowserTabStripSpace.name)) } action: { targets.wrappedValue[target] = $0 }
     }
