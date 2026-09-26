@@ -70,10 +70,11 @@ extension NoodleStore {
     }
 
     func openCompanion(_ attachment: ConversationAttachment) async throws {
-        // A browser on a Noodle Hub runs on the Hub's Mac; its card opens a live view instead.
-        if attachment.isBrowserDocument, hubMirrors.contains(where: { $0.owns(conversation: attachment.conversationID) }) {
+        // Browsers and computers on a Noodle Hub run on the Hub's Mac; their cards open a live view instead.
+        if attachment.isBrowserDocument || attachment.isComputerDocument,
+           hubMirrors.contains(where: { $0.owns(conversation: attachment.conversationID) }) {
             openSurfaceWindow?(HubSurfaceTarget(conversationID: attachment.conversationID, attachmentID: attachment.id,
-                                                title: attachment.browser?.reference.title
+                                                title: attachment.browser?.reference.title ?? attachment.computer?.computer.name
                                                     ?? (attachment.originalFilename as NSString).deletingPathExtension))
             return
         }

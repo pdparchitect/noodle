@@ -4,6 +4,7 @@
 
 ### Added
 
+- Let Noodle Hub show a computer live to the person who owns it, its desktop or the terminal a bot shared, and take their clicks, typing and scrolling.
 - Let Noodle and Noodle Hub make new computers from your templates, change a computer's name, description and icon, and move a computer to the Trash, so you can set up a bot's computer without switching apps.
 
 ## [0.14.0] - 2026-09-25

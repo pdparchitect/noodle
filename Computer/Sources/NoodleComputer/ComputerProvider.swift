@@ -12,6 +12,8 @@ import WebKit
     private var server: ComputerConnectionServer?
     private var terminals: [UUID: ProviderTerminal] = [:]
     private var localTerminals: [UUID: (computer: UUID, owner: String, runtime: LocalMacComputer)] = [:]
+    /// Where a person watching remotely types and clicks, one per desktop view.
+    private var injectors: [UUID: (view: NSView, injector: SurfaceEventInjector)] = [:]
     private let transferRoot: URL
 
     init(store: ComputerStore, socket: URL? = nil) throws {
@@ -132,6 +134,9 @@ import WebKit
             }
             throw ComputerBridgeError("Computer is stopped. Start it in \(ComputerAppIdentity.name) or with computer start --computer \(session.id.uuidString).")
         }
+        if request.operation == .surfaceFrame || request.operation == .surfaceInput {
+            return try await surface(request, session: session, owner: owner)
+        }
         if request.operation.isFileTransfer {
             guard let id = request.transferID, let path = request.path else {
                 throw ComputerBridgeError("Missing broker file-transfer reference.")
@@ -222,6 +227,40 @@ import WebKit
         }
         return .init()
     }
+    /// A person watching a running computer: its desktop if it has one, else the terminal the card shows.
+    private func surface(_ request: ComputerRequest, session: ComputerSession, owner: String) async throws -> ComputerResponse {
+        var response = ComputerResponse()
+        if let browser = session.desktop != nil ? session.browser : nil {
+            let view = browser.view
+            if request.operation == .surfaceFrame {
+                let configuration = WKSnapshotConfiguration()
+                configuration.afterScreenUpdates = false
+                let image: NSImage? = await withCheckedContinuation { continuation in
+                    view.takeSnapshot(with: configuration) { image, _ in continuation.resume(returning: image) }
+                }
+                guard let picture = image?.cgImage(forProposedRect: nil, context: nil, hints: nil),
+                      let frame = SurfaceFrame(image: picture, size: view.bounds.size) else {
+                    throw ComputerBridgeError("The computer's display cannot be shown.")
+                }
+                response.surfaceFrame = frame
+            } else {
+                if injectors[session.id]?.view !== view { injectors[session.id] = (view, SurfaceEventInjector(view: view)) }
+                try injectors[session.id]?.injector.deliver(request.surfaceInput!)
+            }
+            return response
+        }
+        guard let id = request.terminalID, let terminal = terminals[id], terminal.owner == owner, terminal.computerID == session.id else {
+            throw ComputerBridgeError("This computer has no display, and the terminal is closed.")
+        }
+        if request.operation == .surfaceFrame {
+            response.surfaceFrame = TerminalSurface.frame(terminal.replay.read(from: max(0, terminal.replay.end - 16_000)).data ?? Data())
+        } else if let bytes = TerminalSurface.bytes(for: request.surfaceInput!), !terminal.exited {
+            terminal.touched = Date()
+            terminal.io.send(bytes)
+        }
+        return response
+    }
+
     private static func remote(_ session: ComputerSession) -> RemoteComputer {
         let appearance = session.computer.appearance
         let icon = appearance?.iconImage

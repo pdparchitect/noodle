@@ -210,6 +210,25 @@ final class ProtocolTests: XCTestCase {
         let decoded = try JSONDecoder().decode(ComputerResponse.self, from: JSONEncoder().encode(response))
         XCTAssertEqual(decoded.templates, response.templates)
     }
+    /// A person watching a computer from Noodle or the Hub, whatever its bots are doing.
+    func testSurfacesNameTheirComputerAndCarryInput() throws {
+        XCTAssertThrowsError(try ComputerRequest(.surfaceFrame).validate())
+        XCTAssertNoThrow(try ComputerRequest(.surfaceFrame, computerID: UUID()).validate())
+        var input = ComputerRequest(.surfaceInput, computerID: UUID())
+        XCTAssertThrowsError(try input.validate(), "Input carried nothing")
+        input.surfaceInput = .text("ls")
+        XCTAssertNoThrow(try input.validate())
+    }
+    /// A terminal shows its latest output, without colour codes, and takes keys as the bytes a shell expects.
+    func testTerminalsBecomeSurfaces() throws {
+        let frame = try XCTUnwrap(TerminalSurface.frame(Data("\u{1b}[32muser@box\u{1b}[0m:~$ ls\r\nnotes.txt\r\n".utf8)))
+        XCTAssertGreaterThan(frame.width, 0)
+        XCTAssertEqual(TerminalSurface.plainText(Data("\u{1b}[1;31mred\u{1b}[0m text".utf8)), "red text")
+        XCTAssertEqual(TerminalSurface.bytes(for: .text("ls")), Data("ls".utf8))
+        XCTAssertEqual(TerminalSurface.bytes(for: .key(.enter)), Data("\r".utf8))
+        XCTAssertEqual(TerminalSurface.bytes(for: .key(.up)), Data("\u{1b}[A".utf8))
+        XCTAssertNil(TerminalSurface.bytes(for: .pointer(.down, x: 1, y: 1)))
+    }
     func testCardRoundTripAndBoundedSnapshot() throws {
         let card = ComputerCard(computer: .init(id: UUID(), name: "Shared", kind: "Shell", state: "Running", symbol: "terminal"),
             agentID: UUID(), terminalID: UUID(), terminalPreview: String(repeating: "x", count: 5000))

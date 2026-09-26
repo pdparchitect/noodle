@@ -48,8 +48,13 @@ import Observation
     @ObservationIgnored private let browsers: HubBrowsers?
     /// Open event streams, by the key of the device holding each.
     @ObservationIgnored private var streams: [ObjectIdentifier: LinkStream] = [:]
+    /// What a surface shows: a browser tab, or a computer with the terminal a bot's card shows.
+    private enum SurfaceTarget {
+        case browser(UUID, tab: UUID)
+        case computer(UUID, terminal: UUID?, bot: UUID)
+    }
     /// Open surfaces: what each shows, the device watching it, and the pump feeding it.
-    @ObservationIgnored private var surfaces: [UUID: (device: LinkPublicKey, user: HubUser, browser: UUID, tab: UUID, pump: Task<Void, Never>)] = [:]
+    @ObservationIgnored private var surfaces: [UUID: (device: LinkPublicKey, user: HubUser, target: SurfaceTarget, pump: Task<Void, Never>)] = [:]
     @ObservationIgnored private let port: UInt16
     @ObservationIgnored private let localEndpoints: (UInt16) -> [LinkEndpoint]
     @ObservationIgnored private let now: () -> Date
@@ -177,13 +182,23 @@ import Observation
         if case .openSurface(let conversationID, let attachmentID) = request {
             do {
                 let user = try user(key)
-                let card = try hubBots().browserCard(attachmentID, in: conversationID, for: user)
-                let browser = card.reference.browser.id, tab = card.reference.tabID
-                guard try hubBrowsers().browsers(for: user).contains(where: { $0.id == browser }) else {
-                    throw LinkError("That browser is not yours or no longer exists.")
+                let card = try hubBots().card(attachmentID, in: conversationID, for: user)
+                let target: SurfaceTarget
+                if let browser = card.browser {
+                    guard try hubBrowsers().browsers(for: user).contains(where: { $0.id == browser.reference.browser.id }) else {
+                        throw LinkError("That browser is not yours or no longer exists.")
+                    }
+                    target = .browser(browser.reference.browser.id, tab: browser.reference.tabID)
+                } else if let computer = card.computer {
+                    guard try hubComputers().computers(for: user).contains(where: { $0.id == computer.computer.id }) else {
+                        throw LinkError("That computer is not yours or no longer exists.")
+                    }
+                    target = .computer(computer.computer.id, terminal: computer.terminalID, bot: computer.agentID)
+                } else {
+                    throw LinkError("That card cannot be opened.")
                 }
                 return .stream { [weak self] stream in
-                    Task { @MainActor in self?.openSurface(stream, for: user, browser: browser, tab: tab) }
+                    Task { @MainActor in self?.openSurface(stream, for: user, showing: target) }
                 }
             } catch {
                 return .response(LinkProtocol.encode(LinkResponse.failure(error.localizedDescription)))
@@ -206,21 +221,26 @@ import Observation
         }
     }
 
-    /// Sends a tab's frames down `stream` while it is open, only when the picture changes.
-    private func openSurface(_ stream: LinkStream, for user: HubUser, browser: UUID, tab: UUID) {
-        guard let browsers else { return stream.close() }
+    /// Sends a surface's frames down `stream` while it is open, only when the picture changes.
+    private func openSurface(_ stream: LinkStream, for user: HubUser, showing target: SurfaceTarget) {
+        guard let browsers, let computers else { return stream.close() }
         let id = UUID()
         stream.send(LinkProtocol.encode(LinkEvent.surfaceOpened(sessionID: id)))
         let pump = Task { @MainActor in
             let frames = SurfacePump.frames(every: .milliseconds(100)) {
-                try await browsers.surfaceFrame(browser: browser, tab: tab, for: user)
+                switch target {
+                case .browser(let browser, let tab):
+                    try await browsers.surfaceFrame(browser: browser, tab: tab, for: user)
+                case .computer(let computer, let terminal, let bot):
+                    try await computers.surfaceFrame(computer: computer, terminal: terminal, bot: bot, for: user)
+                }
             }
             do {
                 for try await frame in frames { stream.send(LinkProtocol.encode(LinkEvent.surfaceFrame(sessionID: id, frame))) }
             } catch {}
             stream.close()
         }
-        surfaces[id] = (stream.peer, user, browser, tab, pump)
+        surfaces[id] = (stream.peer, user, target, pump)
         stream.onClose { [weak self] in
             Task { @MainActor in self?.surfaces.removeValue(forKey: id)?.pump.cancel() }
         }
@@ -335,7 +355,12 @@ import Observation
             throw LinkError("Surfaces open a stream.")
         case .surfaceInput(let sessionID, let input):
             guard let surface = surfaces[sessionID], surface.device == key else { throw LinkError("That surface is closed.") }
-            try await hubBrowsers().surfaceInput(input, browser: surface.browser, tab: surface.tab, for: surface.user)
+            switch surface.target {
+            case .browser(let browser, let tab):
+                try await hubBrowsers().surfaceInput(input, browser: browser, tab: tab, for: surface.user)
+            case .computer(let computer, let terminal, let bot):
+                try await hubComputers().surfaceInput(input, computer: computer, terminal: terminal, bot: bot, for: surface.user)
+            }
             return .done
         case .browsers:
             let browsers = try hubBrowsers()

@@ -84,6 +84,20 @@ import NoodleCore
         publish()
     }
 
+    /// One of the user's computers as a person watching it sees it: its display, or the bot's terminal.
+    public func surfaceFrame(computer: UUID, terminal: UUID?, bot: UUID, for user: HubUser) async throws -> SurfaceFrame? {
+        try owned(computer, by: user)
+        return try await call(ComputerRequest(.surfaceFrame, computerID: computer, agentID: bot, terminalID: terminal)).checked().surfaceFrame
+    }
+
+    /// What a person watching one of the user's computers did.
+    public func surfaceInput(_ input: SurfaceInput, computer: UUID, terminal: UUID?, bot: UUID, for user: HubUser) async throws {
+        try owned(computer, by: user)
+        var request = ComputerRequest(.surfaceInput, computerID: computer, agentID: bot, terminalID: terminal)
+        request.surfaceInput = input
+        _ = try await call(request).checked()
+    }
+
     /// Replaces which of the user's computers one of their bots may use.
     public func assign(_ ids: Set<UUID>, to bot: UUID, for user: HubUser) throws {
         guard access.owner(ofBot: bot) == user.id else { throw LinkError("That bot is not yours.") }

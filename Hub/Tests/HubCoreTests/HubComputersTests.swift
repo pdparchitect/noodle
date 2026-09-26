@@ -19,6 +19,7 @@ import XCTest
         private let lock = NSLock()
         private var computers: [RemoteComputer] = []
         private(set) var revoked: [(UUID, UUID)] = []
+        private(set) var inputs: [(UUID?, UUID?, UUID?, SurfaceInput)] = []
 
         func call(_ request: ComputerRequest) throws -> ComputerResponse {
             try lock.withLock {
@@ -38,6 +39,10 @@ import XCTest
                     response.computers = [computers[index]]
                 case .delete:
                     computers.removeAll { $0.id == request.computerID }
+                case .surfaceFrame:
+                    response.surfaceFrame = SurfaceFrame(jpeg: Data([4, 5, 6]), width: 1024, height: 768)
+                case .surfaceInput:
+                    inputs.append((request.computerID, request.terminalID, request.agentID, try XCTUnwrap(request.surfaceInput)))
                 case .revoke:
                     revoked.append((try XCTUnwrap(request.computerID), try XCTUnwrap(request.agentID)))
                 default:
@@ -121,5 +126,42 @@ import XCTest
         XCTAssertEqual(f.hub.computers.computers(for: f.ada), [])
         XCTAssertEqual(f.hub.computers.assigned(to: alfred.id, for: f.ada), [])
         XCTAssertNil(f.hub.access.owner(ofComputer: made.id))
+    }
+
+    /// Clicking a computer card in a Hub bot's conversation shows it live and takes the person's input,
+    /// on the terminal the card shows and as the bot that owns it.
+    func testAPersonWatchesAndUsesTheComputerACardPointsAt() async throws {
+        let f = try fixture()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-computer-surface-\(UUID())")
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        let link = HubLinkService(hubName: "Mac mini", directory: root.appendingPathComponent("Link"),
+                                  access: f.hub.access, profiles: f.hub.harnessProfiles, bots: f.hub.bots,
+                                  connections: f.hub.connections, computers: f.hub.computers, browsers: f.hub.browsers, port: 0,
+                                  localEndpoints: { [LinkEndpoint(host: "::1", port: $0)] })
+        await link.start()
+        addTeardownBlock { await MainActor.run { link.stop() } }
+        guard case .listening = link.state else { throw XCTSkip("Could not listen: \(link.state)") }
+        let device = HubPairing(directory: root.appendingPathComponent("Device"), deviceName: "Mac")
+        await device.join(link.invite(f.ada).url().absoluteString)
+
+        let made = try await f.hub.computers.create(ComputerDraft(template: "ubuntu", name: "Workbench"), for: f.ada)
+        let bot = try f.hub.bots.create(LinkBotDraft(name: "Alfred", provider: "claude-code"), for: f.ada)
+        let terminal = UUID()
+        let card = ComputerCard(computer: made, agentID: bot.id, terminalID: terminal, terminalPreview: "$ ls")
+        let attachment = try f.hub.repository.importAttachment(data: JSONEncoder().encode(card.reference), originalFilename: "Workbench.noodlecomputer",
+                                                             into: bot.conversationID, mediaType: ComputerCard.mediaType,
+                                                             computer: card, browser: nil)
+
+        let events = try await device.stream(.openSurface(conversationID: bot.conversationID, attachmentID: attachment.id))
+        var session: UUID?
+        for try await event in events {
+            if case .surfaceOpened(let id) = event { session = id }
+            if case .surfaceFrame(_, let frame) = event { XCTAssertEqual(frame.width, 1024); break }
+        }
+        _ = try await device.request(.surfaceInput(sessionID: try XCTUnwrap(session), .key(.enter)))
+        XCTAssertEqual(f.computer.inputs.map(\.0), [made.id])
+        XCTAssertEqual(f.computer.inputs.map(\.1), [terminal])
+        XCTAssertEqual(f.computer.inputs.map(\.2), [bot.id])
+        XCTAssertEqual(f.computer.inputs.map(\.3), [.key(.enter)])
     }
 }

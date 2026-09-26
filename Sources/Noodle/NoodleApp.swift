@@ -142,7 +142,7 @@ struct NoodleApp: App {
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified(showsTitle: false))
 
-        WindowGroup("Browser", id: HubSurfaceTarget.windowID, for: HubSurfaceTarget.self) { $target in
+        WindowGroup("Live View", id: HubSurfaceTarget.windowID, for: HubSurfaceTarget.self) { $target in
             if let target {
                 HubSurfaceWindow(target: target)
                     .environment(store)

@@ -327,11 +327,11 @@ import NoodleRuntime
     }
 
     /// The bot of a direct conversation the user owns.
-    /// The browser card a message in one of the user's conversations carries.
-    public func browserCard(_ attachmentID: UUID, in conversationID: UUID, for user: HubUser) throws -> BrowserCard {
+    /// A card a message in one of the user's conversations carries.
+    public func card(_ attachmentID: UUID, in conversationID: UUID, for user: HubUser) throws -> ConversationAttachment {
         _ = try ownedConversation(conversationID, by: user)
-        guard let card = try attachments(in: conversationID)[attachmentID]?.browser else {
-            throw LinkError("That is not a browser card in this conversation.")
+        guard let card = try attachments(in: conversationID)[attachmentID], card.browser != nil || card.computer != nil else {
+            throw LinkError("That is not a browser or computer card in this conversation.")
         }
         return card
     }
