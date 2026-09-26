@@ -104,7 +104,7 @@ final class LinkKeyParsingTests: XCTestCase {
         }
         guard ready else { return nil }
         // A client may count its side of the handshake done before the Hub has checked it.
-        guard (try? await LinkQUIC.send(request, on: connection)) != nil, let answer = try? await LinkQUIC.receive(connection),
+        guard (try? await LinkQUIC.send(request, on: connection)) != nil, let answer = try? await LinkQUIC.receive(connection, limit: LinkQUIC.answerLimit),
               !answer.isEmpty else { return nil }
         return answer
     }

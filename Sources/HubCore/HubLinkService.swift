@@ -224,9 +224,19 @@ import Observation
                 return .response(LinkProtocol.encode(LinkResponse.failure(error.localizedDescription)))
             }
         }
-        let response: LinkResponse
+        var response: LinkResponse
         do {
             response = try await handle(request, from: key)
+            // Lists stay small however many pictures they show; the device fetches each once.
+            if LinkProtocol.fetchesPictures(data) {
+                switch response {
+                case .bots(let bots): response = .bots(bots.map(\.withoutPicture))
+                case .connections(let connections): response = .connections(connections.map(\.withoutPicture))
+                case .computers(let computers): response = .computers(computers.map(\.withoutPicture))
+                case .browsers(let browsers): response = .browsers(browsers.map(\.withoutPicture))
+                default: break
+                }
+            }
         } catch {
             response = .failure(error.localizedDescription)
         }
@@ -358,6 +368,14 @@ import Observation
             return .message(try hubBots().react(change, for: try user(key)))
         case .connections:
             return .connections(try hubConnections().link(for: try user(key)))
+        case .picture(let owner):
+            let user = try user(key)
+            switch owner {
+            case .bot(let id): return .picture(try hubBots().picture(ofBot: id, for: user))
+            case .connection(let id): return .picture(try hubConnections().link(for: user).first { $0.id == id }?.iconData)
+            case .computer(let id): return .picture(try hubComputers().link(for: user).first { $0.id == id }?.icon)
+            case .browser(let id): return .picture(try hubBrowsers().link(for: user).first { $0.id == id }?.icon)
+            }
         case .saveConnection(let draft):
             let user = try user(key)
             let record = try MCPConnectionRecord(id: draft.id, name: draft.name, endpoint: draft.endpoint,

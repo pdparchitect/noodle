@@ -15,6 +15,40 @@ final class LinkProtocolTests: XCTestCase {
         XCTAssertEqual(try LinkInvitation(text: code), invitation)
     }
 
+    /// Devices that fetch pictures on their own say so with every request; older ones get them in lists.
+    func testListsLeavePicturesOutOnlyForDevicesThatFetchThem() throws {
+        XCTAssertTrue(LinkProtocol.fetchesPictures(try LinkProtocol.encode(.bots)))
+        XCTAssertFalse(LinkProtocol.fetchesPictures(Data(#"{"version":1,"request":{"bots":{}}}"#.utf8)))
+        let id = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
+        XCTAssertEqual(try LinkProtocol.decode(Data(#"{"version":1,"fetchesPictures":true,"request":{"picture":{"_0":{"bot":{"_0":"00000000-0000-0000-0000-00000000000A"}}}}}"#.utf8)).get(),
+                       .picture(.bot(id)))
+
+        let picture = Data([1, 2, 3])
+        let browser = LinkBrowser(id: id, name: "Work", icon: picture).withoutPicture
+        XCTAssertNil(browser.icon)
+        XCTAssertEqual(browser.iconDigest, LinkPicture.digest(picture))
+        XCTAssertEqual(LinkBrowser(id: id, name: "Work").withoutPicture, LinkBrowser(id: id, name: "Work"))
+    }
+
+    /// An edit sends a bot's picture only when it changed, and a removed one stays removed.
+    func testAnEditLeavesOutOnlyThePictureTheHubHas() {
+        let picture = Data([1, 2, 3])
+        var draft = LinkBotDraft(name: "Alfred", provider: "claude-code", avatarImageData: picture)
+        draft.avatarImageDigest = LinkPicture.digest(picture)
+        XCTAssertNil(draft.leavingOutKnownPicture.avatarImageData)
+        XCTAssertEqual(draft.leavingOutKnownPicture.avatarImageDigest, LinkPicture.digest(picture))
+
+        var changed = draft
+        changed.avatarImageData = Data([4])
+        XCTAssertEqual(changed.leavingOutKnownPicture.avatarImageData, Data([4]))
+        XCTAssertNil(changed.leavingOutKnownPicture.avatarImageDigest)
+
+        var removed = draft
+        removed.removePicture()
+        XCTAssertNil(removed.leavingOutKnownPicture.avatarImageData)
+        XCTAssertNil(removed.leavingOutKnownPicture.avatarImageDigest)
+    }
+
     func testOtherTextIsNotAnInvitation() {
         XCTAssertThrowsError(try LinkInvitation(text: "https://example.com"))
         XCTAssertThrowsError(try LinkInvitation(text: "noodle://join-hub?i=bm90IGpzb24"))

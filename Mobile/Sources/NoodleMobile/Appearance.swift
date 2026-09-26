@@ -173,12 +173,12 @@ struct BotPictureEditor: View {
                     Button { creating = true } label: { Label("Create Image", systemImage: "apple.image.playground") }
                 }
                 Button {
-                    draft.avatarImageData = nil
+                    draft.removePicture()
                 } label: {
-                    Label(draft.avatarImageData == nil ? "Using Symbol" : "Use Symbol Instead",
-                          systemImage: draft.avatarImageData == nil ? "checkmark" : "square.grid.2x2")
+                    Label(draft.hasPicture ? "Use Symbol Instead" : "Using Symbol",
+                          systemImage: draft.hasPicture ? "square.grid.2x2" : "checkmark")
                 }
-                .disabled(draft.avatarImageData == nil)
+                .disabled(!draft.hasPicture)
                 if loading { ProgressView() }
                 if let problem { Text(problem).foregroundStyle(.red) }
             }
@@ -187,10 +187,10 @@ struct BotPictureEditor: View {
                     ForEach(0..<AgentAvatar.colourCount, id: \.self) { index in
                         Button {
                             draft.avatarColorIndex = index
-                            draft.avatarImageData = nil
+                            draft.removePicture()
                         } label: {
                             AgentAvatar.swatch(index).frame(width: 34, height: 34).overlay {
-                                if draft.avatarImageData == nil && AgentAvatar.colourIndex(draft.avatarColorIndex) == index {
+                                if !draft.hasPicture && AgentAvatar.colourIndex(draft.avatarColorIndex) == index {
                                     Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
                                 }
                             }
@@ -205,10 +205,10 @@ struct BotPictureEditor: View {
             Section("Symbol") {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 10) {
                     ForEach(Self.symbols, id: \.self) { symbol in
-                        let selected = draft.avatarImageData == nil && (draft.avatarSymbolName ?? "sparkles") == symbol
+                        let selected = !draft.hasPicture && (draft.avatarSymbolName ?? "sparkles") == symbol
                         Button {
                             draft.avatarSymbolName = symbol
-                            draft.avatarImageData = nil
+                            draft.removePicture()
                         } label: {
                             Image(systemName: symbol).font(.system(size: 18, weight: .semibold))
                                 .frame(maxWidth: .infinity).frame(height: 42)

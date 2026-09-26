@@ -14,7 +14,13 @@ public enum LinkProtocol {
     public static let supportedVersions: ClosedRange<Int> = 1...1
 
     public static func encode(_ request: LinkRequest) throws -> Data {
-        try encoder.encode(Envelope(version: version, request: request))
+        try encoder.encode(Envelope(version: version, fetchesPictures: true, request: request))
+    }
+
+    /// Whether the device fetches pictures with `picture` itself, so lists may leave them out.
+    /// Devices from before it was added get them in lists, as they always did.
+    public static func fetchesPictures(_ data: Data) -> Bool {
+        (try? decoder.decode(Header.self, from: data))?.fetchesPictures ?? false
     }
 
     /// The request, or the failure to answer with when it cannot be served.
@@ -52,9 +58,13 @@ public enum LinkProtocol {
         try? decoder.decode(LinkEvent.self, from: data)
     }
 
-    private struct Header: Decodable { var version: Int }
+    private struct Header: Decodable {
+        var version: Int
+        var fetchesPictures: Bool?
+    }
     private struct Envelope: Codable {
         var version: Int
+        var fetchesPictures: Bool?
         var request: LinkRequest
     }
 
@@ -140,6 +150,96 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     /// The latest picture of what a link a bot shared points at, for its card, when the link
     /// itself carries none, as a noodlet's does not. Answered with `picture`.
     case linkPreview(conversationID: UUID, attachmentID: UUID)
+    /// A picture a list left out, answered with `picture`.
+    case picture(LinkPictureOwner)
+}
+
+/// Whose picture: a bot's, or the icon of a connection, computer or browser.
+public enum LinkPictureOwner: Codable, Hashable, Sendable {
+    case bot(UUID), connection(UUID), computer(UUID), browser(UUID)
+}
+
+/// Pictures travel apart from the lists that show them: a list carries each one's digest, and
+/// a device fetches only those it does not keep yet.
+public enum LinkPicture {
+    public static func digest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func isDigest(_ text: String) -> Bool {
+        text.count == 64 && text.allSatisfy { $0.isHexDigit && !$0.isUppercase }
+    }
+}
+
+/// Something a list shows with a picture that may travel apart from it.
+public protocol LinkPictured: Sendable {
+    static var pictureFolder: String { get }
+    var pictureOwner: LinkPictureOwner { get }
+    var picture: Data? { get set }
+    var pictureDigest: String? { get set }
+}
+
+extension LinkPictured {
+    /// As a list sends it to a device that fetches pictures itself.
+    public var withoutPicture: Self {
+        guard let picture else { return self }
+        var copy = self
+        copy.pictureDigest = LinkPicture.digest(picture)
+        copy.picture = nil
+        return copy
+    }
+}
+
+extension LinkBot: LinkPictured {
+    public static let pictureFolder = "Bots"
+    public var pictureOwner: LinkPictureOwner { .bot(id) }
+    public var picture: Data? {
+        get { draft.avatarImageData }
+        set { draft.avatarImageData = newValue }
+    }
+    public var pictureDigest: String? {
+        get { draft.avatarImageDigest }
+        set { draft.avatarImageDigest = newValue }
+    }
+}
+
+extension LinkConnection: LinkPictured {
+    public static let pictureFolder = "Connections"
+    public var pictureOwner: LinkPictureOwner { .connection(id) }
+    public var picture: Data? {
+        get { iconData }
+        set { iconData = newValue }
+    }
+    public var pictureDigest: String? {
+        get { iconDigest }
+        set { iconDigest = newValue }
+    }
+}
+
+extension LinkComputer: LinkPictured {
+    public static let pictureFolder = "Computers"
+    public var pictureOwner: LinkPictureOwner { .computer(id) }
+    public var picture: Data? {
+        get { icon }
+        set { icon = newValue }
+    }
+    public var pictureDigest: String? {
+        get { iconDigest }
+        set { iconDigest = newValue }
+    }
+}
+
+extension LinkBrowser: LinkPictured {
+    public static let pictureFolder = "Browsers"
+    public var pictureOwner: LinkPictureOwner { .browser(id) }
+    public var picture: Data? {
+        get { icon }
+        set { icon = newValue }
+    }
+    public var pictureDigest: String? {
+        get { iconDigest }
+        set { iconDigest = newValue }
+    }
 }
 
 public enum LinkResponse: Codable, Equatable, Sendable {
@@ -210,6 +310,8 @@ public struct LinkBrowser: Codable, Equatable, Identifiable, Sendable {
     public var symbol: String
     public var colour: Int
     public var icon: Data?
+    /// The icon's digest, sent in its place when a list leaves it out.
+    public var iconDigest: String?
     /// Bots may not use it while its owner has paused them.
     public var paused: Bool
     /// The bots it is assigned to.
@@ -256,6 +358,8 @@ public struct LinkComputer: Codable, Equatable, Identifiable, Sendable {
     public var symbol: String
     public var colour: Int
     public var icon: Data?
+    /// The icon's digest, sent in its place when a list leaves it out.
+    public var iconDigest: String?
     /// The bots it is assigned to.
     public var botIDs: [UUID]
 
@@ -309,6 +413,8 @@ public struct LinkConnectionDraft: Codable, Equatable, Sendable {
 public struct LinkConnection: Codable, Equatable, Identifiable, Sendable {
     public var draft: LinkConnectionDraft
     public var iconData: Data?
+    /// The icon's digest, sent in its place when a list leaves it out.
+    public var iconDigest: String?
     /// The bots it is assigned to.
     public var botIDs: [UUID]
     public var signedIn: Bool
@@ -395,6 +501,8 @@ public struct LinkBotDraft: Codable, Equatable, Sendable {
     public var avatarSymbolName: String?
     public var avatarColorIndex: Int
     public var avatarImageData: Data?
+    /// The picture the Hub has. Sent without `avatarImageData`, it keeps that picture.
+    public var avatarImageDigest: String?
 
     public init(name: String, provider: String, profile: UUID? = nil, model: String? = nil, reasoningEffort: String? = nil,
                 publicDescription: String = "", backstory: String = "", avatarSymbolName: String? = nil,
@@ -412,7 +520,8 @@ public struct LinkBotDraft: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, provider, profile, model, reasoningEffort, publicDescription, backstory, avatarSymbolName, avatarColorIndex, avatarImageData
+        case name, provider, profile, model, reasoningEffort, publicDescription, backstory, avatarSymbolName, avatarColorIndex, avatarImageData,
+             avatarImageDigest
     }
 
     public init(from decoder: Decoder) throws {
@@ -427,6 +536,24 @@ public struct LinkBotDraft: Codable, Equatable, Sendable {
         avatarSymbolName = try c.decodeIfPresent(String.self, forKey: .avatarSymbolName)
         avatarColorIndex = try c.decode(.avatarColorIndex, or: 0)
         avatarImageData = try c.decodeIfPresent(Data.self, forKey: .avatarImageData)
+        avatarImageDigest = try c.decodeIfPresent(String.self, forKey: .avatarImageDigest)
+    }
+
+    /// Whether the bot shows a picture, fetched yet or not.
+    public var hasPicture: Bool { avatarImageData != nil || avatarImageDigest != nil }
+
+    public mutating func removePicture() {
+        avatarImageData = nil
+        avatarImageDigest = nil
+    }
+
+    /// As an edit sends it: without the picture when it is the one the Hub has.
+    public var leavingOutKnownPicture: LinkBotDraft {
+        var draft = self
+        if let data = avatarImageData {
+            if avatarImageDigest == LinkPicture.digest(data) { draft.avatarImageData = nil } else { draft.avatarImageDigest = nil }
+        }
+        return draft
     }
 }
 

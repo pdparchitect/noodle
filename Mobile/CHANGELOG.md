@@ -6,6 +6,10 @@
 
 - Noodle opens with a swirl that rises from the bottom of the screen and writes its name, then shows Pair.
 
+### Fixed
+
+- Connect to a Hub whose bot list or live views are large, such as bots with photo pictures, instead of stopping at “The message is too large.” Chats show at once and bot pictures follow, each fetched once and kept; editing a bot no longer sends its picture back.
+
 ## [0.2.0] - 2026-09-26
 
 ### What to Test

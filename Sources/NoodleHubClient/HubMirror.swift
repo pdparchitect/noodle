@@ -217,21 +217,24 @@ import Observation
         guard case .browsers(let listed) = try await pairing.request(.browsers) else {
             throw LinkError("The Hub sent an unexpected answer.")
         }
-        browsers = listed
+        await pairing.fetchPictures(listed)
+        browsers = pairing.keptPictures(listed)
     }
 
     private func syncComputers() async throws {
         guard case .computers(let listed) = try await pairing.request(.computers) else {
             throw LinkError("The Hub sent an unexpected answer.")
         }
-        computers = listed
+        await pairing.fetchPictures(listed)
+        computers = pairing.keptPictures(listed)
     }
 
     private func syncConnections() async throws {
         guard case .connections(let listed) = try await pairing.request(.connections) else {
             throw LinkError("The Hub sent an unexpected answer.")
         }
-        connections = listed
+        await pairing.fetchPictures(listed)
+        connections = pairing.keptPictures(listed)
     }
 
     private func openSignInPage(_ id: UUID, url: URL) async {
@@ -319,7 +322,9 @@ import Observation
     }
 
     private func syncBots() async throws {
-        guard case .bots(let bots) = try await pairing.request(.bots) else { throw LinkError("The Hub sent an unexpected answer.") }
+        guard case .bots(let listed) = try await pairing.request(.bots) else { throw LinkError("The Hub sent an unexpected answer.") }
+        await pairing.fetchPictures(listed)
+        let bots = pairing.keptPictures(listed)
         var changed = false
         for bot in bots {
             if let entry = entries.first(where: { $0.remote == bot.id }) {
@@ -457,6 +462,9 @@ import Observation
 
     private func apply(_ draft: LinkBotDraft, to entry: Entry) throws {
         guard let agent = try repository.loadAgents().first(where: { $0.id == entry.agent }) else { return }
+        var draft = draft
+        // A picture that could not be fetched yet keeps the one here.
+        if draft.avatarImageData == nil, draft.avatarImageDigest != nil { draft.avatarImageData = agent.avatarImageData }
         update(entry.remote) { $0.profile = draft.profile }
         let unchanged = agent.displayName == draft.name && agent.harnessIdentifier == draft.provider
             && agent.modelIdentifier == draft.model && agent.reasoningEffort == draft.reasoningEffort

@@ -163,7 +163,7 @@ import SwiftUI
     }
 
     func update(_ agent: LinkBot) async throws {
-        guard case .bot(let bot) = try await pairing.request(.updateBot(id: agent.id, agent.draft)) else {
+        guard case .bot(let bot) = try await pairing.request(.updateBot(id: agent.id, agent.draft.leavingOutKnownPicture)) else {
             throw LinkError("The Hub sent an unexpected answer.")
         }
         if let index = agents.firstIndex(where: { $0.id == bot.id }) { agents[index] = bot }
@@ -247,7 +247,7 @@ import SwiftUI
 
     func reload() async throws {
         guard case .bots(let bots) = try await pairing.request(.bots) else { throw LinkError("The Hub sent an unexpected answer.") }
-        agents = bots
+        agents = pairing.keptPictures(bots)
         for bot in bots { try await load(bot.conversationID) }
         // Conversations of bots that are gone.
         conversations = conversations.filter { id, _ in bots.contains { $0.conversationID == id } }
@@ -259,6 +259,11 @@ import SwiftUI
         try? await loadTools()
         isLoaded = true
         error = nil
+        saveCache()
+        // Pictures come after the chats show, each fetched once.
+        await pairing.fetchPictures(bots)
+        guard agents.map(\.id) == bots.map(\.id) else { return }
+        agents = pairing.keptPictures(agents)
         saveCache()
     }
 

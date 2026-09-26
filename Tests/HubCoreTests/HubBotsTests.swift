@@ -57,6 +57,36 @@ import XCTest
         XCTAssertEqual(listed, .bots([bot]))
     }
 
+    /// The list leaves a bot's picture out; a device fetches it once, and an edit keeps it without sending it back.
+    func testBotPicturesTravelApartFromTheList() async throws {
+        let f = try await fixture()
+        let picture = Data(repeating: 9, count: 300_000)
+        guard case .bot(let bot) = try await f.device.request(.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code",
+                                                                                     avatarImageData: picture))) else {
+            return XCTFail("unexpected answer")
+        }
+        guard case .bots(let listed) = try await f.device.request(.bots) else { return XCTFail("unexpected answer") }
+        let draft = try XCTUnwrap(listed.first?.draft)
+        XCTAssertNil(draft.avatarImageData)
+        XCTAssertEqual(draft.avatarImageDigest, LinkPicture.digest(picture))
+        XCTAssertNil(f.device.keptPictures(listed).first?.draft.avatarImageData)
+        await f.device.fetchPictures(listed)
+        XCTAssertEqual(f.device.keptPictures(listed).first?.draft.avatarImageData, picture)
+
+        var renamed = try XCTUnwrap(f.device.keptPictures(listed).first?.draft)
+        renamed.name = "Jeeves"
+        XCTAssertNil(renamed.leavingOutKnownPicture.avatarImageData)
+        _ = try await f.device.request(.updateBot(id: bot.id, renamed.leavingOutKnownPicture))
+        let agent = { try XCTUnwrap(f.hub.repository.loadAgents().first { $0.id == bot.id }) }
+        XCTAssertEqual(try agent().displayName, "Jeeves")
+        XCTAssertEqual(try agent().avatarImageData, picture)
+
+        var symbol = renamed
+        symbol.removePicture()
+        _ = try await f.device.request(.updateBot(id: bot.id, symbol.leavingOutKnownPicture))
+        XCTAssertNil(try agent().avatarImageData)
+    }
+
     func testBotsOnlyUseHarnessesTheirUsersPlanLends() async throws {
         let f = try await fixture()
         do {

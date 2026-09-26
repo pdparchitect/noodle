@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Connect to a Noodle Hub whose bot list or live views are large, such as bots with photo pictures, instead of stopping at “The message is too large.” Bot pictures and tool icons now come apart from their lists, each fetched once and kept, so lists stay quick however many pictures they show.
+
 ## [0.28.0] - 2026-09-26
 
 ### Added

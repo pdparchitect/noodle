@@ -181,7 +181,8 @@ import NoodleRuntime
             agent, displayName: draft.name, harnessIdentifier: provider.rawValue, modelIdentifier: draft.model,
             reasoningEffort: draft.reasoningEffort, publicDescription: draft.publicDescription,
             avatarSymbolName: draft.avatarSymbolName, avatarColorIndex: draft.avatarColorIndex,
-            avatarImageData: draft.avatarImageData)
+            // A digest without the picture keeps the one the bot has.
+            avatarImageData: draft.avatarImageData ?? (draft.avatarImageDigest == nil ? nil : agent.avatarImageData))
         try repository.updateAgentBackstory(updated, backstory: draft.backstory)
         try repository.updateAgentHarnessProfile(updated, profile: draft.profile)
         if running { runtime.restart(agent: updated, repository: repository) }
@@ -190,6 +191,10 @@ import NoodleRuntime
         return try bot(updated, conversations: try repository.loadConversations()) ?? {
             throw LinkError("The bot was saved but could not be read back.")
         }()
+    }
+
+    public func picture(ofBot id: UUID, for user: HubUser) throws -> Data? {
+        try owned(id, by: user).avatarImageData
     }
 
     public func delete(_ id: UUID, for user: HubUser) throws {
@@ -455,11 +460,12 @@ import NoodleRuntime
         guard let conversation = conversations.first(where: { $0.kind == .direct && $0.participantIDs == [agent.id] }) else {
             return nil
         }
-        let draft = LinkBotDraft(
+        var draft = LinkBotDraft(
             name: agent.displayName, provider: agent.harnessIdentifier ?? "", profile: try repository.loadAgentHarnessProfile(agent),
             model: agent.modelIdentifier, reasoningEffort: agent.reasoningEffort, publicDescription: agent.publicDescription ?? "",
             backstory: try repository.loadAgentBackstory(agent), avatarSymbolName: agent.avatarSymbolName,
             avatarColorIndex: agent.avatarColorIndex ?? agent.accentSeed, avatarImageData: agent.avatarImageData)
+        draft.avatarImageDigest = agent.avatarImageData.map(LinkPicture.digest)
         return LinkBot(id: agent.id, conversationID: conversation.id, draft: draft, createdAt: agent.createdAt,
                        phase: LinkBotPhase(rawValue: runtime.snapshot(for: agent.id).phase.rawValue))
     }

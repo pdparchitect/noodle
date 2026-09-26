@@ -13,11 +13,16 @@ private actor FakeHub {
     /// Files by ID, as uploaded or given to the bot's messages.
     var files: [UUID: (attachment: LinkAttachment, data: Data)] = [:]
     var downloads = 0
+    var pictureFetches = 0
+    /// Bot edits as the phone sent them.
+    var edits: [LinkBotDraft] = []
     var messages: [LinkMessage] = []
     /// Where it listens, which it tells the phone when pairing, as the real Hub does.
     var endpoints: [LinkEndpoint] = []
 
     func listen(at endpoint: LinkEndpoint) { endpoints = [endpoint] }
+
+    func setPicture(_ data: Data) { bot.draft.avatarImageData = data }
 
     func data(of id: UUID) -> Data? { files[id]?.data }
 
@@ -45,9 +50,16 @@ private actor FakeHub {
         case .success(.enroll):
             return .status(LinkStatus(hubName: "Studio", userName: "Petko", planName: "", harnesses: [], endpoints: endpoints))
         case .success(.bots):
-            return .bots([bot] + created)
+            // As the real Hub answers a device that fetches pictures itself.
+            return .bots(([bot] + created).map(\.withoutPicture))
+        case .success(.picture(.bot(let id))) where id == bot.id:
+            pictureFetches += 1
+            return .picture(bot.draft.avatarImageData)
         case .success(.updateBot(let id, let draft)) where id == bot.id:
+            edits.append(draft)
+            let picture = draft.avatarImageData ?? (draft.avatarImageDigest == nil ? nil : bot.draft.avatarImageData)
             bot.draft = draft
+            bot.draft.avatarImageData = picture
             return .bot(bot)
         case .success(.deleteBot(let id)):
             created.removeAll { $0.id == id }
@@ -144,6 +156,28 @@ private actor FakeHub {
         try await chats.send("Hi", to: await hub.bot)
         let bodies = chats.messages(of: await hub.bot).map(\.body)
         #expect(Array(bodies.prefix(3)) == ["Hello", "Earlier", "Hi"])
+    }
+
+    /// A bot's picture is fetched once, apart from the list, and an edit does not send it back.
+    @Test func botPicturesAreFetchedOnceAndNotSentBack() async throws {
+        let hub = FakeHub()
+        let picture = Data(repeating: 5, count: 2_000_000)
+        await hub.setPicture(picture)
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+
+        try await chats.reload()
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+        #expect(scout.draft.avatarImageData == picture)
+        #expect(await hub.pictureFetches == 1)
+
+        var renamed = scout
+        renamed.draft.name = "Ranger"
+        try await chats.update(renamed)
+        #expect(await hub.edits.last?.avatarImageData == nil)
+        #expect(await hub.bot.draft.avatarImageData == picture)
+        #expect(await hub.bot.draft.name == "Ranger")
     }
 
     @Test func agentsListWithTheirLatestMessage() async throws {

@@ -124,6 +124,38 @@ import Observation
         }
     }
 
+    /// `items` with the pictures their list left out filled in from those this device keeps.
+    public func keptPictures<Item: LinkPictured>(_ items: [Item]) -> [Item] {
+        items.map { item in
+            guard item.picture == nil, let digest = item.pictureDigest, LinkPicture.isDigest(digest) else { return item }
+            var filled = item
+            filled.picture = try? Data(contentsOf: picturesURL(Item.self).appendingPathComponent(digest))
+            return filled
+        }
+    }
+
+    /// Fetches the pictures `items`, a whole list, left out that this device does not keep yet,
+    /// and forgets those it no longer shows. A picture that cannot be fetched is tried next time.
+    public func fetchPictures<Item: LinkPictured>(_ items: [Item]) async {
+        let folder = picturesURL(Item.self)
+        let wanted = Set(items.compactMap(\.pictureDigest).filter(LinkPicture.isDigest))
+        for name in (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [] where !wanted.contains(name) {
+            try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
+        }
+        for item in items where item.picture == nil {
+            guard let digest = item.pictureDigest, wanted.contains(digest),
+                  !FileManager.default.fileExists(atPath: folder.appendingPathComponent(digest).path),
+                  case .picture(let data?)? = try? await request(.picture(item.pictureOwner)),
+                  LinkPicture.digest(data) == digest else { continue }
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try? data.write(to: folder.appendingPathComponent(digest), options: .atomic)
+        }
+    }
+
+    private func picturesURL<Item: LinkPictured>(_: Item.Type) -> URL {
+        directory.appendingPathComponent("Pictures", isDirectory: true).appendingPathComponent(Item.pictureFolder, isDirectory: true)
+    }
+
     /// Opens the stream the joined Hub pushes events down.
     public func subscribe() async throws -> AsyncThrowingStream<LinkEvent, Error> {
         try await stream(.subscribe)

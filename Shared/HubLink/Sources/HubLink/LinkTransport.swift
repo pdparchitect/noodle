@@ -17,7 +17,11 @@ public struct LinkEndpoint: Codable, Hashable, Sendable, CustomStringConvertible
 
 enum LinkQUIC {
     static let alpn = "noodle-hub/1"
-    static let messageLimit = 1 << 20
+    /// What the Hub reads from a device; files travel in pieces well under it.
+    static let requestLimit = 1 << 20
+    /// What a device reads from the Hub it pinned: answers and pushed frames, such as a bot list
+    /// carrying photo avatars or a video key frame, can be far larger than any request.
+    static let answerLimit = 64 << 20
     static let queue = DispatchQueue(label: "HubLink")
 
     /// Both sides present their key. `verify` decides whether the peer's key is acceptable.
@@ -52,16 +56,16 @@ enum LinkQUIC {
         if first.first == 0 {
             guard let rest = try await read(3, from: connection) else { throw LinkError("The request was cut short.") }
             let length = Int((first + rest).withUnsafeBytes { UInt32(bigEndian: $0.loadUnaligned(as: UInt32.self)) })
-            guard length <= messageLimit, let request = try await read(length, from: connection) else {
+            guard length <= requestLimit, let request = try await read(length, from: connection) else {
                 throw LinkError("The request was too large or cut short.")
             }
             return (request, true)
         }
-        return (first + (try await receive(connection)), false)
+        return (first + (try await receive(connection, limit: requestLimit)), false)
     }
 
     /// Reads one whole message: everything until the peer finishes its side of the stream.
-    static func receive(_ connection: NWConnection) async throws -> Data {
+    static func receive(_ connection: NWConnection, limit: Int) async throws -> Data {
         var data = Data()
         while true {
             let (chunk, complete) = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<(Data?, Bool), Error>) in
@@ -70,7 +74,7 @@ enum LinkQUIC {
                 }
             }
             if let chunk { data.append(chunk) }
-            guard data.count <= messageLimit else { throw LinkError("The message is too large.") }
+            guard data.count <= limit else { throw LinkError("The message is too large.") }
             if complete || chunk == nil { return data }
         }
     }
@@ -169,7 +173,7 @@ public final class LinkStream: @unchecked Sendable {
         Task { [connection] in
             while let header = try? await LinkQUIC.read(4, from: connection) {
                 let length = Int(header.withUnsafeBytes { UInt32(bigEndian: $0.loadUnaligned(as: UInt32.self)) })
-                guard length <= LinkQUIC.messageLimit else { break }
+                guard length <= LinkQUIC.requestLimit else { break }
                 // Empty frames only keep the stream alive.
                 guard length > 0 else { continue }
                 guard let payload = try? await LinkQUIC.read(length, from: connection) else { break }
@@ -334,12 +338,12 @@ public final class LinkSubscription: Sendable {
                     while let header = try await LinkQUIC.read(4, from: connection) {
                         // A Hub that refuses answers once, in JSON, instead of opening the stream.
                         if header.first == UInt8(ascii: "{") {
-                            let response = try LinkProtocol.decodeResponse(header + (try await LinkQUIC.receive(connection)))
+                            let response = try LinkProtocol.decodeResponse(header + (try await LinkQUIC.receive(connection, limit: LinkQUIC.answerLimit)))
                             if case .failure(let message) = response { throw LinkError(message) }
                             throw LinkError("The Hub sent an unexpected answer.")
                         }
                         let length = Int(header.withUnsafeBytes { UInt32(bigEndian: $0.loadUnaligned(as: UInt32.self)) })
-                        guard length <= LinkQUIC.messageLimit else { throw LinkError("The message is too large.") }
+                        guard length <= LinkQUIC.answerLimit else { throw LinkError("The message is too large.") }
                         // Empty frames only keep the stream alive.
                         guard length > 0 else { continue }
                         guard let payload = try await LinkQUIC.read(length, from: connection) else { break }
@@ -414,7 +418,7 @@ public enum LinkClient {
         let (connection, endpoint) = try await firstReady(endpoints, identity: identity, hubKey: hubKey, timeout: timeout)
         defer { connection.cancel() }
         try await LinkQUIC.send(request, on: connection)
-        return (try await LinkQUIC.receive(connection), endpoint)
+        return (try await LinkQUIC.receive(connection, limit: LinkQUIC.answerLimit), endpoint)
     }
 
     /// The first endpoint whose handshake completes wins; the rest are cancelled.

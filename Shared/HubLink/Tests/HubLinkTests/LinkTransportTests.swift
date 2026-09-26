@@ -22,6 +22,19 @@ final class LinkTransportTests: XCTestCase {
         XCTAssertEqual(response, device.publicKey.x963 + Data("hello".utf8))
     }
 
+    /// An answer can outgrow a request, as a bot list carrying photo avatars does.
+    func testTheDeviceTakesAnAnswerLargerThanARequest() async throws {
+        let hub = LinkIdentity()
+        let answer = Data(repeating: 7, count: 6 << 20)
+        let server = try LinkServer(identity: hub, port: 0, admits: { _ in true }) { _, _ in .response(answer) }
+        try await server.start()
+        addTeardownBlock { server.stop() }
+        let endpoint = LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))
+        let (response, _) = try await LinkClient.exchange(Data("bots".utf8), identity: LinkIdentity(), hubKey: hub.publicKey,
+                                                          endpoints: [endpoint])
+        XCTAssertEqual(response, answer)
+    }
+
     func testDeviceRefusesAHubWithAnotherKey() async throws {
         let server = try await server(LinkIdentity())
         let endpoint = LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))
@@ -82,13 +95,15 @@ final class LinkStreamTests: XCTestCase {
         stream.send(Data("one".utf8))
         stream.send(Data(repeating: 7, count: 200_000))
         stream.send(Data("three".utf8))
+        stream.send(Data(repeating: 8, count: 3 << 20))
 
         var received: [Data] = []
         for try await frame in frames.frames {
             received.append(frame)
-            if received.count == 3 { break }
+            if received.count == 4 { break }
         }
-        XCTAssertEqual(received, [Data("one".utf8), Data(repeating: 7, count: 200_000), Data("three".utf8)])
+        XCTAssertEqual(received, [Data("one".utf8), Data(repeating: 7, count: 200_000), Data("three".utf8),
+                                  Data(repeating: 8, count: 3 << 20)])
         frames.cancel()
     }
 
