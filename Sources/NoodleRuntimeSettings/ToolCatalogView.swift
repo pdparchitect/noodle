@@ -90,8 +90,10 @@ public struct MCPConnectionMaturityBadge: View {
 public struct ToolCreationSheet: View {
     var onAdded: (UUID) -> Void = { _ in }
     private let onConnect: (MCPConnectionRecord) -> Void
-    private let addPreset: (ToolDefinition, MCPToolConfiguration, UUID) async throws -> MCPConnectionRecord
-    private let save: (MCPConnectionRecord) async throws -> MCPConnectionRecord
+    /// On this Mac, adding is immediate; elsewhere, as on a Noodle Hub, it waits for an answer.
+    private let controller: MCPController?
+    private let addPreset: ((ToolDefinition, MCPToolConfiguration, UUID) async throws -> MCPConnectionRecord)?
+    private let save: ((MCPConnectionRecord) async throws -> MCPConnectionRecord)?
     @Environment(\.dismiss) private var dismiss
     @State private var customMCP = false
     @State private var error: String?
@@ -100,24 +102,22 @@ public struct ToolCreationSheet: View {
 
     public init(controller: MCPController, onAdded: @escaping (UUID) -> Void = { _ in },
          onConnect: ((MCPConnectionRecord) -> Void)? = nil) {
-        self.init(onAdded: onAdded, onConnect: onConnect ?? controller.connect,
-                  addPreset: { try controller.addPreset($0, configuration: $1, connectionID: $2) },
-                  save: { record in
-                      try controller.save(record)
-                      return controller.registry.connections.first { $0.id == record.id } ?? record
-                  })
+        self.controller = controller; self.onAdded = onAdded; self.onConnect = onConnect ?? controller.connect
+        addPreset = nil; save = nil
     }
 
     /// For connections kept somewhere other than this Mac, as on a Noodle Hub.
     public init(onAdded: @escaping (UUID) -> Void = { _ in }, onConnect: @escaping (MCPConnectionRecord) -> Void,
                 addPreset: @escaping (ToolDefinition, MCPToolConfiguration, UUID) async throws -> MCPConnectionRecord,
                 save: @escaping (MCPConnectionRecord) async throws -> MCPConnectionRecord) {
-        self.onAdded = onAdded; self.onConnect = onConnect; self.addPreset = addPreset; self.save = save
+        controller = nil; self.onAdded = onAdded; self.onConnect = onConnect; self.addPreset = addPreset; self.save = save
     }
 
     public var body: some View {
         Group {
-            if customMCP {
+            if customMCP, let controller {
+                MCPEditor(controller: controller, onBack: { customMCP = false }, onSaved: { onAdded($0.id) }, onConnect: onConnect)
+            } else if customMCP, let save {
                 MCPEditor(onBack: { customMCP = false }, onSaved: { onAdded($0.id) }, onConnect: onConnect, save: save)
             } else {
                 ToolCatalogView(onSelect: add, onCustomMCP: { customMCP = true },
@@ -134,17 +134,23 @@ public struct ToolCreationSheet: View {
         // the user has tried another preset in the same sheet.
         let id = presetAttempts[tool.id] ?? UUID()
         presetAttempts[tool.id] = id
+        if let controller {
+            do { added(try controller.addPreset(tool, configuration: configuration, connectionID: id)) }
+            catch { self.error = error.localizedDescription; adding = false }
+            return
+        }
         Task { @MainActor in
-            do {
-                let connection = try await addPreset(tool, configuration, id)
-                onAdded(connection.id)
-                dismiss()
-                try? await Task.sleep(for: .milliseconds(250))
-                onConnect(connection)
-            } catch {
-                self.error = error.localizedDescription
-                adding = false
-            }
+            do { added(try await addPreset!(tool, configuration, id)) }
+            catch { self.error = error.localizedDescription; adding = false }
+        }
+    }
+
+    private func added(_ connection: MCPConnectionRecord) {
+        onAdded(connection.id)
+        dismiss()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            onConnect(connection)
         }
     }
 }

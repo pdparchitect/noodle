@@ -109,8 +109,9 @@ public struct MCPSettingsView: View {
 }
 
 public struct MCPEditor: View {
-    /// Saves the connection wherever it is kept and returns it as saved.
-    private let saveRecord: (MCPConnectionRecord) async throws -> MCPConnectionRecord
+    /// Saves the connection on this Mac at once, or elsewhere, as on a Noodle Hub, and returns it as saved.
+    private let saveNow: ((MCPConnectionRecord) throws -> MCPConnectionRecord)?
+    private let saveLater: ((MCPConnectionRecord) async throws -> MCPConnectionRecord)?
     let existing: MCPConnectionRecord?
     let onBack: (() -> Void)?
     let onSaved: (MCPConnectionRecord) -> Void
@@ -126,10 +127,18 @@ public struct MCPEditor: View {
     public init(controller: MCPController, existing: MCPConnectionRecord? = nil,
          onBack: (() -> Void)? = nil, onSaved: @escaping (MCPConnectionRecord) -> Void = { _ in },
          onConnect: ((MCPConnectionRecord) -> Void)? = nil) {
-        self.init(existing: existing, onBack: onBack, onSaved: onSaved, onConnect: onConnect ?? controller.connect) { record in
+        saveNow = { record in
             try controller.save(record)
             return controller.registry.connections.first { $0.id == record.id } ?? record
         }
+        saveLater = nil
+        self.existing = existing
+        self.onBack = onBack; self.onSaved = onSaved
+        self.onConnect = onConnect ?? controller.connect
+        _name = State(initialValue: existing?.name ?? "")
+        _endpoint = State(initialValue: existing?.endpoint.absoluteString ?? "")
+        _description = State(initialValue: existing?.description ?? "")
+        _instructions = State(initialValue: existing?.instructions ?? "")
     }
 
     /// For a connection kept somewhere other than this Mac, as on a Noodle Hub.
@@ -137,7 +146,9 @@ public struct MCPEditor: View {
                 onSaved: @escaping (MCPConnectionRecord) -> Void = { _ in },
                 onConnect: @escaping (MCPConnectionRecord) -> Void,
                 save: @escaping (MCPConnectionRecord) async throws -> MCPConnectionRecord) {
-        self.saveRecord = save; self.existing = existing
+        saveNow = nil
+        saveLater = save
+        self.existing = existing
         self.onBack = onBack; self.onSaved = onSaved
         self.onConnect = onConnect
         _name = State(initialValue: existing?.name ?? "")
@@ -198,35 +209,39 @@ public struct MCPEditor: View {
         }.frame(width: 480)
     }
     private func save() {
-        saving = true
-        Task { @MainActor in
-            await submit()
-            saving = false
-        }
-    }
-    private func submit() async {
         do {
-            guard let url = URL(string: endpoint.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-                throw MCPConnectionError.message("Enter a valid HTTPS server URL.")
-            }
-            // A registry save can succeed before workspace refresh fails. Keep
-            // the draft's identity so retry updates that account in place.
-            var record = try existing ?? MCPConnectionRecord(id: newConnectionID, name: name, endpoint: url)
-            record.name = try ConversationName.validated(name)
-            record.description = String(description.prefix(1_000))
-            record.instructions = String(instructions.prefix(20_000))
-            record = try await saveRecord(record)
-            onSaved(record)
-            let shouldConnect = existing == nil
-            dismiss()
-            if shouldConnect {
-                Task { @MainActor in
-                    // Present authorization after the editor sheet has dismissed.
-                    try? await Task.sleep(for: .milliseconds(250))
-                    onConnect(record)
-                }
+            let record = try draft()
+            if let saveNow { return finish(try saveNow(record)) }
+            saving = true
+            Task { @MainActor in
+                defer { saving = false }
+                do { finish(try await saveLater!(record)) } catch { self.error = error.localizedDescription }
             }
         } catch { self.error = error.localizedDescription }
+    }
+    private func draft() throws -> MCPConnectionRecord {
+        guard let url = URL(string: endpoint.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            throw MCPConnectionError.message("Enter a valid HTTPS server URL.")
+        }
+        // A registry save can succeed before workspace refresh fails. Keep
+        // the draft's identity so retry updates that account in place.
+        var record = try existing ?? MCPConnectionRecord(id: newConnectionID, name: name, endpoint: url)
+        record.name = try ConversationName.validated(name)
+        record.description = String(description.prefix(1_000))
+        record.instructions = String(instructions.prefix(20_000))
+        return record
+    }
+    private func finish(_ record: MCPConnectionRecord) {
+        onSaved(record)
+        let shouldConnect = existing == nil
+        dismiss()
+        if shouldConnect {
+            Task { @MainActor in
+                // Present authorization after the editor sheet has dismissed.
+                try? await Task.sleep(for: .milliseconds(250))
+                onConnect(record)
+            }
+        }
     }
 }
 
