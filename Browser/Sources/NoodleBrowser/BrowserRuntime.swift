@@ -141,7 +141,7 @@ import WebKit
         var response = BrowserResponse()
         if request.operation == .list {
             guard library.failure == nil else { throw BrowserError(library.failure!) }
-            response.browsers = library.profiles.map(\.remote); return response
+            response.browsers = library.profiles.map(\.remote); response.features = [SurfaceSocket.feature]; return response
         }
         if request.operation == .create, let draft = request.profile {
             response.browser = try library.create(name: draft.name, description: draft.description,

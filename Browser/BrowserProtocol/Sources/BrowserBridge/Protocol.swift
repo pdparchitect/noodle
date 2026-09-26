@@ -146,6 +146,12 @@ public struct BrowserRequest: Codable, Sendable {
     public init(_ operation: BrowserOperation, browserID: UUID? = nil, tabID: UUID? = nil) {
         self.operation = operation; self.browserID = browserID; self.tabID = tabID
     }
+    /// A request as the companion reads it. One from a newer app it cannot read says which app
+    /// to update, rather than that the data could not be read.
+    public static func read(_ data: Data) throws -> Self {
+        do { return try JSONDecoder().decode(Self.self, from: data) }
+        catch { throw BrowserError("This needs a newer \(BrowserBuildIdentity.current.appName). Update it.") }
+    }
     public func validate() throws {
         try validateWebMCP()
         guard version == 1 else { throw BrowserError("Update Noodle and Noodle Browser to compatible versions.") }
@@ -195,6 +201,8 @@ public struct BrowserRequest: Codable, Sendable {
 public struct BrowserResponse: Codable, Sendable {
     public var version = 1
     public var browsers: [RemoteBrowser]?
+    /// What this Noodle Browser can do beyond its first version, on `list`.
+    public var features: [String]?
     public var browser: RemoteBrowser?
     public var tabs: [BrowserTabInfo]?
     public var tabID: UUID?

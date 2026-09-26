@@ -8,6 +8,9 @@ import Foundation
 /// Sending never waits: frames queue behind a writer of their own, and `pending` says how many
 /// have not left yet, so a sender can skip frames for a reader that is behind.
 public final class SurfaceSocket: @unchecked Sendable {
+    /// What a companion lists among its features when it can show live views this way.
+    public static let feature = "live-view-v1"
+
     public let frames: AsyncStream<Data>
     private let fd: Int32
     private let writer = DispatchQueue(label: "com.pdparchitect.noodle.surface-socket")

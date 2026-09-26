@@ -15,6 +15,7 @@
 
 ### Changed
 
+- A live view of a browser, computer or noodlet in a Noodle Browser, Computer or Applet too old to show it says which app to update.
 - Stream live views as video, each picture as soon as it is ready and no larger than the viewer's window, skipping old pictures for a device that falls behind, and take the person's input on the same connection, in order. While someone watches a browser, computer or noodlet, its bot waits until they close the view. A view the Hub cannot open tells the device why.
 - Send links to the browsers, computers and noodlets the Hub's bots share as links with their pictures, so devices open them live. Cards the Hub saved earlier become links when it starts.
 

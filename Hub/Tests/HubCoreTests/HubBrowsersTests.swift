@@ -11,6 +11,8 @@ import XCTest
     final class FakeBrowser: @unchecked Sendable {
         private let lock = NSLock()
         private var browsers: [RemoteBrowser] = []
+        /// What this Noodle Browser says it can do; nil for one from before it said.
+        var features: [String]?
 
         func call(_ request: BrowserRequest) throws -> BrowserResponse {
             try lock.withLock {
@@ -31,6 +33,7 @@ import XCTest
                     break
                 }
                 response.browsers = browsers
+                if request.operation == .list { response.features = features }
                 return response
             }
         }
@@ -123,8 +126,8 @@ import XCTest
         XCTAssertEqual(left, [])
     }
 
-    /// Clicking a browser card in a Hub bot's conversation shows its tab live and takes the person's input.
-    func testAPersonWatchesAndUsesTheTabACardPointsAt() async throws {
+    /// A tab one of Ada's bots shared in its conversation, and a device of hers to open it from.
+    private func sharedTab() async throws -> (HubPairing, LinkBot, ConversationAttachment, RemoteBrowser, UUID) {
         let (hub, ada, _) = try hub()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-surface-\(UUID())")
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
@@ -145,6 +148,30 @@ import XCTest
                                                            card: LinkCard(title: "Example", detail: "https://example.com"))
         _ = try hub.repository.sendAgentMessage(agentID: bot.id, conversationID: bot.conversationID, body: "Example", attachmentIDs: [card.id])
 
+        return (device, bot, card, made, tab)
+    }
+
+    /// An older Noodle Browser cannot show tabs live and cannot say so; the Hub names the app to update.
+    func testALiveViewAnOldBrowserCannotShowNamesTheAppToUpdate() async throws {
+        let (device, bot, card, _, _) = try await sharedTab()
+        surfaces.refusal = "The data couldn\u{2019}t be read because it isn\u{2019}t in the correct format."
+        func reason() async throws -> String? {
+            let channel = try await device.channel(.openSurface(conversationID: bot.conversationID, attachmentID: card.id))
+            defer { channel.cancel() }
+            for try await frame in channel.frames { if case .failed(let why)? = LinkSurface.message(frame) { return why } }
+            return nil
+        }
+        let old = try await reason()
+        XCTAssertEqual(old, "Update \(BrowserBuildIdentity.current.appName) to watch it live.")
+        browser.features = [SurfaceSocket.feature]
+        surfaces.refusal = "Tab not found in this browser."
+        let current = try await reason()
+        XCTAssertEqual(current, "Tab not found in this browser.", "a browser that can show tabs live lost its own reason")
+    }
+
+    /// Clicking a browser card in a Hub bot's conversation shows its tab live and takes the person's input.
+    func testAPersonWatchesAndUsesTheTabACardPointsAt() async throws {
+        let (device, bot, card, made, tab) = try await sharedTab()
         let (channel, packets) = try await device.firstSurfacePackets(.openSurface(conversationID: bot.conversationID, attachmentID: card.id))
         defer { channel.cancel() }
         XCTAssertEqual(packets.first?.width, 800)

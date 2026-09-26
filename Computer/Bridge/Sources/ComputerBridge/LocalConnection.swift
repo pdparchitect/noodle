@@ -205,7 +205,7 @@ public final class ComputerConnectionServer: @unchecked Sendable {
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
                     let identity = try ComputerConnection.authenticate(peer, team: team, identifiers: clientIDs)
-                    let request = try JSONDecoder().decode(ComputerRequest.self, from: ComputerConnection.receive(peer))
+                    let request = try ComputerRequest.read(ComputerConnection.receive(peer))
                     try request.validate()
                     if request.operation == .surfaceStream {
                         // The answer goes first; then the socket belongs to the live view and

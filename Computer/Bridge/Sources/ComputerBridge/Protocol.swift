@@ -86,6 +86,12 @@ public struct ComputerRequest: Codable, Sendable {
         self.operation = operation; self.computerID = computerID; self.agentID = agentID
         self.terminalID = terminalID; self.data = data; self.offset = offset; self.columns = columns; self.rows = rows
     }
+    /// A request as the companion reads it. One from a newer app it cannot read says which app
+    /// to update, rather than that the data could not be read.
+    public static func read(_ data: Data) throws -> Self {
+        do { return try JSONDecoder().decode(Self.self, from: data) }
+        catch { throw ComputerBridgeError("This needs a newer \(ComputerBuildIdentity.current.appName). Update it.") }
+    }
     public func validate() throws {
         guard version == 1, (data?.count ?? 0) <= 65_536, (offset ?? 0) >= 0 else {
             throw ComputerBridgeError("Unsupported or oversized computer request.")
@@ -162,7 +168,8 @@ public struct ComputerCapabilities: Codable, Equatable, Sendable {
     public var minimumProtocol = 1
     public var maximumProtocol = 1
     private static let requiredFeatures: Set<String> = ["agent-terminals-v1", "presentation-v2", "guest-display-v1"]
-    public var features: Set<String> = requiredFeatures.union(["file-transfer-v1", "document-preview-v1", "computer-management-v1"])
+    public var features: Set<String> = requiredFeatures.union(["file-transfer-v1", "document-preview-v1", "computer-management-v1",
+                                                               SurfaceSocket.feature])
     public init() {}
     public static func requireCompatible(_ capabilities: Self?) throws {
         guard let capabilities else {

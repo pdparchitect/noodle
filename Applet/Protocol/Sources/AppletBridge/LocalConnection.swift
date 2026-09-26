@@ -249,8 +249,7 @@ public final class AppletConnectionServer: @unchecked Sendable {
                 do {
                     let identity = try AppletConnection.authenticate(
                         peer, team: team, identifiers: clientIDs)
-                    let request = try JSONDecoder().decode(
-                        AppletRequest.self, from: AppletConnection.receive(peer))
+                    let request = try AppletRequest.read(AppletConnection.receive(peer))
                     try request.validate()
                     if request.operation == .surfaceStream {
                         // The answer goes first; then the socket belongs to the live view and

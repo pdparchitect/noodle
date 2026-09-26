@@ -92,7 +92,16 @@ import NoodleCore
     /// the socket, what the person does up it. While it is open, the computer's bots wait.
     public func openSurface(computer: UUID, terminal: UUID?, bot: UUID, for user: HubUser) async throws -> SurfaceSocket {
         try owned(computer, by: user)
-        return try await surface(ComputerRequest(.surfaceStream, computerID: computer, agentID: bot, terminalID: terminal))
+        do { return try await surface(ComputerRequest(.surfaceStream, computerID: computer, agentID: bot, terminalID: terminal)) }
+        catch {
+            // A Noodle Computer from before live views cannot say why; the Hub names the app to update.
+            var capabilities = ComputerRequest(.list)
+            capabilities.capabilitiesOnly = true
+            if let listed = try? await call(capabilities), !(listed.capabilities?.features ?? []).contains(SurfaceSocket.feature) {
+                throw LinkError("Update \(ComputerBuildIdentity.current.appName) to watch it live.")
+            }
+            throw error
+        }
     }
 
     /// Replaces which of the user's computers one of their bots may use.

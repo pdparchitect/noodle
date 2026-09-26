@@ -260,6 +260,7 @@ import AppletCore
           item.url = item.noodletID.map(NoodletLink.url)
           return item
         }
+        response.features = [SurfaceSocket.feature]
         return response
       }
       if [.open, .build, .validate].contains(request.operation) {

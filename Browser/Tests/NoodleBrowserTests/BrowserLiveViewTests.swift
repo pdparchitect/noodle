@@ -65,3 +65,13 @@ import XCTest
         return stride(from: 0, to: image.width * image.height, by: 97).map { pixels[$0] }
     }
 }
+
+/// A request from a newer app says which app to update, not that data could not be read.
+final class BrowserRequestReadingTests: XCTestCase {
+    func testARequestFromANewerAppNamesTheAppToUpdate() {
+        let newer = #"{"version":1,"id":"00000000-0000-0000-0000-00000000000A","operation":"surface-teleport"}"#
+        XCTAssertThrowsError(try BrowserRequest.read(Data(newer.utf8))) { error in
+            XCTAssertEqual(error.localizedDescription, "This needs a newer \(BrowserBuildIdentity.current.appName). Update it.")
+        }
+    }
+}

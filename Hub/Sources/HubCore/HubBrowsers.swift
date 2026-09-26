@@ -89,7 +89,14 @@ import NoodleCore
     /// does up it. While it is open, the browser's bots wait.
     public func openSurface(browser: UUID, tab: UUID, for user: HubUser) async throws -> SurfaceSocket {
         try owned(browser, by: user)
-        return try await surface(BrowserRequest(.surfaceStream, browserID: browser, tabID: tab))
+        do { return try await surface(BrowserRequest(.surfaceStream, browserID: browser, tabID: tab)) }
+        catch {
+            // A Noodle Browser from before live views cannot say why; the Hub names the app to update.
+            if let listed = try? await call(BrowserRequest(.list)), !(listed.features ?? []).contains(SurfaceSocket.feature) {
+                throw LinkError("Update \(BrowserBuildIdentity.current.appName) to watch it live.")
+            }
+            throw error
+        }
     }
 
     /// Replaces which of the user's browsers one of their bots may use.

@@ -57,6 +57,14 @@ import XCTest
         XCTAssertNil(hubPreview.previewBookmark)
     }
 
+    /// A request from a newer app says which app to update, not that data could not be read.
+    func testARequestFromANewerAppNamesTheAppToUpdate() {
+        let newer = #"{"version":1,"id":"00000000-0000-0000-0000-00000000000A","operation":"surface-teleport"}"#
+        XCTAssertThrowsError(try AppletRequest.read(Data(newer.utf8))) { error in
+            XCTAssertEqual(error.localizedDescription, "This needs a newer \(AppletBuildIdentity.current.appName). Update it.")
+        }
+    }
+
     /// Each digest must match the argument named beside it in App.swift.
     func testLaunchCheckDigestsMatchTheirArguments() {
         XCTAssertEqual(AppletLaunchCheck.updaterUI, LaunchChecks.digest("--updater-ui-test"))

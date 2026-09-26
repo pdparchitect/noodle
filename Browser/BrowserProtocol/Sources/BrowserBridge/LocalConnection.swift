@@ -244,8 +244,7 @@ public final class BrowserConnectionServer: @unchecked Sendable {
                 do {
                     let identity = try BrowserConnection.authenticate(
                         peer, team: team, identifiers: clientIDs)
-                    let request = try JSONDecoder().decode(
-                        BrowserRequest.self, from: BrowserConnection.receive(peer))
+                    let request = try BrowserRequest.read(BrowserConnection.receive(peer))
                     try request.validate()
                     if request.operation == .surfaceStream {
                         // The answer goes first; then the socket belongs to the live view and

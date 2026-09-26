@@ -108,8 +108,16 @@ import Observation
     /// A live view of a noodlet session for a person, never for a bot: video down the socket,
     /// what the person does up it.
     public func companionSurface(_ request: AppletRequest) async throws -> SurfaceSocket {
-        if let surface { return try await surface(request) }
-        return try await AppletConnection.openSurface(request, socket: AppletConnection.socketURL(), team: AppletConnection.signingTeam())
+        do {
+            if let surface { return try await surface(request) }
+            return try await AppletConnection.openSurface(request, socket: AppletConnection.socketURL(), team: AppletConnection.signingTeam())
+        } catch {
+            // A Noodle Applet from before live views cannot say why; name the app to update.
+            if let listed = try? await call(AppletRequest(.list)), !(listed.features ?? []).contains(SurfaceSocket.feature) {
+                throw AppletError("Update \(AppletBuildIdentity.current.appName) to watch it live.")
+            }
+            throw error
+        }
     }
     private func call(_ request: AppletRequest, authorize: () throws -> Void = {}) async throws -> AppletResponse {
         try authorize()

@@ -211,6 +211,15 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(decoded.templates, response.templates)
     }
     /// A person watching a computer from Noodle or the Hub, whatever its bots are doing.
+    /// A request from a newer app says which app to update, not that data could not be read.
+    func testARequestFromANewerAppNamesTheAppToUpdate() {
+        let newer = #"{"version":1,"id":"00000000-0000-0000-0000-00000000000A","operation":"surfaceTeleport"}"#
+        XCTAssertThrowsError(try ComputerRequest.read(Data(newer.utf8))) { error in
+            XCTAssertEqual(error.localizedDescription, "This needs a newer \(ComputerBuildIdentity.current.appName). Update it.")
+        }
+        XCTAssertTrue(ComputerCapabilities().features.contains(SurfaceSocket.feature))
+    }
+
     func testSurfacesNameTheirComputer() throws {
         XCTAssertThrowsError(try ComputerRequest(.surfaceStream).validate())
         XCTAssertNoThrow(try ComputerRequest(.surfaceStream, computerID: UUID()).validate())

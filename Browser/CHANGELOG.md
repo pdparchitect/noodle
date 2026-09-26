@@ -9,6 +9,7 @@
 
 ### Changed
 
+- A request from a newer Noodle or Noodle Hub that this version cannot read says to update Noodle Browser, instead of that the data could not be read.
 - Stream live views to Noodle Hub as video, pushing each picture as soon as it is ready, at the size of the viewer's window, and skipping old pictures for a viewer that falls behind. While someone watches a browser, bots cannot use it until they close the view.
 
 ### Removed

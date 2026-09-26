@@ -23,6 +23,8 @@ import XCTest
                 case .open:
                     opened.append(request.noodletID ?? UUID())
                     response.sessionID = session
+                case .list:
+                    response.features = [SurfaceSocket.feature]
                 case .info:
                     response.sourcePath = request.noodletID.flatMap { sources[$0] }
                     if request.includePreview == true { response.data = Data("picture".utf8); response.mediaType = "image/png" }

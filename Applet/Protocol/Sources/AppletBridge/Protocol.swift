@@ -62,6 +62,12 @@ public struct AppletRequest: Codable, Sendable {
         self.operation = operation
         self.sessionID = sessionID
     }
+    /// A request as the companion reads it. One from a newer app it cannot read says which app
+    /// to update, rather than that the data could not be read.
+    public static func read(_ data: Data) throws -> Self {
+        do { return try JSONDecoder().decode(Self.self, from: data) }
+        catch { throw AppletError("This needs a newer \(AppletBuildIdentity.current.appName). Update it.") }
+    }
     public func validate() throws {
         guard version == 1 else { throw AppletError("Unsupported Applet protocol version.") }
         if noodletID != nil, path != nil || files != nil {
@@ -151,6 +157,8 @@ public struct AppletResponse: Codable, Sendable {
     public var height: Int?
     public var items: [AppletItem]?
     public var capabilities: [String]?
+    /// What this Noodle Applet can do beyond its first version, on `list`.
+    public var features: [String]?
     /// Each permission the manifest declares: granted, denied or not-requested.
     public var permissions: [String: String]?
     public init(error: String? = nil, errorCode: String? = nil) {

@@ -100,6 +100,137 @@ final class LinkVersion1Tests: XCTestCase {
         LinkMessage(id: a, conversationID: b, author: .bot(c), body: "Hi", createdAt: date, delivered: true, attachments: [attachment])
     }
 
+    private var nextDraft: (connection: LinkConnectionDraft, computer: LinkComputerDraft, browser: LinkBrowserDraft) {
+        (LinkConnectionDraft(id: a, name: "Notion", endpoint: URL(string: "https://mcp.notion.com/mcp")!, description: "Notes", instructions: "Search first."),
+         LinkComputerDraft(template: "ubuntu", name: "Workbench", description: "Builds", symbol: "hammer", colour: 3),
+         LinkBrowserDraft(name: "Work", description: "Research", symbol: "briefcase", colour: 2))
+    }
+    private var nextRequests: [String: LinkRequest] {
+        let d = nextDraft
+        return [
+            "connections": .connections, "saveConnection": .saveConnection(d.connection), "deleteConnection": .deleteConnection(id: a),
+            "assignConnections": .assignConnections(botID: a, connectionIDs: [b]),
+            "signIn": .signIn(connectionID: a, redirect: URL(string: "noodle://sign-in")!),
+            "finishSignIn": .finishSignIn(connectionID: a, callback: URL(string: "noodle://sign-in?code=x")!),
+            "computers": .computers, "computerTemplates": .computerTemplates, "createComputer": .createComputer(requestID: a, d.computer),
+            "updateComputer": .updateComputer(id: a, d.computer), "assignComputers": .assignComputers(botID: a, computerIDs: [b]),
+            "deleteComputer": .deleteComputer(id: a), "browsers": .browsers, "createBrowser": .createBrowser(d.browser),
+            "updateBrowser": .updateBrowser(id: a, d.browser), "deleteBrowser": .deleteBrowser(id: a),
+            "assignBrowsers": .assignBrowsers(botID: a, browserIDs: [b]),
+            "openSurface": .openSurface(conversationID: b, attachmentID: c), "linkPreview": .linkPreview(conversationID: b, attachmentID: c),
+        ]
+    }
+    private var nextResponses: [String: LinkResponse] {
+        let d = nextDraft
+        let connection = LinkConnection(draft: d.connection, iconData: Data([1]), botIDs: [b], signedIn: true, problem: nil)
+        let computer = LinkComputer(id: a, name: "Workbench", description: "Builds", kind: "Linux", state: "Running", symbol: "hammer",
+                                    colour: 3, icon: Data([2]), botIDs: [b])
+        let browser = LinkBrowser(id: a, name: "Work", description: "Research", symbol: "briefcase", colour: 2, icon: Data([3]),
+                                  paused: true, botIDs: [b])
+        let link = LinkAttachment(id: c, filename: "Hacker News.webloc", mediaType: "application/x-webloc", byteCount: 180,
+                                  url: URL(string: "noodlebrowser://00000000-0000-0000-0000-00000000000a?tab=00000000-0000-0000-0000-00000000000b"),
+                                  card: LinkCardInfo(title: "Hacker News", detail: "https://news.ycombinator.com", image: Data([4]),
+                                                     symbol: "globe", colour: 1, icon: Data([5]), capturedAt: date))
+        return [
+            "connections": .connections([connection]), "connection": .connection(connection),
+            "computers": .computers([computer]), "computer": .computer(computer),
+            "computerTemplates": .computerTemplates([LinkComputerTemplate(id: "ubuntu", name: "Ubuntu", description: "Linux", symbol: "terminal")]),
+            "browsers": .browsers([browser]), "browser": .browser(browser), "picture": .picture(Data([6])), "noPicture": .picture(nil),
+            "linkMessage": .message(LinkMessage(id: a, conversationID: b, author: .bot(c), body: "Here", createdAt: date, delivered: true,
+                                                attachments: [link])),
+        ]
+    }
+    private var nextEvents: [String: LinkEvent] {
+        let computer = LinkComputer(id: a, name: "Workbench", kind: "Linux", state: "Running", symbol: "hammer")
+        return [
+            "connectionsChanged": .connectionsChanged, "signInPage": .signInPage(connectionID: a, url: URL(string: "https://example.com/auth")!),
+            "computersChanged": .computersChanged, "computerCreated": .computerCreated(requestID: a, computer: computer, error: nil),
+            "computerFailed": .computerCreated(requestID: a, computer: nil, error: "No space"), "browsersChanged": .browsersChanged,
+            "surfaceOpened": .surfaceOpened(sessionID: a), "surfaceFailed": .surfaceFailed(reason: "The computer is stopped."),
+        ]
+    }
+
+    /// Everything added after the first release, as the next release sends it: managing
+    /// connections, computers and browsers, links with their cards, live views and their pictures.
+    func testMessagesOfTheNextReleaseStillRead() throws {
+        XCTAssertEqual(Set(Self.nextRequestJSON.keys), Set(nextRequests.keys))
+        for (name, json) in Self.nextRequestJSON {
+            XCTAssertEqual(try LinkProtocol.decode(Data(json.utf8)).get(), nextRequests[name], name)
+        }
+        XCTAssertEqual(Set(Self.nextResponseJSON.keys), Set(nextResponses.keys))
+        for (name, json) in Self.nextResponseJSON {
+            XCTAssertEqual(try LinkProtocol.decodeResponse(Data(json.utf8)), nextResponses[name], name)
+        }
+        XCTAssertEqual(Set(Self.nextEventJSON.keys), Set(nextEvents.keys))
+        for (name, json) in Self.nextEventJSON {
+            XCTAssertEqual(LinkProtocol.decodeEvent(Data(json.utf8)), nextEvents[name], name)
+        }
+    }
+
+    /// A live view's video and what goes back up it, byte for byte.
+    func testLiveViewsOfTheNextReleaseStillRead() throws {
+        let hex = "010000000100000000000000070140890000000000004082c000000000000200000002670100000002680200000003650304"
+        let bytes = Data(stride(from: 0, to: hex.count, by: 2).map { UInt8(hex.dropFirst($0).prefix(2), radix: 16)! })
+        let packet = SurfacePacket(sequence: 7, keyFrame: true, width: 800, height: 600,
+                                   parameterSets: [Data([0x67, 1]), Data([0x68, 2])], sample: Data([0x65, 3, 4]))
+        XCTAssertEqual(LinkSurface.message(bytes), .packets([packet]))
+        let controls: [SurfaceControl] = [.input(.pointer(.down, x: 10, y: 20, clickCount: 2)), .input(.scroll(x: 1, y: 2, dx: 0, dy: -40)),
+                                          .input(.key(.enter)), .input(.text("hi")), .view(width: 1206, height: 2622), .keyFrame]
+        XCTAssertEqual(Self.controlJSON.map { SurfaceControl(Data($0.utf8)) }, controls)
+    }
+
+    private static let nextRequestJSON: [String: String] = [
+        "assignBrowsers": #"{"version":1,"request":{"assignBrowsers":{"botID":"00000000-0000-0000-0000-00000000000A","browserIDs":["00000000-0000-0000-0000-00000000000B"]}}}"#,
+        "assignComputers": #"{"request":{"assignComputers":{"botID":"00000000-0000-0000-0000-00000000000A","computerIDs":["00000000-0000-0000-0000-00000000000B"]}},"version":1}"#,
+        "assignConnections": #"{"version":1,"request":{"assignConnections":{"botID":"00000000-0000-0000-0000-00000000000A","connectionIDs":["00000000-0000-0000-0000-00000000000B"]}}}"#,
+        "browsers": #"{"version":1,"request":{"browsers":{}}}"#,
+        "computerTemplates": #"{"version":1,"request":{"computerTemplates":{}}}"#,
+        "computers": #"{"version":1,"request":{"computers":{}}}"#,
+        "connections": #"{"version":1,"request":{"connections":{}}}"#,
+        "createBrowser": #"{"version":1,"request":{"createBrowser":{"_0":{"description":"Research","symbol":"briefcase","colour":2,"name":"Work"}}}}"#,
+        "createComputer": #"{"version":1,"request":{"createComputer":{"requestID":"00000000-0000-0000-0000-00000000000A","_1":{"template":"ubuntu","description":"Builds","symbol":"hammer","colour":3,"name":"Workbench"}}}}"#,
+        "deleteBrowser": #"{"version":1,"request":{"deleteBrowser":{"id":"00000000-0000-0000-0000-00000000000A"}}}"#,
+        "deleteComputer": #"{"version":1,"request":{"deleteComputer":{"id":"00000000-0000-0000-0000-00000000000A"}}}"#,
+        "deleteConnection": #"{"version":1,"request":{"deleteConnection":{"id":"00000000-0000-0000-0000-00000000000A"}}}"#,
+        "finishSignIn": #"{"version":1,"request":{"finishSignIn":{"connectionID":"00000000-0000-0000-0000-00000000000A","callback":"noodle:\/\/sign-in?code=x"}}}"#,
+        "linkPreview": #"{"version":1,"request":{"linkPreview":{"attachmentID":"00000000-0000-0000-0000-00000000000C","conversationID":"00000000-0000-0000-0000-00000000000B"}}}"#,
+        "openSurface": #"{"version":1,"request":{"openSurface":{"attachmentID":"00000000-0000-0000-0000-00000000000C","conversationID":"00000000-0000-0000-0000-00000000000B"}}}"#,
+        "saveConnection": #"{"version":1,"request":{"saveConnection":{"_0":{"id":"00000000-0000-0000-0000-00000000000A","description":"Notes","endpoint":"https:\/\/mcp.notion.com\/mcp","instructions":"Search first.","name":"Notion"}}}}"#,
+        "signIn": #"{"version":1,"request":{"signIn":{"redirect":"noodle:\/\/sign-in","connectionID":"00000000-0000-0000-0000-00000000000A"}}}"#,
+        "updateBrowser": #"{"version":1,"request":{"updateBrowser":{"id":"00000000-0000-0000-0000-00000000000A","_1":{"description":"Research","symbol":"briefcase","colour":2,"name":"Work"}}}}"#,
+        "updateComputer": #"{"version":1,"request":{"updateComputer":{"id":"00000000-0000-0000-0000-00000000000A","_1":{"template":"ubuntu","description":"Builds","symbol":"hammer","colour":3,"name":"Workbench"}}}}"#
+    ]
+    private static let nextResponseJSON: [String: String] = [
+        "browser": #"{"browser":{"_0":{"name":"Work","symbol":"briefcase","botIDs":["00000000-0000-0000-0000-00000000000B"],"id":"00000000-0000-0000-0000-00000000000A","icon":"Aw==","colour":2,"description":"Research","paused":true}}}"#,
+        "browsers": #"{"browsers":{"_0":[{"paused":true,"id":"00000000-0000-0000-0000-00000000000A","symbol":"briefcase","botIDs":["00000000-0000-0000-0000-00000000000B"],"colour":2,"name":"Work","icon":"Aw==","description":"Research"}]}}"#,
+        "computer": #"{"computer":{"_0":{"state":"Running","name":"Workbench","symbol":"hammer","botIDs":["00000000-0000-0000-0000-00000000000B"],"id":"00000000-0000-0000-0000-00000000000A","icon":"Ag==","colour":3,"description":"Builds","kind":"Linux"}}}"#,
+        "computerTemplates": #"{"computerTemplates":{"_0":[{"symbol":"terminal","id":"ubuntu","name":"Ubuntu","description":"Linux"}]}}"#,
+        "computers": #"{"computers":{"_0":[{"icon":"Ag==","colour":3,"kind":"Linux","description":"Builds","botIDs":["00000000-0000-0000-0000-00000000000B"],"id":"00000000-0000-0000-0000-00000000000A","symbol":"hammer","name":"Workbench","state":"Running"}]}}"#,
+        "connection": #"{"connection":{"_0":{"signedIn":true,"botIDs":["00000000-0000-0000-0000-00000000000B"],"draft":{"id":"00000000-0000-0000-0000-00000000000A","description":"Notes","endpoint":"https:\/\/mcp.notion.com\/mcp","instructions":"Search first.","name":"Notion"},"iconData":"AQ=="}}}"#,
+        "connections": #"{"connections":{"_0":[{"signedIn":true,"botIDs":["00000000-0000-0000-0000-00000000000B"],"draft":{"id":"00000000-0000-0000-0000-00000000000A","description":"Notes","endpoint":"https:\/\/mcp.notion.com\/mcp","instructions":"Search first.","name":"Notion"},"iconData":"AQ=="}]}}"#,
+        "linkMessage": #"{"message":{"_0":{"reactions":[],"id":"00000000-0000-0000-0000-00000000000A","attachments":[{"id":"00000000-0000-0000-0000-00000000000C","mediaType":"application\/x-webloc","filename":"Hacker News.webloc","card":{"icon":"BQ==","symbol":"globe","colour":1,"title":"Hacker News","capturedAt":1790000000,"detail":"https:\/\/news.ycombinator.com","image":"BA=="},"byteCount":180,"url":"noodlebrowser:\/\/00000000-0000-0000-0000-00000000000a?tab=00000000-0000-0000-0000-00000000000b"}],"body":"Here","delivered":true,"createdAt":1790000000,"conversationID":"00000000-0000-0000-0000-00000000000B","author":{"bot":{"_0":"00000000-0000-0000-0000-00000000000C"}}}}}"#,
+        "noPicture": #"{"picture":{}}"#,
+        "picture": #"{"picture":{"_0":"Bg=="}}"#
+    ]
+    private static let nextEventJSON: [String: String] = [
+        "browsersChanged": #"{"browsersChanged":{}}"#,
+        "computerCreated": #"{"computerCreated":{"requestID":"00000000-0000-0000-0000-00000000000A","computer":{"name":"Workbench","symbol":"hammer","id":"00000000-0000-0000-0000-00000000000A","colour":0,"kind":"Linux","botIDs":[],"state":"Running"}}}"#,
+        "computerFailed": #"{"computerCreated":{"error":"No space","requestID":"00000000-0000-0000-0000-00000000000A"}}"#,
+        "computersChanged": #"{"computersChanged":{}}"#,
+        "connectionsChanged": #"{"connectionsChanged":{}}"#,
+        "signInPage": #"{"signInPage":{"connectionID":"00000000-0000-0000-0000-00000000000A","url":"https:\/\/example.com\/auth"}}"#,
+        "surfaceFailed": #"{"surfaceFailed":{"reason":"The computer is stopped."}}"#,
+        "surfaceOpened": #"{"surfaceOpened":{"sessionID":"00000000-0000-0000-0000-00000000000A"}}"#
+    ]
+    private static let controlJSON = [
+        #"{"input":{"_0":{"pointer":{"_0":"down","clickCount":2,"x":10,"y":20}}}}"#,
+        #"{"input":{"_0":{"scroll":{"dx":0,"dy":-40,"x":1,"y":2}}}}"#,
+        #"{"input":{"_0":{"key":{"_0":"enter"}}}}"#,
+        #"{"input":{"_0":{"text":{"_0":"hi"}}}}"#,
+        #"{"view":{"height":2622,"width":1206}}"#,
+        #"{"keyFrame":{}}"#
+    ]
+
     func testVersion1RequestsStillRead() throws {
         let expected: [String: LinkRequest] = [
             "enroll": .enroll(token: "t", deviceName: "Mac"), "status": .status, "subscribe": .subscribe, "bots": .bots,
