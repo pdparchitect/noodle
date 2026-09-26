@@ -85,6 +85,10 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case deleteBot(id: UUID)
     /// Messages of one of this user's conversations, from position `after` on.
     case messages(conversationID: UUID, after: Int)
+    /// Part of a conversation, answered with `messages`: the newest first, earlier pages as the
+    /// person scrolls back, or onward from where a device got to. Card pictures are left out;
+    /// ask for each with `linkPreview` as its card comes into view.
+    case messagePage(LinkMessagePage)
     /// Sends as this user. Attachments are uploaded first.
     case send(LinkOutgoingMessage)
     /// One piece of a file for a conversation, starting at `offset`. Pieces go in order.
@@ -633,10 +637,29 @@ public struct LinkOutgoingMessage: Codable, Equatable, Sendable {
 public struct LinkMessages: Codable, Equatable, Sendable {
     public var messages: [LinkMessage]
     public var count: Int
+    /// Where the first of `messages` sits in the conversation, for a page.
+    public var start: Int?
 
-    public init(messages: [LinkMessage], count: Int) {
+    public init(messages: [LinkMessage], count: Int, start: Int? = nil) {
         self.messages = messages
         self.count = count
+        self.start = start
+    }
+}
+
+/// Which part of a conversation a device wants: up to `limit` messages before position `before`,
+/// the newest when it is nil, or from `after` on when it is set. A page may hold fewer, to stay small.
+public struct LinkMessagePage: Codable, Equatable, Sendable {
+    public var conversationID: UUID
+    public var before: Int?
+    public var after: Int?
+    public var limit: Int
+
+    public init(conversationID: UUID, before: Int? = nil, after: Int? = nil, limit: Int = 50) {
+        self.conversationID = conversationID
+        self.before = before
+        self.after = after
+        self.limit = limit
     }
 }
 

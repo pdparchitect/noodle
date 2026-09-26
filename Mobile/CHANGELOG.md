@@ -33,6 +33,10 @@
 
 - The unread dot in the list of bots sits evenly between the screen edge and the bot's picture instead of against it.
 
+### Changed
+
+- Conversations open on their newest messages and load earlier ones as you scroll back; card pictures fill in as they come into view.
+
 ## [0.1.0] - 2026-09-25
 
 ### Added

@@ -318,6 +318,8 @@ import Observation
             return .done
         case .messages(let conversationID, let after):
             return .messages(try hubBots().messages(in: conversationID, after: after, for: try user(key)))
+        case .messagePage(let page):
+            return .messages(try hubBots().page(page, for: try user(key)))
         case .send(let message):
             return .message(try hubBots().send(message.body, id: message.id, attachmentIDs: message.attachmentIDs,
                                                in: message.conversationID, for: try user(key)))

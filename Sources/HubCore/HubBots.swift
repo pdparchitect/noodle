@@ -213,6 +213,45 @@ import NoodleRuntime
                             count: messages.count)
     }
 
+    /// Part of a conversation, small enough for the link however long its messages are. Card
+    /// pictures are left out: devices ask for each as its card comes into view.
+    public func page(_ request: LinkMessagePage, for user: HubUser) throws -> LinkMessages {
+        _ = try ownedConversation(request.conversationID, by: user)
+        let messages = try repository.loadMessages(conversationID: request.conversationID)
+        let files = try attachments(in: request.conversationID)
+        let limit = min(max(1, request.limit), 200)
+        let encoder = JSONEncoder()
+        var page: [LinkMessage] = [], bytes = 0
+        func fits(_ message: LinkMessage) -> Bool {
+            let size = (try? encoder.encode(message).count) ?? 0
+            guard page.isEmpty || (page.count < limit && bytes + size <= Self.pageBytes) else { return false }
+            bytes += size
+            return true
+        }
+        var start: Int
+        if let after = request.after {
+            start = min(max(0, after), messages.count)
+            for message in messages[start...] {
+                let linked = Self.message(message, files: files, pictures: false)
+                guard fits(linked) else { break }
+                page.append(linked)
+            }
+        } else {
+            let end = min(max(0, request.before ?? messages.count), messages.count)
+            start = end
+            for message in messages[..<end].reversed() {
+                let linked = Self.message(message, files: files, pictures: false)
+                guard fits(linked) else { break }
+                page.insert(linked, at: 0)
+                start -= 1
+            }
+        }
+        return LinkMessages(messages: page, count: messages.count, start: start)
+    }
+
+    /// Most of the link's message limit, leaving room for what surrounds the page.
+    private static let pageBytes = 700_000
+
     /// Keeps one piece of a file; the file joins the conversation when its last piece lands.
     public func receive(_ data: Data, at offset: Int, of attachment: LinkAttachment, in conversationID: UUID,
                         for user: HubUser) throws {
@@ -425,7 +464,7 @@ import NoodleRuntime
                        phase: LinkBotPhase(rawValue: runtime.snapshot(for: agent.id).phase.rawValue))
     }
 
-    private static func message(_ message: ChatMessage, files: [UUID: ConversationAttachment]) -> LinkMessage {
+    private static func message(_ message: ChatMessage, files: [UUID: ConversationAttachment], pictures: Bool = true) -> LinkMessage {
         let author: LinkMessage.Author = switch message.author {
         case .user: .you
         case .agent(let id): .bot(id)
@@ -436,7 +475,7 @@ import NoodleRuntime
                            voice: $0.voice.map { LinkVoice(transcript: $0.transcript, duration: $0.duration, waveform: $0.waveform,
                                                            localeIdentifier: $0.localeIdentifier) },
                            url: $0.url,
-                           card: $0.card.map { LinkCardInfo(title: $0.title, detail: $0.detail, image: $0.image, symbol: $0.symbol,
+                           card: $0.card.map { LinkCardInfo(title: $0.title, detail: $0.detail, image: pictures ? $0.image : nil, symbol: $0.symbol,
                                                             colour: $0.colour, icon: $0.icon, capturedAt: $0.capturedAt) })
         }
         let reactions = (message.reactions ?? []).compactMap { reaction -> LinkReaction? in

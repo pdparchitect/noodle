@@ -80,8 +80,8 @@ struct AttachmentView: View {
         .buttonStyle(.plain)
         .accessibilityHint("Opens it live")
         .task(id: attachment.id) {
-            // A noodlet's link carries no picture; the Hub has its latest.
-            guard attachment.card?.image == nil, attachment.liveKind == .noodlet else { return }
+            // Cards come without their pictures; each is fetched as its card comes into view.
+            guard attachment.card?.image == nil else { return }
             livePicture = try? await chats.picture(for: attachment, in: agent)
         }
         .fullScreenCover(isPresented: $watching) {

@@ -36,6 +36,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Long conversations with bots on a Noodle Hub, or on a Mac you reach as one, come over a page at a time, and their cards fetch their pictures on their own, instead of failing to load as one answer.
 - Settings is wide enough to show all its tabs, instead of hiding the last ones behind a menu.
 - A bot on a Noodle Hub shows here when it is working, as it does on the phone, instead of always looking ready.
 - Sandboxed Antigravity bots can run commands again. They can open only their own terminals, not yours.

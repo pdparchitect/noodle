@@ -118,6 +118,8 @@ final class LinkVersion1Tests: XCTestCase {
             "updateBrowser": .updateBrowser(id: a, d.browser), "deleteBrowser": .deleteBrowser(id: a),
             "assignBrowsers": .assignBrowsers(botID: a, browserIDs: [b]),
             "openSurface": .openSurface(conversationID: b, attachmentID: c), "linkPreview": .linkPreview(conversationID: b, attachmentID: c),
+            "messagePageBefore": .messagePage(LinkMessagePage(conversationID: b, before: 120, limit: 50)),
+            "messagePageAfter": .messagePage(LinkMessagePage(conversationID: b, after: 3, limit: 100)),
         ]
     }
     private var nextResponses: [String: LinkResponse] {
@@ -136,6 +138,8 @@ final class LinkVersion1Tests: XCTestCase {
             "computers": .computers([computer]), "computer": .computer(computer),
             "computerTemplates": .computerTemplates([LinkComputerTemplate(id: "ubuntu", name: "Ubuntu", description: "Linux", symbol: "terminal")]),
             "browsers": .browsers([browser]), "browser": .browser(browser), "picture": .picture(Data([6])), "noPicture": .picture(nil),
+            "messagePage": .messages(LinkMessages(messages: [LinkMessage(id: a, conversationID: b, author: .bot(a), body: "Hi", createdAt: date,
+                                                                         delivered: true)], count: 120, start: 70)),
             "linkMessage": .message(LinkMessage(id: a, conversationID: b, author: .bot(c), body: "Here", createdAt: date, delivered: true,
                                                 attachments: [link])),
         ]
@@ -180,6 +184,8 @@ final class LinkVersion1Tests: XCTestCase {
     }
 
     private static let nextRequestJSON: [String: String] = [
+        "messagePageBefore": #"{"version":1,"request":{"messagePage":{"_0":{"before":120,"limit":50,"conversationID":"00000000-0000-0000-0000-00000000000B"}}}}"#,
+        "messagePageAfter": #"{"version":1,"request":{"messagePage":{"_0":{"conversationID":"00000000-0000-0000-0000-00000000000B","after":3,"limit":100}}}}"#,
         "assignBrowsers": #"{"version":1,"request":{"assignBrowsers":{"botID":"00000000-0000-0000-0000-00000000000A","browserIDs":["00000000-0000-0000-0000-00000000000B"]}}}"#,
         "assignComputers": #"{"request":{"assignComputers":{"botID":"00000000-0000-0000-0000-00000000000A","computerIDs":["00000000-0000-0000-0000-00000000000B"]}},"version":1}"#,
         "assignConnections": #"{"version":1,"request":{"assignConnections":{"botID":"00000000-0000-0000-0000-00000000000A","connectionIDs":["00000000-0000-0000-0000-00000000000B"]}}}"#,
@@ -201,6 +207,7 @@ final class LinkVersion1Tests: XCTestCase {
         "updateComputer": #"{"version":1,"request":{"updateComputer":{"id":"00000000-0000-0000-0000-00000000000A","_1":{"template":"ubuntu","description":"Builds","symbol":"hammer","colour":3,"name":"Workbench"}}}}"#
     ]
     private static let nextResponseJSON: [String: String] = [
+        "messagePage": #"{"messages":{"_0":{"count":120,"start":70,"messages":[{"attachments":[],"reactions":[],"author":{"bot":{"_0":"00000000-0000-0000-0000-00000000000A"}},"id":"00000000-0000-0000-0000-00000000000A","conversationID":"00000000-0000-0000-0000-00000000000B","createdAt":1790000000,"body":"Hi","delivered":true}]}}}"#,
         "browser": #"{"browser":{"_0":{"name":"Work","symbol":"briefcase","botIDs":["00000000-0000-0000-0000-00000000000B"],"id":"00000000-0000-0000-0000-00000000000A","icon":"Aw==","colour":2,"description":"Research","paused":true}}}"#,
         "browsers": #"{"browsers":{"_0":[{"paused":true,"id":"00000000-0000-0000-0000-00000000000A","symbol":"briefcase","botIDs":["00000000-0000-0000-0000-00000000000B"],"colour":2,"name":"Work","icon":"Aw==","description":"Research"}]}}"#,
         "computer": #"{"computer":{"_0":{"state":"Running","name":"Workbench","symbol":"hammer","botIDs":["00000000-0000-0000-0000-00000000000B"],"id":"00000000-0000-0000-0000-00000000000A","icon":"Ag==","colour":3,"description":"Builds","kind":"Linux"}}}"#,

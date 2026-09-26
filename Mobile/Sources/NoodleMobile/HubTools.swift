@@ -123,8 +123,10 @@ extension HubChats {
 
     /// The latest picture of what a link points at, for a card that carries none, as a noodlet's.
     func picture(for attachment: LinkAttachment, in agent: LinkBot) async throws -> Data? {
+        if let known = pictures[attachment.id] { return known }
         guard case .picture(let data) = try await pairing.request(.linkPreview(conversationID: agent.conversationID, attachmentID: attachment.id))
         else { throw LinkError("The Hub sent an unexpected answer.") }
+        pictures[attachment.id] = data
         return data
     }
 }

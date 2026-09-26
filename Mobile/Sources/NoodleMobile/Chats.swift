@@ -29,12 +29,20 @@ import SwiftUI
     /// How far each conversation has been read. It stops at a message the bot has not taken yet,
     /// so that message is read again until it shows as delivered.
     @ObservationIgnored private var read: [UUID: Int] = [:]
+    /// Where the earliest message this phone has sits in each conversation; earlier ones load as
+    /// the person scrolls back. None means it has them all.
+    private var start: [UUID: Int] = [:]
+    /// Card pictures, fetched as their cards come into view.
+    @ObservationIgnored var pictures: [UUID: Data] = [:]
+    /// Messages in one page: small enough to come quickly, however long the conversation.
+    private static let pageSize = 50
 
     /// The last sync, shown at launch while the Hub is asked again.
     private struct Cache: Codable {
         var agents: [LinkBot]
         var conversations: [UUID: [LinkMessage]]
         var read: [UUID: Int]
+        var start: [UUID: Int]?
     }
 
     init(pairing: HubPairing) {
@@ -48,6 +56,7 @@ import SwiftUI
             agents = cache.agents
             conversations = cache.conversations
             read = cache.read
+            start = cache.start ?? [:]
             isLoaded = true
         }
     }
@@ -113,7 +122,7 @@ import SwiftUI
     }
 
     private func saveCache() {
-        try? JSONEncoder().encode(Cache(agents: agents, conversations: conversations, read: read))
+        try? JSONEncoder().encode(Cache(agents: agents, conversations: conversations, read: read, start: start))
             .write(to: cacheURL, options: .atomic)
     }
 
@@ -332,22 +341,60 @@ import SwiftUI
         try FileManager.default.copyItem(at: source, to: url)
     }
 
+    /// The first time, the newest page only; after that, what is new, a page at a time. A message
+    /// the bot has not taken yet is read again until it shows as delivered.
     private func load(_ conversationID: UUID) async throws {
-        let after = read[conversationID] ?? 0
-        guard case .messages(let page) = try await pairing.request(.messages(conversationID: conversationID, after: after)) else {
-            throw LinkError("The Hub sent an unexpected answer.")
+        guard var at = read[conversationID] else {
+            let page = try await self.page(LinkMessagePage(conversationID: conversationID, limit: Self.pageSize))
+            merge(page.messages, into: conversationID)
+            let first = page.start ?? 0
+            start[conversationID] = first
+            let pending = page.messages.firstIndex { $0.author == .you && !$0.delivered }
+            read[conversationID] = pending.map { first + $0 } ?? page.count
+            return
         }
-        merge(page.messages, into: conversationID)
-        let pending = page.messages.firstIndex { $0.author == .you && !$0.delivered }
-        read[conversationID] = pending.map { after + $0 } ?? page.count
+        while true {
+            let page = try await self.page(LinkMessagePage(conversationID: conversationID, after: at, limit: 2 * Self.pageSize))
+            merge(page.messages, into: conversationID)
+            if let pending = page.messages.firstIndex(where: { $0.author == .you && !$0.delivered }) {
+                read[conversationID] = at + pending
+                return
+            }
+            at += page.messages.count
+            read[conversationID] = at
+            if page.messages.isEmpty || at >= page.count { return }
+        }
     }
 
+    /// Whether earlier messages wait on the Hub, to load as the person scrolls back.
+    func hasEarlier(_ agent: LinkBot) -> Bool { (start[agent.conversationID] ?? 0) > 0 }
+
+    func loadEarlier(_ agent: LinkBot) async throws {
+        guard let first = start[agent.conversationID], first > 0 else { return }
+        let page = try await self.page(LinkMessagePage(conversationID: agent.conversationID, before: first, limit: Self.pageSize))
+        let known = Set((conversations[agent.conversationID] ?? []).map(\.id))
+        conversations[agent.conversationID] = page.messages.filter { !known.contains($0.id) } + (conversations[agent.conversationID] ?? [])
+        start[agent.conversationID] = page.start ?? 0
+        saveCache()
+    }
+
+    private func page(_ request: LinkMessagePage) async throws -> LinkMessages {
+        guard case .messages(let page) = try await pairing.request(.messagePage(request)) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        return page
+    }
+
+    /// Messages arriving in any order, such as a page landing after one sent from here, keep the
+    /// conversation's order.
     private func merge(_ messages: [LinkMessage], into conversationID: UUID) {
         var list = conversations[conversationID] ?? []
         for message in messages {
             if let index = list.firstIndex(where: { $0.id == message.id }) { list[index] = message } else { list.append(message) }
         }
-        conversations[conversationID] = list
+        conversations[conversationID] = list.enumerated()
+            .sorted { ($0.element.createdAt, $0.offset) < ($1.element.createdAt, $1.offset) }
+            .map(\.element)
     }
 }
 
@@ -575,6 +622,11 @@ struct ChatView: View {
         let latestOwn = messages.last { $0.author == .you }?.id
         return ScrollView {
             LazyVStack(spacing: 6) {
+                // Reaching the top loads the page before.
+                if chats.hasEarlier(agent) {
+                    ProgressView().frame(maxWidth: .infinity).padding(.vertical, 8)
+                        .task(id: messages.first?.id) { try? await chats.loadEarlier(agent) }
+                }
                 ForEach(messages) { message in
                     Bubble(chats: chats, agent: agent, message: message,
                            delivery: message.id == latestOwn ? chats.delivery(of: message) : nil)

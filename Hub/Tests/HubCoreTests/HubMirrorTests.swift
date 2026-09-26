@@ -102,6 +102,21 @@ import XCTest
         XCTAssertNil(mirror.phase(ofAgent: UUID()), "a bot not on the Hub had a phase")
     }
 
+    /// A conversation longer than one answer may carry comes over page by page.
+    func testALongConversationComesOverWhole() async throws {
+        let f = try await fixture()
+        let mirror = f.mirror()
+        let agent = try await mirror.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code"))
+        let remoteBot = try XCTUnwrap(f.hub.repository.loadAgents().first)
+        let remote = try conversation(of: remoteBot.id, in: f.hub.repository)
+        let long = String(repeating: "The little bookshop at the end of the street opened at nine. ", count: 800)
+        for index in 0..<40 { _ = try f.hub.repository.sendAgentMessage(agentID: remoteBot.id, conversationID: remote.id, body: "\(index) \(long)") }
+        await mirror.sync()
+        XCTAssertNil(mirror.error)
+        let local = try conversation(of: agent.id, in: f.local)
+        XCTAssertEqual(try f.local.loadMessages(conversationID: local.id).count, 40)
+    }
+
     func testTheMirrorSurvivesARelaunchWithoutDoubling() async throws {
         let f = try await fixture()
         let agent = try await f.mirror().createBot(LinkBotDraft(name: "Alfred", provider: "claude-code"))

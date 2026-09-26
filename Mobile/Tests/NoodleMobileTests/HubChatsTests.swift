@@ -59,6 +59,15 @@ private actor FakeHub {
         case .success(.messages(let conversationID, let after)):
             let messages = messages.filter { $0.conversationID == conversationID }
             return .messages(LinkMessages(messages: Array(messages.dropFirst(after)), count: messages.count))
+        case .success(.messagePage(let page)):
+            let messages = messages.filter { $0.conversationID == page.conversationID }
+            if let after = page.after {
+                let start = min(after, messages.count)
+                return .messages(LinkMessages(messages: Array(messages[start..<min(start + page.limit, messages.count)]),
+                                              count: messages.count, start: start))
+            }
+            let end = min(page.before ?? messages.count, messages.count), start = max(0, end - page.limit)
+            return .messages(LinkMessages(messages: Array(messages[start..<end]), count: messages.count, start: start))
         case .success(.react(let change)):
             guard let index = messages.firstIndex(where: { $0.id == change.messageID }) else { return .failure("No such message.") }
             let reaction = LinkReaction(author: .you, emoji: change.emoji)
@@ -107,6 +116,34 @@ private actor FakeHub {
         await pairing.join(invitation.url().absoluteString)
         try #require(pairing.hub != nil)
         return (HubChats(pairing: pairing), server)
+    }
+
+    /// A long conversation opens on its newest page; scrolling back brings the rest.
+    @Test func aLongConversationOpensOnItsNewestPage() async throws {
+        let hub = FakeHub()
+        for index in 1..<120 { await hub.botSays("Message \(index)") }
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+        #expect(chats.messages(of: scout).count == 50)
+        #expect(chats.messages(of: scout).last?.body == "Message 119")
+        #expect(chats.hasEarlier(scout))
+        while chats.hasEarlier(scout) { try await chats.loadEarlier(scout) }
+        #expect(chats.messages(of: scout).map(\.body) == ["Hello"] + (1..<120).map { "Message \($0)" })
+    }
+
+    /// A message sent before the conversation has loaded still lands after what was already said.
+    @Test func messagesKeepTheirOrderWhenSentBeforeTheConversationLoads() async throws {
+        let hub = FakeHub()
+        await hub.botSays("Earlier")
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+
+        try await chats.send("Hi", to: await hub.bot)
+        let bodies = chats.messages(of: await hub.bot).map(\.body)
+        #expect(Array(bodies.prefix(3)) == ["Hello", "Earlier", "Hi"])
     }
 
     @Test func agentsListWithTheirLatestMessage() async throws {

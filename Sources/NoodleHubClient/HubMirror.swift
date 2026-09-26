@@ -337,8 +337,20 @@ import Observation
         if changed { onChange?() }
     }
 
+    /// Copies what is new on the Hub a page at a time, so no answer grows with the conversation.
     private func syncMessages(_ entry: Entry) async throws {
-        guard case .messages(let page) = try await pairing.request(.messages(conversationID: entry.remoteConversation, after: entry.synced)) else {
+        var entry = entry
+        while true {
+            let page = try await syncPage(entry)
+            guard let next = entries.first(where: { $0.remote == entry.remote }),
+                  next.synced > entry.synced, next.synced < page.count, page.messages.count > 0 else { return }
+            entry = next
+        }
+    }
+
+    private func syncPage(_ entry: Entry) async throws -> LinkMessages {
+        guard case .messages(let page) = try await pairing.request(.messagePage(LinkMessagePage(
+            conversationID: entry.remoteConversation, after: entry.synced, limit: 100))) else {
             throw LinkError("The Hub sent an unexpected answer.")
         }
         var known = Set(try repository.loadMessages(conversationID: entry.conversation).map(\.id))
@@ -367,7 +379,8 @@ import Observation
         }
         // Delivery changes after the first read, so the last user message is read again until the bot takes it.
         let pendingFrom = page.messages.firstIndex { $0.author == .you && !$0.delivered }
-        update(entry.remote) { $0.synced = pendingFrom.map { entry.synced + $0 } ?? page.count }
+        update(entry.remote) { $0.synced = pendingFrom.map { entry.synced + $0 } ?? entry.synced + page.messages.count }
+        return page
     }
 
     private func sendPending() async throws {
@@ -402,8 +415,15 @@ import Observation
         for attachment in attachments where !present.contains(attachment.id) {
             // A link travels as its address; one to something live keeps its card, and opens live here.
             if let url = attachment.url {
+                // Pages leave card pictures out; each comes on its own.
+                var image = attachment.card?.image
+                if image == nil, attachment.card != nil,
+                   case .picture(let picture)? = try? await pairing.request(.linkPreview(conversationID: entry.remoteConversation,
+                                                                                         attachmentID: attachment.id)) {
+                    image = picture
+                }
                 _ = try repository.importLinkAttachment(url, into: entry.conversation, card: attachment.card.map {
-                    LinkCard(title: $0.title, detail: $0.detail, image: $0.image, symbol: $0.symbol, colour: $0.colour,
+                    LinkCard(title: $0.title, detail: $0.detail, image: image, symbol: $0.symbol, colour: $0.colour,
                              icon: $0.icon, capturedAt: $0.capturedAt)
                 }, id: attachment.id)
                 continue
