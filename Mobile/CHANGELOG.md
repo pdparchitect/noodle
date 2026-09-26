@@ -4,6 +4,8 @@
 
 ### Added
 
+- Open a browser tab, computer or noodlet a bot shared: tap its card to see it live on the Hub's Mac, tap to click, drag to scroll, and type with the keyboard button. Its bot waits while you have it open.
+- Give a bot tools, computers and browsers from its settings. Tools, Computers and Browsers list yours on the Hub; tap one to let the bot use it or not, + adds one, and swiping deletes it. A tool that needs signing in opens its sign-in page on the phone.
 - Join your Noodle Hub from an invitation: scan its QR code, paste its link, choose a photo of the QR code, or open the link. Noodle then shows who you joined as, your plan and whether the Hub is connected, and can leave the Hub.
 - Chat with your bots on the Hub. They are listed like Messages, newest conversation first; tap one to read the conversation and send messages, and replies appear as the bot writes them. The app opens on what it last saw, including the harnesses your plan lends, and catches up with the Hub in the background.
 - Make bots on the Hub with New Bot in the … menu, choosing a name, a colour and one of the harnesses your plan lends. Tap a bot's picture at the top of its chat to edit or delete it. Profiles in the same menu lists every Hub you joined: tap one to show its bots, open its details to see who you joined as or leave it, or add another Hub with Add Hub. With Show All Hubs Together, the bots of every Hub share one list, each marked with its Hub, and New Bot asks which Hub to make it on.

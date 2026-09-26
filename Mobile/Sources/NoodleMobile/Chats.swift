@@ -7,7 +7,7 @@ import SwiftUI
 @MainActor @Observable final class HubChats {
     let pairing: HubPairing
     private(set) var agents: [LinkBot] = []
-    private(set) var error: String?
+    var error: String?
     /// Whether the list is known: from the last sync saved on this phone, or from the Hub itself.
     private(set) var isLoaded = false
     /// Pins belong to this phone alone; the Hub never sees them.
@@ -20,6 +20,12 @@ import SwiftUI
     /// Each conversation's backdrop. Like on the Mac, only this device's look: the Hub never sees it.
     private var backgrounds: [UUID: ConversationBackground] = [:]
     private var conversations: [UUID: [LinkMessage]] = [:]
+    /// This user's tool connections, computers and browsers on the Hub, which bots use when assigned.
+    var connections: [LinkConnection] = []
+    var computers: [LinkComputer] = []
+    var browsers: [LinkBrowser] = []
+    /// Computers being made, waiting for the Hub to say they are ready.
+    @ObservationIgnored var making: [UUID: CheckedContinuation<LinkComputer, Error>] = [:]
     /// How far each conversation has been read. It stops at a message the bot has not taken yet,
     /// so that message is read again until it shows as delivered.
     @ObservationIgnored private var read: [UUID: Int] = [:]
@@ -200,8 +206,20 @@ import SwiftUI
         case .botPhase(let id, let phase):
             guard let index = agents.firstIndex(where: { $0.id == id }) else { return }
             agents[index].phase = phase
-        // Tool connections, computers and browsers are managed from Noodle on the Mac for now.
-        case .connectionsChanged, .signInPage, .computersChanged, .computerCreated, .browsersChanged, .surfaceOpened:
+        case .connectionsChanged:
+            try await loadConnections()
+        case .computersChanged:
+            try await loadComputers()
+        case .browsersChanged:
+            try await loadBrowsers()
+        case .signInPage(let id, let url):
+            // The person may take minutes in the browser; other events keep flowing meanwhile.
+            Task { await signIn(id, page: url) }
+        case .computerCreated(let id, let computer, let error):
+            if let computer { making.removeValue(forKey: id)?.resume(returning: computer) }
+            else { making.removeValue(forKey: id)?.resume(throwing: LinkError(error ?? "The Hub could not make the computer.")) }
+        // Live views have their own channels.
+        case .surfaceOpened:
             return
         }
         saveCache()
@@ -228,6 +246,8 @@ import SwiftUI
             seen = conversations.compactMapValues { $0.last?.createdAt }
             saveSeen()
         }
+        // Chats work even when the Hub cannot list tools.
+        try? await loadTools()
         isLoaded = true
         error = nil
         saveCache()
@@ -965,6 +985,11 @@ struct AgentEditor: View {
                     Section { Text(problem).foregroundStyle(.red) }
                 }
                 if let agent {
+                    Section {
+                        NavigationLink("Tools") { HubToolsScreen(chats: chats, agent: agent, kind: .connection) }
+                        NavigationLink("Computers") { HubToolsScreen(chats: chats, agent: agent, kind: .computer) }
+                        NavigationLink("Browsers") { HubToolsScreen(chats: chats, agent: agent, kind: .browser) }
+                    }
                     Section {
                         NavigationLink("Background") { BackgroundEditor(chats: chats, agent: agent) }
                     }

@@ -17,11 +17,14 @@ struct AttachmentView: View {
     @State private var image: UIImage?
     @State private var failed = false
     @State private var previewing: URL?
+    @State private var watching = false
 
     private var isImage: Bool { attachment.mediaType.hasPrefix("image/") }
 
     var body: some View {
-        if let voice = attachment.voice {
+        if attachment.isLive {
+            live
+        } else if let voice = attachment.voice {
             VoiceMessagePlayer(url: url, voice: voice)
                 .task(id: attachment.id) { url = try? await chats.file(for: attachment, in: agent) }
         } else {
@@ -46,6 +49,33 @@ struct AttachmentView: View {
             }
         }
         .task(id: attachment.id) { await load() }
+    }
+
+    /// A browser tab, computer or noodlet a bot shared: its last picture, opening live on the Hub's Mac.
+    private var live: some View {
+        Button { watching = true } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                ZStack {
+                    Color(.secondarySystemBackground)
+                    if let data = attachment.card?.image, let image = UIImage(data: data) {
+                        Image(uiImage: image).resizable().scaledToFit()
+                    } else {
+                        Image(systemName: attachment.card?.symbol ?? "rectangle.on.rectangle").font(.largeTitle).foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: 240, height: 150)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                Text(attachment.card?.title ?? URL(fileURLWithPath: attachment.filename).deletingPathExtension().lastPathComponent)
+                    .font(.subheadline.weight(.medium)).lineLimit(1)
+            }
+            .padding(8)
+            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens it live")
+        .fullScreenCover(isPresented: $watching) {
+            LiveSurfaceScreen(chats: chats, agent: agent, attachment: attachment)
+        }
     }
 
     @ViewBuilder private var picture: some View {
