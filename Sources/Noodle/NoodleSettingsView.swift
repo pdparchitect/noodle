@@ -36,52 +36,52 @@ struct NoodleSettingsView: View {
 
         TabView(selection: $store.selectedSettingsTab.animation(.easeInOut(duration: 0.22))) {
             GeneralSettingsView()
-                .settingsContentSize()
+                .settingsContentSize(width: 680)
                 .tabItem {
                     Label("General", systemImage: "gearshape")
                 }
                 .tag(NoodleSettingsTab.general)
             ChatSettingsView()
-                .settingsContentSize()
+                .settingsContentSize(width: 680)
                 .tabItem {
                     Label("Conversation", systemImage: "bubble.left.and.bubble.right")
                 }
                 .tag(NoodleSettingsTab.chat)
             HarnessesSettingsView(store: store, setup: harnessSetup)
-                .settingsContentSize()
+                .settingsContentSize(width: 680)
                 .tabItem {
                     Label("Harness", systemImage: "terminal")
                 }
                 .tag(NoodleSettingsTab.harnesses)
             HeartbeatsSettingsView(store: store)
-                .settingsContentSize()
+                .settingsContentSize(width: 680)
                 .tabItem {
                     Label("Heartbeat", systemImage: "waveform.path.ecg")
                 }
                 .tag(NoodleSettingsTab.heartbeats)
             AgentAccessSettingsView(store: store)
-                .settingsContentSize()
+                .settingsContentSize(width: 680)
                 .tabItem { Label("Sandbox", systemImage: "lock.shield") }
                 .tag(NoodleSettingsTab.sandbox)
             MCPSettingsView(store: store)
-                .settingsContentSize()
+                .settingsContentSize(width: 680)
                 .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
                 .tag(NoodleSettingsTab.mcps)
             KeybindingsSettingsView()
-                .settingsContentSize()
+                .settingsContentSize(width: 680)
                 .tabItem { Label("Keybindings", systemImage: "keyboard") }
                 .tag(NoodleSettingsTab.keybindings)
             PermissionsSettingsView()
-                .settingsContentSize()
+                .settingsContentSize(width: 680)
                 .tabItem { Label("Permissions", systemImage: "hand.raised") }
                 .tag(NoodleSettingsTab.permissions)
             CompanionAppsSettingsView(store: store, extraRow: AnyView(HubCompanionRows().environment(store)),
                                       onCheckAgain: { Task { await store.hubs.refreshAll() } })
-                .settingsContentSize()
+                .settingsContentSize(width: 680)
                 .tabItem { Label("Companions", systemImage: "square.stack.3d.up") }
                 .tag(NoodleSettingsTab.companions)
             UpdatesSettingsView()
-                .settingsContentSize()
+                .settingsContentSize(width: 680)
                 .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }
                 .tag(NoodleSettingsTab.updates)
         }
@@ -214,13 +214,6 @@ private struct SettingsWindowResizeAnchor: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         content.windowResizeAnchor(.top)
-    }
-}
-
-private extension View {
-    func settingsContentSize() -> some View {
-        frame(width: 680)
-            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

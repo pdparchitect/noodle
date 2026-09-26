@@ -182,6 +182,7 @@ public struct HarnessInstallationRow: View {
                         Text(activity).font(.caption)
                         Spacer()
                         Button("Cancel") { setup.cancel(id) }
+                            .buttonStyle(.link)
                     }
                 }
                 if let challenge = setup.challenges[id] {
@@ -193,6 +194,7 @@ public struct HarnessInstallationRow: View {
                             if let command = guide.command {
                                 HarnessCommandView(command: command)
                                 Button("Open Terminal") { openTerminal() }
+                                    .buttonStyle(.link)
                             }
                             HStack {
                                 Link("Installation Guide", destination: guide.documentationURL)
@@ -200,7 +202,9 @@ public struct HarnessInstallationRow: View {
                                 Button("Check Installation") {
                                     hasCheckedInstallation = true
                                     install()
-                                }.disabled(setup.checking.contains(id))
+                                }
+                                .buttonStyle(.link)
+                                .disabled(setup.checking.contains(id))
                             }
                             if hasCheckedInstallation {
                                 Text("Not detected yet. Finish the installer in Terminal, then check again.")
@@ -210,10 +214,13 @@ public struct HarnessInstallationRow: View {
                         } else if setup.canInstall(id) {
                             HStack {
                                 Button("Install") { setup.install(id, runtime: store.runtime) }
+                                    .buttonStyle(.link)
                                 Button("Install Manually…") { showsInstallationGuide = true }
+                                    .buttonStyle(.link)
                             }
                         } else {
                             Button("Install…") { showsInstallationGuide = true }
+                                .buttonStyle(.link)
                         }
                     }
                 }
@@ -411,8 +418,10 @@ public struct HarnessInstallationRow: View {
             HStack {
                 if guide.command != nil {
                     Button("Open Terminal") { openTerminal() }
+                        .buttonStyle(.link)
                 }
                 Button("Official Update Guide") { openURL(guide.documentationURL) }
+                    .buttonStyle(.link)
             }
             if let terminalError { Text(terminalError).font(.caption).foregroundStyle(.red) }
         }
