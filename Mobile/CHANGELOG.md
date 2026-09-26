@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-26
+
 ### Added
 
 - Open a browser tab, computer or noodlet a bot shared: tap its card to see it live on the Hub's Mac, tap to click, drag to scroll, and type with the keyboard button. Turn the phone sideways to give it the whole screen. Its bot waits while you have it open. Cards show the latest picture of a noodlet and the latest lines of a computer's terminal.

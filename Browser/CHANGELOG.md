@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-26
+
 ### Added
 
 - Let Noodle Hub show a browser live to the person who owns it, its tabs above the page as in its window, with back, forward, reload and an address bar under them, and take their clicks, typing and scrolling, even while bots are paused. Clicking the tabs selects, closes and opens them, so a link that opens a new tab shows up there, and a new tab starts with its address bar ready to type.

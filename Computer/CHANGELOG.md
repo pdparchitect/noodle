@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-26
+
 ### Added
 
 - Let Noodle Hub show a computer live to the person who owns it, its desktop or the terminal a bot shared, and take their clicks, typing and scrolling. A stopped computer starts when someone opens it, and if the bot's terminal closed meanwhile, the view opens a new one for it.
