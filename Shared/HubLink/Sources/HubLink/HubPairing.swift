@@ -36,8 +36,10 @@ import Observation
         await perform {
             let invitation = try LinkInvitation(text: invitationText)
             guard invitation.expires > now else { throw LinkError("This invitation has expired. Ask for a new one.") }
-            let status = try await self.exchange(.enroll(token: invitation.token, deviceName: self.deviceName),
-                                                 key: invitation.hubKey, endpoints: invitation.endpoints)
+            let join = try invitation.joinIdentity(), device = try self.identity()
+            let enroll = LinkRequest.enroll(deviceKey: device.publicKey, proof: try device.joinProof(for: join.publicKey),
+                                            deviceName: self.deviceName)
+            let status = try await self.exchange(enroll, as: join, key: invitation.hubKey, endpoints: invitation.endpoints)
             try self.save(Hub(name: status.hubName, key: invitation.hubKey, endpoints: status.endpoints, userName: status.userName))
             self.remember(status)
         }
@@ -47,7 +49,7 @@ import Observation
     public func refresh(quietly: Bool = false) async {
         guard let hub else { return }
         await perform(quietly: quietly) {
-            let status = try await self.exchange(.status, key: hub.key, endpoints: hub.endpoints)
+            let status = try await self.exchange(.status, as: try self.identity(), key: hub.key, endpoints: hub.endpoints)
             // Left or joined another Hub while this was in flight.
             guard self.hub?.key == hub.key else { return }
             try self.save(Hub(name: status.hubName, key: hub.key, endpoints: status.endpoints, userName: status.userName))
@@ -90,7 +92,7 @@ import Observation
     /// Sends any request to the joined Hub, as this device.
     public func request(_ request: LinkRequest) async throws -> LinkResponse {
         guard let hub else { throw LinkError("This Mac has not joined a Noodle Hub.") }
-        return try await send(request, key: hub.key, endpoints: hub.endpoints)
+        return try await send(request, as: try identity(), key: hub.key, endpoints: hub.endpoints)
     }
 
     /// Sends a file to one of this user's conversations on the Hub, piece by piece.
@@ -160,16 +162,18 @@ import Observation
         }
     }
 
-    private func exchange(_ request: LinkRequest, key: LinkPublicKey, endpoints: [LinkEndpoint]) async throws -> LinkStatus {
-        switch try await send(request, key: key, endpoints: endpoints) {
+    private func exchange(_ request: LinkRequest, as identity: LinkIdentity, key: LinkPublicKey,
+                          endpoints: [LinkEndpoint]) async throws -> LinkStatus {
+        switch try await send(request, as: identity, key: key, endpoints: endpoints) {
         case .status(let status): return status
         case .failure(let message): throw LinkError(message)
         default: throw LinkError("The Hub sent an unexpected answer.")
         }
     }
 
-    private func send(_ request: LinkRequest, key: LinkPublicKey, endpoints: [LinkEndpoint]) async throws -> LinkResponse {
-        let (data, endpoint) = try await LinkClient.exchange(try LinkProtocol.encode(request), identity: try identity(),
+    private func send(_ request: LinkRequest, as identity: LinkIdentity, key: LinkPublicKey,
+                      endpoints: [LinkEndpoint]) async throws -> LinkResponse {
+        let (data, endpoint) = try await LinkClient.exchange(try LinkProtocol.encode(request), identity: identity,
                                                              hubKey: key, endpoints: endpoints)
         self.endpoint = endpoint
         let response = try LinkProtocol.decodeResponse(data)

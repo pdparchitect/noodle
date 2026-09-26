@@ -8,7 +8,7 @@ final class LinkInvitationImageTests: XCTestCase {
     private let invitation = LinkInvitation(
         hubName: "Mac mini", hubKey: LinkIdentity().publicKey,
         endpoints: [LinkEndpoint(host: "Mac-mini.local", port: 38_415), LinkEndpoint(host: "192.168.1.20", port: 38_415)],
-        userName: "Ada", token: LinkInvitation.newToken(), expires: Date(timeIntervalSince1970: 1_790_000_000))
+        userName: "Ada", joinKey: LinkIdentity().privateKey.rawRepresentation, expires: Date(timeIntervalSince1970: 1_790_000_000))
 
     /// The QR code as the Hub draws it, scaled up and placed on a larger white picture.
     private func picture(of text: String) throws -> CGImage {

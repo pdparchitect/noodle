@@ -58,6 +58,11 @@ public struct LinkIdentity: Sendable {
         }
         return secIdentity
     }
+
+    /// Signs the invitation's key, proving to the Hub that this side holds the key it asks to pair.
+    public func joinProof(for invitationKey: LinkPublicKey) throws -> Data {
+        try privateKey.signature(for: LinkPublicKey.joinProofMessage(invitationKey)).rawRepresentation
+    }
 }
 
 /// Who a peer is: its P-256 public key, compared byte for byte.
@@ -76,6 +81,17 @@ public struct LinkPublicKey: Hashable, Codable, Sendable, CustomStringConvertibl
               let data = SecKeyCopyExternalRepresentation(key, nil) as Data?,
               let parsed = try? LinkPublicKey(x963: data) else { return nil }
         self = parsed
+    }
+
+    /// Whether `proof` shows the holder of this key asked to pair through the invitation with `invitationKey`.
+    public func isJoinProof(_ proof: Data, for invitationKey: LinkPublicKey) -> Bool {
+        guard let key = try? P256.Signing.PublicKey(x963Representation: x963),
+              let signature = try? P256.Signing.ECDSASignature(rawRepresentation: proof) else { return false }
+        return key.isValidSignature(signature, for: Self.joinProofMessage(invitationKey))
+    }
+
+    fileprivate static func joinProofMessage(_ invitationKey: LinkPublicKey) -> Data {
+        Data("noodle-hub-join".utf8) + invitationKey.x963
     }
 
     /// Short and stable, for showing a person which key they are trusting.

@@ -72,8 +72,9 @@ public enum LinkProtocol {
 }
 
 public enum LinkRequest: Codable, Equatable, Sendable {
-    /// Pairs the key this request arrives with to the invitation's user. The token works once.
-    case enroll(token: String, deviceName: String)
+    /// Sent with the invitation's key, which works once: pairs `deviceKey` to the invitation's user.
+    /// `proof` is `deviceKey`'s signature of the invitation's key, so nobody pairs a key they do not hold.
+    case enroll(deviceKey: LinkPublicKey, proof: Data, deviceName: String)
     /// What the Hub lends this device's user.
     case status
     /// Keeps a stream open that the Hub pushes `LinkEvent`s down.
@@ -672,12 +673,14 @@ public struct LinkInvitation: Codable, Equatable, Sendable {
     public var hubKey: LinkPublicKey
     public var endpoints: [LinkEndpoint]
     public var userName: String
-    public var token: String
+    /// The private half of a key made for this invitation alone. A joining device presents it in
+    /// the handshake; the Hub lets no other unpaired key connect.
+    public var joinKey: Data
     public var expires: Date
     /// The request version the inviting Hub speaks.
     public var version: Int
 
-    private enum CodingKeys: String, CodingKey { case hubName, hubKey, endpoints, userName, token, expires, version }
+    private enum CodingKeys: String, CodingKey { case hubName, hubKey, endpoints, userName, joinKey, expires, version }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -685,29 +688,25 @@ public struct LinkInvitation: Codable, Equatable, Sendable {
         hubKey = try c.decode(LinkPublicKey.self, forKey: .hubKey)
         endpoints = try c.decode(.endpoints, or: [])
         userName = try c.decode(.userName, or: "")
-        token = try c.decode(String.self, forKey: .token)
+        joinKey = try c.decode(Data.self, forKey: .joinKey)
         expires = try c.decode(Date.self, forKey: .expires)
         version = try c.decode(.version, or: 1)
     }
 
-    public init(hubName: String, hubKey: LinkPublicKey, endpoints: [LinkEndpoint], userName: String, token: String, expires: Date,
+    public init(hubName: String, hubKey: LinkPublicKey, endpoints: [LinkEndpoint], userName: String, joinKey: Data, expires: Date,
                 version: Int = LinkProtocol.version) {
         self.version = version
         self.hubName = hubName
         self.hubKey = hubKey
         self.endpoints = endpoints
         self.userName = userName
-        self.token = token
+        self.joinKey = joinKey
         self.expires = expires
     }
 
-    public static func newToken() -> String {
-        Data(SymmetricKey(size: .bits256).withUnsafeBytes { Array($0) }).base64URL
-    }
-
-    /// What the Hub keeps instead of the token itself.
-    public static func tokenDigest(_ token: String) -> Data {
-        Data(SHA256.hash(data: Data(token.utf8)))
+    /// What the joining device connects as, until it has paired its own key.
+    public func joinIdentity() throws -> LinkIdentity {
+        LinkIdentity(privateKey: try P256.Signing.PrivateKey(rawRepresentation: joinKey))
     }
 
     /// A link Noodle opens, which is also what the QR code holds.
@@ -725,7 +724,8 @@ public struct LinkInvitation: Codable, Equatable, Sendable {
         let code = URLComponents(string: text).flatMap { components in
             components.host == Self.urlHost ? components.queryItems?.first { $0.name == "i" }?.value : nil
         } ?? text
-        guard let data = Data(base64URL: code), let invitation = try? Self.decoder.decode(Self.self, from: data) else {
+        guard let data = Data(base64URL: code), let invitation = try? Self.decoder.decode(Self.self, from: data),
+              (try? invitation.joinIdentity()) != nil else {
             throw LinkError("This is not a Noodle Hub invitation.")
         }
         guard LinkProtocol.supportedVersions.contains(invitation.version) else {

@@ -59,7 +59,7 @@ final class LinkVersion1Tests: XCTestCase {
     private let date = Date(timeIntervalSince1970: 1_790_000_000)
 
     private static let requests: [String: String] = [
-        "enroll": #"{"request":{"enroll":{"token":"t","deviceName":"Mac"}},"version":1}"#,
+        "enroll": #"{"request":{"enroll":{"deviceKey":"BEhnsDZStQfLMoSoKK4ZQvb0rOhU49qIX51h+o1GRTuRTSdeWLgusF4zPaU7KyvfPYKhUFhsFaMUDl8p2MoP7s8=","proof":"AQI=","deviceName":"Mac"}},"version":1}"#,
         "status": #"{"version":1,"request":{"status":{}}}"#,
         "subscribe": #"{"version":1,"request":{"subscribe":{}}}"#,
         "bots": #"{"request":{"bots":{}},"version":1}"#,
@@ -88,7 +88,7 @@ final class LinkVersion1Tests: XCTestCase {
         "messageChanged": #"{"messageChanged":{"_0":{"attachments":[],"author":{"bot":{"_0":"00000000-0000-0000-0000-00000000000C"}},"body":"Hi","conversationID":"00000000-0000-0000-0000-00000000000B","createdAt":1790000000,"delivered":true,"id":"00000000-0000-0000-0000-00000000000A","reactions":[{"author":{"you":{}},"emoji":"👍"}]}}}"#,
         "botPhase": #"{"botPhase":{"botID":"00000000-0000-0000-0000-00000000000A","phase":"working"}}"#
     ]
-    private static let invitation = #"{"endpoints":[{"host":"hub.local","port":38415}],"expires":1790000000,"hubKey":"BEhnsDZStQfLMoSoKK4ZQvb0rOhU49qIX51h+o1GRTuRTSdeWLgusF4zPaU7KyvfPYKhUFhsFaMUDl8p2MoP7s8=","hubName":"Hub","token":"t","userName":"Ada","version":1}"#
+    private static let invitation = #"{"endpoints":[{"host":"hub.local","port":38415}],"expires":1790000000,"hubKey":"BEhnsDZStQfLMoSoKK4ZQvb0rOhU49qIX51h+o1GRTuRTSdeWLgusF4zPaU7KyvfPYKhUFhsFaMUDl8p2MoP7s8=","hubName":"Hub","joinKey":"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=","userName":"Ada","version":1}"#
 
     private var draft: LinkBotDraft {
         LinkBotDraft(name: "Alfred", provider: "claude-code", profile: a, model: "opus", reasoningEffort: "high",
@@ -240,7 +240,7 @@ final class LinkVersion1Tests: XCTestCase {
 
     func testVersion1RequestsStillRead() throws {
         let expected: [String: LinkRequest] = [
-            "enroll": .enroll(token: "t", deviceName: "Mac"), "status": .status, "subscribe": .subscribe, "bots": .bots,
+            "enroll": .enroll(deviceKey: try LinkPublicKey(x963: Data(base64Encoded: "BEhnsDZStQfLMoSoKK4ZQvb0rOhU49qIX51h+o1GRTuRTSdeWLgusF4zPaU7KyvfPYKhUFhsFaMUDl8p2MoP7s8=")!), proof: Data([1, 2]), deviceName: "Mac"), "status": .status, "subscribe": .subscribe, "bots": .bots,
             "createBot": .createBot(draft), "updateBot": .updateBot(id: a, draft), "deleteBot": .deleteBot(id: a),
             "messages": .messages(conversationID: b, after: 3),
             "send": .send(LinkOutgoingMessage(conversationID: b, id: a, body: "Hi", attachmentIDs: [c])),

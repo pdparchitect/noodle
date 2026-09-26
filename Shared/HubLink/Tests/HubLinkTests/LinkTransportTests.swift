@@ -184,7 +184,7 @@ final class StreamBox: @unchecked Sendable {
         port.value = try XCTUnwrap(server.port)
         let invitation = LinkInvitation(hubName: "Studio", hubKey: hub.publicKey,
                                         endpoints: [LinkEndpoint(host: "127.0.0.1", port: port.value)],
-                                        userName: "Petko", token: "t", expires: Date().addingTimeInterval(600))
+                                        userName: "Petko", joinKey: LinkIdentity().privateKey.rawRepresentation, expires: Date().addingTimeInterval(600))
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
         let pairing = HubPairing(directory: directory, deviceName: "iPhone")

@@ -9,7 +9,7 @@ import XCTest
 @MainActor final class HubPairingStoreTests: XCTestCase {
     private let invitation = LinkInvitation(hubName: "Mac mini", hubKey: LinkIdentity().publicKey,
         endpoints: [LinkEndpoint(host: "Mac-mini.local", port: 38_415)], userName: "Ada",
-        token: LinkInvitation.newToken(), expires: Date().addingTimeInterval(600))
+        joinKey: LinkIdentity().privateKey.rawRepresentation, expires: Date().addingTimeInterval(600))
 
     func testInvitationLinksOpenCompanionsReadyToJoin() throws {
         let f = try StoreFixture()

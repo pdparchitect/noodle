@@ -56,8 +56,8 @@ import Observation
     @ObservationIgnored private let routerMapper: (any RouterPortMapper)?
     /// Keeps the router's port open until cancelled.
     @ObservationIgnored private var routerRenewal: Task<Void, Never>?
-    /// Token digests of unused invitations. Kept in memory: an invitation outlives no relaunch.
-    @ObservationIgnored private var invitations: [Data: (user: UUID, expires: Date)] = [:]
+    /// Unused invitations by their key. Kept in memory: an invitation outlives no relaunch.
+    @ObservationIgnored private var invitations: [LinkPublicKey: (user: UUID, expires: Date)] = [:]
     @ObservationIgnored private let gate = LinkGate()
 
     private struct Settings: Codable {
@@ -153,13 +153,13 @@ import Observation
     }
 
     public func invite(_ user: HubUser) -> LinkInvitation {
-        let token = LinkInvitation.newToken()
+        // Only the invitation carries the private half; the Hub keeps the public one to let it in.
+        let join = LinkIdentity()
         let expires = now().addingTimeInterval(LinkInvitation.lifetime)
-        invitations = invitations.filter { $0.value.expires > now() }
-        invitations[LinkInvitation.tokenDigest(token)] = (user.id, expires)
+        invitations[join.publicKey] = (user.id, expires)
         updateGate()
         return LinkInvitation(hubName: hubName, hubKey: key, endpoints: endpoints, userName: user.name,
-                              token: token, expires: expires)
+                              joinKey: join.privateKey.rawRepresentation, expires: expires)
     }
 
     private func reply(to data: Data, from key: LinkPublicKey) async -> LinkReply {
@@ -243,11 +243,10 @@ import Observation
         }
     }
 
-    /// Lets in paired devices, and anyone while an invitation is open, since a joining device's
-    /// key is new; drops whoever that no longer covers.
+    /// Lets in paired devices and the keys of open invitations; drops whoever that no longer covers.
     private func updateGate() {
         invitations = invitations.filter { $0.value.expires > now() }
-        gate.update(keys: Set(access.devices.map(\.key)), invitingUntil: invitations.values.map(\.expires).max())
+        gate.update(keys: Set(access.devices.map(\.key)), invitations: invitations.mapValues(\.expires))
         server?.disconnectRefused()
     }
 
@@ -314,15 +313,16 @@ import Observation
             }
         }
         switch request {
-        case .enroll(let token, let deviceName):
-            let digest = LinkInvitation.tokenDigest(token)
-            guard let invitation = invitations.removeValue(forKey: digest), invitation.expires > now(),
+        case .enroll(let deviceKey, let proof, let deviceName):
+            // The invitation's key arrives only from whoever holds the invitation, and works once.
+            defer { updateGate() }
+            guard let invitation = invitations.removeValue(forKey: key), invitation.expires > now(),
                   let user = access.users.first(where: { $0.id == invitation.user }) else {
                 throw LinkError("This invitation is no longer valid. Ask for a new one.")
             }
+            guard deviceKey.isJoinProof(proof, for: key) else { throw LinkError("This device could not prove its key.") }
             let name = deviceName.trimmingCharacters(in: .whitespacesAndNewlines)
-            let device = access.addDevice(named: name.isEmpty ? "Device" : String(name.prefix(80)), key: key, for: user, at: now())
-            updateGate()
+            let device = access.addDevice(named: name.isEmpty ? "Device" : String(name.prefix(80)), key: deviceKey, for: user, at: now())
             return .status(status(for: device))
         case .status:
             let device = try paired(key)
@@ -549,16 +549,16 @@ import Observation
 private final class LinkGate: @unchecked Sendable {
     private let lock = NSLock()
     private var keys: Set<LinkPublicKey> = []
-    private var invitingUntil: Date?
+    private var invitations: [LinkPublicKey: Date] = [:]
 
-    func update(keys: Set<LinkPublicKey>, invitingUntil: Date?) {
+    func update(keys: Set<LinkPublicKey>, invitations: [LinkPublicKey: Date]) {
         lock.withLock {
             self.keys = keys
-            self.invitingUntil = invitingUntil
+            self.invitations = invitations
         }
     }
 
     @Sendable func admits(_ key: LinkPublicKey) -> Bool {
-        lock.withLock { keys.contains(key) || invitingUntil.map { $0 > Date() } ?? false }
+        lock.withLock { keys.contains(key) || invitations[key].map { $0 > Date() } ?? false }
     }
 }

@@ -6,7 +6,7 @@ final class LinkProtocolTests: XCTestCase {
     private let invitation = LinkInvitation(
         hubName: "Mac mini", hubKey: LinkIdentity().publicKey,
         endpoints: [LinkEndpoint(host: "Mac-mini.local", port: 38_415), LinkEndpoint(host: "fd00::1", port: 38_415)],
-        userName: "Ada", token: LinkInvitation.newToken(), expires: Date(timeIntervalSince1970: 1_790_000_000))
+        userName: "Ada", joinKey: LinkIdentity().privateKey.rawRepresentation, expires: Date(timeIntervalSince1970: 1_790_000_000))
 
     func testInvitationsSurviveTheirLinkFromAnyNoodleBuild() throws {
         XCTAssertEqual(try LinkInvitation(text: invitation.url().absoluteString), invitation)
@@ -20,11 +20,20 @@ final class LinkProtocolTests: XCTestCase {
         XCTAssertThrowsError(try LinkInvitation(text: "noodle://join-hub?i=bm90IGpzb24"))
     }
 
-    func testTokensAreKeptOnlyAsDigests() {
-        let token = LinkInvitation.newToken()
-        XCTAssertEqual(LinkInvitation.tokenDigest(token), LinkInvitation.tokenDigest(token))
-        XCTAssertNotEqual(LinkInvitation.tokenDigest(token), LinkInvitation.tokenDigest(LinkInvitation.newToken()))
-        XCTAssertFalse(LinkInvitation.tokenDigest(token).base64URL.contains(token))
+    /// A device proves it holds the key it pairs, for one invitation only.
+    func testAJoinProofHoldsForItsKeyAndInvitationOnly() throws {
+        let device = LinkIdentity(), invitation = LinkIdentity().publicKey
+        let proof = try device.joinProof(for: invitation)
+        XCTAssertTrue(device.publicKey.isJoinProof(proof, for: invitation))
+        XCTAssertFalse(device.publicKey.isJoinProof(proof, for: LinkIdentity().publicKey))
+        XCTAssertFalse(LinkIdentity().publicKey.isJoinProof(proof, for: invitation))
+        XCTAssertFalse(device.publicKey.isJoinProof(Data([1, 2, 3]), for: invitation))
+    }
+
+    func testAnInvitationWithoutAUsableJoinKeyIsNotAnInvitation() {
+        var broken = invitation
+        broken.joinKey = Data([1, 2, 3])
+        XCTAssertThrowsError(try LinkInvitation(text: broken.url().absoluteString))
     }
 
     func testTypedAddressesTakeAnOptionalPort() {

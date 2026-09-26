@@ -108,21 +108,46 @@ import XCTest
         } catch {}
     }
 
-    /// A joining device's key is new to the Hub, so strangers get in while an invitation is open, and only to join.
-    func testStrangersGetInOnlyWhileAnInvitationIsOpen() async throws {
+    /// An open invitation lets in only whoever holds it: the joining device presents the invitation's own key.
+    func testStrangersAreRefusedEvenWhileAnInvitationIsOpen() async throws {
+        let (hub, link, _) = try await fixture()
+        _ = link.invite(try hub.access.addUser(named: "Ada"))
+        do {
+            _ = try await LinkClient.exchange(try LinkProtocol.encode(.status), identity: LinkIdentity(), hubKey: link.key,
+                                              endpoints: link.endpoints, timeout: .seconds(5))
+            XCTFail("A stranger got in while an invitation was open")
+        } catch {}
+    }
+
+    /// Whoever holds an invitation cannot pair a key they do not hold, such as another device's.
+    func testAnInvitationCannotPairSomeoneElsesKey() async throws {
         let (hub, link, device) = try await fixture()
-        let invitation = link.invite(try hub.access.addUser(named: "Ada"))
-        let stranger = LinkIdentity()
-        let (answer, _) = try await LinkClient.exchange(try LinkProtocol.encode(.status), identity: stranger, hubKey: link.key,
+        let ada = try hub.access.addUser(named: "Ada"), grace = try hub.access.addUser(named: "Grace")
+        await HubPairing(directory: device, deviceName: "Ada’s Mac").join(link.invite(ada).url().absoluteString)
+        let victim = try XCTUnwrap(hub.access.devices.first)
+
+        let join = try link.invite(grace).joinIdentity()
+        let forged = LinkRequest.enroll(deviceKey: victim.key, proof: try LinkIdentity().joinProof(for: join.publicKey), deviceName: "Mine")
+        let (answer, _) = try await LinkClient.exchange(try LinkProtocol.encode(forged), identity: join, hubKey: link.key,
+                                                        endpoints: link.endpoints, timeout: .seconds(5))
+        XCTAssertEqual(try LinkProtocol.decodeResponse(answer), .failure("This device could not prove its key."))
+        XCTAssertEqual(hub.access.devices, [victim])
+        // The attempt used the invitation up.
+        do {
+            _ = try await LinkClient.exchange(try LinkProtocol.encode(.status), identity: join, hubKey: link.key,
+                                              endpoints: link.endpoints, timeout: .seconds(5))
+            XCTFail("A used invitation's key still got in")
+        } catch {}
+    }
+
+    /// The invitation's key only joins; it reaches nothing a paired device does.
+    func testAnInvitationsKeyOnlyJoins() async throws {
+        let (hub, link, _) = try await fixture()
+        let join = try link.invite(try hub.access.addUser(named: "Ada")).joinIdentity()
+        let (answer, _) = try await LinkClient.exchange(try LinkProtocol.encode(.status), identity: join, hubKey: link.key,
                                                         endpoints: link.endpoints, timeout: .seconds(5))
         XCTAssertEqual(try LinkProtocol.decodeResponse(answer), .failure("This device is not paired with Mac mini."))
-
-        await HubPairing(directory: device, deviceName: "Mac").join(invitation.url().absoluteString)
-        do {
-            _ = try await LinkClient.exchange(try LinkProtocol.encode(.bots), identity: stranger, hubKey: link.key,
-                                              endpoints: link.endpoints, timeout: .seconds(5))
-            XCTFail("A stranger got in after the invitation was used")
-        } catch {}
+        XCTAssertTrue(hub.access.devices.isEmpty)
     }
 
     func testRemovingADeviceEndsItsOpenStream() async throws {

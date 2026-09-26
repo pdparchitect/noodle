@@ -269,10 +269,10 @@ public final class LinkServer: @unchecked Sendable {
         open.forEach { $0.close() }
     }
 
-    /// Ends the connections of keys `admits` no longer lets in, such as a removed device's.
+    /// Ends the open streams of keys `admits` no longer lets in, such as a removed device's. A
+    /// request in flight is left to its answer, which may be what closed the door, as a used invitation.
     public func disconnectRefused() {
-        let (connections, open) = lock.withLock { (Array(streams.values), Array(pushed.values)) }
-        for connection in connections where LinkQUIC.peerKey(of: connection).map(admits) == false { connection.cancel() }
+        let open = lock.withLock { Array(pushed.values) }
         for stream in open where !admits(stream.peer) { stream.close() }
     }
 

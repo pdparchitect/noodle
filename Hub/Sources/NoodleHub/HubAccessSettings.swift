@@ -17,7 +17,7 @@ struct HubUsersSettingsView: View {
     private struct Invitation: Identifiable {
         let user: HubUser
         let invitation: LinkInvitation
-        var id: String { invitation.token }
+        var id: Data { invitation.joinKey }
     }
 
     private var access: HubAccess { host.hub.access }

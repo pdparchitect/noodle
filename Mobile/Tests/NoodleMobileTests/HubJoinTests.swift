@@ -5,10 +5,11 @@ import Testing
 /// Joins a Hub running in the test over QUIC, as the phone joins a Mac's Hub.
 @MainActor @Suite struct HubJoinTests {
     @Test func anInvitationJoinsTheHubAndShowsWhoIJoinedAs() async throws {
-        let hubIdentity = LinkIdentity()
-        let token = LinkInvitation.newToken()
-        let server = try LinkServer(identity: hubIdentity, port: 0, admits: { _ in true }) { _, data in
-            guard case .success(.enroll(let sent, _)) = LinkProtocol.decode(data), sent == token else {
+        let hubIdentity = LinkIdentity(), join = LinkIdentity()
+        // Like a real Hub, only the invitation's key gets in, and the device proves the key it pairs.
+        let server = try LinkServer(identity: hubIdentity, port: 0, admits: { $0 == join.publicKey }) { key, data in
+            guard case .success(.enroll(let deviceKey, let proof, _)) = LinkProtocol.decode(data),
+                  deviceKey.isJoinProof(proof, for: key) else {
                 return .response(LinkProtocol.encode(.failure("This invitation was already used.")))
             }
             return .response(LinkProtocol.encode(.status(LinkStatus(hubName: "Studio", userName: "Petko",
@@ -18,7 +19,7 @@ import Testing
         defer { server.stop() }
         let endpoint = LinkEndpoint(host: "127.0.0.1", port: try #require(server.port))
         let invitation = LinkInvitation(hubName: "Studio", hubKey: hubIdentity.publicKey, endpoints: [endpoint],
-                                        userName: "Petko", token: token, expires: Date().addingTimeInterval(600))
+                                        userName: "Petko", joinKey: join.privateKey.rawRepresentation, expires: Date().addingTimeInterval(600))
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
 

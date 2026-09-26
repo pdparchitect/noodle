@@ -30,7 +30,7 @@ final class LinkVersionTests: XCTestCase {
 
     func testInvitationsFromANewerHubAskForANewerNoodle() {
         let invitation = LinkInvitation(hubName: "Hub", hubKey: LinkIdentity().publicKey, endpoints: [], userName: "Ada",
-                                        token: "t", expires: Date(), version: LinkProtocol.version + 1)
+                                        joinKey: LinkIdentity().privateKey.rawRepresentation, expires: Date(), version: LinkProtocol.version + 1)
         XCTAssertThrowsError(try LinkInvitation(text: invitation.url().absoluteString)) { error in
             XCTAssertEqual((error as? LinkError)?.message, "This invitation needs a newer Noodle. Update Noodle.")
         }

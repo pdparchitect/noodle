@@ -111,7 +111,7 @@ private actor FakeHub {
         let endpoint = LinkEndpoint(host: "127.0.0.1", port: try #require(server.port))
         await hub.listen(at: endpoint)
         let invitation = LinkInvitation(hubName: "Studio", hubKey: identity.publicKey, endpoints: [endpoint],
-                                        userName: "Petko", token: "t", expires: Date().addingTimeInterval(600))
+                                        userName: "Petko", joinKey: LinkIdentity().privateKey.rawRepresentation, expires: Date().addingTimeInterval(600))
         let pairing = HubPairing(directory: directory, deviceName: "iPhone")
         await pairing.join(invitation.url().absoluteString)
         try #require(pairing.hub != nil)

@@ -17,7 +17,7 @@
 
 ### Changed
 
-- Refuse devices that are not paired before reading anything they send. A new device can only reach the Hub while an invitation is open, and then only to join. A removed device is disconnected at once.
+- Refuse devices that are not paired before reading anything they send. An invitation's code carries a key made for it alone, and only a device holding that code can reach the Hub to join, once; the joining device also proves it holds the key it pairs. A removed device is disconnected at once. Devices join with the latest Noodle or Noodle for iPhone.
 - Send conversations to devices a page at a time, newest first, with card pictures fetched separately, so a long conversation loads quickly and never fails for its size.
 - A live view of a browser, computer or noodlet in a Noodle Browser, Computer or Applet too old to show it says which app to update.
 - Stream live views as video, each picture as soon as it is ready and no larger than the viewer's window, skipping old pictures for a device that falls behind, and take the person's input on the same connection, in order. While someone watches a browser, computer or noodlet, its bot waits until they close the view. A view the Hub cannot open tells the device why.
