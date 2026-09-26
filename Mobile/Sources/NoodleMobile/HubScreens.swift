@@ -6,34 +6,61 @@ import VisionKit
 /// The first screen: takes an invitation from the camera, the clipboard or a photo of its QR code.
 struct JoinView: View {
     @Environment(HubMemberships.self) private var hubs
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var choosing = false
     @State private var problem: String?
+    @State private var written = JoinView.wordmarkWritten
+    @State private var ready = JoinView.wordmarkWritten
+
+    /// The wordmark is written on once per launch; coming back from the background, or to this
+    /// screen after leaving a Hub, shows it whole.
+    @MainActor private static var wordmarkWritten = false
 
     var body: some View {
         VStack(spacing: 16) {
             Spacer()
-            Image("Symbol")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 96, height: 96)
+            let size = CGSize(width: 220, height: 49)
+            Wordmark(progress: written ? 1 : 0)
+                .stroke(.primary, style: StrokeStyle(
+                    lineWidth: Wordmark.lineWidth(in: CGRect(origin: .zero, size: size)),
+                    lineCap: .round, lineJoin: .round))
+                .frame(width: size.width, height: size.height)
+                .accessibilityElement()
                 .accessibilityLabel("Noodle")
+                .accessibilityAddTraits(.isHeader)
             Spacer()
-            if hubs.isJoining {
-                ProgressView("Joining…")
-            } else if let message = problem ?? hubs.joinError {
-                Label(message, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
+            Group {
+                if hubs.isJoining {
+                    ProgressView("Joining…")
+                } else if let message = problem ?? hubs.joinError {
+                    Label(message, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                }
+                Button { choosing = true } label: {
+                    Text("Pair").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(hubs.isJoining)
             }
-            Button { choosing = true } label: {
-                Text("Pair").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(hubs.isJoining)
+            .opacity(ready ? 1 : 0)
+            .offset(y: ready ? 0 : 12)
         }
         .padding(24)
         .pairing(isPresented: $choosing, problem: $problem)
+        .onAppear {
+            guard !written else { return }
+            Self.wordmarkWritten = true
+            if reduceMotion {
+                written = true
+                ready = true
+            } else {
+                // The films' pace: a short pause, 2.1 s of writing, then the button rises in.
+                withAnimation(.easeInOut(duration: 2.1).delay(0.55)) { written = true }
+                withAnimation(.easeOut(duration: 0.5).delay(2.75)) { ready = true }
+            }
+        }
     }
 }
 

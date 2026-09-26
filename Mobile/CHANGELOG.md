@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Noodle writes its name on the first screen as it opens, then shows Pair.
+
 ## [0.2.0] - 2026-09-26
 
 ### What to Test
