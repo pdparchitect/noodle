@@ -76,9 +76,16 @@ pages in the background and can send clickable previews back to your conversatio
 Each browser keeps its own sign-ins and browsing data.
 
 To use someone's Noodle Hub, ask them for an invitation, then choose **Join** under
-Noodle Hub in **Settings → Companions**. New bots can then run on the harnesses the
+Noodle Hubs in **Settings → Hub**. New bots can then run on the harnesses the
 Hub lends you. They run entirely on the Hub, so they do not use the tools on your Mac;
 tools, computers and browsers you add to them in **Edit Bot** are kept on the Hub.
+
+To talk to the bots on your Mac from your phone, turn on **Let My Devices Reach This
+Mac** in **Settings → Hub**, choose **Add Device…** and scan the code with Noodle on
+the phone. Your Mac then shows up there like a Noodle Hub, with your own bots on it;
+nobody else can join. The Mac stays awake while this is on. Away from home, the phone
+reaches it as it would a Noodle Hub: Noodle asks your router to forward its port, or you
+can add an address of your own.
 
 ## A quick look
 

@@ -155,6 +155,8 @@ let project = Project(
                 // Noodle Dev talks to the Dev companions only.
                 "NOODLE_COMPANION_SUFFIX": ".local",
                 "NOODLE_APPLET_CLI_ID": "com.pdparchitect.noodle.applet.local.cli",
+                // Beside Noodle's own and both Noodle Hubs', so all four can serve from one Mac.
+                "NOODLE_PERSONAL_HUB_PORT": "38418",
             ]),
             .release(name: "Release", settings: [
                 "NOODLE_APP_BUNDLE_ID": "com.pdparchitect.noodle",
@@ -163,6 +165,7 @@ let project = Project(
                 "NOODLE_GOOGLE_SCHEME": "com.googleusercontent.apps.183234845746-flond96hao8g0cll1boruegemodo9fe5",
                 "NOODLE_COMPANION_SUFFIX": "",
                 "NOODLE_APPLET_CLI_ID": "com.pdparchitect.noodle.applet.cli",
+                "NOODLE_PERSONAL_HUB_PORT": "38417",
             ]),
         ]
     ),
@@ -193,6 +196,7 @@ let project = Project(
                 .package(product: "NoodleSharing"),
                 .package(product: "NoodleRuntime"),
                 .package(product: "NoodleRuntimeSettings"),
+                .package(product: "HubCore"),
                 .package(product: "NoodleAgentBridge"),
                 .package(product: "NoodleAudioCapture"),
                 .package(product: "NoodleLaunchChecks"),

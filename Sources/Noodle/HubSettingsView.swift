@@ -1,12 +1,127 @@
 import AppKit
 import AVFoundation
+import HubCore
 import HubLink
 import NoodleRuntimeSettings
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Each Noodle Hub this Mac joined, then a row to join another, in Settings > Companions.
-struct HubCompanionRows: View {
+/// Settings > Hub: this Mac serving its owner's devices, and the Noodle Hubs it joined.
+struct HubSettingsView: View {
+    @Environment(NoodleStore.self) private var store
+
+    var body: some View {
+        Form {
+            Section("This Mac") { ThisMacRows() }
+            Section("Noodle Hubs") { JoinedHubRows() }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// Whether the owner's phone and other Macs can reach this Mac, and which have joined.
+private struct ThisMacRows: View {
+    @Environment(NoodleStore.self) private var store
+    @State private var inviting: LinkInvitation?
+    @State private var removing: HubDevice?
+    @State private var editingAddress = false
+    @State private var address = ""
+
+    var body: some View {
+        let thisMac = store.thisMac
+        Toggle(isOn: Binding(get: { thisMac.isOn }, set: { on in Task { await thisMac.setOn(on) } })) {
+            Text("Let My Devices Reach This Mac")
+            Text("Your phone and other Macs talk to the bots here as they would a Noodle Hub’s. The Mac stays awake while this is on.")
+        }
+        if let hub = thisMac.hub {
+            status(hub.link)
+            network(hub.link)
+            ForEach(hub.access.devices) { device in deviceRow(device, hub: hub) }
+            HStack {
+                Spacer()
+                Button("Add Device…") { inviting = hub.link.invite(hub.owner) }
+                    .disabled(hub.link.state == .stopped || hub.link.state == .starting)
+            }
+            .sheet(isPresented: Binding(get: { inviting != nil }, set: { if !$0 { inviting = nil } })) {
+                if let inviting { HubInvitationSheet(access: hub.access, user: hub.owner, invitation: inviting, title: "Add a Device") }
+            }
+            .alert("Remove \(removing?.name ?? "Device")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+                   presenting: removing) { device in
+                Button("Remove", role: .destructive) { hub.access.remove(device) }
+                Button("Cancel", role: .cancel) {}.keyboardShortcut(.defaultAction)
+            } message: { device in
+                Text("“\(device.name)” can no longer reach this Mac until it joins again.")
+            }
+        }
+    }
+
+    @ViewBuilder private func status(_ link: HubLinkService) -> some View {
+        switch link.state {
+        case .listening:
+            if case .open = link.router {
+                SettingsStatusLabel(title: "Reachable from anywhere", systemImage: "checkmark.circle.fill", color: .green)
+            } else if link.manualEndpoint != nil {
+                SettingsStatusLabel(title: "Reachable through your address", systemImage: "checkmark.circle.fill", color: .green)
+            } else {
+                SettingsStatusLabel(title: "Reachable on this network", systemImage: "checkmark.circle.fill", color: .green)
+            }
+        case .failed(let reason):
+            SettingsStatusLabel(title: reason, systemImage: "exclamationmark.circle.fill", color: .orange)
+        case .starting, .stopped:
+            SettingsStatusLabel(title: "Starting…", systemImage: "circle.dotted", color: .secondary)
+        }
+    }
+
+    /// Reaching this Mac away from home, as with a Noodle Hub: the router forwards its port, or an
+    /// address the owner set up reaches it.
+    @ViewBuilder private func network(_ link: HubLinkService) -> some View {
+        Toggle("Open Port on Router", isOn: Binding(get: { link.opensRouterPort }, set: { link.opensRouterPort = $0 }))
+            .help("Asks the router, through UPnP or NAT-PMP, to forward this Mac’s port so your devices reach it away from home")
+        LabeledContent("Addresses") {
+            VStack(alignment: .trailing, spacing: 2) {
+                ForEach(link.endpoints, id: \.self) { Text($0.description).font(.caption.monospaced()).textSelection(.enabled) }
+            }
+        }
+        HStack {
+            Spacer()
+            Button(link.manualEndpoint == nil ? "Add Remote Address…" : "Change Remote Address…") {
+                address = link.manualAddress
+                editingAddress = true
+            }
+        }
+        .alert("Remote Address", isPresented: $editingAddress) {
+            TextField("Address", text: $address, prompt: Text("mac.example.com"))
+            Button("Cancel", role: .cancel) {}
+            Button("Save") { link.manualAddress = address.trimmingCharacters(in: .whitespaces) }
+        } message: {
+            Text("A domain, public address or forwarded port that reaches this Mac from outside your network. Leave it empty to remove it.")
+        }
+    }
+
+    private func deviceRow(_ device: HubDevice, hub: PersonalHub) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "iphone").foregroundStyle(.secondary).frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(device.name).lineLimit(1)
+                TimelineView(.periodic(from: .now, by: 15)) { _ in
+                    if hub.link.isConnected(device) {
+                        Text("Connected")
+                    } else if let lastSeen = device.lastSeen {
+                        Text("Last seen \(lastSeen, format: .relative(presentation: .named))")
+                    } else {
+                        Text("Joined \(device.paired, format: .relative(presentation: .named))")
+                    }
+                }
+                .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            Button("Remove…") { removing = device }
+        }
+    }
+}
+
+/// Each Noodle Hub this Mac joined, then a row to join another.
+private struct JoinedHubRows: View {
     @Environment(NoodleStore.self) private var store
     @State private var joining = false
 

@@ -6,7 +6,6 @@ let package = Package(
     platforms: [.macOS("26.0")],
     products: [
         .executable(name: "NoodleHub", targets: ["NoodleHub"]),
-        .library(name: "HubCore", targets: ["HubCore"]),
     ],
     dependencies: [
         // Noodle itself: the Hub runs bots with the same runtime.
@@ -20,33 +19,21 @@ let package = Package(
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
     ],
     targets: [
-        .target(
-            name: "HubCore",
-            dependencies: [
-                .product(name: "NoodleCore", package: "noodle"),
-                .product(name: "NoodleRuntime", package: "noodle"),
-                .product(name: "NoodleMCP", package: "noodle"),
-                .product(name: "NoodleComputerTools", package: "noodle"),
-                .product(name: "NoodleBrowserTools", package: "noodle"),
-                .product(name: "ComputerBridge", package: "Bridge"),
-                .product(name: "BrowserBridge", package: "BrowserProtocol"),
-                .product(name: "AppletBridge", package: "Protocol"),
-                .product(name: "HubLink", package: "HubLink"),
-            ]),
         .executableTarget(
             name: "NoodleHub",
             dependencies: [
-                "HubCore",
+                .product(name: "HubCore", package: "noodle"),
                 .product(name: "HubLink", package: "HubLink"),
                 .product(name: "NoodleLaunchChecks", package: "LaunchChecks"),
                 .product(name: "NoodleRuntimeSettings", package: "noodle"),
                 .product(name: "NoodleSettingsUI", package: "SettingsUI"),
                 .product(name: "Sparkle", package: "Sparkle"),
             ]),
-        .testTarget(name: "HubCoreTests", dependencies: ["HubCore", .product(name: "NoodleCore", package: "noodle"),
+        .testTarget(name: "HubCoreTests", dependencies: [.product(name: "HubCore", package: "noodle"), .product(name: "NoodleCore", package: "noodle"),
                                                         .product(name: "HubLink", package: "HubLink"),
                                                         .product(name: "NoodleHubClient", package: "noodle"),
                                                         .product(name: "NoodleMCP", package: "noodle"),
+                                                        .product(name: "NoodleRuntime", package: "noodle"),
                                                         .product(name: "ComputerBridge", package: "Bridge"),
                                                         .product(name: "BrowserBridge", package: "BrowserProtocol"),
                                                         .product(name: "AppletBridge", package: "Protocol")]),

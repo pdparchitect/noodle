@@ -6,7 +6,7 @@ import NoodleRuntime
 import NoodleRuntimeSettings
 
 enum NoodleSettingsTab: Hashable {
-    case general, chat, harnesses, mcps, heartbeats, sandbox, keybindings, permissions, companions, updates
+    case general, chat, harnesses, mcps, heartbeats, sandbox, keybindings, permissions, companions, hub, updates
 }
 
 struct NoodleSettingsView: View {
@@ -31,57 +31,63 @@ struct NoodleSettingsView: View {
         store.mcp.registry.connections.filter { store.mcp.errors[$0.id] != nil }.count
     }
 
+    /// Wide enough for every tab in the toolbar, none left in its overflow menu.
+    private static let width: CGFloat = 740
+
     var body: some View {
         @Bindable var store = store
 
         TabView(selection: $store.selectedSettingsTab.animation(.easeInOut(duration: 0.22))) {
             GeneralSettingsView()
-                .settingsContentSize(width: 680)
+                .settingsContentSize(width: Self.width)
                 .tabItem {
                     Label("General", systemImage: "gearshape")
                 }
                 .tag(NoodleSettingsTab.general)
             ChatSettingsView()
-                .settingsContentSize(width: 680)
+                .settingsContentSize(width: Self.width)
                 .tabItem {
                     Label("Conversation", systemImage: "bubble.left.and.bubble.right")
                 }
                 .tag(NoodleSettingsTab.chat)
             HarnessesSettingsView(store: store, setup: harnessSetup)
-                .settingsContentSize(width: 680)
+                .settingsContentSize(width: Self.width)
                 .tabItem {
                     Label("Harness", systemImage: "terminal")
                 }
                 .tag(NoodleSettingsTab.harnesses)
             HeartbeatsSettingsView(store: store)
-                .settingsContentSize(width: 680)
+                .settingsContentSize(width: Self.width)
                 .tabItem {
                     Label("Heartbeat", systemImage: "waveform.path.ecg")
                 }
                 .tag(NoodleSettingsTab.heartbeats)
             AgentAccessSettingsView(store: store)
-                .settingsContentSize(width: 680)
+                .settingsContentSize(width: Self.width)
                 .tabItem { Label("Sandbox", systemImage: "lock.shield") }
                 .tag(NoodleSettingsTab.sandbox)
             MCPSettingsView(store: store)
-                .settingsContentSize(width: 680)
+                .settingsContentSize(width: Self.width)
                 .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
                 .tag(NoodleSettingsTab.mcps)
             KeybindingsSettingsView()
-                .settingsContentSize(width: 680)
+                .settingsContentSize(width: Self.width)
                 .tabItem { Label("Keybindings", systemImage: "keyboard") }
                 .tag(NoodleSettingsTab.keybindings)
             PermissionsSettingsView()
-                .settingsContentSize(width: 680)
+                .settingsContentSize(width: Self.width)
                 .tabItem { Label("Permissions", systemImage: "hand.raised") }
                 .tag(NoodleSettingsTab.permissions)
-            CompanionAppsSettingsView(store: store, extraRow: AnyView(HubCompanionRows().environment(store)),
-                                      onCheckAgain: { Task { await store.hubs.refreshAll() } })
-                .settingsContentSize(width: 680)
+            CompanionAppsSettingsView(store: store)
+                .settingsContentSize(width: Self.width)
                 .tabItem { Label("Companions", systemImage: "square.stack.3d.up") }
                 .tag(NoodleSettingsTab.companions)
+            HubSettingsView()
+                .settingsContentSize(width: Self.width)
+                .tabItem { Label("Hub", systemImage: "server.rack") }
+                .tag(NoodleSettingsTab.hub)
             UpdatesSettingsView()
-                .settingsContentSize(width: 680)
+                .settingsContentSize(width: Self.width)
                 .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }
                 .tag(NoodleSettingsTab.updates)
         }

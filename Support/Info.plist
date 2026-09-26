@@ -118,6 +118,8 @@
 	<string>$(DEVELOPMENT_TEAM).com.pdparchitect.noodle.browsers$(NOODLE_COMPANION_SUFFIX)</string>
 	<key>NoodleComputerGroup</key>
 	<string>$(DEVELOPMENT_TEAM).com.pdparchitect.noodle.computers$(NOODLE_COMPANION_SUFFIX)</string>
+	<key>NoodlePersonalHubPort</key>
+	<string>$(NOODLE_PERSONAL_HUB_PORT)</string>
 	<key>NoodleSharedGroup</key>
 	<string>$(DEVELOPMENT_TEAM).$(NOODLE_APP_BUNDLE_ID).sharing</string>
 	<key>NoodleSigningTeam</key>

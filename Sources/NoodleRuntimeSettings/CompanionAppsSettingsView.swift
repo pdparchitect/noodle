@@ -9,19 +9,11 @@ public struct CompanionAppsSettingsView: View {
     @State private var failedApp: CompanionApp?
     private let discoverInstallations: @MainActor () -> [CompanionApp: CompanionAppInstallation]
     private let updateChecker: CompanionUpdateChecker
-    /// A row an app adds to the companion list, such as Noodle's Hub.
-    private let extraRow: AnyView?
-    /// Runs with Check Again, for whatever `extraRow` shows.
-    private let onCheckAgain: (() -> Void)?
 
     @MainActor public init(store: any BotSettingsHost,
                            discoverInstallations: @escaping @MainActor () -> [CompanionApp: CompanionAppInstallation] = { CompanionApp.installedApps() },
-                           updateChecker: CompanionUpdateChecker? = nil,
-                           extraRow: AnyView? = nil,
-                           onCheckAgain: (() -> Void)? = nil) {
+                           updateChecker: CompanionUpdateChecker? = nil) {
         self.store = store
-        self.extraRow = extraRow
-        self.onCheckAgain = onCheckAgain
         self.discoverInstallations = discoverInstallations
         self.updateChecker = updateChecker ?? .shared
         _installations = State(initialValue: discoverInstallations())
@@ -34,7 +26,6 @@ public struct CompanionAppsSettingsView: View {
                     ForEach(CompanionApp.allCases) { app in
                         companionRow(app)
                     }
-                    if let extraRow { extraRow }
                 }
             }
             .formStyle(.grouped)
@@ -44,7 +35,6 @@ public struct CompanionAppsSettingsView: View {
                 Spacer()
                 Button("Check Again") {
                     refresh(forceUpdates: true)
-                    onCheckAgain?()
                 }
             }
             .padding(.horizontal, 20).padding(.vertical, 12)

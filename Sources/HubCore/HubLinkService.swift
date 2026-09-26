@@ -182,13 +182,14 @@ import Observation
                 let open: @MainActor () async throws -> SurfaceSocket
                 switch link {
                 case .browser(let browser, let tab):
-                    guard let tab, try hubBrowsers().browsers(for: user).contains(where: { $0.id == browser }) else {
+                    // Every browser on the owner's own Mac is theirs.
+                    guard let tab, try access.isPersonal || hubBrowsers().browsers(for: user).contains(where: { $0.id == browser }) else {
                         throw LinkError("That browser is not yours or no longer exists.")
                     }
                     let browsers = try hubBrowsers()
                     open = { try await browsers.openSurface(browser: browser, tab: tab, for: user) }
                 case .computer(let computer, let terminal, _):
-                    guard try hubComputers().computers(for: user).contains(where: { $0.id == computer }) else {
+                    guard try access.isPersonal || hubComputers().computers(for: user).contains(where: { $0.id == computer }) else {
                         throw LinkError("That computer is not yours or no longer exists.")
                     }
                     let computers = try hubComputers()
@@ -280,6 +281,16 @@ import Observation
     }
 
     private func handle(_ request: LinkRequest, from key: LinkPublicKey) async throws -> LinkResponse {
+        // On the owner's own Mac these are Noodle's, kept in its own settings.
+        if access.isPersonal {
+            switch request {
+            case .saveConnection, .deleteConnection, .assignConnections, .signIn, .finishSignIn,
+                 .createComputer, .updateComputer, .deleteComputer, .assignComputers,
+                 .createBrowser, .updateBrowser, .deleteBrowser, .assignBrowsers:
+                throw LinkError("Manage tools, computers and browsers in Noodle on the Mac.")
+            default: break
+            }
+        }
         switch request {
         case .enroll(let token, let deviceName):
             let digest = LinkInvitation.tokenDigest(token)

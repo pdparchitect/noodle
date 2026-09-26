@@ -48,6 +48,7 @@ let package = Package(
         .library(name: "NoodleRuntime", targets: ["NoodleRuntime"]),
         .library(name: "NoodleRuntimeSettings", targets: ["NoodleRuntimeSettings"]),
         .library(name: "NoodleHubClient", targets: ["NoodleHubClient"]),
+        .library(name: "HubCore", targets: ["HubCore"]),
         .library(name: "NoodleAgentBridge", targets: ["NoodleAgentBridge"]),
         .library(name: "NoodleToolScripting", targets: ["NoodleToolScripting"]),
         .library(name: "NoodleAppleRuntime", targets: ["NoodleAppleRuntime"]),
@@ -100,8 +101,14 @@ let package = Package(
                 swiftSettings: developmentHooks),
         /// The Harness, Heartbeat and Sandbox settings, shared by the apps that run bots.
         .target(name: "NoodleHubClient", dependencies: ["NoodleCore", .product(name: "HubLink", package: "HubLink")]),
+        /// What serves paired devices: Noodle Hub for the people it lends to, and Noodle for its own owner.
+        .target(name: "HubCore", dependencies: ["NoodleCore", "NoodleRuntime", "NoodleMCP", "NoodleComputerTools", "NoodleBrowserTools",
+                                                .product(name: "ComputerBridge", package: "Bridge"),
+                                                .product(name: "BrowserBridge", package: "BrowserProtocol"),
+                                                .product(name: "AppletBridge", package: "Protocol"),
+                                                .product(name: "HubLink", package: "HubLink")]),
         .target(name: "NoodleRuntimeSettings",
-                dependencies: ["NoodleCore", "NoodleRuntime", .product(name: "NoodleSettingsUI", package: "SettingsUI"),
+                dependencies: ["NoodleCore", "NoodleRuntime", "HubCore", .product(name: "NoodleSettingsUI", package: "SettingsUI"),
                                .product(name: "NoodleWallpaper", package: "Wallpaper"), "NoodleComputerTools", "NoodleMCP",
                                .product(name: "ComputerBridge", package: "Bridge"), .product(name: "AppletBridge", package: "Protocol"),
                                .product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "Sparkle", package: "Sparkle")],
@@ -114,7 +121,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleRemindersTools", "NoodleMCP", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient"],
+            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleRemindersTools", "NoodleMCP", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "HubCore", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient"],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",

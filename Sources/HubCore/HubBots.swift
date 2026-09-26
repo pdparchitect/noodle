@@ -25,7 +25,13 @@ import NoodleRuntime
     /// Files arriving in pieces, until the last one lands.
     private let uploads: URL
     private var running = false
+    /// Following bots that something else runs, as Noodle does its own.
+    private var watching = false
     private var loop: Task<Void, Never>?
+    /// Runs after a device made, changed or deleted a bot, for whatever runs the bots.
+    public var onBotsEdited: (() -> Void)?
+    /// Bots here that devices never see: on the owner's own Mac, its copies of bots another Hub keeps.
+    public var isHidden: (UUID) -> Bool = { _ in false }
     /// The last seen size and date of each conversation's messages, their count, and the latest reaction change.
     private var transcripts: [UUID: (size: Int, modified: Date, count: Int, reactions: Int)] = [:]
     /// What each bot was last reported doing.
@@ -75,6 +81,26 @@ import NoodleRuntime
         }
     }
 
+    /// Tells devices what changes, for bots something else runs: Noodle, serving its own owner.
+    /// A message from a device wakes its bot through that runtime.
+    public func watch() {
+        guard !running, !watching else { return }
+        watching = true
+        loop = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self, !Task.isCancelled else { return }
+                self.checkForChanges()
+            }
+        }
+    }
+
+    public func stopWatching() {
+        loop?.cancel()
+        loop = nil
+        watching = false
+    }
+
     /// Lets bots call the tools assigned to them.
     public func startTools() throws {
         if toolBroker == nil {
@@ -113,7 +139,7 @@ import NoodleRuntime
     public func bots(for user: HubUser) throws -> [LinkBot] {
         let conversations = try repository.loadConversations()
         return try repository.loadAgents()
-            .filter { access.owner(ofBot: $0.id) == user.id }
+            .filter { access.owner(ofBot: $0.id) == user.id && !isHidden($0.id) }
             .compactMap { try bot($0, conversations: conversations) }
     }
 
@@ -139,6 +165,7 @@ import NoodleRuntime
         if toolBroker != nil { try? startTools() }
         if running { applets.start(agents: (try? repository.loadAgents()) ?? []) }
         onChange?(user.id, .botsChanged)
+        onBotsEdited?()
         // As saved, so it matches every later read of the same bot.
         guard let saved = try repository.loadAgents().first(where: { $0.id == created.agent.id }),
               let bot = try bot(saved, conversations: [created.conversation]) else {
@@ -159,6 +186,7 @@ import NoodleRuntime
         try repository.updateAgentHarnessProfile(updated, profile: draft.profile)
         if running { runtime.restart(agent: updated, repository: repository) }
         onChange?(user.id, .botsChanged)
+        onBotsEdited?()
         return try bot(updated, conversations: try repository.loadConversations()) ?? {
             throw LinkError("The bot was saved but could not be read back.")
         }()
@@ -167,6 +195,7 @@ import NoodleRuntime
     public func delete(_ id: UUID, for user: HubUser) throws {
         try remove(try owned(id, by: user))
         onChange?(user.id, .botsChanged)
+        onBotsEdited?()
     }
 
     /// Deletes every bot of a user who is being removed.
@@ -233,14 +262,16 @@ import NoodleRuntime
             throw LinkError("An attachment has not reached the Hub yet.")
         }
         let profile = try repository.loadAgentHarnessProfile(agent)
-        guard let provider = agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:)),
-              lends(HubHarness(provider: provider, profile: profile), to: user) else {
+        // On the owner's own Mac, a bot runs on whatever Noodle gives it.
+        guard access.isPersonal || agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:)).map({
+            lends(HubHarness(provider: $0, profile: profile), to: user)
+        }) == true else {
             let name = agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.displayName ?? "this harness"
             throw LinkError("Your plan no longer lends \(name).")
         }
         let message = try repository.sendUserMessage(conversationID: conversationID, body: body,
                                                      attachmentIDs: attachmentIDs, id: id)
-        if running { runtime.notify([agent], repository: repository) }
+        if running || watching { runtime.notify([agent], repository: repository) }
         checkForChanges()
         return Self.message(message, files: files)
     }
@@ -253,7 +284,7 @@ import NoodleRuntime
     public func checkForChanges() {
         guard let agents = try? repository.loadAgents(), let conversations = try? repository.loadConversations() else { return }
         for conversation in conversations where conversation.kind == .direct {
-            guard let bot = conversation.participantIDs.first, agents.contains(where: { $0.id == bot }),
+            guard let bot = conversation.participantIDs.first, agents.contains(where: { $0.id == bot }), !isHidden(bot),
                   let owner = access.owner(ofBot: bot) else { continue }
             let url = repository.conversationDirectory(id: conversation.id).appendingPathComponent("messages.json")
             guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
@@ -314,10 +345,7 @@ import NoodleRuntime
     }
 
     /// Reads the user's current plan, not the one they were on when `user` was read.
-    private func lends(_ harness: HubHarness, to user: HubUser) -> Bool {
-        guard let current = access.users.first(where: { $0.id == user.id }) else { return false }
-        return access.harnesses(for: current).contains(harness)
-    }
+    private func lends(_ harness: HubHarness, to user: HubUser) -> Bool { access.lends(harness, to: user) }
 
     private func lent(_ draft: LinkBotDraft, to user: HubUser, verb: String) throws -> HarnessProvider {
         guard let provider = HarnessProvider(rawValue: draft.provider) else {
@@ -330,7 +358,7 @@ import NoodleRuntime
     }
 
     private func owned(_ id: UUID, by user: HubUser) throws -> AgentRecord {
-        guard access.owner(ofBot: id) == user.id, let agent = try repository.loadAgents().first(where: { $0.id == id }) else {
+        guard access.owner(ofBot: id) == user.id, !isHidden(id), let agent = try repository.loadAgents().first(where: { $0.id == id }) else {
             throw LinkError("There is no such bot.")
         }
         return agent

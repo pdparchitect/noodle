@@ -10,6 +10,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Reach the bots on this Mac from your phone: turn on Let My Devices Reach This Mac in Settings > Hub and add the phone with its code. The Mac appears there like a Noodle Hub with your own bots, at home or away, as the router forwards its port or through an address you set. Nobody else can join, and the Mac stays awake while it is on.
 - Connect Replit in Settings → Tools → Add Tools, so bots can work with your Replit apps.
 - Give a bot on a Noodle Hub tools from that Hub in Edit Bot > Tools. Connections you add there are yours on the Hub and are signed in there, so they work with this Mac closed; your browser opens here only to sign in. Choose which of them each bot may use.
 - Open a noodlet a bot on a Noodle Hub shared to use it live in a floating panel here, like a preview; it runs in Noodle Applet on the Hub's Mac.
@@ -22,6 +23,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Noodle Hubs you joined are in the new Settings > Hub, beside this Mac, instead of in Companions.
 - Bots build and open noodlets only from their own workspace, never from another bot's folder.
 - Live views of a Noodle Hub bot's browser, computer or noodlet stream as video, so they move smoothly, and your clicks and typing travel on the same connection, in order. Each picture is sent as soon as it is ready and no larger than your window; on a slow connection old pictures are skipped rather than shown late. While one is open, its bot waits: it cannot use that browser, computer or noodlet until you close the view. When the Hub cannot open one, the window says why.
 - Share browser tabs and computers as links with a picture, as noodlets already are, instead of .noodlebrowser and .noodlecomputer files. Clicking one opens that tab or computer in its app, or live when the bot runs on a Noodle Hub. Cards already in your conversations become links the first time Noodle opens.
@@ -34,6 +36,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Settings is wide enough to show all its tabs, instead of hiding the last ones behind a menu.
 - A bot on a Noodle Hub shows here when it is working, as it does on the phone, instead of always looking ready.
 - Sandboxed Antigravity bots can run commands again. They can open only their own terminals, not yours.
 - Settings no longer grows taller than your screen: a long tab, such as Harness with many harnesses, now scrolls so you can reach the bottom. Harness setup actions such as Install and Install Manually… are compact links.

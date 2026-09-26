@@ -15,7 +15,7 @@ import XCTest
         let f = try StoreFixture()
         defer { f.cleanUp() }
         XCTAssertTrue(f.store.receiveHubInvitation(invitation.url(scheme: "noodle-dev")))
-        XCTAssertEqual(f.store.selectedSettingsTab, .companions)
+        XCTAssertEqual(f.store.selectedSettingsTab, .hub)
         XCTAssertEqual(f.store.pendingHubInvitation, invitation.url(scheme: "noodle-dev").absoluteString)
     }
 

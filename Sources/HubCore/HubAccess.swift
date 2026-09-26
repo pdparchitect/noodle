@@ -89,8 +89,13 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         var browserOwners: [UUID: UUID]?
     }
 
-    public init(url: URL) {
+    /// Noodle serving its own owner: one user, who owns every bot and companion on the Mac and
+    /// may use every harness. Nobody else can be added.
+    public let isPersonal: Bool
+
+    public init(url: URL, personal: Bool = false) {
         self.url = url
+        isPersonal = personal
         if let data = try? Data(contentsOf: url), let stored = try? JSONDecoder().decode(Stored.self, from: data) {
             users = stored.users
             plans = stored.plans
@@ -107,13 +112,28 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         for index in users.indices where !plans.contains(where: { $0.id == users[index].plan }) {
             users[index].plan = HubPlan.defaultID
         }
+        if personal, users.isEmpty {
+            users = [HubUser(name: NSFullUserName().isEmpty ? "Me" : NSFullUserName())]
+            save()
+        }
     }
 
     public func harnesses(for user: HubUser) -> Set<HubHarness> {
-        plans.first { $0.id == user.plan }?.harnesses ?? []
+        if isPersonal { return Set(HarnessProvider.allCases.map { HubHarness(provider: $0, profile: nil) }) }
+        return plans.first { $0.id == user.plan }?.harnesses ?? []
     }
 
+    /// Whether the user may run a bot on `harness`; the owner of a personal Mac may run any.
+    public func lends(_ harness: HubHarness, to user: HubUser) -> Bool {
+        guard let current = users.first(where: { $0.id == user.id }) else { return false }
+        return isPersonal || harnesses(for: current).contains(harness)
+    }
+
+    /// The owner of everything on a personal Mac.
+    private var personalOwner: UUID? { isPersonal ? users.first?.id : nil }
+
     @discardableResult public func addUser(named name: String) throws -> HubUser {
+        guard !isPersonal else { throw LinkError("This Mac is only yours; nobody else can be added.") }
         let user = HubUser(name: try ConversationName.validated(name))
         users.append(user)
         save()
@@ -141,7 +161,7 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         save()
     }
 
-    public func owner(ofBot bot: UUID) -> UUID? { botOwners[bot] }
+    public func owner(ofBot bot: UUID) -> UUID? { personalOwner ?? botOwners[bot] }
 
     public func bots(of user: HubUser) -> [UUID] {
         botOwners.filter { $0.value == user.id }.map(\.key)
@@ -152,11 +172,11 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         save()
     }
 
-    public func owner(ofConnection connection: UUID) -> UUID? { connectionOwners[connection] }
+    public func owner(ofConnection connection: UUID) -> UUID? { personalOwner ?? connectionOwners[connection] }
 
-    public func owner(ofComputer computer: UUID) -> UUID? { computerOwners[computer] }
+    public func owner(ofComputer computer: UUID) -> UUID? { personalOwner ?? computerOwners[computer] }
 
-    public func owner(ofBrowser browser: UUID) -> UUID? { browserOwners[browser] }
+    public func owner(ofBrowser browser: UUID) -> UUID? { personalOwner ?? browserOwners[browser] }
 
     public func setOwner(_ user: HubUser?, ofBrowser browser: UUID) {
         browserOwners[browser] = user?.id

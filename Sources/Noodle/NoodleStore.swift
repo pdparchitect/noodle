@@ -136,7 +136,9 @@ final class NoodleStore {
     let usage: UsageHistory
     /// The Noodle Hubs this Mac joined.
     let hubs: HubMemberships
-    /// An invitation opened from a link, waiting in Settings > Companions to be joined.
+    /// This Mac serving its owner's devices, as a Noodle Hub of its own.
+    let thisMac: ThisMacHub
+    /// An invitation opened from a link, waiting in Settings > Hub to be joined.
     var pendingHubInvitation: String?
     /// This Mac's copy of the bots it keeps on each joined Hub.
     private(set) var hubMirrors: [HubMirror] = []
@@ -233,9 +235,12 @@ final class NoodleStore {
         try? toolProviders.register(ReminderToolProvider(store: reminderStore))
         applets = AppletController(repository: self.repository)
         harnessProfiles = HarnessProfilesController(store: self.repository.harnessProfiles)
+        thisMac = ThisMacHub(repository: self.repository, runtime: self.runtime, applets: applets, profiles: harnessProfiles)
         // Before any bot starts, so bots on a Hub never run here.
         refreshHubMirrors()
         reload()
+        // A device made, changed or deleted one of this Mac's bots.
+        thisMac.onBotsEdited = { [weak self] in self?.reload() }
         Self.active = self
     }
 
@@ -479,7 +484,7 @@ final class NoodleStore {
     func receiveHubInvitation(_ url: URL) -> Bool {
         guard url.host == LinkInvitation.urlHost else { return false }
         pendingHubInvitation = url.absoluteString
-        selectedSettingsTab = .companions
+        selectedSettingsTab = .hub
         return true
     }
 
