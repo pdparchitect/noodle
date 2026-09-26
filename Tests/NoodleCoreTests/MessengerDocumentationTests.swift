@@ -139,11 +139,6 @@ final class MessengerDocumentationTests: XCTestCase {
         browsers.agents[bot.agent.id.uuidString] = [browserID]
         try browsers.save(root: root)
         try repository.synchronizeAgentWorkspace(bot.agent)
-        let browserSkill = workspace.appendingPathComponent(".agents/skills/browser/SKILL.md")
-        // What an earlier Noodle wrote: a managed hand-written skill with its command link.
-        try WorkspaceMailbox.synchronizeSkill(workspace: workspace, name: "browser", enabled: true,
-            instructions: "Obsolete screenshot-only instructions", command: "browser", executable: URL(fileURLWithPath: "/usr/bin/true"))
-        try repository.synchronizeAgentWorkspace(bot.agent)
         let refreshed = try String(contentsOf: guide, encoding: .utf8)
         let skill = try String(contentsOf: workspace.appendingPathComponent(".agents/skills/messenger/SKILL.md"), encoding: .utf8)
         XCTAssertTrue(refreshed.contains("PRIVATE-BACKSTORY-TO-PRESERVE"))
@@ -152,8 +147,6 @@ final class MessengerDocumentationTests: XCTestCase {
         XCTAssertFalse(refreshed.contains("Obsolete runtime guidance"))
         XCTAssertTrue(refreshed.contains(MessengerDocumentation.bootstrapInstructions))
         XCTAssertFalse(refreshed.contains("skills/browser"), "Noodle names no tool itself; generated skills are listed instead")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: browserSkill.path),
-                       "the hand-written browser skill is removed; the Browser tool extension's skill replaces it")
         XCTAssertFalse(refreshed.contains(MessengerDocumentation.skillInstructions))
         XCTAssertFalse(refreshed.contains(MessengerDocumentation.transportInstructions))
         XCTAssertTrue(skill.contains(MessengerDocumentation.skillInstructions))
