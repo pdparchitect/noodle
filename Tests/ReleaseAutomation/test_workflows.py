@@ -88,6 +88,12 @@ class WorkflowTests(unittest.TestCase):
             if name.startswith('test-'):
                 self.assertNotIn('checks', needs, name)
 
+    def test_every_package_the_workflows_test_has_tests(self):
+        # swift test fails a package without test targets, as when its tests move elsewhere.
+        for path in sorted((ROOT / '.github/workflows').glob('*.yml')):
+            for package in re.findall(r'swift test\b[^\n]*--package-path (\S+)', path.read_text()):
+                self.assertIn('.testTarget(', (ROOT / package / 'Package.swift').read_text(), f'{path.name}: {package}')
+
     def test_release_archives_build_apple_silicon_only(self):
         # Package dependencies ignore the app targets' ARCHS; only the command line reaches them.
         script = (ROOT / 'scripts/package-xcode-release.sh').read_text()
