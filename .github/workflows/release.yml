@@ -92,6 +92,8 @@ jobs:
         run: swift test --disable-sandbox --package-path Shared/LaunchChecks --scratch-path .build/launch-checks
       - name: Test the Hub link
         run: swift test --disable-sandbox --package-path Shared/HubLink --scratch-path .build/hub-link
+      - name: Test live views
+        run: swift test --disable-sandbox --package-path Shared/Surface --scratch-path .build/surface
       - name: Test Noodle and Computer integration
         id: tests
         env:
