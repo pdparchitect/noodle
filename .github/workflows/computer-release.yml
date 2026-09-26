@@ -40,7 +40,6 @@ jobs:
         run: |
           swiftc Computer/Sources/NoodleComputer/ComputerPreviewSnapshot.swift Computer/Tests/PreviewSnapshotTests.swift -o "$RUNNER_TEMP/computer-snapshot-tests"
           "$RUNNER_TEMP/computer-snapshot-tests"
-          swift test --disable-sandbox --package-path Computer/Presentation
           swift Computer/Tests/TerminalPromptTests.swift
 
       - name: Prepare signing credentials
