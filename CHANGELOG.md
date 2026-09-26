@@ -10,6 +10,7 @@ All notable changes to Noodle are documented here, following
 
 - Connect Replit in Settings → Tools → Add Tools, so bots can work with your Replit apps.
 - Give a bot on a Noodle Hub tools from that Hub in Edit Bot > Tools. Connections you add there are yours on the Hub and are signed in there, so they work with this Mac closed; your browser opens here only to sign in. Choose which of them each bot may use.
+- Make a computer for a bot without leaving Noodle: New Computer… in Edit Bot > Computers creates one from Noodle Computer's templates and adds it to the bot. It needs the latest Noodle Computer.
 - Let bots convert images with the Vision tool. It writes a JPEG, PNG, HEIC or TIFF copy that is turned upright and can be shrunk, so a bot can use an HEIC photo you send even when its model or tools cannot open HEIC. Your original is kept.
 
 ### Changed

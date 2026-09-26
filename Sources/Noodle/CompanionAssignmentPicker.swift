@@ -26,6 +26,8 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
     let notice: Notice
     var footer: String?
     var failure: String?
+    /// Makes a new one without leaving Noodle, where the companion supports it.
+    var onNew: (() -> Void)?
     @State private var showingAdd = false
     @State private var search = ""
     @State private var removing: CompanionAssignmentItem?
@@ -42,6 +44,7 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
             HStack {
                 Text(title).font(.caption.weight(.semibold))
                 Spacer()
+                if let onNew { Button("New \(noun.capitalized)…", action: onNew) }
                 Button { search = ""; showingAdd = true } label: {
                     Label("Add \(title)", systemImage: "plus")
                 }

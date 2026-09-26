@@ -1,5 +1,6 @@
 import AppKit
 import ComputerBridge
+import ComputerCore
 import Containerization
 import Darwin
 import Foundation
@@ -49,20 +50,55 @@ import WebKit
                 response.capabilities = ComputerCapabilities()
                 return response
             }
-            var response = ComputerResponse(computers: store.sessions.filter { $0.computer.kind == .container || $0.computer.kind == .localMac }.map { session in
-                let appearance = session.computer.appearance
-                let icon = appearance?.iconImage
-                return RemoteComputer(id: session.id, name: session.computer.name, description: session.computer.description, kind: session.computer.displayType,
-                    state: session.phase.label, symbol: appearance?.iconSymbol ?? session.computer.displaySymbol,
-                    colour: appearance?.iconColour ?? 0, icon: (icon?.count ?? 0) <= 65_536 ? icon : nil,
-                    hasWebDisplay: session.desktop != nil || session.computer.kind == .localMac)
-            })
+            var response = ComputerResponse(computers: store.sessions.filter { $0.computer.kind == .container || $0.computer.kind == .localMac }.map(Self.remote))
             response.capabilities = ComputerCapabilities()
             return response
+        }
+        if request.operation == .templates {
+            var response = ComputerResponse()
+            response.templates = ContainerRegistry.bundled.templates.map {
+                ComputerTemplateSummary(id: $0.id, name: $0.name, description: $0.description, symbol: $0.symbol)
+            }
+            return response
+        }
+        if request.operation == .create, let draft = request.computer {
+            // Only containers: a client never makes a computer out of this Mac itself.
+            guard let template = ContainerRegistry.bundled.templates.first(where: { $0.id == draft.template }) else {
+                throw ComputerBridgeError("\(ComputerAppIdentity.name) does not offer that kind of computer.")
+            }
+            guard store.creationStatus == nil else {
+                throw ComputerBridgeError("\(ComputerAppIdentity.name) is making another computer. Try again when it finishes.")
+            }
+            var computer = template.makeComputer(name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines))
+            computer.description = draft.description
+            var appearance = ComputerAppearance()
+            appearance.iconSymbol = draft.symbol
+            appearance.iconColour = draft.colour ?? 0
+            computer.appearance = appearance
+            try computer.validate()
+            guard await store.create(computer, source: nil), let session = store.sessions.first(where: { $0.id == computer.id }) else {
+                let message = store.creationWasCancelled ? "Making the computer was cancelled." : store.error ?? "The computer could not be made."
+                store.error = nil
+                throw ComputerBridgeError(message)
+            }
+            return ComputerResponse(computers: [Self.remote(session)])
         }
         guard let session = store.sessions.first(where: { $0.id == request.computerID }),
               session.computer.kind == .container || session.computer.kind == .localMac else {
             throw ComputerBridgeError("This computer no longer exists or is not supported by this provider version.")
+        }
+        if request.operation == .update, let draft = request.computer {
+            var appearance = session.computer.appearance ?? ComputerAppearance()
+            if let symbol = draft.symbol { appearance.iconSymbol = symbol }
+            if let colour = draft.colour { appearance.iconColour = colour }
+            // An error already showing in the window is not this edit's.
+            let shown = store.error
+            store.error = nil
+            store.rename(session, name: draft.name, description: draft.description, appearance: appearance)
+            let failure = store.error
+            store.error = shown
+            if let failure { throw ComputerBridgeError(failure) }
+            return ComputerResponse(computers: [Self.remote(session)])
         }
         if session.computer.kind == .localMac { return try await handleLocal(request, session: session, store: store, owner: owner) }
         if request.operation == .revoke {
@@ -170,6 +206,14 @@ import WebKit
         default: throw ComputerBridgeError("Unsupported computer operation.")
         }
         return .init()
+    }
+    private static func remote(_ session: ComputerSession) -> RemoteComputer {
+        let appearance = session.computer.appearance
+        let icon = appearance?.iconImage
+        return RemoteComputer(id: session.id, name: session.computer.name, description: session.computer.description, kind: session.computer.displayType,
+            state: session.phase.label, symbol: appearance?.iconSymbol ?? session.computer.displaySymbol,
+            colour: appearance?.iconColour ?? 0, icon: (icon?.count ?? 0) <= 65_536 ? icon : nil,
+            hasWebDisplay: session.desktop != nil || session.computer.kind == .localMac)
     }
     private func handleLocal(_ request: ComputerRequest, session: ComputerSession, store: ComputerStore, owner: String) async throws -> ComputerResponse {
         localTerminals = localTerminals.filter { _, value in

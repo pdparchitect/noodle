@@ -29,8 +29,35 @@ public struct RemoteComputer: Codable, Hashable, Identifiable, Sendable {
 public enum ComputerOperation: String, Codable, Sendable {
     case list, start, terminalOpen, terminalRead, terminalWrite, terminalResize, terminalClose, terminalResolve, revoke, preview, display
     case fileUpload, fileDownload
+    /// Managing computers: what can be made, making one, and changing one.
+    case templates, create, update
     public var isFileTransfer: Bool { self == .fileUpload || self == .fileDownload }
-    public var timeout: Int { isFileTransfer ? 600 : (self == .start ? 180 : 120) }
+    /// A new computer may first download its image.
+    public var timeout: Int { self == .create ? 1800 : isFileTransfer ? 600 : (self == .start ? 180 : 120) }
+}
+
+/// What a client sets on a computer it makes or edits. Nil fields stay as they are.
+public struct ComputerDraft: Codable, Equatable, Sendable {
+    /// The template a new computer is made from; ignored when editing.
+    public var template: String?
+    public var name: String
+    public var description: String?
+    public var symbol: String?
+    public var colour: Int?
+    public init(template: String? = nil, name: String, description: String? = nil, symbol: String? = nil, colour: Int? = nil) {
+        self.template = template; self.name = name; self.description = description; self.symbol = symbol; self.colour = colour
+    }
+}
+
+/// A kind of computer a client may make.
+public struct ComputerTemplateSummary: Codable, Equatable, Identifiable, Sendable {
+    public var id: String
+    public var name: String
+    public var description: String
+    public var symbol: String
+    public init(id: String, name: String, description: String, symbol: String) {
+        self.id = id; self.name = name; self.description = description; self.symbol = symbol
+    }
 }
 
 public struct ComputerRequest: Codable, Sendable {
@@ -49,6 +76,7 @@ public struct ComputerRequest: Codable, Sendable {
     public var path: String?
     /// Broker-generated reference in the shared App Group, never a host path.
     public var transferID: UUID?
+    public var computer: ComputerDraft?
     public init(_ operation: ComputerOperation, computerID: UUID? = nil, agentID: UUID? = nil,
                 terminalID: UUID? = nil, data: Data? = nil, offset: Int64? = nil, columns: Int? = nil, rows: Int? = nil) {
         self.operation = operation; self.computerID = computerID; self.agentID = agentID
@@ -61,7 +89,7 @@ public struct ComputerRequest: Codable, Sendable {
         if operation == .preview {
             guard computerID != nil || terminalID != nil else { throw ComputerBridgeError("Specify --computer or --terminal.") }
             guard view == nil || ["terminal", "web"].contains(view!) else { throw ComputerBridgeError("Invalid preview view.") }
-        } else if ![.list, .terminalResolve].contains(operation), computerID == nil {
+        } else if ![.list, .terminalResolve, .templates, .create].contains(operation), computerID == nil {
             throw ComputerBridgeError("Specify a computer.")
         }
         if [.terminalRead, .terminalWrite, .terminalResize, .terminalClose, .terminalResolve].contains(operation), terminalID == nil {
@@ -69,6 +97,19 @@ public struct ComputerRequest: Codable, Sendable {
         }
         if operation == .terminalResize && (!(1...500).contains(columns ?? 0) || !(1...200).contains(rows ?? 0)) {
             throw ComputerBridgeError("Invalid terminal dimensions.")
+        }
+        if [.create, .update].contains(operation) {
+            guard let computer else { throw ComputerBridgeError("Specify the computer's name.") }
+            let name = computer.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, name.count <= 100, !name.contains(where: \.isNewline) else {
+                throw ComputerBridgeError("Use a single-line name between 1 and 100 characters.")
+            }
+            guard (computer.description?.count ?? 0) <= RemoteComputer.maximumDescriptionLength else {
+                throw ComputerBridgeError("Enter a computer description of at most \(RemoteComputer.maximumDescriptionLength) characters.")
+            }
+            if operation == .create, (computer.template ?? "").isEmpty { throw ComputerBridgeError("Choose what kind of computer to make.") }
+        } else if computer != nil {
+            throw ComputerBridgeError("Computer details require a create or update operation.")
         }
         if operation.isFileTransfer {
             guard let path, path.hasPrefix("/"), !path.utf8.contains(0), path.utf8.count <= 4096,
@@ -98,6 +139,7 @@ public struct ComputerResponse: Codable, Sendable {
     public var display: ComputerWebConnection?
     public var path: String?
     public var byteCount: Int64?
+    public var templates: [ComputerTemplateSummary]?
     public init(computers: [RemoteComputer]? = nil, terminalID: UUID? = nil, data: Data? = nil,
                 offset: Int64? = nil, truncated: Bool? = nil, exited: Bool? = nil, error: String? = nil) {
         self.computers = computers; self.terminalID = terminalID; self.data = data; self.offset = offset
@@ -116,7 +158,7 @@ public struct ComputerCapabilities: Codable, Equatable, Sendable {
     public var minimumProtocol = 1
     public var maximumProtocol = 1
     private static let requiredFeatures: Set<String> = ["agent-terminals-v1", "presentation-v2", "guest-display-v1"]
-    public var features: Set<String> = requiredFeatures.union(["file-transfer-v1", "document-preview-v1"])
+    public var features: Set<String> = requiredFeatures.union(["file-transfer-v1", "document-preview-v1", "computer-management-v1"])
     public init() {}
     public static func requireCompatible(_ capabilities: Self?) throws {
         guard let capabilities else {
@@ -136,6 +178,12 @@ public struct ComputerCapabilities: Codable, Equatable, Sendable {
         try requireCompatible(capabilities)
         guard capabilities?.features.contains("file-transfer-v1") == true else {
             throw ComputerBridgeError("Update Noodle Computer to upload and download files.")
+        }
+    }
+    public static func requireManagement(_ capabilities: Self?) throws {
+        try requireCompatible(capabilities)
+        guard capabilities?.features.contains("computer-management-v1") == true else {
+            throw ComputerBridgeError("Update Noodle Computer to make and edit computers from here.")
         }
     }
     public static func requireDocumentPreview(_ capabilities: Self?) throws {

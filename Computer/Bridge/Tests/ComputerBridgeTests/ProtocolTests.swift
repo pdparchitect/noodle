@@ -174,6 +174,40 @@ final class ProtocolTests: XCTestCase {
         request.version = 1; request.data = Data(count: 65_537); XCTAssertThrowsError(try request.validate())
         request.data = nil; request.offset = -1; XCTAssertThrowsError(try request.validate())
     }
+    /// Noodle and the Hub make and edit computers the same way, through the connection.
+    func testComputersAreCreatedAndEditedThroughTheConnection() throws {
+        let draft = ComputerDraft(template: "ubuntu-desktop", name: "Workbench", description: "Builds.", symbol: "hammer", colour: 3)
+        var create = ComputerRequest(.create)
+        XCTAssertThrowsError(try create.validate(), "A computer was made from nothing")
+        create.computer = draft
+        XCTAssertNoThrow(try create.validate())
+        create.computer?.template = nil
+        XCTAssertThrowsError(try create.validate(), "A computer was made without a template")
+        create.computer?.template = "ubuntu-desktop"
+        create.computer?.name = " "
+        XCTAssertThrowsError(try create.validate())
+        create.computer?.name = "Workbench"
+        create.computer?.description = String(repeating: "x", count: RemoteComputer.maximumDescriptionLength + 1)
+        XCTAssertThrowsError(try create.validate())
+
+        var update = ComputerRequest(.update)
+        update.computer = ComputerDraft(name: "Renamed")
+        XCTAssertThrowsError(try update.validate(), "An edit named no computer")
+        update.computerID = UUID()
+        XCTAssertNoThrow(try update.validate())
+        XCTAssertNoThrow(try ComputerRequest(.templates).validate())
+        XCTAssertGreaterThanOrEqual(ComputerOperation.create.timeout, 1800)
+
+        var capabilities = ComputerCapabilities()
+        XCTAssertNoThrow(try ComputerCapabilities.requireManagement(capabilities))
+        capabilities.features.remove("computer-management-v1")
+        XCTAssertThrowsError(try ComputerCapabilities.requireManagement(capabilities))
+
+        var response = ComputerResponse()
+        response.templates = [ComputerTemplateSummary(id: "ubuntu-desktop", name: "Ubuntu Desktop", description: "A desktop.", symbol: "desktopcomputer")]
+        let decoded = try JSONDecoder().decode(ComputerResponse.self, from: JSONEncoder().encode(response))
+        XCTAssertEqual(decoded.templates, response.templates)
+    }
     func testCardRoundTripAndBoundedSnapshot() throws {
         let card = ComputerCard(computer: .init(id: UUID(), name: "Shared", kind: "Shell", state: "Running", symbol: "terminal"),
             agentID: UUID(), terminalID: UUID(), terminalPreview: String(repeating: "x", count: 5000))

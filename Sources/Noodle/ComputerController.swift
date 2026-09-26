@@ -79,10 +79,25 @@ import SwiftUI
         try ComputerCapabilities.requireCompatible(discovery.capabilities)
         if request.operation.isFileTransfer { try ComputerCapabilities.requireFileTransfer(discovery.capabilities) }
         if request.operation == .preview { try ComputerCapabilities.requireDocumentPreview(discovery.capabilities) }
+        if [.templates, .create, .update].contains(request.operation) { try ComputerCapabilities.requireManagement(discovery.capabilities) }
         try Task.checkCancellation()
         try authorize()
         if request.operation == .list { return discovery }
         return try await connect(request, launchIfNeeded: false)
+    }
+    /// The kinds of computer Computer can make.
+    func templates() async throws -> [ComputerTemplateSummary] {
+        try await call(ComputerRequest(.templates)).checked().templates ?? []
+    }
+    /// Makes a computer in Computer, which may first download its image, and lists it here.
+    func create(_ draft: ComputerDraft) async throws -> RemoteComputer {
+        var request = ComputerRequest(.create)
+        request.computer = draft
+        guard let made = try await call(request).checked().computers?.first else {
+            throw ComputerBridgeError("\(ComputerBuildIdentity.current.appName) did not return the new computer.")
+        }
+        await refresh()
+        return made
     }
     private func connect(_ request: ComputerRequest, launchIfNeeded: Bool) async throws -> ComputerResponse {
         if let connection { return try await connection(request) }
@@ -221,6 +236,7 @@ struct ComputerAssignmentPicker: View {
     @Binding var selectedIDs: Set<UUID>
     @State private var openingLibrary = false
     @State private var openError: String?
+    @State private var creating = false
 
     var body: some View {
         CompanionAssignmentPicker(title: "Computers", noun: "computer", symbol: "desktopcomputer",
@@ -228,7 +244,11 @@ struct ComputerAssignmentPicker: View {
                 CompanionAssignmentItem(id: $0.id, name: $0.name, state: controller.available ? $0.state : "Unavailable",
                     symbol: $0.symbol, colour: $0.colour, icon: $0.icon, detail: $0.description)
             }, selectedIDs: $selectedIDs, createPrompt: createPrompt, openLibraryButton: openLibraryButton,
-            notice: updateNotice, failure: controller.failure)
+            notice: updateNotice, failure: controller.failure,
+            onNew: controller.installed ? { creating = true } : nil)
+        .sheet(isPresented: $creating) {
+            NewComputerSheet(templates: controller.templates, create: controller.create) { selectedIDs.insert($0.id) }
+        }
         .task { await controller.refresh(launchIfNeeded: true) }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didActivateApplicationNotification)) { notification in
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
@@ -294,5 +314,72 @@ struct ComputerAssignmentPicker: View {
                 catch { openError = error.localizedDescription }
             }
         }.disabled(openingLibrary)
+    }
+}
+
+/// Makes a computer from one of Computer's templates, on this Mac or on a Noodle Hub.
+struct NewComputerSheet: View {
+    let templates: () async throws -> [ComputerTemplateSummary]
+    let create: (ComputerDraft) async throws -> RemoteComputer
+    let onCreated: (RemoteComputer) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var available: [ComputerTemplateSummary] = []
+    @State private var template = ""
+    @State private var name = ""
+    @State private var description = ""
+    @State private var making = false
+    @State private var failure: String?
+
+    private var chosen: ComputerTemplateSummary? { available.first { $0.id == template } }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).disabled(making)
+                Spacer()
+                Text("New Computer").font(.headline)
+                Spacer()
+                Button("Create", action: make).keyboardShortcut(.defaultAction)
+                    .disabled(making || chosen == nil || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }.padding(16)
+            Divider()
+            Form {
+                Picker("Kind", selection: $template) {
+                    ForEach(available) { Label($0.name, systemImage: $0.symbol).tag($0.id) }
+                }.help(chosen?.description ?? "")
+                TextField("Name", text: $name)
+                TextField("Description", text: $description, prompt: Text("Optional"), axis: .vertical).lineLimit(2...3)
+                if making { ProgressView("Creating…").controlSize(.small).help("A new computer may first download its image.") }
+                if let failure { Text(failure).font(.caption).foregroundStyle(.red) }
+            }.formStyle(.grouped).disabled(making)
+        }
+        .frame(width: 420)
+        .task {
+            do {
+                available = try await templates()
+                if template.isEmpty, let first = available.first { template = first.id; name = first.name }
+            } catch { failure = error.localizedDescription }
+        }
+        .onChange(of: template) { _, id in
+            if let picked = available.first(where: { $0.id == id }), name.isEmpty || available.contains(where: { $0.name == name }) {
+                name = picked.name
+            }
+        }
+    }
+
+    private func make() {
+        guard let chosen else { return }
+        making = true
+        failure = nil
+        let text = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task { @MainActor in
+            defer { making = false }
+            do {
+                let made = try await create(ComputerDraft(template: chosen.id, name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                                                          description: text.isEmpty ? nil : text, symbol: chosen.symbol))
+                onCreated(made)
+                dismiss()
+            } catch { failure = error.localizedDescription }
+        }
     }
 }

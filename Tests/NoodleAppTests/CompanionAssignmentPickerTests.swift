@@ -82,4 +82,38 @@ import XCTest
         try image.write(to: output)
         print("BROWSER_ASSIGNMENT_PREVIEW: \(output.path)")
     }
+
+    /// A computer made from the bot editor is Computer's own, listed like any other.
+    func testANewComputerIsMadeThroughComputerAndListedHere() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = WorkspaceRepository(rootURL: root); try repository.prepare()
+        let made = RemoteComputer(id: UUID(), name: "Workbench", kind: "Linux", state: "Stopped", symbol: "hammer", colour: 3)
+        let listed = LockedBox<[RemoteComputer]>([]), sent = LockedBox<[ComputerRequest]>([])
+        let computers = ComputerController(repository: repository, applicationLookup: { nil }, connection: { request in
+            sent.mutate { $0.append(request) }
+            var response = ComputerResponse(computers: listed.value)
+            response.capabilities = ComputerCapabilities()
+            switch request.operation {
+            case .templates: response.templates = [ComputerTemplateSummary(id: "ubuntu", name: "Ubuntu", description: "", symbol: "terminal")]
+            case .create: listed.mutate { $0.append(made) }; response.computers = [made]
+            default: break
+            }
+            return response
+        })
+        let templates = try await computers.templates()
+        XCTAssertEqual(templates.map(\.id), ["ubuntu"])
+        let created = try await computers.create(ComputerDraft(template: "ubuntu", name: "Workbench", symbol: "hammer", colour: 3))
+        XCTAssertEqual(created, made)
+        XCTAssertEqual(sent.value.last(where: { $0.operation == .create })?.computer?.name, "Workbench")
+        XCTAssertEqual(computers.registry.computers, [made])
+    }
+}
+
+private final class LockedBox<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Value
+    init(_ value: Value) { stored = value }
+    var value: Value { lock.withLock { stored } }
+    func mutate(_ change: (inout Value) -> Void) { lock.withLock { change(&stored) } }
 }
