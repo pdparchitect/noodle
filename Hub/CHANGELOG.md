@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-26
+
 ### Changed
 
 - Send bot pictures and tool icons apart from their lists to the latest Noodle and Noodle for iPhone, which fetch each once, so lists stay small however many pictures they show. Editing a bot from a device keeps its picture without sending it back.

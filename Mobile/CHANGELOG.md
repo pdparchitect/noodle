@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-26
+
+### What to Test
+
+- Join a Hub whose bots have photo pictures: chats show at once and the pictures follow.
+- Rename a bot that has a picture; the picture stays.
+- Open the app to see the swirl write Noodle before Pair.
+
 ### Changed
 
 - Noodle opens with a swirl that rises from the bottom of the screen and writes its name, then shows Pair.
