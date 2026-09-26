@@ -3,7 +3,8 @@ import ComputerBridge
 import Foundation
 
 // TODO(0.29.0): Remove CompanionCardMigration, its calls in NoodleStore.reload and HubBots.start, and
-// CompanionCardMigrationTests.
+// CompanionCardMigrationTests, once Noodle is at 0.29.0 and the Hub at 0.4.0: both run it in their
+// update milestones, Noodle 0.28.0 and Hub 0.3.0.
 /// Turns the browser and computer cards earlier versions saved as files into links, keeping each
 /// attachment's ID, date and picture, so messages still point at them and they open as before.
 public enum CompanionCardMigration {

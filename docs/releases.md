@@ -190,7 +190,8 @@ Noodle releases as the repository's latest release.
 ## Update milestones
 
 `Support/update-milestones.json` declares releases that users must run before
-installing their successors. Use one when a release migrates or cleans up data that
+installing their successors; an app released on its own, such as Noodle Hub, keeps its
+own list in its `Support` folder, with its own versions. Use one when a release migrates or cleans up data that
 later versions will no longer handle. Keep published versions intact.
 
 Release packaging verifies the signed feeds of earlier milestones, preserves

@@ -77,7 +77,7 @@ sparkle_tools="$derived/SourcePackages/artifacts/sparkle/Sparkle/bin"
 if [[ -f "$folder/Support/update-milestones.json" ]]; then
     python3 "$project_root/scripts/prepare-update-feed.py" --version "$version" --feed "$staging/assets/appcast.xml" \
         --milestones "$folder/Support/update-milestones.json" --sign-update "$sparkle_tools/sign_update" \
-        --key-file "$SPARKLE_PRIVATE_KEY_PATH"
+        --key-file "$SPARKLE_PRIVATE_KEY_PATH" --tag-prefix "$tag_prefix" --archive "$archive"
 fi
 "$sparkle_tools/sign_update" --ed-key-file "$SPARKLE_PRIVATE_KEY_PATH" --verify "$staging/assets/appcast.xml"
 archive_signature="$(xmllint --xpath 'string(//enclosure/@*[local-name()="edSignature"])' "$staging/assets/appcast.xml")"

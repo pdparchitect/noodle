@@ -11,13 +11,13 @@ spec.loader.exec_module(feed)
 S = "{" + feed.SPARKLE + "}"
 
 
-def appcast(version, minimum=None, legacy=False):
+def appcast(version, minimum=None, legacy=False, tag="v", archive="Noodle-arm64.zip"):
     root = ET.Element("rss"); channel = ET.SubElement(root, "channel"); item = ET.SubElement(channel, "item")
     ET.SubElement(item, S + "version").text = version
     if minimum:
         ET.SubElement(item, S + "minimumUpdateVersion").text = minimum
-    archive = f"Noodle-{version}-macOS.zip" if legacy else "Noodle-arm64.zip"
-    ET.SubElement(item, "enclosure", {"url": f"{feed.RELEASES}/v{version}/{archive}",
+    archive = f"Noodle-{version}-macOS.zip" if legacy else archive
+    ET.SubElement(item, "enclosure", {"url": f"{feed.RELEASES}/{tag}{version}/{archive}",
                                      S + "edSignature": "unchanged-archive-signature", "length": "123"})
     return ET.tostring(root)
 
@@ -25,16 +25,34 @@ def appcast(version, minimum=None, legacy=False):
 class UpdateFeedTests(unittest.TestCase):
     def test_registered_backstory_milestone_remains_in_the_upgrade_chain(self):
         milestones = json.loads((ROOT / "Support/update-milestones.json").read_text())["milestones"]
-        # 0.21.0 removes the skills and command links earlier versions wrote into bot workspaces.
-        self.assertEqual(milestones, ["0.13.0", "0.14.0", "0.21.0"])
+        # 0.21.0 removes the skills and command links earlier versions wrote into bot workspaces;
+        # 0.28.0 turns browser and computer cards into links.
+        self.assertEqual(milestones, ["0.13.0", "0.14.0", "0.21.0", "0.28.0"])
         def previous(version):
-            return appcast(version, {"0.14.0": "0.13.0", "0.21.0": "0.14.0"}.get(version), legacy=version == "0.13.0")
+            return appcast(version, {"0.14.0": "0.13.0", "0.21.0": "0.14.0", "0.28.0": "0.21.0"}.get(version),
+                           legacy=version == "0.13.0")
         for version, expected in [("0.14.0", ["0.13.0", None]), ("0.15.0", ["0.14.0", "0.13.0", None]),
                                   ("0.21.0", ["0.14.0", "0.13.0", None]),
-                                  ("0.22.0", ["0.21.0", "0.14.0", "0.13.0", None])]:
+                                  ("0.22.0", ["0.21.0", "0.14.0", "0.13.0", None]),
+                                  ("0.28.0", ["0.21.0", "0.14.0", "0.13.0", None]),
+                                  ("0.29.0", ["0.28.0", "0.21.0", "0.14.0", "0.13.0", None])]:
             result = feed.prepare(appcast(version), version, milestones, previous)
             items = ET.fromstring(result).findall("channel/item")
             self.assertEqual([i.findtext(S + "minimumUpdateVersion") for i in items], expected)
+
+    def test_hub_releases_keep_their_own_milestones_tags_and_archives(self):
+        milestones = json.loads((ROOT / "Hub/Support/update-milestones.json").read_text())["milestones"]
+        # Hub 0.3.0 turns browser and computer cards into links.
+        self.assertEqual(milestones, ["0.3.0"])
+        hub = dict(tag="hub-v", archive="Noodle-Hub-arm64.zip")
+        result = feed.prepare(appcast("0.4.0", **hub), "0.4.0", milestones, lambda v: appcast(v, **hub), **hub)
+        items = ET.fromstring(result).findall("channel/item")
+        self.assertEqual([feed.item_version(i) for i in items], ["0.4.0", "0.3.0"])
+        self.assertEqual(items[0].findtext(S + "minimumUpdateVersion"), "0.3.0")
+        self.assertEqual(items[1].find("enclosure").get("url"), f"{feed.RELEASES}/hub-v0.3.0/Noodle-Hub-arm64.zip")
+        # A Noodle release is not a Hub milestone.
+        with self.assertRaises(ValueError):
+            feed.prepare(appcast("0.4.0", **hub), "0.4.0", milestones, lambda v: appcast(v), **hub)
 
     def test_migration_release_is_reachable_from_older_versions(self):
         result = feed.prepare(appcast("0.13.0"), "0.13.0", ["0.13.0"], lambda _: self.fail("No old release needed"))

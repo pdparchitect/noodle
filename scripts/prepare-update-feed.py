@@ -33,8 +33,9 @@ def item_version(item):
     return value
 
 
-def prepare(feed, version, milestones, fetch_verified):
-    """fetch_verified returns bytes only AFTER their embedded signature verifies."""
+def prepare(feed, version, milestones, fetch_verified, tag="v", archive="Noodle-arm64.zip"):
+    """fetch_verified returns bytes only AFTER their embedded signature verifies.
+    tag and archive name the app's release tags and update archive: v and Noodle-arm64.zip for Noodle."""
     number(version)
     if milestones != sorted(set(milestones), key=number):
         raise ValueError("Milestones must be unique and in ascending version order")
@@ -62,10 +63,9 @@ def prepare(feed, version, milestones, fetch_verified):
         enclosure = item.find("enclosure")
         # Older published milestones retain their original versioned filenames.
         # Both names must still point to this milestone's immutable release tag.
-        expected_urls = {
-            f"{RELEASES}/v{milestone}/Noodle-arm64.zip",
-            f"{RELEASES}/v{milestone}/Noodle-{milestone}-macOS.zip",
-        }
+        expected_urls = {f"{RELEASES}/{tag}{milestone}/{archive}"}
+        if tag == "v":
+            expected_urls.add(f"{RELEASES}/v{milestone}/Noodle-{milestone}-macOS.zip")
         if enclosure is None or enclosure.get("url") not in expected_urls or not enclosure.get(f"{{{SPARKLE}}}edSignature"):
             raise ValueError("Milestone must retain its signed, immutable release archive")
         expected_minimum = required[index - 1] if index else None
@@ -83,10 +83,12 @@ def main():
     parser.add_argument("--milestones", type=Path, required=True)
     parser.add_argument("--sign-update", required=True)
     parser.add_argument("--key-file", required=True)
+    parser.add_argument("--tag-prefix", default="v")
+    parser.add_argument("--archive", default="Noodle-arm64.zip")
     args = parser.parse_args()
 
     def fetch_verified(version):
-        url = f"{RELEASES}/v{version}/appcast.xml"
+        url = f"{RELEASES}/{args.tag_prefix}{version}/appcast.xml"
         with urllib.request.urlopen(url, timeout=60) as response:
             data = response.read(2 * 1024 * 1024 + 1)
         if len(data) > 2 * 1024 * 1024:
@@ -98,7 +100,7 @@ def main():
         return data
 
     milestones = json.loads(args.milestones.read_text())["milestones"]
-    data = prepare(args.feed.read_bytes(), args.version, milestones, fetch_verified)
+    data = prepare(args.feed.read_bytes(), args.version, milestones, fetch_verified, args.tag_prefix, args.archive)
     args.feed.write_bytes(data)
     # XML assembly invalidates generate_appcast's signature. Re-sign the entire
     # feed; copied archive signatures and immutable URLs remain unchanged.
