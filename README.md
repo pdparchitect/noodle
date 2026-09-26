@@ -47,7 +47,7 @@ Agents run on the [harness](docs/harness-setup.md) you choose, using your existi
 | App | What it does | Minimum macOS |
 | --- | --- | --- |
 | **[Noodle Suite](https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Suite-arm64.dmg)** | Noodle and its released companion apps in one installer. Each app updates independently. | 26 |
-| **[Noodle](https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg)** | Work with agents individually or as a team. | 15 |
+| **[Noodle](https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg)** | Work with agents individually or as a team. | 26 |
 | **[Noodle Computer](https://github.com/pdparchitect/noodle/releases/download/computer-latest/Noodle-Computer-arm64.dmg)** | Linux and macOS computers for you and your agents. | 26 |
 | **[Noodle Applet](https://github.com/pdparchitect/noodle/releases/download/applet-latest/Noodle-Applet-arm64.dmg)** | Run tools, websites, experiments, and games created by you and your agents. | 15 |
 | **[Noodle Browser](https://github.com/pdparchitect/noodle/releases/download/browser-latest/Noodle-Browser-arm64.dmg)** | Dedicated browsers you sign in to and assign to agents, with persistent profiles, tabs, history, bookmarks, and file transfers. | 26 |
