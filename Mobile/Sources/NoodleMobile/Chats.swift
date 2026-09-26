@@ -393,6 +393,8 @@ struct AgentsView: View {
                 }
                 // As in Messages: dividers between rows, none above the first.
                 .listRowSeparator(row.id == rows.first?.id ? .hidden : .visible, edges: .top)
+                // Room for the unread dot, as far from the edge as from the picture.
+                .listRowInsets(.leading, AgentRow.dotGap * 2 + AgentRow.dotSize)
                 .swipeActions(edge: .leading) {
                     let pinned = row.chats.isPinned(row.agent)
                     Button { row.chats.togglePin(row.agent) } label: {
@@ -498,6 +500,7 @@ private struct AgentRow: View {
     let unread: Bool
     /// The bot's Hub, when several are shown together.
     var hub: String?
+    static let dotSize: CGFloat = 10, dotGap: CGFloat = 8
 
     var body: some View {
         HStack(spacing: 12) {
@@ -505,7 +508,7 @@ private struct AgentRow: View {
                 // In the margin left of the picture, as in Messages.
                 .overlay(alignment: .leading) {
                     if unread {
-                        Circle().fill(.tint).frame(width: 10, height: 10).offset(x: -16)
+                        Circle().fill(.tint).frame(width: Self.dotSize, height: Self.dotSize).offset(x: -(Self.dotSize + Self.dotGap))
                             .accessibilityLabel("Unread")
                     }
                 }

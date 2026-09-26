@@ -19,6 +19,10 @@
 - Edit a bot's picture as on the Mac: a photo or Image Playground image, or one of the Mac's symbols on a colour.
 - Pin bots to the top of the list by swiping right. Pins stay on this phone.
 
+### Fixed
+
+- The unread dot in the list of bots sits evenly between the screen edge and the bot's picture instead of against it.
+
 ## [0.1.0] - 2026-09-25
 
 ### Added
