@@ -41,7 +41,8 @@ output="$project_root/dist/$product-$version"
 
 # Release is the production identity. A public release signs with Developer ID, timestamps every
 # signature and turns updates on, through the project's <APP>_CODESIGN_TIMESTAMP and
-# <APP>_UPDATES_ENABLED settings.
+# <APP>_UPDATES_ENABLED settings. ARCHS on the command line also reaches the package dependencies,
+# which otherwise build an unused Intel copy of everything.
 tuist="$(zsh "$project_root/scripts/install-tuist.sh")"
 (cd "$folder" && "$tuist" generate --no-open >&2)
 derived="$project_root/.build/$product-release"
@@ -49,7 +50,7 @@ scheme="${app_name// /}"
 xcodebuild -workspace "$folder/$scheme.xcworkspace" -scheme "$scheme" \
     -configuration Release -derivedDataPath "$derived" -destination 'generic/platform=macOS' \
     -archivePath "$staging/$scheme.xcarchive" -skipPackagePluginValidation -skipMacroValidation \
-    CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$NOODLE_SIGNING_IDENTITY" DEVELOPMENT_TEAM="$team" \
+    ARCHS=arm64 CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$NOODLE_SIGNING_IDENTITY" DEVELOPMENT_TEAM="$team" \
     OTHER_CODE_SIGN_FLAGS=--timestamp "${setting}_CODESIGN_TIMESTAMP=--timestamp" \
     "INFOPLIST_PREPROCESSOR_DEFINITIONS=${setting}_UPDATES_ENABLED=true" archive >&2
 app="$staging/$app_name.app"

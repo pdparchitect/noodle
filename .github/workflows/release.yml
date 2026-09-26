@@ -75,7 +75,7 @@ jobs:
         run: zsh scripts/verify-icons.sh
 
   test-noodle:
-    needs: [versions, checks]
+    needs: [versions]
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -84,16 +84,6 @@ jobs:
           lfs: true
       - name: Build sandbox CLI fixtures without signing credentials
         run: zsh Tests/build-sandbox-cli-fixture.sh
-      - name: Test shared wallpaper imports and preview drops
-        run: swift test --disable-sandbox --package-path Shared/Wallpaper --scratch-path .build/wallpaper
-      - name: Test settings window behavior
-        run: swift test --disable-sandbox --package-path Shared/SettingsUI --scratch-path .build/settings-ui
-      - name: Test launch check matching
-        run: swift test --disable-sandbox --package-path Shared/LaunchChecks --scratch-path .build/launch-checks
-      - name: Test the Hub link
-        run: swift test --disable-sandbox --package-path Shared/HubLink --scratch-path .build/hub-link
-      - name: Test live views
-        run: swift test --disable-sandbox --package-path Shared/Surface --scratch-path .build/surface
       - name: Test Noodle and Computer integration
         id: tests
         env:
@@ -115,8 +105,27 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  test-shared:
+    needs: [versions]
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - name: Test shared wallpaper imports and preview drops
+        run: swift test --disable-sandbox --package-path Shared/Wallpaper --scratch-path .build/wallpaper
+      - name: Test settings window behavior
+        run: swift test --disable-sandbox --package-path Shared/SettingsUI --scratch-path .build/settings-ui
+      - name: Test launch check matching
+        run: swift test --disable-sandbox --package-path Shared/LaunchChecks --scratch-path .build/launch-checks
+      - name: Test the Hub link
+        run: swift test --disable-sandbox --package-path Shared/HubLink --scratch-path .build/hub-link
+      - name: Test live views
+        run: swift test --disable-sandbox --package-path Shared/Surface --scratch-path .build/surface
+
   test-noodle-macos27:
-    needs: [versions, checks]
+    needs: [versions]
     # The image releases use: macOS 27 with Xcode 27, so the Apple harness is compiled in and runs.
     runs-on: xcode-27
     timeout-minutes: 30
@@ -145,7 +154,7 @@ jobs:
           print 'macOS 27 harness build, Metal shaders, and regression tests passed. Live inference remains an explicit local opt-in.' >> "$GITHUB_STEP_SUMMARY"
 
   test-computer:
-    needs: [versions, checks]
+    needs: [versions]
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -158,7 +167,7 @@ jobs:
         run: swift test --disable-sandbox --package-path Computer/LocalMac --scratch-path .build/localmac
 
   test-applet:
-    needs: [versions, checks]
+    needs: [versions]
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -169,7 +178,7 @@ jobs:
         run: swift test --disable-sandbox --package-path Applet --scratch-path .build/applet
 
   test-bridge:
-    needs: [versions, checks]
+    needs: [versions]
     runs-on: macos-26
     timeout-minutes: 10
     steps:
@@ -178,7 +187,7 @@ jobs:
         run: swift test --disable-sandbox --package-path Computer/Bridge
 
   test-browser:
-    needs: [versions, checks]
+    needs: [versions]
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -189,7 +198,7 @@ jobs:
         run: swift test --disable-sandbox --package-path Browser --scratch-path .build/browser
 
   test-hub:
-    needs: [versions, checks]
+    needs: [versions]
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -200,7 +209,7 @@ jobs:
         run: swift test --disable-sandbox --package-path Hub --scratch-path .build/hub
 
   test-mobile:
-    needs: [versions, checks]
+    needs: [versions]
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -210,22 +219,22 @@ jobs:
       - name: Test Mobile on an iPhone simulator
         run: zsh scripts/mobile.sh test
 
-  # Each preparation waits only for its own product's tests, so a companion is not signed
-  # behind Noodle's long suite. The tag job below still requires every selected test.
+  # Preparation signs and notarizes alongside the tests; nothing is tagged or published until
+  # the tag job below has every selected test.
   prepare-noodle:
-    needs: [versions, checks, test-noodle, test-noodle-macos27, test-bridge]
+    needs: [versions, checks]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.noodle == 'true'
     uses: ./.github/workflows/prepare-noodle-release.yml
     secrets: inherit
 
   prepare-computer:
-    needs: [versions, checks, test-computer, test-bridge]
+    needs: [versions, checks]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.computer == 'true'
     uses: ./.github/workflows/computer-release.yml
     secrets: inherit
 
   prepare-applet:
-    needs: [versions, checks, test-applet]
+    needs: [versions, checks]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.applet == 'true'
     uses: ./.github/workflows/applet-release.yml
     secrets: inherit
@@ -236,26 +245,25 @@ jobs:
     uses: ./.github/workflows/computer-images.yml
 
   prepare-browser:
-    needs: [versions, checks, test-browser]
+    needs: [versions, checks]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.browser == 'true'
     uses: ./.github/workflows/browser-release.yml
     secrets: inherit
 
-  # The Hub ships Noodle's runtime and helpers, so it also waits for Noodle's own tests.
   prepare-hub:
-    needs: [versions, checks, test-hub, test-noodle]
+    needs: [versions, checks]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.hub == 'true'
     uses: ./.github/workflows/hub-release.yml
     secrets: inherit
 
   prepare-mobile:
-    needs: [versions, checks, test-mobile]
+    needs: [versions, checks]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.mobile == 'true'
     uses: ./.github/workflows/mobile-release.yml
     secrets: inherit
 
   tag:
-    needs: [versions, workflow-lint, checks, test-noodle, test-noodle-macos27, test-computer, test-applet, test-browser, test-hub, test-mobile, test-bridge, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-mobile, prepare-images]
+    needs: [versions, workflow-lint, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-browser, test-hub, test-mobile, test-bridge, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-mobile, prepare-images]
     # Explicitly accept unselected/skipped products, never a failed/cancelled build.
     if: >-
       always() && !cancelled() && github.event_name != 'pull_request' &&
@@ -263,7 +271,7 @@ jobs:
       needs.workflow-lint.result == 'success' &&
       needs.checks.result == 'success' &&
       ((needs.versions.outputs.noodle != 'true' && needs.versions.outputs.computer != 'true' && needs.versions.outputs.applet != 'true' && needs.versions.outputs.browser != 'true' && needs.versions.outputs.hub != 'true') ||
-       (needs.test-noodle.result == 'success' && needs.test-bridge.result == 'success')) &&
+       (needs.test-noodle.result == 'success' && needs.test-shared.result == 'success' && needs.test-bridge.result == 'success')) &&
       (needs.versions.outputs.computer != 'true' || needs.test-computer.result == 'success') &&
       (needs.versions.outputs.applet != 'true' || needs.test-applet.result == 'success') &&
       (needs.versions.outputs.browser != 'true' || needs.test-browser.result == 'success') &&
