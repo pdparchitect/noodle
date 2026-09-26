@@ -56,7 +56,7 @@ class WorkflowTests(unittest.TestCase):
             'needs.versions.outputs.any': 'true', 'needs.checks.result': 'success',
             'needs.workflow-lint.result': 'success',
             'needs.test-noodle-macos27.result': 'success',
-            **{f'needs.test-{p}.result': 'success' for p in ['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'bridge']},
+            **{f'needs.test-{p}.result': 'success' for p in ['noodle', 'shared', 'computer', 'applet', 'browser', 'hub', 'mobile', 'bridge']},
             **{f'needs.versions.outputs.{p}': 'true' for p in ['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'images']},
             **{f'needs.prepare-{p}.result': 'success' for p in ['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'images']},
         }
@@ -78,6 +78,21 @@ class WorkflowTests(unittest.TestCase):
         for result in ['failure', 'cancelled', 'skipped']:
             self.assertFalse(condition(gate, {**self.base(), 'needs.checks.result': result}))
             self.assertFalse(condition(gate, {**self.base(), 'needs.workflow-lint.result': result}))
+
+    def test_preparation_and_tests_start_without_waiting_for_each_other(self):
+        # Signing runs alongside the tests; only the tag gate below needs them.
+        for name, job in self.jobs.items():
+            needs = job.get('needs', [])
+            if name.startswith('prepare-'):
+                self.assertFalse([n for n in needs if n.startswith('test-')], name)
+            if name.startswith('test-'):
+                self.assertNotIn('checks', needs, name)
+
+    def test_release_archives_build_apple_silicon_only(self):
+        # Package dependencies ignore the app targets' ARCHS; only the command line reaches them.
+        script = (ROOT / 'scripts/package-xcode-release.sh').read_text()
+        archive = script[script.index('xcodebuild -workspace'):script.index(' archive >&2')]
+        self.assertIn(' ARCHS=arm64 ', archive)
 
     def test_pr_other_branch_and_no_version_change_never_tag(self):
         for changes in [
@@ -127,10 +142,10 @@ class WorkflowTests(unittest.TestCase):
     def test_all_suites_run_independently_of_version_changes(self):
         # Every workflow trigger runs the tests. Release selection still gates
         # preparation/publication, but must never suppress ordinary main CI.
-        for product in ['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'bridge']:
+        for product in ['noodle', 'shared', 'computer', 'applet', 'browser', 'hub', 'mobile', 'bridge']:
             job = self.jobs['test-' + product]
             self.assertNotIn('if', job)
-            self.assertEqual(job['needs'], ['versions', 'checks'])
+            self.assertEqual(job['needs'], ['versions'])
             self.assertEqual(job['runs-on'], 'macos-26')
         self.assertNotIn('test-computer', self.jobs['prepare-noodle']['needs'])
         self.assertEqual(self.jobs['prepare-images']['needs'], ['versions', 'checks'])
@@ -161,31 +176,15 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('localModelsSupported', tests['run'])
         self.assertIn('build-mlx-metal.sh', tests['run'])
         self.assertEqual(tests['env']['NOODLE_APPLE_HARNESS_ONLY'], '1')
-    def test_preparation_waits_only_for_its_own_products_tests(self):
-        # Signing and notarizing a companion must not queue behind Noodle's long suite.
-        # The tag job still requires every selected test, so nothing ships early.
-        expected = {
-            'prepare-noodle': ['versions', 'checks', 'test-noodle', 'test-noodle-macos27', 'test-bridge'],
-            'prepare-computer': ['versions', 'checks', 'test-computer', 'test-bridge'],
-            'prepare-applet': ['versions', 'checks', 'test-applet'],
-            'prepare-browser': ['versions', 'checks', 'test-browser'],
-            # The Hub ships Noodle's runtime and helpers, so it also waits for Noodle's tests.
-            'prepare-hub': ['versions', 'checks', 'test-hub', 'test-noodle'],
-            'prepare-mobile': ['versions', 'checks', 'test-mobile'],
-            'prepare-images': ['versions', 'checks'],
-        }
-        for job, needs in expected.items():
-            self.assertEqual(self.jobs[job]['needs'], needs, job)
-        for job in expected:
-            self.assertIn(job, self.jobs['tag']['needs'])
-        for test in ['test-noodle', 'test-noodle-macos27', 'test-computer', 'test-applet', 'test-browser', 'test-hub', 'test-mobile', 'test-bridge']:
-            self.assertIn(test, self.jobs['tag']['needs'])
-
     def test_selected_test_failures_block_tagging(self):
-        for product in ['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'bridge', 'noodle-macos27']:
+        # Preparation does not wait for the tests, so this gate is all that keeps a failed suite from shipping.
+        tests = [name for name in self.jobs if name.startswith('test-')]
+        self.assertIn('test-shared', tests)
+        for name in tests:
+            self.assertIn(name, self.jobs['tag']['needs'])
             for result in ['failure', 'cancelled', 'skipped']:
                 self.assertFalse(condition(self.jobs['tag']['if'], {
-                    **self.base(), f'needs.test-{product}.result': result}))
+                    **self.base(), f'needs.{name}.result': result}), name)
         # A Hub-only release still requires Noodle's tests: the Hub ships Noodle's runtime.
         hub_only = {**self.base(), **{f'needs.versions.outputs.{p}': 'false' for p in ['noodle', 'computer', 'applet', 'browser', 'mobile', 'images']}}
         self.assertTrue(condition(self.jobs['tag']['if'], hub_only))
@@ -362,7 +361,7 @@ class WorkflowTests(unittest.TestCase):
             child = workflow(name)
             self.assertNotIn('push', child.get('on', child.get('true')))
         self.assertEqual(self.jobs['tag']['needs'], [
-            'versions', 'workflow-lint', 'checks', 'test-noodle', 'test-noodle-macos27', 'test-computer', 'test-applet', 'test-browser', 'test-hub', 'test-mobile', 'test-bridge',
+            'versions', 'workflow-lint', 'checks', 'test-noodle', 'test-shared', 'test-noodle-macos27', 'test-computer', 'test-applet', 'test-browser', 'test-hub', 'test-mobile', 'test-bridge',
             'prepare-noodle', 'prepare-computer', 'prepare-applet', 'prepare-browser', 'prepare-hub', 'prepare-mobile', 'prepare-images'])
 
     def test_documentation_only_changes_skip_app_ci_but_release_inputs_do_not(self):
