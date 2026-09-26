@@ -40,7 +40,7 @@ import XCTest
                 case .delete:
                     computers.removeAll { $0.id == request.computerID }
                 case .surfaceFrame:
-                    response.surfaceFrame = SurfaceFrame(jpeg: Data([4, 5, 6]), width: 1024, height: 768)
+                    response.surfacePackets = SurfacePacket.encode([SurfacePacket(sequence: 1, keyFrame: true, width: 1024, height: 768, parameterSets: [Data([1]), Data([2])], sample: Data([3]))])
                 case .surfaceInput:
                     inputs.append((request.computerID, request.terminalID, request.agentID, try XCTUnwrap(request.surfaceInput)))
                 case .revoke:
@@ -152,13 +152,11 @@ import XCTest
         _ = try f.hub.repository.sendAgentMessage(agentID: bot.id, conversationID: bot.conversationID, body: "Workbench",
                                                    attachmentIDs: [attachment.id])
 
-        let events = try await device.stream(.openSurface(conversationID: bot.conversationID, attachmentID: attachment.id))
-        var session: UUID?
-        for try await event in events {
-            if case .surfaceOpened(let id) = event { session = id }
-            if case .surfaceFrame(_, let frame) = event { XCTAssertEqual(frame.width, 1024); break }
-        }
-        _ = try await device.request(.surfaceInput(sessionID: try XCTUnwrap(session), .key(.enter)))
+        let (channel, packets) = try await device.firstSurfacePackets(.openSurface(conversationID: bot.conversationID, attachmentID: attachment.id))
+        defer { channel.cancel() }
+        XCTAssertEqual(packets.first?.width, 1024)
+        channel.send(LinkSurface.input(.key(.enter)))
+        await waitUntil { !f.computer.inputs.isEmpty }
         XCTAssertEqual(f.computer.inputs.map(\.0), [made.id])
         XCTAssertEqual(f.computer.inputs.map(\.1), [terminal])
         XCTAssertEqual(f.computer.inputs.map(\.2), [bot.id])

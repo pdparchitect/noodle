@@ -15,6 +15,7 @@
 
 ### Changed
 
+- Stream live views as video and take the person's input on the same connection. While someone watches a browser, computer or noodlet, its bot waits until they close the view.
 - Send links to the browsers, computers and noodlets the Hub's bots share as links with their pictures, so devices open them live. Cards the Hub saved earlier become links when it starts.
 
 ### Removed

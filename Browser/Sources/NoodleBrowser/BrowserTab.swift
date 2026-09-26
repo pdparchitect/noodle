@@ -26,6 +26,8 @@ import WebKit
     private var visitedURL: String?
     private var visitedTitle: String?
     private var humanInput = false
+    /// Where a person watching remotely clicks and types.
+    private var surfaceInjector: SurfaceEventInjector?
     private var inputMonitor: Any?
     private var inputGeneration = 0
     static let controlWorld = WKContentWorld.world(name: "NoodleBrowserControl")
@@ -305,8 +307,8 @@ import WebKit
             if type == .keyDown { responder.keyDown(with: event) } else { responder.keyUp(with: event) }
         }
     }
-    /// The tab as a person watching it remotely sees it, pointer included.
-    func surfaceFrame() async throws -> SurfaceFrame {
+    /// The tab as a person watching it remotely sees it, pointer included, and its size in points.
+    func surfacePicture() async throws -> (image: CGImage, size: CGSize) {
         let pointerState = pointer.state
         let config = WKSnapshotConfiguration(); config.rect = web.bounds; config.afterScreenUpdates = false
         let viewport = config.rect.size
@@ -316,53 +318,18 @@ import WebKit
             }
         }
         let annotated = pointer.annotate(image, state: pointerState, viewport: viewport)
-        guard let picture = annotated.cgImage(forProposedRect: nil, context: nil, hints: nil),
-              let frame = SurfaceFrame(image: picture, size: viewport) else { throw BrowserError("Could not encode the tab.") }
-        return frame
+        guard let picture = annotated.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            throw BrowserError("Could not capture the tab.")
+        }
+        return (picture, viewport)
     }
 
-    /// What a person watching remotely did, as if they had done it here.
-    func apply(_ input: SurfaceInput) async throws {
+    /// What a person watching remotely did, as real events in the tab, the same way Noodle
+    /// Computer and Noodle Applet take it.
+    func apply(_ input: SurfaceInput) throws {
         humanInput = true
-        switch input {
-        case .pointer(let phase, let x, let y, let count):
-            let point = CGPoint(x: x, y: y)
-            switch phase {
-            case .move, .drag: try pointer.move(to: point)
-            case .down:
-                if pointer.pressed { try pointer.up() }
-                try pointer.move(to: point); try pointer.down(count: count)
-            case .up:
-                try pointer.move(to: point)
-                if pointer.pressed { try pointer.up(count: count) }
-            }
-        case .scroll(let x, let y, let dx, let dy):
-            _ = try await evaluate("const e=document.elementFromPoint(x,y); let s=e; while(s&&s!==document.body&&!(s.scrollHeight>s.clientHeight&&getComputedStyle(s).overflowY!=='visible')) s=s.parentElement; (s&&s!==document.body?s:window).scrollBy(dx,dy); return true;",
-                                   arguments: ["x": x / web.pageZoom, "y": y / web.pageZoom, "dx": dx, "dy": dy], frame: nil,
-                                   world: Self.controlWorld)
-        case .key(let key):
-            let names: [SurfaceInput.Key: String] = [.enter: "Enter", .tab: "Tab", .escape: "Escape", .backspace: "Backspace",
-                                                     .space: "Space", .left: "ArrowLeft", .right: "ArrowRight", .up: "ArrowUp", .down: "ArrowDown"]
-            try press(names[key]!)
-        case .text(let text):
-            try type(text)
-        }
-    }
-
-    /// Types text into the focused element, one character at a time.
-    private func type(_ text: String) throws {
-        guard let window = web.window else { throw BrowserError("The tab is unavailable.") }
-        if let view = window.firstResponder as? NSView, view !== web, !view.isDescendant(of: web) { window.makeFirstResponder(web) }
-        let responder: NSResponder = (window.firstResponder as? NSView).flatMap { $0 === web || $0.isDescendant(of: web) ? $0 : nil } ?? web
-        for character in text {
-            let characters = String(character)
-            for type in [NSEvent.EventType.keyDown, .keyUp] {
-                guard let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                                                   windowNumber: window.windowNumber, context: nil, characters: characters,
-                                                   charactersIgnoringModifiers: characters, isARepeat: false, keyCode: 0) else { continue }
-                if type == .keyDown { responder.keyDown(with: event) } else { responder.keyUp(with: event) }
-            }
-        }
+        if surfaceInjector == nil { surfaceInjector = SurfaceEventInjector(view: web) }
+        try surfaceInjector?.deliver(input)
     }
 
     func snapshot() async throws -> Data {

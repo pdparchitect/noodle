@@ -20,6 +20,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Live views of a Noodle Hub bot's browser, computer or noodlet stream as video, so they move smoothly, and your clicks and typing travel on the same connection. While one is open, its bot waits: it cannot use that browser, computer or noodlet until you close the view.
 - Share browser tabs and computers as links with a picture, as noodlets already are, instead of .noodlebrowser and .noodlecomputer files. Clicking one opens that tab or computer in its app, or live when the bot runs on a Noodle Hub. Cards already in your conversations become links the first time Noodle opens.
 - Voice messages to bots on a Noodle Hub keep their transcript and waveform, both ways.
 - Choose a Noodle Hub harness for a bot as soon as Noodle opens. Noodle remembers what each Hub last said it lends instead of waiting for the Hub to answer again.

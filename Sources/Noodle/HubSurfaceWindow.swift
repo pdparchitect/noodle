@@ -10,22 +10,20 @@ struct HubSurfaceTarget: Codable, Hashable {
     let title: String
 }
 
-/// Shows what a card points at on the Hub's Mac, and passes on what the person does. Closing
-/// the window ends the stream.
+/// Shows what a link points at on the Hub's Mac as live video, and passes on what the person
+/// does over the same channel. Closing the window ends it, and the bot may go on.
 struct HubSurfaceWindow: View {
     @Environment(NoodleStore.self) private var store
     let target: HubSurfaceTarget
-    @State private var frame: SurfaceFrame?
-    @State private var session: UUID?
+    @State private var feed = SurfaceFeed()
+    @State private var channel: LinkChannel?
+    @State private var showing = false
     @State private var failure: String?
 
     var body: some View {
         ZStack {
-            SurfaceView(frame: frame) { input in
-                guard let session, let mirror = store.hubMirror(forConversation: target.conversationID) else { return }
-                Task { try? await mirror.sendSurfaceInput(input, session: session) }
-            }
-            if frame == nil {
+            SurfaceView(feed: feed) { input in channel?.send(LinkSurface.input(input)) }
+            if !showing {
                 if let failure { Text(failure).foregroundStyle(.secondary).padding() }
                 else { ProgressView() }
             }
@@ -33,6 +31,7 @@ struct HubSurfaceWindow: View {
         .navigationTitle(target.title)
         .frame(minWidth: 480, minHeight: 320)
         .task { await follow() }
+        .onDisappear { channel?.cancel() }
     }
 
     private func follow() async {
@@ -40,15 +39,15 @@ struct HubSurfaceWindow: View {
             failure = "Join that Noodle Hub again to open this."
             return
         }
+        feed.onFirstPicture = { showing = true }
         do {
-            for try await event in try await mirror.openSurface(attachment: target.attachmentID, in: target.conversationID) {
-                switch event {
-                case .surfaceOpened(let id): session = id
-                case .surfaceFrame(let id, let next) where id == session: frame = next
-                default: break
-                }
+            let channel = try await mirror.openSurface(attachment: target.attachmentID, in: target.conversationID)
+            self.channel = channel
+            defer { channel.cancel() }
+            for try await frame in channel.frames {
+                if case .packets(let packets)? = LinkSurface.message(frame) { feed.receive(packets) }
             }
-            if frame == nil { failure = "The Hub could not show this." }
+            if !showing { failure = "The Hub could not show this." }
         } catch {
             failure = error.localizedDescription
         }

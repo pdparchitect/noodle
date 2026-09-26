@@ -84,6 +84,8 @@ import AppletCore
   private var artifacts: [UUID: (owner: String, url: URL)] = [:]
   /// Where a person watching an HTML noodlet remotely clicks and types, one per session.
   private var surfaceInjectors: [UUID: (view: NSView, injector: SurfaceEventInjector)] = [:]
+  /// Live views of sessions. While one is watched, bots cannot drive that session.
+  private var surfaceStreamers: [UUID: SurfaceStreamer] = [:]
   private var origins: [String: String]
   private var owners: [String: String]
   private let defaults: UserDefaults
@@ -355,13 +357,16 @@ import AppletCore
       resolvedSession = session
       switch request.operation {
       case .surfaceFrame:
-        let image = try await session.snapshot()
-        guard let picture = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
-              let frame = SurfaceFrame(image: picture, size: session.size) else {
-          throw AppletError("The noodlet cannot be shown.")
+        let streamer = surfaceStreamers[session.id] ?? SurfaceStreamer { [weak session] in
+          guard let session else { return nil }
+          guard let picture = try await session.snapshot().cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            throw AppletError("The noodlet cannot be shown.")
+          }
+          return (picture, session.size)
         }
+        surfaceStreamers[session.id] = streamer
         var response = status(session)
-        response.surfaceFrame = frame
+        response.surfacePackets = SurfacePacket.encode(try streamer.read(after: request.surfaceAfter ?? 0))
         return response
       case .surfaceInput:
         try await deliver(request.surfaceInput!, to: session)
@@ -443,6 +448,9 @@ import AppletCore
         response.mediaType = "video/mp4"
         return response
       case .inspect, .eval, .click, .type, .key, .scroll, .drag, .step:
+        guard surfaceStreamers[session.id]?.isWatched != true else {
+          throw AppletError("A person is using this noodlet right now. Try again when they're done.", code: "session-busy")
+        }
         guard session.state == "running" else {
           throw AppletError("Session \(session.id) (\(session.mode)) is \(session.state).", code: "session-not-running")
         }

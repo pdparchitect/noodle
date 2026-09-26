@@ -29,7 +29,7 @@ import XCTest
                 case .delete:
                     browsers.removeAll { $0.id == request.browserID }
                 case .surfaceFrame:
-                    response.surfaceFrame = SurfaceFrame(jpeg: Data([1, 2, 3]), width: 800, height: 600)
+                    response.surfacePackets = SurfacePacket.encode([SurfacePacket(sequence: 1, keyFrame: true, width: 800, height: 600, parameterSets: [Data([1]), Data([2])], sample: Data([3]))])
                 case .surfaceInput:
                     inputs.append((request.browserID, request.tabID, try XCTUnwrap(request.surfaceInput)))
                 default:
@@ -148,19 +148,36 @@ import XCTest
                                                            card: LinkCard(title: "Example", detail: "https://example.com"))
         _ = try hub.repository.sendAgentMessage(agentID: bot.id, conversationID: bot.conversationID, body: "Example", attachmentIDs: [card.id])
 
-        let events = try await device.stream(.openSurface(conversationID: bot.conversationID, attachmentID: card.id))
-        var session: UUID?
-        for try await event in events {
-            if case .surfaceOpened(let id) = event { session = id }
-            if case .surfaceFrame(let id, let frame) = event {
-                XCTAssertEqual(id, session)
-                XCTAssertEqual(frame.width, 800)
-                break
-            }
-        }
-        _ = try await device.request(.surfaceInput(sessionID: try XCTUnwrap(session), .text("hi")))
+        let (channel, packets) = try await device.firstSurfacePackets(.openSurface(conversationID: bot.conversationID, attachmentID: card.id))
+        defer { channel.cancel() }
+        XCTAssertEqual(packets.first?.width, 800)
+        channel.send(LinkSurface.input(.text("hi")))
+        await waitUntil { !browser.inputs.isEmpty }
         XCTAssertEqual(browser.inputs.map(\.0), [made.id])
         XCTAssertEqual(browser.inputs.map(\.1), [tab])
         XCTAssertEqual(browser.inputs.map(\.2), [.text("hi")])
     }
+}
+
+extension HubPairing {
+    /// Opens a surface channel, checks it announces itself, and waits for its first video.
+    func firstSurfacePackets(_ request: LinkRequest) async throws -> (LinkChannel, [SurfacePacket]) {
+        let channel = try await channel(request)
+        var opened = false
+        for try await frame in channel.frames {
+            switch LinkSurface.message(frame) {
+            case .opened?: opened = true
+            case .packets(let packets)?:
+                XCTAssertTrue(opened, "video came before the channel said it was open")
+                return (channel, packets)
+            case nil: XCTFail("an unreadable surface frame")
+            }
+        }
+        throw LinkError("The surface ended before any video.")
+    }
+}
+
+/// Waits a little for something the Hub does in the background.
+@MainActor func waitUntil(_ condition: () -> Bool) async {
+    for _ in 0..<100 where !condition() { try? await Task.sleep(for: .milliseconds(20)) }
 }

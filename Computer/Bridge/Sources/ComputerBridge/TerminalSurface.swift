@@ -13,8 +13,8 @@ public enum TerminalSurface {
                                          with: "", options: .regularExpression)
     }
 
-    /// The last screenful of `output`.
-    public static func frame(_ output: Data) -> SurfaceFrame? {
+    /// The last screenful of `output`, and its size in points.
+    public static func picture(_ output: Data) -> (image: CGImage, size: CGSize)? {
         var lines: [String] = []
         for line in plainText(output).replacingOccurrences(of: "\r\n", with: "\n").split(separator: "\n", omittingEmptySubsequences: false) {
             // A carriage return alone rewrites the line, as a progress bar does.
@@ -38,7 +38,7 @@ public enum TerminalSurface {
             CTLineDraw(typeset, context)
         }
         guard let image = context.makeImage() else { return nil }
-        return SurfaceFrame(image: image, size: CGSize(width: width, height: height))
+        return (image, CGSize(width: width, height: height))
     }
 
     /// What to write to the shell for a key or text; nil for pointer input, which a terminal ignores.

@@ -81,6 +81,8 @@ public struct ComputerRequest: Codable, Sendable {
     public var transferID: UUID?
     public var computer: ComputerDraft?
     public var surfaceInput: SurfaceInput?
+    /// For surfaceFrame: the last packet this viewer has, 0 for none.
+    public var surfaceAfter: UInt64?
     public init(_ operation: ComputerOperation, computerID: UUID? = nil, agentID: UUID? = nil,
                 terminalID: UUID? = nil, data: Data? = nil, offset: Int64? = nil, columns: Int? = nil, rows: Int? = nil) {
         self.operation = operation; self.computerID = computerID; self.agentID = agentID
@@ -145,7 +147,8 @@ public struct ComputerResponse: Codable, Sendable {
     public var path: String?
     public var byteCount: Int64?
     public var templates: [ComputerTemplateSummary]?
-    public var surfaceFrame: SurfaceFrame?
+    /// Encoded video packets, as `SurfacePacket.encode` writes them.
+    public var surfacePackets: Data?
     public init(computers: [RemoteComputer]? = nil, terminalID: UUID? = nil, data: Data? = nil,
                 offset: Int64? = nil, truncated: Bool? = nil, exited: Bool? = nil, error: String? = nil) {
         self.computers = computers; self.terminalID = terminalID; self.data = data; self.offset = offset

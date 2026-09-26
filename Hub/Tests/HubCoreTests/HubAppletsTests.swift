@@ -23,7 +23,7 @@ import XCTest
                     opened.append(request.noodletID ?? UUID())
                     response.sessionID = session
                 case .surfaceFrame:
-                    response.surfaceFrame = SurfaceFrame(jpeg: Data([7, 8, 9]), width: 640, height: 480)
+                    response.surfacePackets = SurfacePacket.encode([SurfacePacket(sequence: 1, keyFrame: true, width: 640, height: 480, parameterSets: [Data([1]), Data([2])], sample: Data([3]))])
                 case .surfaceInput:
                     if let input = request.surfaceInput { inputs.append((request.sessionID, input)) }
                 default:
@@ -77,9 +77,10 @@ import XCTest
     }
 
     private func opens(_ attachment: UUID, in bot: LinkBot, _ f: Fixture) async -> Bool {
-        guard let events = try? await f.device.stream(.openSurface(conversationID: bot.conversationID, attachmentID: attachment)) else { return false }
+        guard let channel = try? await f.device.channel(.openSurface(conversationID: bot.conversationID, attachmentID: attachment)) else { return false }
+        defer { channel.cancel() }
         do {
-            for try await event in events { if case .surfaceFrame = event { return true } }
+            for try await frame in channel.frames { if case .packets? = LinkSurface.message(frame) { return true } }
         } catch {}
         return false
     }
@@ -91,14 +92,12 @@ import XCTest
         f.hub.bots.applets.onShared?(noodlet, bot.id, bot.conversationID)
         let link = try post(noodlet, in: bot, byBot: true, hub: f.hub)
 
-        let events = try await f.device.stream(.openSurface(conversationID: bot.conversationID, attachmentID: link))
-        var session: UUID?
-        for try await event in events {
-            if case .surfaceOpened(let id) = event { session = id }
-            if case .surfaceFrame(_, let frame) = event { XCTAssertEqual(frame.width, 640); break }
-        }
+        let (channel, packets) = try await f.device.firstSurfacePackets(.openSurface(conversationID: bot.conversationID, attachmentID: link))
+        defer { channel.cancel() }
+        XCTAssertEqual(packets.first?.width, 640)
         XCTAssertEqual(f.applet.opened, [noodlet])
-        _ = try await f.device.request(.surfaceInput(sessionID: try XCTUnwrap(session), .text("go")))
+        channel.send(LinkSurface.input(.text("go")))
+        await waitUntil { !f.applet.inputs.isEmpty }
         XCTAssertEqual(f.applet.inputs.map(\.0), [f.applet.session])
         XCTAssertEqual(f.applet.inputs.map(\.1), [.text("go")])
     }

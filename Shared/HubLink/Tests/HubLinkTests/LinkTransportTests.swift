@@ -71,6 +71,41 @@ final class LinkStreamTests: XCTestCase {
         frames.cancel()
     }
 
+    /// A channel carries frames both ways on one stream, so input needs no connection of its own.
+    func testAChannelCarriesFramesBothWaysOnOneStream() async throws {
+        let hub = LinkIdentity(), device = LinkIdentity()
+        let opened = expectation(description: "channel opened")
+        let heard = expectation(description: "device frames arrived")
+        heard.expectedFulfillmentCount = 2
+        let box = StreamBox(), requests = FrameBox(), incoming = FrameBox()
+        let server = try LinkServer(identity: hub, port: 0, handler: { _, request in
+            requests.append(request)
+            return .stream({ stream in
+                box.stream = stream
+                stream.onFrame { incoming.append($0); heard.fulfill() }
+                opened.fulfill()
+            })
+        })
+        try await server.start()
+        addTeardownBlock { server.stop() }
+        let endpoint = LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))
+
+        let channel = try await LinkClient.channel(Data(#"{"open":1}"#.utf8), identity: device, hubKey: hub.publicKey, endpoints: [endpoint])
+        channel.send(Data("click".utf8))
+        channel.send(Data(repeating: 3, count: 100_000))
+        await fulfillment(of: [opened, heard], timeout: 5)
+        XCTAssertEqual(requests.frames, [Data(#"{"open":1}"#.utf8)])
+        XCTAssertEqual(incoming.frames, [Data("click".utf8), Data(repeating: 3, count: 100_000)])
+
+        let stream = try XCTUnwrap(box.stream)
+        stream.send(Data([1, 2, 3]))
+        for try await frame in channel.frames {
+            XCTAssertEqual(frame, Data([1, 2, 3]))
+            break
+        }
+        channel.cancel()
+    }
+
     func testClosingTheStreamOnTheHubEndsItOnTheDevice() async throws {
         let hub = LinkIdentity()
         let box = StreamBox()
@@ -132,4 +167,11 @@ private final class LockedPort: @unchecked Sendable {
         get { lock.withLock { port } }
         set { lock.withLock { port = newValue } }
     }
+}
+
+final class FrameBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [Data] = []
+    var frames: [Data] { lock.withLock { stored } }
+    func append(_ frame: Data) { lock.withLock { stored.append(frame) } }
 }

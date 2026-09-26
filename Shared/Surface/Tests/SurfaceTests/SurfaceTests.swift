@@ -1,6 +1,9 @@
 import CoreGraphics
+import CoreMedia
+import CoreVideo
 import Foundation
 import Surface
+import VideoToolbox
 import XCTest
 
 final class SurfaceTests: XCTestCase {
@@ -9,17 +12,9 @@ final class SurfaceTests: XCTestCase {
                                 space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
         context.setFillColor(gray: gray, alpha: 1)
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.setFillColor(gray: 1 - gray, alpha: 1)
+        context.fill(CGRect(x: width / 4, y: height / 4, width: width / 2, height: height / 2))
         return context.makeImage()!
-    }
-
-    /// A frame keeps the surface's size in points, however small its picture is sent.
-    func testFramesAreShrunkButKeepTheSurfaceSize() throws {
-        let frame = try XCTUnwrap(SurfaceFrame(image: image(width: 2560, height: 1600, gray: 0.5), size: CGSize(width: 1280, height: 800),
-                                               maxPixelSize: 1280))
-        XCTAssertEqual(frame.width, 1280)
-        XCTAssertEqual(frame.height, 800)
-        let decoded = try XCTUnwrap(frame.cgImage)
-        XCTAssertLessThanOrEqual(max(decoded.width, decoded.height), 1280)
     }
 
     func testInputRoundTripsThroughJSON() throws {
@@ -30,18 +25,66 @@ final class SurfaceTests: XCTestCase {
         }
     }
 
-    /// Only changed frames travel; a still page costs nothing after its first frame. The pump
-    /// ends when the surface is gone.
-    func testThePumpSendsOnlyFramesThatChanged() async throws {
-        let captured = [0.2, 0.2, 0.7, 0.7, 0.7].map { gray in
-            SurfaceFrame(image: image(width: 64, height: 40, gray: gray), size: CGSize(width: 64, height: 40), maxPixelSize: 64)
+    /// Packets travel as bytes, starting with a byte no JSON starts with.
+    func testPacketsRoundTripAsBytes() throws {
+        let packets = [SurfacePacket(sequence: 1, keyFrame: true, width: 1280, height: 800, parameterSets: [Data([1, 2]), Data([3])], sample: Data([9, 8, 7])),
+                       SurfacePacket(sequence: 2, keyFrame: false, width: 1280, height: 800, parameterSets: [], sample: Data(repeating: 5, count: 1000))]
+        let data = SurfacePacket.encode(packets)
+        XCTAssertEqual(data.first, SurfacePacket.formatByte)
+        XCTAssertNotEqual(data.first, UInt8(ascii: "{"))
+        XCTAssertEqual(SurfacePacket.decode(data), packets)
+        XCTAssertNil(SurfacePacket.decode(data.dropLast()), "a cut-short packet read as whole")
+        XCTAssertNil(SurfacePacket.decode(Data("{}".utf8)))
+    }
+
+    /// The Mac's encoder makes H.264 a viewer can decode, at the surface's shape.
+    func testEncodedFramesDecode() throws {
+        let encoder = SurfaceEncoder(maxPixelSize: 640, fps: 30)
+        let first = try XCTUnwrap(try encoder.encode(image(width: 1280, height: 800, gray: 0.2), size: CGSize(width: 640, height: 400)))
+        XCTAssertTrue(first.keyFrame)
+        XCTAssertEqual(first.parameterSets.count, 2)
+        let second = try XCTUnwrap(try encoder.encode(image(width: 1280, height: 800, gray: 0.3), size: CGSize(width: 640, height: 400)))
+        XCTAssertFalse(second.keyFrame)
+        let packet = SurfacePacket(sequence: 1, keyFrame: true, width: 640, height: 400, parameterSets: first.parameterSets, sample: first.sample)
+        let format = try XCTUnwrap(SurfaceSamples.format(packet))
+        let dimensions = CMVideoFormatDescriptionGetDimensions(format)
+        XCTAssertEqual(dimensions.width, 640)
+        XCTAssertEqual(dimensions.height, 400)
+        let sample = try XCTUnwrap(SurfaceSamples.sample(packet, format: format))
+        var session: VTDecompressionSession?
+        XCTAssertEqual(VTDecompressionSessionCreate(allocator: nil, formatDescription: format, decoderSpecification: nil,
+                                                    imageBufferAttributes: nil, outputCallback: nil, decompressionSessionOut: &session), noErr)
+        var decoded: CVImageBuffer?
+        let status = VTDecompressionSessionDecodeFrame(try XCTUnwrap(session), sampleBuffer: sample, flags: [], infoFlagsOut: nil) { _, _, buffer, _, _ in
+            decoded = buffer
         }
-        let box = Captures(captured)
-        var sent: [SurfaceFrame] = []
-        for try await frame in SurfacePump.frames(every: .milliseconds(1), capture: { box.next() }) {
-            sent.append(frame)
+        XCTAssertEqual(status, noErr)
+        VTDecompressionSessionWaitForAsynchronousFrames(session!)
+        XCTAssertEqual(decoded.map(CVPixelBufferGetWidth), 640)
+    }
+
+    /// A new reader starts at a key frame, a caught-up one gets only what is new, and the
+    /// surface counts as watched only while someone keeps reading.
+    @MainActor func testTheStreamerServesReadersAndKnowsWhenItIsWatched() async throws {
+        let picture = image(width: 320, height: 200, gray: 0.5)
+        let streamer = SurfaceStreamer(fps: 60, maxPixelSize: 320, lease: .milliseconds(300)) { (picture, CGSize(width: 320, height: 200)) }
+        XCTAssertFalse(streamer.isWatched)
+        XCTAssertEqual(try streamer.read(after: 0), [])
+        XCTAssertTrue(streamer.isWatched)
+        var packets: [SurfacePacket] = []
+        for _ in 0..<50 where packets.count < 3 {
+            try await Task.sleep(for: .milliseconds(20))
+            packets = try streamer.read(after: 0)
         }
-        XCTAssertEqual(sent.count, 2)
+        XCTAssertTrue(packets.first?.keyFrame == true, "a new reader did not start at a key frame")
+        XCTAssertEqual(packets.first?.size, CGSize(width: 320, height: 200))
+        let last = try XCTUnwrap(packets.last).sequence
+        try await Task.sleep(for: .milliseconds(60))
+        let newer = try streamer.read(after: last)
+        XCTAssertFalse(newer.isEmpty)
+        XCTAssertTrue(newer.allSatisfy { $0.sequence > last })
+        try await Task.sleep(for: .milliseconds(450))
+        XCTAssertFalse(streamer.isWatched, "the lease outlived its reader")
     }
 
     /// A point on the viewer lands on the same spot of the surface, letterboxing included.
@@ -51,11 +94,4 @@ final class SurfaceTests: XCTestCase {
         XCTAssertEqual(SurfaceGeometry.surfacePoint(CGPoint(x: 320, y: 300), in: view, surface: surface), CGPoint(x: 640, y: 400))
         XCTAssertNil(SurfaceGeometry.surfacePoint(CGPoint(x: 320, y: 10), in: view, surface: surface), "a click in the letterbox reaches nothing")
     }
-}
-
-private final class Captures: @unchecked Sendable {
-    private let lock = NSLock()
-    private var frames: [SurfaceFrame?]
-    init(_ frames: [SurfaceFrame?]) { self.frames = frames }
-    func next() -> SurfaceFrame? { lock.withLock { frames.isEmpty ? nil : frames.removeFirst() } }
 }

@@ -15,6 +15,8 @@ import WebKit
     private var activeDownloads: [ObjectIdentifier: (download: WKDownload?, browserID: UUID, record: BrowserDownloadInfo)] = [:]
     private var busy: Set<UUID> = []
     private var deleting: Set<UUID> = []
+    /// Live views of tabs, by tab. While one is watched, bots are kept off its browser.
+    private var surfaces: [UUID: SurfaceStreamer] = [:]
     private let transferRoot: URL?
     init(library: BrowserLibrary, transferRoot: URL? = nil) { self.library = library; self.transferRoot = transferRoot; super.init() }
     func startServer(socket: URL? = nil) {
@@ -61,10 +63,15 @@ import WebKit
         if profile.tabs.isEmpty { _ = try makeTab(browserID: id) }
         else if let tabID = profile.selectedTabID ?? profile.tabs.first?.id { _ = try tab(browserID: id, tabID: tabID) }
     }
+    /// Someone is watching one of the browser's tabs live.
+    func isWatched(_ browser: UUID) -> Bool {
+        surfaces.contains { tabID, streamer in tabs[tabID]?.browserID == browser && streamer.isWatched }
+    }
     func closeTab(browserID: UUID, tabID: UUID) throws {
         var profile = try library.profile(browserID)
         guard profile.tabs.contains(where: { $0.id == tabID }) else { throw BrowserError("Tab not found in this browser.") }
         profile.tabs.removeAll { $0.id == tabID }
+        surfaces.removeValue(forKey: tabID)?.stop()
         if profile.selectedTabID == tabID { profile.selectedTabID = profile.tabs.first?.id }
         try library.update(profile)
         tabs.removeValue(forKey: tabID)?.stop()
@@ -168,14 +175,18 @@ import WebKit
         }
         // A person may watch and use a tab while bots are paused, and alongside a bot's own call.
         if request.operation == .surfaceFrame {
-            response.surfaceFrame = try await tab(browserID: id, tabID: request.tabID!).surfaceFrame()
+            let tab = try tab(browserID: id, tabID: request.tabID!)
+            let streamer = surfaces[tab.id] ?? SurfaceStreamer { [weak tab] in try await tab?.surfacePicture() }
+            surfaces[tab.id] = streamer
+            response.surfacePackets = SurfacePacket.encode(try streamer.read(after: request.surfaceAfter ?? 0))
             return response
         }
         if request.operation == .surfaceInput {
-            try await tab(browserID: id, tabID: request.tabID!).apply(request.surfaceInput!)
+            try tab(browserID: id, tabID: request.tabID!).apply(request.surfaceInput!)
             return response
         }
         guard !profile.paused else { throw BrowserError("Agent control is paused for this browser. Wait for the user to resume it.") }
+        guard !isWatched(id) else { throw BrowserError("A person is using this browser right now. Try again when they're done.") }
         // Dialog replies must remain available while a JS command is waiting.
         if request.operation == .dialog {
             let tab = try tab(browserID: id, tabID: request.tabID!)

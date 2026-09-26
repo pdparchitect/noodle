@@ -231,30 +231,58 @@ import Observation
         }
     }
 
-    /// Sends a surface's frames down `stream` while it is open, only when the picture changes.
+    /// Streams a surface's video down `stream` while it is open, and applies what the person
+    /// does, which arrives on the same stream. Reading keeps the companion's lease, which keeps
+    /// the bot off it; when the stream ends the lease lapses and the bot may go on.
     private func openSurface(_ stream: LinkStream, for user: HubUser, showing target: SurfaceTarget) {
-        guard let browsers, let computers else { return stream.close() }
+        guard let browsers, let computers, let applets = bots?.applets else { return stream.close() }
         let id = UUID()
         stream.send(LinkProtocol.encode(LinkEvent.surfaceOpened(sessionID: id)))
-        let pump = Task { @MainActor in
-            let frames = SurfacePump.frames(every: .milliseconds(100)) {
-                switch target {
-                case .browser(let browser, let tab):
-                    try await browsers.surfaceFrame(browser: browser, tab: tab, for: user)
-                case .computer(let computer, let terminal, let bot):
-                    try await computers.surfaceFrame(computer: computer, terminal: terminal, bot: bot, for: user)
-                case .noodlet(let session):
-                    try await self.bots?.applets.companion(AppletRequest(.surfaceFrame, sessionID: session)).surfaceFrame
-                }
+        func read(after sequence: UInt64) async throws -> [SurfacePacket] {
+            switch target {
+            case .browser(let browser, let tab):
+                return try await browsers.surfacePackets(browser: browser, tab: tab, after: sequence, for: user)
+            case .computer(let computer, let terminal, let bot):
+                return try await computers.surfacePackets(computer: computer, terminal: terminal, bot: bot, after: sequence, for: user)
+            case .noodlet(let session):
+                var request = AppletRequest(.surfaceFrame, sessionID: session)
+                request.surfaceAfter = sequence
+                return try await applets.companion(request).surfacePackets.flatMap(SurfacePacket.decode) ?? []
             }
+        }
+        let pump = Task { @MainActor in
+            var last: UInt64 = 0
             do {
-                for try await frame in frames { stream.send(LinkProtocol.encode(LinkEvent.surfaceFrame(sessionID: id, frame))) }
+                while !Task.isCancelled, !stream.isClosed {
+                    let packets = try await read(after: last)
+                    for batch in LinkSurface.batches(packets) { stream.send(LinkSurface.frame(batch)) }
+                    last = packets.last?.sequence ?? last
+                    try await Task.sleep(for: .milliseconds(packets.isEmpty ? 25 : 10))
+                }
             } catch {}
             stream.close()
         }
         surfaces[id] = (stream.peer, user, target, pump)
+        stream.onFrame { [weak self] data in
+            guard let input = try? JSONDecoder().decode(SurfaceInput.self, from: data) else { return }
+            Task { @MainActor in try? await self?.deliver(input, to: id) }
+        }
         stream.onClose { [weak self] in
             Task { @MainActor in self?.surfaces.removeValue(forKey: id)?.pump.cancel() }
+        }
+    }
+
+    private func deliver(_ input: SurfaceInput, to session: UUID) async throws {
+        guard let surface = surfaces[session] else { return }
+        switch surface.target {
+        case .browser(let browser, let tab):
+            try await hubBrowsers().surfaceInput(input, browser: browser, tab: tab, for: surface.user)
+        case .computer(let computer, let terminal, let bot):
+            try await hubComputers().surfaceInput(input, computer: computer, terminal: terminal, bot: bot, for: surface.user)
+        case .noodlet(let noodlet):
+            var request = AppletRequest(.surfaceInput, sessionID: noodlet)
+            request.surfaceInput = input
+            _ = try await hubBots().applets.companion(request)
         }
     }
 
@@ -365,19 +393,6 @@ import Observation
             return .computer(computers.link(changed, for: user))
         case .openSurface:
             throw LinkError("Surfaces open a stream.")
-        case .surfaceInput(let sessionID, let input):
-            guard let surface = surfaces[sessionID], surface.device == key else { throw LinkError("That surface is closed.") }
-            switch surface.target {
-            case .browser(let browser, let tab):
-                try await hubBrowsers().surfaceInput(input, browser: browser, tab: tab, for: surface.user)
-            case .computer(let computer, let terminal, let bot):
-                try await hubComputers().surfaceInput(input, computer: computer, terminal: terminal, bot: bot, for: surface.user)
-            case .noodlet(let session):
-                var request = AppletRequest(.surfaceInput, sessionID: session)
-                request.surfaceInput = input
-                _ = try await hubBots().applets.companion(request)
-            }
-            return .done
         case .browsers:
             let browsers = try hubBrowsers()
             await browsers.refresh()

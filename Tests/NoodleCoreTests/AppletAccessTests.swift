@@ -74,11 +74,15 @@ final class AppletAccessTests: XCTestCase {
     }
 
     func testEveryCommandIsDocumentedInGeneratedSkillAndHelp() {
-        for command in AppletOperation.allCases {
+        for command in AppletOperation.allCases where !command.isSurface {
             let guidance = AppletGuidance.operation(command)
             XCTAssertFalse(guidance.isEmpty)
             XCTAssertTrue(AppletGuidance.cliHelp.contains(guidance))
             XCTAssertTrue(AppletGuidance.skill.contains(guidance))
+        }
+        // Showing a noodlet to a person is never a bot's command.
+        for command in AppletOperation.allCases where command.isSurface {
+            XCTAssertFalse(AppletGuidance.cliHelp.contains(command.rawValue), command.rawValue)
         }
     }
     func testManagedSkillPreservesCustomSkillAndExposesCorrectHelper() throws {

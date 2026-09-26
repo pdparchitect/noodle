@@ -127,7 +127,16 @@ import Observation
         try await stream(.subscribe)
     }
 
-    /// Opens a stream for a request the Hub answers with a stream, such as `openSurface`.
+    /// Opens a channel to the Hub for a request it answers with a stream, such as `openSurface`:
+    /// frames come down it, and this side sends its own up it.
+    public func channel(_ request: LinkRequest) async throws -> LinkChannel {
+        guard let hub else { throw LinkError("This Mac has not joined a Noodle Hub.") }
+        let channel = try await LinkClient.channel(try LinkProtocol.encode(request), identity: try identity(),
+                                                   hubKey: hub.key, endpoints: hub.endpoints)
+        return channel
+    }
+
+    /// Opens a stream for a request the Hub answers with a stream.
     public func stream(_ request: LinkRequest) async throws -> AsyncThrowingStream<LinkEvent, Error> {
         guard let hub else { throw LinkError("This Mac has not joined a Noodle Hub.") }
         let subscription = try await LinkClient.subscribe(try LinkProtocol.encode(request), identity: try identity(),

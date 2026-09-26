@@ -14,6 +14,8 @@ import WebKit
     private var localTerminals: [UUID: (computer: UUID, owner: String, runtime: LocalMacComputer)] = [:]
     /// Where a person watching remotely types and clicks, one per desktop view.
     private var injectors: [UUID: (view: NSView, injector: SurfaceEventInjector)] = [:]
+    /// Live views of displays and terminals. While one is watched, bots are kept off its computer.
+    private var surfaces: [String: (computer: UUID, streamer: SurfaceStreamer)] = [:]
     private let transferRoot: URL
 
     init(store: ComputerStore, socket: URL? = nil) throws {
@@ -137,6 +139,10 @@ import WebKit
         if request.operation == .surfaceFrame || request.operation == .surfaceInput {
             return try await surface(request, session: session, owner: owner)
         }
+        // A person using the computer live has it to themselves until they close the view.
+        if [.terminalOpen, .terminalWrite, .terminalResize, .fileUpload, .fileDownload].contains(request.operation), isWatched(session.id) {
+            throw ComputerBridgeError("A person is using this computer right now. Try again when they're done.")
+        }
         if request.operation.isFileTransfer {
             guard let id = request.transferID, let path = request.path else {
                 throw ComputerBridgeError("Missing broker file-transfer reference.")
@@ -233,16 +239,19 @@ import WebKit
         if let browser = session.desktop != nil ? session.browser : nil {
             let view = browser.view
             if request.operation == .surfaceFrame {
-                let configuration = WKSnapshotConfiguration()
-                configuration.afterScreenUpdates = false
-                let image: NSImage? = await withCheckedContinuation { continuation in
-                    view.takeSnapshot(with: configuration) { image, _ in continuation.resume(returning: image) }
+                let streamer = streamer("display:\(session.id)", computer: session.id) { [weak view] in
+                    guard let view else { return nil }
+                    let configuration = WKSnapshotConfiguration()
+                    configuration.afterScreenUpdates = false
+                    let image: NSImage? = await withCheckedContinuation { continuation in
+                        view.takeSnapshot(with: configuration) { image, _ in continuation.resume(returning: image) }
+                    }
+                    guard let picture = image?.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+                        throw ComputerBridgeError("The computer's display cannot be shown.")
+                    }
+                    return (picture, view.bounds.size)
                 }
-                guard let picture = image?.cgImage(forProposedRect: nil, context: nil, hints: nil),
-                      let frame = SurfaceFrame(image: picture, size: view.bounds.size) else {
-                    throw ComputerBridgeError("The computer's display cannot be shown.")
-                }
-                response.surfaceFrame = frame
+                response.surfacePackets = SurfacePacket.encode(try streamer.read(after: request.surfaceAfter ?? 0))
             } else {
                 if injectors[session.id]?.view !== view { injectors[session.id] = (view, SurfaceEventInjector(view: view)) }
                 try injectors[session.id]?.injector.deliver(request.surfaceInput!)
@@ -253,12 +262,28 @@ import WebKit
             throw ComputerBridgeError("This computer has no display, and the terminal is closed.")
         }
         if request.operation == .surfaceFrame {
-            response.surfaceFrame = TerminalSurface.frame(terminal.replay.read(from: max(0, terminal.replay.end - 16_000)).data ?? Data())
+            let streamer = streamer("terminal:\(id)", computer: session.id) { [weak terminal] in
+                terminal.flatMap { TerminalSurface.picture($0.replay.read(from: max(0, $0.replay.end - 16_000)).data ?? Data()) }
+            }
+            response.surfacePackets = SurfacePacket.encode(try streamer.read(after: request.surfaceAfter ?? 0))
         } else if let bytes = TerminalSurface.bytes(for: request.surfaceInput!), !terminal.exited {
             terminal.touched = Date()
             terminal.io.send(bytes)
         }
         return response
+    }
+
+    private func streamer(_ key: String, computer: UUID,
+                          capture: @escaping @MainActor () async throws -> (image: CGImage, size: CGSize)?) -> SurfaceStreamer {
+        if let existing = surfaces[key] { return existing.streamer }
+        let streamer = SurfaceStreamer(capture: capture)
+        surfaces[key] = (computer, streamer)
+        return streamer
+    }
+
+    /// Someone is watching the computer live.
+    private func isWatched(_ computer: UUID) -> Bool {
+        surfaces.values.contains { $0.computer == computer && $0.streamer.isWatched }
     }
 
     private static func remote(_ session: ComputerSession) -> RemoteComputer {

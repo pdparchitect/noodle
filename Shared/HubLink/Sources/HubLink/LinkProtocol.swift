@@ -129,11 +129,9 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case deleteBrowser(id: UUID)
     /// Replaces which of this user's browsers one of their bots may use.
     case assignBrowsers(botID: UUID, browserIDs: [UUID])
-    /// Opens a stream showing what a card in one of this user's conversations points at, live.
-    /// The Hub sends `surfaceOpened`, then `surfaceFrame` whenever the picture changes.
+    /// Opens a channel showing what a link in one of this user's conversations points at, live.
+    /// See `LinkSurface` for what travels on it.
     case openSurface(conversationID: UUID, attachmentID: UUID)
-    /// What the person did in an open surface.
-    case surfaceInput(sessionID: UUID, SurfaceInput)
 }
 
 public enum LinkResponse: Codable, Equatable, Sendable {
@@ -173,9 +171,8 @@ public enum LinkEvent: Codable, Equatable, Sendable {
     case computerCreated(requestID: UUID, computer: LinkComputer?, error: String?)
     /// This user's browsers or their bots changed.
     case browsersChanged
-    /// A surface stream is ready; send input with this session.
+    /// A surface channel is ready; video follows as `LinkSurface` packets.
     case surfaceOpened(sessionID: UUID)
-    case surfaceFrame(sessionID: UUID, SurfaceFrame)
 }
 
 /// What a device sets on a browser it makes or edits on the Hub. Nil fields stay as they are.

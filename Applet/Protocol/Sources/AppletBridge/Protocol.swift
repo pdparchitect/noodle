@@ -58,6 +58,8 @@ public struct AppletRequest: Codable, Sendable {
     public var offset: Int?
     public var artifactID: UUID?
     public var surfaceInput: SurfaceInput?
+    /// For surface-frame: the last packet this viewer has, 0 for none.
+    public var surfaceAfter: UInt64?
     public init(_ operation: AppletOperation, sessionID: UUID? = nil) {
         self.operation = operation
         self.sessionID = sessionID
@@ -125,7 +127,8 @@ public struct AppletResponse: Codable, Sendable {
     public var errorCode: String?
     public var sessionID: UUID?
     public var noodletID: UUID?
-    public var surfaceFrame: SurfaceFrame?
+    /// Encoded video packets, as `SurfacePacket.encode` writes them.
+    public var surfacePackets: Data?
     public var url: URL?
     public var title: String?
     public var runtime: String?

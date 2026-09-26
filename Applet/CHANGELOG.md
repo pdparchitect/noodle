@@ -6,6 +6,10 @@
 
 - Let Noodle Hub run its bots' noodlets and show a running noodlet live to a person, taking their clicks, typing and scrolling.
 
+### Changed
+
+- Stream live views to Noodle Hub as video. While someone watches a noodlet, bots cannot use it until they close the view.
+
 ## [0.10.0] - 2026-09-25
 
 ### Added

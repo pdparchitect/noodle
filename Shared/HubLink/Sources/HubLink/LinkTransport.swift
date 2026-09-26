@@ -44,6 +44,22 @@ enum LinkQUIC {
         return key
     }
 
+    /// Reads a request: a channel sends it as one frame and keeps its side open, anything else
+    /// sends it whole and finishes. A frame starts with a zero byte, a JSON request with "{".
+    static func receiveRequest(_ connection: NWConnection) async throws -> (request: Data, channel: Bool) {
+        // An empty request finishes at once.
+        guard let first = try await read(1, from: connection) else { return (Data(), false) }
+        if first.first == 0 {
+            guard let rest = try await read(3, from: connection) else { throw LinkError("The request was cut short.") }
+            let length = Int((first + rest).withUnsafeBytes { UInt32(bigEndian: $0.loadUnaligned(as: UInt32.self)) })
+            guard length <= messageLimit, let request = try await read(length, from: connection) else {
+                throw LinkError("The request was too large or cut short.")
+            }
+            return (request, true)
+        }
+        return (first + (try await receive(connection)), false)
+    }
+
     /// Reads one whole message: everything until the peer finishes its side of the stream.
     static func receive(_ connection: NWConnection) async throws -> Data {
         var data = Data()
@@ -55,7 +71,7 @@ enum LinkQUIC {
             }
             if let chunk { data.append(chunk) }
             guard data.count <= messageLimit else { throw LinkError("The message is too large.") }
-            if complete { return data }
+            if complete || chunk == nil { return data }
         }
     }
 
@@ -108,6 +124,9 @@ public final class LinkStream: @unchecked Sendable {
     private var closed = false
     private var closeHandlers: [@Sendable () -> Void] = []
     private var timer: DispatchSourceTimer?
+    /// Frames a channel's client sent before anyone listened, and who listens.
+    private var received: [Data] = []
+    private var frameHandler: (@Sendable (Data) -> Void)?
 
     init(peer: LinkPublicKey, connection: NWConnection) {
         self.peer = peer
@@ -126,6 +145,34 @@ public final class LinkStream: @unchecked Sendable {
     }
 
     public var isClosed: Bool { lock.withLock { closed } }
+
+    /// Takes the frames a channel's client sends, including any sent before this was set.
+    public func onFrame(_ handler: @escaping @Sendable (Data) -> Void) {
+        let waiting = lock.withLock { () -> [Data] in
+            frameHandler = handler
+            defer { received = [] }
+            return received
+        }
+        waiting.forEach(handler)
+    }
+
+    /// Reads the client's frames until it finishes or the stream ends.
+    func readFrames() {
+        Task { [connection] in
+            while let header = try? await LinkQUIC.read(4, from: connection) {
+                let length = Int(header.withUnsafeBytes { UInt32(bigEndian: $0.loadUnaligned(as: UInt32.self)) })
+                guard length <= LinkQUIC.messageLimit else { break }
+                // Empty frames only keep the stream alive.
+                guard length > 0 else { continue }
+                guard let payload = try? await LinkQUIC.read(length, from: connection) else { break }
+                let handler = lock.withLock { () -> (@Sendable (Data) -> Void)? in
+                    if frameHandler == nil { received.append(payload) }
+                    return frameHandler
+                }
+                handler?(payload)
+            }
+        }
+    }
 
     /// Runs once when the stream ends, at once if it already has.
     public func onClose(_ handler: @escaping @Sendable () -> Void) {
@@ -227,11 +274,11 @@ public final class LinkServer: @unchecked Sendable {
     }
 
     private func serve(_ stream: NWConnection) async {
-        guard let key = LinkQUIC.peerKey(of: stream), let request = try? await LinkQUIC.receive(stream) else {
+        guard let key = LinkQUIC.peerKey(of: stream), let request = try? await LinkQUIC.receiveRequest(stream) else {
             stream.cancel()
             return
         }
-        switch await handler(key, request) {
+        switch await handler(key, request.request) {
         case .response(let response):
             try? await LinkQUIC.send(response, on: stream)
         case .stream(let open):
@@ -243,6 +290,7 @@ public final class LinkServer: @unchecked Sendable {
                 stream.cancel()
             }
             open(pushed)
+            if request.channel { pushed.readFrames() }
         }
     }
 }
@@ -282,8 +330,40 @@ public final class LinkSubscription: Sendable {
     public func cancel() { connection.cancel() }
 }
 
+/// A stream both ways: the Hub pushes frames, and this side sends its own on the same stream,
+/// without opening a connection for each.
+public final class LinkChannel: Sendable {
+    public let frames: AsyncThrowingStream<Data, Error>
+    private let subscription: LinkSubscription
+    private let connection: NWConnection
+
+    init(connection: NWConnection, endpoint: LinkEndpoint) {
+        self.connection = connection
+        subscription = LinkSubscription(connection: connection, endpoint: endpoint)
+        frames = subscription.frames
+    }
+
+    public func send(_ payload: Data) {
+        connection.send(content: LinkQUIC.frame(payload), completion: .contentProcessed { [connection] error in
+            if error != nil { connection.cancel() }
+        })
+    }
+
+    public func cancel() { connection.cancel() }
+}
+
 /// Sends one request to a Hub whose key is pinned, trying every endpoint at once.
 public enum LinkClient {
+    /// Opens a channel: the request goes as a frame, and the stream stays open both ways.
+    public static func channel(_ request: Data, identity: LinkIdentity, hubKey: LinkPublicKey,
+                               endpoints: [LinkEndpoint], timeout: Duration = .seconds(10)) async throws -> LinkChannel {
+        guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.") }
+        let (connection, endpoint) = try await firstReady(endpoints, identity: identity, hubKey: hubKey, timeout: timeout)
+        let channel = LinkChannel(connection: connection, endpoint: endpoint)
+        channel.send(request)
+        return channel
+    }
+
     /// Opens a stream the Hub keeps pushing frames down.
     public static func subscribe(_ request: Data, identity: LinkIdentity, hubKey: LinkPublicKey,
                                  endpoints: [LinkEndpoint], timeout: Duration = .seconds(10)) async throws -> LinkSubscription {

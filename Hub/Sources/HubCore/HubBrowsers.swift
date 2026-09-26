@@ -81,10 +81,13 @@ import NoodleCore
         publish()
     }
 
-    /// A tab of one of the user's browsers, as a person watching it sees it.
-    public func surfaceFrame(browser: UUID, tab: UUID, for user: HubUser) async throws -> SurfaceFrame? {
+    /// A tab of one of the user's browsers as video, the packets after `sequence`. Reading keeps
+    /// the browser's bots off it while the person watches.
+    public func surfacePackets(browser: UUID, tab: UUID, after sequence: UInt64, for user: HubUser) async throws -> [SurfacePacket] {
         try owned(browser, by: user)
-        return try await call(BrowserRequest(.surfaceFrame, browserID: browser, tabID: tab)).checked().surfaceFrame
+        var request = BrowserRequest(.surfaceFrame, browserID: browser, tabID: tab)
+        request.surfaceAfter = sequence
+        return try await call(request).checked().surfacePackets.flatMap(SurfacePacket.decode) ?? []
     }
 
     /// What a person watching one of the user's tabs did.

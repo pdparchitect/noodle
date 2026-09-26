@@ -143,6 +143,8 @@ public struct BrowserRequest: Codable, Sendable {
     public var arguments: String?
     public var profile: BrowserDraft?
     public var surfaceInput: SurfaceInput?
+    /// For surface-frame: the last packet this viewer has, 0 for none.
+    public var surfaceAfter: UInt64?
     public init(_ operation: BrowserOperation, browserID: UUID? = nil, tabID: UUID? = nil) {
         self.operation = operation; self.browserID = browserID; self.tabID = tabID
     }
@@ -213,7 +215,8 @@ public struct BrowserResponse: Codable, Sendable {
     public var totalCount: Int?
     public var offset: Int?
     public var limit: Int?
-    public var surfaceFrame: SurfaceFrame?
+    /// Encoded video packets, as `SurfacePacket.encode` writes them.
+    public var surfacePackets: Data?
     public var error: String?
     public init(error: String? = nil) { self.error = error }
     public func checked() throws -> Self {

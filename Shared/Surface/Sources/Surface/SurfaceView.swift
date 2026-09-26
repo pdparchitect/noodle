@@ -1,18 +1,60 @@
+import AVFoundation
 import SwiftUI
 
-/// Shows a surface's latest frame and turns what the person does over it into `SurfaceInput`.
+/// Where a live view's packets arrive. The view hands them straight to the display layer,
+/// without redrawing SwiftUI for every frame.
+@MainActor public final class SurfaceFeed {
+    /// The surface's size in points, once the first packet says it.
+    public private(set) var size: CGSize = .zero
+    public private(set) var hasPicture = false
+    fileprivate var show: ((SurfacePacket) -> Void)?
+    fileprivate var keyboard: (() -> Void)?
+    public var onFirstPicture: (() -> Void)?
+
+    public init() {}
+
+    /// Shows or hides the phone's keyboard, which types into whatever the person tapped.
+    public func toggleKeyboard() { keyboard?() }
+
+    public func receive(_ packets: [SurfacePacket]) {
+        for packet in packets {
+            size = packet.size
+            show?(packet)
+            if !hasPicture, packet.keyFrame { hasPicture = true; onFirstPicture?() }
+        }
+    }
+}
+
+/// Shows a surface's live video and turns what the person does over it into `SurfaceInput`.
 public struct SurfaceView: View {
-    let frame: SurfaceFrame?
+    let feed: SurfaceFeed
     let send: (SurfaceInput) -> Void
 
-    public init(frame: SurfaceFrame?, send: @escaping (SurfaceInput) -> Void) {
-        self.frame = frame
+    public init(feed: SurfaceFeed, send: @escaping (SurfaceInput) -> Void) {
+        self.feed = feed
         self.send = send
     }
 
     public var body: some View {
-        SurfaceCanvas(frame: frame, send: send)
-            .background(.black)
+        SurfaceCanvas(feed: feed, send: send).background(.black)
+    }
+}
+
+/// Decodes packets into the layer, starting at a key frame and whenever the stream's format changes.
+@MainActor private final class SurfaceDisplay {
+    let layer = AVSampleBufferDisplayLayer()
+    private var format: CMVideoFormatDescription?
+
+    init() { layer.videoGravity = .resizeAspect }
+
+    func show(_ packet: SurfacePacket) {
+        if packet.keyFrame, let next = SurfaceSamples.format(packet) {
+            if let format, !CMFormatDescriptionEqual(format, otherFormatDescription: next) { layer.sampleBufferRenderer.flush() }
+            format = next
+        }
+        guard let format, let sample = SurfaceSamples.sample(packet, format: format) else { return }
+        if layer.sampleBufferRenderer.status == .failed { layer.sampleBufferRenderer.flush() }
+        layer.sampleBufferRenderer.enqueue(sample)
     }
 }
 
@@ -20,44 +62,35 @@ public struct SurfaceView: View {
 import AppKit
 
 private struct SurfaceCanvas: NSViewRepresentable {
-    let frame: SurfaceFrame?
+    let feed: SurfaceFeed
     let send: (SurfaceInput) -> Void
 
-    func makeNSView(context: Context) -> SurfaceNSView { SurfaceNSView() }
+    func makeNSView(context: Context) -> SurfaceNSView { SurfaceNSView(feed: feed) }
 
-    func updateNSView(_ view: SurfaceNSView, context: Context) {
-        view.send = send
-        view.show(frame)
-    }
+    func updateNSView(_ view: SurfaceNSView, context: Context) { view.send = send }
 }
 
 final class SurfaceNSView: NSView {
     var send: (SurfaceInput) -> Void = { _ in }
-    private var frameSize: CGSize = .zero
-    private var picture: CGImage?
+    private let feed: SurfaceFeed
+    private let display = SurfaceDisplay()
+
+    init(feed: SurfaceFeed) {
+        self.feed = feed
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.cgColor
+        layer?.addSublayer(display.layer)
+        feed.show = { [display] in display.show($0) }
+    }
+    required init?(coder: NSCoder) { nil }
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
 
-    func show(_ frame: SurfaceFrame?) {
-        guard let frame else { return }
-        frameSize = frame.size
-        picture = frame.cgImage
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.black.setFill()
-        bounds.fill()
-        guard let picture, let context = NSGraphicsContext.current?.cgContext else { return }
-        let rect = SurfaceGeometry.fitted(frameSize, in: bounds.size)
-        context.saveGState()
-        // The view is flipped; draw the picture upright.
-        context.translateBy(x: 0, y: bounds.height)
-        context.scaleBy(x: 1, y: -1)
-        context.interpolationQuality = .high
-        context.draw(picture, in: CGRect(x: rect.minX, y: bounds.height - rect.maxY, width: rect.width, height: rect.height))
-        context.restoreGState()
+    override func layout() {
+        super.layout()
+        display.layer.frame = bounds
     }
 
     override func updateTrackingAreas() {
@@ -68,7 +101,7 @@ final class SurfaceNSView: NSView {
 
     private func pointer(_ phase: SurfaceInput.Phase, _ event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        guard let target = SurfaceGeometry.surfacePoint(point, in: bounds.size, surface: frameSize) else { return }
+        guard let target = SurfaceGeometry.surfacePoint(point, in: bounds.size, surface: feed.size) else { return }
         send(.pointer(phase, x: target.x, y: target.y, clickCount: max(1, event.clickCount)))
     }
 
@@ -79,7 +112,7 @@ final class SurfaceNSView: NSView {
 
     override func scrollWheel(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        guard let target = SurfaceGeometry.surfacePoint(point, in: bounds.size, surface: frameSize) else { return }
+        guard let target = SurfaceGeometry.surfacePoint(point, in: bounds.size, surface: feed.size) else { return }
         let scale = event.hasPreciseScrollingDeltas ? 1.0 : 10.0
         send(.scroll(x: target.x, y: target.y, dx: -event.scrollingDeltaX * scale, dy: -event.scrollingDeltaY * scale))
     }
@@ -96,27 +129,27 @@ final class SurfaceNSView: NSView {
 import UIKit
 
 private struct SurfaceCanvas: UIViewRepresentable {
-    let frame: SurfaceFrame?
+    let feed: SurfaceFeed
     let send: (SurfaceInput) -> Void
 
-    func makeUIView(context: Context) -> SurfaceUIView { SurfaceUIView() }
+    func makeUIView(context: Context) -> SurfaceUIView { SurfaceUIView(feed: feed) }
 
-    func updateUIView(_ view: SurfaceUIView, context: Context) {
-        view.send = send
-        view.show(frame)
-    }
+    func updateUIView(_ view: SurfaceUIView, context: Context) { view.send = send }
 }
 
-final class SurfaceUIView: UIView {
+/// Taps click and a finger drag scrolls, as in Safari; the keyboard types into what is focused.
+final class SurfaceUIView: UIView, UIKeyInput {
     var send: (SurfaceInput) -> Void = { _ in }
-    private let picture = UIImageView()
-    private var frameSize: CGSize = .zero
+    private let feed: SurfaceFeed
+    private let display = SurfaceDisplay()
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+    init(feed: SurfaceFeed) {
+        self.feed = feed
+        super.init(frame: .zero)
         backgroundColor = .black
-        picture.contentMode = .scaleAspectFit
-        addSubview(picture)
+        layer.addSublayer(display.layer)
+        feed.show = { [display] in display.show($0) }
+        feed.keyboard = { [weak self] in self?.toggleKeyboard() }
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tap)))
         addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(pan)))
     }
@@ -124,17 +157,16 @@ final class SurfaceUIView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        picture.frame = bounds
+        display.layer.frame = bounds
     }
 
-    func show(_ frame: SurfaceFrame?) {
-        guard let frame, let image = frame.cgImage else { return }
-        frameSize = frame.size
-        picture.image = UIImage(cgImage: image)
-    }
+    override var canBecomeFirstResponder: Bool { true }
+    var hasText: Bool { true }
+    func insertText(_ text: String) { send(text == "\n" ? .key(.enter) : .text(text)) }
+    func deleteBackward() { send(.key(.backspace)) }
 
     private func target(_ gesture: UIGestureRecognizer) -> CGPoint? {
-        SurfaceGeometry.surfacePoint(gesture.location(in: self), in: bounds.size, surface: frameSize)
+        SurfaceGeometry.surfacePoint(gesture.location(in: self), in: bounds.size, surface: feed.size)
     }
 
     @objc private func tap(_ gesture: UITapGestureRecognizer) {
@@ -143,13 +175,15 @@ final class SurfaceUIView: UIView {
         send(.pointer(.up, x: point.x, y: point.y))
     }
 
-    /// A finger drag scrolls the page, as it would in Safari.
     @objc private func pan(_ gesture: UIPanGestureRecognizer) {
         guard let point = target(gesture) else { return }
         let moved = gesture.translation(in: self)
         gesture.setTranslation(.zero, in: self)
-        let scale = frameSize.width / max(1, SurfaceGeometry.fitted(frameSize, in: bounds.size).width)
+        let scale = feed.size.width / max(1, SurfaceGeometry.fitted(feed.size, in: bounds.size).width)
         send(.scroll(x: point.x, y: point.y, dx: -moved.x * scale, dy: -moved.y * scale))
     }
+
+    /// Shows or hides the keyboard, which types into whatever the person tapped.
+    func toggleKeyboard() { if isFirstResponder { resignFirstResponder() } else { becomeFirstResponder() } }
 }
 #endif

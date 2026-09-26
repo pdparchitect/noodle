@@ -201,7 +201,7 @@ import SwiftUI
             guard let index = agents.firstIndex(where: { $0.id == id }) else { return }
             agents[index].phase = phase
         // Tool connections, computers and browsers are managed from Noodle on the Mac for now.
-        case .connectionsChanged, .signInPage, .computersChanged, .computerCreated, .browsersChanged, .surfaceOpened, .surfaceFrame:
+        case .connectionsChanged, .signInPage, .computersChanged, .computerCreated, .browsersChanged, .surfaceOpened:
             return
         }
         saveCache()

@@ -54,14 +54,11 @@ import Observation
 
     public func owns(conversation id: UUID) -> Bool { entries.contains { $0.conversation == id } }
 
-    /// Opens the live view of what a card in a conversation here points at, kept on the Hub.
-    public func openSurface(attachment: UUID, in conversation: UUID) async throws -> AsyncThrowingStream<LinkEvent, Error> {
+    /// Opens the live view of what a link in a conversation here points at, kept on the Hub. Video
+    /// comes down the channel as `LinkSurface` messages; send input up it with `LinkSurface.input`.
+    public func openSurface(attachment: UUID, in conversation: UUID) async throws -> LinkChannel {
         guard let entry = entries.first(where: { $0.conversation == conversation }) else { throw LinkError("That conversation is not on this Hub.") }
-        return try await pairing.stream(.openSurface(conversationID: entry.remoteConversation, attachmentID: attachment))
-    }
-
-    public func sendSurfaceInput(_ input: SurfaceInput, session: UUID) async throws {
-        _ = try await pairing.request(.surfaceInput(sessionID: session, input))
+        return try await pairing.channel(.openSurface(conversationID: entry.remoteConversation, attachmentID: attachment))
     }
 
     /// The Hub harness a local stand-in runs on.
@@ -286,7 +283,7 @@ import Observation
                     case .browsersChanged:
                         try await syncBrowsers()
                     // Surfaces have their own streams.
-                    case .surfaceOpened, .surfaceFrame:
+                    case .surfaceOpened:
                         break
                     case .computerCreated(let id, let computer, let error):
                         if let computer { making.removeValue(forKey: id)?.resume(returning: computer) }

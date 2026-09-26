@@ -221,8 +221,9 @@ final class ProtocolTests: XCTestCase {
     }
     /// A terminal shows its latest output, without colour codes, and takes keys as the bytes a shell expects.
     func testTerminalsBecomeSurfaces() throws {
-        let frame = try XCTUnwrap(TerminalSurface.frame(Data("\u{1b}[32muser@box\u{1b}[0m:~$ ls\r\nnotes.txt\r\n".utf8)))
-        XCTAssertGreaterThan(frame.width, 0)
+        let frame = try XCTUnwrap(TerminalSurface.picture(Data("\u{1b}[32muser@box\u{1b}[0m:~$ ls\r\nnotes.txt\r\n".utf8)))
+        XCTAssertGreaterThan(frame.size.width, 0)
+        XCTAssertGreaterThan(frame.image.width, 0)
         XCTAssertEqual(TerminalSurface.plainText(Data("\u{1b}[1;31mred\u{1b}[0m text".utf8)), "red text")
         XCTAssertEqual(TerminalSurface.bytes(for: .text("ls")), Data("ls".utf8))
         XCTAssertEqual(TerminalSurface.bytes(for: .key(.enter)), Data("\r".utf8))

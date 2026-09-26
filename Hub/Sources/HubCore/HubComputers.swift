@@ -84,10 +84,14 @@ import NoodleCore
         publish()
     }
 
-    /// One of the user's computers as a person watching it sees it: its display, or the bot's terminal.
-    public func surfaceFrame(computer: UUID, terminal: UUID?, bot: UUID, for user: HubUser) async throws -> SurfaceFrame? {
+    /// One of the user's computers as video, its display or the bot's terminal, the packets after
+    /// `sequence`. Reading keeps the computer's bots off it while the person watches.
+    public func surfacePackets(computer: UUID, terminal: UUID?, bot: UUID, after sequence: UInt64,
+                               for user: HubUser) async throws -> [SurfacePacket] {
         try owned(computer, by: user)
-        return try await call(ComputerRequest(.surfaceFrame, computerID: computer, agentID: bot, terminalID: terminal)).checked().surfaceFrame
+        var request = ComputerRequest(.surfaceFrame, computerID: computer, agentID: bot, terminalID: terminal)
+        request.surfaceAfter = sequence
+        return try await call(request).checked().surfacePackets.flatMap(SurfacePacket.decode) ?? []
     }
 
     /// What a person watching one of the user's computers did.
