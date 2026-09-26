@@ -30,7 +30,7 @@ remains in development until its first dated version section is prepared. PRs va
 
 See [Computer releases](../Computer/RELEASING.md), [Applet releases](../Applet/RELEASING.md), [Browser releases](../Browser/RELEASING.md), and [Hub releases](../Hub/RELEASING.md)
 for their separate download channels, and [image releases](../Computer/RELEASING.md#computer-images) for registry checks.
-Mobile has no download: each release goes to TestFlight, which offers it to the app's internal testers.
+Mobile has no download: each release goes to TestFlight, and anyone can join the beta from the [public link](https://testflight.apple.com/join/wYKkNSP9).
 
 ## Download filenames
 

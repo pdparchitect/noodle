@@ -44,17 +44,18 @@ Agents run on the [harness](docs/harness-setup.md) you choose, using your existi
 
 ## Download
 
-| App | What it does | Minimum macOS |
+| App | What it does | Minimum OS |
 | --- | --- | --- |
-| **[Noodle Suite](https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Suite-arm64.dmg)** | Noodle and its released companion apps in one installer. Each app updates independently. | 26 |
-| **[Noodle](https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg)** | Work with agents individually or as a team. | 26 |
-| **[Noodle Computer](https://github.com/pdparchitect/noodle/releases/download/computer-latest/Noodle-Computer-arm64.dmg)** | Linux and macOS computers for you and your agents. | 26 |
-| **[Noodle Applet](https://github.com/pdparchitect/noodle/releases/download/applet-latest/Noodle-Applet-arm64.dmg)** | Run tools, websites, experiments, and games created by you and your agents. | 15 |
-| **[Noodle Browser](https://github.com/pdparchitect/noodle/releases/download/browser-latest/Noodle-Browser-arm64.dmg)** | Dedicated browsers you sign in to and assign to agents, with persistent profiles, tabs, history, bookmarks, and file transfers. | 26 |
-| **[Noodle Hub](https://github.com/pdparchitect/noodle/releases/download/hub-latest/Noodle-Hub-arm64.dmg)** | Share your harnesses with family and friends from an always-on Mac. Their bots run there, with your sign-ins kept on the Hub. | 26 |
+| **[Noodle Suite](https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Suite-arm64.dmg)** | Noodle and its released companion apps in one installer. Each app updates independently. | macOS 26 |
+| **[Noodle](https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg)** | Work with agents individually or as a team. | macOS 26 |
+| **[Noodle Computer](https://github.com/pdparchitect/noodle/releases/download/computer-latest/Noodle-Computer-arm64.dmg)** | Linux and macOS computers for you and your agents. | macOS 26 |
+| **[Noodle Applet](https://github.com/pdparchitect/noodle/releases/download/applet-latest/Noodle-Applet-arm64.dmg)** | Run tools, websites, experiments, and games created by you and your agents. | macOS 15 |
+| **[Noodle Browser](https://github.com/pdparchitect/noodle/releases/download/browser-latest/Noodle-Browser-arm64.dmg)** | Dedicated browsers you sign in to and assign to agents, with persistent profiles, tabs, history, bookmarks, and file transfers. | macOS 26 |
+| **[Noodle Hub](https://github.com/pdparchitect/noodle/releases/download/hub-latest/Noodle-Hub-arm64.dmg)** | Share your harnesses with family and friends from an always-on Mac. Their bots run there, with your sign-ins kept on the Hub. | macOS 26 |
+| **[Noodle Mobile](https://testflight.apple.com/join/wYKkNSP9)** | Chat with the agents on your Noodle Hub from iPhone and iPad. Beta on TestFlight: open the link on your phone. | iOS 26 |
 
-Each link downloads the DMG. Open it and drag the app to **Applications**. ZIP downloads are on the [releases page](https://github.com/pdparchitect/noodle/releases).
-Noodle Computer, Noodle Applet, Noodle Browser, and Noodle Hub are optional companions and also work on their own.
+Each Mac link downloads the DMG. Open it and drag the app to **Applications**. ZIP downloads are on the [releases page](https://github.com/pdparchitect/noodle/releases).
+Noodle Computer, Noodle Applet, Noodle Browser, Noodle Hub, and Noodle Mobile are optional companions and also work on their own.
 
 ## Get started
 
