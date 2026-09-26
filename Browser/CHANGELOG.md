@@ -4,7 +4,7 @@
 
 ### Added
 
-- Let Noodle Hub show a tab live to the person who owns the browser and take their clicks, typing and scrolling, even while bots are paused.
+- Let Noodle Hub show a browser live to the person who owns it, its tab strip above the page as in its window, and take their clicks, typing and scrolling, even while bots are paused. Clicking the strip selects, closes and opens tabs, so a link that opens a new tab shows up there.
 - Let Noodle and Noodle Hub make, rename and delete browsers, so you can set up a bot's browser without switching apps. Bots themselves still cannot.
 
 ### Changed

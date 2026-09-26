@@ -140,8 +140,8 @@ final class NoodleStore {
     var pendingHubInvitation: String?
     /// This Mac's copy of the bots it keeps on each joined Hub.
     private(set) var hubMirrors: [HubMirror] = []
-    /// Opens the live view of a card whose browser runs on a Noodle Hub.
-    @ObservationIgnored var openSurfaceWindow: ((HubSurfaceTarget) -> Void)?
+    /// Live views of what Hub bots' links point at.
+    @ObservationIgnored let surfacePanels = HubSurfacePanels()
     @ObservationIgnored private var hubMirrorTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     let harnessSetup: HarnessSetupController
     private let connectsServices: Bool

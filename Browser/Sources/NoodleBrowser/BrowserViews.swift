@@ -164,7 +164,6 @@ private struct BrowserDetailView: View {
     @ObservedObject var presentation: BrowserPresentation
     let profile: BrowserProfile
     let sidebarCollapsed: Bool
-    @State private var tabStripWidth: CGFloat = 0
     private var selected: BrowserTab? { presentation.currentTab }
 
     var body: some View {
@@ -231,12 +230,38 @@ private struct BrowserDetailView: View {
     }
 
     private var tabStrip: some View {
+        BrowserTabStrip(tabs: profile.tabs, selectedTabID: profile.selectedTabID, select: presentation.selectTab, close: { id in
+            do { try presentation.runtime.closeTab(browserID: profile.id, tabID: id) } catch { presentation.runtime.failure = error.localizedDescription }
+        }, newTab: presentation.newTab)
+    }
+}
+
+/// What can be clicked in a tab strip.
+enum BrowserTabStripTarget: Hashable {
+    case tab(UUID), close(UUID), newTab
+}
+
+/// A browser's tabs, as its window shows them above the page and as a live view of it does.
+/// `layout` hears where each target sits, for a strip drawn somewhere nobody clicks it directly.
+struct BrowserTabStrip: View {
+    static let height: CGFloat = 32 + 2 * browserTabInset
+
+    let tabs: [BrowserTabInfo]
+    let selectedTabID: UUID?
+    let select: (UUID) -> Void
+    let close: (UUID) -> Void
+    let newTab: () -> Void
+    var layout: (([BrowserTabStripTarget: CGRect]) -> Void)?
+    @State private var width: CGFloat = 0
+    @State private var targets: [BrowserTabStripTarget: CGRect] = [:]
+
+    var body: some View {
         HStack(spacing: 4) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 3) {
-                    ForEach(profile.tabs) { tab in
+                    ForEach(tabs) { tab in
                         ZStack(alignment: .trailing) {
-                            Button { presentation.selectTab(tab.id) } label: {
+                            Button { select(tab.id) } label: {
                                 HStack(spacing: 7) {
                                     Image(systemName: "globe").font(.caption).foregroundStyle(.secondary)
                                     Text(tab.title).font(.system(size: 12.5)).lineLimit(1)
@@ -246,28 +271,39 @@ private struct BrowserDetailView: View {
                                 .contentShape(Rectangle())
                             }
                             .accessibilityIdentifier("browser.tab.\(tab.id)")
-                            Button {
-                                do { try presentation.runtime.closeTab(browserID: profile.id, tabID: tab.id) } catch { presentation.runtime.failure = error.localizedDescription }
-                            } label: {
+                            .located(.tab(tab.id), in: $targets)
+                            Button { close(tab.id) } label: {
                                 Image(systemName: "xmark").font(.system(size: 9, weight: .semibold))
                                     .frame(width: 24, height: 32).contentShape(Rectangle())
                             }.padding(.trailing, 4).help("Close Tab")
                                 .accessibilityIdentifier("browser.tab.close.\(tab.id)")
+                                .located(.close(tab.id), in: $targets)
                         }.buttonStyle(.plain)
-                            .background(profile.selectedTabID == tab.id ? Color.primary.opacity(0.10) : Color.clear,
+                            .background(selectedTabID == tab.id ? Color.primary.opacity(0.10) : Color.clear,
                                 in: RoundedRectangle(cornerRadius: browserTabCornerRadius, style: .continuous))
                             .fixedSize()
                     }
                     // Only the space after the last tab opens a tab; the tabs are
                     // siblings, so double-clicking one never reaches this gesture.
                     Color.clear.frame(height: 32).contentShape(Rectangle())
-                        .onTapGesture(count: 2) { presentation.newTab() }
+                        .onTapGesture(count: 2) { newTab() }
                         .accessibilityHidden(true)
-                }.frame(minWidth: tabStripWidth, alignment: .leading)
-            }.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { tabStripWidth = $0 }
-            Button { presentation.newTab() } label: { Image(systemName: "plus") }.buttonStyle(.borderless).help("New Tab").padding(.horizontal, 8)
+                }.frame(minWidth: width, alignment: .leading)
+            }.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+            Button { newTab() } label: { Image(systemName: "plus") }.buttonStyle(.borderless).help("New Tab").padding(.horizontal, 8)
                 .accessibilityIdentifier("browser.tab.new")
+                .located(.newTab, in: $targets)
         }.padding(browserTabInset)
+            .coordinateSpace(.named(BrowserTabStripSpace.name))
+            .onChange(of: targets) { layout?(targets) }
+    }
+}
+
+private enum BrowserTabStripSpace { static let name = "BrowserTabStrip" }
+
+private extension View {
+    func located(_ target: BrowserTabStripTarget, in targets: Binding<[BrowserTabStripTarget: CGRect]>) -> some View {
+        onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BrowserTabStripSpace.name)) } action: { targets.wrappedValue[target] = $0 }
     }
 }
 

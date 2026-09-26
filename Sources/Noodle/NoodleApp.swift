@@ -148,17 +148,6 @@ struct NoodleApp: App {
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified(showsTitle: false))
 
-        WindowGroup("Live View", id: HubSurfaceTarget.windowID, for: HubSurfaceTarget.self) { $target in
-            if let target {
-                HubSurfaceWindow(target: target)
-                    .environment(store)
-                    .preferredColorScheme(.dark)
-            }
-        }
-        .defaultSize(width: 1100, height: 760)
-        .restorationBehavior(.disabled)
-        .commandsRemoved()
-
         Window("Usage", id: UsageView.windowID) {
             NoodleUsageView()
                 .environment(store)
@@ -316,7 +305,6 @@ struct RootView: View {
         .task(id: store.storageReady) {
             guard store.storageReady else { return }
             store.conversationWindows.openMainWindow = { openWindow(id: "main") }
-            store.openSurfaceWindow = { openWindow(id: HubSurfaceTarget.windowID, value: $0) }
             store.conversationWindows.restoreWindows { id in
                 // A conversation left floating comes back as a panel, not a scene window.
                 if FloatingConversations.shared.contains(id) { store.floatConversation(id) }

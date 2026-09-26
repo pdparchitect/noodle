@@ -44,12 +44,8 @@ enum BrowserDetailMode: String, CaseIterable, Identifiable {
     }
     func selectTab(_ id: UUID) {
         guard let selection else { return }
-        do {
-            var profile = try library.profile(selection)
-            guard profile.tabs.contains(where: { $0.id == id }) else { throw BrowserError("Tab not found in this browser.") }
-            profile.selectedTabID = id; try library.update(profile)
-            _ = try runtime.tab(browserID: selection, tabID: id); mode = .browser
-        } catch { runtime.failure = error.localizedDescription }
+        do { try runtime.selectTab(browserID: selection, tabID: id); mode = .browser }
+        catch { runtime.failure = error.localizedDescription }
     }
     func navigate(_ value: String, newTab: Bool = false) {
         guard let selection else { return }

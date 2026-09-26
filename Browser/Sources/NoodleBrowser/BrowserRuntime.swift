@@ -15,7 +15,7 @@ import WebKit
     private var activeDownloads: [ObjectIdentifier: (download: WKDownload?, browserID: UUID, record: BrowserDownloadInfo)] = [:]
     private var busy: Set<UUID> = []
     private var deleting: Set<UUID> = []
-    /// Live views of tabs, by tab. While one is watched, bots are kept off its browser.
+    /// Live views, by browser. While one is watched, bots are kept off that browser.
     private var surfaces: [UUID: SurfaceStreamer] = [:]
     private let transferRoot: URL?
     init(library: BrowserLibrary, transferRoot: URL? = nil) { self.library = library; self.transferRoot = transferRoot; super.init() }
@@ -68,15 +68,18 @@ import WebKit
         if profile.tabs.isEmpty { _ = try makeTab(browserID: id) }
         else if let tabID = profile.selectedTabID ?? profile.tabs.first?.id { _ = try tab(browserID: id, tabID: tabID) }
     }
-    /// Someone is watching one of the browser's tabs live.
-    func isWatched(_ browser: UUID) -> Bool {
-        surfaces.contains { tabID, streamer in tabs[tabID]?.browserID == browser && streamer.isWatched }
+    /// Someone is watching the browser live.
+    func isWatched(_ browser: UUID) -> Bool { surfaces[browser]?.isWatched == true }
+    func selectTab(browserID: UUID, tabID: UUID) throws {
+        var profile = try library.profile(browserID)
+        guard profile.tabs.contains(where: { $0.id == tabID }) else { throw BrowserError("Tab not found in this browser.") }
+        profile.selectedTabID = tabID; try library.update(profile)
+        _ = try tab(browserID: browserID, tabID: tabID)
     }
     func closeTab(browserID: UUID, tabID: UUID) throws {
         var profile = try library.profile(browserID)
         guard profile.tabs.contains(where: { $0.id == tabID }) else { throw BrowserError("Tab not found in this browser.") }
         profile.tabs.removeAll { $0.id == tabID }
-        surfaces.removeValue(forKey: tabID)?.stop()
         if profile.selectedTabID == tabID { profile.selectedTabID = profile.tabs.first?.id }
         try library.update(profile)
         tabs.removeValue(forKey: tabID)?.stop()
@@ -94,6 +97,7 @@ import WebKit
         busy.insert(id); deleting.insert(id)
         defer { busy.remove(id); deleting.remove(id) }
         willRemoveBrowser?(id)
+        surfaces.removeValue(forKey: id)?.stop()
         for tab in tabs.values.filter({ $0.browserID == id }) { tabs.removeValue(forKey: tab.id)?.stop() }
         for (key, value) in activeDownloads where value.browserID == id {
             _ = await value.download?.cancel(); activeDownloads.removeValue(forKey: key)
@@ -181,10 +185,13 @@ import WebKit
         // A person may watch and use a tab while bots are paused, and alongside a bot's own call.
         if request.operation == .surfaceStream {
             guard let surface else { throw BrowserError("A live view needs a connection of its own.") }
-            let tab = try tab(browserID: id, tabID: request.tabID!)
-            let streamer = surfaces[tab.id] ?? SurfaceStreamer(capture: { [weak tab] in try await tab?.surfacePicture() },
-                                                              apply: { [weak tab] in try tab?.apply($0) })
-            surfaces[tab.id] = streamer
+            // The view opens on the tab its link names, as the browser's window would show it.
+            if let tabID = request.tabID, profile.tabs.contains(where: { $0.id == tabID }) { try selectTab(browserID: id, tabID: tabID) }
+            let streamer = surfaces[id] ?? {
+                let view = BrowserLiveView(browserID: id, runtime: self)
+                return SurfaceStreamer(capture: { try await view.picture() }, apply: { try view.apply($0) })
+            }()
+            surfaces[id] = streamer
             streamer.attach(surface)
             return response
         }
