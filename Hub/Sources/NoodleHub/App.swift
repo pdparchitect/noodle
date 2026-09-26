@@ -1,13 +1,22 @@
 import AppKit
 import HubCore
 import HubLink
+import NoodleLaunchChecks
 import NoodleRuntimeSettings
 import SwiftUI
 
 /// "Noodle Hub Dev" in development builds, so they are told apart from a released Hub running beside them.
 let hubAppName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Noodle Hub"
 
-@main struct NoodleHubApp: App {
+/// Claims the app's single running copy before SwiftUI makes its delegate, which opens its data.
+@main enum NoodleHubEntry {
+    static func main() {
+        AppInstance.claim()
+        NoodleHubApp.main()
+    }
+}
+
+struct NoodleHubApp: App {
     @NSApplicationDelegateAdaptor(HubDelegate.self) private var delegate
 
     var body: some Scene {

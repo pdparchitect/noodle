@@ -15,6 +15,10 @@
 
 - Remove .noodlecomputer files and their Quick Look previews. Noodle shares computers as links now, which select and start the computer.
 
+### Fixed
+
+- Opening the app again brings the copy already running to the front instead of starting a second one on the same data, however it is started.
+
 ## [0.14.0] - 2026-09-25
 
 ### Removed

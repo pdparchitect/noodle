@@ -13,6 +13,7 @@ let package = Package(
         .package(path: ".."),
         .package(path: "../Shared/SettingsUI"),
         .package(path: "../Shared/HubLink"),
+        .package(path: "../Shared/LaunchChecks"),
         .package(path: "../Computer/Bridge"),
         .package(path: "../Browser/BrowserProtocol"),
         .package(path: "../Applet/Protocol"),
@@ -37,6 +38,7 @@ let package = Package(
             dependencies: [
                 "HubCore",
                 .product(name: "HubLink", package: "HubLink"),
+                .product(name: "NoodleLaunchChecks", package: "LaunchChecks"),
                 .product(name: "NoodleRuntimeSettings", package: "noodle"),
                 .product(name: "NoodleSettingsUI", package: "SettingsUI"),
                 .product(name: "Sparkle", package: "Sparkle"),

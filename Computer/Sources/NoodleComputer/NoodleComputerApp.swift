@@ -8,7 +8,14 @@ import NoodleSettingsUI
 import UniformTypeIdentifiers
 import Virtualization
 
-@main
+/// Claims the app's single running copy before SwiftUI makes its delegate, which opens its data.
+@main enum NoodleComputerEntry {
+    static func main() {
+        AppInstance.claim()
+        NoodleComputerApp.main()
+    }
+}
+
 struct NoodleComputerApp: App {
   @NSApplicationDelegateAdaptor(ComputerAppDelegate.self) private var delegate
   @ObservedObject private var visibility = CompanionAppVisibility.shared

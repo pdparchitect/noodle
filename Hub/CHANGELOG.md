@@ -24,6 +24,7 @@
 
 ### Fixed
 
+- Opening the app again brings the copy already running to the front instead of starting a second one on the same data, however it is started.
 - Delete a removed tool connection's sign-in from Keychain even when the first try fails. The Hub tries again until it is gone.
 
 ## [0.2.0] - 2026-09-25

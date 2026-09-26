@@ -25,7 +25,15 @@ enum BrowserLaunchCheck {
     static let smoke = LaunchChecks.current.contains(smokeTest), ui = LaunchChecks.current.contains(uiTest)
 }
 
-@main struct NoodleBrowserApp: App {
+/// Claims the app's single running copy before SwiftUI makes its delegate, which opens its data.
+@main enum NoodleBrowserEntry {
+    static func main() {
+        AppInstance.claim()
+        NoodleBrowserApp.main()
+    }
+}
+
+struct NoodleBrowserApp: App {
     @NSApplicationDelegateAdaptor(BrowserAppDelegate.self) private var delegate
     @ObservedObject private var visibility = CompanionAppVisibility.shared
     init() {

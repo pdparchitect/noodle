@@ -31,6 +31,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Opening Noodle, Noodle Browser, Noodle Computer, Noodle Applet or Noodle Hub again brings the copy already running to the front instead of starting a second one on the same data, however it is started.
 - Delete a removed tool connection's sign-in from Keychain even when the first try fails. Noodle tries again until it is gone.
 
 ## [0.27.0] - 2026-09-25

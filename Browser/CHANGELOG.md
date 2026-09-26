@@ -15,6 +15,10 @@
 
 - Stop opening .noodlebrowser files. Noodle shares tabs as links now, which open the browser and the tab a bot shared.
 
+### Fixed
+
+- Opening the app again brings the copy already running to the front instead of starting a second one on the same data, however it is started.
+
 ## [0.5.1] - 2026-09-24
 
 ### Fixed

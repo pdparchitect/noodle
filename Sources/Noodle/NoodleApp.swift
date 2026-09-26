@@ -2,15 +2,22 @@ import AppKit
 import Darwin
 import SwiftUI
 import NoodleCore
+import NoodleLaunchChecks
 import NoodleRuntimeSettings
 import NoodleSettingsUI
 import UserNotifications
 #if NOODLE_DEV_HOOKS
-import NoodleLaunchChecks
 import os
 #endif
 
-@main
+/// Claims the app's single running copy before SwiftUI makes its delegate, which opens its data.
+@main enum NoodleEntry {
+    static func main() {
+        if !MessengerCLI.shouldHandle() { AppInstance.claim() }
+        NoodleApp.main()
+    }
+}
+
 struct NoodleApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var store: NoodleStore

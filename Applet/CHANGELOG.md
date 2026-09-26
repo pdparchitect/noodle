@@ -10,6 +10,10 @@
 
 - Stream live views to Noodle Hub as video. While someone watches a noodlet, bots cannot use it until they close the view.
 
+### Fixed
+
+- Opening the app again brings the copy already running to the front instead of starting a second one on the same data, however it is started.
+
 ## [0.10.0] - 2026-09-25
 
 ### Added

@@ -7,7 +7,15 @@ import SwiftUI
 import NoodleSettingsUI
 import OSLog
 
-@main struct NoodleAppletApp: App {
+/// Claims the app's single running copy before SwiftUI makes its delegate, which opens its data.
+@main enum NoodleAppletEntry {
+    static func main() {
+        AppInstance.claim()
+        NoodleAppletApp.main()
+    }
+}
+
+struct NoodleAppletApp: App {
   @NSApplicationDelegateAdaptor(AppletDelegate.self) private var delegate
   @ObservedObject private var visibility = CompanionAppVisibility.shared
 
