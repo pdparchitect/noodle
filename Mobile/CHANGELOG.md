@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Noodle writes its name on the first screen as it opens, then shows Pair.
+- Noodle opens with a swirl that rises from the bottom of the screen and writes its name, then shows Pair.
 
 ## [0.2.0] - 2026-09-26
 

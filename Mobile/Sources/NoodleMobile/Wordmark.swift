@@ -56,21 +56,78 @@ struct Wordmark: Shape {
         return path
     }()
 
+    /// How wide the word is drawn, centred in the shape's rect.
+    var wordWidth: CGFloat
+
+    /// The word centred in `rect`, led in by a swirl that rises from the bottom edge, curls once
+    /// and runs up into the `n`. The swirl's end follows the pen in, so only the word is left.
     func path(in rect: CGRect) -> Path {
-        let scale = Self.scale(in: rect)
+        let scale = wordWidth / Self.bounds.width
         guard scale > 0 else { return Path() }
-        let width = Self.bounds.width * scale, height = Self.bounds.height * scale
-        let transform = CGAffineTransform(translationX: rect.midX - width / 2, y: rect.midY - height / 2)
+        let height = Self.bounds.height * scale
+        let transform = CGAffineTransform(translationX: rect.midX - wordWidth / 2, y: rect.midY - height / 2)
             .scaledBy(x: scale, y: scale)
             .translatedBy(x: -Self.bounds.minX, y: -Self.bounds.minY)
-        let full = Self.skeleton.applying(transform)
-        return progress >= 1 ? full : full.trimmedPath(from: 0, to: max(0, progress))
+        let word = Self.skeleton.applying(transform)
+        if progress >= 1 { return word }
+
+        let pen = Self.pen * scale
+        let entry = CGPoint(x: 64, y: 906).applying(transform)
+        let radius = pen * 4, pull = radius * 0.5523
+        let curl = CGPoint(x: entry.x, y: entry.y + radius * 2.4)
+        let centre = CGPoint(x: curl.x - radius, y: curl.y)
+        let start = CGPoint(x: rect.midX, y: rect.maxY + pen)
+        let rise = start.y - curl.y
+        var path = Path()
+        path.move(to: start)
+        path.addCurve(to: curl, control1: CGPoint(x: start.x + radius * 3, y: start.y - rise * 0.45),
+                      control2: CGPoint(x: curl.x, y: curl.y + rise * 0.4))
+        path.addCurve(to: CGPoint(x: centre.x, y: centre.y - radius), control1: CGPoint(x: curl.x, y: curl.y - pull),
+                      control2: CGPoint(x: centre.x + pull, y: centre.y - radius))
+        path.addCurve(to: CGPoint(x: centre.x - radius, y: centre.y), control1: CGPoint(x: centre.x - pull, y: centre.y - radius),
+                      control2: CGPoint(x: centre.x - radius, y: centre.y - pull))
+        path.addCurve(to: CGPoint(x: centre.x, y: centre.y + radius), control1: CGPoint(x: centre.x - radius, y: centre.y + pull),
+                      control2: CGPoint(x: centre.x - pull, y: centre.y + radius))
+        path.addCurve(to: curl, control1: CGPoint(x: centre.x + pull, y: centre.y + radius),
+                      control2: CGPoint(x: curl.x, y: centre.y + pull))
+        path.addLine(to: entry)
+
+        let swirl = Self.length(of: path)
+        let total = swirl + Self.length(of: word)
+        path.addPath(word)
+        let swirlEnd = swirl / total
+        // How much of the swirl shows at once; shorter than the word, so its end is in before the pen finishes.
+        let body = min(swirlEnd * 0.6, 1 - swirlEnd)
+        let head = max(0, progress)
+        return path.trimmedPath(from: min(max(0, head - body), swirlEnd), to: head)
     }
 
-    /// The pen width for a word drawn into `rect`.
-    static func lineWidth(in rect: CGRect) -> CGFloat { pen * scale(in: rect) }
+    /// The pen width for a word drawn `wordWidth` wide.
+    static func lineWidth(forWordWidth wordWidth: CGFloat) -> CGFloat { pen * wordWidth / bounds.width }
 
-    private static func scale(in rect: CGRect) -> CGFloat {
-        min(rect.width / bounds.width, rect.height / bounds.height)
+    private static func length(of path: Path) -> CGFloat {
+        var length: CGFloat = 0, current = CGPoint.zero, first = CGPoint.zero
+        func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat { hypot(b.x - a.x, b.y - a.y) }
+        path.forEach { element in
+            switch element {
+            case .move(let to):
+                current = to; first = to
+            case .line(let to), .quadCurve(let to, _):
+                length += distance(current, to); current = to
+            case .curve(let to, let control1, let control2):
+                var previous = current
+                for step in 1...16 {
+                    let t = CGFloat(step) / 16, u = 1 - t
+                    let a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t
+                    let point = CGPoint(x: a * current.x + b * control1.x + c * control2.x + d * to.x,
+                                        y: a * current.y + b * control1.y + c * control2.y + d * to.y)
+                    length += distance(previous, point); previous = point
+                }
+                current = to
+            case .closeSubpath:
+                length += distance(current, first); current = first
+            }
+        }
+        return length
     }
 }

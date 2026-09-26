@@ -17,19 +17,16 @@ struct JoinView: View {
     @MainActor private static var wordmarkWritten = false
 
     var body: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            let size = CGSize(width: 220, height: 49)
-            Wordmark(progress: written ? 1 : 0)
+        ZStack {
+            Wordmark(progress: written ? 1 : 0, wordWidth: 220)
                 .stroke(.primary, style: StrokeStyle(
-                    lineWidth: Wordmark.lineWidth(in: CGRect(origin: .zero, size: size)),
-                    lineCap: .round, lineJoin: .round))
-                .frame(width: size.width, height: size.height)
+                    lineWidth: Wordmark.lineWidth(forWordWidth: 220), lineCap: .round, lineJoin: .round))
+                .ignoresSafeArea()
                 .accessibilityElement()
                 .accessibilityLabel("Noodle")
                 .accessibilityAddTraits(.isHeader)
-            Spacer()
-            Group {
+            VStack(spacing: 16) {
+                Spacer()
                 if hubs.isJoining {
                     ProgressView("Joining…")
                 } else if let message = problem ?? hubs.joinError {
@@ -44,10 +41,10 @@ struct JoinView: View {
                 .controlSize(.large)
                 .disabled(hubs.isJoining)
             }
+            .padding(24)
             .opacity(ready ? 1 : 0)
             .offset(y: ready ? 0 : 12)
         }
-        .padding(24)
         .pairing(isPresented: $choosing, problem: $problem)
         .onAppear {
             guard !written else { return }
@@ -56,9 +53,9 @@ struct JoinView: View {
                 written = true
                 ready = true
             } else {
-                // The films' pace: a short pause, 2.1 s of writing, then the button rises in.
-                withAnimation(.easeInOut(duration: 2.1).delay(0.55)) { written = true }
-                withAnimation(.easeOut(duration: 0.5).delay(2.75)) { ready = true }
+                // A short pause, the swirl and the word in one stroke, then the button rises in.
+                withAnimation(.easeInOut(duration: 3.4).delay(0.55)) { written = true }
+                withAnimation(.easeOut(duration: 0.5).delay(4.05)) { ready = true }
             }
         }
     }
