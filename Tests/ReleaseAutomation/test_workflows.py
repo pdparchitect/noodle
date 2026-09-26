@@ -249,6 +249,39 @@ class WorkflowTests(unittest.TestCase):
                         **environment, product.upper() + '_RESULT': failure}, capture_output=True)
                     self.assertNotEqual(failed.returncode, 0)
 
+    def test_testflight_handover_follows_only_complete_trusted_releases(self):
+        # Its own workflow, so waiting for Apple or failing there never holds back the Suite.
+        self.assertNotIn('testflight-mobile', self.jobs)
+        flow = workflow('testflight.yml')
+        triggers = flow.get('on', flow.get('true'))
+        self.assertEqual(triggers['workflow_run']['workflows'],
+                         ['Validate and release versions', 'Publish verified release artifacts'])
+        self.assertEqual(triggers['workflow_run']['types'], ['completed'])
+        self.assertEqual(flow['permissions'], {'contents': 'read'})
+        self.assertFalse(flow['concurrency']['cancel-in-progress'])
+        job = flow['jobs']['external']
+        values = {'github.ref': 'refs/heads/main', 'github.event_name': 'workflow_run',
+                  'github.repository': 'pdparchitect/noodle',
+                  'github.event.workflow_run.conclusion': 'success',
+                  'github.event.workflow_run.head_branch': 'main',
+                  'github.event.workflow_run.head_repository.full_name': 'pdparchitect/noodle',
+                  'github.event.workflow_run.event': 'push'}
+        self.assertTrue(condition(job['if'], values))
+        self.assertTrue(condition(job['if'], {**values, 'github.event_name': 'workflow_dispatch'}))
+        for changes in [
+            {'github.ref': 'refs/heads/feature'},
+            {'github.event.workflow_run.conclusion': 'failure'},
+            {'github.event.workflow_run.conclusion': 'cancelled'},
+            {'github.event.workflow_run.head_branch': 'feature'},
+            {'github.event.workflow_run.head_repository.full_name': 'someone/noodle'},
+            {'github.event.workflow_run.event': 'pull_request'},
+        ]:
+            self.assertFalse(condition(job['if'], {**values, **changes}))
+        checkout = job['steps'][0]
+        self.assertEqual(checkout['with']['fetch-depth'], 0)
+        self.assertIn('github.event.workflow_run.head_sha', checkout['with']['ref'])
+        self.assertIn('python3 scripts/testflight.py', json.dumps(job))
+
     def test_preparation_is_read_only_and_publication_uses_artifacts(self):
         for name in ['prepare-noodle-release.yml', 'computer-release.yml', 'applet-release.yml', 'browser-release.yml', 'hub-release.yml', 'mobile-release.yml', 'computer-images.yml']:
             prepare = workflow(name)

@@ -4,6 +4,14 @@
 
 ## [0.2.0] - 2026-09-26
 
+### What to Test
+
+- You need an invitation to a Noodle Hub. Join it by scanning its QR code, pasting its link or opening the link on the phone.
+- Chat with your bots: send messages, photos, files and voice messages, and react to replies.
+- Make a bot with New Bot, then change its picture, background, tools, computers and browsers in its settings.
+- Tap a browser, computer or noodlet a bot shares to use it live.
+- Join a second Hub from Profiles and switch between them, or show them all together.
+
 ### Added
 
 - Open a browser tab, computer or noodlet a bot shared: tap its card to see it live on the Hub's Mac, tap to click, drag to scroll, and type with the keyboard button. Turn the phone sideways to give it the whole screen. Its bot waits while you have it open. Cards show the latest picture of a noodlet and the latest lines of a computer's terminal.
