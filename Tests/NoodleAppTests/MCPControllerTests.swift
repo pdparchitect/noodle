@@ -157,6 +157,30 @@ import XCTest
         XCTAssertNil(f.controller.errorMessage)
     }
 
+    func testASignInThatFailsToDeleteIsDeletedWhenNoodleNextStarts() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-mcp-deletions-\(UUID())").resolvingSymlinksInPath()
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        let repository = WorkspaceRepository(rootURL: root)
+        try repository.prepare()
+        let keychain = RefusingControllerCredentials()
+        let service = MCPService(credentials: keychain, oauth: MCPOAuth(), httpConfiguration: { .ephemeral })
+        let account = try MCPConnectionRecord(name: "Fixture tools", endpoint: URL(string: "https://example.com/mcp")!)
+        let first = MCPController(repository: repository, service: service)
+        try first.save(account)
+        keychain.refusing = true
+        first.remove(account)
+        XCTAssertTrue(first.registry.connections.isEmpty, "Access must be revoked before the sign-in is deleted")
+        for _ in 0..<200 where first.errorMessage == nil { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertNotNil(first.errorMessage)
+        XCTAssertEqual(keychain.removed, [])
+
+        keychain.refusing = false
+        let next = MCPController(repository: repository, service: service)
+        next.start(agents: [])
+        for _ in 0..<200 where keychain.removed.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(keychain.removed, [account.id])
+    }
+
     // The request files, sessions and clean-up now belong to the tool bridge every provider
     // shares. These tests drive it with this controller's real connections behind it.
     func testBridgeSessionsArePrivateStableAndRotatedAfterAnAgentIsRemoved() throws {
@@ -411,4 +435,20 @@ private struct EmptyControllerCredentials: MCPCredentialStorage {
     }
     func save(_ credentials: MCPCredentials, id: UUID) { XCTFail("These tests must never authorize an account") }
     func remove(_ id: UUID) { removed?.fulfill() }
+}
+
+/// A Keychain that refuses deletions until told otherwise, and records the ones it made.
+private final class RefusingControllerCredentials: MCPCredentialStorage, @unchecked Sendable {
+    private let lock = NSLock()
+    private var refusal = false, deleted: [UUID] = []
+    var refusing: Bool { get { lock.withLock { refusal } } set { lock.withLock { refusal = newValue } } }
+    var removed: [UUID] { lock.withLock { deleted } }
+    func load(_ id: UUID) throws -> MCPCredentials? { nil }
+    func save(_ credentials: MCPCredentials, id: UUID) { XCTFail("These tests must never authorize an account") }
+    func remove(_ id: UUID) throws {
+        try lock.withLock {
+            if refusal { throw MCPServiceError.keychain(-25308) }
+            deleted.append(id)
+        }
+    }
 }

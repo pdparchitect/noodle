@@ -109,7 +109,8 @@ public struct MCPSettingsView: View {
 }
 
 public struct MCPEditor: View {
-    let controller: MCPController
+    /// Saves the connection wherever it is kept and returns it as saved.
+    private let saveRecord: (MCPConnectionRecord) async throws -> MCPConnectionRecord
     let existing: MCPConnectionRecord?
     let onBack: (() -> Void)?
     let onSaved: (MCPConnectionRecord) -> Void
@@ -121,12 +122,24 @@ public struct MCPEditor: View {
     @State private var instructions: String
     @State private var error: String?
     @State private var newConnectionID = UUID()
+    @State private var saving = false
     public init(controller: MCPController, existing: MCPConnectionRecord? = nil,
          onBack: (() -> Void)? = nil, onSaved: @escaping (MCPConnectionRecord) -> Void = { _ in },
          onConnect: ((MCPConnectionRecord) -> Void)? = nil) {
-        self.controller = controller; self.existing = existing
+        self.init(existing: existing, onBack: onBack, onSaved: onSaved, onConnect: onConnect ?? controller.connect) { record in
+            try controller.save(record)
+            return controller.registry.connections.first { $0.id == record.id } ?? record
+        }
+    }
+
+    /// For a connection kept somewhere other than this Mac, as on a Noodle Hub.
+    public init(existing: MCPConnectionRecord? = nil, onBack: (() -> Void)? = nil,
+                onSaved: @escaping (MCPConnectionRecord) -> Void = { _ in },
+                onConnect: @escaping (MCPConnectionRecord) -> Void,
+                save: @escaping (MCPConnectionRecord) async throws -> MCPConnectionRecord) {
+        self.saveRecord = save; self.existing = existing
         self.onBack = onBack; self.onSaved = onSaved
-        self.onConnect = onConnect ?? controller.connect
+        self.onConnect = onConnect
         _name = State(initialValue: existing?.name ?? "")
         _endpoint = State(initialValue: existing?.endpoint.absoluteString ?? "")
         _description = State(initialValue: existing?.description ?? "")
@@ -144,7 +157,7 @@ public struct MCPEditor: View {
                 Text(existing != nil ? "Edit MCP" : "Custom MCP").font(.headline)
                 Spacer()
                 Button(existing == nil ? "Add & Connect" : "Save", action: save)
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || endpoint.isEmpty)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || endpoint.isEmpty || saving)
                     .keyboardShortcut(.defaultAction)
             }.padding(16)
             Divider()
@@ -185,6 +198,13 @@ public struct MCPEditor: View {
         }.frame(width: 480)
     }
     private func save() {
+        saving = true
+        Task { @MainActor in
+            await submit()
+            saving = false
+        }
+    }
+    private func submit() async {
         do {
             guard let url = URL(string: endpoint.trimmingCharacters(in: .whitespacesAndNewlines)) else {
                 throw MCPConnectionError.message("Enter a valid HTTPS server URL.")
@@ -195,8 +215,7 @@ public struct MCPEditor: View {
             record.name = try ConversationName.validated(name)
             record.description = String(description.prefix(1_000))
             record.instructions = String(instructions.prefix(20_000))
-            try controller.save(record)
-            record = controller.registry.connections.first { $0.id == record.id } ?? record
+            record = try await saveRecord(record)
             onSaved(record)
             let shouldConnect = existing == nil
             dismiss()

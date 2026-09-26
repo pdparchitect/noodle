@@ -20,5 +20,6 @@ home. If the router cannot, forward UDP port 38415 yourself, or use Add Address 
 a domain or other address that reaches the Hub from outside your network.
 
 People who joined can keep bots on the Hub from Noodle, on the harnesses their plan
-lends. Those bots run here and keep their conversations here. Settings > Bots lists them
-with their folder and activity.
+lends. Those bots run here and keep their conversations here, and use the tool connections
+their owner adds and signs in to from Noodle, which stay on this Mac. Settings > Bots lists
+them with their folder and activity.

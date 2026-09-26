@@ -1,5 +1,7 @@
 import SwiftUI
+import HubLink
 import NoodleCore
+import NoodleHubClient
 import NoodleRuntimeSettings
 
 struct MCPAssignmentPicker: View {
@@ -165,5 +167,137 @@ struct MCPConnectionChooser: View {
                 Button("Done", action: onDone)
             }
         }.padding(16).frame(width: 330, height: 260)
+    }
+}
+
+/// The Tools tab of a bot kept on a Noodle Hub: the person's connections on that Hub, chosen
+/// per bot. They sign in on the Hub; only the browser opens here.
+struct HubConnectionPicker: View {
+    let mirror: HubMirror
+    @Binding var selectedIDs: Set<UUID>
+    @State private var showingAdd = false
+    @State private var search = ""
+    @State private var wantsNewTool = false
+    @State private var showingNewTool = false
+    @State private var editing: MCPConnectionRecord?
+    @State private var failure: String?
+    private static let listHeight: CGFloat = 5 * 44
+
+    private var connections: [(link: LinkConnection, record: MCPConnectionRecord)] {
+        mirror.connections.compactMap { link in link.record.map { (link, $0) } }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Tools").font(.headline)
+                Spacer()
+                Button { search = ""; showingAdd = true } label: { Label("Add Tools…", systemImage: "plus") }
+                    .popover(isPresented: $showingAdd, arrowEdge: .bottom) { chooser }
+            }
+            if selectedIDs.isEmpty {
+                Button { search = ""; showingAdd = true } label: {
+                    VStack(spacing: 10) {
+                        Image(systemName: "puzzlepiece.extension").font(.largeTitle)
+                        Text("Add tools to this bot")
+                    }.foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: Self.listHeight)
+                        .contentShape(Rectangle())
+                }.buttonStyle(.plain).accessibilityLabel("Add tools to this bot")
+                    .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 10))
+            } else {
+                ScrollView {
+                    VStack(spacing: 6) {
+                        ForEach(connections.filter { selectedIDs.contains($0.link.id) }, id: \.link.id) { connection in
+                            row(connection.link, connection.record)
+                        }
+                    }
+                }.frame(height: Self.listHeight)
+                    .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 10))
+            }
+            if let failure { Text(failure).font(.caption).foregroundStyle(.red) }
+        }
+        .sheet(isPresented: $showingNewTool) {
+            ToolCreationSheet(onAdded: { selectedIDs.insert($0) }, onConnect: signIn,
+                              addPreset: { tool, configuration, id in
+                                  let name = ToolCatalog.availableName(for: tool, existingNames: mirror.connections.map(\.draft.name))
+                                  return try await save(LinkConnectionDraft(id: id, name: name, endpoint: configuration.endpoint,
+                                                                            description: tool.summary, instructions: tool.defaultInstructions))
+                              },
+                              save: { try await save(LinkConnectionDraft($0)) }).noodleSheetSizing()
+        }
+        .sheet(item: $editing) { record in
+            MCPEditor(existing: record, onConnect: signIn, save: { try await save(LinkConnectionDraft($0)) }).noodleSheetSizing()
+        }
+    }
+
+    private func row(_ link: LinkConnection, _ record: MCPConnectionRecord) -> some View {
+        HStack(spacing: 10) {
+            MCPConnectionIcon(connection: record, size: 26)
+            Text(record.name).lineLimit(1)
+            MCPConnectionMaturityBadge(connection: record)
+            if let problem = link.problem {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).help(problem)
+            }
+            Spacer()
+            if !link.signedIn { Button("Sign In") { signIn(record) }.controlSize(.small) }
+            Button { editing = record } label: {
+                Image(systemName: "pencil").foregroundStyle(.secondary)
+            }.buttonStyle(.plain).help("Edit \(record.name)")
+            Button { selectedIDs.remove(link.id) } label: {
+                Image(systemName: "minus.circle.fill").foregroundStyle(.secondary)
+            }.buttonStyle(.plain).help("Remove \(record.name) from this bot")
+        }.padding(8)
+    }
+
+    private var chooser: some View {
+        VStack(spacing: 10) {
+            TextField("Search connections", text: $search).textFieldStyle(.roundedBorder).autocorrectionDisabled()
+            ScrollView {
+                LazyVStack(spacing: 4) {
+                    ForEach(connections.filter {
+                        !selectedIDs.contains($0.link.id) && (search.isEmpty || $0.record.name.localizedCaseInsensitiveContains(search))
+                    }, id: \.link.id) { connection in
+                        Button { selectedIDs.insert(connection.link.id) } label: {
+                            HStack(spacing: 10) {
+                                MCPConnectionIcon(connection: connection.record, size: 28)
+                                VStack(alignment: .leading) {
+                                    Text(connection.record.name).foregroundStyle(.primary)
+                                    Text(connection.record.description).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                                Spacer()
+                                Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
+                            }.padding(8).contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                    }
+                    if mirror.connections.isEmpty {
+                        Text("No connections on this Hub.").foregroundStyle(.secondary).padding()
+                    }
+                }
+            }
+            HStack {
+                Button("New Tool…") { wantsNewTool = true; showingAdd = false }
+                Spacer()
+                Button("Done") { showingAdd = false }
+            }
+        }.padding(16).frame(width: 330, height: 260)
+            .onDisappear {
+                // Wait for the popover to close before presenting a sheet on the bot editor.
+                if wantsNewTool { wantsNewTool = false; showingNewTool = true }
+            }
+    }
+
+    private func save(_ draft: LinkConnectionDraft) async throws -> MCPConnectionRecord {
+        guard let record = try await mirror.saveConnection(draft).record else {
+            throw MCPConnectionError.message("The Hub saved a connection this Mac cannot read.")
+        }
+        return record
+    }
+
+    private func signIn(_ record: MCPConnectionRecord) {
+        failure = nil
+        Task { @MainActor in
+            do { try await mirror.signIn(record.id, redirect: MCPController.redirectURI(for: record.endpoint)) }
+            catch { failure = error.localizedDescription }
+        }
     }
 }

@@ -21,6 +21,7 @@ let package = Package(
             dependencies: [
                 .product(name: "NoodleCore", package: "noodle"),
                 .product(name: "NoodleRuntime", package: "noodle"),
+                .product(name: "NoodleMCP", package: "noodle"),
                 .product(name: "HubLink", package: "HubLink"),
             ]),
         .executableTarget(
@@ -34,7 +35,8 @@ let package = Package(
             ]),
         .testTarget(name: "HubCoreTests", dependencies: ["HubCore", .product(name: "NoodleCore", package: "noodle"),
                                                         .product(name: "HubLink", package: "HubLink"),
-                                                        .product(name: "NoodleHubClient", package: "noodle")]),
+                                                        .product(name: "NoodleHubClient", package: "noodle"),
+                                                        .product(name: "NoodleMCP", package: "noodle")]),
     ],
     swiftLanguageModes: [.v5]
 )

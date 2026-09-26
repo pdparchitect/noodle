@@ -22,7 +22,8 @@ import XCTest
         let hub = Hub(root: root.appendingPathComponent("Hub"), messenger: nil)
         try hub.repository.prepare()
         let link = HubLinkService(hubName: "Mac mini", directory: root.appendingPathComponent("Hub/Link"),
-                                  access: hub.access, profiles: hub.harnessProfiles, bots: hub.bots, port: 0,
+                                  access: hub.access, profiles: hub.harnessProfiles, bots: hub.bots,
+                                  connections: hub.connections, port: 0,
                                   localEndpoints: { [LinkEndpoint(host: "::1", port: $0)] })
         await link.start()
         addTeardownBlock { await MainActor.run { link.stop() } }
@@ -180,5 +181,19 @@ import XCTest
         let local = try XCTUnwrap(f.local.loadAgents().first)
         XCTAssertEqual(local.displayName, "Jeeves")
         XCTAssertEqual(try f.local.loadAgentBackstory(local), "A valet.")
+    }
+
+    func testABotGetsTheHubConnectionsChosenForItHere() async throws {
+        let f = try await fixture()
+        let mirror = f.mirror()
+        let agent = try await mirror.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code"))
+        let notes = try await mirror.saveConnection(LinkConnectionDraft(name: "Notes", endpoint: URL(string: "https://example.com/mcp")!))
+        XCTAssertEqual(mirror.connections.map(\.id), [notes.id])
+        XCTAssertEqual(mirror.connectionIDs(forAgent: agent.id), [])
+
+        try await mirror.assignConnections([notes.id], toAgent: agent.id)
+        XCTAssertEqual(mirror.connectionIDs(forAgent: agent.id), [notes.id])
+        let remote = try XCTUnwrap(try f.hub.repository.loadAgents().first)
+        XCTAssertEqual(f.hub.connections.assigned(to: remote.id, for: f.ada), [notes.id])
     }
 }

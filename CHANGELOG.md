@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - Connect Replit in Settings → Tools → Add Tools, so bots can work with your Replit apps.
+- Give a bot on a Noodle Hub tools from that Hub in Edit Bot > Tools. Connections you add there are yours on the Hub and are signed in there, so they work with this Mac closed; your browser opens here only to sign in. Choose which of them each bot may use.
 - Let bots convert images with the Vision tool. It writes a JPEG, PNG, HEIC or TIFF copy that is turned upright and can be shrunk, so a bot can use an HEIC photo you send even when its model or tools cannot open HEIC. Your original is kept.
 
 ### Changed
@@ -18,7 +19,11 @@ All notable changes to Noodle are documented here, following
 
 ### Removed
 
-- Bots on a Noodle Hub no longer use the tools on this Mac, so they work with this Mac closed. Edit Bot shows only General and Harness for them.
+- Bots on a Noodle Hub no longer use the tools on this Mac, so they work with this Mac closed. Edit Bot shows no Computers or Browsers for them.
+
+### Fixed
+
+- Delete a removed tool connection's sign-in from Keychain even when the first try fails. Noodle tries again until it is gone.
 
 ## [0.27.0] - 2026-09-25
 

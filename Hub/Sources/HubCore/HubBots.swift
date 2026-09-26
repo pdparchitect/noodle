@@ -12,6 +12,9 @@ import NoodleRuntime
     private let repository: WorkspaceRepository
     private let runtime: AgentRuntimeCoordinator
     private let access: HubAccess
+    private let connections: HubConnections
+    /// Serves bots the tools their owners assigned them from the Hub's own connections.
+    private var toolBroker: ToolBridgeBroker?
     private let messenger: MessengerBroker
     /// Files arriving in pieces, until the last one lands.
     private let uploads: URL
@@ -22,12 +25,15 @@ import NoodleRuntime
     /// What each bot was last reported doing.
     private var phases: [UUID: AgentRuntimePhase] = [:]
 
-    public init(repository: WorkspaceRepository, runtime: AgentRuntimeCoordinator, access: HubAccess, uploads: URL) {
+    public init(repository: WorkspaceRepository, runtime: AgentRuntimeCoordinator, access: HubAccess,
+                connections: HubConnections, uploads: URL) {
         self.uploads = uploads
         self.repository = repository
         self.runtime = runtime
         self.access = access
+        self.connections = connections
         messenger = MessengerBroker(repository: repository)
+        connections.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
     }
 
     /// Runs every bot, the messenger they reply through, and the checks that keep them going.
@@ -40,6 +46,7 @@ import NoodleRuntime
         let now = Date()
         agents.forEach { runtime.seedHeartbeatActivity(for: $0.id, at: now) }
         runtime.startAll(agents: agents, repository: repository)
+        try startTools()
         running = true
         loop = Task { [weak self] in
             while !Task.isCancelled {
@@ -54,7 +61,28 @@ import NoodleRuntime
         }
     }
 
+    /// Lets bots call the tools assigned to them.
+    public func startTools() throws {
+        if toolBroker == nil {
+            let assignments = connections.assignments
+            let broker = ToolBridgeBroker(registry: connections.tools) { assignments.assignments(for: $0) }
+            // A bot's AGENTS.md lists its tool skills once they are written.
+            broker.onSkillsChanged = { [weak self] id in
+                Task { @MainActor in
+                    guard let self, let agent = try? self.repository.loadAgents().first(where: { $0.id == id }) else { return }
+                    try? self.repository.synchronizeAgentWorkspace(agent)
+                }
+            }
+            toolBroker = broker
+        }
+        try toolBroker?.start(agents: try repository.loadAgents().map {
+            ToolBridgeAgent(id: $0.id, workspace: repository.directory(for: $0))
+        })
+    }
+
     public func stop() {
+        toolBroker?.stop()
+        toolBroker = nil
         loop?.cancel()
         loop = nil
         messenger.stop()
@@ -88,6 +116,7 @@ import NoodleRuntime
             runtime.refresh(agents: try repository.loadAgents())
             runtime.start(agent: created.agent, repository: repository)
         }
+        if toolBroker != nil { try? startTools() }
         onChange?(user.id, .botsChanged)
         // As saved, so it matches every later read of the same bot.
         guard let saved = try repository.loadAgents().first(where: { $0.id == created.agent.id }),
@@ -255,6 +284,8 @@ import NoodleRuntime
             runtime.stop(agentID: agent.id)
             try? messenger.start(agents: try repository.loadAgents())
         }
+        if toolBroker != nil { try? startTools() }
+        connections.forget(bot: agent.id)
         access.setOwner(nil, ofBot: agent.id)
     }
 

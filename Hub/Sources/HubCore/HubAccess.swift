@@ -71,6 +71,8 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
     public private(set) var devices: [HubDevice] = []
     /// Which user each bot on the Hub belongs to.
     public private(set) var botOwners: [UUID: UUID] = [:]
+    /// Which user each tool connection on the Hub belongs to.
+    public private(set) var connectionOwners: [UUID: UUID] = [:]
     @ObservationIgnored private let url: URL
 
     private struct Stored: Codable {
@@ -78,6 +80,7 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         var plans: [HubPlan]
         var devices: [HubDevice]?
         var botOwners: [UUID: UUID]?
+        var connectionOwners: [UUID: UUID]?
     }
 
     public init(url: URL) {
@@ -87,6 +90,7 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
             plans = stored.plans
             devices = stored.devices ?? []
             botOwners = stored.botOwners ?? [:]
+            connectionOwners = stored.connectionOwners ?? [:]
         }
         if !plans.contains(where: \.isDefault) {
             plans.insert(HubPlan(id: HubPlan.defaultID, name: "Default"), at: 0)
@@ -118,11 +122,12 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         update(user) { $0.plan = plan.id }
     }
 
-    /// Their devices go too. Remove a user through `Hub.remove`, which deletes their bots first.
+    /// Their devices go too. Remove a user through `Hub.remove`, which deletes their bots and connections first.
     public func remove(_ user: HubUser) {
         users.removeAll { $0.id == user.id }
         devices.removeAll { $0.user == user.id }
         botOwners = botOwners.filter { $0.value != user.id }
+        connectionOwners = connectionOwners.filter { $0.value != user.id }
         save()
     }
 
@@ -134,6 +139,13 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
 
     public func setOwner(_ user: HubUser?, ofBot bot: UUID) {
         botOwners[bot] = user?.id
+        save()
+    }
+
+    public func owner(ofConnection connection: UUID) -> UUID? { connectionOwners[connection] }
+
+    public func setOwner(_ user: HubUser?, ofConnection connection: UUID) {
+        connectionOwners[connection] = user?.id
         save()
     }
 
@@ -216,7 +228,8 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
     private func save() {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(Stored(users: users, plans: plans, devices: devices, botOwners: botOwners)) else { return }
+        guard let data = try? encoder.encode(Stored(users: users, plans: plans, devices: devices, botOwners: botOwners,
+                                                         connectionOwners: connectionOwners)) else { return }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? AtomicFile.write(data, to: url)
     }

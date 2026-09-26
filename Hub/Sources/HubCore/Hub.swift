@@ -1,6 +1,7 @@
 import Foundation
 import HubLink
 import NoodleCore
+import NoodleMCP
 import NoodleRuntime
 
 /// The Hub's bots, harnesses and conversations. They live in the Hub's own sandbox
@@ -13,6 +14,7 @@ import NoodleRuntime
     public let harnessProfiles: HarnessProfilesController
     public let usage: UsageHistory
     public let access: HubAccess
+    public let connections: HubConnections
     public let bots: HubBots
     public let link: HubLinkService
 
@@ -26,16 +28,19 @@ import NoodleRuntime
         usage = UsageHistory(url: root.appendingPathComponent("usage.sqlite"))
         runtime.onUsage = { [usage] in usage.record($0) }
         access = HubAccess(url: root.appendingPathComponent("access.json"))
-        bots = HubBots(repository: repository, runtime: runtime, access: access,
+        connections = HubConnections(root: root, access: access,
+                                     service: MCPService(namespace: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle.hub"))
+        bots = HubBots(repository: repository, runtime: runtime, access: access, connections: connections,
                        uploads: root.appendingPathComponent("Uploads", isDirectory: true))
         link = HubLinkService(hubName: Host.current().localizedName ?? "Noodle Hub",
                               directory: root.appendingPathComponent("Link", isDirectory: true),
-                              access: access, profiles: harnessProfiles, bots: bots, port: linkPort, router: router)
+                              access: access, profiles: harnessProfiles, bots: bots, connections: connections, port: linkPort, router: router)
     }
 
     /// Removes a user with their devices and the bots they keep here.
     public func remove(_ user: HubUser) {
         bots.removeBots(of: user)
+        connections.removeConnections(of: user)
         access.remove(user)
     }
 

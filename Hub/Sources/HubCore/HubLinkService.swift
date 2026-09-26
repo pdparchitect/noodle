@@ -41,6 +41,7 @@ import Observation
     @ObservationIgnored private let access: HubAccess
     @ObservationIgnored private let profiles: HarnessProfilesController
     @ObservationIgnored private let bots: HubBots?
+    @ObservationIgnored private let connections: HubConnections?
     /// Open event streams, by the key of the device holding each.
     @ObservationIgnored private var streams: [ObjectIdentifier: LinkStream] = [:]
     @ObservationIgnored private let port: UInt16
@@ -59,7 +60,7 @@ import Observation
     }
 
     public init(hubName: String, directory: URL, access: HubAccess, profiles: HarnessProfilesController,
-                bots: HubBots? = nil, port: UInt16 = LinkEndpoint.defaultPort, router: (any RouterPortMapper)? = nil,
+                bots: HubBots? = nil, connections: HubConnections? = nil, port: UInt16 = LinkEndpoint.defaultPort, router: (any RouterPortMapper)? = nil,
                 localEndpoints: @escaping (UInt16) -> [LinkEndpoint] = LinkEndpoint.local(port:),
                 now: @escaping () -> Date = Date.init) {
         self.hubName = hubName
@@ -67,6 +68,7 @@ import Observation
         self.access = access
         self.profiles = profiles
         self.bots = bots
+        self.connections = connections
         self.port = port
         routerMapper = router
         self.localEndpoints = localEndpoints
@@ -78,6 +80,7 @@ import Observation
         manualAddress = settings?.manualAddress ?? ""
         opensRouterPort = settings?.opensRouterPort ?? true
         bots?.onChange = { [weak self] user, event in self?.push(event, to: user) }
+        connections?.onSignInEnded = { [weak self] user in self?.push(.connectionsChanged, to: user) }
     }
 
     public func start() async {
@@ -178,6 +181,12 @@ import Observation
         }
     }
 
+    private func push(_ event: LinkEvent, toDevice key: LinkPublicKey) -> Bool {
+        guard let stream = streams.values.first(where: { $0.peer == key && !$0.isClosed }) else { return false }
+        stream.send(LinkProtocol.encode(event))
+        return true
+    }
+
     private func push(_ event: LinkEvent, to user: UUID) {
         let keys = Set(access.devices.filter { $0.user == user }.map(\.key))
         let payload = LinkProtocol.encode(event)
@@ -223,7 +232,41 @@ import Observation
             return .chunk(data: data, total: total)
         case .react(let change):
             return .message(try hubBots().react(change, for: try user(key)))
+        case .connections:
+            return .connections(try hubConnections().link(for: try user(key)))
+        case .saveConnection(let draft):
+            let user = try user(key)
+            let record = try MCPConnectionRecord(id: draft.id, name: draft.name, endpoint: draft.endpoint,
+                                                 description: draft.description, instructions: draft.instructions)
+            try hubConnections().add(record, for: user)
+            push(.connectionsChanged, to: user.id)
+            return .connection(try hubConnections().link(for: user).first { $0.id == draft.id } ?? {
+                throw LinkError("The connection was saved but could not be read back.")
+            }())
+        case .deleteConnection(let id):
+            let user = try user(key)
+            try hubConnections().remove(id, for: user)
+            push(.connectionsChanged, to: user.id)
+            return .done
+        case .assignConnections(let botID, let connectionIDs):
+            let user = try user(key)
+            try hubConnections().assign(Set(connectionIDs), to: botID, for: user)
+            push(.connectionsChanged, to: user.id)
+            return .done
+        case .signIn(let connectionID, let redirect):
+            try hubConnections().signIn(connectionID, redirect: redirect, for: try user(key)) { [weak self] url in
+                self?.push(.signInPage(connectionID: connectionID, url: url), toDevice: key) ?? false
+            }
+            return .done
+        case .finishSignIn(let connectionID, let callback):
+            try hubConnections().finishSignIn(connectionID, callback: callback, for: try user(key))
+            return .done
         }
+    }
+
+    private func hubConnections() throws -> HubConnections {
+        guard let connections else { throw LinkError("This Noodle Hub does not keep tool connections.") }
+        return connections
     }
 
     private func paired(_ key: LinkPublicKey) throws -> HubDevice {

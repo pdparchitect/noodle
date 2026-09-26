@@ -92,6 +92,19 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case download(conversationID: UUID, attachmentID: UUID, offset: Int)
     /// Adds or removes this user's reaction to a message. Answers with the message.
     case react(LinkReactionChange)
+    /// This user's tool connections on the Hub.
+    case connections
+    /// Adds a connection, or changes one of this user's. It reaches no bot until assigned.
+    case saveConnection(LinkConnectionDraft)
+    /// Deletes one of this user's connections and its sign-in.
+    case deleteConnection(id: UUID)
+    /// Replaces which of this user's connections one of their bots may use.
+    case assignConnections(botID: UUID, connectionIDs: [UUID])
+    /// Starts signing a connection in. The Hub pushes `signInPage` to this device; `redirect`
+    /// is where this device's browser returns.
+    case signIn(connectionID: UUID, redirect: URL)
+    /// The address the browser returned to, which carries the sign-in's answer.
+    case finishSignIn(connectionID: UUID, callback: URL)
 }
 
 public enum LinkResponse: Codable, Equatable, Sendable {
@@ -100,6 +113,8 @@ public enum LinkResponse: Codable, Equatable, Sendable {
     case bot(LinkBot)
     case messages(LinkMessages)
     case message(LinkMessage)
+    case connections([LinkConnection])
+    case connection(LinkConnection)
     /// A piece of a file, and the file's full size.
     case chunk(data: Data, total: Int)
     case done
@@ -114,6 +129,47 @@ public enum LinkEvent: Codable, Equatable, Sendable {
     case messageChanged(LinkMessage)
     /// What a bot is doing now.
     case botPhase(botID: UUID, phase: LinkBotPhase)
+    /// This user's connections, their sign-in or their bots changed.
+    case connectionsChanged
+    /// Open this page in the browser to sign a connection in, then send `finishSignIn`.
+    case signInPage(connectionID: UUID, url: URL)
+}
+
+/// What a device sets on a tool connection it keeps on the Hub.
+public struct LinkConnectionDraft: Codable, Equatable, Sendable {
+    public var id: UUID
+    public var name: String
+    public var endpoint: URL
+    public var description: String
+    public var instructions: String
+
+    public init(id: UUID = UUID(), name: String, endpoint: URL, description: String = "", instructions: String = "") {
+        self.id = id
+        self.name = name
+        self.endpoint = endpoint
+        self.description = description
+        self.instructions = instructions
+    }
+}
+
+/// A tool connection one user keeps on the Hub.
+public struct LinkConnection: Codable, Equatable, Identifiable, Sendable {
+    public var draft: LinkConnectionDraft
+    public var iconData: Data?
+    /// The bots it is assigned to.
+    public var botIDs: [UUID]
+    public var signedIn: Bool
+    /// Why it last failed, safe to show.
+    public var problem: String?
+    public var id: UUID { draft.id }
+
+    public init(draft: LinkConnectionDraft, iconData: Data? = nil, botIDs: [UUID] = [], signedIn: Bool = false, problem: String? = nil) {
+        self.draft = draft
+        self.iconData = iconData
+        self.botIDs = botIDs
+        self.signedIn = signedIn
+        self.problem = problem
+    }
 }
 
 public struct LinkStatus: Codable, Equatable, Sendable {

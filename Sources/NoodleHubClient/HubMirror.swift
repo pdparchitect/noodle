@@ -24,6 +24,10 @@ import Observation
     /// Runs when bots here were added, removed or changed, so the app can reload them.
     /// New messages need no call: they land in the conversation files the app already watches.
     @ObservationIgnored public var onChange: (() -> Void)?
+    /// This Mac's user's tool connections on the Hub, as last listed.
+    public private(set) var connections: [LinkConnection] = []
+    /// Opens a connection's sign-in page in the browser and returns the address it came back to.
+    @ObservationIgnored public var onSignInPage: ((LinkConnection, URL) async throws -> URL)?
 
 
     public let pairing: HubPairing
@@ -83,10 +87,61 @@ import Observation
         onChange?()
     }
 
+    /// Adds a connection on the Hub, or changes one. It reaches no bot until assigned.
+    @discardableResult public func saveConnection(_ draft: LinkConnectionDraft) async throws -> LinkConnection {
+        guard case .connection(let saved) = try await pairing.request(.saveConnection(draft)) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        try await syncConnections()
+        return saved
+    }
+
+    public func deleteConnection(_ id: UUID) async throws {
+        _ = try await pairing.request(.deleteConnection(id: id))
+        try await syncConnections()
+    }
+
+    /// The Hub connections a bot kept there may use, by its local stand-in.
+    public func connectionIDs(forAgent id: UUID) -> Set<UUID> {
+        guard let entry = entries.first(where: { $0.agent == id }) else { return [] }
+        return Set(connections.filter { $0.botIDs.contains(entry.remote) }.map(\.id))
+    }
+
+    public func assignConnections(_ ids: Set<UUID>, toAgent id: UUID) async throws {
+        guard let entry = entries.first(where: { $0.agent == id }) else { throw LinkError("That bot is not on this Hub.") }
+        _ = try await pairing.request(.assignConnections(botID: entry.remote, connectionIDs: ids.sorted { $0.uuidString < $1.uuidString }))
+        try await syncConnections()
+    }
+
+    /// Asks the Hub to sign a connection in; its page opens through `onSignInPage`.
+    public func signIn(_ id: UUID, redirect: URL) async throws {
+        _ = try await pairing.request(.signIn(connectionID: id, redirect: redirect))
+    }
+
+    private func syncConnections() async throws {
+        guard case .connections(let listed) = try await pairing.request(.connections) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        connections = listed
+    }
+
+    private func openSignInPage(_ id: UUID, url: URL) async {
+        do {
+            guard let connection = connections.first(where: { $0.id == id }), let onSignInPage else {
+                throw LinkError("This Mac cannot open that sign-in.")
+            }
+            let callback = try await onSignInPage(connection, url)
+            _ = try await pairing.request(.finishSignIn(connectionID: id, callback: callback))
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
     /// Brings bots and messages up to date with the Hub, and sends what is waiting here.
     public func sync() async {
         do {
             try await syncBots()
+            try await syncConnections()
             for entry in entries { try await syncMessages(entry) }
             try await sendPending()
             error = nil
@@ -120,6 +175,11 @@ import Observation
                         try await syncBots()
                     case .conversationChanged(let id, _):
                         if let entry = entries.first(where: { $0.remoteConversation == id }) { try await syncMessages(entry) }
+                    case .connectionsChanged:
+                        try await syncConnections()
+                    case .signInPage(let id, let url):
+                        // The person may take minutes in the browser; other events keep flowing meanwhile.
+                        Task { await openSignInPage(id, url: url) }
                     // Hub reactions and bot status are not shown on the Mac yet.
                     case .messageChanged, .botPhase:
                         break
@@ -306,5 +366,22 @@ public struct HubHarnessChoice: Equatable, Sendable {
         let parts = identifier.dropFirst(Self.prefix.count).split(separator: "|", omittingEmptySubsequences: false).map(String.init)
         guard parts.count == 3, let key = Data(base64Encoded: parts[0]), let hub = try? LinkPublicKey(x963: key) else { return nil }
         self.init(hub: hub, provider: parts[1], profile: UUID(uuidString: parts[2]))
+    }
+}
+
+extension LinkConnection {
+    /// As this Mac shows a connection, with the Hub's icon.
+    public var record: MCPConnectionRecord? {
+        var record = try? MCPConnectionRecord(id: draft.id, name: draft.name, endpoint: draft.endpoint,
+                                              description: draft.description, instructions: draft.instructions)
+        record?.iconData = iconData
+        return record
+    }
+}
+
+extension LinkConnectionDraft {
+    public init(_ record: MCPConnectionRecord) {
+        self.init(id: record.id, name: record.name, endpoint: record.endpoint,
+                  description: record.description, instructions: record.instructions)
     }
 }

@@ -10,13 +10,15 @@ import NoodleRuntimeSettings
 enum BotEditorTab: String, CaseIterable {
     case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers", browsers = "Browsers"
 
-    /// A bot on a Noodle Hub cannot use this Mac's tools, so only its own settings show.
-    static func shown(onHub: Bool) -> [BotEditorTab] { onHub ? [.general, .runtime] : allCases }
+    /// A bot on a Noodle Hub uses only the Hub's tool connections, never this Mac's computers or browsers.
+    static func shown(onHub: Bool) -> [BotEditorTab] { onHub ? [.general, .runtime, .mcp] : allCases }
 }
 
 private struct BotEditorTabPicker: View {
     @Binding var selection: BotEditorTab
     let harnessIdentifier: String
+    /// Connections chosen on this Mac mean nothing on a Hub, and one Hub's mean nothing on another.
+    var onToolsHomeChange: () -> Void = {}
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var tabs: [BotEditorTab] { BotEditorTab.shown(onHub: HubHarnessChoice(identifier: harnessIdentifier) != nil) }
     var body: some View {
@@ -26,6 +28,7 @@ private struct BotEditorTabPicker: View {
             .fixedSize(horizontal: true, vertical: false)
             .frame(maxWidth: .infinity, alignment: .center)
             .onChange(of: tabs) { if !tabs.contains(selection) { selection = .general } }
+            .onChange(of: HubHarnessChoice(identifier: harnessIdentifier)?.hub) { onToolsHomeChange() }
     }
 }
 
@@ -129,7 +132,7 @@ struct NewBotSheet: View {
 
                 NameValidationMessage(name: name)
 
-                BotEditorTabPicker(selection: $selectedTab, harnessIdentifier: selectedHarnessIdentifier)
+                BotEditorTabPicker(selection: $selectedTab, harnessIdentifier: selectedHarnessIdentifier) { mcpConnectionIDs = [] }
                 switch selectedTab {
                 case .general:
                     BotPublicDescriptionEditor(publicDescription: $publicDescription)
@@ -146,10 +149,14 @@ struct NewBotSheet: View {
                     )
                     BotFolderPicker(folders: $folders)
                 case .mcp:
-                    MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs,
-                                        calendars: store.calendars, reminders: store.reminders,
-                                        calendarIDs: $calendarIDs, reminderIDs: $reminderListIDs,
-                                        builtIn: $builtInTools)
+                    if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
+                        HubConnectionPicker(mirror: mirror, selectedIDs: $mcpConnectionIDs)
+                    } else {
+                        MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs,
+                                            calendars: store.calendars, reminders: store.reminders,
+                                            calendarIDs: $calendarIDs, reminderIDs: $reminderListIDs,
+                                            builtIn: $builtInTools)
+                    }
                 case .browsers:
                     BrowserAssignmentPicker(controller: store.browsers, selectedIDs: $browserIDs)
                 case .computers:
@@ -358,10 +365,14 @@ struct EditBotSheet: View {
                         .font(.caption).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .mcp:
-                    MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs,
-                                        calendars: store.calendars, reminders: store.reminders,
-                                        calendarIDs: $calendarIDs, reminderIDs: $reminderListIDs,
-                                        builtIn: $builtInTools)
+                    if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
+                        HubConnectionPicker(mirror: mirror, selectedIDs: $mcpConnectionIDs)
+                    } else {
+                        MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs,
+                                            calendars: store.calendars, reminders: store.reminders,
+                                            calendarIDs: $calendarIDs, reminderIDs: $reminderListIDs,
+                                            builtIn: $builtInTools)
+                    }
                 case .browsers:
                     BrowserAssignmentPicker(controller: store.browsers, selectedIDs: $browserIDs)
                 case .computers:
@@ -385,8 +396,9 @@ struct EditBotSheet: View {
             folders = store.folders(for: agent)
             selectedProfileID = store.harnessProfile(for: agent)
             // A bot on a Noodle Hub runs on that Hub's harness.
-            if let choice = store.hubMirror(forAgent: agent.id)?.harness(ofAgent: agent.id) {
+            if let mirror = store.hubMirror(forAgent: agent.id), let choice = mirror.harness(ofAgent: agent.id) {
                 selectedHarnessIdentifier = choice.identifier
+                mcpConnectionIDs = mirror.connectionIDs(forAgent: agent.id)
             }
             if selectedHarnessIdentifier.isEmpty {
                 selectedHarnessIdentifier = store.runtime.availableInstallations.first?.provider.rawValue ?? ""

@@ -88,9 +88,10 @@ public struct MCPConnectionMaturityBadge: View {
 
 /// One dispatch boundary per supported tool type; MCP owns its form and storage.
 public struct ToolCreationSheet: View {
-    let controller: MCPController
     var onAdded: (UUID) -> Void = { _ in }
     private let onConnect: (MCPConnectionRecord) -> Void
+    private let addPreset: (ToolDefinition, MCPToolConfiguration, UUID) async throws -> MCPConnectionRecord
+    private let save: (MCPConnectionRecord) async throws -> MCPConnectionRecord
     @Environment(\.dismiss) private var dismiss
     @State private var customMCP = false
     @State private var error: String?
@@ -99,14 +100,25 @@ public struct ToolCreationSheet: View {
 
     public init(controller: MCPController, onAdded: @escaping (UUID) -> Void = { _ in },
          onConnect: ((MCPConnectionRecord) -> Void)? = nil) {
-        self.controller = controller; self.onAdded = onAdded
-        self.onConnect = onConnect ?? controller.connect
+        self.init(onAdded: onAdded, onConnect: onConnect ?? controller.connect,
+                  addPreset: { try controller.addPreset($0, configuration: $1, connectionID: $2) },
+                  save: { record in
+                      try controller.save(record)
+                      return controller.registry.connections.first { $0.id == record.id } ?? record
+                  })
+    }
+
+    /// For connections kept somewhere other than this Mac, as on a Noodle Hub.
+    public init(onAdded: @escaping (UUID) -> Void = { _ in }, onConnect: @escaping (MCPConnectionRecord) -> Void,
+                addPreset: @escaping (ToolDefinition, MCPToolConfiguration, UUID) async throws -> MCPConnectionRecord,
+                save: @escaping (MCPConnectionRecord) async throws -> MCPConnectionRecord) {
+        self.onAdded = onAdded; self.onConnect = onConnect; self.addPreset = addPreset; self.save = save
     }
 
     public var body: some View {
         Group {
             if customMCP {
-                MCPEditor(controller: controller, onBack: { customMCP = false }, onSaved: { onAdded($0.id) }, onConnect: onConnect)
+                MCPEditor(onBack: { customMCP = false }, onSaved: { onAdded($0.id) }, onConnect: onConnect, save: save)
             } else {
                 ToolCatalogView(onSelect: add, onCustomMCP: { customMCP = true },
                                 onCancel: { dismiss() }, error: error).disabled(adding)
@@ -115,27 +127,24 @@ public struct ToolCreationSheet: View {
     }
 
     private func add(_ tool: ToolDefinition) {
-        guard !adding else { return }
+        guard !adding, case .mcp(let configuration) = tool.configuration else { return }
         adding = true
-        do {
-            switch tool.configuration {
-            case .mcp(let configuration):
-                // Saving the account can precede a failed workspace refresh.
-                // Retrying this preset must resume that account, even after
-                // the user has tried another preset in the same sheet.
-                let id = presetAttempts[tool.id] ?? UUID()
-                presetAttempts[tool.id] = id
-                let connection = try controller.addPreset(tool, configuration: configuration, connectionID: id)
+        // Saving the account can precede a failed workspace refresh.
+        // Retrying this preset must resume that account, even after
+        // the user has tried another preset in the same sheet.
+        let id = presetAttempts[tool.id] ?? UUID()
+        presetAttempts[tool.id] = id
+        Task { @MainActor in
+            do {
+                let connection = try await addPreset(tool, configuration, id)
                 onAdded(connection.id)
                 dismiss()
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(250))
-                    onConnect(connection)
-                }
+                try? await Task.sleep(for: .milliseconds(250))
+                onConnect(connection)
+            } catch {
+                self.error = error.localizedDescription
+                adding = false
             }
-        } catch {
-            self.error = error.localizedDescription
-            adding = false
         }
     }
 }

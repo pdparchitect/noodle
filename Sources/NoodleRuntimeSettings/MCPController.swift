@@ -16,17 +16,25 @@ public final class MCPController {
     @ObservationIgnored private var loginTask: Task<Void, Never>?
     @ObservationIgnored private var agents: [AgentRecord] = []
     @ObservationIgnored private var started = false
-    @ObservationIgnored private var providers: [UUID: String] = [:]
+    @ObservationIgnored private var providers: MCPConnectionProviders?
     /// Where this controller registers one provider per connection.
-    @ObservationIgnored public var toolRegistry: ToolProviderRegistry? { didSet { synchronizeProviders() } }
+    @ObservationIgnored public var toolRegistry: ToolProviderRegistry? {
+        didSet {
+            providers = toolRegistry.map { MCPConnectionProviders(registry: $0, service: service) }
+            providers?.onError = { [weak self] id, message in self?.errors[id] = message }
+            synchronizeProviders()
+        }
+    }
     /// Receives the connections each bot is granted, now and on every change.
     @ObservationIgnored public var onAssignmentsChange: (([UUID: Set<String>]) -> Void)? { didSet { synchronizeProviders() } }
     @ObservationIgnored private let browser = MCPBrowserAuthorization()
     @ObservationIgnored private var registryReadable = true
+    @ObservationIgnored private let deletions: DeletionJournal<UUID>
 
     public init(repository: WorkspaceRepository, service: MCPService? = nil) {
         self.repository = repository
         self.service = service ?? MCPService(namespace: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle.local")
+        deletions = DeletionJournal(url: repository.rootURL.appendingPathComponent("MCP/removed-sign-ins.json"))
         do { registry = try MCPRegistry.load(root: repository.rootURL) }
         catch {
             registryReadable = false
@@ -43,6 +51,7 @@ public final class MCPController {
             started = true
             Task { [weak self] in
                 guard let self else { return }
+                await deleteRemovedSignIns()
                 for connection in registry.connections {
                     if await service.hasCredentials(connection.id) { connected.insert(connection.id) }
                 }
@@ -112,17 +121,24 @@ public final class MCPController {
         next.remove(record.id)
         do {
             try requireReadableRegistry()
+            try deletions.schedule([record.id])
             try next.save(root: repository.rootURL)
             registry = next // Revoke broker access immediately, before asynchronous cleanup.
             synchronizeProviders()
             connected.remove(record.id)
             errors[record.id] = nil
-            Task {
-                do { try await service.disconnect(record.id) }
-                catch { errorMessage = error.localizedDescription }
-            }
+            Task { if let error = await deleteRemovedSignIns() { errorMessage = error.localizedDescription } }
             try synchronize()
         } catch { errorMessage = error.localizedDescription }
+    }
+    /// Deletes removed connections' sign-ins; one that fails is tried again on the next removal or start.
+    @discardableResult private func deleteRemovedSignIns() async -> Error? {
+        await deletions.run { id in
+            // A removal whose registry write failed keeps its connection, so it keeps its sign-in too.
+            guard registryReadable else { throw MCPConnectionError.message("Saved tool connections could not be read.") }
+            guard !registry.connections.contains(where: { $0.id == id }) else { return }
+            try await service.disconnect(id)
+        }
     }
     func connect(_ record: MCPConnectionRecord) {
         guard signingIn == nil else { return }
@@ -132,10 +148,7 @@ public final class MCPController {
         loginTask = Task {
             defer { signingIn = nil; loginTask = nil; signInStage = "" }
             do {
-                let types = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]]
-                let scheme = (types?.first?["CFBundleURLSchemes"] as? [String])?.first ?? "noodle-dev"
-                let redirect = MCPService.configuredRedirectURI(for: record.endpoint)
-                    ?? URL(string: "\(scheme)://mcp/oauth/callback")!
+                let redirect = Self.redirectURI(for: record.endpoint)
                 try await service.signIn(record, redirectURI: redirect, progress: { [weak self] stage in
                     await self?.setSignInStage(stage)
                 }) { [browser] url in
@@ -160,6 +173,20 @@ public final class MCPController {
         }
     }
     func cancelSignIn() { loginTask?.cancel() }
+
+    /// Where a sign-in for a connection at `endpoint` returns to this app.
+    public static func redirectURI(for endpoint: URL) -> URL {
+        let types = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]]
+        let scheme = (types?.first?["CFBundleURLSchemes"] as? [String])?.first ?? "noodle-dev"
+        return MCPService.configuredRedirectURI(for: endpoint) ?? URL(string: "\(scheme)://mcp/oauth/callback")!
+    }
+
+    /// Opens the sign-in page of a connection kept elsewhere, as on a Noodle Hub, and returns
+    /// the address the browser came back to.
+    public func authorizeInBrowser(_ url: URL, callbackURL: URL) async throws -> URL {
+        browser.captureReturnWindow()
+        return try await browser.authorize(url: url, callbackURL: callbackURL)
+    }
     @discardableResult public func receiveAuthorizationCallback(_ url: URL) -> Bool {
         browser.receive(url)
     }
@@ -170,41 +197,13 @@ public final class MCPController {
     /// Call after every change to `registry`. A connection that cannot be read grants nothing.
     private func synchronizeProviders() {
         let connections = registryReadable ? registry.connections : []
-        if let toolRegistry {
-            let wanted = Dictionary(uniqueKeysWithValues: connections.map { ($0.id, $0.skillName + "\n" + $0.name + "\n" + $0.description + "\n" + $0.instructions) })
-            for (id, signature) in providers where wanted[id] != signature {
-                toolRegistry.unregister(String(signature.prefix { $0 != "\n" }))
-                providers[id] = nil
-            }
-            for connection in connections where providers[connection.id] == nil {
-                let id = connection.id, service = service
-                let provider = ConnectionToolProvider(id: connection.skillName, title: connection.name, connection: id,
-                    summary: connection.description, userInstructions: connection.instructions) { [weak self] action, tool, arguments, uri, authorized in
-                    // Use the connection as it is now: its endpoint or account may have been edited.
-                    guard let current = await self?.registry.connections.first(where: { $0.id == id }) else { throw MCPServiceError.revoked }
-                    do {
-                        return try await service.perform(MCPBridgeRequest(session: "", connectionID: id, action: action, tool: tool, arguments: arguments, uri: uri),
-                                                         connection: current, authorized: authorized)
-                    } catch {
-                        let message = Self.safeError(error)
-                        await self?.record(message, for: id)
-                        throw ToolProviderError(message)
-                    }
-                }
-                do { try toolRegistry.register(provider); providers[id] = wanted[id] }
-                catch { errors[id] = error.localizedDescription }
-            }
-        }
+        providers?.synchronize(connections) { [weak self] id in self?.registry.connections.first { $0.id == id } }
         let granted = registryReadable ? registry.assignments : [:]
         onAssignmentsChange?(Dictionary(uniqueKeysWithValues: granted.compactMap { key, ids in
             UUID(uuidString: key).map { ($0, Set(ids.map(\.uuidString))) }
         }))
     }
-    private func record(_ message: String, for connection: UUID) { errors[connection] = message }
-    private nonisolated static func safeError(_ error: Error) -> String {
-        if error is MCPServiceError || error is MCPConnectionError { return error.localizedDescription }
-        return "The tool connection could not complete the request. Try reconnecting in Settings → Tools."
-    }
+    private nonisolated static func safeError(_ error: Error) -> String { MCPConnectionProviders.safeError(error) }
 }
 
 // Open an ordinary default-browser tab, retaining normal profiles and extensions.
