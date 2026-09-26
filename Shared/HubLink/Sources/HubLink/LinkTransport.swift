@@ -81,7 +81,9 @@ enum LinkQUIC {
         while data.count < count {
             let (chunk, complete) = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<(Data?, Bool), Error>) in
                 connection.receive(minimumIncompleteLength: 1, maximumLength: count - data.count) { chunk, _, complete, error in
-                    if let error { continuation.resume(throwing: error) } else { continuation.resume(returning: (chunk, complete)) }
+                    // A finish that carries no bytes can arrive as "no message available" instead.
+                    if case .posix(.ENODATA)? = error { continuation.resume(returning: (chunk, true)) }
+                    else if let error { continuation.resume(throwing: error) } else { continuation.resume(returning: (chunk, complete)) }
                 }
             }
             if let chunk { data.append(chunk) }
@@ -117,6 +119,8 @@ public enum LinkReply: Sendable {
 /// An open stream the Hub pushes frames down until either side closes it.
 public final class LinkStream: @unchecked Sendable {
     public static let keepAliveInterval: TimeInterval = 10
+    /// How long a closed stream waits for the device to end its side.
+    static let closeGrace: TimeInterval = 5
 
     public let peer: LinkPublicKey
     private let connection: NWConnection
@@ -305,7 +309,9 @@ public final class LinkServer: @unchecked Sendable {
             lock.withLock { self.pushed[ObjectIdentifier(pushed)] = pushed }
             pushed.onClose { [weak self] in
                 self?.lock.withLock { _ = self?.pushed.removeValue(forKey: ObjectIdentifier(pushed)) }
-                stream.cancel()
+                // Cancelling as the end goes out can drop the last frames on their way; the device
+                // ends its side once it has read them, and this only catches one that never does.
+                LinkQUIC.queue.asyncAfter(deadline: .now() + LinkStream.closeGrace) { stream.cancel() }
             }
             open(pushed)
             if request.channel { pushed.readFrames() }

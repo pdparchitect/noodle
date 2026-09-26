@@ -163,6 +163,35 @@ final class LinkStreamTests: XCTestCase {
         do { for try await _ in frames.frames { count += 1 } } catch {}
         XCTAssertEqual(count, 0)
     }
+
+    /// A Hub that says why and closes at once, as a live view that cannot open does, still gets
+    /// its last words to the device.
+    func testTheLastFrameBeforeTheHubClosesArrives() async throws {
+        let hub = LinkIdentity()
+        let server = try LinkServer(identity: hub, port: 0, admits: { _ in true }, handler: { _, _ in
+            .stream({ stream in
+                stream.send(Data("opened".utf8))
+                Task {
+                    try? await Task.sleep(for: .milliseconds(20))
+                    stream.send(Data("failed".utf8))
+                    stream.close()
+                }
+            })
+        })
+        try await server.start()
+        addTeardownBlock { server.stop() }
+        let endpoint = LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))
+        for attempt in 0..<30 {
+            let channel = try await LinkClient.channel(Data(#"{"open":1}"#.utf8), identity: LinkIdentity(), hubKey: hub.publicKey,
+                                                       endpoints: [endpoint])
+            defer { channel.cancel() }
+            var frames: [Data] = []
+            do { for try await frame in channel.frames { frames.append(frame) } } catch {
+                XCTFail("attempt \(attempt) ended with \(error) after \(frames.count) frames")
+            }
+            XCTAssertEqual(frames, [Data("opened".utf8), Data("failed".utf8)], "attempt \(attempt)")
+        }
+    }
 }
 
 final class StreamBox: @unchecked Sendable {
