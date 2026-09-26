@@ -177,30 +177,43 @@ import Observation
             do {
                 let user = try user(key)
                 let (link, bot) = try await hubBots().companionLink(attachmentID, in: conversationID, for: user)
-                // Opened before answering, so a companion's refusal reaches the device as one.
-                let companion: SurfaceSocket
+                // Starting a computer or a noodlet can outlast a request, so the channel opens first
+                // and anything that then goes wrong comes down it.
+                let open: @MainActor () async throws -> SurfaceSocket
                 switch link {
                 case .browser(let browser, let tab):
                     guard let tab, try hubBrowsers().browsers(for: user).contains(where: { $0.id == browser }) else {
                         throw LinkError("That browser is not yours or no longer exists.")
                     }
-                    companion = try await hubBrowsers().openSurface(browser: browser, tab: tab, for: user)
+                    let browsers = try hubBrowsers()
+                    open = { try await browsers.openSurface(browser: browser, tab: tab, for: user) }
                 case .computer(let computer, let terminal, _):
                     guard try hubComputers().computers(for: user).contains(where: { $0.id == computer }) else {
                         throw LinkError("That computer is not yours or no longer exists.")
                     }
-                    companion = try await hubComputers().openSurface(computer: computer, terminal: terminal, bot: bot, for: user)
+                    let computers = try hubComputers()
+                    open = { try await computers.openSurface(computer: computer, terminal: terminal, bot: bot, for: user) }
                 case .noodlet(let noodlet):
-                    var open = AppletRequest(.open)
-                    open.noodletID = noodlet
-                    open.mode = "background"
-                    guard let session = try await hubBots().applets.companion(open).sessionID else {
-                        throw LinkError("Noodle Applet did not start the noodlet.")
+                    let applets = try hubBots().applets
+                    open = {
+                        var start = AppletRequest(.open)
+                        start.noodletID = noodlet
+                        start.mode = "background"
+                        guard let session = try await applets.companion(start).sessionID else {
+                            throw LinkError("Noodle Applet did not start the noodlet.")
+                        }
+                        return try await applets.companionSurface(AppletRequest(.surfaceStream, sessionID: session))
                     }
-                    companion = try await hubBots().applets.companionSurface(AppletRequest(.surfaceStream, sessionID: session))
                 }
                 return .stream { stream in
-                    Task { @MainActor in Self.relay(companion, to: stream) }
+                    Task { @MainActor in
+                        stream.send(LinkProtocol.encode(LinkEvent.surfaceOpened(sessionID: UUID())))
+                        do { Self.relay(try await open(), to: stream) }
+                        catch {
+                            stream.send(LinkProtocol.encode(LinkEvent.surfaceFailed(reason: error.localizedDescription)))
+                            stream.close()
+                        }
+                    }
                 }
             } catch {
                 return .response(LinkProtocol.encode(LinkResponse.failure(error.localizedDescription)))
@@ -228,7 +241,6 @@ import Observation
     /// in the order they sent them. A device that falls behind misses frames rather than getting
     /// old ones late, and picks up again at a key frame. While the view is open, bots wait.
     private static func relay(_ companion: SurfaceSocket, to stream: LinkStream) {
-        stream.send(LinkProtocol.encode(LinkEvent.surfaceOpened(sessionID: UUID())))
         stream.onFrame { data in
             if SurfaceControl(data) != nil { companion.send(data) }
         }

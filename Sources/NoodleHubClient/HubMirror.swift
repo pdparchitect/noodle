@@ -283,7 +283,7 @@ import Observation
                     case .browsersChanged:
                         try await syncBrowsers()
                     // Surfaces have their own streams.
-                    case .surfaceOpened:
+                    case .surfaceOpened, .surfaceFailed:
                         break
                     case .computerCreated(let id, let computer, let error):
                         if let computer { making.removeValue(forKey: id)?.resume(returning: computer) }

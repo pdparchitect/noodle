@@ -219,7 +219,7 @@ import SwiftUI
             if let computer { making.removeValue(forKey: id)?.resume(returning: computer) }
             else { making.removeValue(forKey: id)?.resume(throwing: LinkError(error ?? "The Hub could not make the computer.")) }
         // Live views have their own channels.
-        case .surfaceOpened:
+        case .surfaceOpened, .surfaceFailed:
             return
         }
         saveCache()

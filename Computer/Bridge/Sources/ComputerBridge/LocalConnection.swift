@@ -143,7 +143,8 @@ public enum ComputerConnection {
             let fd = socket(AF_UNIX, SOCK_STREAM, 0)
             guard fd >= 0 else { throw ComputerBridgeError("Cannot open computer connection.") }
             do {
-                configure(fd, seconds: 30)
+                // A stopped computer starts first.
+                configure(fd, seconds: ComputerOperation.start.timeout)
                 var address = try address(url)
                 guard withAddress(&address, { Darwin.connect(fd, $0, $1) }) == 0 else {
                     throw ComputerBridgeError("Computer is unavailable.", unavailable: true)

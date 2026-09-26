@@ -173,6 +173,8 @@ public enum LinkEvent: Codable, Equatable, Sendable {
     case browsersChanged
     /// A surface channel is ready; video follows as `LinkSurface` packets.
     case surfaceOpened(sessionID: UUID)
+    /// What a surface channel was opened for could not be shown, and why; the channel ends.
+    case surfaceFailed(reason: String)
 }
 
 /// What a device sets on a browser it makes or edits on the Hub. Nil fields stay as they are.

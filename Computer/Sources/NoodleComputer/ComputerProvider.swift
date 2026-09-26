@@ -128,8 +128,11 @@ import WebKit
             for id in ids { await terminals.removeValue(forKey: id)?.close() }
             return .init()
         }
-        if request.operation == .start {
+        // A person opening a stopped computer wakes it, as a bot starting it does.
+        if request.operation == .start || request.operation == .surfaceStream {
             if session.phase.canStart { await store.start(session) }
+        }
+        if request.operation == .start {
             guard session.phase == .running else { throw ComputerBridgeError(session.phase.startFailureDescription) }
             return .init()
         }
@@ -141,7 +144,7 @@ import WebKit
         }
         if request.operation == .surfaceStream {
             guard let socket else { throw ComputerBridgeError("A live view needs a connection of its own.") }
-            try surface(request, session: session, owner: owner, socket: socket)
+            try await surface(request, session: session, runtime: runtime, owner: owner, socket: socket)
             return .init()
         }
         // A person using the computer live has it to themselves until they close the view.
@@ -169,19 +172,7 @@ import WebKit
             return response
         }
         if request.operation == .terminalOpen {
-            // Retain completed output, but don't let abandoned sessions grow indefinitely.
-            terminals = terminals.filter { !$0.value.exited || Date().timeIntervalSince($0.value.touched) < 600 }
-            guard terminals.count < 64, terminals.values.filter({ $0.computerID == session.id && !$0.exited }).count < 16 else {
-                throw ComputerBridgeError("Too many terminal sessions. Close an unused session first.")
-            }
-            let id = UUID(), io = GuestTerminalIO()
-            let process = try await runtime.makeProviderTerminal(io: io, id: id)
-            guard session.phase == .running, session.container === runtime else {
-                try? await process.kill(.kill); try? await process.delete(); io.finish()
-                throw ComputerBridgeError("Computer stopped while opening the terminal.")
-            }
-            terminals[id] = ProviderTerminal(computerID: session.id, owner: owner, io: io, process: process)
-            return .init(terminalID: id, offset: 0, exited: false)
+            return .init(terminalID: try await openTerminal(on: session, runtime: runtime, owner: owner), offset: 0, exited: false)
         }
         // A web display belongs to the assigned computer, not to an arbitrary PTY.
         if request.operation == .display {
@@ -239,7 +230,24 @@ import WebKit
         return .init()
     }
     /// A person watching a running computer: its desktop if it has one, else the terminal the card shows.
-    private func surface(_ request: ComputerRequest, session: ComputerSession, owner: String, socket: SurfaceSocket) throws {
+    private func openTerminal(on session: ComputerSession, runtime: ContainerComputer, owner: String) async throws -> UUID {
+        // Retain completed output, but don't let abandoned sessions grow indefinitely.
+        terminals = terminals.filter { !$0.value.exited || Date().timeIntervalSince($0.value.touched) < 600 }
+        guard terminals.count < 64, terminals.values.filter({ $0.computerID == session.id && !$0.exited }).count < 16 else {
+            throw ComputerBridgeError("Too many terminal sessions. Close an unused session first.")
+        }
+        let id = UUID(), io = GuestTerminalIO()
+        let process = try await runtime.makeProviderTerminal(io: io, id: id)
+        guard session.phase == .running, session.container === runtime else {
+            try? await process.kill(.kill); try? await process.delete(); io.finish()
+            throw ComputerBridgeError("Computer stopped while opening the terminal.")
+        }
+        terminals[id] = ProviderTerminal(computerID: session.id, owner: owner, io: io, process: process)
+        return id
+    }
+
+    private func surface(_ request: ComputerRequest, session: ComputerSession, runtime: ContainerComputer, owner: String,
+                         socket: SurfaceSocket) async throws {
         if let browser = session.desktop != nil ? session.browser : nil {
             let view = browser.view
             streamer("display:\(session.id)", computer: session.id, capture: { [weak view] in
@@ -260,9 +268,14 @@ import WebKit
             }).attach(socket)
             return
         }
-        guard let id = request.terminalID, let terminal = terminals[id], terminal.owner == owner, terminal.computerID == session.id else {
-            throw ComputerBridgeError("This computer has no display, and the terminal is closed.")
-        }
+        // The terminal the card showed, else another of the bot's, else a new one: a terminal does
+        // not outlive a restart.
+        let open = terminals.filter { $0.value.owner == owner && $0.value.computerID == session.id && !$0.value.exited }
+        let id: UUID
+        if let shown = request.terminalID, open[shown] != nil { id = shown }
+        else if let other = open.max(by: { $0.value.touched < $1.value.touched })?.key { id = other }
+        else { id = try await openTerminal(on: session, runtime: runtime, owner: owner) }
+        guard let terminal = terminals[id] else { throw ComputerBridgeError("The terminal is closed.") }
         streamer("terminal:\(id)", computer: session.id, capture: { [weak terminal] in
             terminal.flatMap { TerminalSurface.picture($0.replay.read(from: max(0, $0.replay.end - 16_000)).data ?? Data()) }
         }, apply: { [weak terminal] input in

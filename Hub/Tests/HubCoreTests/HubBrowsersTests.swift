@@ -45,7 +45,7 @@ import XCTest
         let browser = self.browser, surfaces = self.surfaces
         let hub = Hub(root: root.appendingPathComponent("Hub"), messenger: nil,
                       computer: { try HubComputersTests.FakeComputer().call($0) }, browser: { try browser.call($0) },
-                      surfaces: SurfaceOpeners(browser: { surfaces.open("\($0.browserID!) \($0.tabID!)") }))
+                      surfaces: SurfaceOpeners(browser: { try surfaces.open("\($0.browserID!) \($0.tabID!)") }))
         try hub.repository.prepare()
         let family = try hub.access.addPlan(named: "Family")
         hub.access.set(HubHarness(provider: .claudeCode, profile: nil), included: true, in: family)
@@ -165,8 +165,15 @@ final class FakeSurfaces: @unchecked Sendable {
     init(width: Double) { self.width = width }
 
     var inputs: [(view: String, input: SurfaceInput)] { lock.withLock { received } }
+    /// Why the companion refuses to show anything, when it does.
+    var refusal: String? {
+        get { lock.withLock { refusing } }
+        set { lock.withLock { refusing = newValue } }
+    }
+    private var refusing: String?
 
-    func open(_ view: String) -> SurfaceSocket {
+    func open(_ view: String) throws -> SurfaceSocket {
+        if let refusal { throw LinkError(refusal) }
         var fds: [Int32] = [0, 0]
         precondition(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds) == 0)
         let companion = SurfaceSocket(fd: fds[0])
@@ -192,6 +199,8 @@ extension HubPairing {
             case .packets(let packets)?:
                 XCTAssertTrue(opened, "video came before the channel said it was open")
                 return (channel, packets)
+            case .failed(let reason)?:
+                throw LinkError(reason)
             case nil: XCTFail("an unreadable surface frame")
             }
         }

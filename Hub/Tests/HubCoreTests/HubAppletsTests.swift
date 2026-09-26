@@ -48,7 +48,7 @@ import XCTest
         let hub = Hub(root: root.appendingPathComponent("Hub"), messenger: nil,
                       computer: { try HubComputersTests.FakeComputer().call($0) },
                       browser: { try HubBrowsersTests.FakeBrowser().call($0) }, applet: { applet.call($0) },
-                      surfaces: SurfaceOpeners(applet: { surfaces.open($0.sessionID!.uuidString) }))
+                      surfaces: SurfaceOpeners(applet: { try surfaces.open($0.sessionID!.uuidString) }))
         try hub.repository.prepare()
         let family = try hub.access.addPlan(named: "Family")
         hub.access.set(HubHarness(provider: .claudeCode, profile: nil), included: true, in: family)
@@ -134,6 +134,22 @@ import XCTest
         let link = try post(noodlet, in: bot, byBot: true, hub: f.hub)
         let opened = await opens(link, in: bot, f)
         XCTAssertTrue(opened, "a noodlet its bot made did not open")
+    }
+
+    /// Starting what a view shows can take longer than a request may wait, so the view opens at
+    /// once; if what it shows then cannot start, the device still hears why.
+    func testAViewThatCannotStartSaysWhy() async throws {
+        let f = try await fixture()
+        let bot = try f.hub.bots.create(LinkBotDraft(name: "Kai", provider: "claude-code"), for: f.ada)
+        let link = try post(made(in: folder(of: bot, f), f), in: bot, byBot: true, hub: f.hub)
+        f.surfaces.refusal = "The noodlet stopped."
+        let channel = try await f.device.channel(.openSurface(conversationID: bot.conversationID, attachmentID: link))
+        defer { channel.cancel() }
+        var reason: String?
+        for try await frame in channel.frames {
+            if case .failed(let why)? = LinkSurface.message(frame) { reason = why; break }
+        }
+        XCTAssertEqual(reason, "The noodlet stopped.")
     }
 
     func testNoodletsOfAnotherBotOrPostedByAPersonNeverOpen() async throws {

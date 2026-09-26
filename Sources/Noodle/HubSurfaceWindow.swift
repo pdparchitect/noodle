@@ -98,7 +98,11 @@ struct HubSurfaceWindow: View {
             self.channel = channel
             defer { channel.cancel() }
             for try await frame in channel.frames {
-                if case .packets(let packets)? = LinkSurface.message(frame) { feed.receive(packets) }
+                switch LinkSurface.message(frame) {
+                case .packets(let packets)?: feed.receive(packets)
+                case .failed(let reason)?: failure = reason; showing = false
+                default: break
+                }
             }
             if !showing { failure = "The Hub could not show this." }
         } catch {

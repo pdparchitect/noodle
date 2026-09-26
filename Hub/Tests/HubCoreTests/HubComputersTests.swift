@@ -54,7 +54,7 @@ import XCTest
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
         let computer = FakeComputer(), surfaces = FakeSurfaces(width: 1024)
         let hub = Hub(root: root.appendingPathComponent("Hub"), messenger: nil, computer: { try computer.call($0) },
-                      surfaces: SurfaceOpeners(computer: { surfaces.open("\($0.computerID!) \($0.terminalID!) \($0.agentID!)") }))
+                      surfaces: SurfaceOpeners(computer: { try surfaces.open("\($0.computerID!) \($0.terminalID!) \($0.agentID!)") }))
         try hub.repository.prepare()
         let family = try hub.access.addPlan(named: "Family")
         hub.access.set(HubHarness(provider: .claudeCode, profile: nil), included: true, in: family)
