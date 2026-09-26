@@ -4,7 +4,7 @@ import XCTest
 
 final class LinkTransportTests: XCTestCase {
     private func server(_ identity: LinkIdentity) async throws -> LinkServer {
-        let server = try LinkServer(identity: identity, port: 0) { key, request in
+        let server = try LinkServer(identity: identity, port: 0, admits: { _ in true }) { key, request in
             .response(key.x963 + request)
         }
         try await server.start()
@@ -32,6 +32,27 @@ final class LinkTransportTests: XCTestCase {
         } catch {}
     }
 
+    /// A key the Hub does not admit fails the handshake, so its request never reaches the handler.
+    func testTheHubRefusesKeysItDoesNotAdmitDuringTheHandshake() async throws {
+        let hub = LinkIdentity(), known = LinkIdentity()
+        let requests = FrameBox()
+        let server = try LinkServer(identity: hub, port: 0, admits: { $0 == known.publicKey }) { _, request in
+            requests.append(request)
+            return .response(request)
+        }
+        try await server.start()
+        addTeardownBlock { server.stop() }
+        let endpoint = LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))
+        do {
+            _ = try await LinkClient.exchange(Data("stranger".utf8), identity: LinkIdentity(), hubKey: hub.publicKey,
+                                              endpoints: [endpoint], timeout: .seconds(5))
+            XCTFail("A key the Hub does not admit got in")
+        } catch {}
+        let (response, _) = try await LinkClient.exchange(Data("known".utf8), identity: known, hubKey: hub.publicKey, endpoints: [endpoint])
+        XCTAssertEqual(response, Data("known".utf8))
+        XCTAssertEqual(requests.frames, [Data("known".utf8)])
+    }
+
     func testTheFirstReachableEndpointWins() async throws {
         let hub = LinkIdentity()
         let server = try await server(hub)
@@ -47,7 +68,7 @@ final class LinkStreamTests: XCTestCase {
         let hub = LinkIdentity(), device = LinkIdentity()
         let opened = expectation(description: "stream opened")
         let box = StreamBox()
-        let server = try LinkServer(identity: hub, port: 0, handler: { _, request in
+        let server = try LinkServer(identity: hub, port: 0, admits: { _ in true }, handler: { _, request in
             request == Data("subscribe".utf8) ? .stream({ stream in box.stream = stream; opened.fulfill() }) : .response(Data())
         })
         try await server.start()
@@ -78,7 +99,7 @@ final class LinkStreamTests: XCTestCase {
         let heard = expectation(description: "device frames arrived")
         heard.expectedFulfillmentCount = 2
         let box = StreamBox(), requests = FrameBox(), incoming = FrameBox()
-        let server = try LinkServer(identity: hub, port: 0, handler: { _, request in
+        let server = try LinkServer(identity: hub, port: 0, admits: { _ in true }, handler: { _, request in
             requests.append(request)
             return .stream({ stream in
                 box.stream = stream
@@ -109,7 +130,7 @@ final class LinkStreamTests: XCTestCase {
     /// A Hub that refuses answers once instead of opening a stream; the device hears why.
     func testARefusedChannelSaysWhy() async throws {
         let hub = LinkIdentity()
-        let server = try LinkServer(identity: hub, port: 0, handler: { _, _ in
+        let server = try LinkServer(identity: hub, port: 0, admits: { _ in true }, handler: { _, _ in
             .response(LinkProtocol.encode(LinkResponse.failure("That noodlet is not this bot's.")))
         })
         try await server.start()
@@ -129,7 +150,7 @@ final class LinkStreamTests: XCTestCase {
         let hub = LinkIdentity()
         let box = StreamBox()
         let opened = expectation(description: "stream opened")
-        let server = try LinkServer(identity: hub, port: 0, handler: { _, _ in
+        let server = try LinkServer(identity: hub, port: 0, admits: { _ in true }, handler: { _, _ in
             .stream({ stream in box.stream = stream; opened.fulfill() })
         })
         try await server.start()
@@ -154,7 +175,7 @@ final class StreamBox: @unchecked Sendable {
         let hub = LinkIdentity()
         let harness = LinkHarness(provider: "codex", providerName: "Codex", profileName: nil)
         let port = LockedPort()
-        let server = try LinkServer(identity: hub, port: 0) { _, _ in
+        let server = try LinkServer(identity: hub, port: 0, admits: { _ in true }) { _, _ in
             .response(LinkProtocol.encode(.status(LinkStatus(hubName: "Studio", userName: "Petko", planName: "Family",
                 harnesses: [harness], endpoints: [LinkEndpoint(host: "127.0.0.1", port: port.value)]))))
         }

@@ -217,20 +217,24 @@ public final class LinkStream: @unchecked Sendable {
     }
 }
 
-/// Accepts QUIC connections from any key and hands each request to `handler` with the
-/// sender's key, which is how the Hub knows which device is asking.
+/// Accepts QUIC connections only from keys `admits` lets in, refused during the handshake so
+/// nothing a stranger sends is read, and hands each request to `handler` with the sender's
+/// key, which is how the Hub knows which device is asking.
 public final class LinkServer: @unchecked Sendable {
     public typealias Handler = @Sendable (LinkPublicKey, Data) async -> LinkReply
 
     private let listener: NWListener
+    private let admits: @Sendable (LinkPublicKey) -> Bool
     private let handler: Handler
     private let lock = NSLock()
     private var streams: [ObjectIdentifier: NWConnection] = [:]
     private var pushed: [ObjectIdentifier: LinkStream] = [:]
 
-    public init(identity: LinkIdentity, port: UInt16, handler: @escaping Handler) throws {
+    public init(identity: LinkIdentity, port: UInt16, admits: @escaping @Sendable (LinkPublicKey) -> Bool,
+                handler: @escaping Handler) throws {
         guard let port = NWEndpoint.Port(rawValue: port) else { throw LinkError("The port is not valid.") }
-        listener = try NWListener(using: try LinkQUIC.parameters(identity: identity) { _ in true }, on: port)
+        listener = try NWListener(using: try LinkQUIC.parameters(identity: identity, verify: admits), on: port)
+        self.admits = admits
         self.handler = handler
     }
 
@@ -263,6 +267,13 @@ public final class LinkServer: @unchecked Sendable {
             return Array(pushed.values)
         }
         open.forEach { $0.close() }
+    }
+
+    /// Ends the connections of keys `admits` no longer lets in, such as a removed device's.
+    public func disconnectRefused() {
+        let (connections, open) = lock.withLock { (Array(streams.values), Array(pushed.values)) }
+        for connection in connections where LinkQUIC.peerKey(of: connection).map(admits) == false { connection.cancel() }
+        for stream in open where !admits(stream.peer) { stream.close() }
     }
 
     private func accept(_ stream: NWConnection) {

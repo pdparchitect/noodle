@@ -58,6 +58,7 @@ import Observation
     @ObservationIgnored private var routerRenewal: Task<Void, Never>?
     /// Token digests of unused invitations. Kept in memory: an invitation outlives no relaunch.
     @ObservationIgnored private var invitations: [Data: (user: UUID, expires: Date)] = [:]
+    @ObservationIgnored private let gate = LinkGate()
 
     private struct Settings: Codable {
         var manualAddress: String
@@ -90,13 +91,15 @@ import Observation
         opensRouterPort = settings?.opensRouterPort ?? true
         bots?.onChange = { [weak self] user, event in self?.push(event, to: user) }
         connections?.onSignInEnded = { [weak self] user in self?.push(.connectionsChanged, to: user) }
+        updateGate()
+        watchDevices()
     }
 
     public func start() async {
         guard server == nil else { return }
         state = .starting
         do {
-            let server = try LinkServer(identity: identity, port: port) { [weak self] key, request in
+            let server = try LinkServer(identity: identity, port: port, admits: gate.admits) { [weak self] key, request in
                 await self?.reply(to: request, from: key) ?? .response(Data())
             }
             try await server.start()
@@ -154,6 +157,7 @@ import Observation
         let expires = now().addingTimeInterval(LinkInvitation.lifetime)
         invitations = invitations.filter { $0.value.expires > now() }
         invitations[LinkInvitation.tokenDigest(token)] = (user.id, expires)
+        updateGate()
         return LinkInvitation(hubName: hubName, hubKey: key, endpoints: endpoints, userName: user.name,
                               token: token, expires: expires)
     }
@@ -229,6 +233,24 @@ import Observation
         return .response(LinkProtocol.encode(response))
     }
 
+    /// Keeps the gate in step with the devices however they change, including from Settings.
+    private func watchDevices() {
+        withObservationTracking { _ = access.devices } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.updateGate()
+                self?.watchDevices()
+            }
+        }
+    }
+
+    /// Lets in paired devices, and anyone while an invitation is open, since a joining device's
+    /// key is new; drops whoever that no longer covers.
+    private func updateGate() {
+        invitations = invitations.filter { $0.value.expires > now() }
+        gate.update(keys: Set(access.devices.map(\.key)), invitingUntil: invitations.values.map(\.expires).max())
+        server?.disconnectRefused()
+    }
+
     private func register(_ stream: LinkStream) {
         let id = ObjectIdentifier(stream)
         streams[id] = stream
@@ -300,6 +322,7 @@ import Observation
             }
             let name = deviceName.trimmingCharacters(in: .whitespacesAndNewlines)
             let device = access.addDevice(named: name.isEmpty ? "Device" : String(name.prefix(80)), key: key, for: user, at: now())
+            updateGate()
             return .status(status(for: device))
         case .status:
             let device = try paired(key)
@@ -519,5 +542,23 @@ import Observation
     private func saveSettings() {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try? JSONEncoder().encode(Settings(manualAddress: manualAddress, opensRouterPort: opensRouterPort)).write(to: directory.appendingPathComponent("link.json"), options: .atomic)
+    }
+}
+
+/// Who may finish a handshake, read on the link's queue while the devices change on the main actor.
+private final class LinkGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var keys: Set<LinkPublicKey> = []
+    private var invitingUntil: Date?
+
+    func update(keys: Set<LinkPublicKey>, invitingUntil: Date?) {
+        lock.withLock {
+            self.keys = keys
+            self.invitingUntil = invitingUntil
+        }
+    }
+
+    @Sendable func admits(_ key: LinkPublicKey) -> Bool {
+        lock.withLock { keys.contains(key) || invitingUntil.map { $0 > Date() } ?? false }
     }
 }

@@ -104,7 +104,7 @@ private actor FakeHub {
     private func paired(to hub: FakeHub, directory: URL = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString)) async throws -> (HubChats, LinkServer) {
         let identity = LinkIdentity()
-        let server = try LinkServer(identity: identity, port: 0) { _, data in
+        let server = try LinkServer(identity: identity, port: 0, admits: { _ in true }) { _, data in
             .response(LinkProtocol.encode(await hub.reply(to: data)))
         }
         try await server.start()

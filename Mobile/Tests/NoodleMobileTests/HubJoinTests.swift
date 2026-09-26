@@ -7,7 +7,7 @@ import Testing
     @Test func anInvitationJoinsTheHubAndShowsWhoIJoinedAs() async throws {
         let hubIdentity = LinkIdentity()
         let token = LinkInvitation.newToken()
-        let server = try LinkServer(identity: hubIdentity, port: 0) { _, data in
+        let server = try LinkServer(identity: hubIdentity, port: 0, admits: { _ in true }) { _, data in
             guard case .success(.enroll(let sent, _)) = LinkProtocol.decode(data), sent == token else {
                 return .response(LinkProtocol.encode(.failure("This invitation was already used.")))
             }

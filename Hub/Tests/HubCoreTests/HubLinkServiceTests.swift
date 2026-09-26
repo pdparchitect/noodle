@@ -97,6 +97,54 @@ import XCTest
         XCTAssertNotNil(pairing.error)
     }
 
+    /// Only paired devices finish the handshake, so the Hub reads nothing a stranger sends.
+    func testStrangersAreRefusedBeforeTheHubReadsAnything() async throws {
+        let (hub, link, device) = try await fixture()
+        await HubPairing(directory: device, deviceName: "Mac").join(link.invite(try hub.access.addUser(named: "Ada")).url().absoluteString)
+        do {
+            _ = try await LinkClient.exchange(try LinkProtocol.encode(.status), identity: LinkIdentity(), hubKey: link.key,
+                                              endpoints: link.endpoints, timeout: .seconds(5))
+            XCTFail("A stranger's request reached the Hub")
+        } catch {}
+    }
+
+    /// A joining device's key is new to the Hub, so strangers get in while an invitation is open, and only to join.
+    func testStrangersGetInOnlyWhileAnInvitationIsOpen() async throws {
+        let (hub, link, device) = try await fixture()
+        let invitation = link.invite(try hub.access.addUser(named: "Ada"))
+        let stranger = LinkIdentity()
+        let (answer, _) = try await LinkClient.exchange(try LinkProtocol.encode(.status), identity: stranger, hubKey: link.key,
+                                                        endpoints: link.endpoints, timeout: .seconds(5))
+        XCTAssertEqual(try LinkProtocol.decodeResponse(answer), .failure("This device is not paired with Mac mini."))
+
+        await HubPairing(directory: device, deviceName: "Mac").join(invitation.url().absoluteString)
+        do {
+            _ = try await LinkClient.exchange(try LinkProtocol.encode(.bots), identity: stranger, hubKey: link.key,
+                                              endpoints: link.endpoints, timeout: .seconds(5))
+            XCTFail("A stranger got in after the invitation was used")
+        } catch {}
+    }
+
+    func testRemovingADeviceEndsItsOpenStream() async throws {
+        let (hub, link, device) = try await fixture()
+        let pairing = HubPairing(directory: device, deviceName: "Mac")
+        await pairing.join(link.invite(try hub.access.addUser(named: "Ada")).url().absoluteString)
+        let paired = try XCTUnwrap(hub.access.devices.first)
+        let events = try await pairing.subscribe()
+        // Past the presence window, the device counts as connected only once its stream is registered.
+        clock = clock.addingTimeInterval(HubLinkService.presenceWindow + 1)
+        for _ in 0..<100 where !link.isConnected(paired) { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertTrue(link.isConnected(paired))
+
+        let ended = expectation(description: "The removed device's stream ended")
+        Task {
+            do { for try await _ in events {} } catch {}
+            ended.fulfill()
+        }
+        hub.access.remove(paired)
+        await fulfillment(of: [ended], timeout: 5)
+    }
+
     func testInvitationsCarryTheManualAddressAndTheKey() async throws {
         let (hub, link, _) = try await fixture()
         link.manualAddress = "hub.example.com:4000"
