@@ -67,5 +67,9 @@ import XCTest
         XCTAssertEqual(listed.map(\.id), [computer.id])
         XCTAssertEqual(listed.first?.botIDs, [bot.id])
         XCTAssertEqual(listed.first?.name, "Bench")
+
+        _ = try await f.device.request(.deleteComputer(id: computer.id))
+        guard case .computers(let left) = try await f.device.request(.computers) else { return XCTFail("not listed") }
+        XCTAssertEqual(left, [])
     }
 }

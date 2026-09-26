@@ -152,6 +152,11 @@ import Observation
         return changed
     }
 
+    public func deleteComputer(_ id: UUID) async throws {
+        _ = try await pairing.request(.deleteComputer(id: id))
+        try await syncComputers()
+    }
+
     /// The Hub computers a bot kept there may use, by its local stand-in.
     public func computerIDs(forAgent id: UUID) -> Set<UUID> {
         guard let entry = entries.first(where: { $0.agent == id }) else { return [] }

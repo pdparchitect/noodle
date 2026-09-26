@@ -28,9 +28,13 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
     var failure: String?
     /// Makes a new one without leaving Noodle, where the companion supports it.
     var onNew: (() -> Void)?
+    /// Deletes one in the companion, after the person confirms.
+    var onDelete: ((CompanionAssignmentItem) -> Void)?
     @State private var showingAdd = false
     @State private var search = ""
     @State private var removing: CompanionAssignmentItem?
+    @State private var wantsNew = false
+    @State private var deleting: CompanionAssignmentItem?
 
     private var selected: [CompanionAssignmentItem] {
         let known = items.filter { selectedIDs.contains($0.id) }
@@ -44,14 +48,20 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
             HStack {
                 Text(title).font(.caption.weight(.semibold))
                 Spacer()
-                if let onNew { Button("New \(noun.capitalized)…", action: onNew) }
                 Button { search = ""; showingAdd = true } label: {
                     Label("Add \(title)", systemImage: "plus")
                 }
                 .popover(isPresented: $showingAdd, arrowEdge: .bottom) {
                     CompanionAssignmentChooser(title: title, items: items, selectedIDs: $selectedIDs,
                         search: $search, createPrompt: createPrompt, openLibraryButton: openLibraryButton,
-                        onDone: { showingAdd = false })
+                        newTitle: onNew == nil ? nil : "New \(noun.capitalized)…",
+                        onNew: { wantsNew = true; showingAdd = false },
+                        deleteTitle: onDelete == nil ? nil : "Delete \(noun.capitalized)…",
+                        onDelete: { deleting = $0; showingAdd = false }, onDone: { showingAdd = false })
+                        .onDisappear {
+                            // Wait for the popover to close before presenting a sheet on the bot editor.
+                            if wantsNew { wantsNew = false; onNew?() }
+                        }
                 }
             }
             notice
@@ -85,6 +95,9 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
                                 Text(item.name).font(.caption).lineLimit(2).multilineTextAlignment(.center)
                             }.frame(maxWidth: .infinity, alignment: .top)
                                 .help(item.tooltip)
+                                .contextMenu {
+                                    if onDelete != nil { Button("Delete \(noun.capitalized)…", role: .destructive) { deleting = item } }
+                                }
                         }
                     }.padding(12)
                 }
@@ -106,6 +119,14 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
         } message: { _ in
             Text("This bot loses access to it when you save. The \(noun) itself is not deleted.")
         }
+        .confirmationDialog("Delete “\(deleting?.name ?? "")”?", isPresented: Binding(
+            get: { deleting != nil }, set: { if !$0 { deleting = nil } }
+        ), titleVisibility: .visible, presenting: deleting) { item in
+            Button("Delete \(noun.capitalized)", role: .destructive) { selectedIDs.remove(item.id); onDelete?(item) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("It moves to the Trash, and every bot using it loses it.")
+        }
     }
 }
 
@@ -116,6 +137,10 @@ struct CompanionAssignmentChooser<Prompt: View, LibraryButton: View>: View {
     @Binding var search: String
     let createPrompt: Prompt
     let openLibraryButton: LibraryButton
+    var newTitle: String?
+    var onNew: () -> Void = {}
+    var deleteTitle: String?
+    var onDelete: (CompanionAssignmentItem) -> Void = { _ in }
     let onDone: () -> Void
     private var available: [CompanionAssignmentItem] {
         items.filter {
@@ -141,6 +166,9 @@ struct CompanionAssignmentChooser<Prompt: View, LibraryButton: View>: View {
                             }.padding(8).contentShape(Rectangle())
                         }
                         .buttonStyle(.plain).help(item.tooltip).accessibilityLabel("Add \(item.name) to bot")
+                        .contextMenu {
+                            if let deleteTitle { Button(deleteTitle, role: .destructive) { onDelete(item) } }
+                        }
                     }
                     if items.isEmpty { createPrompt }
                     else if available.isEmpty {
@@ -150,6 +178,7 @@ struct CompanionAssignmentChooser<Prompt: View, LibraryButton: View>: View {
                 }
             }
             HStack {
+                if let newTitle { Button(newTitle, action: onNew) }
                 if !items.isEmpty { openLibraryButton }
                 Spacer()
                 Button("Done", action: onDone)

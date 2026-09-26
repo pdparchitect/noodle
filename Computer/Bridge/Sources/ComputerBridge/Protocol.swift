@@ -29,8 +29,8 @@ public struct RemoteComputer: Codable, Hashable, Identifiable, Sendable {
 public enum ComputerOperation: String, Codable, Sendable {
     case list, start, terminalOpen, terminalRead, terminalWrite, terminalResize, terminalClose, terminalResolve, revoke, preview, display
     case fileUpload, fileDownload
-    /// Managing computers: what can be made, making one, and changing one.
-    case templates, create, update
+    /// Managing computers: what can be made, making one, changing one and deleting one.
+    case templates, create, update, delete
     public var isFileTransfer: Bool { self == .fileUpload || self == .fileDownload }
     /// A new computer may first download its image.
     public var timeout: Int { self == .create ? 1800 : isFileTransfer ? 600 : (self == .start ? 180 : 120) }

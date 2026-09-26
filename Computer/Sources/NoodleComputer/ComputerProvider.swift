@@ -100,6 +100,21 @@ import WebKit
             if let failure { throw ComputerBridgeError(failure) }
             return ComputerResponse(computers: [Self.remote(session)])
         }
+        if request.operation == .delete {
+            // Only containers: this Mac itself is set up and removed in Noodle Computer.
+            guard session.computer.kind == .container else {
+                throw ComputerBridgeError("Remove this computer in \(ComputerAppIdentity.name).")
+            }
+            if session.phase != .stopped { await store.stop(session) }
+            guard session.canDelete else { throw ComputerBridgeError("Stop this computer before deleting it.") }
+            let shown = store.error
+            store.error = nil
+            store.remove(session)
+            let failure = store.error
+            store.error = shown
+            if let failure { throw ComputerBridgeError(failure) }
+            return .init()
+        }
         if session.computer.kind == .localMac { return try await handleLocal(request, session: session, store: store, owner: owner) }
         if request.operation == .revoke {
             let ids = terminals.filter { $0.value.owner == owner && $0.value.computerID == session.id }.map(\.key)

@@ -196,6 +196,8 @@ final class ProtocolTests: XCTestCase {
         update.computerID = UUID()
         XCTAssertNoThrow(try update.validate())
         XCTAssertNoThrow(try ComputerRequest(.templates).validate())
+        XCTAssertThrowsError(try ComputerRequest(.delete).validate(), "A delete named no computer")
+        XCTAssertNoThrow(try ComputerRequest(.delete, computerID: UUID()).validate())
         XCTAssertGreaterThanOrEqual(ComputerOperation.create.timeout, 1800)
 
         var capabilities = ComputerCapabilities()

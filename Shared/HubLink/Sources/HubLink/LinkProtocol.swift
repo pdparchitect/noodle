@@ -116,6 +116,8 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case updateComputer(id: UUID, LinkComputerDraft)
     /// Replaces which of this user's computers one of their bots may use.
     case assignComputers(botID: UUID, computerIDs: [UUID])
+    /// Moves one of this user's computers to the Trash on the Hub's Mac.
+    case deleteComputer(id: UUID)
 }
 
 public enum LinkResponse: Codable, Equatable, Sendable {

@@ -36,6 +36,8 @@ import XCTest
                     let index = try XCTUnwrap(computers.firstIndex { $0.id == request.computerID })
                     computers[index].name = request.computer?.name ?? computers[index].name
                     response.computers = [computers[index]]
+                case .delete:
+                    computers.removeAll { $0.id == request.computerID }
                 case .revoke:
                     revoked.append((try XCTUnwrap(request.computerID), try XCTUnwrap(request.agentID)))
                 default:
@@ -104,5 +106,20 @@ import XCTest
         for _ in 0..<50 where f.computer.revoked.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
         XCTAssertEqual(f.computer.revoked.map(\.0), [made.id])
         XCTAssertEqual(f.computer.revoked.map(\.1), [alfred.id])
+    }
+
+    func testOnlyItsOwnerDeletesAComputerAndItsBotsLoseIt() async throws {
+        let f = try fixture()
+        let alfred = try f.hub.bots.create(LinkBotDraft(name: "Alfred", provider: "claude-code"), for: f.ada)
+        let made = try await f.hub.computers.create(ComputerDraft(template: "ubuntu", name: "Workbench"), for: f.ada)
+        try f.hub.computers.assign([made.id], to: alfred.id, for: f.ada)
+        do {
+            try await f.hub.computers.delete(made.id, for: f.bob)
+            XCTFail("Bob deleted Ada's computer")
+        } catch {}
+        try await f.hub.computers.delete(made.id, for: f.ada)
+        XCTAssertEqual(f.hub.computers.computers(for: f.ada), [])
+        XCTAssertEqual(f.hub.computers.assigned(to: alfred.id, for: f.ada), [])
+        XCTAssertNil(f.hub.access.owner(ofComputer: made.id))
     }
 }

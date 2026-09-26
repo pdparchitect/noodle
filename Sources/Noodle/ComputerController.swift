@@ -81,7 +81,7 @@ import SwiftUI
         try ComputerCapabilities.requireCompatible(discovery.capabilities)
         if request.operation.isFileTransfer { try ComputerCapabilities.requireFileTransfer(discovery.capabilities) }
         if request.operation == .preview { try ComputerCapabilities.requireDocumentPreview(discovery.capabilities) }
-        if [.templates, .create, .update].contains(request.operation) { try ComputerCapabilities.requireManagement(discovery.capabilities) }
+        if [.templates, .create, .update, .delete].contains(request.operation) { try ComputerCapabilities.requireManagement(discovery.capabilities) }
         try Task.checkCancellation()
         try authorize()
         if request.operation == .list { return discovery }
@@ -100,6 +100,11 @@ import SwiftUI
         }
         await refresh()
         return made
+    }
+    /// Moves a computer to the Trash in Computer, stopping it first.
+    func delete(_ id: UUID) async throws {
+        _ = try await call(ComputerRequest(.delete, computerID: id)).checked()
+        await refresh()
     }
     private func connect(_ request: ComputerRequest, launchIfNeeded: Bool) async throws -> ComputerResponse {
         if let connection { return try await connection(request) }
@@ -247,7 +252,13 @@ struct ComputerAssignmentPicker: View {
                     symbol: $0.symbol, colour: $0.colour, icon: $0.icon, detail: $0.description)
             }, selectedIDs: $selectedIDs, createPrompt: createPrompt, openLibraryButton: openLibraryButton,
             notice: updateNotice, failure: controller.failure,
-            onNew: controller.installed ? { creating = true } : nil)
+            onNew: controller.installed ? { creating = true } : nil,
+            onDelete: { item in
+                Task {
+                    do { try await controller.delete(item.id) }
+                    catch { openError = error.localizedDescription }
+                }
+            })
         .sheet(isPresented: $creating) {
             NewComputerSheet(templates: controller.templates, create: controller.create) { selectedIDs.insert($0.id) }
         }
@@ -392,6 +403,7 @@ struct HubComputerPicker: View {
     let mirror: HubMirror
     @Binding var selectedIDs: Set<UUID>
     @State private var creating = false
+    @State private var failure: String?
 
     var body: some View {
         CompanionAssignmentPicker(title: "Computers", noun: "computer", symbol: "desktopcomputer",
@@ -403,7 +415,14 @@ struct HubComputerPicker: View {
                 Image(systemName: "desktopcomputer").font(.largeTitle)
                 Text("No computers on this Hub")
             }.foregroundStyle(.secondary).frame(maxWidth: .infinity),
-            openLibraryButton: EmptyView(), notice: EmptyView(), onNew: { creating = true })
+            openLibraryButton: EmptyView(), notice: EmptyView(), failure: failure, onNew: { creating = true },
+            onDelete: { item in
+                failure = nil
+                Task {
+                    do { try await mirror.deleteComputer(item.id) }
+                    catch { failure = error.localizedDescription }
+                }
+            })
         .sheet(isPresented: $creating) {
             NewComputerSheet(templates: {
                 try await mirror.computerTemplates().map {

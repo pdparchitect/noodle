@@ -4,7 +4,7 @@
 
 ### Added
 
-- Let Noodle and Noodle Hub make new computers from your templates and change a computer's name, description and icon, so you can set up a bot's computer without switching apps.
+- Let Noodle and Noodle Hub make new computers from your templates, change a computer's name, description and icon, and move a computer to the Trash, so you can set up a bot's computer without switching apps.
 
 ## [0.14.0] - 2026-09-25
 

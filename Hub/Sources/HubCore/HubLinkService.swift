@@ -290,6 +290,11 @@ import Observation
             let changed = try await computers.update(id, with: ComputerDraft(draft), for: user)
             push(.computersChanged, to: user.id)
             return .computer(computers.link(changed, for: user))
+        case .deleteComputer(let id):
+            let user = try user(key)
+            try await hubComputers().delete(id, for: user)
+            push(.computersChanged, to: user.id)
+            return .done
         case .assignComputers(let botID, let computerIDs):
             let user = try user(key)
             try hubComputers().assign(Set(computerIDs), to: botID, for: user)

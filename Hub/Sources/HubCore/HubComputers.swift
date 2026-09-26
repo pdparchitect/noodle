@@ -71,6 +71,19 @@ import NoodleCore
         return changed
     }
 
+    /// Moves one of the user's computers to the Trash on the Hub's Mac; its bots lose it.
+    public func delete(_ id: UUID, for user: HubUser) async throws {
+        try owned(id, by: user)
+        _ = try await manage(ComputerRequest(.delete, computerID: id))
+        var next = registry
+        next.computers.removeAll { $0.id == id }
+        for key in next.agents.keys { next.agents[key]?.remove(id) }
+        try next.save(root: root)
+        registry = next
+        access.setOwner(nil, ofComputer: id)
+        publish()
+    }
+
     /// Replaces which of the user's computers one of their bots may use.
     public func assign(_ ids: Set<UUID>, to bot: UUID, for user: HubUser) throws {
         guard access.owner(ofBot: bot) == user.id else { throw LinkError("That bot is not yours.") }
