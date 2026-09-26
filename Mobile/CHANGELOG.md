@@ -31,6 +31,7 @@
 
 ### Fixed
 
+- The join sheet no longer repeats its heading.
 - The unread dot in the list of bots sits evenly between the screen edge and the bot's picture instead of against it.
 
 ### Changed

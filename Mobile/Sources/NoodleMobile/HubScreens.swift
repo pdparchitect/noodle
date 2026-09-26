@@ -112,21 +112,47 @@ enum PairingSource { case camera, pasted(String), photo }
 /// The ways to hand over an invitation, in a short sheet from the bottom.
 struct PairingSources: View {
     let choose: (PairingSource) -> Void
+    @State private var link = ""
 
     var body: some View {
         VStack(spacing: 12) {
-            Text("Pair with Noodle Hub").font(.headline).padding(.bottom, 4)
             // The simulator has no camera; paste the link or choose a picture of the QR code there.
             if DataScannerViewController.isSupported {
                 option("Scan QR Code", systemImage: "qrcode.viewfinder", .camera).buttonStyle(.borderedProminent)
             }
             PasteLinkButton { choose(.pasted($0)) }.frame(height: 50)
             option("Choose Photo", systemImage: "photo", .photo).buttonStyle(.bordered)
+            #if targetEnvironment(simulator)
+            // The Simulator gets a Mac's clipboard too late for the paste button to light up;
+            // pasting into a field always works.
+            TextField("Invitation Link", text: $link)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+                .frame(height: 50)
+                .background(Color(.tertiarySystemFill), in: Capsule())
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+                .submitLabel(.join)
+                .onSubmit { if !link.isEmpty { choose(.pasted(link)) } }
+                .onChange(of: link) { _, text in
+                    // A whole invitation pasted at once joins without needing Return.
+                    if (try? LinkInvitation(text: text)) != nil { choose(.pasted(text)) }
+                }
+            #endif
         }
         .controlSize(.large)
         .padding(24)
-        .presentationDetents([.height(DataScannerViewController.isSupported ? 280 : 220)])
+        .presentationDetents([.height(Self.height)])
         .presentationDragIndicator(.visible)
+    }
+
+    private static var height: CGFloat {
+        #if targetEnvironment(simulator)
+        248
+        #else
+        DataScannerViewController.isSupported ? 244 : 184
+        #endif
     }
 
     private func option(_ title: String, systemImage: String, _ source: PairingSource) -> some View {
