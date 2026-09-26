@@ -157,6 +157,13 @@ let package = Package(
             dependencies: ["NoodleSharing", "NoodleCore"]
         ),
         .testTarget(name: "NoodleToolScriptingTests", dependencies: ["NoodleToolScripting", "NoodleCore"]),
+        .testTarget(name: "NoodleAgentBridgeTests", dependencies: ["NoodleAgentBridge"]),
+        .testTarget(
+            name: "HubCoreTests",
+            dependencies: ["HubCore", "NoodleCore", "NoodleHubClient", "NoodleMCP", "NoodleRuntime", .product(name: "HubLink", package: "HubLink"),
+                           .product(name: "ComputerBridge", package: "Bridge"), .product(name: "BrowserBridge", package: "BrowserProtocol"),
+                           .product(name: "AppletBridge", package: "Protocol")]
+        ),
         .testTarget(
             name: "NoodleMCPTests",
             dependencies: ["NoodleMCP", "NoodleCore", .product(name: "MCP", package: "swift-sdk")]
