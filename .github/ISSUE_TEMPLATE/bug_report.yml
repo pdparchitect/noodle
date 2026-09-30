@@ -1,5 +1,6 @@
 name: Bug report
 description: Report a problem with Noodle or a companion app.
+labels: [bug]
 body:
   - type: markdown
     attributes:
@@ -17,6 +18,24 @@ body:
         - Computer images
         - Website or documentation
         - Other or unsure
+    validations:
+      required: true
+  - type: dropdown
+    id: harness
+    attributes:
+      label: Harness
+      description: The agent harness involved, if the problem is with an agent.
+      options:
+        - Not agent related
+        - Claude Code
+        - Codex
+        - Antigravity
+        - FX
+        - Grok Build
+        - Muse Code
+        - OpenCode
+        - Apple Intelligence
+        - Several or unsure
     validations:
       required: true
   - type: textarea
@@ -48,12 +67,12 @@ body:
     id: environment
     attributes:
       label: Versions and environment
-      description: Include the affected app version (or source commit), macOS version, and Mac model or chip. For agent problems, include the harness and its version; for Computer problems, include the image if relevant. Use N/A for details that do not apply.
+      description: Include the affected app version (or source commit), macOS version, and Mac model or chip. For agent problems, include the harness version; for Computer problems, include the image if relevant. Use N/A for details that do not apply.
       placeholder: |
         App version or commit:
         macOS version:
         Mac model or chip:
-        Harness and version (if relevant):
+        Harness version (if relevant):
         Computer image (if relevant):
     validations:
       required: true
