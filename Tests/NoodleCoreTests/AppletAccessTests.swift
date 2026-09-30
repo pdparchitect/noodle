@@ -74,7 +74,7 @@ final class AppletAccessTests: XCTestCase {
     }
 
     func testEveryCommandIsDocumentedInGeneratedSkillAndHelp() {
-        for command in AppletOperation.allCases where !command.isSurface && command != .show {
+        for command in AppletOperation.allCases where !command.isAppOnly && command != .show {
             let guidance = AppletGuidance.operation(command)
             XCTAssertFalse(guidance.isEmpty)
             XCTAssertTrue(AppletGuidance.cliHelp.contains(guidance), command.rawValue)

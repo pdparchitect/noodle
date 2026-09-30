@@ -137,6 +137,9 @@ public enum AppletGuidance {
         `await noodle.storage.set(key, JSON_value)` / `await noodle.storage.get(key)` persist
         small values. `noodle.data.writeText(relativePath, text)` / `readText(relativePath)`
         use its data directory (4 MiB per file). Missing values/files return null.
+        The browser's own localStorage and IndexedDB are local to wherever the page runs:
+        they do not follow the noodlet to other devices, and on a phone or another Mac they
+        last only while it is open. Keep anything that matters in noodle.storage.
         `await noodle.secrets.set(name, value)` / `get(name)` / `delete(name)` / `names()` keep
         API keys and tokens in Applet's Keychain, separately for each noodlet; never put
         them in storage, data files or source. Missing secrets return null.
@@ -161,7 +164,9 @@ public enum AppletGuidance {
         microphone, or quick touch, and "hub" when it needs the Hub's network or localhost,
         screen capture or heavy work; leave it out when either works. The person can still
         choose. Wherever it runs, storage, data and secrets are the same, kept where the
-        noodlet lives. `noodle.features` lists what the page can use where it runs: storage,
+        noodlet lives. On a phone or another Mac each storage, data and secrets call goes to
+        the Hub and back, so it takes a little longer than on the Hub; batch frequent saves
+        where that is natural. `noodle.features` lists what the page can use where it runs: storage,
         data, secrets, network (with network:true), files and window. Check it before
         relying on files or window.
 
