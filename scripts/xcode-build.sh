@@ -27,7 +27,13 @@ xcodebuild -workspace "$folder/${name// /}.xcworkspace" -scheme "${name// /}" -c
     -derivedDataPath "$derived_data" -destination 'platform=macOS' -allowProvisioningUpdates \
     -skipPackagePluginValidation -skipMacroValidation "$@" build >&2
 destination="$project_root/.build/$app_name.app"
-rm -rf "$destination"
-ditto "$derived_data/Build/Products/$configuration/$app_name.app" "$destination"
-codesign --verify --deep --strict "$destination"
+# Copied beside it and swapped in, so the previous build stays whole until the new one is: an
+# app that starts a companion finds the one built beside it, never a gap to fall back from.
+incoming="$destination.incoming" outgoing="$destination.outgoing"
+rm -rf "$incoming" "$outgoing"
+ditto "$derived_data/Build/Products/$configuration/$app_name.app" "$incoming"
+codesign --verify --deep --strict "$incoming"
+[[ ! -e "$destination" ]] || mv "$destination" "$outgoing"
+mv "$incoming" "$destination"
+rm -rf "$outgoing"
 print "$destination"
