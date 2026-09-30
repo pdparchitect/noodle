@@ -226,7 +226,7 @@ public struct GamepadLayout: Equatable {
     }
 }
 
-/// On-screen controls over a live view, filling it edge to edge and keeping to its safe area.
+/// On-screen controls over a live view, kept to its safe area.
 public struct GamepadOverlay: View {
     let gamepad: Gamepad
     let onKey: (GamepadKeyChange) -> Void
@@ -237,11 +237,12 @@ public struct GamepadOverlay: View {
     }
 
     public var body: some View {
-        // Spread over the whole screen, the reader still reports the safe area to keep to.
+        // A reader spread over the whole screen reports no safe area, so it stays inside it; the
+        // keyboard coming up leaves the controls where they are.
         GeometryReader { proxy in
-            GamepadControls(gamepad: gamepad, layout: GamepadLayout(gamepad, in: proxy.size, safeArea: proxy.safeAreaInsets), onKey: onKey)
+            GamepadControls(gamepad: gamepad, layout: GamepadLayout(gamepad, in: proxy.size, safeArea: EdgeInsets()), onKey: onKey)
         }
-        .ignoresSafeArea()
+        .ignoresSafeArea(.keyboard)
     }
 }
 

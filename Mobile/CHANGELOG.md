@@ -20,6 +20,7 @@
 ### Fixed
 
 - A game's on-screen controls show over a light page too, where they were white on white.
+- With the phone sideways, a game's on-screen controls keep clear of the Dynamic Island and the home bar instead of sitting under them.
 
 ## [0.11.0] - 2026-09-30
 

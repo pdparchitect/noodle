@@ -444,3 +444,30 @@ extension NSResponder {
     @MainActor @objc fileprivate func recordingDoCommand(by selector: Selector) { unhandledCommands += 1 }
 }
 #endif
+
+#if os(macOS)
+/// On a phone held sideways the overlay keeps its controls clear of the camera housing and the
+/// home bar, though it spreads over the whole screen.
+@MainActor final class GamepadOverlaySafeAreaTests: XCTestCase {
+    func testControlsKeepToTheSafeArea() throws {
+        let size = CGSize(width: 874, height: 402), insets = EdgeInsets(top: 0, leading: 62, bottom: 21, trailing: 62)
+        let container = NSView(frame: CGRect(origin: .zero, size: size))
+        container.additionalSafeAreaInsets = NSEdgeInsets(top: insets.top, left: insets.leading, bottom: insets.bottom, right: insets.trailing)
+        let host = NSHostingView(rootView: GamepadOverlay(gamepad: .pausable, onKey: { _ in }))
+        host.frame = container.bounds
+        container.addSubview(host)
+        let window = NSWindow(contentRect: container.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        window.contentView = container
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        let pixels = try Pixels(XCTUnwrap(bitmap.cgImage))
+        func drawn(_ frame: CGRect) -> Bool { pixels.alpha(at: CGPoint(x: frame.midX * CGFloat(pixels.width) / size.width,
+                                                                        y: frame.midY * CGFloat(pixels.height) / size.height)) > 0 }
+        let kept = try XCTUnwrap(GamepadLayout(.pausable, in: size, safeArea: insets).frames[.menu])
+        let edge = try XCTUnwrap(GamepadLayout(.pausable, in: size, safeArea: EdgeInsets()).frames[.menu])
+        XCTAssertTrue(drawn(kept))
+        XCTAssertFalse(drawn(edge))
+    }
+}
+#endif
