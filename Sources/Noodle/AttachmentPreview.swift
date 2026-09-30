@@ -73,14 +73,21 @@ extension NoodleStore {
         ConversationAttachment.companions(newestFirst: messages(for: conversation).reversed().flatMap { attachments(for: $0) })
     }
 
-    func openCompanion(_ attachment: ConversationAttachment) async throws {
+    /// Whether `attachment` is a noodlet on a Noodle Hub, which can run on this Mac or there.
+    func isHubNoodlet(_ attachment: ConversationAttachment) -> Bool {
+        guard case .noodlet? = attachment.companion else { return false }
+        return hubMirrors.contains { $0.owns(conversation: attachment.conversationID) }
+    }
+
+    /// Opens a link; a Hub's noodlet `at` the place the person asked for, if they did.
+    func openCompanion(_ attachment: ConversationAttachment, at place: NoodletManifest.Placement? = nil) async throws {
         guard let link = attachment.companion, let url = attachment.url else { return }
         // On a Noodle Hub they run on the Hub's Mac, so their links open a live view instead.
         if hubMirrors.contains(where: { $0.owns(conversation: attachment.conversationID) }) {
             var target = HubSurfaceTarget(conversationID: attachment.conversationID, attachmentID: attachment.id,
                                           title: attachment.companionTitle)
             if case .noodlet = link { target.noodlet = true }
-            surfacePanels.open(target, store: self)
+            surfacePanels.open(target, store: self, at: place)
             return
         }
         switch link {

@@ -16,6 +16,8 @@ import XCTest
         private(set) var opened: [UUID] = []
         /// The folder each noodlet came from.
         var sources: [UUID: String] = [:]
+        /// What each noodlet's manifest asks for.
+        var permissions: [UUID: [String: String]] = [:]
         /// What a noodlet's files archive to, larger than one piece.
         let archive = Data((0..<1_500_000).map { UInt8(truncatingIfNeeded: $0) })
         private(set) var calls: [(UUID?, NoodletStoreCall)] = []
@@ -44,6 +46,7 @@ import XCTest
                     response.features = [SurfaceSocket.feature]
                 case .info:
                     response.sourcePath = request.noodletID.flatMap { sources[$0] }
+                    response.permissions = request.noodletID.flatMap { permissions[$0] }
                     if request.includePreview == true { response.data = Data("picture".utf8); response.mediaType = "image/png" }
                 default:
                     break
@@ -273,6 +276,26 @@ import XCTest
             _ = try await f.device.request(.noodlet(conversationID: kai.conversationID, attachmentID: borrowed))
             XCTFail("another bot's noodlet was readied")
         } catch { XCTAssertEqual(error.localizedDescription, "That noodlet is not this bot's.") }
+    }
+
+    /// A noodlet that uses the camera, microphone or screen would get the Hub's if streamed, so
+    /// the Hub never streams it, even to a device that cannot run it itself.
+    func testANoodletThatSensesIsNeverStreamed() async throws {
+        let f = try await fixture()
+        let bot = try f.hub.bots.create(LinkBotDraft(name: "Alfred", provider: "claude-code"), for: f.ada)
+        let noodlet = made(in: folder(of: bot, f), f)
+        f.applet.permissions[noodlet] = ["microphone": "not-requested"]
+        let link = try post(noodlet, in: bot, byBot: true, hub: f.hub)
+        let channel = try await f.device.channel(.openSurface(conversationID: bot.conversationID, attachmentID: link))
+        defer { channel.cancel() }
+        var refusal: String?
+        do {
+            for try await frame in channel.frames { if case .packets? = LinkSurface.message(frame) { break } }
+        } catch { refusal = error.localizedDescription }
+        XCTAssertEqual(refusal, "This noodlet uses the camera, microphone or screen, so it runs on your device. Update Noodle to open it.")
+        XCTAssertEqual(f.applet.opened, [])
+        guard case .noodlet = try await f.device.request(.noodlet(conversationID: bot.conversationID, attachmentID: link))
+        else { return XCTFail("it did not open to run on the device") }
     }
 
     func testNoodletsOfAnotherBotOrPostedByAPersonNeverOpen() async throws {

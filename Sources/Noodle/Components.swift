@@ -386,6 +386,12 @@ struct MessageBubble: View {
             },
             showTranscript: attachment.flatMap { item in
                 item.voice == nil ? nil : { transcriptAttachment = item }
+            },
+            openOnThisMac: attachment.flatMap { item in
+                store.isHubNoodlet(item) ? { Task { try? await store.openCompanion(item, at: .device) } } : nil
+            },
+            openOnHub: attachment.flatMap { item in
+                store.isHubNoodlet(item) ? { Task { try? await store.openCompanion(item, at: .hub) } } : nil
             }
         )
     }

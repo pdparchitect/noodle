@@ -19,9 +19,14 @@ struct HubSurfaceTarget: Hashable {
 /// belongs to what is shown; the close button and ⌘W close the panel, which ends the view.
 @MainActor final class HubSurfacePanels: NSObject, NSWindowDelegate {
     private var panels: [HubSurfaceTarget: NSPanel] = [:]
+    private var runs: [HubSurfaceTarget: HubNoodletRun] = [:]
 
-    func open(_ target: HubSurfaceTarget, store: NoodleStore) {
-        if let panel = panels[target] { return panel.makeKeyAndOrderFront(nil) }
+    /// Opens a live view, or a noodlet `at` the place the person asked for, if they did.
+    func open(_ target: HubSurfaceTarget, store: NoodleStore, at place: NoodletManifest.Placement? = nil) {
+        if let panel = panels[target] {
+            if let place { runs[target]?.choose(place) }
+            return panel.makeKeyAndOrderFront(nil)
+        }
         let panel = HubSurfacePanel(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 760),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false; panel.hidesOnDeactivate = false
@@ -36,7 +41,8 @@ struct HubSurfaceTarget: Hashable {
         panel.minSize = NSSize(width: 480, height: 340)
         panel.title = target.title
         if target.noodlet {
-            let run = HubNoodletRun(target: target)
+            let run = HubNoodletRun(target: target, requested: place)
+            runs[target] = run
             let content = NSHostingView(rootView: HubNoodletView(run: run).environment(store).preferredColorScheme(.dark))
             content.sizingOptions = []
             let accessory = NSHostingView(rootView: HubNoodletSwitch(run: run).preferredColorScheme(.dark))
@@ -63,6 +69,7 @@ struct HubSurfaceTarget: Hashable {
         guard let closing = notification.object as? NSPanel,
               let target = panels.first(where: { $0.value === closing })?.key else { return }
         panels[target] = nil
+        runs[target] = nil
         // Dropping the content ends the view, so the bot may go on.
         closing.contentView = nil
     }
@@ -131,9 +138,14 @@ struct HubSurfaceWindow: View {
     private(set) var readied: (session: LinkNoodletSession, noodlet: LinkNoodlet, manifest: NoodletManifest)?
     private(set) var place: NoodletManifest.Placement?
     private(set) var failure: String?
+    /// Where the person asked for it from its card's menu, until it is readied.
+    private var requested: NoodletManifest.Placement?
     @ObservationIgnored private let places = NoodletPlaces()
 
-    init(target: HubSurfaceTarget) { self.target = target }
+    init(target: HubSurfaceTarget, requested: NoodletManifest.Placement? = nil) {
+        self.target = target
+        self.requested = requested
+    }
 
     func ready(from mirror: HubMirror?) async {
         guard let mirror else { return failure = "Join that Noodle Hub again to open this." }
@@ -142,6 +154,7 @@ struct HubSurfaceWindow: View {
             let noodlet = await session.noodlet
             let manifest = try JSONDecoder().decode(NoodletManifest.self, from: noodlet.manifest)
             readied = (session, noodlet, manifest)
+            if let requested { places.choose(requested, for: noodlet.noodletID) }
             place = manifest.placement(chosen: places.chosen(noodlet.noodletID))
         } catch let error as LinkError where error.message == LinkProtocol.unknownRequest {
             place = .hub
@@ -152,13 +165,15 @@ struct HubSurfaceWindow: View {
 
     /// The other place it can run, if any.
     var otherPlace: NoodletManifest.Placement? {
-        guard let readied, readied.manifest.runsOnDevices, let place else { return nil }
+        guard let readied, readied.manifest.streams, let place else { return nil }
         return place == .hub ? .device : .hub
     }
 
+    /// Runs it at `next` from now on, as far as it can run there.
     func choose(_ next: NoodletManifest.Placement) {
-        if let readied { places.choose(next, for: readied.noodlet.noodletID) }
-        place = next
+        guard let readied else { return requested = next }
+        places.choose(next, for: readied.noodlet.noodletID)
+        place = readied.manifest.placement(chosen: next)
     }
 }
 

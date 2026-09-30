@@ -2,6 +2,7 @@ import CryptoKit
 import HubLink
 import ImageIO
 @preconcurrency import LinkPresentation
+import NoodletRuntime
 import PhotosUI
 import QuickLook
 import QuickLookThumbnailing
@@ -10,8 +11,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 extension EnvironmentValues {
-    /// Opens a live link full screen, presented by the conversation rather than the card that was tapped.
-    @Entry var watchLive: @MainActor (LinkAttachment) -> Void = { _ in }
+    /// Opens a live link full screen, presented by the conversation rather than the card that was
+    /// tapped; a noodlet where the person asked, if they did.
+    @Entry var watchLive: @MainActor (LinkAttachment, NoodletManifest.Placement?) -> Void = { _, _ in }
 }
 
 /// One file in a message: a picture shown inline, anything else as a card. Tapping opens Quick Look,
@@ -67,7 +69,7 @@ struct AttachmentView: View {
 
     /// A browser tab, computer or noodlet a bot shared: its last picture, opening live on the Hub's Mac.
     private var live: some View {
-        Button { watchLive(attachment) } label: {
+        Button { watchLive(attachment, nil) } label: {
             VStack(alignment: .leading, spacing: 6) {
                 ZStack {
                     Color(.secondarySystemBackground)
@@ -92,6 +94,12 @@ struct AttachmentView: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint("Opens it live")
+        .contextMenu {
+            if attachment.liveKind == .noodlet {
+                Button("Open on \(UIDevice.current.model)", systemImage: "iphone") { watchLive(attachment, .device) }
+                Button("Open on Hub", systemImage: "play.display") { watchLive(attachment, .hub) }
+            }
+        }
         .task(id: attachment.id) {
             // Cards come without their pictures; each is fetched as its card comes into view.
             guard attachment.card?.image == nil else { return }

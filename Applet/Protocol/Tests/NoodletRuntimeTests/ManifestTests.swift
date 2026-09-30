@@ -27,18 +27,21 @@ final class ManifestTests: XCTestCase {
     }
 
     /// Opened from another device, a noodlet runs where the person last chose, else where its bot
-    /// said, else on the device; one that captures the screen needs the Hub's Mac whatever was chosen.
+    /// said, else on the device. One that uses the camera, microphone or screen runs on the device
+    /// whatever was chosen: streamed from the Hub it would get the Hub's.
     func testWhereANoodletRuns() throws {
         let plain = try manifest("")
+        XCTAssertTrue(plain.streams)
         XCTAssertEqual(plain.placement(chosen: nil), .device)
         XCTAssertEqual(plain.placement(chosen: .hub), .hub)
         let hinted = try manifest(#","runs":"hub""#)
         XCTAssertEqual(hinted.placement(chosen: nil), .hub)
         XCTAssertEqual(hinted.placement(chosen: .device), .device)
-        let capturing = try manifest(#","permissions":["screen-capture"]"#)
-        XCTAssertFalse(capturing.runsOnDevices)
-        XCTAssertEqual(capturing.placement(chosen: .device), .hub)
-        XCTAssertTrue(try manifest(#","permissions":["microphone"]"#).runsOnDevices)
+        for permission in NoodletManifest.knownPermissions {
+            let sensing = try manifest(#","runs":"hub","permissions":["\#(permission)"]"#)
+            XCTAssertFalse(sensing.streams, permission)
+            XCTAssertEqual(sensing.placement(chosen: .hub), .device, permission)
+        }
     }
 
     /// Written back, a noodlet keeps only the hints it gave.

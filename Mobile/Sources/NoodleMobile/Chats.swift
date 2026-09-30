@@ -1,4 +1,5 @@
 import HubLink
+import NoodletRuntime
 import NoodleWallpaperCore
 import PhotosUI
 import SwiftUI
@@ -1069,6 +1070,8 @@ struct ChatView: View {
     /// The live link open full screen. Held here, not by its card: the conversation unloads rows it
     /// lays out again, as on rotating the phone, and a cover presented by a row would close with it.
     @State private var watching: LinkAttachment?
+    /// Where the person asked to open the noodlet they are watching, from its card's menu.
+    @State private var watchingAt: NoodletManifest.Placement?
     /// The message lifted by a long press, with its reactions and actions.
     @State private var focused: MessageFocus?
     /// Whether the panel of things to attach is open over the conversation.
@@ -1199,7 +1202,7 @@ struct ChatView: View {
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             attach { try result.get().map(PickedFiles.copy) }
         }
-        .environment(\.watchLive) { watching = $0 }
+        .environment(\.watchLive) { watchingAt = $1; watching = $0 }
         .environment(\.openURL, OpenURLAction { url in
             guard let link = WebLinkPreview.previewed(url, enabled: previewsLinks) else { return .systemAction }
             previewing = PreviewedLink(url: link)
@@ -1225,7 +1228,7 @@ struct ChatView: View {
         }
         .fullScreenCover(item: $watching) { attachment in
             if attachment.liveKind == .noodlet {
-                NoodletScreen(chats: chats, thread: thread, attachment: attachment)
+                NoodletScreen(chats: chats, thread: thread, attachment: attachment, requested: watchingAt)
             } else {
                 LiveSurfaceScreen(chats: chats, thread: thread, attachment: attachment)
             }

@@ -9,6 +9,8 @@ struct NoodletScreen: View {
     let chats: HubChats
     let thread: HubThread
     let attachment: LinkAttachment
+    /// Where the person asked to open it from its card's menu, remembered for next time.
+    var requested: NoodletManifest.Placement?
     var places = NoodletPlaces()
     @Environment(\.dismiss) private var dismiss
     @State private var readied: (session: LinkNoodletSession, noodlet: LinkNoodlet, manifest: NoodletManifest)?
@@ -19,11 +21,12 @@ struct NoodletScreen: View {
         switch place {
         case .hub?:
             LiveSurfaceScreen(chats: chats, thread: thread, attachment: attachment,
-                              runHere: readied.flatMap { $0.manifest.runsOnDevices ? { choose(.device) } : nil })
+                              runHere: readied.map { _ in { choose(.device) } })
         case .device?:
             if let readied {
                 NoodletDeviceScreen(chats: chats, session: readied.session, noodlet: readied.noodlet, manifest: readied.manifest,
-                                    title: attachment.card?.title ?? readied.manifest.title) { choose(.hub) }
+                                    title: attachment.card?.title ?? readied.manifest.title,
+                                    runOnHub: readied.manifest.streams ? { choose(.hub) } : nil)
             }
         case nil:
             NavigationStack {
@@ -43,6 +46,7 @@ struct NoodletScreen: View {
             let noodlet = await session.noodlet
             let manifest = try JSONDecoder().decode(NoodletManifest.self, from: noodlet.manifest)
             readied = (session, noodlet, manifest)
+            if let requested { places.choose(requested, for: noodlet.noodletID) }
             place = manifest.placement(chosen: places.chosen(noodlet.noodletID))
         } catch let error as LinkError where error.message == LinkProtocol.unknownRequest {
             place = .hub
@@ -65,7 +69,8 @@ struct NoodletDeviceScreen: View {
     let noodlet: LinkNoodlet
     let manifest: NoodletManifest
     let title: String
-    let runOnHub: () -> Void
+    /// For a noodlet the Hub may stream, switches to watching it there.
+    let runOnHub: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.verticalSizeClass) private var verticalSize
     @State private var page: NoodletPage?
@@ -89,7 +94,7 @@ struct NoodletDeviceScreen: View {
         if manifest.controls != nil {
             Button("Controls", systemImage: showsControls ? "gamecontroller.fill" : "gamecontroller") { showsControls.toggle() }
         }
-        Button("Run on Hub", systemImage: "play.display", action: runOnHub)
+        if let runOnHub { Button("Run on Hub", systemImage: "play.display", action: runOnHub) }
     }
 
     var body: some View {

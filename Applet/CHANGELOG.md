@@ -5,7 +5,7 @@
 ### Added
 
 - Noodlets can run on the phones and Macs of people using a bot through Noodle Hub. Their data and secrets stay with Noodle Applet on the Hub's Mac, the same wherever the noodlet runs.
-- Optional manifest hints `layout` (desktop, phone or adaptive) and `runs` (device or hub) say how a noodlet is laid out and where it works best when opened from another device.
+- Optional manifest hints `layout` (desktop, phone or adaptive) and `runs` (device or hub) say how a noodlet is laid out and where it works best when opened from another device. A noodlet that declares a permission always runs on the device it is opened on.
 - `noodle.features` lists what a noodlet's page can use where it runs, such as files or window.
 
 ### Fixed

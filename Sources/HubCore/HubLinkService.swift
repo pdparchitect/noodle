@@ -240,6 +240,11 @@ import os
                     open = { (try await computers.openSurface(computer: computer, terminal: terminal, bot: bot, for: user), nil) }
                 case .noodlet(let noodlet):
                     let applets = try hubBots().applets
+                    var info = AppletRequest(.info)
+                    info.noodletID = noodlet
+                    guard try await applets.companion(info).permissions?.isEmpty != false else {
+                        throw LinkError("This noodlet uses the camera, microphone or screen, so it runs on your device. Update Noodle to open it.")
+                    }
                     open = {
                         var start = AppletRequest(.open)
                         start.noodletID = noodlet

@@ -160,10 +160,11 @@ public enum AppletGuidance {
         that device or watching it live from the Hub. Two optional manifest hints say what
         suits it. "layout" is "desktop" (the default: a window with a pointer, which a phone
         shows at desktop width), "phone" (touch on a small screen) or "adaptive" (any size;
-        prefer it). "runs" is "device" when it needs the device's own files, camera or
-        microphone, or quick touch, and "hub" when it needs the Hub's network or localhost,
-        screen capture or heavy work; leave it out when either works. The person can still
-        choose. Wherever it runs, storage, data and secrets are the same, kept where the
+        prefer it). "runs" is "device" when it needs the device's own files or quick touch,
+        and "hub" when it needs the Hub's network or localhost or heavy work; leave it out
+        when either works. The person can still choose. A noodlet that declares any
+        permission (camera, microphone, speech recognition, screen capture) always runs on
+        the device it is opened on, where those belong; the Hub never streams it. Wherever it runs, storage, data and secrets are the same, kept where the
         noodlet lives. On a phone or another Mac each storage, data and secrets call goes to
         the Hub and back, so it takes a little longer than on the Hub; batch frequent saves
         where that is natural. `noodle.features` lists what the page can use where it runs: storage,

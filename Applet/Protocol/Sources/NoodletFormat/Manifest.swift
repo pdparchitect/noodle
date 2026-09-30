@@ -80,12 +80,14 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
     }
     return hint
   }
-  /// Whether a device other than the Hub's Mac can run it: capturing the screen needs that Mac.
-  public var runsOnDevices: Bool { !(permissions ?? []).contains("screen-capture") }
+  /// Whether the Hub may stream it to another device. Everything a noodlet can ask for, the
+  /// camera, microphone and screen, belongs to the device showing it; streamed from the Hub it
+  /// would get the Hub's, so one that asks runs on the device.
+  public var streams: Bool { (permissions ?? []).isEmpty }
   /// Where it runs when opened from another device: where the person last chose, else where its
-  /// bot said, else on the device, unless only the Hub can run it.
+  /// bot said, else on the device, unless only the device can run it.
   public func placement(chosen: Placement?) -> Placement {
-    runsOnDevices ? chosen ?? runs ?? .device : .hub
+    streams ? chosen ?? runs ?? .device : .device
   }
   public func validate() throws {
     try window?.validate()

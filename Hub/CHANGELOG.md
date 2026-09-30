@@ -4,7 +4,7 @@
 
 ### Added
 
-- Paired phones and Macs can run a bot's noodlets themselves instead of watching them live. Only the person who has the bot can open them, and their data and secrets stay on the Hub. Needs the latest Noodle Applet.
+- Paired phones and Macs can run a bot's noodlets themselves instead of watching them live. Only the person who has the bot can open them, and their data and secrets stay on the Hub. A noodlet that uses the camera, microphone or screen is never streamed, since it would get the Hub's; the device runs it. Needs the latest Noodle Applet.
 
 ## [0.11.0] - 2026-09-30
 
