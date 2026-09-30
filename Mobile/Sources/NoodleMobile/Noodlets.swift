@@ -11,7 +11,7 @@ struct NoodletScreen: View {
     let attachment: LinkAttachment
     var places = NoodletPlaces()
     @Environment(\.dismiss) private var dismiss
-    @State private var readied: (noodlet: LinkNoodlet, manifest: NoodletManifest)?
+    @State private var readied: (session: LinkNoodletSession, noodlet: LinkNoodlet, manifest: NoodletManifest)?
     @State private var place: NoodletManifest.Placement?
     @State private var failure: String?
 
@@ -22,7 +22,7 @@ struct NoodletScreen: View {
                               runHere: readied.flatMap { $0.manifest.runsOnDevices ? { choose(.device) } : nil })
         case .device?:
             if let readied {
-                NoodletDeviceScreen(chats: chats, noodlet: readied.noodlet, manifest: readied.manifest,
+                NoodletDeviceScreen(chats: chats, session: readied.session, noodlet: readied.noodlet, manifest: readied.manifest,
                                     title: attachment.card?.title ?? readied.manifest.title) { choose(.hub) }
             }
         case nil:
@@ -39,9 +39,10 @@ struct NoodletScreen: View {
 
     private func ready() async {
         do {
-            let noodlet = try await chats.readyNoodlet(attachment, in: thread)
+            let session = try await chats.openNoodlet(attachment, in: thread)
+            let noodlet = await session.noodlet
             let manifest = try JSONDecoder().decode(NoodletManifest.self, from: noodlet.manifest)
-            readied = (noodlet, manifest)
+            readied = (session, noodlet, manifest)
             place = manifest.placement(chosen: places.chosen(noodlet.noodletID))
         } catch let error as LinkError where error.message == LinkProtocol.unknownRequest {
             place = .hub
@@ -60,6 +61,7 @@ struct NoodletScreen: View {
 /// data and secrets stay there, each call going back.
 struct NoodletDeviceScreen: View {
     let chats: HubChats
+    let session: LinkNoodletSession
     let noodlet: LinkNoodlet
     let manifest: NoodletManifest
     let title: String
@@ -124,16 +126,15 @@ struct NoodletDeviceScreen: View {
 
     private func start() async {
         do {
-            let grant = noodlet.grant, chats = chats
+            let session = session
             let root = try await NoodletCache(root: chats.noodletCache).package(
                 noodlet.noodletID, revision: noodlet.revision, byteCount: noodlet.byteCount
-            ) { try await chats.noodletArchive(grant, from: $0) }
+            ) { try await session.archive(from: $0) }
             // The files it came with say how it runs; the Hub's copy of the manifest only chose where.
             let manifest = try JSONDecoder().decode(NoodletManifest.self, from: Data(contentsOf: root.appendingPathComponent("noodlet.json")))
             try manifest.validate()
-            let store = RemoteNoodletStore { id, offset, total, piece in
-                try await chats.noodletCall(LinkNoodletCall(grant: grant, id: id, offset: offset, total: total, data: piece))
-            }
+            let store = RemoteNoodletStore(send: { try await session.call(id: $0, offset: $1, total: $2, data: $3) },
+                                           renew: { try await session.renew(after: $0) })
             let page = NoodletPage(root: root, manifest: manifest, store: store, dataStore: .nonPersistent(),
                                    features: NoodletDeviceHost.features, log: { Self.log.notice("\($0, privacy: .public): \($1, privacy: .private)") }) {
                 // Laid out for a desktop window, it gets desktop width and pinch to zoom, as Safari's desktop site.

@@ -15,6 +15,8 @@ public enum LinkProtocol {
     public static let supportedVersions: ClosedRange<Int> = 1...1
     /// How a Hub from before a request answers it, so a device can do without.
     public static let unknownRequest = "This Noodle Hub does not know that request. Update Noodle Hub."
+    /// How a Hub answers for a noodlet it no longer has open, as after it restarted.
+    public static let noodletForgotten = "Open this noodlet again."
 
     public static func encode(_ request: LinkRequest) throws -> Data {
         try encoder.encode(Envelope(version: version, fetchesPictures: true, request: request))

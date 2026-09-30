@@ -128,7 +128,7 @@ struct HubSurfaceWindow: View {
 /// last chose or its bot suggested. A Hub from before Macs ran its noodlets always shows them live.
 @MainActor @Observable final class HubNoodletRun {
     let target: HubSurfaceTarget
-    private(set) var readied: (noodlet: LinkNoodlet, manifest: NoodletManifest)?
+    private(set) var readied: (session: LinkNoodletSession, noodlet: LinkNoodlet, manifest: NoodletManifest)?
     private(set) var place: NoodletManifest.Placement?
     private(set) var failure: String?
     @ObservationIgnored private let places = NoodletPlaces()
@@ -138,9 +138,10 @@ struct HubSurfaceWindow: View {
     func ready(from mirror: HubMirror?) async {
         guard let mirror else { return failure = "Join that Noodle Hub again to open this." }
         do {
-            let noodlet = try await mirror.readyNoodlet(attachment: target.attachmentID, in: target.conversationID)
+            let session = try await mirror.openNoodlet(attachment: target.attachmentID, in: target.conversationID)
+            let noodlet = await session.noodlet
             let manifest = try JSONDecoder().decode(NoodletManifest.self, from: noodlet.manifest)
-            readied = (noodlet, manifest)
+            readied = (session, noodlet, manifest)
             place = manifest.placement(chosen: places.chosen(noodlet.noodletID))
         } catch let error as LinkError where error.message == LinkProtocol.unknownRequest {
             place = .hub
@@ -183,7 +184,7 @@ struct HubNoodletView: View {
         case .device?:
             if let readied = run.readied {
                 HubNoodletPage(mirror: store.hubMirror(forConversation: run.target.conversationID),
-                               noodlet: readied.noodlet).id(readied.noodlet.grant)
+                               session: readied.session, noodlet: readied.noodlet).id(readied.noodlet.grant)
             }
         case nil:
             Group {
@@ -200,6 +201,7 @@ struct HubNoodletView: View {
 /// and secrets stay there, each call going back.
 struct HubNoodletPage: View {
     let mirror: HubMirror?
+    let session: LinkNoodletSession
     let noodlet: LinkNoodlet
     @State private var page: NoodletPage?
     @State private var host: NoodletDeviceHost?
@@ -223,16 +225,15 @@ struct HubNoodletPage: View {
     private func start() async {
         guard let mirror else { return failure = "Join that Noodle Hub again to open this." }
         do {
-            let grant = noodlet.grant
+            let session = session
             let root = try await NoodletCache(root: mirror.noodletCache).package(
                 noodlet.noodletID, revision: noodlet.revision, byteCount: noodlet.byteCount
-            ) { try await mirror.noodletArchive(grant, from: $0) }
+            ) { try await session.archive(from: $0) }
             // The files it came with say how it runs; the Hub's copy of the manifest only chose where.
             let manifest = try JSONDecoder().decode(NoodletManifest.self, from: Data(contentsOf: root.appendingPathComponent("noodlet.json")))
             try manifest.validate()
-            let store = RemoteNoodletStore { id, offset, total, piece in
-                try await mirror.noodletCall(LinkNoodletCall(grant: grant, id: id, offset: offset, total: total, data: piece))
-            }
+            let store = RemoteNoodletStore(send: { try await session.call(id: $0, offset: $1, total: $2, data: $3) },
+                                           renew: { try await session.renew(after: $0) })
             let page = NoodletPage(root: root, manifest: manifest, store: store, dataStore: .nonPersistent(),
                                    features: NoodletDeviceHost.features,
                                    log: { Self.log.notice("\($0, privacy: .public): \($1, privacy: .private)") })

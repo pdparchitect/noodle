@@ -131,27 +131,11 @@ extension HubChats {
         try await pairing.channel(.openSurface(conversationID: conversation.conversationID, attachmentID: attachment.id))
     }
 
-    /// Readies a noodlet a bot shared to run on this phone.
-    func readyNoodlet(_ attachment: LinkAttachment, in conversation: some HubConversation) async throws -> LinkNoodlet {
-        guard case .noodlet(let readied) = try await pairing.request(.noodlet(conversationID: conversation.conversationID,
-                                                                              attachmentID: attachment.id))
-        else { throw LinkError("The Hub sent an unexpected answer.") }
-        return readied
-    }
-
-    /// A piece of a readied noodlet's files, from `offset`.
-    func noodletArchive(_ grant: UUID, from offset: Int) async throws -> Data {
-        guard case .chunk(let data, _) = try await pairing.request(.noodletArchive(grant: grant, offset: offset))
-        else { throw LinkError("The Hub sent an unexpected answer.") }
-        return data
-    }
-
-    /// Sends a piece of a noodlet's call on its data and secrets; the last one answers.
-    func noodletCall(_ piece: LinkNoodletCall) async throws -> Data? {
-        switch try await pairing.request(.noodletCall(piece)) {
-        case .done: return nil
-        case .noodletAnswer(let answer): return answer
-        default: throw LinkError("The Hub sent an unexpected answer.")
+    /// Opens a noodlet a bot shared to run on this phone.
+    func openNoodlet(_ attachment: LinkAttachment, in conversation: some HubConversation) async throws -> LinkNoodletSession {
+        let pairing = pairing
+        return try await LinkNoodletSession.open(conversationID: conversation.conversationID, attachmentID: attachment.id) {
+            try await pairing.request($0)
         }
     }
 

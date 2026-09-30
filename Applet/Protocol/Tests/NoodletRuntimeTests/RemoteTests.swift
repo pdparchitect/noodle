@@ -30,6 +30,32 @@ final class RemoteTests: XCTestCase {
         XCTAssertEqual(small, .text("read"))
     }
 
+    /// When the other Mac lost track of a call partway, the whole call goes again from its first piece.
+    func testACallStartsOverAfterItsAccessIsRenewed() async throws {
+        let wire = Wire()
+        let lost = Lost()
+        let store = RemoteNoodletStore(send: { id, offset, total, piece in
+            if offset > 0, await lost.once() { throw AppletError("forgotten") }
+            return await wire.take(id, offset, total, piece)
+        }, renew: { ($0 as? AppletError)?.message == "forgotten" })
+        let text = String(repeating: "a", count: RemoteNoodletStore.pieceSize + 10)
+        let answer = try await store.perform(NoodletStoreCall(operation: "write", path: "a.txt", text: text))
+        XCTAssertEqual(answer, .text(text))
+        let pieces = await wire.pieces
+        XCTAssertEqual(pieces.map(\.1), [0, 0, RemoteNoodletStore.pieceSize])
+        XCTAssertNotEqual(pieces[0].0, pieces[1].0, "the call went again under the id the other Mac lost")
+        do {
+            _ = try await RemoteNoodletStore(send: { _, _, _, _ in throw AppletError("gone") }, renew: { _ in false })
+                .perform(NoodletStoreCall(operation: "read", path: "a.txt"))
+            XCTFail("a failure that was not renewed was retried away")
+        } catch { XCTAssertEqual((error as? AppletError)?.message, "gone") }
+    }
+
+    private actor Lost {
+        var lost = false
+        func once() -> Bool { defer { lost = true }; return !lost }
+    }
+
     private func folder() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)

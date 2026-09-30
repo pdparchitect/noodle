@@ -72,7 +72,7 @@ import NoodleRuntime
 
     private func granted(_ id: UUID, to user: UUID) throws -> Grant {
         guard var grant = grants[id], grant.user == user, now().timeIntervalSince(grant.used) < Self.lifetime else {
-            throw LinkError("Open this noodlet again.")
+            throw LinkError(LinkProtocol.noodletForgotten)
         }
         grant.used = now()
         grants[id] = grant

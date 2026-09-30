@@ -7,13 +7,29 @@ public struct RemoteNoodletStore: NoodletStore {
     /// Sends one piece of the encoded call `id`, starting at `offset` of `total` bytes; the last
     /// piece answers with the encoded `NoodletValue`.
     public typealias Send = @Sendable (_ id: UUID, _ offset: Int, _ total: Int, _ piece: Data) async throws -> Data?
+    /// Given why a call failed, regains access to the other Mac if it lost track of this device:
+    /// whether it did, so the call goes again from its first piece.
+    public typealias Renew = @Sendable (Error) async throws -> Bool
     public static let pieceSize = 512 * 1024
     private let send: Send
+    private let renew: Renew
 
-    public init(send: @escaping Send) { self.send = send }
+    public init(send: @escaping Send, renew: @escaping Renew = { _ in false }) {
+        self.send = send
+        self.renew = renew
+    }
 
     public func perform(_ call: NoodletStoreCall) async throws -> NoodletValue {
         let data = try JSONEncoder().encode(call)
+        do {
+            return try await perform(data)
+        } catch {
+            guard try await renew(error) else { throw error }
+            return try await perform(data)
+        }
+    }
+
+    private func perform(_ data: Data) async throws -> NoodletValue {
         let id = UUID()
         var offset = 0
         var answer: Data?
