@@ -158,6 +158,11 @@ reaches the internet only when it says it needs to, never other programs on
 your Mac. Removing a bot from a conversation stops its
 requests to shared noodlets, though one already running may still finish.
 
+A noodlet from a Noodle Hub can run on your phone or Mac instead of on the Hub.
+There too it sees only its own files, reaches the internet only when it says it
+needs to, and uses the camera or microphone only when it asks and you agree.
+Its saved data and secrets stay on the Hub, and only you can open it.
+
 ## Noodle Hub
 
 A [Noodle Hub](../Hub/README.md) runs bots for other people with the sign-ins its

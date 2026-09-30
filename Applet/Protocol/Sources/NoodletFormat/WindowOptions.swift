@@ -1,4 +1,3 @@
-import AppletBridge
 import Foundation
 
 public struct NoodletWindowOptions: Codable, Sendable, Equatable {

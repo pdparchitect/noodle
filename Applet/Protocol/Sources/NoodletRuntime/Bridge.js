@@ -65,6 +65,7 @@
   const key = key => 'storage/' + encodeURIComponent(String(key)) + '.json';
   Object.defineProperty(window, 'noodle', {value:Object.freeze({
     version:1,
+    features:Object.freeze([...features]),
     fetch:nativeFetch,
     data:Object.freeze({readText:path=>send({operation:'read',path}),writeText:(path,text)=>send({operation:'write',path,text})}),
     storage:Object.freeze({get:async name=>{const value=await send({operation:'read',path:key(name)});return value===null?null:JSON.parse(value);},set:(name,value)=>send({operation:'write',path:key(name),text:JSON.stringify(value)})}),

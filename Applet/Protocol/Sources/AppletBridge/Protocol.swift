@@ -1,17 +1,6 @@
 import Foundation
+@_exported import NoodletFormat
 @_exported import Surface
-
-public struct AppletError: Error, LocalizedError, Sendable {
-    public let message: String
-    public let unavailable: Bool
-    public let code: String?
-    public init(_ message: String, unavailable: Bool = false, code: String? = nil) {
-        self.message = message
-        self.unavailable = unavailable
-        self.code = code
-    }
-    public var errorDescription: String? { message }
-}
 
 public enum AppletOperation: String, Codable, CaseIterable, Sendable {
     case list, info, validate, build, open, status, logs, inspect, eval, click, type, key, scroll, drag
@@ -22,10 +11,16 @@ public enum AppletOperation: String, Codable, CaseIterable, Sendable {
     /// A person watching and using a noodlet from Noodle Hub; never a bot's command. The
     /// connection stays open, video coming down it and what they do going up.
     case surfaceStream = "surface-stream"
+    /// A noodlet's files as one archive, read with `artifact`, for a person's device to run it itself.
+    case archive
+    /// One call of a noodlet's page on another device on the data and secrets it keeps here.
+    case store
     public var isSurface: Bool { self == .surfaceStream }
+    /// Asked by Noodle and Noodle Hub for a person, never by a bot or the command.
+    public var isAppOnly: Bool { [.surfaceStream, .archive, .store].contains(self) }
     public var timeout: Int {
         switch self {
-        case .build, .open, .restart: return 180
+        case .build, .open, .restart, .archive: return 180
         case .recordStop: return 60
         default: return 30
         }
@@ -58,6 +53,8 @@ public struct AppletRequest: Codable, Sendable {
     public var duration: Double?
     public var offset: Int?
     public var artifactID: UUID?
+    /// What a `store` request asks of the noodlet's data or secrets.
+    public var store: NoodletStoreCall?
     public init(_ operation: AppletOperation, sessionID: UUID? = nil) {
         self.operation = operation
         self.sessionID = sessionID
@@ -81,6 +78,8 @@ public struct AppletRequest: Codable, Sendable {
             throw AppletError("Use --id without --path or package files.")
         }
         if operation.isSurface, sessionID == nil { throw AppletError("Specify --session.") }
+        if [.archive, .store].contains(operation), noodletID == nil { throw AppletError("Name the noodlet by its id.") }
+        if (operation == .store) != (store != nil) { throw AppletError("Only a store request carries a store call.") }
         if sessionID != nil, [.open, .build, .validate, .list].contains(operation) {
             throw AppletError("This command does not accept --session.")
         }
@@ -118,15 +117,7 @@ public struct AppletRequest: Codable, Sendable {
         if let files {
             guard files.count <= 512, files.values.reduce(0, { $0 + $1.count }) <= 20 * 1_048_576
             else { throw AppletError("Send at most 512 files and 20 MiB.") }
-            for name in files.keys { try Self.validateRelativePath(name) }
-        }
-    }
-    public static func validateRelativePath(_ path: String) throws {
-        let parts = path.split(separator: "/", omittingEmptySubsequences: false)
-        guard !path.isEmpty, !path.hasPrefix("/"), !path.contains("\\"), !path.contains("\0"),
-            parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }), path.utf8.count < 2048
-        else {
-            throw AppletError("Unsafe relative path: \(path.prefix(100))")
+            for name in files.keys { try NoodletPath.validate(name) }
         }
     }
 }
@@ -170,6 +161,13 @@ public struct AppletResponse: Codable, Sendable {
     public var permissions: [String: String]?
     /// The controls the manifest declares, for a viewer to show as a controller.
     public var controls: Gamepad?
+    /// The noodlet's manifest and the revision of its files, with an `archive`.
+    public var manifest: NoodletManifest?
+    public var revision: String?
+    /// The size of an `archive`'s file.
+    public var byteCount: Int?
+    /// What a `store` call answered.
+    public var stored: NoodletValue?
     public init(error: String? = nil, errorCode: String? = nil) {
         self.error = error
         self.errorCode = errorCode

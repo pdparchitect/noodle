@@ -77,8 +77,10 @@ extension NoodleStore {
         guard let link = attachment.companion, let url = attachment.url else { return }
         // On a Noodle Hub they run on the Hub's Mac, so their links open a live view instead.
         if hubMirrors.contains(where: { $0.owns(conversation: attachment.conversationID) }) {
-            surfacePanels.open(HubSurfaceTarget(conversationID: attachment.conversationID, attachmentID: attachment.id,
-                                                title: attachment.companionTitle), store: self)
+            var target = HubSurfaceTarget(conversationID: attachment.conversationID, attachmentID: attachment.id,
+                                          title: attachment.companionTitle)
+            if case .noodlet = link { target.noodlet = true }
+            surfacePanels.open(target, store: self)
             return
         }
         switch link {

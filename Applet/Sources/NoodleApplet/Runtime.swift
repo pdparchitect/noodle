@@ -1,6 +1,7 @@
 import AppKit
 import AppletBridge
 import AppletCore
+import NoodletRuntime
 
 @MainActor final class AppletSession {
   let id = UUID(), package: NoodletPackage, owner: String, log: AppletLog, dataRoot: URL
@@ -28,12 +29,16 @@ import AppletCore
     self.testClock = testClock
     self.size = size
     revision = package.revision
-    dataRoot = root.appendingPathComponent(
-      "Data/\(package.key)/\(mode == "headless" ? "Testing" : "User")")
-    try FileManager.default.createDirectory(at: dataRoot, withIntermediateDirectories: true)
+    dataRoot = try Self.dataRoot(of: package, test: mode == "headless", root: root)
     log = AppletLog(url: root.appendingPathComponent("Logs/\(id.uuidString).jsonl"))
     lock = try InstanceLock(
       location: package.url, directory: root.appendingPathComponent("Locks"))
+  }
+  /// Where a noodlet keeps its data: its test runs apart from everything else.
+  static func dataRoot(of package: NoodletPackage, test: Bool, root: URL) throws -> URL {
+    let url = root.appendingPathComponent("Data/\(package.key)/\(test ? "Testing" : "User")")
+    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    return url
   }
   func place() -> WindowPlace? { web?.place }
   func snapshot() async throws -> NSImage {
@@ -150,7 +155,7 @@ import AppletCore
       if let path = request.path, AppletBuildIdentity.document(URL(fileURLWithPath: path)) != .current {
         throw AppletError("Use a .\(AppletBuildIdentity.current.fileExtension) package in this environment.", code: "environment-mismatch")
       }
-      if request.operation.isSurface, identity == AppletBuildIdentity.current.cliID {
+      if request.operation.isAppOnly, identity == AppletBuildIdentity.current.cliID {
         throw AppletError("Unknown command. Use --help.")
       }
       if identity == AppletBuildIdentity.current.cliID { try request.keepOutOfSight() }
@@ -176,6 +181,23 @@ import AppletCore
         if fromHub(identity, path: nil) { library.markHub(package.key) }
         request.path = package.url.path
         request.noodletID = nil
+      }
+      if [.archive, .store].contains(request.operation), let path = request.path {
+        let package = try NoodletPackage(url: URL(fileURLWithPath: path))
+        var response = AppletResponse()
+        if let call = request.store {
+          let data = try AppletSession.dataRoot(of: package, test: false, root: library.root)
+          response.stored = try await AppletDataStore(
+            dataRoot: data, account: AppletSecrets.account(package, dataRoot: data), secrets: library.secrets
+          ).perform(call)
+        } else {
+          let (url, revision) = try archive(package)
+          response.artifactID = register(url, owner: owner)
+          response.revision = revision
+          response.byteCount = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize
+          response.manifest = package.manifest
+        }
+        return response
       }
       if request.operation == .info {
         let package: NoodletPackage
@@ -545,7 +567,7 @@ import AppletCore
         package: package, dataRoot: session.dataRoot, log: session.log,
         size: session.size, storeID: storeID,
         rememberFrame: session.mode != "headless" && request.width == nil && request.height == nil,
-        testClock: session.testClock
+        testClock: session.testClock, secrets: library.secrets
       )
       runner.failed = { [weak self, weak session] message in
         guard let session else { return }
@@ -673,6 +695,24 @@ import AppletCore
     objectWillChange.send()
     return url
   }
+  /// The noodlet's files as one archive, kept once for each revision, and that revision.
+  private func archive(_ package: NoodletPackage) throws -> (URL, String) {
+    let revision = package.revision
+    let directory = library.root.appendingPathComponent("Archives")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let url = directory.appendingPathComponent("\(package.key).\(revision).noodletarchive")
+    if !FileManager.default.fileExists(atPath: url.path) {
+      for old in (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+      where old.hasPrefix(package.key + ".") {
+        try? FileManager.default.removeItem(at: directory.appendingPathComponent(old))
+      }
+      let partial = directory.appendingPathComponent(".\(UUID().uuidString)")
+      defer { try? FileManager.default.removeItem(at: partial) }
+      try NoodletArchive.write(package.names(), from: package.url, to: partial)
+      try FileManager.default.moveItem(at: partial, to: url)
+    }
+    return (url, revision)
+  }
   private func register(_ url: URL, owner: String) -> UUID {
     let id = UUID()
     artifacts[id] = (owner, url)
@@ -688,57 +728,4 @@ import AppletCore
 private struct SessionRecord: Codable {
   let owner: String
   var response: AppletResponse
-}
-
-/// Keys and typing from a remote viewer, played into an HTML noodlet's page as the key events a
-/// keyboard gives. As Mac key events they went through the Mac's text input, which serves the
-/// active window, so they reached other windows, opened the emoji picker and beeped.
-enum PageKeys {
-  static func script(for input: SurfaceInput) -> String? {
-    var steps: [[String: Any]] = []
-    switch input {
-    case .pointer, .scroll: return nil
-    case .hold(let key, let pressed): steps = [step(pressed ? "keydown" : "keyup", key)]
-    case .key(let key):
-      var down = step("keydown", key.rawValue)
-      if key == .backspace { down["delete"] = true }
-      steps = [down, step("keyup", key.rawValue)]
-    case .text(let text):
-      for character in text.prefix(4096) {
-        let name = character == " " ? "space" : String(character)
-        var down = step("keydown", name)
-        down["insert"] = String(character)
-        steps += [down, step("keyup", name)]
-      }
-    }
-    guard let data = try? JSONSerialization.data(withJSONObject: steps) else { return nil }
-    return """
-      const target = document.activeElement && document.activeElement !== document.body ? document.activeElement : (document.body || document.documentElement);
-      const editable = target.isContentEditable || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
-      for (const s of \(String(decoding: data, as: UTF8.self))) {
-        const typed = target.dispatchEvent(new KeyboardEvent(s.type, {key: s.key, code: s.code, keyCode: s.keyCode, which: s.keyCode, bubbles: true, cancelable: true, composed: true}));
-        if (typed && editable && s.insert) document.execCommand('insertText', false, s.insert);
-        if (typed && editable && s.delete) document.execCommand('delete');
-      }
-      """
-  }
-
-  /// A key as a keyboard reports it: named keys, lowercase letters and digits by their key, code
-  /// and key code; anything else typed carries only its character.
-  private static func step(_ type: String, _ name: String) -> [String: Any] {
-    let named: [String: (String, String, Int)] = [
-      "space": (" ", "Space", 32), "enter": ("Enter", "Enter", 13), "tab": ("Tab", "Tab", 9), "escape": ("Escape", "Escape", 27),
-      "backspace": ("Backspace", "Backspace", 8), "left": ("ArrowLeft", "ArrowLeft", 37), "up": ("ArrowUp", "ArrowUp", 38),
-      "right": ("ArrowRight", "ArrowRight", 39), "down": ("ArrowDown", "ArrowDown", 40),
-    ]
-    if let (key, code, keyCode) = named[name] { return ["type": type, "key": key, "code": code, "keyCode": keyCode] }
-    if name.count == 1, let scalar = name.unicodeScalars.first, scalar.isASCII {
-      let upper = name.uppercased()
-      if ("a"..."z").contains(name.lowercased()) {
-        return ["type": type, "key": name, "code": "Key" + upper, "keyCode": Int(upper.unicodeScalars.first!.value)]
-      }
-      if ("0"..."9").contains(name) { return ["type": type, "key": name, "code": "Digit" + name, "keyCode": Int(scalar.value)] }
-    }
-    return ["type": type, "key": name, "code": "", "keyCode": 0]
-  }
 }

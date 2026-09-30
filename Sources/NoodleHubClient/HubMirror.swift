@@ -101,6 +101,36 @@ import Observation
         return try await pairing.channel(.openSurface(conversationID: thread.remote, attachmentID: attachment))
     }
 
+    /// Readies a noodlet a bot shared in a conversation here to run on this Mac.
+    public func readyNoodlet(attachment: UUID, in conversation: UUID) async throws -> LinkNoodlet {
+        guard let thread = thread(local: conversation) else { throw LinkError("That conversation is not on this Hub.") }
+        guard case .noodlet(let readied) = try await pairing.request(.noodlet(conversationID: thread.remote, attachmentID: attachment))
+        else { throw LinkError("The Hub sent an unexpected answer.") }
+        return readied
+    }
+
+    /// A piece of a readied noodlet's files, from `offset`.
+    public func noodletArchive(_ grant: UUID, from offset: Int) async throws -> Data {
+        guard case .chunk(let data, _) = try await pairing.request(.noodletArchive(grant: grant, offset: offset))
+        else { throw LinkError("The Hub sent an unexpected answer.") }
+        return data
+    }
+
+    /// Sends a piece of a noodlet's call on its data and secrets; the last one answers.
+    public func noodletCall(_ piece: LinkNoodletCall) async throws -> Data? {
+        switch try await pairing.request(.noodletCall(piece)) {
+        case .done: return nil
+        case .noodletAnswer(let answer): return answer
+        default: throw LinkError("The Hub sent an unexpected answer.")
+        }
+    }
+
+    /// Where this Hub's noodlets are kept on this Mac.
+    public var noodletCache: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Noodlets/\(pairing.directory.lastPathComponent)")
+    }
+
     /// The Hub harness a local stand-in runs on.
     public func harness(ofAgent id: UUID) -> HubHarnessChoice? {
         guard let entry = entries.first(where: { $0.agent == id }),

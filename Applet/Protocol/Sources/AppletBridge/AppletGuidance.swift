@@ -17,7 +17,7 @@ public enum AppletGuidance {
     public static var cliHelp: String {
         """
         noodlet COMMAND [--path PACKAGE | --session UUID | --id UUID_OR_URL] [options]
-        \(AppletOperation.allCases.filter { !$0.isSurface && $0 != .show }.map { "\($0.rawValue): \(operation($0))" }.joined(separator: "\n"))
+        \(AppletOperation.allCases.filter { !$0.isAppOnly && $0 != .show }.map { "\($0.rawValue): \(operation($0))" }.joined(separator: "\n"))
 
         Options: --mode background|headless, --width POINTS, --height POINTS,
         --target CSS_SELECTOR, --x POINTS, --y POINTS, --to-x POINTS, --to-y POINTS,
@@ -87,7 +87,7 @@ public enum AppletGuidance {
         case .artifact: "Read a capture using --artifact UUID and --offset; CLI normally handles transfer via --output."
         case .present: "With --conversation UUID, capture the running noodlet for its preview and attach its noodlet:// URL to the conversation. Shares the live package by reference; inspect content before sharing. Requires a Noodle bot workspace."
         // Never a bot's command: Noodle Hub shows noodlets to people with these.
-        case .surfaceStream: ""
+        case .surfaceStream, .archive, .store: ""
         }
     }
     public static var skill: String {
@@ -152,6 +152,18 @@ public enum AppletGuidance {
         Optional manifest category, for example "category":"games",
         groups the noodlet in the library: games, productivity, utilities, developer,
         data, creativity, media, writing, learning or lifestyle. Leave it out when none fits.
+
+        People with Noodle Hub open a noodlet from their phone or another Mac, running it on
+        that device or watching it live from the Hub. Two optional manifest hints say what
+        suits it. "layout" is "desktop" (the default: a window with a pointer, which a phone
+        shows at desktop width), "phone" (touch on a small screen) or "adaptive" (any size;
+        prefer it). "runs" is "device" when it needs the device's own files, camera or
+        microphone, or quick touch, and "hub" when it needs the Hub's network or localhost,
+        screen capture or heavy work; leave it out when either works. The person can still
+        choose. Wherever it runs, storage, data and secrets are the same, kept where the
+        noodlet lives. `noodle.features` lists what the page can use where it runs: storage,
+        data, secrets, network (with network:true), files and window. Check it before
+        relying on files or window.
 
         Games played with keys declare them in an optional manifest controls object, so
         people watching on a phone get a controller instead of a keyboard:

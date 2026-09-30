@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import NoodleApplet
+@testable import NoodletRuntime
 
 /// Pins the request boundary a noodlet's `fetch` goes through. These are pure
 /// validation checks; none of them opens a connection.

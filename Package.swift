@@ -122,7 +122,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleRemindersTools", "NoodleMCP", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "HubCore", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "NoodleBrand", package: "Brand"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient"],
+            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleRemindersTools", "NoodleMCP", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "HubCore", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "NoodleBrand", package: "Brand"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", .product(name: "NoodletRuntime", package: "Protocol")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",
@@ -146,7 +146,7 @@ let package = Package(
         ),
         .testTarget(
             name: "NoodleAppTests",
-            dependencies: ["Noodle", "NoodleCore", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleMCP", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient"],
+            dependencies: ["Noodle", "NoodleCore", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleMCP", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", .product(name: "NoodletRuntime", package: "Protocol")],
             swiftSettings: developmentHooks
         ),
         .testTarget(

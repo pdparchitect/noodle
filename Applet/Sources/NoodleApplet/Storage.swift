@@ -1,3 +1,4 @@
+import AppletCore
 import Foundation
 import WebKit
 
@@ -32,5 +33,31 @@ import WebKit
       }
       defaults.removeObject(forKey: name)
     }
+  }
+}
+
+/// A noodlet's data folder and Keychain item on this Mac, as its page reaches them.
+struct AppletDataStore: NoodletStore {
+  let dataRoot: URL
+  let account: String
+  let secrets: AppletSecrets
+
+  func perform(_ call: NoodletStoreCall) async throws -> NoodletValue {
+    if call.operation == "secret" {
+      return try secrets.perform(call.action ?? "", name: call.name, value: call.value, account: account)
+    }
+    guard let path = call.path else { throw AppletError("A relative data path is required.") }
+    let file = try NoodletPath.child(path, in: dataRoot)
+    if call.operation == "read" {
+      guard FileManager.default.fileExists(atPath: file.path) else { return .null }
+      guard try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0 <= 4 * 1_048_576 else {
+        throw AppletError("Data file exceeds 4 MiB.")
+      }
+      return .text(try String(contentsOf: file, encoding: .utf8))
+    }
+    guard let text = call.text, text.utf8.count <= 4 * 1_048_576 else { throw AppletError("Text must fit in 4 MiB.") }
+    try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try text.write(to: file, atomically: true, encoding: .utf8)
+    return .bool(true)
   }
 }

@@ -54,7 +54,7 @@ final class NoodletPreviewController: NSViewController, @preconcurrency QLPrevie
             if let list { web?.configuration.userContentController.add(list) }
           }
           web?.loadFileURL(
-            try NoodletPackage.child(package.manifest.entry, in: package.url),
+            try NoodletPath.child(package.manifest.entry, in: package.url),
             allowingReadAccessTo: package.url)
         } catch { self?.finish(error) }
       }

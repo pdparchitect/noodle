@@ -16,11 +16,26 @@ import XCTest
         private(set) var opened: [UUID] = []
         /// The folder each noodlet came from.
         var sources: [UUID: String] = [:]
+        /// What a noodlet's files archive to, larger than one piece.
+        let archive = Data((0..<1_500_000).map { UInt8(truncatingIfNeeded: $0) })
+        private(set) var calls: [(UUID?, NoodletStoreCall)] = []
 
         func call(_ request: AppletRequest) -> AppletResponse {
             lock.withLock {
                 var response = AppletResponse()
                 switch request.operation {
+                case .archive:
+                    response.artifactID = session
+                    response.revision = "r1"
+                    response.byteCount = archive.count
+                    response.manifest = NoodletManifest(title: "Counter")
+                case .artifact:
+                    let offset = request.offset ?? 0
+                    response.data = archive.subdata(in: offset..<min(archive.count, offset + 1_048_576))
+                    response.done = offset + (response.data?.count ?? 0) >= archive.count
+                case .store:
+                    calls.append((request.noodletID, request.store!))
+                    response.stored = .text("kept")
                 case .open:
                     opened.append(request.noodletID ?? UUID())
                     response.sessionID = session
@@ -44,6 +59,7 @@ import XCTest
         let device: HubPairing
         let applet: FakeApplet
         let surfaces: FakeSurfaces
+        let link: HubLinkService
     }
 
     private func fixture() async throws -> Fixture {
@@ -68,7 +84,7 @@ import XCTest
         guard case .listening = link.state else { throw XCTSkip("Could not listen: \(link.state)") }
         let device = HubPairing(directory: root.appendingPathComponent("Device"), deviceName: "Mac")
         await device.join(link.invite(ada).url().absoluteString)
-        return Fixture(hub: hub, ada: ada, device: device, applet: applet, surfaces: surfaces)
+        return Fixture(hub: hub, ada: ada, device: device, applet: applet, surfaces: surfaces, link: link)
     }
 
     /// Posts a noodlet link into a conversation, as the bot or as its owner.
@@ -190,6 +206,72 @@ import XCTest
         do {
             _ = try await f.device.request(.linkPreview(conversationID: kai.conversationID, attachmentID: borrowed))
             XCTFail("another bot's noodlet showed its picture")
+        } catch { XCTAssertEqual(error.localizedDescription, "That noodlet is not this bot's.") }
+    }
+
+    /// A device running a noodlet itself fetches its files, and its page's calls on data and
+    /// secrets come back to the noodlet here, a large one in pieces.
+    func testANoodletItsBotSharedRunsOnTheDevice() async throws {
+        let f = try await fixture()
+        let bot = try f.hub.bots.create(LinkBotDraft(name: "Alfred", provider: "claude-code"), for: f.ada)
+        let noodlet = made(in: folder(of: bot, f), f)
+        let link = try post(noodlet, in: bot, byBot: true, hub: f.hub)
+        guard case .noodlet(let readied) = try await f.device.request(.noodlet(conversationID: bot.conversationID, attachmentID: link))
+        else { return XCTFail("no noodlet") }
+        XCTAssertEqual(readied.noodletID, noodlet)
+        XCTAssertEqual(readied.revision, "r1")
+        XCTAssertEqual(try JSONDecoder().decode(NoodletManifest.self, from: readied.manifest).title, "Counter")
+        var files = Data()
+        while files.count < readied.byteCount {
+            guard case .chunk(let data, let total) = try await f.device.request(.noodletArchive(grant: readied.grant, offset: files.count))
+            else { return XCTFail("no piece") }
+            XCTAssertEqual(total, readied.byteCount)
+            files.append(data)
+        }
+        XCTAssertEqual(files, f.applet.archive)
+
+        let call = try JSONEncoder().encode(NoodletStoreCall(operation: "write", path: "a.txt", text: String(repeating: "x", count: 10)))
+        let id = UUID(), half = call.count / 2
+        let first = try await f.device.request(.noodletCall(LinkNoodletCall(grant: readied.grant, id: id, offset: 0, total: call.count,
+                                                                            data: call.prefix(half))))
+        XCTAssertEqual(first, .done)
+        let last = try await f.device.request(.noodletCall(LinkNoodletCall(grant: readied.grant, id: id, offset: half, total: call.count,
+                                                                           data: call.suffix(from: half))))
+        guard case .noodletAnswer(let answer) = last else { return XCTFail("no answer") }
+        XCTAssertEqual(try JSONDecoder().decode(NoodletValue.self, from: answer), .text("kept"))
+        XCTAssertEqual(f.applet.calls.map(\.0), [noodlet])
+        XCTAssertEqual(f.applet.calls.map(\.1), [NoodletStoreCall(operation: "write", path: "a.txt", text: String(repeating: "x", count: 10))])
+    }
+
+    /// What one person's device readied is theirs alone; another user's device holding its grant gets nothing.
+    func testAGrantIsItsUsersAlone() async throws {
+        let f = try await fixture()
+        let bot = try f.hub.bots.create(LinkBotDraft(name: "Alfred", provider: "claude-code"), for: f.ada)
+        let link = try post(made(in: folder(of: bot, f), f), in: bot, byBot: true, hub: f.hub)
+        guard case .noodlet(let readied) = try await f.device.request(.noodlet(conversationID: bot.conversationID, attachmentID: link))
+        else { return XCTFail("no noodlet") }
+        let bob = try f.hub.access.addUser(named: "Bob")
+        let other = HubPairing(directory: FileManager.default.temporaryDirectory.appendingPathComponent("noodle-bob-\(UUID())"), deviceName: "Phone")
+        await other.join(f.link.invite(bob).url().absoluteString)
+        for request: LinkRequest in [.noodletArchive(grant: readied.grant, offset: 0),
+                                     .noodletCall(LinkNoodletCall(grant: readied.grant, id: UUID(), offset: 0, total: 2, data: Data("{}".utf8)))] {
+            do {
+                _ = try await other.request(request)
+                XCTFail("another user used the grant")
+            } catch { XCTAssertEqual(error.localizedDescription, "Open this noodlet again.") }
+        }
+        XCTAssertTrue(f.applet.calls.isEmpty)
+    }
+
+    /// The same rule as watching it live: only a noodlet from the bot's own folder runs on a device.
+    func testAnotherBotsNoodletDoesNotRunOnTheDevice() async throws {
+        let f = try await fixture()
+        let kai = try f.hub.bots.create(LinkBotDraft(name: "Kai", provider: "claude-code"), for: f.ada)
+        let eli = try f.hub.bots.create(LinkBotDraft(name: "Eli", provider: "claude-code"), for: f.ada)
+        let borrowed = try post(made(in: folder(of: eli, f), f), in: kai, byBot: true, hub: f.hub)
+        do {
+            _ = try await f.device.request(.noodlet(conversationID: kai.conversationID, attachmentID: borrowed))
+            XCTFail("another bot's noodlet was readied")
         } catch { XCTAssertEqual(error.localizedDescription, "That noodlet is not this bot's.") }
     }
 

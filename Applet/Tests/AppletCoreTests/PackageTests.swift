@@ -37,7 +37,7 @@ final class PackageTests: XCTestCase {
         try FileManager.default.createSymbolicLink(
             at: destination.appendingPathComponent("outside"), withDestinationURL: root)
         XCTAssertEqual(try package.names(), ["index.html", "noodlet.json"])
-        XCTAssertThrowsError(try NoodletPackage.child("outside/file", in: destination))
+        XCTAssertThrowsError(try NoodletPath.child("outside/file", in: destination))
     }
     /// Nothing is sent anywhere, so a package may be as large as its assets need.
     func testALargePackageHasARevision() throws {

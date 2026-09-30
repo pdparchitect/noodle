@@ -1,5 +1,6 @@
 import AppletBridge
 import AppletCore
+import NoodletRuntime
 import WebKit
 import XCTest
 @testable import NoodleApplet
@@ -74,8 +75,8 @@ import XCTest
     }
 
     func testMediaCaptureDelegateIsVisibleToWebKit() {
-        XCTAssertTrue(WebRunner.instancesRespond(to: Selector(
+        XCTAssertTrue(NoodletPage.instancesRespond(to: Selector(
             ("webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:"))))
-        XCTAssertTrue(WebRunner.instancesRespond(to: WebRunner.displayCaptureSelector))
+        XCTAssertTrue(NoodletPage.instancesRespond(to: NoodletPage.displayCaptureSelector))
     }
 }

@@ -13,6 +13,8 @@ public enum LinkProtocol {
     /// Files travel in pieces this size, each one request, so no request nears the message limit.
     public static let chunkSize = 512 * 1024
     public static let supportedVersions: ClosedRange<Int> = 1...1
+    /// How a Hub from before a request answers it, so a device can do without.
+    public static let unknownRequest = "This Noodle Hub does not know that request. Update Noodle Hub."
 
     public static func encode(_ request: LinkRequest) throws -> Data {
         try encoder.encode(Envelope(version: version, fetchesPictures: true, request: request))
@@ -36,7 +38,7 @@ public enum LinkProtocol {
             return .failure(LinkError("This Noodle Hub needs a newer Noodle. Update Noodle."))
         }
         guard let envelope = try? decoder.decode(Envelope.self, from: data) else {
-            return .failure(LinkError("This Noodle Hub does not know that request. Update Noodle Hub."))
+            return .failure(LinkError(unknownRequest))
         }
         return .success(envelope.request)
     }
@@ -178,6 +180,55 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     /// A one-time invitation for another device of this user, when the Hub lets them pair
     /// their own devices. Answered with `invitation`.
     case invite
+    /// Readies a noodlet a bot shared in one of this user's conversations to run on this device.
+    /// Answered with `noodlet`.
+    case noodlet(conversationID: UUID, attachmentID: UUID)
+    /// A piece of the noodlet a `noodlet` answer readied, starting at `offset`. Answered with `chunk`.
+    case noodletArchive(grant: UUID, offset: Int)
+    /// A piece of one call a noodlet running on this device makes on its data and secrets, which
+    /// stay on the Hub. Answered with `done` until the last piece, then with `noodletAnswer`.
+    case noodletCall(LinkNoodletCall)
+}
+
+/// A noodlet readied to run on a device.
+public struct LinkNoodlet: Codable, Equatable, Sendable {
+    /// Names this opening in `noodletArchive` and `noodletCall`, for this user only, for a while.
+    public var grant: UUID
+    /// The noodlet, the same whichever conversation shared it: its files are cached under it.
+    public var noodletID: UUID
+    /// Changes whenever its files do.
+    public var revision: String
+    /// The size of its archive.
+    public var byteCount: Int
+    /// Its noodlet.json, which says how it wants to run before its files are fetched.
+    public var manifest: Data
+
+    public init(grant: UUID, noodletID: UUID, revision: String, byteCount: Int, manifest: Data) {
+        self.grant = grant
+        self.noodletID = noodletID
+        self.revision = revision
+        self.byteCount = byteCount
+        self.manifest = manifest
+    }
+}
+
+/// A piece of a call a noodlet's page makes on its data and secrets. A call that does not fit one
+/// request goes in pieces of the same `id`, in order.
+public struct LinkNoodletCall: Codable, Equatable, Sendable {
+    public var grant: UUID
+    public var id: UUID
+    public var offset: Int
+    public var total: Int
+    /// This piece of the call, as its app encodes it.
+    public var data: Data
+
+    public init(grant: UUID, id: UUID, offset: Int, total: Int, data: Data) {
+        self.grant = grant
+        self.id = id
+        self.offset = offset
+        self.total = total
+        self.data = data
+    }
 }
 
 /// Whose picture: a bot's, or the icon of a connection, computer or browser.
@@ -290,6 +341,9 @@ public enum LinkResponse: Codable, Equatable, Sendable {
     case picture(Data?)
     case invitation(LinkInvitation)
     case kickConfirmation(LinkKickConfirmation)
+    case noodlet(LinkNoodlet)
+    /// What a noodlet's call answered, as its app encodes it.
+    case noodletAnswer(Data)
     case done
     case failure(String)
 }

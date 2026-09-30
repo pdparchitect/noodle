@@ -1224,7 +1224,11 @@ struct ChatView: View {
             .presentationBackground(.clear)
         }
         .fullScreenCover(item: $watching) { attachment in
-            LiveSurfaceScreen(chats: chats, thread: thread, attachment: attachment)
+            if attachment.liveKind == .noodlet {
+                NoodletScreen(chats: chats, thread: thread, attachment: attachment)
+            } else {
+                LiveSurfaceScreen(chats: chats, thread: thread, attachment: attachment)
+            }
         }
     }
 
