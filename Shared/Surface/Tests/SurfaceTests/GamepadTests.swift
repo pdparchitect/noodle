@@ -315,6 +315,20 @@ final class GamepadPadTests: XCTestCase {
         }
     }
 
+    /// A view is laid out before it has its size; controls then have no room and lay out nothing,
+    /// rather than trapping on a size they cannot divide.
+    func testControlsWithNoRoomLayOutNothing() {
+        let game = Gamepad(pads: [Gamepad.Pad(left: "left", right: "right", up: "up", down: "down")],
+                           buttons: [Gamepad.Button(key: "c"), Gamepad.Button(key: "x")], menu: "escape")
+        for gamepad in [Gamepad.snake, game] {
+            for size in [CGSize.zero, CGSize(width: 20, height: 20)] {
+                XCTAssertTrue(GamepadLayout(gamepad, in: size, safeArea: EdgeInsets()).frames.isEmpty, "\(size)")
+            }
+        }
+        XCTAssertTrue(GamepadLayout(.snake, in: CGSize(width: 390, height: 844),
+                                    safeArea: EdgeInsets(top: 500, leading: 0, bottom: 400, trailing: 0)).frames.isEmpty)
+    }
+
     /// A pad is a cross with an arm for each direction it has, never a disc.
     func testPadsAreACrossOfTheirDirections() throws {
         let size = CGSize(width: 874, height: 402)

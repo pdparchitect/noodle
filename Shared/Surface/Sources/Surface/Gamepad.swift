@@ -153,8 +153,10 @@ public struct GamepadLayout: Equatable {
 
     /// `size` is the whole screen; `safeArea` is what iOS keeps clear of the notch and home bar.
     public init(_ gamepad: Gamepad, in size: CGSize, safeArea: EdgeInsets) {
-        let area = CGRect(x: safeArea.leading, y: safeArea.top, width: size.width - safeArea.leading - safeArea.trailing,
-                          height: size.height - safeArea.top - safeArea.bottom)
+        let width = size.width - safeArea.leading - safeArea.trailing, height = size.height - safeArea.top - safeArea.bottom
+        // Before a view has its size there is no room, and no controls.
+        guard width > 2 * Self.margin, height > 2 * Self.margin else { return }
+        let area = CGRect(x: safeArea.leading, y: safeArea.top, width: width, height: height)
         let inner = area.insetBy(dx: Self.margin, dy: Self.margin)
         let spacing = Self.spacing
         let padSize = min(max(min(inner.width, inner.height) * 0.36, 120), 170)
