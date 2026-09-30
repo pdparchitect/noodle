@@ -63,9 +63,6 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
     guard version == 1 else { throw AppletError("Unsupported noodlet version \(version).") }
     guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, title.count <= 200
     else { throw AppletError("A noodlet needs a title of 1–200 characters.") }
-    guard runtime != "swift" else {
-      throw AppletError("Noodlets written in Swift are no longer supported. Rewrite this one in HTML.")
-    }
     guard runtime == "html" else { throw AppletError("Runtime must be html.") }
     try AppletRequest.validateRelativePath(entry)
     guard entry.hasSuffix(".html") else { throw AppletError("The entry must be an .html file.") }

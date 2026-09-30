@@ -60,15 +60,13 @@ final class PackageTests: XCTestCase {
             at: destination.appendingPathComponent("outside"), withDestinationURL: root)
         XCTAssertEqual(package.revision, revision)
     }
-    /// A noodlet written in Swift from before says why it no longer opens.
-    func testASwiftNoodletSaysItIsNoLongerSupported() throws {
+    func testARuntimeOtherThanHTMLIsRejected() throws {
         let root = try temporary().appendingPathComponent("Orbit.noodlet")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try Data(#"{"version":1,"title":"Orbit","runtime":"swift","entry":"Main.swift"}"#.utf8)
             .write(to: root.appendingPathComponent("noodlet.json"))
-        try Data("// noodlet".utf8).write(to: root.appendingPathComponent("Main.swift"))
         XCTAssertThrowsError(try NoodletPackage(url: root)) {
-            XCTAssertEqual($0.localizedDescription, "Noodlets written in Swift are no longer supported. Rewrite this one in HTML.")
+            XCTAssertEqual($0.localizedDescription, "Runtime must be html.")
         }
     }
     func testLockCanonicalLocationAndRelease() throws {

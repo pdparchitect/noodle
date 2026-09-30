@@ -11,7 +11,7 @@
 ### Removed
 
 - `noodlet convert`. To move a noodlet between Applet and Applet Dev, copy its folder under the other extension.
-- Noodlets written in Swift, with `noodlet typecheck` and the Orbital playground example, which leaves your library unless you changed it. One you already have no longer opens and says so; rewrite it in HTML. Applet no longer needs Xcode or the Command Line Tools, and frees the space it used to build and run them.
+- Noodlets written in Swift, with `noodlet typecheck` and the Orbital playground example, which leaves your library unless you changed it. One you already have no longer opens; rewrite it in HTML. Applet no longer needs Xcode or the Command Line Tools, and frees the space it used to build and run them.
 
 ## [0.18.0] - 2026-09-30
 
