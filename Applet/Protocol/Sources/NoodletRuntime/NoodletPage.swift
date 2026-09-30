@@ -255,6 +255,13 @@ public typealias NoodletColor = UIColor
         log("permissions", "Screen capture \(allowed ? "offered to the user" : "denied; declare screen-capture in noodlet.json").")
         decisionHandler(allowed ? 1 : 0)
     }
+
+    // WebKit refuses a page's pointer lock, which games use to turn with the mouse, unless its app
+    // agrees through this SPI. It asks only after a click in a focused page, and Escape releases it.
+    @objc(_webViewDidRequestPointerLock:completionHandler:)
+    public func webView(_ webView: WKWebView, didRequestPointerLock completionHandler: @escaping @convention(block) (Bool) -> Void) {
+        completionHandler(true)
+    }
     #endif
 
     /// The bridge dispatch, split from the WebKit callback so it can be exercised without a

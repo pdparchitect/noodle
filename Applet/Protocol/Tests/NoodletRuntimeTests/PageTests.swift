@@ -180,4 +180,20 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         let scaled = try await desktop.evaluate("return document.querySelector('meta[name=viewport]').content;")
         XCTAssertEqual(scaled, "\"width=\(width), user-scalable=no, viewport-fit=cover\"")
     }
+
+    #if os(macOS)
+    /// WebKit lets a page lock the pointer, as a game turning with the mouse does, only once its
+    /// app agrees through this SPI; without it the pointer stays free beside the game's own.
+    func testAPageMayLockThePointer() throws {
+        let (page, _, _) = try page()
+        let selector = NSSelectorFromString("_webViewDidRequestPointerLock:completionHandler:")
+        guard let method = class_getInstanceMethod(NoodletPage.self, selector) else {
+            return XCTFail("WebKit never asks the page's app, so it refuses every pointer lock.")
+        }
+        typealias Request = @convention(c) (AnyObject, Selector, WKWebView, @escaping @convention(block) (Bool) -> Void) -> Void
+        var granted: Bool?
+        unsafeBitCast(method_getImplementation(method), to: Request.self)(page, selector, page.web) { granted = $0 }
+        XCTAssertEqual(granted, true)
+    }
+    #endif
 }
