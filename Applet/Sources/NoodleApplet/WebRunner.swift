@@ -176,11 +176,47 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
     // hidden, and games stop drawing; with detection off the page is visible while ordered in.
     setOcclusionDetection(false)
     window.orderBack(nil)
+    // Nothing on screen changes in a transparent window, so within a minute or two macOS takes
+    // the app for idle: WebKit then halves the page's animation frames and lets its process nap,
+    // and a game watched from a phone stutters. Taking the window off screen and straight back
+    // counts as a change the page never sees, and a page that may not nap keeps its pace
+    // through what that misses, such as the Mac's display going to sleep.
+    setAppNap(false)
+    stir()
   }
   private func restoreSeen() {
+    stirring?.cancel()
+    stirring = nil
+    setAppNap(true)
     window.alphaValue = 1
     window.ignoresMouseEvents = false
     setOcclusionDetection(true)
+  }
+  /// How long the unseen window stays unchanged; macOS takes the app for idle after half a minute at the soonest.
+  var stillAfter = Duration.seconds(20)
+  /// Times the unseen window has been taken off screen and put back.
+  private(set) var stirred = 0
+  private var stirring: Task<Void, Never>?
+  private func stir() {
+    stirring?.cancel()
+    stirring = Task { [weak self] in
+      while !Task.isCancelled {
+        try? await Task.sleep(for: self?.stillAfter ?? .zero)
+        guard !Task.isCancelled, let self, self.window.alphaValue == 0 else { return }
+        self.window.orderOut(nil)
+        self.window.orderBack(nil)
+        self.stirred += 1
+      }
+    }
+  }
+  private func setAppNap(_ enabled: Bool) {
+    let selector = NSSelectorFromString("_setAppNapEnabled:")
+    typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+    guard let method = class_getInstanceMethod(WKPreferences.self, selector) else {
+      if !enabled { log.append("rendering", "This WebKit build may let a noodlet watched from another device nap, which makes its live view stutter.") }
+      return
+    }
+    unsafeBitCast(method_getImplementation(method), to: Setter.self)(web.configuration.preferences, selector, enabled)
   }
   private func setOcclusionDetection(_ enabled: Bool) {
     let selector = NSSelectorFromString("_setWindowOcclusionDetectionEnabled:")
@@ -210,6 +246,8 @@ final class WebRunner: NSObject, WKNavigationDelegate, WKUIDelegate,
   func stop() {
     guard !stopped else { return }
     stopped = true
+    stirring?.cancel()
+    stirring = nil
     network.stop()
     if let dragMonitor { NSEvent.removeMonitor(dragMonitor) }
     dragMonitor = nil

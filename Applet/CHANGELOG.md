@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- A game watched from another device no longer turns choppy after a minute or two, or stalls once the Mac's display sleeps.
+
 ## [0.19.0] - 2026-09-30
 
 ### Changed
