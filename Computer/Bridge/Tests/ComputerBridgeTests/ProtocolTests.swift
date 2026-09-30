@@ -224,12 +224,25 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(ComputerCard.self, from: JSONEncoder().encode(card)), card)
     }
     func testSocketPathLimitAndUnsafeExistingFile() throws {
-        XCTAssertThrowsError(try ComputerConnection.address(URL(fileURLWithPath: "/" + String(repeating: "x", count: 110))))
+        XCTAssertThrowsError(try ComputerConnection.withAddress(URL(fileURLWithPath: "/" + String(repeating: "x", count: 300))) { _, _ in 0 })
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try Data("keep".utf8).write(to: url)
         defer { try? FileManager.default.removeItem(at: url) }
         XCTAssertThrowsError(try ComputerConnectionServer(socket: url, team: "1234567890") { _, _ in .init() })
         XCTAssertEqual(try Data(contentsOf: url), Data("keep".utf8))
+    }
+
+    /// A long home folder name must not push the connection past the platform's socket path limit.
+    func testLongConnectionPathRegistersAndAnswers() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(String(repeating: "x", count: 110))
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("c.sock")
+        let server = try ComputerConnectionServer(socket: url, team: "1234567890") { _, _ in .init() }
+        XCTAssertThrowsError(try ComputerConnectionServer(socket: url, team: "1234567890") { _, _ in .init() }) {
+            XCTAssertEqual($0.localizedDescription, "A computer provider is already running.")
+        }
+        withExtendedLifetime(server) {}
     }
 
     /// Whom Noodle Hub keeps a computer for travels in its list, never in a card anyone in a conversation can read.

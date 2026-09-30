@@ -12,6 +12,7 @@
 
 ### Fixed
 
+- Noodle Applet starts on a Mac account with a long user name, instead of failing because the connection path is too long. Update Noodle as well.
 - A noodlet can lock the pointer, as a game that turns with the mouse does, instead of leaving the Mac's pointer free beside its own. Escape releases it.
 - A game watched from another device no longer turns choppy after a minute or two, or stalls once the Mac's display sleeps.
 - Recordings keep a noodlet's music when it was already playing before recording started, as a game's usually is.

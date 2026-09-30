@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Noodle Browser starts on a Mac account with a long user name, instead of failing because the connection path is too long. Update Noodle as well.
+
 ## [0.11.0] - 2026-09-30
 
 ### Changed

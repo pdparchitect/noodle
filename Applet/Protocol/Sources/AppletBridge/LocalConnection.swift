@@ -27,23 +27,24 @@ public enum AppletConnection {
         }
         return team
     }
-    static func address(_ url: URL) throws -> sockaddr_un {
+    /// Runs `connect` or `bind` on the connection's address, sized to its path rather than to
+    /// `sockaddr_un`: a long home folder name outgrows its 104 bytes, and Darwin takes up to 255.
+    static func withAddress(
+        _ url: URL, _ body: (UnsafePointer<sockaddr>, socklen_t) -> Int32
+    ) throws -> Int32 {
         let path = Array(url.path.utf8) + [0]
-        var address = sockaddr_un()
-        guard path.count <= MemoryLayout.size(ofValue: address.sun_path) else {
+        let offset = MemoryLayout<sockaddr_un>.offset(of: \.sun_path)!
+        guard offset + path.count <= SOCK_MAXADDRLEN else {
             throw AppletError("Applet connection path is too long.")
         }
-        address.sun_family = sa_family_t(AF_UNIX)
-        address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
-        withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: path) }
-        return address
-    }
-    static func withAddress<T>(
-        _ address: inout sockaddr_un, _ body: (UnsafePointer<sockaddr>, socklen_t) -> T
-    ) -> T {
-        withUnsafePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                body($0, socklen_t(MemoryLayout<sockaddr_un>.size))
+        var address = [UInt8](
+            repeating: 0, count: max(offset + path.count, MemoryLayout<sockaddr_un>.size))
+        address[0] = UInt8(address.count)
+        address[1] = UInt8(AF_UNIX)
+        address.replaceSubrange(offset..<offset + path.count, with: path)
+        return address.withUnsafeBufferPointer {
+            $0.baseAddress!.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                body($0, socklen_t(address.count))
             }
         }
     }
@@ -148,8 +149,7 @@ public enum AppletConnection {
                     ? request.operation.timeout
                     : (request.operation == .open || request.operation == .build
                         || request.operation == .restart ? 180 : 30))
-            var address = try address(url)
-            guard withAddress(&address, { Darwin.connect(fd, $0, $1) }) == 0 else {
+            guard try withAddress(url, { Darwin.connect(fd, $0, $1) }) == 0 else {
                 throw AppletError("Applet is unavailable.", unavailable: true)
             }
             _ = try authenticate(fd, team: team, identifiers: [providerID])
@@ -177,8 +177,7 @@ public enum AppletConnection {
             guard fd >= 0 else { throw AppletError("Cannot open applet connection.") }
             do {
                 configure(fd, seconds: 30)
-                var address = try address(url)
-                guard withAddress(&address, { Darwin.connect(fd, $0, $1) }) == 0 else {
+                guard try withAddress(url, { Darwin.connect(fd, $0, $1) }) == 0 else {
                     throw AppletError("Applet is unavailable.", unavailable: true)
                 }
                 _ = try authenticate(fd, team: team, identifiers: [providerID])
@@ -203,7 +202,6 @@ public final class AppletConnectionServer: @unchecked Sendable {
         surface: (@Sendable (AppletRequest, String, SurfaceSocket) async -> AppletResponse)? = nil
     ) throws {
         self.url = url
-        var address = try AppletConnection.address(url)
         var info = stat()
         if lstat(url.path, &info) == 0 {
             guard info.st_mode & S_IFMT == S_IFSOCK, info.st_uid == getuid() else {
@@ -212,7 +210,7 @@ public final class AppletConnectionServer: @unchecked Sendable {
             let probe = socket(AF_UNIX, SOCK_STREAM, 0)
             guard probe >= 0 else { throw AppletError("Cannot inspect applet connection.") }
             let active =
-                AppletConnection.withAddress(&address, { Darwin.connect(probe, $0, $1) }) == 0
+                (try? AppletConnection.withAddress(url, { Darwin.connect(probe, $0, $1) })) == 0
             Darwin.close(probe)
             guard !active else { throw AppletError("A applet provider is already running.") }
             guard unlink(url.path) == 0 else {
@@ -222,7 +220,7 @@ public final class AppletConnectionServer: @unchecked Sendable {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw AppletError("Cannot create applet connection.") }
         AppletConnection.configure(fd)
-        guard AppletConnection.withAddress(&address, { Darwin.bind(fd, $0, $1) }) == 0,
+        guard (try? AppletConnection.withAddress(url, { Darwin.bind(fd, $0, $1) })) == 0,
             chmod(url.path, 0o600) == 0, Darwin.listen(fd, 16) == 0
         else {
             Darwin.close(fd)

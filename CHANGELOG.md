@@ -13,6 +13,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Noodle reaches Noodle Computer, Noodle Browser and Noodle Applet on a Mac account with a long user name, instead of failing because the connection path is too long.
 - A noodlet running on this Mac can lock the pointer, as a game that turns with the mouse does, instead of leaving the Mac's pointer free beside its own. Escape releases it.
 
 ## [0.37.0] - 2026-09-30

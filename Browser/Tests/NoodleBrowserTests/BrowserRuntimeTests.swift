@@ -128,4 +128,17 @@ final class BrowserRuntimeTests: XCTestCase {
         let opened = try await runtime.perform(.init(.open, browserID: a.id))
         XCTAssertNotNil(try used(XCTUnwrap(opened.tabID)))
     }
+
+    /// A long home folder name must not push the connection past the platform's socket path limit.
+    func testLongConnectionPathRegistersAndAnswers() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(String(repeating: "x", count: 110))
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("b.sock")
+        let server = try BrowserConnectionServer(socket: url, team: "1234567890") { _, _ in .init() }
+        XCTAssertThrowsError(try BrowserConnectionServer(socket: url, team: "1234567890") { _, _ in .init() }) {
+            XCTAssertEqual($0.localizedDescription, "A browser provider is already running.")
+        }
+        withExtendedLifetime(server) {}
+    }
 }

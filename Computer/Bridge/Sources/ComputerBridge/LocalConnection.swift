@@ -27,20 +27,17 @@ public enum ComputerConnection {
         }
         return team
     }
-    static func address(_ url: URL) throws -> sockaddr_un {
-        let path = Array(url.path.utf8) + [0]
-        var address = sockaddr_un()
-        guard path.count <= MemoryLayout.size(ofValue: address.sun_path) else {
-            throw ComputerBridgeError("Computer connection path is too long.")
-        }
-        address.sun_family = sa_family_t(AF_UNIX)
-        address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
-        withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: path) }
-        return address
-    }
-    static func withAddress<T>(_ address: inout sockaddr_un, _ body: (UnsafePointer<sockaddr>, socklen_t) -> T) -> T {
-        withUnsafePointer(to: &address) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-            body($0, socklen_t(MemoryLayout<sockaddr_un>.size))
+    /// Runs `connect` or `bind` on the connection's address, sized to its path rather than to
+    /// `sockaddr_un`: a long home folder name outgrows its 104 bytes, and Darwin takes up to 255.
+    static func withAddress(_ url: URL, _ body: (UnsafePointer<sockaddr>, socklen_t) -> Int32) throws -> Int32 {
+        let path = Array(url.path.utf8) + [0], offset = MemoryLayout<sockaddr_un>.offset(of: \.sun_path)!
+        guard offset + path.count <= SOCK_MAXADDRLEN else { throw ComputerBridgeError("Computer connection path is too long.") }
+        var address = [UInt8](repeating: 0, count: max(offset + path.count, MemoryLayout<sockaddr_un>.size))
+        address[0] = UInt8(address.count)
+        address[1] = UInt8(AF_UNIX)
+        address.replaceSubrange(offset..<offset + path.count, with: path)
+        return address.withUnsafeBufferPointer { $0.baseAddress!.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+            body($0, socklen_t(address.count))
         } }
     }
     static func configure(_ fd: Int32, seconds: Int = 10) {
@@ -118,8 +115,7 @@ public enum ComputerConnection {
             guard fd >= 0 else { throw ComputerBridgeError("Cannot open computer connection.") }
             defer { Darwin.close(fd) }
             configure(fd, seconds: request.operation.isFileTransfer ? request.operation.timeout : (request.operation == .start ? 180 : 30))
-            var address = try address(url)
-            guard withAddress(&address, { Darwin.connect(fd, $0, $1) }) == 0 else {
+            guard try withAddress(url, { Darwin.connect(fd, $0, $1) }) == 0 else {
                 throw ComputerBridgeError("Computer is unavailable.", unavailable: true)
             }
             _ = try authenticate(fd, team: team, identifiers: [providerID])
@@ -145,8 +141,7 @@ public enum ComputerConnection {
             do {
                 // A stopped computer starts first.
                 configure(fd, seconds: ComputerOperation.start.timeout)
-                var address = try address(url)
-                guard withAddress(&address, { Darwin.connect(fd, $0, $1) }) == 0 else {
+                guard try withAddress(url, { Darwin.connect(fd, $0, $1) }) == 0 else {
                     throw ComputerBridgeError("Computer is unavailable.", unavailable: true)
                 }
                 _ = try authenticate(fd, team: team, identifiers: [providerID])
@@ -169,7 +164,6 @@ public final class ComputerConnectionServer: @unchecked Sendable {
                 handler: @escaping @Sendable (ComputerRequest, String) async -> ComputerResponse,
                 surface: (@Sendable (ComputerRequest, String, SurfaceSocket) async -> ComputerResponse)? = nil) throws {
         self.url = url
-        var address = try ComputerConnection.address(url)
         var info = stat()
         if lstat(url.path, &info) == 0 {
             guard info.st_mode & S_IFMT == S_IFSOCK, info.st_uid == getuid() else {
@@ -177,7 +171,7 @@ public final class ComputerConnectionServer: @unchecked Sendable {
             }
             let probe = socket(AF_UNIX, SOCK_STREAM, 0)
             guard probe >= 0 else { throw ComputerBridgeError("Cannot inspect computer connection.") }
-            let active = ComputerConnection.withAddress(&address, { Darwin.connect(probe, $0, $1) }) == 0
+            let active = (try? ComputerConnection.withAddress(url, { Darwin.connect(probe, $0, $1) })) == 0
             Darwin.close(probe)
             guard !active else { throw ComputerBridgeError("A computer provider is already running.") }
             guard unlink(url.path) == 0 else { throw ComputerBridgeError("Cannot replace stale computer connection.") }
@@ -185,7 +179,7 @@ public final class ComputerConnectionServer: @unchecked Sendable {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw ComputerBridgeError("Cannot create computer connection.") }
         ComputerConnection.configure(fd)
-        guard ComputerConnection.withAddress(&address, { Darwin.bind(fd, $0, $1) }) == 0,
+        guard (try? ComputerConnection.withAddress(url, { Darwin.bind(fd, $0, $1) })) == 0,
               chmod(url.path, 0o600) == 0, Darwin.listen(fd, 16) == 0 else {
             Darwin.close(fd)
             throw ComputerBridgeError("Cannot register the computer provider (\(errno)).")
