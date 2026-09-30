@@ -20,6 +20,8 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
   public var layout: Layout?
   /// Where it works best when opened from another device; none means either.
   public var runs: Placement?
+  /// The look its page sees; none follows the device's appearance.
+  public var theme: Theme?
   public enum Layout: String, Codable, Sendable, CaseIterable {
     /// A window with a pointer, which a phone shows at desktop width.
     case desktop
@@ -27,6 +29,9 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
     case phone
     /// Any size.
     case adaptive
+  }
+  public enum Theme: String, Codable, Sendable, CaseIterable {
+    case system, light, dark
   }
   public enum Placement: String, Codable, Sendable, CaseIterable {
     /// On the device it is opened on, such as a noodlet that picks the phone's files or uses its camera.
@@ -52,7 +57,7 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
     self.network = network
   }
   enum CodingKeys: String, CodingKey {
-    case version, title, runtime, entry, summary, symbol, network, window, permissions, category, controls, layout, runs
+    case version, title, runtime, entry, summary, symbol, network, window, permissions, category, controls, layout, runs, theme
   }
   public init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -69,6 +74,7 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
     controls = try c.decodeIfPresent(Gamepad.self, forKey: .controls)
     layout = try Self.hint(.layout, in: c, known: "desktop, phone or adaptive")
     runs = try Self.hint(.runs, in: c, known: "device or hub")
+    theme = try Self.hint(.theme, in: c, known: "system, light or dark")
   }
   /// A hint the manifest names, refusing a value it does not know with what it may be instead.
   private static func hint<Hint: RawRepresentable<String>>(

@@ -1,4 +1,5 @@
 import NoodletFormat
+import Surface
 import WebKit
 import XCTest
 
@@ -30,7 +31,8 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
 }
 
 @MainActor final class PageTests: XCTestCase {
-    private func page(network: Bool = false, features: [String] = [], files: [String: String] = [:]) throws -> (NoodletPage, MemoryStore, URL) {
+    private func page(network: Bool = false, theme: NoodletManifest.Theme? = nil, features: [String] = [],
+                      files: [String: String] = [:]) throws -> (NoodletPage, MemoryStore, URL) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".noodlet")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         for (name, text) in files { try Data(text.utf8).write(to: root.appendingPathComponent(name)) }
@@ -38,6 +40,7 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         let store = MemoryStore()
         var manifest = NoodletManifest(title: "Page")
         manifest.network = network
+        manifest.theme = theme
         let page = NoodletPage(root: root, manifest: manifest, store: store, dataStore: .nonPersistent(),
                                frame: CGRect(x: 0, y: 0, width: 320, height: 240), features: features) { _, _ in }
         addTeardownBlock { await MainActor.run { page.stop() } }
@@ -117,5 +120,31 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         try await page.load()
         let answer = await page.handleBridge(operation: "fetch", body: ["id": "one", "url": "https://example.com"])
         XCTAssertEqual(answer.1, "Set network: true in noodlet.json to make web requests.")
+    }
+
+    /// A noodlet made for one look keeps it whatever the device's appearance; without a theme it
+    /// follows the device, as any page does.
+    func testAThemeFixesTheLookThePageSees() async throws {
+        for (theme, dark) in [(NoodletManifest.Theme.dark, true), (.light, false)] {
+            let (page, _, _) = try page(theme: theme, files: ["index.html": "<title>t</title>"])
+            try await page.load()
+            let answer = try await page.evaluate("return matchMedia('(prefers-color-scheme: dark)').matches;")
+            XCTAssertEqual(answer, dark ? "true" : "false", "\(theme)")
+        }
+    }
+
+    /// What is typed on a phone's keyboard reaches the page as a keyboard's keys, in order: into
+    /// the field it focused, and to its own key handlers.
+    func testTypingOnTheDeviceReachesThePageInOrder() async throws {
+        let (page, _, _) = try page(files: ["index.html": """
+            <input id="name" autofocus><script>window.keys=[];document.addEventListener('keydown',e=>keys.push(e.key));</script>
+            """])
+        let host = NoodletDeviceHost(page)
+        try await page.load()
+        _ = try await page.evaluate("document.querySelector('#name').focus();")
+        for input: SurfaceInput in [.text("Ada"), .key(.backspace), .text("y"), .key(.enter)] { host.type(input) }
+        await host.typed()
+        let typed = try await page.evaluate("return [document.querySelector('#name').value, keys.join(',')];")
+        XCTAssertEqual(typed, #"["Ady","A,d,a,Backspace,y,Enter"]"#)
     }
 }

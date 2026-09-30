@@ -1,5 +1,6 @@
 import Foundation
 import NoodletFormat
+import Surface
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
@@ -92,11 +93,38 @@ import WebKit
 @MainActor public final class NoodletDeviceHost: NoodletPageHost {
     public static let features = ["files"]
     private weak var page: NoodletPage?
+    /// What was typed so far, played into the page one after another.
+    private var typing: Task<Void, Never>?
+    #if os(iOS)
+    private lazy var keyboard = PageKeyboard { [weak self] in self?.type($0) }
+    #endif
 
     public init(_ page: NoodletPage) {
         self.page = page
         page.host = self
     }
+
+    /// Plays a key or text into the page as a keyboard's key events, after what came before it.
+    public func type(_ input: SurfaceInput) {
+        guard let page, let script = PageKeys.script(for: input) else { return }
+        let previous = typing
+        typing = Task { [weak page] in
+            await previous?.value
+            _ = try? await page?.evaluate(script)
+        }
+    }
+
+    /// Returns once everything typed so far has reached the page.
+    public func typed() async { await typing?.value }
+
+    #if os(iOS)
+    /// Shows or hides the phone's keyboard, which types into the page.
+    public func toggleKeyboard() {
+        guard let web = page?.web else { return }
+        if keyboard.superview !== web { web.addSubview(keyboard) }
+        if keyboard.isFirstResponder { keyboard.resignFirstResponder() } else { keyboard.becomeFirstResponder() }
+    }
+    #endif
 
     public func perform(_ operation: String, body: [String: Any]) async throws -> Any {
         guard let web = page?.web else { throw AppletError("Noodlet stopped.") }
@@ -109,6 +137,27 @@ import WebKit
         }
     }
 }
+
+#if os(iOS)
+/// Takes what is typed on the phone's keyboard for a page that listens for keys, as the live view does.
+private final class PageKeyboard: UIView, UIKeyInput {
+    private let type: (SurfaceInput) -> Void
+    var autocorrectionType: UITextAutocorrectionType = .no
+    var autocapitalizationType: UITextAutocapitalizationType = .none
+    var spellCheckingType: UITextSpellCheckingType = .no
+
+    init(type: @escaping (SurfaceInput) -> Void) {
+        self.type = type
+        super.init(frame: .zero)
+    }
+    required init?(coder: NSCoder) { nil }
+
+    override var canBecomeFirstResponder: Bool { true }
+    var hasText: Bool { true }
+    func insertText(_ text: String) { type(text == "\n" ? .key(.enter) : .text(text)) }
+    func deleteBackward() { type(.key(.backspace)) }
+}
+#endif
 
 /// A page in a SwiftUI view.
 #if os(macOS)

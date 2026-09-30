@@ -281,18 +281,21 @@ public struct GamepadControls: View {
                 }.onEnded { _ in hold(control, []) })
         case .button(let index):
             let button = gamepad.buttons[index]
-            Circle().fill(.white.opacity(pressed ? 0.45 : 0.2))
+            Circle().fill(GamepadControls.backing).overlay(Circle().fill(.white.opacity(pressed ? 0.45 : 0.2)))
                 .overlay(Circle().strokeBorder(.white.opacity(0.4), lineWidth: 1.5))
                 .overlay(Text(button.label ?? button.key.uppercased()).font(.system(size: 13, weight: .semibold))
                     .minimumScaleFactor(0.6).lineLimit(1).padding(6).foregroundStyle(.white))
                 .gesture(press(control, key: button.key))
         case .menu:
-            Capsule().fill(.white.opacity(pressed ? 0.45 : 0.2))
+            Capsule().fill(GamepadControls.backing).overlay(Capsule().fill(.white.opacity(pressed ? 0.45 : 0.2)))
                 .overlay(Capsule().strokeBorder(.white.opacity(0.4), lineWidth: 1.5))
                 .overlay(Image(systemName: "line.3.horizontal").foregroundStyle(.white))
                 .gesture(press(control, key: gamepad.menu ?? ""))
         }
     }
+
+    /// Under each control, so its white reads over a light page as well as a dark one.
+    static let backing = Color.black.opacity(0.25)
 
     private func press(_ control: GamepadLayout.Control, key: String) -> some Gesture {
         DragGesture(minimumDistance: 0).onChanged { _ in hold(control, [key]) }.onEnded { _ in hold(control, []) }
@@ -319,6 +322,7 @@ private struct PadShape: View {
                                                                  (pad.left, "chevron.left", -1, 0), (pad.right, "chevron.right", 1, 0)]
             let cross = PadCross(pad: pad)
             ZStack {
+                cross.fill(GamepadControls.backing)
                 cross.fill(.white.opacity(held.isEmpty ? 0.18 : 0.28))
                 cross.stroke(.white.opacity(0.4), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round)).padding(0.75)
                 ForEach(arrows, id: \.1) { key, symbol, x, y in

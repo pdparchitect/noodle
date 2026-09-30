@@ -94,6 +94,7 @@ struct NoodletDeviceScreen: View {
         if manifest.controls != nil {
             Button("Controls", systemImage: showsControls ? "gamecontroller.fill" : "gamecontroller") { showsControls.toggle() }
         }
+        Button("Keyboard", systemImage: "keyboard") { host?.toggleKeyboard() }
         if let runOnHub { Button("Run on Hub", systemImage: "play.display", action: runOnHub) }
     }
 

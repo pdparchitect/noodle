@@ -21,6 +21,11 @@ final class ManifestTests: XCTestCase {
         XCTAssertThrowsError(try manifest(#","layout":"tablet""#)) {
             XCTAssertEqual($0.localizedDescription, "Unknown layout tablet. Use desktop, phone or adaptive.")
         }
+        XCTAssertNil(plain.theme)
+        XCTAssertEqual(try manifest(#","theme":"dark""#).theme, .dark)
+        XCTAssertThrowsError(try manifest(#","theme":"sepia""#)) {
+            XCTAssertEqual($0.localizedDescription, "Unknown theme sepia. Use system, light or dark.")
+        }
         XCTAssertThrowsError(try manifest(#","runs":"cloud""#)) {
             XCTAssertEqual($0.localizedDescription, "Unknown runs cloud. Use device or hub.")
         }

@@ -152,6 +152,9 @@ public enum AppletGuidance {
         and saved host credentials are not shared. XHR retains normal WebKit behavior.
         The privileged main page stays inside its package.
 
+        Optional manifest theme, "light" or "dark", fixes the look the page sees through
+        prefers-color-scheme; leave it out, or use "system", to follow the device's appearance.
+
         Optional manifest category, for example "category":"games",
         groups the noodlet in the library: games, productivity, utilities, developer,
         data, creativity, media, writing, learning or lifestyle. Leave it out when none fits.

@@ -9,11 +9,16 @@
 - Touch and hold a noodlet's card and choose Open on iPhone or Open on Hub: it opens there, and next time too.
 - Open a noodlet that uses the microphone or camera: it runs on this iPhone and asks for it here, and Run on Hub is not offered.
 - A game with controls shows them over the noodlet; a game controller in hand plays it too.
+- In a noodlet running on this iPhone, tap the keyboard button and type: a game gets the keys, and a field the noodlet selected gets the text.
 - Open a noodlet a second time: it comes up without downloading again. After the bot changes it, it downloads once more.
 
 ### Added
 
 - Noodlets run on this iPhone instead of streaming from the Hub, which is faster and smoother. Run on Hub switches to watching one live from the Hub, and Noodle remembers the choice for each noodlet. Touch and hold a noodlet's card to choose before it opens. A noodlet that uses the camera, microphone or screen always runs on this iPhone. The Hub needs its latest version.
+
+### Fixed
+
+- A game's on-screen controls show over a light page too, where they were white on white.
 
 ## [0.11.0] - 2026-09-30
 

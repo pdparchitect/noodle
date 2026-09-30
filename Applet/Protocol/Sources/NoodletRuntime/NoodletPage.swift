@@ -64,6 +64,12 @@ public typealias NoodletImage = UIImage
         super.init()
         web.navigationDelegate = self
         web.uiDelegate = self
+        // The page sees the look its manifest asks for, else the device's.
+        #if canImport(AppKit)
+        web.appearance = manifest.theme == .dark ? NSAppearance(named: .darkAqua) : manifest.theme == .light ? NSAppearance(named: .aqua) : nil
+        #else
+        web.overrideUserInterfaceStyle = manifest.theme == .dark ? .dark : manifest.theme == .light ? .light : .unspecified
+        #endif
         configuration.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "noodle")
         let listed = (try? JSONSerialization.data(withJSONObject: self.features)).map { String(decoding: $0, as: UTF8.self) } ?? "[]"
         configuration.userContentController.addUserScript(WKUserScript(
