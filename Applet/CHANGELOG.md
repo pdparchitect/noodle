@@ -7,6 +7,7 @@
 - Noodlets can run on the phones and Macs of people using a bot through Noodle Hub. Their data and secrets are kept by Noodle Applet on the Hub's Mac, the same wherever the noodlet runs.
 - Optional manifest hints `layout` (desktop, phone or adaptive) and `runs` (device or hub) say how a noodlet is laid out and where it works best when opened from another device. A noodlet that declares a permission always runs on the device it is opened on.
 - `noodle.features` lists what a noodlet's page can use where it runs, such as files or window.
+- Optional manifest `display` (browser, standalone or fullscreen) says whether a noodlet is a web page or an app that fits its view, without page scrolling, zoom or text selection; `orientation` (any, portrait or landscape) holds a phone one way while it is open; and `backgroundColor` shows until the page paints.
 - Optional manifest `theme` (system, light or dark) fixes the look a noodlet's page sees, wherever it runs; without it the page follows the device's appearance.
 
 ### Fixed

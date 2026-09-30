@@ -155,6 +155,16 @@ public enum AppletGuidance {
         Optional manifest theme, "light" or "dark", fixes the look the page sees through
         prefers-color-scheme; leave it out, or use "system", to follow the device's appearance.
 
+        Optional manifest display says how it presents itself, as in a web app's manifest:
+        "browser" (the default) is a web page that scrolls and zooms; "standalone" is an app that
+        fits its view, without page scrolling, zoom, text selection or long-press menu; "fullscreen"
+        is an app that also takes the whole screen on a phone. Use "fullscreen" for games and
+        anything drawn on a canvas. Its CSS can still make a field selectable or a panel scroll;
+        env(safe-area-inset-*) keeps controls clear of a phone's notch and home bar.
+        Optional orientation, "portrait" or "landscape", holds a phone that way while it is open;
+        leave it out, or use "any", to let the phone turn. Optional backgroundColor, a hex colour
+        such as "#1d1d1f", shows until the page paints, so a dark game never flashes white.
+
         Optional manifest category, for example "category":"games",
         groups the noodlet in the library: games, productivity, utilities, developer,
         data, creativity, media, writing, learning or lifestyle. Leave it out when none fits.

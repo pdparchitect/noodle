@@ -8,7 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
-- A noodlet a bot on a Noodle Hub shared runs on this Mac instead of streaming from the Hub. Run on Hub in its panel switches to watching it live, and Noodle remembers the choice for each noodlet; right-click its card to choose before it opens. One that uses the camera, microphone or screen always runs on this Mac. Its data and secrets are kept on the Hub.
+- A noodlet a bot on a Noodle Hub shared runs on this Mac instead of streaming from the Hub. Run on Hub in its panel switches to watching it live, and Noodle remembers the choice for each noodlet; right-click its card to choose before it opens. One that uses the camera, microphone or screen always runs on this Mac, and one made as an app fits its panel without scrolling or zooming. Its data and secrets are kept on the Hub.
 - This Mac as a Hub lets your phone run your bots' noodlets itself.
 
 ## [0.37.0] - 2026-09-30

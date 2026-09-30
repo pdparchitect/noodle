@@ -32,7 +32,7 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
 
 @MainActor final class PageTests: XCTestCase {
     private func page(network: Bool = false, theme: NoodletManifest.Theme? = nil, features: [String] = [],
-                      files: [String: String] = [:]) throws -> (NoodletPage, MemoryStore, URL) {
+                      files: [String: String] = [:], shape: (inout NoodletManifest) -> Void = { _ in }) throws -> (NoodletPage, MemoryStore, URL) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".noodlet")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         for (name, text) in files { try Data(text.utf8).write(to: root.appendingPathComponent(name)) }
@@ -41,6 +41,7 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         var manifest = NoodletManifest(title: "Page")
         manifest.network = network
         manifest.theme = theme
+        shape(&manifest)
         let page = NoodletPage(root: root, manifest: manifest, store: store, dataStore: .nonPersistent(),
                                frame: CGRect(x: 0, y: 0, width: 320, height: 240), features: features) { _, _ in }
         addTeardownBlock { await MainActor.run { page.stop() } }
@@ -146,5 +147,37 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         await host.typed()
         let typed = try await page.evaluate("return [document.querySelector('#name').value, keys.join(',')];")
         XCTAssertEqual(typed, #"["Ady","A,d,a,Backspace,y,Enter"]"#)
+    }
+
+    /// A noodlet that presents itself as an app fits its view: no page zoom, scrolling past its
+    /// edges, text selection or long-press menu, which the page can still turn back on where it
+    /// wants them. A page stays a page. Its background colour shows until the page paints its own.
+    func testAnAppFitsItsViewAndAPageStaysAPage() async throws {
+        let probe = """
+            const root = getComputedStyle(document.documentElement);
+            return [root.webkitUserSelect, root.overscrollBehaviorY, root.backgroundColor,
+                    [...document.querySelectorAll('meta[name=viewport]')].map(m => m.content).pop() ?? null];
+            """
+        let html = ["index.html": "<!doctype html><title>t</title><body>game</body>"]
+        let (plain, _, _) = try page(files: html)
+        try await plain.load()
+        let asPage = try await plain.evaluate(probe)
+        XCTAssertEqual(asPage, #"["text","auto","rgba(0, 0, 0, 0)",null]"#)
+
+        let (app, _, _) = try page(files: html) {
+            $0.display = .fullscreen
+            $0.layout = .adaptive
+            $0.backgroundColor = "#1d1d1f"
+        }
+        try await app.load()
+        let fitted = try await app.evaluate(probe)
+        XCTAssertEqual(fitted, #"["none","none","rgb(29, 29, 31)","width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"]"#)
+
+        // Laid out for a desktop window, it keeps that window's width, scaled to fit the view.
+        let (desktop, _, _) = try page(files: html) { $0.display = .standalone }
+        try await desktop.load()
+        let width = Int((NoodletWindowOptions()).size(width: nil, height: nil).width)
+        let scaled = try await desktop.evaluate("return document.querySelector('meta[name=viewport]').content;")
+        XCTAssertEqual(scaled, "\"width=\(width), user-scalable=no, viewport-fit=cover\"")
     }
 }

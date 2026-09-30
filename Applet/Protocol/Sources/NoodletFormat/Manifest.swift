@@ -22,6 +22,12 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
   public var runs: Placement?
   /// The look its page sees; none follows the device's appearance.
   public var theme: Theme?
+  /// How it presents itself, as in a web app's manifest; none is a web page.
+  public var display: Display?
+  /// Which way a phone shows it; none turns with the phone.
+  public var orientation: Orientation?
+  /// A hex colour shown until the page paints its own, such as while it loads.
+  public var backgroundColor: String?
   public enum Layout: String, Codable, Sendable, CaseIterable {
     /// A window with a pointer, which a phone shows at desktop width.
     case desktop
@@ -32,6 +38,19 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
   }
   public enum Theme: String, Codable, Sendable, CaseIterable {
     case system, light, dark
+  }
+  public enum Display: String, Codable, Sendable, CaseIterable {
+    /// A web page: it scrolls and zooms, and its text can be selected.
+    case browser
+    /// An app: it fits its view, without page scrolling, zoom, text selection or long-press menu.
+    case standalone
+    /// An app that also takes the whole screen, with the device's and Noodle's bars out of the way.
+    case fullscreen
+    /// Whether it fits its view as an app does.
+    public var fitsView: Bool { self != .browser }
+  }
+  public enum Orientation: String, Codable, Sendable, CaseIterable {
+    case any, portrait, landscape
   }
   public enum Placement: String, Codable, Sendable, CaseIterable {
     /// On the device it is opened on, such as a noodlet that picks the phone's files or uses its camera.
@@ -58,6 +77,7 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
   }
   enum CodingKeys: String, CodingKey {
     case version, title, runtime, entry, summary, symbol, network, window, permissions, category, controls, layout, runs, theme
+    case display, orientation, backgroundColor
   }
   public init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -75,6 +95,17 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
     layout = try Self.hint(.layout, in: c, known: "desktop, phone or adaptive")
     runs = try Self.hint(.runs, in: c, known: "device or hub")
     theme = try Self.hint(.theme, in: c, known: "system, light or dark")
+    display = try Self.hint(.display, in: c, known: "browser, standalone or fullscreen")
+    orientation = try Self.hint(.orientation, in: c, known: "any, portrait or landscape")
+    backgroundColor = try c.decodeIfPresent(String.self, forKey: .backgroundColor)
+    // Only a hex colour: it goes into the page's style as it is.
+    if let colour = backgroundColor, !Self.isHexColour(colour) {
+      throw AppletError("Unknown backgroundColor \(colour.prefix(40)). Use a hex colour such as #1d1d1f.")
+    }
+  }
+  public static func isHexColour(_ text: String) -> Bool {
+    let digits = text.dropFirst()
+    return text.first == "#" && [3, 6].contains(digits.count) && digits.allSatisfy(\.isHexDigit)
   }
   /// A hint the manifest names, refusing a value it does not know with what it may be instead.
   private static func hint<Hint: RawRepresentable<String>>(

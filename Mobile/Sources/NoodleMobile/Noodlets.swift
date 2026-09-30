@@ -2,6 +2,7 @@ import HubLink
 import NoodletRuntime
 import os
 import SwiftUI
+import WebKit
 
 /// A noodlet a bot shared: run on this phone, or watched live from the Hub, where the person last
 /// chose or its bot suggested. A Hub from before phones ran noodlets always shows it live.
@@ -81,8 +82,15 @@ struct NoodletDeviceScreen: View {
 
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "NoodleMobile", category: "Noodlets")
 
-    /// Sideways, the page gets the whole screen and the buttons float over its corners.
-    private var fullScreen: Bool { verticalSize == .compact }
+    /// Sideways, or for a noodlet that asks for the whole screen, the page gets it and the
+    /// buttons float over its corners.
+    private var fullScreen: Bool { verticalSize == .compact || manifest.display == .fullscreen }
+
+    /// A page laid out for a desktop window gets the desktop site, as in Safari, unless it presents
+    /// itself as an app, which fits the phone's view.
+    static func contentMode(for manifest: NoodletManifest) -> WKWebpagePreferences.ContentMode {
+        (manifest.layout ?? .desktop) == .desktop && manifest.display?.fitsView != true ? .desktop : .mobile
+    }
 
     private var screenControls: Gamepad? {
         guard let controls = manifest.controls, showsControls else { return nil }
@@ -126,8 +134,10 @@ struct NoodletDeviceScreen: View {
                 ToolbarItemGroup(placement: .primaryAction) { buttons }
             }
         }
+        .background(manifest.backgroundColor.flatMap(NoodletPage.colour).map(Color.init) ?? Color(.systemBackground))
         .task { await start() }
-        .onDisappear { hardware.detach(); page?.stop() }
+        .onAppear { ScreenOrientation.hold(manifest.orientation) }
+        .onDisappear { hardware.detach(); page?.stop(); ScreenOrientation.hold(nil) }
     }
 
     private func start() async {
@@ -143,8 +153,7 @@ struct NoodletDeviceScreen: View {
                                            renew: { try await session.renew(after: $0) })
             let page = NoodletPage(root: root, manifest: manifest, store: store, dataStore: .nonPersistent(),
                                    features: NoodletDeviceHost.features, log: { Self.log.notice("\($0, privacy: .public): \($1, privacy: .private)") }) {
-                // Laid out for a desktop window, it gets desktop width and pinch to zoom, as Safari's desktop site.
-                $0.defaultWebpagePreferences.preferredContentMode = (manifest.layout ?? .desktop) == .desktop ? .desktop : .mobile
+                $0.defaultWebpagePreferences.preferredContentMode = Self.contentMode(for: manifest)
             }
             host = NoodletDeviceHost(page)
             page.failed = { failure = $0; self.page = nil }
@@ -162,5 +171,32 @@ struct NoodletDeviceScreen: View {
     private func press(_ change: GamepadKeyChange) {
         guard let page, let script = PageKeys.script(for: .hold(key: change.key, pressed: change.pressed)) else { return }
         Task { _ = try? await page.evaluate(script) }
+    }
+}
+
+/// Which ways the phone may turn: any, except while a noodlet that asks for one way is open.
+@MainActor enum ScreenOrientation {
+    static private(set) var allowed: UIInterfaceOrientationMask = .all
+
+    static func mask(for orientation: NoodletManifest.Orientation?) -> UIInterfaceOrientationMask {
+        switch orientation {
+        case .portrait?: .portrait
+        case .landscape?: .landscape
+        case .any?, nil: .all
+        }
+    }
+
+    static func hold(_ orientation: NoodletManifest.Orientation?) {
+        allowed = mask(for: orientation)
+        for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
+            scene.windows.forEach { $0.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations() }
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: allowed))
+        }
+    }
+}
+
+extension AppDelegate {
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        ScreenOrientation.allowed
     }
 }

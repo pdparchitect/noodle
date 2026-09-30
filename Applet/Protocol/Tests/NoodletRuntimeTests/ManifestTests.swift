@@ -21,6 +21,25 @@ final class ManifestTests: XCTestCase {
         XCTAssertThrowsError(try manifest(#","layout":"tablet""#)) {
             XCTAssertEqual($0.localizedDescription, "Unknown layout tablet. Use desktop, phone or adaptive.")
         }
+        XCTAssertNil(plain.display)
+        XCTAssertNil(plain.orientation)
+        XCTAssertNil(plain.backgroundColor)
+        let game = try manifest(##","display":"fullscreen","orientation":"landscape","backgroundColor":"#1D1d1f""##)
+        XCTAssertEqual(game.display, .fullscreen)
+        XCTAssertEqual(game.orientation, .landscape)
+        XCTAssertEqual(game.backgroundColor, "#1D1d1f")
+        XCTAssertEqual(try manifest(##","display":"standalone","orientation":"portrait","backgroundColor":"#000""##).display, .standalone)
+        XCTAssertThrowsError(try manifest(#","display":"kiosk""#)) {
+            XCTAssertEqual($0.localizedDescription, "Unknown display kiosk. Use browser, standalone or fullscreen.")
+        }
+        XCTAssertThrowsError(try manifest(#","orientation":"upside""#)) {
+            XCTAssertEqual($0.localizedDescription, "Unknown orientation upside. Use any, portrait or landscape.")
+        }
+        for colour in ["black", "#12345", "#1d1d1f;}", "rgb(0,0,0)"] {
+            XCTAssertThrowsError(try manifest(#","backgroundColor":"\#(colour)""#), colour) {
+                XCTAssertEqual($0.localizedDescription, "Unknown backgroundColor \(colour). Use a hex colour such as #1d1d1f.")
+            }
+        }
         XCTAssertNil(plain.theme)
         XCTAssertEqual(try manifest(#","theme":"dark""#).theme, .dark)
         XCTAssertThrowsError(try manifest(#","theme":"sepia""#)) {

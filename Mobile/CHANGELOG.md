@@ -10,6 +10,7 @@
 - Open a noodlet that uses the microphone or camera: it runs on this iPhone and asks for it here, and Run on Hub is not offered.
 - A game with controls shows them over the noodlet; a game controller in hand plays it too.
 - In a noodlet running on this iPhone, tap the keyboard button and type: a game gets the keys, and a field the noodlet selected gets the text.
+- Open a game made to fill the screen: it takes the whole screen without the status bar, cannot be scrolled or zoomed by accident, and one made for landscape turns the phone sideways until you close it.
 - Open a noodlet a second time: it comes up without downloading again. After the bot changes it, it downloads once more.
 
 ### Added

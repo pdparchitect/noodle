@@ -6,9 +6,11 @@ import WebKit
 #if canImport(AppKit)
 import AppKit
 public typealias NoodletImage = NSImage
+public typealias NoodletColor = NSColor
 #else
 import UIKit
 public typealias NoodletImage = UIImage
+public typealias NoodletColor = UIColor
 #endif
 
 /// What the app running a page adds for where it runs, such as a window, file dialogs or the
@@ -65,16 +67,82 @@ public typealias NoodletImage = UIImage
         web.navigationDelegate = self
         web.uiDelegate = self
         // The page sees the look its manifest asks for, else the device's.
+        let background = manifest.backgroundColor.flatMap(Self.colour)
         #if canImport(AppKit)
         web.appearance = manifest.theme == .dark ? NSAppearance(named: .darkAqua) : manifest.theme == .light ? NSAppearance(named: .aqua) : nil
+        if let background { web.underPageBackgroundColor = background }
         #else
         web.overrideUserInterfaceStyle = manifest.theme == .dark ? .dark : manifest.theme == .light ? .light : .unspecified
+        if let background {
+            web.isOpaque = false
+            web.backgroundColor = background
+            web.scrollView.backgroundColor = background
+            web.underPageBackgroundColor = background
+        }
+        if manifest.display?.fitsView == true {
+            // An app stays put in its view; what scrolls inside the page still scrolls.
+            web.scrollView.isScrollEnabled = false
+            web.scrollView.bounces = false
+            web.scrollView.pinchGestureRecognizer?.isEnabled = false
+            web.scrollView.contentInsetAdjustmentBehavior = .never
+        }
         #endif
+        if let presentation = Self.presentation(of: manifest) {
+            configuration.userContentController.addUserScript(WKUserScript(
+                source: presentation, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         configuration.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "noodle")
         let listed = (try? JSONSerialization.data(withJSONObject: self.features)).map { String(decoding: $0, as: UTF8.self) } ?? "[]"
         configuration.userContentController.addUserScript(WKUserScript(
             source: "(() => { const features = \(listed);\n\(Self.bridge)\n})();",
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    }
+
+    /// What the page is given to present itself as its manifest says: its background colour, and
+    /// for an app the styles and viewport that keep it to its view. They carry no weight in the
+    /// page's own styles, so it can take back what it wants, such as selectable text in a field.
+    static func presentation(of manifest: NoodletManifest) -> String? {
+        var style = ""
+        if let colour = manifest.backgroundColor, NoodletManifest.isHexColour(colour) {
+            style += ":where(:root){background-color:\(colour)}"
+        }
+        var viewport: String?
+        if manifest.display?.fitsView == true {
+            style += ":where(html,body){overscroll-behavior:none;-webkit-user-select:none;user-select:none;"
+                + "-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}"
+            // Laid out for a desktop window, it keeps that window's width, scaled to fit the view.
+            if (manifest.layout ?? .desktop) == .desktop {
+                let width = Int((manifest.window ?? NoodletWindowOptions()).size(width: nil, height: nil).width)
+                viewport = "width=\(width), user-scalable=no, viewport-fit=cover"
+            } else {
+                viewport = "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+            }
+        }
+        guard !style.isEmpty || viewport != nil else { return nil }
+        var script = "const style = document.createElement('style'); style.textContent = \(Self.quoted(style));"
+            + " document.documentElement.prepend(style);"
+        if let viewport {
+            // After the page's own, which it replaces: the last one counts.
+            script += " const fit = () => { const meta = document.createElement('meta'); meta.name = 'viewport';"
+                + " meta.content = \(Self.quoted(viewport)); document.head.append(meta); };"
+                + " if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fit); else fit();"
+        }
+        return "(() => { \(script) })();"
+    }
+
+    private static func quoted(_ text: String) -> String {
+        String(decoding: (try? JSONSerialization.data(withJSONObject: [text])) ?? Data("[\"\"]".utf8), as: UTF8.self)
+            .dropFirst().dropLast().description
+    }
+
+    /// A manifest's hex colour for the view behind the page.
+    public static func colour(_ hex: String) -> NoodletColor? {
+        guard NoodletManifest.isHexColour(hex) else { return nil }
+        var digits = String(hex.dropFirst())
+        if digits.count == 3 { digits = digits.map { "\($0)\($0)" }.joined() }
+        guard let value = UInt32(digits, radix: 16) else { return nil }
+        let channel = { (shift: UInt32) in CGFloat((value >> shift) & 0xFF) / 255 }
+        return NoodletColor(red: channel(16), green: channel(8), blue: channel(0), alpha: 1)
     }
 
     static let bridge: String = {

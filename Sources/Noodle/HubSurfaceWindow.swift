@@ -222,6 +222,12 @@ struct HubNoodletPage: View {
     @State private var host: NoodletDeviceHost?
     @State private var failure: String?
 
+    /// The colour the noodlet asks for until its page paints, from what the Hub sent.
+    private var manifestBackground: Color? {
+        (try? JSONDecoder().decode(NoodletManifest.self, from: noodlet.manifest))?.backgroundColor
+            .flatMap(NoodletPage.colour).map(Color.init)
+    }
+
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Noodle", category: "Noodlets")
 
     var body: some View {
@@ -232,7 +238,7 @@ struct HubNoodletPage: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.black)
+        .background(manifestBackground ?? .black)
         .task { await start() }
         .onDisappear { page?.stop() }
     }
