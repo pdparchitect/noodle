@@ -225,7 +225,7 @@ import Observation
         try checkAccess()
         var request = envelope.request
         // Showing a noodlet to people is the app's, never a bot's.
-        guard !request.operation.isSurface else { throw AppletError("Unknown command. Use --help.") }
+        guard !request.operation.isAppOnly else { throw AppletError("Unknown command. Use --help.") }
         try request.keepOutOfSight()
         request.includePreview = nil
         request.owner = agent.id.uuidString.lowercased()

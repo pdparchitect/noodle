@@ -6,6 +6,7 @@ code, or open the link on the phone. Join more Hubs, such as a friend's, from Pr
 Pair Another Device in your profile shows an invitation for another of your devices, when
 the Hub allows it.
 
-A browser tab, computer or noodlet a bot shares opens live when you tap it, and you can
-use it from the phone. In a bot's settings, Tools, Computers and Browsers choose what it
+A browser tab or computer a bot shares opens live when you tap it, and you can use it
+from the phone. A noodlet runs on the phone itself; Run on Hub shows it live from the Hub
+instead, and Noodle remembers which you chose. In a bot's settings, Tools, Computers and Browsers choose what it
 may use on the Hub.

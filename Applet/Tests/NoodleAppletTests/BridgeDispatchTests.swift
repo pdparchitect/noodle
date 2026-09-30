@@ -3,9 +3,8 @@ import XCTest
 
 @testable import NoodleApplet
 
-/// Pins the noodlet bridge contract. The WebKit callback takes a
-/// WKScriptMessage, which has no public initializer, so the trust check and the
-/// operation dispatch are exercised directly.
+/// Pins the noodlet bridge contract as Applet answers it. The WebKit callback takes a
+/// WKScriptMessage, which has no public initializer, so the dispatch is exercised directly.
 final class BridgeDispatchTests: XCTestCase {
     @MainActor private func makeRunner() throws -> (WebRunner, URL, URL) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -20,32 +19,6 @@ final class BridgeDispatchTests: XCTestCase {
             package: package, dataRoot: dataRoot, log: AppletLog(url: root.appendingPathComponent("log.txt")), size: CGSize(width: 320, height: 240),
             storeID: UUID(), rememberFrame: false, testClock: true)
         return (runner, root, dataRoot)
-    }
-
-    // MARK: - Trust boundary
-
-    func testOnlyTheNoodletsOwnMainPageIsTrusted() {
-        let package = "/tmp/Some.noodlet"
-        let inside = URL(fileURLWithPath: package + "/index.html")
-
-        XCTAssertTrue(WebRunner.isTrustedBridgeSource(isMainFrame: true, url: inside, packagePath: package))
-
-        // Subframes are never trusted, even from inside the package.
-        XCTAssertFalse(WebRunner.isTrustedBridgeSource(isMainFrame: false, url: inside, packagePath: package))
-        // A missing URL is not trusted.
-        XCTAssertFalse(WebRunner.isTrustedBridgeSource(isMainFrame: true, url: nil, packagePath: package))
-        // Remote origins are never trusted.
-        XCTAssertFalse(WebRunner.isTrustedBridgeSource(
-            isMainFrame: true, url: URL(string: "https://example.com/index.html"), packagePath: package))
-        // The package directory itself is not "inside" it.
-        XCTAssertFalse(WebRunner.isTrustedBridgeSource(
-            isMainFrame: true, url: URL(fileURLWithPath: package), packagePath: package))
-        // A sibling directory sharing the prefix must not pass.
-        XCTAssertFalse(WebRunner.isTrustedBridgeSource(
-            isMainFrame: true, url: URL(fileURLWithPath: package + "-evil/index.html"), packagePath: package))
-        // Traversal out of the package is rejected after standardizing.
-        XCTAssertFalse(WebRunner.isTrustedBridgeSource(
-            isMainFrame: true, url: URL(fileURLWithPath: package + "/../other/index.html"), packagePath: package))
     }
 
     // MARK: - Dispatch

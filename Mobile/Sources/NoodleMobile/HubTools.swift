@@ -131,6 +131,20 @@ extension HubChats {
         try await pairing.channel(.openSurface(conversationID: conversation.conversationID, attachmentID: attachment.id))
     }
 
+    /// Opens a noodlet a bot shared to run on this phone.
+    func openNoodlet(_ attachment: LinkAttachment, in conversation: some HubConversation) async throws -> LinkNoodletSession {
+        let pairing = pairing
+        return try await LinkNoodletSession.open(conversationID: conversation.conversationID, attachmentID: attachment.id) {
+            try await pairing.request($0)
+        }
+    }
+
+    /// Where this Hub's noodlets are kept on this phone; the system clears it when space runs low.
+    var noodletCache: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Noodlets/\(pairing.directory.lastPathComponent)")
+    }
+
     /// The latest picture of what a link points at, for a card that carries none, as a noodlet's.
     func picture(for attachment: LinkAttachment, in conversation: some HubConversation) async throws -> Data? {
         if let known = pictures[attachment.id] { return known }
@@ -524,6 +538,8 @@ struct LiveSurfaceScreen: View {
     let chats: HubChats
     let thread: HubThread
     let attachment: LinkAttachment
+    /// For a noodlet this phone can run itself, switches to running it here.
+    var runHere: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var feed = SurfaceFeed()
     @State private var channel: LinkChannel?
@@ -555,6 +571,7 @@ struct LiveSurfaceScreen: View {
             Button("Controls", systemImage: showsControls ? "gamecontroller.fill" : "gamecontroller") { showsControls.toggle() }
         }
         Button("Keyboard", systemImage: "keyboard") { feed.toggleKeyboard() }
+        if let runHere { Button("Run on \(UIDevice.current.model)", systemImage: "iphone", action: runHere) }
     }
 
     var body: some View {

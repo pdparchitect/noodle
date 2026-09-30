@@ -61,6 +61,7 @@ import os
     @ObservationIgnored private let connections: HubConnections?
     @ObservationIgnored private let computers: HubComputers?
     @ObservationIgnored private let browsers: HubBrowsers?
+    @ObservationIgnored private let noodlets: HubNoodlets?
     /// Open event streams, by the key of the device holding each.
     @ObservationIgnored private var streams: [ObjectIdentifier: LinkStream] = [:]
     @ObservationIgnored private let port: UInt16
@@ -102,6 +103,7 @@ import os
         self.connections = connections
         self.computers = computers
         self.browsers = browsers
+        noodlets = bots.map { HubNoodlets(applets: $0.applets, now: now) }
         self.port = port
         routerMapper = router
         self.localEndpoints = localEndpoints
@@ -238,6 +240,11 @@ import os
                     open = { (try await computers.openSurface(computer: computer, terminal: terminal, bot: bot, for: user), nil) }
                 case .noodlet(let noodlet):
                     let applets = try hubBots().applets
+                    var info = AppletRequest(.info)
+                    info.noodletID = noodlet
+                    guard try await applets.companion(info).permissions?.isEmpty != false else {
+                        throw LinkError("This noodlet uses the camera, microphone or screen, so it runs on your device. Update Noodle to open it.")
+                    }
                     open = {
                         var start = AppletRequest(.open)
                         start.noodletID = noodlet
@@ -577,7 +584,24 @@ import os
             try hubComputers().assign(Set(computerIDs), to: botID, for: user)
             push(.computersChanged, to: user.id)
             return .done
+        case .noodlet(let conversationID, let attachmentID):
+            let user = try user(key)
+            // The same rule as watching it live: a noodlet from the folder of the bot that shared it.
+            guard case (.noodlet(let noodlet), _) = try await hubBots().companionLink(attachmentID, in: conversationID, for: user) else {
+                throw LinkError("That is not a noodlet.")
+            }
+            return .noodlet(try await hubNoodlets().open(noodlet, for: user.id))
+        case .noodletArchive(let grant, let offset):
+            let (data, total) = try await hubNoodlets().archive(grant, from: offset, for: try user(key).id)
+            return .chunk(data: data, total: total)
+        case .noodletCall(let piece):
+            return try await hubNoodlets().call(piece, for: try user(key).id).map(LinkResponse.noodletAnswer) ?? .done
         }
+    }
+
+    private func hubNoodlets() throws -> HubNoodlets {
+        guard let noodlets else { throw LinkError("This Noodle Hub does not keep bots.") }
+        return noodlets
     }
 
     /// Fails the request when they cannot be read: working on an older copy would save it over Noodle's.

@@ -118,6 +118,7 @@ let project = Project(
             dependencies: [
                 .package(product: "AppletCore"),
                 .package(product: "AppletBridge"),
+                .package(product: "NoodletRuntime"),
                 .package(product: "NoodleSettingsUI"),
                 .package(product: "NoodleLaunchChecks"),
                 .package(product: "NoodleWallpaper"),

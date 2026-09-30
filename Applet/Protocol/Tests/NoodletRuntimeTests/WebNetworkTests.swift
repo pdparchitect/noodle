@@ -1,5 +1,5 @@
 import XCTest
-@testable import NoodleApplet
+@testable import NoodletRuntime
 
 final class WebNetworkTests: XCTestCase {
     @MainActor func testNativeRequestBoundaryAndExplicitCredentials() async throws {

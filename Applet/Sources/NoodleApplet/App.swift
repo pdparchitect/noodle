@@ -528,7 +528,7 @@ private struct LibraryView: View {
   private func card(_ entry: LibraryEntry) -> some View {
     let cached = library.root.appendingPathComponent("Thumbnails/\(entry.id).png")
     let thumbnail = FileManager.default.fileExists(atPath: cached.path) ? cached
-      : ((try? NoodletPackage.child("preview.png", in: entry.package.url)) ?? cached)
+      : ((try? NoodletPath.child("preview.png", in: entry.package.url)) ?? cached)
     let running = runtime.isRunning(entry.id)
     return VStack(alignment: .leading, spacing: 0) {
       Button {

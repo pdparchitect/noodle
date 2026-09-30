@@ -241,6 +241,18 @@ import XCTest
             _ = try await invoke(AppletRequest(.surfaceStream, sessionID: UUID()))
             XCTFail("A bot opened a live view")
         } catch {}
+        // Nor may it take a noodlet's files or data as a person's device does.
+        var archive = AppletRequest(.archive)
+        archive.noodletID = id
+        var store = AppletRequest(.store)
+        store.noodletID = id
+        store.store = NoodletStoreCall(operation: "secret", action: "names")
+        for request in [archive, store] {
+            do {
+                _ = try await invoke(request)
+                XCTFail("A bot asked for \(request.operation.rawValue)")
+            } catch { XCTAssertEqual(error.localizedDescription, "Unknown command. Use --help.") }
+        }
         let before = await recorder.requests
         XCTAssertEqual(before.count, 0)
         _ = try await invoke(AppletRequest(.present, sessionID: UUID()), in: group.id)

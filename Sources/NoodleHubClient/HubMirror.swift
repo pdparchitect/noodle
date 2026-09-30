@@ -101,6 +101,21 @@ import Observation
         return try await pairing.channel(.openSurface(conversationID: thread.remote, attachmentID: attachment))
     }
 
+    /// Opens a noodlet a bot shared in a conversation here to run on this Mac.
+    public func openNoodlet(attachment: UUID, in conversation: UUID) async throws -> LinkNoodletSession {
+        guard let thread = thread(local: conversation) else { throw LinkError("That conversation is not on this Hub.") }
+        let pairing = pairing
+        return try await LinkNoodletSession.open(conversationID: thread.remote, attachmentID: attachment) {
+            try await pairing.request($0)
+        }
+    }
+
+    /// Where this Hub's noodlets are kept on this Mac.
+    public var noodletCache: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Noodlets/\(pairing.directory.lastPathComponent)")
+    }
+
     /// The Hub harness a local stand-in runs on.
     public func harness(ofAgent id: UUID) -> HubHarnessChoice? {
         guard let entry = entries.first(where: { $0.agent == id }),

@@ -1,17 +1,18 @@
-import AppletBridge
 import Foundation
+import NoodletFormat
 
 /// Per-noodlet HTTP requests, independent of browser CORS and browser credentials.
-@MainActor final class WebNetwork {
-  static let limit = 16 * 1_048_576
+@MainActor public final class WebNetwork {
+  public static let limit = 16 * 1_048_576
   private var requests: [String: Task<[String: Any], Error>] = [:]
 
-  func cancel(_ id: String) { requests[id]?.cancel() }
-  func stop() {
+  public init() {}
+  public func cancel(_ id: String) { requests[id]?.cancel() }
+  public func stop() {
     for task in requests.values { task.cancel() }
     requests.removeAll()
   }
-  func fetch(_ body: [String: Any], enabled: Bool) async throws -> [String: Any] {
+  public func fetch(_ body: [String: Any], enabled: Bool) async throws -> [String: Any] {
     guard enabled else {
       throw AppletError("Set network: true in noodlet.json to make web requests.")
     }
@@ -32,7 +33,7 @@ import Foundation
       task.cancel()
     }
   }
-  static func request(_ body: [String: Any]) throws -> URLRequest {
+  public static func request(_ body: [String: Any]) throws -> URLRequest {
     guard let address = body["url"] as? String, address.utf8.count <= 8192,
       let url = URL(string: address), ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
       url.host != nil, url.user == nil, url.password == nil

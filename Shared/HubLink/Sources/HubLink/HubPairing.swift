@@ -266,3 +266,64 @@ import Observation
     private var hubURL: URL { directory.appendingPathComponent("hub.json") }
     private var statusURL: URL { directory.appendingPathComponent("status.json") }
 }
+
+/// A noodlet a bot shared, opened to run on this device. The Hub forgets what it opened when it
+/// restarts, so this opens it again when the Hub says so, and the person never sees it.
+public actor LinkNoodletSession {
+    public typealias Request = @Sendable (LinkRequest) async throws -> LinkResponse
+    private let conversationID: UUID
+    private let attachmentID: UUID
+    private let request: Request
+    public private(set) var noodlet: LinkNoodlet
+
+    private init(conversationID: UUID, attachmentID: UUID, request: @escaping Request, noodlet: LinkNoodlet) {
+        self.conversationID = conversationID
+        self.attachmentID = attachmentID
+        self.request = request
+        self.noodlet = noodlet
+    }
+
+    public static func open(conversationID: UUID, attachmentID: UUID, request: @escaping Request) async throws -> LinkNoodletSession {
+        LinkNoodletSession(conversationID: conversationID, attachmentID: attachmentID, request: request,
+                           noodlet: try await ready(conversationID, attachmentID, request))
+    }
+
+    private static func ready(_ conversationID: UUID, _ attachmentID: UUID, _ request: Request) async throws -> LinkNoodlet {
+        guard case .noodlet(let noodlet) = try await request(.noodlet(conversationID: conversationID, attachmentID: attachmentID))
+        else { throw LinkError("The Hub sent an unexpected answer.") }
+        return noodlet
+    }
+
+    /// Opens the noodlet again if `error` says the Hub forgot it: whether it did.
+    public func renew(after error: Error) async throws -> Bool {
+        guard (error as? LinkError)?.message == LinkProtocol.noodletForgotten else { return false }
+        noodlet = try await Self.ready(conversationID, attachmentID, request)
+        return true
+    }
+
+    /// A piece of the noodlet's files from `offset`, the same files even if the Hub forgot them.
+    public func archive(from offset: Int) async throws -> Data {
+        let revision = noodlet.revision
+        do {
+            return try await archivePiece(from: offset)
+        } catch {
+            guard try await renew(after: error), noodlet.revision == revision else { throw error }
+            return try await archivePiece(from: offset)
+        }
+    }
+
+    private func archivePiece(from offset: Int) async throws -> Data {
+        guard case .chunk(let data, _) = try await request(.noodletArchive(grant: noodlet.grant, offset: offset))
+        else { throw LinkError("The Hub sent an unexpected answer.") }
+        return data
+    }
+
+    /// Sends a piece of the call `id` on the noodlet's data and secrets; the last one answers.
+    public func call(id: UUID, offset: Int, total: Int, data: Data) async throws -> Data? {
+        switch try await request(.noodletCall(LinkNoodletCall(grant: noodlet.grant, id: id, offset: offset, total: total, data: data))) {
+        case .done: return nil
+        case .noodletAnswer(let answer): return answer
+        default: throw LinkError("The Hub sent an unexpected answer.")
+        }
+    }
+}

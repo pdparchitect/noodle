@@ -140,6 +140,8 @@ final class LinkVersion1Tests: XCTestCase {
             "pushTopic": .pushTopic(LinkPushTopic(topic: "topic")), "noPushTopic": .pushTopic(LinkPushTopic(topic: nil)),
             "kick": .kick(botID: a), "confirmKick": .confirmKick(botID: a, confirmationID: b), "newSession": .newSession(botID: a),
             "toolCatalog": .toolCatalog,
+            "noodlet": .noodlet(conversationID: b, attachmentID: c), "noodletArchive": .noodletArchive(grant: a, offset: 524288),
+            "noodletCall": .noodletCall(LinkNoodletCall(grant: a, id: b, offset: 0, total: 2, data: Data([1, 2]))),
         ]
     }
     private var group: LinkGroup {
@@ -173,6 +175,8 @@ final class LinkVersion1Tests: XCTestCase {
                                                         endpoint: URL(string: "https://mcp.notion.com/mcp")!, badge: "Experimental",
                                                         icon: Data([7]))]),
             "groups": .groups([group]), "group": .group(group),
+            "noodlet": .noodlet(LinkNoodlet(grant: a, noodletID: b, revision: "abc", byteCount: 9, manifest: Data([3]))),
+            "noodletAnswer": .noodletAnswer(Data([4])),
         ]
     }
     private var nextEvents: [String: LinkEvent] {
@@ -250,7 +254,10 @@ final class LinkVersion1Tests: XCTestCase {
         "groups": #"{"version":1,"request":{"groups":{}}}"#,
         "createGroup": #"{"version":1,"request":{"createGroup":{"_0":{"name":"House","publicDescription":"Staff","botIDs":["00000000-0000-0000-0000-00000000000A"]}}}}"#,
         "updateGroup": #"{"version":1,"request":{"updateGroup":{"id":"00000000-0000-0000-0000-00000000000B","_1":{"name":"House","publicDescription":"Staff","botIDs":["00000000-0000-0000-0000-00000000000A"]}}}}"#,
-        "deleteGroup": #"{"version":1,"request":{"deleteGroup":{"id":"00000000-0000-0000-0000-00000000000B"}}}"#
+        "deleteGroup": #"{"version":1,"request":{"deleteGroup":{"id":"00000000-0000-0000-0000-00000000000B"}}}"#,
+        "noodlet": #"{"version":1,"request":{"noodlet":{"attachmentID":"00000000-0000-0000-0000-00000000000C","conversationID":"00000000-0000-0000-0000-00000000000B"}}}"#,
+        "noodletArchive": #"{"version":1,"request":{"noodletArchive":{"grant":"00000000-0000-0000-0000-00000000000A","offset":524288}}}"#,
+        "noodletCall": #"{"version":1,"request":{"noodletCall":{"_0":{"grant":"00000000-0000-0000-0000-00000000000A","id":"00000000-0000-0000-0000-00000000000B","offset":0,"total":2,"data":"AQI="}}}}"#
     ]
     private static let nextResponseJSON: [String: String] = [
         "kickConfirmation": #"{"kickConfirmation":{"_0":{"id":"00000000-0000-0000-0000-00000000000A","title":"Safeguards stopped Alfred","message":"Stopped.","confirmTitle":"Resume","offersNewSession":true}}}"#,
@@ -268,7 +275,9 @@ final class LinkVersion1Tests: XCTestCase {
         "toolCatalog": #"{"toolCatalog":{"_0":[{"id":"notion","name":"Notion","summary":"Pages.","instructions":"Search first.","endpoint":"https:\/\/mcp.notion.com\/mcp","badge":"Experimental","icon":"Bw=="}]}}"#,
         "readBot": #"{"bot":{"_0":{"id":"00000000-0000-0000-0000-00000000000A","conversationID":"00000000-0000-0000-0000-00000000000B","draft":{"name":"Alfred","provider":"codex"},"createdAt":1790000000,"readUpTo":1790000000}}}"#,
         "groups": #"{"groups":{"_0":[{"id":"00000000-0000-0000-0000-00000000000B","draft":{"name":"House","publicDescription":"Staff","botIDs":["00000000-0000-0000-0000-00000000000A"]},"createdAt":1790000000,"readUpTo":1790000000}]}}"#,
-        "group": #"{"group":{"_0":{"id":"00000000-0000-0000-0000-00000000000B","draft":{"name":"House","publicDescription":"Staff","botIDs":["00000000-0000-0000-0000-00000000000A"]},"createdAt":1790000000,"readUpTo":1790000000}}}"#
+        "group": #"{"group":{"_0":{"id":"00000000-0000-0000-0000-00000000000B","draft":{"name":"House","publicDescription":"Staff","botIDs":["00000000-0000-0000-0000-00000000000A"]},"createdAt":1790000000,"readUpTo":1790000000}}}"#,
+        "noodlet": #"{"noodlet":{"_0":{"grant":"00000000-0000-0000-0000-00000000000A","noodletID":"00000000-0000-0000-0000-00000000000B","revision":"abc","byteCount":9,"manifest":"Aw=="}}}"#,
+        "noodletAnswer": #"{"noodletAnswer":{"_0":"BA=="}}"#
     ]
     private static let nextEventJSON: [String: String] = [
         "browsersChanged": #"{"browsersChanged":{}}"#,

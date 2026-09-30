@@ -7,7 +7,8 @@ let version = (try? String(contentsOfFile: "VERSION", encoding: .utf8))?
 
 let project = Project(
     name: "NoodleMobile",
-    packages: [.local(path: "../Shared/HubLink"), .local(path: "../Shared/Wallpaper"), .local(path: "../Shared/Brand")],
+    packages: [.local(path: "../Shared/HubLink"), .local(path: "../Shared/Wallpaper"), .local(path: "../Shared/Brand"),
+               .local(path: "../Applet/Protocol")],
     settings: .settings(
         base: [
             "DEVELOPMENT_TEAM": "S8VNVK39LH",
@@ -46,9 +47,9 @@ let project = Project(
                 "ITSAppUsesNonExemptEncryption": false,
                 // Invitation links and QR codes are noodle://join-hub links, the same as on the Mac.
                 "CFBundleURLTypes": [["CFBundleURLName": "$(MOBILE_APP_BUNDLE_ID)", "CFBundleURLSchemes": ["noodle"]]],
-                "NSCameraUsageDescription": "Noodle scans the QR code of a Noodle Hub invitation.",
+                "NSCameraUsageDescription": "Noodle scans the QR code of a Noodle Hub invitation, and noodlets you open use the camera when they ask.",
                 "NSLocalNetworkUsageDescription": "Noodle connects to your Noodle Hub on this network.",
-                "NSMicrophoneUsageDescription": "Record voice messages you choose to send in your conversations. Speech is transcribed on this device.",
+                "NSMicrophoneUsageDescription": "Record voice messages you choose to send in your conversations, and let noodlets you open listen when they ask. Speech is transcribed on this device.",
                 // Shared with the notification extension, which reaches the Hubs kept there.
                 "NoodleAppGroup": "group.$(MOBILE_APP_BUNDLE_ID)",
             ]),
@@ -56,6 +57,7 @@ let project = Project(
             resources: ["Support/Assets.xcassets"],
             entitlements: .file(path: "Support/NoodleMobile.entitlements"),
             dependencies: [.package(product: "HubLink"), .package(product: "NoodleWallpaperCore"), .package(product: "NoodleBrand"),
+                           .package(product: "NoodletRuntime"),
                            .target(name: "NoodleMobileNotifications")],
             settings: .settings(base: [
                 "PRODUCT_BUNDLE_IDENTIFIER": "$(MOBILE_APP_BUNDLE_ID)",

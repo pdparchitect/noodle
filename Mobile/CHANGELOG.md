@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### What to Test
+
+- Open a noodlet a bot shared: it runs on this iPhone, and responds at once to taps and typing. What it saves is still there when you open it on your Mac.
+- Tap Run on Hub to watch it live from the Hub instead, then Run on iPhone to bring it back. Open it again later: it comes up where you left it.
+- Touch and hold a noodlet's card and choose Open on iPhone or Open on Hub: it opens there, and next time too.
+- Open a noodlet that uses the microphone or camera: it runs on this iPhone and asks for it here, and Run on Hub is not offered.
+- A game with controls shows them over the noodlet; a game controller in hand plays it too.
+- Open a noodlet a second time: it comes up without downloading again. After the bot changes it, it downloads once more.
+
+### Added
+
+- Noodlets run on this iPhone instead of streaming from the Hub, which is faster and smoother. Run on Hub switches to watching one live from the Hub, and Noodle remembers the choice for each noodlet. Touch and hold a noodlet's card to choose before it opens. A noodlet that uses the camera, microphone or screen always runs on this iPhone. The Hub needs its latest version.
+
 ## [0.11.0] - 2026-09-30
 
 ### What to Test

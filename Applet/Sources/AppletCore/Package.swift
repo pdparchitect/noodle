@@ -1,73 +1,7 @@
 import AppletBridge
 import CryptoKit
 import Foundation
-
-public struct NoodletManifest: Codable, Sendable, Equatable {
-  public var version: Int
-  public var title: String
-  public var runtime: String
-  public var entry: String
-  public var summary: String?
-  public var symbol: String?
-  public var network: Bool
-  public var window: NoodletWindowOptions?
-  /// Protected resources the user is asked about before the noodlet starts.
-  public var permissions: [String]?
-  /// Groups the noodlet under one library sidebar category; untagged noodlets appear only in All.
-  public var category: String?
-  /// The keys a game listens for, shown as a controller to people watching on a phone.
-  public var controls: Gamepad?
-  public static let knownCategories = [
-    "games", "productivity", "utilities", "developer", "data",
-    "creativity", "media", "writing", "learning", "lifestyle",
-  ]
-  public static let knownPermissions = ["microphone", "camera", "speech-recognition", "screen-capture"]
-  public init(
-    title: String, runtime: String = "html", entry: String = "index.html",
-    summary: String? = nil, symbol: String? = nil, network: Bool = false
-  ) {
-    version = 1
-    self.title = title
-    self.runtime = runtime
-    self.entry = entry
-    self.summary = summary
-    self.symbol = symbol
-    self.network = network
-  }
-  enum CodingKeys: String, CodingKey {
-    case version, title, runtime, entry, summary, symbol, network, window, permissions, category, controls
-  }
-  public init(from decoder: Decoder) throws {
-    let c = try decoder.container(keyedBy: CodingKeys.self)
-    version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
-    title = try c.decode(String.self, forKey: .title)
-    runtime = try c.decode(String.self, forKey: .runtime)
-    entry = try c.decode(String.self, forKey: .entry)
-    summary = try c.decodeIfPresent(String.self, forKey: .summary)
-    symbol = try c.decodeIfPresent(String.self, forKey: .symbol)
-    network = try c.decodeIfPresent(Bool.self, forKey: .network) ?? false
-    window = try c.decodeIfPresent(NoodletWindowOptions.self, forKey: .window)
-    permissions = try c.decodeIfPresent([String].self, forKey: .permissions)
-    category = try c.decodeIfPresent(String.self, forKey: .category)
-    controls = try c.decodeIfPresent(Gamepad.self, forKey: .controls)
-  }
-  public func validate() throws {
-    try window?.validate()
-    do { try controls?.validate() } catch let error as Gamepad.Invalid { throw AppletError(error.message) }
-    for permission in permissions ?? [] where !Self.knownPermissions.contains(permission) {
-      throw AppletError("Unknown permission \(permission.prefix(40)). Use \(Self.knownPermissions.joined(separator: ", ")).")
-    }
-    if let category, !Self.knownCategories.contains(category) {
-      throw AppletError("Unknown category \(category.prefix(40)). Use \(Self.knownCategories.joined(separator: ", ")).")
-    }
-    guard version == 1 else { throw AppletError("Unsupported noodlet version \(version).") }
-    guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, title.count <= 200
-    else { throw AppletError("A noodlet needs a title of 1–200 characters.") }
-    guard runtime == "html" else { throw AppletError("Runtime must be html.") }
-    try AppletRequest.validateRelativePath(entry)
-    guard entry.hasSuffix(".html") else { throw AppletError("The entry must be an .html file.") }
-  }
-}
+@_exported import NoodletFormat
 
 public struct NoodletPackage: Sendable {
   public let url: URL
@@ -82,7 +16,7 @@ public struct NoodletPackage: Sendable {
     else {
       throw AppletError("Open a .\(build.fileExtension) document package.")
     }
-    let manifestURL = try Self.child("noodlet.json", in: self.url)
+    let manifestURL = try NoodletPath.child("noodlet.json", in: self.url)
     guard try manifestURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0 <= 65536 else {
       throw AppletError("Manifest exceeds 64 KiB.")
     }
@@ -91,23 +25,10 @@ public struct NoodletPackage: Sendable {
         NoodletManifest.self, from: Data(contentsOf: manifestURL))
     } catch { throw AppletError("noodlet.json: \(error.localizedDescription)") }
     try manifest.validate()
-    let entry = try Self.child(manifest.entry, in: self.url)
+    let entry = try NoodletPath.child(manifest.entry, in: self.url)
     guard try entry.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
       throw AppletError("Missing entry file: \(manifest.entry)")
     }
-  }
-  public static func child(_ relative: String, in root: URL) throws -> URL {
-    try AppletRequest.validateRelativePath(relative)
-    var current = root
-    for component in relative.split(separator: "/") {
-      current.appendPathComponent(String(component))
-      if let values = try? current.resourceValues(forKeys: [.isSymbolicLinkKey]),
-        values.isSymbolicLink == true
-      {
-        throw AppletError("Symlinks are not allowed inside noodlets: \(relative)")
-      }
-    }
-    return current
   }
   /// The package's files, relative to it and sorted. Hidden files and folders, such as
   /// `.git`, and links are not part of a noodlet.
@@ -152,7 +73,7 @@ public struct NoodletPackage: Sendable {
     try fm.createDirectory(at: stage, withIntermediateDirectories: true)
     defer { try? fm.removeItem(at: stage) }
     for (name, data) in files {
-      let target = try child(name, in: stage)
+      let target = try NoodletPath.child(name, in: stage)
       try fm.createDirectory(
         at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
       try data.write(to: target, options: .atomic)

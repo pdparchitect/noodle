@@ -70,15 +70,15 @@ struct AppletSecrets: Sendable {
   static func account(_ package: NoodletPackage, dataRoot: URL) -> String {
     "\(package.key).\(dataRoot.lastPathComponent == "Testing" ? "test" : "user")"
   }
-  /// `action` is get, set, delete or names. Returns a JSON value for the noodlet.
-  func perform(_ action: String, name: String?, value: String?, account: String) throws -> Any {
+  /// `action` is get, set, delete or names.
+  func perform(_ action: String, name: String?, value: String?, account: String) throws -> NoodletValue {
     var values = try storage.load(account)
-    if action == "names" { return values.keys.sorted() }
+    if action == "names" { return .names(values.keys.sorted()) }
     guard let name, !name.isEmpty, name.utf8.count <= 128 else {
       throw AppletError("A secret needs a name of 1–128 bytes.")
     }
     switch action {
-    case "get": return values[name] ?? NSNull()
+    case "get": return values[name].map(NoodletValue.text) ?? .null
     case "set":
       guard let value, value.utf8.count <= 16384 else { throw AppletError("A secret must fit in 16 KiB.") }
       guard values[name] != nil || values.count < 64 else { throw AppletError("A noodlet may keep 64 secrets.") }
@@ -87,7 +87,7 @@ struct AppletSecrets: Sendable {
     default: throw AppletError("Unknown secrets operation.")
     }
     try storage.save(values, account: account)
-    return true
+    return .bool(true)
   }
   /// Every noodlet's secret names, by account, for Settings. Values are never listed.
   func names() -> [String: [String]] {

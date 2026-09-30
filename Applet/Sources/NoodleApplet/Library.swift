@@ -84,12 +84,15 @@ struct HubPerson: Hashable, Identifiable, Decodable {
   private var timer: Timer?
   private var refreshing = false
   private var links: NoodletRegistry?
+  /// Where noodlets keep their secrets, whichever device their page runs on.
+  let secrets: AppletSecrets
 
   init(
     root: URL? = nil, defaults: UserDefaults = .standard, installExamples: Bool = true,
     watchChanges: Bool = true, botFolders: [BotFolder]? = nil, secrets: AppletSecrets = .shared
   ) {
     self.defaults = defaults
+    self.secrets = secrets
     // A library kept elsewhere, as in a test, finds only the bots it is given.
     self.botFolders = botFolders ?? (root == nil ? BotFolder.system : [])
     self.root =

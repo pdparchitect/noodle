@@ -13,11 +13,11 @@ final class MemorySecrets: AppletSecretStorage, @unchecked Sendable {
 @MainActor final class SecretsTests: XCTestCase {
     func testSecretsAreSeparateForEachNoodletAndScope() throws {
         let secrets = AppletSecrets(storage: MemorySecrets())
-        XCTAssertTrue(try secrets.perform("set", name: "token", value: "one", account: "a.user") as? Bool == true)
-        XCTAssertEqual(try secrets.perform("get", name: "token", value: nil, account: "a.user") as? String, "one")
-        XCTAssertTrue(try secrets.perform("get", name: "token", value: nil, account: "b.user") is NSNull)
-        XCTAssertTrue(try secrets.perform("get", name: "token", value: nil, account: "a.test") is NSNull)
-        XCTAssertEqual(try secrets.perform("names", name: nil, value: nil, account: "a.user") as? [String], ["token"])
+        XCTAssertEqual(try secrets.perform("set", name: "token", value: "one", account: "a.user"), .bool(true))
+        XCTAssertEqual(try secrets.perform("get", name: "token", value: nil, account: "a.user"), .text("one"))
+        XCTAssertEqual(try secrets.perform("get", name: "token", value: nil, account: "b.user"), .null)
+        XCTAssertEqual(try secrets.perform("get", name: "token", value: nil, account: "a.test"), .null)
+        XCTAssertEqual(try secrets.perform("names", name: nil, value: nil, account: "a.user"), .names(["token"]))
         XCTAssertEqual(secrets.names(), ["a.user": ["token"]])
         _ = try secrets.perform("delete", name: "token", value: nil, account: "a.user")
         XCTAssertTrue(secrets.names().isEmpty)

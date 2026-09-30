@@ -307,8 +307,9 @@ private final class ActivityEmptyLabel: NSTextField {
         set { title.stringValue = newValue }
     }
 
+    /// `accessory` sits in the header, before `kindLabel`.
     public init(content: NSView, filename: String, kindLabel: String = "Annotation", closeHint: String = "Close Preview (Esc or ⌘W)",
-         closeLabel: String = "Close Preview") {
+         closeLabel: String = "Close Preview", accessory: NSView? = nil) {
         super.init(frame: .zero)
         material = .hudWindow; blendingMode = .behindWindow; state = .active
         appearance = NSAppearance(named: .darkAqua)
@@ -340,7 +341,7 @@ private final class ActivityEmptyLabel: NSTextField {
             close.widthAnchor.constraint(equalToConstant: 18), close.heightAnchor.constraint(equalToConstant: 18),
             title.leadingAnchor.constraint(equalTo: close.trailingAnchor, constant: 8),
             title.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            title.trailingAnchor.constraint(lessThanOrEqualTo: kind.leadingAnchor, constant: -16),
+            title.trailingAnchor.constraint(lessThanOrEqualTo: (accessory ?? kind).leadingAnchor, constant: -16),
             kind.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -14),
             kind.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             inset.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5),
@@ -349,6 +350,14 @@ private final class ActivityEmptyLabel: NSTextField {
             content.leadingAnchor.constraint(equalTo: inset.leadingAnchor), content.trailingAnchor.constraint(equalTo: inset.trailingAnchor),
             content.topAnchor.constraint(equalTo: inset.topAnchor), content.bottomAnchor.constraint(equalTo: inset.bottomAnchor)
         ])
+        if let accessory {
+            header.addSubview(accessory)
+            accessory.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                accessory.trailingAnchor.constraint(equalTo: kind.leadingAnchor, constant: -10),
+                accessory.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            ])
+        }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }

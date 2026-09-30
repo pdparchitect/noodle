@@ -23,11 +23,13 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "AppletCore", dependencies: [.product(name: "AppletBridge", package: "Protocol")]),
+            name: "AppletCore", dependencies: [.product(name: "AppletBridge", package: "Protocol"),
+                                               .product(name: "NoodletFormat", package: "Protocol")]),
         .executableTarget(
             name: "NoodleApplet",
             dependencies: [
                 "AppletCore", .product(name: "AppletBridge", package: "Protocol"),
+                .product(name: "NoodletRuntime", package: "Protocol"),
                 .product(name: "NoodleSettingsUI", package: "SettingsUI"),
                 .product(name: "NoodleLaunchChecks", package: "LaunchChecks"),
                 .product(name: "NoodleWallpaper", package: "Wallpaper"),
@@ -41,7 +43,8 @@ let package = Package(
         .testTarget(
             name: "AppletCoreTests",
             dependencies: ["AppletCore", .product(name: "AppletBridge", package: "Protocol")]),
-        .testTarget(name: "NoodleAppletTests", dependencies: ["NoodleApplet", .product(name: "NoodleLaunchChecks", package: "LaunchChecks")], swiftSettings: appSettings),
+        .testTarget(name: "NoodleAppletTests", dependencies: ["NoodleApplet", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"),
+                                                            .product(name: "NoodletRuntime", package: "Protocol")], swiftSettings: appSettings),
     ],
     swiftLanguageModes: [.v5]
 )
