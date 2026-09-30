@@ -5,6 +5,7 @@
 ### Fixed
 
 - A game watched from another device no longer turns choppy after a minute or two, or stalls once the Mac's display sleeps.
+- Recordings keep a noodlet's music when it was already playing before recording started, as a game's usually is.
 
 ## [0.19.0] - 2026-09-30
 

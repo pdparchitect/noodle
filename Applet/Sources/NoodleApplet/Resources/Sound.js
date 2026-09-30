@@ -6,7 +6,7 @@
   if (!Context) return;
   const send = body => window.webkit.messageHandlers.noodle.postMessage(body);
   const connect = AudioNode.prototype.connect, disconnect = AudioNode.prototype.disconnect;
-  const buses = new WeakMap(), contexts = [], routed = new WeakSet();
+  const buses = new WeakMap(), contexts = [], routed = new WeakSet(), played = [];
   const rate = 48000, frames = 4096;
   let capture = null, recorder = null;
   const busFor = context => {
@@ -31,12 +31,20 @@
     const bus = target instanceof AudioDestinationNode ? buses.get(target.context) : null;
     return bus ? disconnect.call(this, bus, ...rest) : disconnect.call(this, ...arguments);
   };
+  // Media a page started before the recording, such as a game's music, is often never in the page.
+  const remember = element => {
+    if (!(element instanceof HTMLMediaElement)) return;
+    const live = played.filter(reference => reference.deref());
+    if (!live.some(reference => reference.deref() === element)) live.push(new WeakRef(element));
+    played.splice(0, played.length, ...live);
+    recorder?.element(element);
+  };
   const play = HTMLMediaElement.prototype.play;
   HTMLMediaElement.prototype.play = function (...args) {
-    recorder?.element(this);
+    remember(this);
     return play.apply(this, args);
   };
-  document.addEventListener('play', event => recorder?.element(event.target), true);
+  document.addEventListener('play', event => remember(event.target), true);
   const encode = chunks => {
     const length = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
     const pcm = new Int16Array(length);
@@ -115,6 +123,10 @@
         if (context) recorder.tap(context, buses.get(context));
       }
       for (const element of document.querySelectorAll('audio,video')) recorder.element(element);
+      for (const reference of played) {
+        const element = reference.deref();
+        if (element) recorder.element(element);
+      }
       capture.resume();
       return true;
     },
