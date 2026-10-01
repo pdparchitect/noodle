@@ -8,6 +8,7 @@ on:
       - '!**.md'
       - '!docs/**'
       - '!website/**'
+      - '!Scenarios/**'
       - '!.github/workflows/website.yml'
   pull_request:
     paths:
@@ -15,6 +16,7 @@ on:
       - '!**.md'
       - '!docs/**'
       - '!website/**'
+      - '!Scenarios/**'
       - '!.github/workflows/website.yml'
   workflow_dispatch:
 
