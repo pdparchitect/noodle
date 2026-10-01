@@ -114,7 +114,12 @@ public struct LinkPublicKey: Hashable, Codable, Sendable, CustomStringConvertibl
 
 public struct LinkError: LocalizedError, Equatable, Sendable {
     public let message: String
-    public init(_ message: String) { self.message = message }
+    /// No address of the Hub answered, as opposed to the Hub answering with a refusal.
+    public let isUnreachable: Bool
+    public init(_ message: String, isUnreachable: Bool = false) {
+        self.message = message
+        self.isUnreachable = isUnreachable
+    }
     public var errorDescription: String? { message }
 }
 

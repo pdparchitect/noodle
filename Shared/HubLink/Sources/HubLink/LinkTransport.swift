@@ -391,7 +391,7 @@ public enum LinkClient {
     /// Opens a channel: the request goes as a frame, and the stream stays open both ways.
     public static func channel(_ request: Data, identity: LinkIdentity, hubKey: LinkPublicKey,
                                endpoints: [LinkEndpoint], timeout: Duration = .seconds(10)) async throws -> LinkChannel {
-        guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.") }
+        guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.", isUnreachable: true) }
         let (connection, endpoint) = try await firstReady(endpoints, identity: identity, hubKey: hubKey, timeout: timeout)
         let channel = LinkChannel(connection: connection, endpoint: endpoint)
         channel.send(request)
@@ -401,7 +401,7 @@ public enum LinkClient {
     /// Opens a stream the Hub keeps pushing frames down.
     public static func subscribe(_ request: Data, identity: LinkIdentity, hubKey: LinkPublicKey,
                                  endpoints: [LinkEndpoint], timeout: Duration = .seconds(10)) async throws -> LinkSubscription {
-        guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.") }
+        guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.", isUnreachable: true) }
         let (connection, endpoint) = try await firstReady(endpoints, identity: identity, hubKey: hubKey, timeout: timeout)
         do {
             try await LinkQUIC.send(request, on: connection)
@@ -414,7 +414,7 @@ public enum LinkClient {
 
     public static func exchange(_ request: Data, identity: LinkIdentity, hubKey: LinkPublicKey,
                                 endpoints: [LinkEndpoint], timeout: Duration = .seconds(10)) async throws -> (response: Data, endpoint: LinkEndpoint) {
-        guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.") }
+        guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.", isUnreachable: true) }
         let (connection, endpoint) = try await firstReady(endpoints, identity: identity, hubKey: hubKey, timeout: timeout)
         defer { connection.cancel() }
         try await LinkQUIC.send(request, on: connection)
@@ -436,16 +436,71 @@ public enum LinkClient {
         return pinned
     }
 
+    /// Tries each endpoint on its own, to tell someone which ones reach the Hub. One where the
+    /// handshake was refused still answered: something holding the Hub's port is there.
+    public static func probe(_ endpoints: [LinkEndpoint], identity: LinkIdentity, hubKey: LinkPublicKey,
+                             timeout: Duration = .seconds(5)) async -> [LinkEndpoint: Bool] {
+        guard let parameters = try? LinkQUIC.parameters(identity: identity, verify: { $0 == hubKey }) else { return [:] }
+        return await withTaskGroup(of: (LinkEndpoint, Bool).self) { group in
+            for endpoint in Set(endpoints) {
+                group.addTask { (endpoint, await answers(endpoint, using: parameters, timeout: timeout)) }
+            }
+            var answers: [LinkEndpoint: Bool] = [:]
+            for await (endpoint, answered) in group { answers[endpoint] = answered }
+            return answers
+        }
+    }
+
+    private static func answers(_ endpoint: LinkEndpoint, using parameters: NWParameters, timeout: Duration) async -> Bool {
+        guard let connection = connection(to: endpoint, using: parameters) else { return false }
+        return await withCheckedContinuation { continuation in
+            let once = Once()
+            @Sendable func finish(_ answered: Bool) {
+                once.run {
+                    connection.cancel()
+                    continuation.resume(returning: answered)
+                }
+            }
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready: finish(true)
+                case .waiting(let error) where error.isTLS, .failed(let error) where error.isTLS: finish(true)
+                case .waiting:
+                    LinkQUIC.queue.asyncAfter(deadline: .now() + .milliseconds(250)) {
+                        if case .waiting = connection.state { connection.restart() }
+                    }
+                case .failed: finish(false)
+                default: break
+                }
+            }
+            connection.start(queue: LinkQUIC.queue)
+            LinkQUIC.queue.asyncAfter(deadline: .now() + .milliseconds(Int(timeout.components.seconds * 1000))) { finish(false) }
+        }
+    }
+
+    private static func connection(to endpoint: LinkEndpoint, using parameters: NWParameters) -> NWConnection? {
+        guard let port = NWEndpoint.Port(rawValue: endpoint.port) else { return nil }
+        let host = NWEndpoint.Host(endpoint.host)
+        return NWConnection(host: host, port: port, using: anyLocalPort(parameters, for: host))
+    }
+
     /// The first endpoint whose handshake completes wins; the rest are cancelled.
     private static func firstReady(_ endpoints: [LinkEndpoint], identity: LinkIdentity, hubKey: LinkPublicKey,
                                    timeout: Duration) async throws -> (NWConnection, LinkEndpoint) {
         let parameters = try LinkQUIC.parameters(identity: identity) { $0 == hubKey }
-        let connections = endpoints.compactMap { endpoint -> (NWConnection, LinkEndpoint)? in
-            guard let port = NWEndpoint.Port(rawValue: endpoint.port) else { return nil }
-            let host = NWEndpoint.Host(endpoint.host)
-            return (NWConnection(host: host, port: port, using: anyLocalPort(parameters, for: host)), endpoint)
+        let connections = endpoints.compactMap { endpoint in connection(to: endpoint, using: parameters).map { ($0, endpoint) } }
+        try Task.checkCancellation()
+        // Cancelling every connection ends the wait through their handlers.
+        return try await withTaskCancellationHandler {
+            try await firstReady(connections, timeout: timeout)
+        } onCancel: {
+            for (connection, _) in connections { connection.cancel() }
         }
-        return try await withCheckedThrowingContinuation { continuation in
+    }
+
+    private static func firstReady(_ connections: [(NWConnection, LinkEndpoint)],
+                                   timeout: Duration) async throws -> (NWConnection, LinkEndpoint) {
+        try await withCheckedThrowingContinuation { continuation in
             let once = Once()
             let failures = Counter()
             @Sendable func finish(_ result: Result<(NWConnection, LinkEndpoint), Error>) {
@@ -470,15 +525,17 @@ public enum LinkClient {
                     case .failed, .waiting:
                         connection.stateUpdateHandler = nil
                         if failures.increment() == connections.count {
-                            finish(.failure(LinkError("The Hub could not be reached.")))
+                            finish(.failure(LinkError("The Hub could not be reached.", isUnreachable: true)))
                         }
+                    // Only cancelling the task cancels a connection that has not lost the race yet.
+                    case .cancelled: finish(.failure(CancellationError()))
                     default: break
                     }
                 }
                 connection.start(queue: LinkQUIC.queue)
             }
             LinkQUIC.queue.asyncAfter(deadline: .now() + .milliseconds(Int(timeout.components.seconds * 1000))) {
-                finish(.failure(LinkError("The Hub did not answer in time.")))
+                finish(.failure(LinkError("The Hub did not answer in time.", isUnreachable: true)))
             }
         }
     }

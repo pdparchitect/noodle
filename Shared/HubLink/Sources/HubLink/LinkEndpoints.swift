@@ -8,6 +8,23 @@ import SystemConfiguration
 extension LinkEndpoint {
     public static let defaultPort: UInt16 = 38_415
 
+    public enum Network: Equatable, Sendable { case home, tailnet, internet }
+
+    /// Where a device has to be to reach this address. Hubs list their routable IPv6 addresses too;
+    /// home routers rarely let those in from outside, so they count as the home network.
+    public var network: Network {
+        let host = host.lowercased()
+        if host.hasSuffix(".ts.net") || host.hasPrefix("fd7a:115c:a1e0:") { return .tailnet }
+        if host.hasSuffix(".local") || host.contains(":") { return .home }
+        let octets = host.split(separator: ".", omittingEmptySubsequences: false).compactMap { UInt8($0) }
+        guard octets.count == 4 else { return .internet }
+        switch (octets[0], octets[1]) {
+        case (100, 64...127): return .tailnet
+        case (10, _), (172, 16...31), (192, 168): return .home
+        default: return .internet
+        }
+    }
+
     #if os(macOS)
     /// This Mac's own addresses: its Bonjour name, its Tailscale MagicDNS name, then every IPv4
     /// and routable IPv6 address on an active interface. Loopback and link-local addresses are left out: a device on

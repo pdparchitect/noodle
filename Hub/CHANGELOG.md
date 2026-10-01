@@ -2,8 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Network shows whether devices away from home can reach the Hub, through Tailscale, the internet or your own address, and turns orange when the router could not open the port and nothing else reaches it.
+- Open Port on Router says where the router opened the port or why it did not, and each address is tagged home, Tailscale or internet.
+
 ### Changed
 
+- Network is laid out like This Mac in Noodle's Hub settings, with Add Remote Address in the list instead of at the bottom of the window.
 - Retire naming each bot's owner in its files when the Hub opens, which bots from before 0.6.0 needed. Updates already pass through 0.6.0.
 
 ## [0.12.0] - 2026-10-01

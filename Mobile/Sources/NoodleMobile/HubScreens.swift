@@ -1,7 +1,9 @@
 import HubLink
+import Network
 import NoodleBrand
 import PhotosUI
 import SwiftUI
+import Synchronization
 import VisionKit
 
 /// The first screen: takes an invitation from the camera, the clipboard or a photo of its QR code.
@@ -28,19 +30,20 @@ struct JoinView: View {
                 .accessibilityAddTraits(.isHeader)
             VStack(spacing: 16) {
                 Spacer()
-                if hubs.isJoining {
-                    ProgressView("Joining…")
-                } else if let message = problem ?? hubs.joinError {
-                    Label(message, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
+                if let joining = hubs.joining {
+                    JoiningProgress(hubName: joining.hubName) { hubs.cancelJoin() }
+                } else {
+                    if let message = problem ?? hubs.joinError {
+                        JoinProblem(message: message, isPairing: problem != nil)
+                            .multilineTextAlignment(.center)
+                    }
+                    Button { choosing = true } label: {
+                        Text("Pair").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(hubs.isJoining)
                 }
-                Button { choosing = true } label: {
-                    Text("Pair").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(hubs.isJoining)
             }
             .padding(24)
             .opacity(ready ? 1 : 0)
@@ -133,6 +136,289 @@ private struct Pairing: ViewModifier {
 }
 
 enum PairingSource { case camera, pasted(String), photo }
+
+/// A join that gets no answer takes a while to give up, so after a moment it says it is still at
+/// it, and it can be cancelled.
+private let stillTryingAfter: Duration = .seconds(4)
+
+/// The Pair button while joining: which Hub, still trying, and a way out.
+private struct JoiningProgress: View {
+    let hubName: String
+    let cancel: () -> Void
+    @State private var slow = false
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("Still trying…").font(.footnote).foregroundStyle(.secondary).opacity(slow ? 1 : 0)
+            HStack(spacing: 10) {
+                ProgressView()
+                Text("Connecting to \(hubName)…").lineLimit(1).minimumScaleFactor(0.7)
+            }
+            .padding(.horizontal, 20)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .background(.fill.tertiary, in: Capsule())
+            Button("Cancel", action: cancel)
+        }
+        .animation(.easeOut, value: slow)
+        .task {
+            try? await Task.sleep(for: stillTryingAfter)
+            slow = true
+        }
+    }
+}
+
+/// Add Hub while joining, in the list of Hubs.
+private struct JoiningRow: View {
+    let hubName: String
+    let cancel: () -> Void
+    @State private var slow = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+            // Two lines from the start, so the row keeps its height when it changes its mind.
+            VStack(alignment: .leading, spacing: 2) {
+                Text(hubName).lineLimit(1)
+                Text(slow ? "Still trying…" : "Connecting…").font(.caption).foregroundStyle(.secondary)
+                    .contentTransition(.opacity)
+            }
+            Spacer(minLength: 8)
+            Button("Cancel", action: cancel).buttonStyle(.borderless)
+        }
+        .animation(.easeOut, value: slow)
+        .task {
+            try? await Task.sleep(for: stillTryingAfter)
+            slow = true
+        }
+    }
+}
+
+/// Why the last join failed. When no address of the Hub answered, it offers to work out why.
+private struct JoinProblem: View {
+    @Environment(HubMemberships.self) private var hubs
+    let message: String
+    /// The problem is with the invitation handed over, not with reaching its Hub.
+    let isPairing: Bool
+    /// Handed to the sheet itself: one that reads it from state can open before the state arrives,
+    /// blank. `hubs` forgets it when trying again while the sheet is still going.
+    @State private var helping: Unreachable?
+
+    private struct Unreachable: Identifiable {
+        let id = UUID()
+        let invitation: LinkInvitation
+    }
+
+    var body: some View {
+        if !isPairing, let unreachable = hubs.unreachableInvitation {
+            Text(message).foregroundStyle(.secondary)
+            Button {
+                helping = Unreachable(invitation: unreachable)
+            } label: {
+                Text("Help Me Connect").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .sheet(item: $helping) { helping in
+                HubTroubleshootingView(invitation: helping.invitation) {
+                    hubs.clearJoinError()
+                    Task { await hubs.join(helping.invitation.url().absoluteString) }
+                }
+            }
+        } else {
+            Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+        }
+    }
+}
+
+/// Tries each way to the Hub, checks this device's connection and says what to try.
+struct HubTroubleshootingView: View {
+    let invitation: LinkInvitation
+    let tryAgain: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @State private var device: HubTroubleshooting.Device?
+    /// Whether each address reached the Hub, tried one by one.
+    @State private var answers: [LinkEndpoint: Bool]?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Your Hub") {
+                    ForEach(networks, id: \.self) { network in
+                        HStack {
+                            Text(Self.name(of: network))
+                            Spacer(minLength: 8)
+                            answer(through: network).font(.subheadline)
+                        }
+                        // Lines run under the route's name, not under its answer.
+                        .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+                    }
+                }
+                Section {
+                    if let device, let answers {
+                        let answered = answers.filter(\.value).map(\.key)
+                        ForEach(HubTroubleshooting.advice(for: invitation.endpoints, on: device, answered: answered),
+                                id: \.self) { advice in
+                            row(advice, on: device)
+                        }
+                    } else {
+                        ProgressView("Checking…").frame(maxWidth: .infinity)
+                    }
+                }
+            }
+            .navigationTitle("Help Me Connect")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
+            }
+            .safeAreaInset(edge: .bottom) {
+                Button {
+                    dismiss()
+                    tryAgain()
+                } label: {
+                    Text("Try Again").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding(24)
+                .disabled(device == nil || answers == nil)
+            }
+            .task {
+                async let checked = HubTroubleshooting.Device.check(reaching: invitation.endpoints)
+                async let tried = probe()
+                (device, answers) = await (checked, tried)
+            }
+        }
+    }
+
+    /// The kinds of address the Hub gave, nearest first.
+    private var networks: [LinkEndpoint.Network] {
+        let present = Set(invitation.endpoints.map(\.network))
+        return [LinkEndpoint.Network.home, .tailnet, .internet].filter(present.contains)
+    }
+
+    @ViewBuilder private func answer(through network: LinkEndpoint.Network) -> some View {
+        if let answers {
+            if answers.contains(where: { $0.value && $0.key.network == network }) {
+                Label("Answers", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            } else {
+                Label("No answer", systemImage: "xmark.circle").foregroundStyle(.secondary)
+            }
+        } else {
+            ProgressView().controlSize(.small)
+        }
+    }
+
+    private func probe() async -> [LinkEndpoint: Bool] {
+        guard let identity = try? invitation.joinIdentity() else { return [:] }
+        return await LinkClient.probe(invitation.endpoints, identity: identity, hubKey: invitation.hubKey)
+    }
+
+    private static func name(of network: LinkEndpoint.Network) -> String {
+        switch network {
+        case .home: "Home Wi-Fi"
+        case .tailnet: "Tailscale"
+        case .internet: "Internet"
+        }
+    }
+
+    @ViewBuilder private func row(_ advice: HubTroubleshooting.Advice, on device: HubTroubleshooting.Device) -> some View {
+        switch advice {
+        case .goOnline:
+            Label("You're offline. Connect to Wi-Fi or mobile data.", systemImage: "wifi.slash")
+        case .allowLocalNetwork:
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Noodle isn't allowed to look for your Hub on this network. Turn on Local Network for Noodle in Settings.",
+                      systemImage: "lock")
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                }
+            }
+        case .joinSameWiFi:
+            Label(device.isOnWiFi
+                  ? "Make sure you're on the same Wi-Fi as the Mac your Hub runs on."
+                  : "You're on mobile data. Join the same Wi-Fi as the Mac your Hub runs on.",
+                  systemImage: "wifi")
+        case .connectTailscale:
+            Label("Away from that Wi-Fi? Open Tailscale and connect.", systemImage: "point.3.connected.trianglepath.dotted")
+        case .tryAgain:
+            Label("Your Hub answers now. Tap Try Again.", systemImage: "checkmark.circle")
+        case .wakeHubMac:
+            Label("Make sure the Mac your Hub runs on is awake and its Hub is open.", systemImage: "desktopcomputer")
+        }
+    }
+}
+
+extension HubTroubleshooting.Device {
+    /// What this device can find out about its own connection to the Hub's addresses.
+    static func check(reaching endpoints: [LinkEndpoint]) async -> Self {
+        let path = await currentPath()
+        let isOnline = path.status == .satisfied
+        // An address the system answers for itself first, so a name lookup is not what gets refused.
+        let homes = endpoints.filter { $0.network == .home }
+        let probe = homes.first { !$0.host.hasSuffix(".local") } ?? homes.first
+        let isDenied = if isOnline, let probe { await isLocalNetworkDenied(probe) } else { false }
+        return Self(isOnline: isOnline, isOnWiFi: path.availableInterfaces.contains { $0.type == .wifi },
+                    isOnTailnet: hasTailnetAddress(), isLocalNetworkDenied: isDenied)
+    }
+
+    private static let queue = DispatchQueue(label: "HubTroubleshooting")
+
+    private static func currentPath() async -> NWPath {
+        await withCheckedContinuation { continuation in
+            let monitor = NWPathMonitor()
+            let answered = Mutex(false)
+            monitor.pathUpdateHandler = { path in
+                guard answered.withLock({ done in defer { done = true }; return !done }) else { return }
+                monitor.cancel()
+                continuation.resume(returning: path)
+            }
+            monitor.start(queue: queue)
+        }
+    }
+
+    /// Sends nothing: the system decides before a UDP flow is ready, and asks the first time.
+    private static func isLocalNetworkDenied(_ endpoint: LinkEndpoint) async -> Bool {
+        guard let port = NWEndpoint.Port(rawValue: endpoint.port) else { return false }
+        let connection = NWConnection(host: NWEndpoint.Host(endpoint.host), port: port, using: .udp)
+        let answered = Mutex(false)
+        return await withCheckedContinuation { continuation in
+            @Sendable func answer(_ denied: Bool) {
+                guard answered.withLock({ done in defer { done = true }; return !done }) else { return }
+                connection.cancel()
+                continuation.resume(returning: denied)
+            }
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready: answer(false)
+                case .waiting(let error), .failed(let error):
+                    answer(connection.currentPath?.unsatisfiedReason == .localNetworkDenied
+                           || error == .dns(DNSServiceErrorType(kDNSServiceErr_PolicyDenied)))
+                default: break
+                }
+            }
+            connection.start(queue: queue)
+            queue.asyncAfter(deadline: .now() + 10) { answer(false) }
+        }
+    }
+
+    /// Tailscale's tunnel carries an address in 100.64.0.0/10. Some mobile carriers hand out the
+    /// same range, so only tunnels count.
+    private static func hasTailnetAddress() -> Bool {
+        var list: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&list) == 0, let first = list else { return false }
+        defer { freeifaddrs(list) }
+        return sequence(first: first, next: { $0.pointee.ifa_next }).contains { pointer in
+            let entry = pointer.pointee
+            guard String(cString: entry.ifa_name).hasPrefix("utun"), entry.ifa_flags & UInt32(IFF_UP) != 0,
+                  let address = entry.ifa_addr, Int32(address.pointee.sa_family) == AF_INET else { return false }
+            var value = address.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee.sin_addr }
+            var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+            guard inet_ntop(AF_INET, &value, &buffer, socklen_t(buffer.count)) != nil else { return false }
+            return LinkEndpoint(host: String(cString: buffer), port: 0).network == .tailnet
+        }
+    }
+}
 
 /// The ways to hand over an invitation, in a short sheet from the bottom.
 struct PairingSources: View {
@@ -275,19 +561,21 @@ struct HubsView: View {
                     }
                 }
                 Section {
-                    if hubs.isJoining {
-                        ProgressView("Joining…")
-                    } else if let message = problem ?? hubs.joinError {
-                        Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                    if let joining = hubs.joining {
+                        JoiningRow(hubName: joining.hubName) { hubs.cancelJoin() }
+                    } else {
+                        if let message = problem ?? hubs.joinError {
+                            JoinProblem(message: message, isPairing: problem != nil)
+                        }
+                        Button {
+                            problem = nil
+                            hubs.clearJoinError()
+                            adding = true
+                        } label: {
+                            Label("Add Hub", systemImage: "plus")
+                        }
+                        .disabled(hubs.isJoining)
                     }
-                    Button {
-                        problem = nil
-                        hubs.clearJoinError()
-                        adding = true
-                    } label: {
-                        Label("Add Hub", systemImage: "plus")
-                    }
-                    .disabled(hubs.isJoining)
                 }
             }
             .navigationTitle("Profiles")

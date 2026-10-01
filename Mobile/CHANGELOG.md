@@ -10,13 +10,18 @@
 - Tap a bot's name at the top of its conversation: New Session is near the bottom of its settings, and Kick too when the bot has failed.
 - Touch and hold each pinned bot or group in turn: each shows its own menu, Edit Bot for a bot and Edit Group for a group.
 - React to one of your own messages and to a bot's: the reaction sits on the top right corner of both.
+- Pair with a Hub whose Mac is asleep, or with Wi-Fi off: tap Help Me Connect under the message and check that Your Hub shows which ways answer and the suggestions fit, then wake the Mac or turn Wi-Fi on and tap Try Again.
+- Pair with a Hub whose Mac is asleep: the Pair button shows which Hub it is connecting to, says Still trying after a few seconds, and Cancel stops at once. Do the same from Add Hub in Profiles.
+- Turn off Local Network for Noodle in Settings and pair again: Help Me Connect asks you to turn it on, and Open Settings goes straight there.
 
 ### Added
 
+- Help Me Connect, when pairing cannot reach the Hub, tries each way to it, home Wi-Fi, Tailscale and the internet, shows which answer, and suggests what to try, such as joining the Hub's Wi-Fi, allowing Local Network or opening Tailscale.
 - … in a conversation lists the computers, browsers and noodlets shared there, for opening again without scrolling back, as Shared does on the Mac.
 
 ### Changed
 
+- Pairing shows the Hub it is connecting to and can be cancelled, instead of a bare Joining… spinner.
 - New Session and Kick moved from … to the bot's settings, opened by tapping its name.
 - Reactions sit on a message's top right corner, on your messages too, as on the Mac.
 - New Bot in More shows a person with a plus instead of a bare plus.

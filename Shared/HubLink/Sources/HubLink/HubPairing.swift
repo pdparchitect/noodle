@@ -17,6 +17,8 @@ import Observation
     /// The address that answered last.
     public private(set) var endpoint: LinkEndpoint?
     public private(set) var error: String?
+    /// Whether `error` is no address of the Hub answering.
+    public private(set) var isUnreachable = false
     public private(set) var isWorking = false
     /// Where this pairing keeps its key and what it knows of the Hub.
     @ObservationIgnored public let directory: URL
@@ -75,6 +77,7 @@ import Observation
         status = nil
         endpoint = nil
         error = nil
+        isUnreachable = false
     }
 
     private func perform(quietly: Bool = false, _ body: () async throws -> Void) async {
@@ -84,8 +87,12 @@ import Observation
         do {
             try await body()
             error = nil
+            isUnreachable = false
+        } catch is CancellationError {
+            // Given up on, which says nothing about the Hub.
         } catch {
             self.error = error.localizedDescription
+            isUnreachable = (error as? LinkError)?.isUnreachable == true
         }
     }
 

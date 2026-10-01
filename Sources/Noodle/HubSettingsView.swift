@@ -24,8 +24,6 @@ private struct ThisMacRows: View {
     @Environment(NoodleStore.self) private var store
     @State private var inviting: LinkInvitation?
     @State private var removing: HubDevice?
-    @State private var editingAddress = false
-    @State private var address = ""
 
     var body: some View {
         let thisMac = store.thisMac
@@ -34,8 +32,7 @@ private struct ThisMacRows: View {
             Text("Your phone and other Macs talk to the bots here as they would a Noodle Hub’s. The Mac stays awake while this is on.")
         }
         if let hub = thisMac.hub {
-            status(hub.link)
-            network(hub.link)
+            HubLinkRows(link: hub.link)
             ForEach(hub.access.devices) { device in deviceRow(device, hub: hub) }
             HStack {
                 Spacer()
@@ -51,72 +48,6 @@ private struct ThisMacRows: View {
                 Button("Cancel", role: .cancel) {}.keyboardShortcut(.defaultAction)
             } message: { device in
                 Text("“\(device.name)” can no longer reach this Mac until it joins again.")
-            }
-        }
-    }
-
-    @ViewBuilder private func status(_ link: HubLinkService) -> some View {
-        switch link.state {
-        case .listening:
-            if case .open = link.router {
-                SettingsStatusLabel(title: "Reachable from anywhere", systemImage: "checkmark.circle.fill", color: .green)
-            } else if link.manualEndpoint != nil {
-                SettingsStatusLabel(title: "Reachable through your address", systemImage: "checkmark.circle.fill", color: .green)
-            } else {
-                SettingsStatusLabel(title: "Reachable on this network", systemImage: "checkmark.circle.fill", color: .green)
-            }
-        case .failed(let reason):
-            SettingsStatusLabel(title: reason, systemImage: "exclamationmark.circle.fill", color: .orange)
-        case .starting, .stopped:
-            SettingsStatusLabel(title: "Starting…", systemImage: "circle.dotted", color: .secondary)
-        }
-    }
-
-    /// Reaching this Mac away from home, as with a Noodle Hub: the router forwards its port, or an
-    /// address the owner set up reaches it.
-    @ViewBuilder private func network(_ link: HubLinkService) -> some View {
-        Toggle("Open Port on Router", isOn: Binding(get: { link.opensRouterPort }, set: { link.opensRouterPort = $0 }))
-            .help("Asks the router, through UPnP or NAT-PMP, to forward this Mac’s port so your devices reach it away from home")
-        Picker("Largest File", selection: Binding(get: { link.uploadLimit }, set: { link.uploadLimit = $0 })) {
-            ForEach(link.uploadLimitChoices, id: \.self) { limit in
-                Text(ByteCountFormatter.string(fromByteCount: Int64(limit), countStyle: .file)).tag(limit)
-            }
-        }
-        .help("The largest file your devices can send to a conversation on this Mac")
-        LabeledContent("Addresses") {
-            VStack(alignment: .trailing, spacing: 2) {
-                ForEach(link.endpoints, id: \.self) { endpoint in
-                    HStack(spacing: 4) {
-                        Text(endpoint.description).font(.caption.monospaced()).textSelection(.enabled)
-                        if endpoint == link.manualEndpoint {
-                            Button {
-                                link.manualAddress = ""
-                            } label: {
-                                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.borderless)
-                            .controlSize(.small)
-                            .help("Remove this address")
-                        }
-                    }
-                }
-            }
-        }
-        .alert("Remote Address", isPresented: $editingAddress) {
-            TextField("Address", text: $address, prompt: Text("mac.example.com"))
-            Button("Cancel", role: .cancel) {}
-            Button("Save") { link.manualAddress = address.trimmingCharacters(in: .whitespaces) }
-                .disabled(LinkEndpoint(text: address, defaultPort: LinkEndpoint.defaultPort) == nil)
-        } message: {
-            Text("A domain, public address or forwarded port that reaches this Mac from outside your network.")
-        }
-        if link.manualEndpoint == nil {
-            HStack {
-                Spacer()
-                Button("Add Remote Address…") {
-                    address = ""
-                    editingAddress = true
-                }
             }
         }
     }

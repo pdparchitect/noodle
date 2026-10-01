@@ -6,12 +6,18 @@ import Observation
 @MainActor @Observable public final class HubMemberships {
     public private(set) var hubs: [HubPairing] = []
     public private(set) var isJoining = false
+    /// The invitation being joined, while it is.
+    public private(set) var joining: LinkInvitation?
     public private(set) var joinError: String?
+    /// The invitation of a join that reached no address of its Hub, for working out why.
+    public private(set) var unreachableInvitation: LinkInvitation?
     /// An invitation from an opened link, waiting for the person to confirm it.
     public private(set) var offered: LinkInvitation?
     @ObservationIgnored private let directory: URL
     @ObservationIgnored private let deviceName: String
     @ObservationIgnored private var folders: [ObjectIdentifier: URL] = [:]
+    @ObservationIgnored private var joinTask: Task<Void, Never>?
+    @ObservationIgnored private var joinCancelled = false
 
     public init(directory: URL, deviceName: String) {
         self.directory = directory
@@ -35,14 +41,31 @@ import Observation
             invitation = try LinkInvitation(text: invitationText)
         } catch {
             joinError = error.localizedDescription
+            unreachableInvitation = nil
             return
         }
         let existing = hubs.first { $0.hub?.key == invitation.hubKey }
         let folder = existing.flatMap { folders[ObjectIdentifier($0)] }
             ?? directory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let pairing = existing ?? HubPairing(directory: folder, deviceName: deviceName)
-        await pairing.join(invitationText)
+        joining = invitation
+        defer { joining = nil }
+        joinCancelled = false
+        let task = Task { await pairing.join(invitationText) }
+        joinTask = task
+        await task.value
+        joinTask = nil
+        if joinCancelled {
+            joinError = nil
+            unreachableInvitation = nil
+            if existing == nil, pairing.hub == nil { try? FileManager.default.removeItem(at: folder) }
+            guard existing == nil, pairing.hub != nil else { return }
+            hubs.append(pairing)
+            folders[ObjectIdentifier(pairing)] = folder
+            return
+        }
         joinError = pairing.error
+        unreachableInvitation = pairing.isUnreachable ? invitation : nil
         guard existing == nil else { return }
         if pairing.hub == nil {
             try? FileManager.default.removeItem(at: folder)
@@ -57,9 +80,11 @@ import Observation
         do {
             offered = try LinkInvitation(text: invitationText)
             joinError = nil
+            unreachableInvitation = nil
         } catch {
             offered = nil
             joinError = error.localizedDescription
+            unreachableInvitation = nil
         }
     }
 
@@ -86,7 +111,16 @@ import Observation
         }
     }
 
-    public func clearJoinError() { joinError = nil }
+    /// Gives up on the join under way; it ends without a problem to show.
+    public func cancelJoin() {
+        joinCancelled = true
+        joinTask?.cancel()
+    }
+
+    public func clearJoinError() {
+        joinError = nil
+        unreachableInvitation = nil
+    }
 
     private static func created(_ lhs: URL, _ rhs: URL) -> Bool {
         let date = { (url: URL) in (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast }

@@ -55,6 +55,46 @@ final class LinkTransportTests: XCTestCase {
         XCTAssertEqual(requests.frames, [Data("status".utf8)])
     }
 
+    /// Troubleshooting knocks on each address alone. A Hub that refuses this device's key still
+    /// answered: the address reaches it.
+    func testEachAddressIsTriedOnItsOwn() async throws {
+        let hub = LinkIdentity()
+        let refusing = try LinkServer(identity: hub, port: 0, admits: { _ in false }) { _, _ in .response(Data()) }
+        try await refusing.start()
+        addTeardownBlock { refusing.stop() }
+        let open = try await server(hub)
+        let silent = try await server(LinkIdentity())
+        let silentPort = try XCTUnwrap(silent.port)
+        silent.stop()
+        let answering = LinkEndpoint(host: "::1", port: try XCTUnwrap(open.port))
+        let refused = LinkEndpoint(host: "::1", port: try XCTUnwrap(refusing.port))
+        let nothing = LinkEndpoint(host: "::1", port: silentPort)
+        let answers = await LinkClient.probe([answering, refused, nothing], identity: LinkIdentity(), hubKey: hub.publicKey,
+                                             timeout: .seconds(2))
+        XCTAssertEqual(answers, [answering: true, refused: true, nothing: false])
+    }
+
+    /// Someone giving up on a Hub that does not answer is not kept waiting for the timeout.
+    func testCancellingStopsWaitingForAHub() async throws {
+        let silent = try await server(LinkIdentity())
+        let endpoint = LinkEndpoint(host: "::1", port: try XCTUnwrap(silent.port))
+        silent.stop()
+        let started = Date()
+        let attempt = Task {
+            try await LinkClient.exchange(Data("status".utf8), identity: LinkIdentity(), hubKey: LinkIdentity().publicKey,
+                                          endpoints: [endpoint], timeout: .seconds(10))
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        attempt.cancel()
+        do {
+            _ = try await attempt.value
+            XCTFail("A cancelled attempt answered")
+        } catch {
+            XCTAssertTrue(error is CancellationError, "\(error)")
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 5)
+    }
+
     func testDeviceRefusesAHubWithAnotherKey() async throws {
         let server = try await server(LinkIdentity())
         let endpoint = LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))
