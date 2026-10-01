@@ -125,6 +125,7 @@ import SwiftUI
 
 struct BrowserAssignmentPicker: View {
     let controller: BrowserController
+    let bot: String
     @Binding var selectedIDs: Set<UUID>
     @State private var openingLibrary = false
     @State private var openError: String?
@@ -146,7 +147,7 @@ struct BrowserAssignmentPicker: View {
                 }
             })
         .sheet(isPresented: $creating) {
-            NewBrowserSheet(create: controller.create) { selectedIDs.insert($0.id) }
+            NewBrowserSheet(bot: bot, create: controller.create) { selectedIDs.insert($0.id) }
         }
         .task { await controller.refresh(launchIfNeeded: true) }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -186,10 +187,16 @@ struct NewBrowserSheet: View {
     let create: (BrowserDraft) async throws -> RemoteBrowser
     let onCreated: (RemoteBrowser) -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var name = "Browser"
+    @State private var name: String
     @State private var description = ""
     @State private var making = false
     @State private var failure: String?
+
+    init(bot: String, create: @escaping (BrowserDraft) async throws -> RemoteBrowser, onCreated: @escaping (RemoteBrowser) -> Void) {
+        self.create = create
+        self.onCreated = onCreated
+        _name = State(initialValue: companionName("Browser", for: bot))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -231,6 +238,7 @@ struct NewBrowserSheet: View {
 /// Browser on the Hub's Mac.
 struct HubBrowserPicker: View {
     let mirror: HubMirror
+    let bot: String
     @Binding var selectedIDs: Set<UUID>
     @State private var creating = false
     @State private var failure: String?
@@ -254,7 +262,7 @@ struct HubBrowserPicker: View {
                 }
             })
         .sheet(isPresented: $creating) {
-            NewBrowserSheet(create: { draft in
+            NewBrowserSheet(bot: bot, create: { draft in
                 let made = try await mirror.createBrowser(LinkBrowserDraft(name: draft.name, description: draft.description,
                                                                            symbol: draft.symbol, colour: draft.colour))
                 return RemoteBrowser(id: made.id, name: made.name, description: made.description, symbol: made.symbol,

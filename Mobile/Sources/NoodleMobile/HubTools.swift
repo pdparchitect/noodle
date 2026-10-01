@@ -279,12 +279,10 @@ struct HubToolsScreen: View {
     }
 }
 
-extension [LinkComputerTemplate] {
-    /// A new computer's name after its kind changes: it follows the kind's name until the user types their own.
-    func renamed(_ name: String, from old: String, to new: String) -> String {
-        guard name == (first { $0.id == old }?.name ?? ""), let named = first(where: { $0.id == new })?.name else { return name }
-        return named
-    }
+/// A new computer or browser is named for its bot, as in "Chloe’s Computer".
+func companionName(_ noun: String, for bot: String) -> String {
+    let bot = bot.trimmingCharacters(in: .whitespacesAndNewlines)
+    return bot.isEmpty ? noun : "\(bot)’s \(noun)"
 }
 
 /// Adds a tool, computer or browser on the Hub and gives it to the bot.
@@ -304,11 +302,18 @@ private struct NewMachineSheet: View {
     let agent: LinkBot
     let kind: HubTool
     @Environment(\.dismiss) private var dismiss
-    @State private var name = ""
+    @State private var name: String
     @State private var templates: [LinkComputerTemplate] = []
     @State private var template = ""
     @State private var working = false
     @State private var problem: String?
+
+    init(chats: HubChats, agent: LinkBot, kind: HubTool) {
+        self.chats = chats
+        self.agent = agent
+        self.kind = kind
+        _name = State(initialValue: companionName(kind == .computer ? "Computer" : "Browser", for: agent.name))
+    }
 
     var body: some View {
         NavigationStack {
@@ -337,7 +342,6 @@ private struct NewMachineSheet: View {
                     if let first = templates.first { template = first.id }
                 } catch { problem = error.localizedDescription }
             }
-            .onChange(of: template) { old, new in name = templates.renamed(name, from: old, to: new) }
         }
     }
 

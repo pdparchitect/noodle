@@ -15,6 +15,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- A new computer or browser made from a bot's settings is named for the bot, such as Chloe’s Computer, instead of Browser or the computer's kind.
 - Settings > Hub says which ways reach This Mac from anywhere, Tailscale, the internet or your own address, and no longer says "on this network" for a Mac that Tailscale reaches.
 - Retire upgrade steps for data from before the 0.28.0 milestone: harness login stamps from earlier versions, the old bot inbox location, the access settings kept before per-bot grants, and MCP skill names ending in a connection ID. Updates already pass through 0.28.0.
 - A web link a bot attaches shows the page's picture, title and site, like a link in a message, instead of a .webloc file.

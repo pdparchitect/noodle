@@ -17,6 +17,7 @@
 - Turn off Local Network for Noodle in Settings and pair again: Help Me Connect asks you to turn it on, and Open Settings goes straight there.
 - Open a Hub noodlet that uses the camera or your local network: it asks once, then not again. Settings lists it; swipe it away and it asks the next time.
 - Ask a bot to share a web page as a link: it shows the page's picture, title and site, like a link in a message, and tapping it opens the page.
+- In a bot's settings, add a new computer and a new browser: each is named for the bot, such as Chloe’s Computer, and changing the computer's kind keeps the name.
 
 ### Added
 
@@ -25,6 +26,7 @@
 
 ### Changed
 
+- A new computer or browser is named for its bot, such as Chloe’s Computer.
 - Pairing shows the Hub it is connecting to and can be cancelled, instead of a bare Joining… spinner.
 - New Session and Kick moved from … to the bot's settings, opened by tapping its name.
 - Reactions sit on a message's top right corner, on your messages too, as on the Mac.

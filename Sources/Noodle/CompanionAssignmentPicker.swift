@@ -14,6 +14,12 @@ struct CompanionAssignmentItem: Identifiable {
     var tooltip: String { ["\(name) · \(state)", detail].compactMap { $0 }.joined(separator: "\n") }
 }
 
+/// A new computer or browser is named for its bot, as in "Chloe’s Computer".
+func companionName(_ noun: String, for bot: String) -> String {
+    let bot = bot.trimmingCharacters(in: .whitespacesAndNewlines)
+    return bot.isEmpty ? noun : "\(bot)’s \(noun)"
+}
+
 /// The same assignment controls for Computer and Browser in the bot editor.
 struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View>: View {
     let title: String

@@ -242,11 +242,11 @@ private struct ComputerPickerFixture: View {
         HStack(alignment: .top, spacing: 24) {
             VStack(alignment: .leading, spacing: 16) {
                 if updateComparison { Text("Update required").font(.headline) }
-                ComputerAssignmentPicker(controller: controller, selectedIDs: $selected)
+                ComputerAssignmentPicker(controller: controller, bot: "Fixture", selectedIDs: $selected)
             }
             VStack(alignment: .leading, spacing: 16) {
                 if updateComparison { Text("After updating").font(.headline) }
-                ComputerAssignmentPicker(controller: emptyController, selectedIDs: $emptySelected)
+                ComputerAssignmentPicker(controller: emptyController, bot: "Fixture", selectedIDs: $emptySelected)
             }
         }
         .padding(24).frame(width: 960, height: updateComparison ? 520 : 420)

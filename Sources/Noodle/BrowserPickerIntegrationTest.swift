@@ -39,8 +39,8 @@ import SwiftUI
         window.appearance = NSAppearance(named: .darkAqua)
         window.contentView = NSHostingView(rootView: HStack(alignment: .top, spacing: 28) {
             VStack(spacing: 24) {
-                BrowserAssignmentPicker(controller: browsers, selectedIDs: .constant([browser.id]))
-                ComputerAssignmentPicker(controller: computers, selectedIDs: .constant([computer.id]))
+                BrowserAssignmentPicker(controller: browsers, bot: "Fixture", selectedIDs: .constant([browser.id]))
+                ComputerAssignmentPicker(controller: computers, bot: "Fixture", selectedIDs: .constant([computer.id]))
             }.frame(width: 480)
             AttachmentInlinePreview(attachment: attachment, fileURL: file, shouldLoad: true, isSelected: false, select: {}, preview: {})
         }.padding(20).preferredColorScheme(.dark))

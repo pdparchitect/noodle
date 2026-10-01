@@ -31,7 +31,7 @@ import XCTest
         try await wait { selection.ids == [work.id, personal.id] }
         XCTAssertFalse(hasControl("Done", in: chooser), "Clicking outside the popover closes it")
         let missing = UUID(); selection.ids.insert(missing)
-        let picker = host(BrowserAssignmentPicker(controller: controller, selectedIDs: selection.idsBinding))
+        let picker = host(BrowserAssignmentPicker(controller: controller, bot: "Fixture", selectedIDs: selection.idsBinding))
         _ = try await control("Add Browsers", in: picker)
         let window = try XCTUnwrap(picker.window)
         func confirmation(_ name: String) async throws -> NSView {
@@ -66,8 +66,8 @@ import XCTest
         })
         await browsers.refresh(); await computers.refresh()
         let preview = host(VStack(alignment: .leading, spacing: 24) {
-            BrowserAssignmentPicker(controller: browsers, selectedIDs: .constant([browser.id]))
-            ComputerAssignmentPicker(controller: computers, selectedIDs: .constant([computer.id]))
+            BrowserAssignmentPicker(controller: browsers, bot: "Fixture", selectedIDs: .constant([browser.id]))
+            ComputerAssignmentPicker(controller: computers, bot: "Fixture", selectedIDs: .constant([computer.id]))
         }.padding(20).frame(width: 520).preferredColorScheme(.dark))
         preview.window?.setContentSize(.init(width: 520, height: 460))
         _ = try await control("Remove Browser from bot", in: preview)

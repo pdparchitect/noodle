@@ -156,15 +156,15 @@ struct NewBotSheet: View {
                     }
                 case .browsers:
                     if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
-                        HubBrowserPicker(mirror: mirror, selectedIDs: $browserIDs)
+                        HubBrowserPicker(mirror: mirror, bot: name, selectedIDs: $browserIDs)
                     } else {
-                        BrowserAssignmentPicker(controller: store.browsers, selectedIDs: $browserIDs)
+                        BrowserAssignmentPicker(controller: store.browsers, bot: name, selectedIDs: $browserIDs)
                     }
                 case .computers:
                     if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
-                        HubComputerPicker(mirror: mirror, selectedIDs: $computerIDs)
+                        HubComputerPicker(mirror: mirror, bot: name, selectedIDs: $computerIDs)
                     } else {
-                        ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
+                        ComputerAssignmentPicker(controller: store.computers, bot: name, selectedIDs: $computerIDs)
                     }
                 }
                 if selectedTab != .runtime {
@@ -380,15 +380,15 @@ struct EditBotSheet: View {
                     }
                 case .browsers:
                     if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
-                        HubBrowserPicker(mirror: mirror, selectedIDs: $browserIDs)
+                        HubBrowserPicker(mirror: mirror, bot: name, selectedIDs: $browserIDs)
                     } else {
-                        BrowserAssignmentPicker(controller: store.browsers, selectedIDs: $browserIDs)
+                        BrowserAssignmentPicker(controller: store.browsers, bot: name, selectedIDs: $browserIDs)
                     }
                 case .computers:
                     if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
-                        HubComputerPicker(mirror: mirror, selectedIDs: $computerIDs)
+                        HubComputerPicker(mirror: mirror, bot: name, selectedIDs: $computerIDs)
                     } else {
-                        ComputerAssignmentPicker(controller: store.computers, selectedIDs: $computerIDs)
+                        ComputerAssignmentPicker(controller: store.computers, bot: name, selectedIDs: $computerIDs)
                     }
                 }
             }

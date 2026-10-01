@@ -232,6 +232,7 @@ import SwiftUI
 
 struct ComputerAssignmentPicker: View {
     let controller: ComputerController
+    let bot: String
     @Binding var selectedIDs: Set<UUID>
     @State private var openingLibrary = false
     @State private var openError: String?
@@ -252,7 +253,7 @@ struct ComputerAssignmentPicker: View {
                 }
             })
         .sheet(isPresented: $creating) {
-            NewComputerSheet(templates: controller.templates, create: controller.create) { selectedIDs.insert($0.id) }
+            NewComputerSheet(bot: bot, templates: controller.templates, create: controller.create) { selectedIDs.insert($0.id) }
         }
         .task { await controller.refresh(launchIfNeeded: true) }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didActivateApplicationNotification)) { notification in
@@ -323,10 +324,18 @@ struct NewComputerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var available: [ComputerTemplateSummary] = []
     @State private var template = ""
-    @State private var name = ""
+    @State private var name: String
     @State private var description = ""
     @State private var making = false
     @State private var failure: String?
+
+    init(bot: String, templates: @escaping () async throws -> [ComputerTemplateSummary],
+         create: @escaping (ComputerDraft) async throws -> RemoteComputer, onCreated: @escaping (RemoteComputer) -> Void) {
+        self.templates = templates
+        self.create = create
+        self.onCreated = onCreated
+        _name = State(initialValue: companionName("Computer", for: bot))
+    }
 
     private var chosen: ComputerTemplateSummary? { available.first { $0.id == template } }
 
@@ -355,13 +364,8 @@ struct NewComputerSheet: View {
         .task {
             do {
                 available = try await templates()
-                if template.isEmpty, let first = available.first { template = first.id; name = first.name }
+                if template.isEmpty, let first = available.first { template = first.id }
             } catch { failure = error.localizedDescription }
-        }
-        .onChange(of: template) { _, id in
-            if let picked = available.first(where: { $0.id == id }), name.isEmpty || available.contains(where: { $0.name == name }) {
-                name = picked.name
-            }
         }
     }
 
@@ -386,6 +390,7 @@ struct NewComputerSheet: View {
 /// Noodle Computer on the Hub's Mac.
 struct HubComputerPicker: View {
     let mirror: HubMirror
+    let bot: String
     @Binding var selectedIDs: Set<UUID>
     @State private var creating = false
     @State private var failure: String?
@@ -409,7 +414,7 @@ struct HubComputerPicker: View {
                 }
             })
         .sheet(isPresented: $creating) {
-            NewComputerSheet(templates: {
+            NewComputerSheet(bot: bot, templates: {
                 try await mirror.computerTemplates().map {
                     ComputerTemplateSummary(id: $0.id, name: $0.name, description: $0.description, symbol: $0.symbol)
                 }
