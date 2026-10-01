@@ -12,6 +12,7 @@ public struct IconEditorSheet: View {
     private let symbol: String
     private let symbols: [String]
     private let encoding: IconImageEncoding
+    private let avatar: AvatarIdea?
     @Environment(\.dismiss) private var dismiss
     @State private var draft: IconAppearance
     @State private var failure: String?
@@ -20,8 +21,9 @@ public struct IconEditorSheet: View {
     @State private var photoSelection: PhotosPickerItem?
     @State private var isLoadingImage = false
 
-    public init(title: String, icon: Binding<IconAppearance>, symbol: String, symbols: [String], encoding: IconImageEncoding) {
-        _icon = icon; self.title = title; self.symbol = symbol; self.symbols = symbols; self.encoding = encoding
+    public init(title: String, icon: Binding<IconAppearance>, symbol: String, symbols: [String], encoding: IconImageEncoding,
+                avatar: AvatarIdea? = nil) {
+        _icon = icon; self.title = title; self.symbol = symbol; self.symbols = symbols; self.encoding = encoding; self.avatar = avatar
         _draft = State(initialValue: icon.wrappedValue)
     }
 
@@ -46,7 +48,7 @@ public struct IconEditorSheet: View {
                                 choosePhoto: { photoSelection = nil; choosingPhoto = true }
                             ).frame(minWidth: 0, maxWidth: .infinity)
                             if #available(macOS 15.1, *) {
-                                NoodleImagePlaygroundButton(sourceImageData: draft.iconImage) { url in loadImage(url) }
+                                NoodleImagePlaygroundButton(sourceImageData: draft.iconImage, concepts: avatar?.concepts ?? []) { url in loadImage(url) }
                                     .frame(minWidth: 0, maxWidth: .infinity)
                             }
                         }

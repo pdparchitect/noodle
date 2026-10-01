@@ -189,7 +189,8 @@ struct NewBotSheet: View {
             BotIconEditor(
                 symbolName: $avatarSymbolName,
                 colorIndex: $avatarColorIndex,
-                imageData: $avatarImageData
+                imageData: $avatarImageData,
+                avatar: AvatarIdea(name: name, description: publicDescription, backstory: backstory)
             )
             .noodleSheetSizing()
         }
@@ -428,7 +429,8 @@ struct EditBotSheet: View {
             BotIconEditor(
                 symbolName: $avatarSymbolName,
                 colorIndex: $avatarColorIndex,
-                imageData: $avatarImageData
+                imageData: $avatarImageData,
+                avatar: AvatarIdea(name: name, description: publicDescription, backstory: backstory)
             )
             .noodleSheetSizing()
         }
@@ -562,6 +564,7 @@ private struct BotIconEditor: View {
     @Binding var symbolName: String?
     @Binding var colorIndex: Int
     @Binding var imageData: Data?
+    let avatar: AvatarIdea
 
     private static let symbols = [
         "sparkles",
@@ -593,7 +596,8 @@ private struct BotIconEditor: View {
             ),
             symbol: BotAvatar.defaultSymbol,
             symbols: Self.symbols,
-            encoding: .jpeg(quality: 0.86)
+            encoding: .jpeg(quality: 0.86),
+            avatar: avatar
         )
     }
 }

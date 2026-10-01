@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Create Image in a bot's picture starts from an avatar portrait with the bot's name and description, instead of an empty Image Playground.
+
 ### What to Test
 
 - Open a conversation and tap the message field: the field sits a little above the keyboard, not on it, and drops back level with Search when the keyboard goes.

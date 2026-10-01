@@ -17,6 +17,7 @@ All notable changes to Noodle are documented here, following
 - Bots that run on a Hub no longer offer folders from this Mac, which they could never use.
 - Settings > Hub tags Tailscale addresses as tailscale, lowercase like home and internet.
 - Long conversations open on their latest 100 messages and show earlier ones as you scroll up, so new replies no longer slow down as a conversation grows.
+- Create Image… in a bot's Bot Icon starts from an avatar portrait with the bot's name and description, instead of an empty Image Playground.
 
 ### Fixed
 

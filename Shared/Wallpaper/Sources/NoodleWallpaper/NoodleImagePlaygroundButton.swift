@@ -7,10 +7,12 @@ public struct NoodleImagePlaygroundButton: View {
     @Environment(\.supportsImagePlayground) private var supportsImagePlayground
     @State private var isPresented = false
     let sourceImageData: Data?
+    let concepts: [ImagePlaygroundConcept]
     let onCompletion: (URL) -> Void
 
-    public init(sourceImageData: Data?, onCompletion: @escaping (URL) -> Void) {
+    public init(sourceImageData: Data?, concepts: [ImagePlaygroundConcept] = [], onCompletion: @escaping (URL) -> Void) {
         self.sourceImageData = sourceImageData
+        self.concepts = concepts
         self.onCompletion = onCompletion
     }
 
@@ -20,18 +22,18 @@ public struct NoodleImagePlaygroundButton: View {
     @ViewBuilder private var configuredButton: some View {
         if #available(macOS 26.4, *) {
             triggerButton
-                .imagePlaygroundSheet(isPresented: $isPresented, sourceImage: sourceImage, onCompletion: onCompletion)
+                .imagePlaygroundSheet(isPresented: $isPresented, concepts: concepts, sourceImage: sourceImage, onCompletion: onCompletion)
                 .imagePlaygroundPersonalizationPolicy(.disabled)
                 .imagePlaygroundOptions(imagePlaygroundOptions)
                 .imagePlaygroundGenerationStyle(.illustration)
         } else if #available(macOS 15.4, *) {
             triggerButton
-                .imagePlaygroundSheet(isPresented: $isPresented, sourceImage: sourceImage, onCompletion: onCompletion)
+                .imagePlaygroundSheet(isPresented: $isPresented, concepts: concepts, sourceImage: sourceImage, onCompletion: onCompletion)
                 .imagePlaygroundPersonalizationPolicy(.disabled)
                 .imagePlaygroundGenerationStyle(.illustration)
         } else {
             triggerButton
-                .imagePlaygroundSheet(isPresented: $isPresented, sourceImage: sourceImage, onCompletion: onCompletion)
+                .imagePlaygroundSheet(isPresented: $isPresented, concepts: concepts, sourceImage: sourceImage, onCompletion: onCompletion)
         }
     }
     private var triggerButton: some View {

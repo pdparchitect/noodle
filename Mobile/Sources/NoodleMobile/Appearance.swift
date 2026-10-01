@@ -154,6 +154,10 @@ struct BotPictureEditor: View {
     @State private var loading = false
     @State private var problem: String?
 
+    private var avatar: AvatarIdea {
+        AvatarIdea(name: draft.name, description: draft.publicDescription, backstory: draft.backstory)
+    }
+
     /// The Mac's bot symbols, in its order.
     static let symbols = [
         "sparkles", "bolt.fill", "brain.head.profile", "hammer.fill", "terminal.fill", "magnifyingglass",
@@ -230,7 +234,7 @@ struct BotPictureEditor: View {
             await load { try await photo.loadTransferable(type: BackgroundPhoto.self)?.data }
             self.photo = nil
         }
-        .imagePlaygroundSheet(isPresented: $creating, concepts: [], sourceImage: draft.avatarImageData.flatMap(UIImage.init(data:)).map(Image.init(uiImage:))) { url in
+        .imagePlaygroundSheet(isPresented: $creating, concepts: avatar.concepts, sourceImage: draft.avatarImageData.flatMap(UIImage.init(data:)).map(Image.init(uiImage:))) { url in
             Task { await load { try Data(contentsOf: url) } }
         }
     }
