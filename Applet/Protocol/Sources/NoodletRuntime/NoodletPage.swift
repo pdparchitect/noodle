@@ -279,8 +279,8 @@ public typealias NoodletColor = UIColor
     /// A page's `<input type=file>` opens the Mac's file picker. iOS shows its own.
     public func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
                         initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
-        guard webView.window?.isVisible == true else {
-            log("files", "File inputs need the noodlet in the foreground.")
+        guard NoodletFiles.seenWindow(of: webView) != nil else {
+            log("files", "File inputs need the noodlet in the foreground, on the device it runs on.")
             return completionHandler(nil)
         }
         Task { completionHandler(await NoodletFiles.chooseUploads(parameters, over: webView)) }

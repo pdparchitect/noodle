@@ -49,7 +49,7 @@ import WebKit
     /// Opens a web link in the person's browser, only while they can see the noodlet.
     static func openExternally(_ url: URL, over web: WKWebView) -> Bool {
         #if os(macOS)
-        guard web.window?.isVisible == true else { return false }
+        guard seenWindow(of: web) != nil else { return false }
         return NSWorkspace.shared.open(url)
         #else
         guard let scene = web.window?.windowScene else { return false }
@@ -59,9 +59,16 @@ import WebKit
     }
 
     #if os(macOS)
+    /// The window a dialog may open over: one the person can see. A noodlet watched from another
+    /// device, or recorded, runs in a transparent window nobody is sitting at, so it gets none.
+    static func seenWindow(of web: WKWebView) -> NSWindow? {
+        guard let window = web.window, window.isVisible, window.alphaValue > 0, !window.ignoresMouseEvents else { return nil }
+        return window
+    }
+
     /// Asks where a download goes, before WebKit starts writing it.
     static func chooseDestination(named name: String, over web: WKWebView) async throws -> URL? {
-        guard let window = web.window, window.isVisible else {
+        guard let window = seenWindow(of: web) else {
             throw AppletError("Downloads need the noodlet in the foreground.")
         }
         let panel = NSSavePanel()
@@ -80,7 +87,7 @@ import WebKit
 
     /// The files a page's `<input type=file>` gets: what the person picks, as the input allows.
     static func chooseUploads(_ parameters: WKOpenPanelParameters, over web: WKWebView) async -> [URL]? {
-        guard let window = web.window, window.isVisible else { return nil }
+        guard let window = seenWindow(of: web) else { return nil }
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = parameters.allowsDirectories
@@ -98,7 +105,7 @@ import WebKit
 
     #if os(macOS)
     private static func choose(over web: WKWebView) async throws -> URL? {
-        guard let window = web.window, window.isVisible else {
+        guard let window = seenWindow(of: web) else {
             throw AppletError("File dialogs require foreground mode. Use noodle.data in background mode.")
         }
         let panel = NSOpenPanel()
@@ -108,7 +115,7 @@ import WebKit
     }
 
     private static func save(_ text: String, as name: String, over web: WKWebView) async throws -> Bool {
-        guard let window = web.window, window.isVisible else { throw AppletError("File dialogs require foreground mode.") }
+        guard let window = seenWindow(of: web) else { throw AppletError("File dialogs require foreground mode.") }
         let panel = NSSavePanel()
         panel.nameFieldStringValue = name
         guard await panel.beginSheetModal(for: window) == .OK, let file = panel.url else { return false }
