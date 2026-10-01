@@ -5,6 +5,11 @@
 ### What to Test
 
 - Open a conversation: the message field sits at the same height as Search in the list of bots.
+- Tap More in the list of bots: New Bot shows a person with a plus, like New Group shows people.
+
+### Changed
+
+- New Bot in More shows a person with a plus instead of a bare plus.
 
 ### Fixed
 

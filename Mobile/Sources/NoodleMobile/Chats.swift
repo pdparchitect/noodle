@@ -901,7 +901,7 @@ struct MoreSheet: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            option("New Bot", systemImage: "plus", .createBot)
+            option("New Bot", systemImage: "person.badge.plus", .createBot)
             option("New Group", systemImage: "person.2", .createGroup)
             option("Profiles", systemImage: "person.crop.circle", .profiles)
             option("Settings", systemImage: "gear", .settings)
