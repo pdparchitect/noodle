@@ -27,16 +27,13 @@ import AppletBridge
         videoURL = url.deletingPathExtension().appendingPathExtension("video.mp4")
         self.size = CGSize(width: Int(size.width) / 2 * 2, height: Int(size.height) / 2 * 2)
         writer = try AVAssetWriter(outputURL: videoURL, fileType: .mp4)
-        // The bit rate is budgeted per pixel and capped: enough for a game in motion to stay
-        // sharp, small enough to post.
-        let pixels = Double(self.size.width * self.size.height) * Double(Self.framesPerSecond)
         input = AVAssetWriterInput(
             mediaType: .video,
             outputSettings: [
                 AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: Int(self.size.width),
                 AVVideoHeightKey: Int(self.size.height),
                 AVVideoCompressionPropertiesKey: [
-                    AVVideoAverageBitRateKey: Int(min(max(pixels * 0.4, 2_000_000), 12_000_000)),
+                    AVVideoAverageBitRateKey: Self.bitRate(for: self.size),
                     AVVideoExpectedSourceFrameRateKey: Self.framesPerSecond,
                     AVVideoMaxKeyFrameIntervalKey: Self.framesPerSecond * 2,
                     AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
@@ -58,6 +55,11 @@ import AppletBridge
             throw writer.error ?? AppletError("Cannot start video encoder.")
         }
         writer.startSession(atSourceTime: .zero)
+    }
+    /// Budgeted per pixel and capped: enough for a game in motion to stay sharp, small enough to post.
+    nonisolated static func bitRate(for size: CGSize) -> Int {
+        let pixels = Double(size.width * size.height) * Double(framesPerSecond)
+        return Int(min(max(pixels * 0.4, 2_000_000), 12_000_000))
     }
     func start(snapshot: @escaping @MainActor () async throws -> NSImage, duration: Double) {
         limit = Int(((duration + 1) * Self.audioRate).rounded()) * 2

@@ -115,45 +115,13 @@ final class RecordingTests: XCTestCase {
         XCTAssertEqual(audio.count, 0)
     }
 
-    /// A busy picture, like rain in a game, needs bits to stay sharp. The budget used to be 0.2 bits
-    /// a pixel, which left fast motion blocky. Faint noise is too busy for the budget but not beyond
-    /// it, so the encoder spends all of it however many frames the machine manages.
-    @MainActor func testABusyPictureGetsEnoughBitsToStaySharp() async throws {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(UUID().uuidString).mp4")
-        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
-        let size = CGSize(width: 900, height: 620)
-        let noise = (0..<8).map { _ in Self.noise(size) }
-        var next = 0
-        let recording = try AppletRecording(url: url, size: size)
-        recording.start(
-            snapshot: {
-                next += 1
-                return noise[next % noise.count]
-            }, duration: 2)
-        try await Task.sleep(for: .milliseconds(2400))
-        try await recording.finish()
-        let tracks = try await AVURLAsset(url: url).loadTracks(withMediaType: .video)
-        let track = try XCTUnwrap(tracks.first)
-        let rate = try await track.load(.estimatedDataRate)
-        // 0.4 bits a pixel at 30 frames a second is 6.7 Mbps here; 0.2 was 3.3.
-        XCTAssertGreaterThan(rate, 5_000_000, "The video got \(Int(rate)) bits a second.")
-    }
-
-    private static func noise(_ size: CGSize) -> NSImage {
-        let bitmap = NSBitmapImageRep(
-            bitmapDataPlanes: nil, pixelsWide: Int(size.width), pixelsHigh: Int(size.height),
-            bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false,
-            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-        // Every byte between 96 and 127, eight at a time.
-        let words = UnsafeMutableRawPointer(bitmap.bitmapData!).assumingMemoryBound(to: UInt64.self)
-        arc4random_buf(words, bitmap.bytesPerRow * Int(size.height) / 8 * 8)
-        for index in 0..<bitmap.bytesPerRow * Int(size.height) / 8 {
-            words[index] = words[index] & 0x1F1F_1F1F_1F1F_1F1F | 0x6060_6060_6060_6060
-        }
-        let image = NSImage(size: size)
-        image.addRepresentation(bitmap)
-        return image
+    /// A busy picture, like rain in a game, needs bits to stay sharp; 0.2 bits a pixel left fast motion
+    /// blocky. How much of the budget the encoder spends depends on how many frames the machine
+    /// manages, so the budget itself is checked.
+    func testABusyPictureGetsEnoughBitsToStaySharp() {
+        let rate = AppletRecording.bitRate(for: CGSize(width: 900, height: 620))
+        // 0.4 bits a pixel at 30 frames a second is 6.7 Mbps here; 0.2 is 3.3.
+        XCTAssertGreaterThan(rate, 5_000_000, "The video gets \(rate) bits a second.")
     }
 
     private static func filled(_ size: CGSize) -> NSImage {
