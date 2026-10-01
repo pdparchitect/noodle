@@ -1156,10 +1156,15 @@ struct ChatView: View {
         // composer over the conversation, as in Messages, instead of moving it.
         .safeAreaInset(edge: .bottom) { Color.clear.frame(height: Self.controlHeight + 8 + Self.composerGap(homeBar: homeBar) - homeBar) }
         .overlay(alignment: .bottom) {
+            // Moved down past the safe area's edge rather than ignoring it, which iOS 26 does not let an
+            // overlay do.
             composer
-                .padding(.bottom, Self.composerGap(homeBar: homeBar))
-                .ignoresSafeArea(.container, edges: .bottom)
-                .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { homeBar = $0 }
+                .padding(.bottom, Self.composerGap(homeBar: homeBar) - homeBar)
+                .background {
+                    Color.clear
+                        .ignoresSafeArea(.container, edges: .bottom)
+                        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { homeBar = $0 }
+                }
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
