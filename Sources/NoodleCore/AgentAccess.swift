@@ -51,24 +51,6 @@ public struct AgentAccessConfiguration: Equatable, Sendable {
         return result
     }
 
-    /// Snapshot the previously selected harness once when upgrading. New or
-    /// copied agents on later launches cannot receive an implicit grant.
-    public mutating func migrateRequiredHarnessGrants(_ agents: [AgentRecord], in defaults: UserDefaults) {
-        guard defaults.object(forKey: Self.harnessGrantsKey) == nil else { return }
-        for agent in agents { authorizeSelectedHarness(for: agent) }
-        defaults.set(requiredHarnessGrants, forKey: Self.harnessGrantsKey)
-    }
-
-    /// Snapshot the previous default-on policy once, after loading the existing
-    /// roster and before creating or starting bots. Unknown IDs always fail closed.
-    public static func migrateExistingAgents(_ ids: Set<UUID>, in defaults: UserDefaults) -> Self {
-        guard defaults.object(forKey: storageKey) == nil else { return load(from: defaults) }
-        let restricted = Set((defaults.stringArray(forKey: "Noodle.access.restrictedAgents") ?? []).compactMap(UUID.init(uuidString:)))
-        var configuration = load(from: defaults)
-        configuration.autonomousAgentIDs = ids.subtracting(restricted)
-        defaults.set(configuration.autonomousAgentIDs.map(\.uuidString).sorted(), forKey: storageKey)
-        return configuration
-    }
     public func save(to defaults: UserDefaults) {
         defaults.set(autonomousAgentIDs.map(\.uuidString).sorted(), forKey: Self.storageKey)
         defaults.set(requiredHarnessGrants, forKey: Self.harnessGrantsKey)

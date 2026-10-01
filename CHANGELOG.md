@@ -10,6 +10,10 @@ All notable changes to Noodle are documented here, following
 
 - The Window menu opens Noodle Browser, Noodle Computer and Noodle Applet; those not installed are dimmed.
 
+### Changed
+
+- Retire upgrade steps for data from before the 0.28.0 milestone: harness login stamps from earlier versions, the old bot inbox location, the access settings kept before per-bot grants, and MCP skill names ending in a connection ID. Updates already pass through 0.28.0.
+
 ## [0.38.0] - 2026-10-01
 
 ### Added

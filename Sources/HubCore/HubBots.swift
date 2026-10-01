@@ -63,9 +63,6 @@ import NoodleRuntime
         computers.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
         browsers.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
         clearAbandonedUploads()
-        // TODO(Hub 0.7.0): remove with HubTests.testBotsFromBeforeGetTheirOwnerWhenTheHubOpens. Milestone: Hub 0.6.0.
-        // Bots made before agent.json named their owner get one here; later changes write it as they happen.
-        synchronizeOwners()
     }
 
     /// How long a file's pieces wait for the next one. Each piece touches the file, so one quiet

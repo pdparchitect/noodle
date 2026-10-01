@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Retire naming each bot's owner in its files when the Hub opens, which bots from before 0.6.0 needed. Updates already pass through 0.6.0.
+
 ## [0.12.0] - 2026-10-01
 
 ### Added

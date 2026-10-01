@@ -2,7 +2,7 @@ import XCTest
 @testable import NoodleCore
 
 final class MCPInvocationTests: XCTestCase {
-    func testReadableNamesAreUniqueStableAndMigrateWithoutChangingAccounts() throws {
+    func testReadableNamesAreUniqueAndStable() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let first = try MCPConnectionRecord(name: "Notion", endpoint: URL(string: "https://mcp.notion.com/mcp")!)
@@ -17,29 +17,6 @@ final class MCPInvocationTests: XCTestCase {
         registry.remove(first.id)
         try registry.save(root: root)
         XCTAssertEqual(try MCPRegistry.load(root: root).connections[0].skillName, "mcp-notion-2")
-
-        // A real legacy registry.
-        var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(first)) as! [String: Any]
-        let oldName = "mcp-notion-" + first.id.uuidString.lowercased().replacingOccurrences(of: "-", with: "")
-        object["skillName"] = oldName
-        let legacy = try JSONDecoder().decode(MCPConnectionRecord.self, from: JSONSerialization.data(withJSONObject: object))
-        let legacyRegistry = ["connections": [object], "assignments": [agent.uuidString.lowercased(): [first.id.uuidString]] ] as [String: Any]
-        try JSONSerialization.data(withJSONObject: legacyRegistry).write(to: root.appendingPathComponent("MCP/connections.json"))
-        let workspace = root.appendingPathComponent("workspace")
-        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
-        XCTAssertEqual(legacy.id, first.id)
-        var migrated = try MCPRegistry.load(root: root)
-        XCTAssertEqual(migrated.connections[0].id, first.id)
-        XCTAssertEqual(migrated.assigned(to: agent).map(\.skillName), ["mcp-notion"])
-        try migrated.save(root: root)
-        let connection = migrated.connections[0]
-        ToolProviderSkills.synchronize(workspace: workspace, providers: [(ConnectionToolProvider(id: connection.skillName, title: connection.name,
-            connection: connection.id) { _, _, _, _, _ in Data() }.manifest, [])])
-        let skill = try String(contentsOf: workspace.appendingPathComponent(".agents/skills/mcp-notion/SKILL.md"))
-        XCTAssertTrue(skill.contains("name: mcp-notion\n"))
-        XCTAssertFalse(skill.contains(first.id.uuidString.lowercased()))
-        XCTAssertFalse(skill.contains(first.id.uuidString.lowercased().replacingOccurrences(of: "-", with: "")))
-        XCTAssertFalse(skill.contains("--connection"))
     }
 
     func testBrokerResolvesOnlyAssignedNamesAndRejectsAmbiguousTargets() throws {

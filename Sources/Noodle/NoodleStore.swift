@@ -335,7 +335,7 @@ final class NoodleStore {
             try repository.prepare()
             agents = try repository.loadAgents()
             activityWindows.synchronize(agents: agents)
-            runtime.prepareAccessForExistingAgents()
+            runtime.reloadAccess()
             try repository.synchronizeAgentWorkspaces(agents)
             if connectsServices {
                 try messenger.start(agents: agents)

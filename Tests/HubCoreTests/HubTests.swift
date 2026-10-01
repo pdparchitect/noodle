@@ -48,22 +48,6 @@ import XCTest
         XCTAssertNil(try owner(in: hub, of: agent))
     }
 
-    /// Bots made before their files named an owner get one when the Hub opens.
-    // TODO(Hub 0.7.0): remove with the synchronizeOwners() call in HubBots.init. Milestone: Hub 0.6.0.
-    func testBotsFromBeforeGetTheirOwnerWhenTheHubOpens() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-tests-\(UUID())")
-        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
-        let repository = WorkspaceRepository(rootURL: root)
-        try repository.prepare()
-        let agent = try repository.createAgent(named: "Alfred").agent
-        let access = HubAccess(url: root.appendingPathComponent("access.json"))
-        let ada = try access.addUser(named: "Ada")
-        access.setOwner(ada, ofBot: agent.id)
-        XCTAssertNil(try repository.loadAgentOwner(agent))
-        let hub = Hub(root: root, messenger: nil)
-        XCTAssertEqual(try owner(in: hub, of: agent), ["id": ada.id.uuidString, "name": "Ada"])
-    }
-
     /// Only an app signed with the iCloud container talks to CloudKit; tests and development builds never do.
     func testPushesNeedTheICloudEntitlement() {
         XCTAssertNil(CloudKitPushes.ifEntitled())

@@ -81,20 +81,15 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
     }
 
     // Allocate once when saving; preserve clean names across display-name edits,
-    // removals and reloads. Legacy UUID-suffixed folders migrate on workspace sync.
+    // removals and reloads.
     private mutating func normalizeSkillNames() {
-        func base(_ connection: MCPConnectionRecord) -> String {
-            let suffix = "-" + connection.id.uuidString.lowercased().replacingOccurrences(of: "-", with: "")
-            return connection.skillName.hasSuffix(suffix) ? String(connection.skillName.dropLast(suffix.count)) : connection.skillName
-        }
-        let reserved = Set(connections.filter { base($0) == $0.skillName }.map(\.skillName))
+        let reserved = Set(connections.map(\.skillName))
         var used: Set<String> = []
         for index in connections.indices {
-            let original = connections[index].skillName
-            let stem = base(connections[index])
+            let stem = connections[index].skillName
             var candidate = stem
             var number = 2
-            while used.contains(candidate) || (original != candidate && reserved.contains(candidate)) {
+            while used.contains(candidate) || (stem != candidate && reserved.contains(candidate)) {
                 candidate = String(stem.prefix(52)) + "-\(number)"
                 number += 1
             }

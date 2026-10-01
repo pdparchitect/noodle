@@ -152,8 +152,6 @@ struct HubPerson: Hashable, Identifiable, Decodable {
       } catch { continue }
     }
     persistRegistrations()
-    removeCopies(secrets: secrets)
-    removeSwiftBuilds(secrets: secrets)
     scan()
     if watchChanges {
       timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
@@ -175,93 +173,6 @@ struct HubPerson: Hashable, Identifiable, Decodable {
       return (folder, parts[base.count])
     }
     return nil
-  }
-  /// The lists of noodlet keys the library keeps, with where each is saved.
-  private static let lists: [(ReferenceWritableKeyPath<AppletLibrary, [String]>, String)] = [
-    (\.recent, "recent"), (\.pinned, "pinned"), (\.hidden, "hidden"), (\.hub, "hub"),
-  ]
-  // TODO(Applet 0.20.0): remove with installedOrbit, its call in init,
-  // LibraryTests.testWhatSwiftNoodletsLeftGoesAndTheirDataStays and
-  // LibraryTests.testTheSwiftExampleGoesUnlessItWasChanged. Milestone: Applet 0.19.0.
-  /// The Orbital playground example as Applet put it in the library, by its Orbit.swift.
-  static var installedOrbit = "ed26526b98a23950c3ffbf3f58d91f5b8e6d2ca9edb3840fe151babe17b089d9"
-  /// Noodlets written in Swift were built under Builds and ran with a private home under Homes.
-  /// The Swift example goes too, with what Applet kept for it, unless the person changed it.
-  private func removeSwiftBuilds(secrets: AppletSecrets) {
-    for folder in ["Builds", "Homes"] { try? FileManager.default.removeItem(at: root.appendingPathComponent(folder)) }
-    let orbit = Self.canonical(documents.appendingPathComponent("Orbit.\(AppletBuildIdentity.current.fileExtension)"))
-    guard let source = try? Data(contentsOf: orbit.appendingPathComponent("Orbit.swift")),
-      NoodletPackage.digest(source) == Self.installedOrbit,
-      (try? FileManager.default.removeItem(at: orbit)) != nil
-    else { return }
-    forget(NoodletPackage.digest(Data(orbit.path.utf8)), secrets: secrets)
-    for (list, name) in Self.lists { defaults.set(self[keyPath: list], forKey: name) }
-  }
-  // TODO(Applet 0.13.0): remove with its call in init, LibraryTests.testCopiesFromBeforeGoAndWhatTheyKeptFollowsTheOriginal
-  // and LibraryTests.testACopyWhoseOriginalCannotBeReadIsKeptForLater. Milestone: Applet 0.12.0.
-  /// Applet used to keep a copy of each noodlet a bot sent, under Imports. The copies go. What
-  /// was kept for one, its link, saved data, permissions, secrets and place in lists, follows the
-  /// bot's own noodlet while that is still there, and goes with the copy when it is not.
-  private func removeCopies(secrets: AppletSecrets) {
-    let imports = documents.appendingPathComponent("Imports", isDirectory: true)
-    let origins = defaults.dictionary(forKey: "sourceOrigins") as? [String: String] ?? [:]
-    guard !origins.isEmpty || FileManager.default.fileExists(atPath: imports.path) else { return }
-    // Copies whose original is there but cannot be read now, as when macOS keeps Applet out of a
-    // bot's folder, wait for a later launch rather than be taken for ones whose original is gone.
-    var waiting: [String: String] = [:]
-    for (origin, copyPath) in origins {
-      guard let copy = try? NoodletPackage(url: URL(fileURLWithPath: copyPath)) else { continue }
-      let sourceURL = URL(fileURLWithPath: String(origin.split(separator: "\0", maxSplits: 1).last ?? ""))
-      guard let source = try? NoodletPackage(url: sourceURL) else {
-        if Self.missing(sourceURL) { forget(copy.key, secrets: secrets) } else { waiting[origin] = copyPath }
-        continue
-      }
-      try? links?.move(copy.url, to: source.url)
-      let (old, new) = (copy.key, source.key)
-      for folder in ["Data", "Homes"] {
-        let from = root.appendingPathComponent("\(folder)/\(old)"), to = root.appendingPathComponent("\(folder)/\(new)")
-        if !FileManager.default.fileExists(atPath: to.path) { try? FileManager.default.moveItem(at: from, to: to) }
-      }
-      let thumbnails = root.appendingPathComponent("Thumbnails")
-      try? FileManager.default.moveItem(
-        at: thumbnails.appendingPathComponent("\(old).png"), to: thumbnails.appendingPathComponent("\(new).png"))
-      for name in ["store.%@.user", "store.%@.test", "permissions.%@"] {
-        guard let value = defaults.object(forKey: String(format: name, old)) else { continue }
-        if defaults.object(forKey: String(format: name, new)) == nil { defaults.set(value, forKey: String(format: name, new)) }
-        defaults.removeObject(forKey: String(format: name, old))
-      }
-      for scope in ["user", "test"] {
-        let kept = (try? secrets.storage.load("\(old).\(scope)")) ?? [:]
-        if !kept.isEmpty, ((try? secrets.storage.load("\(new).\(scope)")) ?? [:]).isEmpty {
-          try? secrets.storage.save(kept, account: "\(new).\(scope)")
-        }
-        try? secrets.storage.save([:], account: "\(old).\(scope)")
-      }
-      for (list, _) in Self.lists {
-        var seen = Set<String>()
-        self[keyPath: list] = self[keyPath: list].map { $0 == old ? new : $0 }.filter { seen.insert($0).inserted }
-      }
-    }
-    for (list, name) in Self.lists { defaults.set(self[keyPath: list], forKey: name) }
-    guard waiting.isEmpty else {
-      let kept = Set(waiting.values.map { URL(fileURLWithPath: $0).standardizedFileURL.path })
-      for (_, copyPath) in origins where !kept.contains(URL(fileURLWithPath: copyPath).standardizedFileURL.path) {
-        try? FileManager.default.removeItem(atPath: copyPath)
-      }
-      defaults.set(waiting, forKey: "sourceOrigins")
-      return
-    }
-    try? FileManager.default.removeItem(at: imports)
-    defaults.removeObject(forKey: "sourceOrigins")
-    defaults.removeObject(forKey: "packageOwners")
-  }
-  /// Deletes what Applet kept for a noodlet that no longer exists, as trashing it does.
-  private func forget(_ key: String, secrets: AppletSecrets) {
-    for (list, _) in Self.lists { self[keyPath: list].removeAll { $0 == key } }
-    Task { await AppletStorage.remove(key, root: root, defaults: defaults) }
-    AppletPermissions.revoke(packageKey: key, defaults: defaults)
-    for scope in ["user", "test"] { try? secrets.storage.save([:], account: "\(key).\(scope)") }
-    try? FileManager.default.removeItem(at: root.appendingPathComponent("Thumbnails/\(key).png"))
   }
   private static func canonical(_ url: URL) -> URL {
     url.resolvingSymlinksInPath().standardizedFileURL

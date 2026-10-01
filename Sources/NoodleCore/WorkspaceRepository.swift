@@ -1005,12 +1005,6 @@ public struct WorkspaceRepository: Sendable {
         if FileManager.default.fileExists(atPath: current.path) {
             return try read(AgentInbox.self, from: current)
         }
-        // Lazy migration: preserve the old cursor (including reaction offsets),
-        // leave its file untouched, and write the new location only on consume.
-        let legacy = directory(forAgentID: agentID).appendingPathComponent(".agents/inbox.json")
-        if FileManager.default.fileExists(atPath: legacy.path) {
-            return try read(AgentInbox.self, from: legacy)
-        }
         return AgentInbox()
     }
 

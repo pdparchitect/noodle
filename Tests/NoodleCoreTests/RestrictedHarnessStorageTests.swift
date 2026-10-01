@@ -1,4 +1,3 @@
-import CryptoKit
 import XCTest
 @testable import NoodleCore
 
@@ -179,22 +178,6 @@ final class RestrictedHarnessStorageTests: XCTestCase {
         addTeardownBlock { try? FileManager.default.removeItem(at: other) }
         try RestrictedHarnessStorage.exchange(provider: .codex, workspace: second, loginHome: other)
         XCTAssertEqual(try b.read("auth.json", limit: 100), Data("refreshed".utf8))
-    }
-
-    // TODO(0.31.0): remove with RestrictedHarnessStorage.SharedLogin.legacyTag. Milestone: 0.28.0.
-    func testALegacyStampStillHandsBackTheBotsRefresh() throws {
-        let (home, workspace, _) = try fixture()
-        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
-        let source = try WorkspaceMailbox(workspace: home, path: ".codex", create: true)
-        let login = Data("login-one".utf8)
-        try source.writeData(login, named: "auth.json")
-        let copy = try WorkspaceMailbox(workspace: workspace, path: ".noodle/home/.codex", create: true)
-        try copy.writeData(Data("refreshed".utf8), named: "auth.json")
-        let runtime = try WorkspaceMailbox(workspace: AgentStorageLayout(workspace: workspace).package, path: "runtime")
-        let digest = SHA256.hash(data: login).map { String(format: "%02x", $0) }.joined()
-        try runtime.writeData(Data(digest.utf8), named: "auth-seed-codex-auth.json.sha256")
-        try RestrictedHarnessStorage.prepare(provider: .codex, workspace: workspace, loginHome: home)
-        XCTAssertEqual(try source.read("auth.json", limit: 100), Data("refreshed".utf8))
     }
 
     func testKeychainLoginsHandARefreshToTheOtherBotsWithoutRewritingTheItem() throws {
