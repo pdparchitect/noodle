@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-01
+
 ### What to Test
 
 - Open a noodlet a bot shared: it runs on this iPhone, and responds at once to taps and typing. What it saves is still there when you open it on your Mac.

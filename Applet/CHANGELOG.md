@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-01
+
 ### Added
 
 - Noodlets can run on the phones and Macs of people using a bot through Noodle Hub. Their data and secrets are kept by Noodle Applet on the Hub's Mac, the same wherever the noodlet runs.
