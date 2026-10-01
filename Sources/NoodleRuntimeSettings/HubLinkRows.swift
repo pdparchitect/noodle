@@ -107,7 +107,7 @@ public struct HubLinkRows<Extra: View>: View {
     private static func name(of network: LinkEndpoint.Network) -> String {
         switch network {
         case .home: "home"
-        case .tailnet: "Tailscale"
+        case .tailnet: "tailscale"
         case .internet: "internet"
         }
     }
