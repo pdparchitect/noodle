@@ -43,6 +43,8 @@ struct AttachmentView: View {
         } else if let voice = attachment.voice {
             VoiceMessagePlayer(url: url, voice: voice)
                 .task(id: attachment.id) { url = try? await chats.file(for: attachment, in: thread) }
+        } else if let webLink = attachment.webLink {
+            LinkPreviewCard(url: webLink, previews: chats.linkPreviews, conversationID: thread.conversationID)
         } else {
             file
         }

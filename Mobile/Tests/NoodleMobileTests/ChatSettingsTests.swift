@@ -45,4 +45,16 @@ import Testing
         #expect(WebLinkPreview.previewed(web, enabled: false) == nil)
         #expect(WebLinkPreview.previewed(try #require(URL(string: "mailto:a@example.com")), enabled: true) == nil)
     }
+
+    @Test func attachedWebLinksShowAsLinkCards() throws {
+        func link(_ address: String) throws -> LinkAttachment {
+            LinkAttachment(id: UUID(), filename: "Link.webloc", mediaType: "application/x-webloc", byteCount: 7,
+                           url: try #require(URL(string: address)))
+        }
+        let web = try #require(URL(string: "https://www.example.com/page"))
+        #expect(try link(web.absoluteString).webLink == web)
+        #expect(try link("http://192.168.1.2/page").webLink == nil)
+        #expect(try link("noodlet://00000000-0000-0000-0000-00000000000a").webLink == nil)
+        #expect(LinkAttachment(id: UUID(), filename: "Notes.pdf", mediaType: "application/pdf", byteCount: 7).webLink == nil)
+    }
 }

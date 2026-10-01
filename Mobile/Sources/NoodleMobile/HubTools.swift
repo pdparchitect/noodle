@@ -755,6 +755,9 @@ extension LinkAttachment {
 
     var isLive: Bool { liveKind != nil }
 
+    /// A web page a bot shared, shown as the card a link in a message gets rather than as its bookmark file.
+    var webLink: URL? { url.flatMap { LinkPreview.isPublicWeb($0) ? $0 : nil } }
+
     /// What a live link points at, as on the Mac: a computer whichever view, a browser by its tab, a noodlet.
     private var liveKey: String? {
         guard let liveKind, let url, let id = url.host?.lowercased() else { return nil }
