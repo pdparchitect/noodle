@@ -1,21 +1,24 @@
+import Darwin
 import Foundation
 import NoodletFormat
 
-/// Per-noodlet HTTP requests, independent of browser CORS and browser credentials.
+/// Per-noodlet HTTP requests, independent of browser CORS and browser credentials. The public web
+/// is open to every noodlet; this device and the network it is on only with `localNetwork`.
 @MainActor public final class WebNetwork {
   public static let limit = 16 * 1_048_576
   private var requests: [String: Task<[String: Any], Error>] = [:]
+  private let localNetwork: Bool
+  static let localRefusal = "This noodlet reaches only the public web. To reach this device or its network, declare the local-network permission."
 
-  public init() {}
+  /// `localNetwork` is whether the person allowed the noodlet the local network; without it,
+  /// requests and the redirects they follow keep to public addresses.
+  public init(localNetwork: Bool = false) { self.localNetwork = localNetwork }
   public func cancel(_ id: String) { requests[id]?.cancel() }
   public func stop() {
     for task in requests.values { task.cancel() }
     requests.removeAll()
   }
-  public func fetch(_ body: [String: Any], enabled: Bool) async throws -> [String: Any] {
-    guard enabled else {
-      throw AppletError("Set network: true in noodlet.json to make web requests.")
-    }
+  public func fetch(_ body: [String: Any]) async throws -> [String: Any] {
     guard let id = body["id"] as? String, id.count <= 100,
       requests[id] == nil, requests.count < 8
     else { throw AppletError("A noodlet supports up to eight concurrent web requests.") }
@@ -24,7 +27,15 @@ import NoodletFormat
     guard ["follow", "error", "manual"].contains(mode) else {
       throw AppletError("Invalid redirect mode.")
     }
-    let task = Task { try await Self.perform(request, redirect: mode) }
+    if !localNetwork, let host = request.url?.host {
+      switch await Task.detached(operation: { Self.isPublic(host: host) }).value {
+      case true?: break
+      case false?: throw AppletError(Self.localRefusal)
+      case nil: throw AppletError("Could not find \(host.prefix(100)).")
+      }
+    }
+    let localNetwork = localNetwork
+    let task = Task { try await Self.perform(request, redirect: mode, localNetwork: localNetwork) }
     requests[id] = task
     defer { requests.removeValue(forKey: id) }
     return try await withTaskCancellationHandler {
@@ -74,7 +85,51 @@ import NoodletFormat
     }
     return request
   }
-  private static func perform(_ request: URLRequest, redirect: String) async throws -> [String: Any]
+  /// Whether every address `host` names is on the public internet, or nil when it names none.
+  /// The connection resolves it again, so a name that changes its answer in between still gets
+  /// through; this keeps out plain local addresses and names for them.
+  nonisolated static func isPublic(host: String) -> Bool? {
+    var hints = addrinfo()
+    hints.ai_socktype = SOCK_STREAM
+    var list: UnsafeMutablePointer<addrinfo>?
+    let name = host.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+    guard getaddrinfo(name, nil, &hints, &list) == 0, let list else { return nil }
+    defer { freeaddrinfo(list) }
+    var addresses: [String] = []
+    for entry in sequence(first: list, next: { $0.pointee.ai_next }) {
+      var text = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+      guard getnameinfo(entry.pointee.ai_addr, entry.pointee.ai_addrlen, &text, socklen_t(text.count), nil, 0, NI_NUMERICHOST) == 0
+      else { return nil }
+      addresses.append(String(cString: text).split(separator: "%").first.map(String.init) ?? "")
+    }
+    return addresses.isEmpty ? nil : addresses.allSatisfy(isPublic(address:))
+  }
+
+  /// Whether a numeric address is on the public internet, not loopback, private, link-local,
+  /// shared, multicast or reserved, including IPv4 carried inside IPv6.
+  nonisolated static func isPublic(address: String) -> Bool {
+    var v4 = in_addr(), v6 = in6_addr()
+    if inet_pton(AF_INET, address, &v4) == 1 {
+      return isPublic(v4: withUnsafeBytes(of: v4) { Array($0) })
+    }
+    guard inet_pton(AF_INET6, address, &v6) == 1 else { return false }
+    let b = withUnsafeBytes(of: v6) { Array($0) }
+    if b[0..<10].allSatisfy({ $0 == 0 }), b[10] == 0xff, b[11] == 0xff { return isPublic(v4: Array(b[12...])) }
+    if b[0..<12].allSatisfy({ $0 == 0 }) { return false }
+    if b[0..<12] == [0, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0] { return isPublic(v4: Array(b[12...])) }
+    if b[0] & 0xfe == 0xfc || b[0] == 0xff || (b[0] == 0xfe && b[1] & 0x80 == 0x80) { return false }
+    return true
+  }
+
+  private nonisolated static func isPublic(v4 b: [UInt8]) -> Bool {
+    switch (b[0], b[1], b[2]) {
+    case (0, _, _), (10, _, _), (127, _, _), (169, 254, _), (192, 168, _), (192, 0, 0), (224...255, _, _): false
+    case (100, 64...127, _), (172, 16...31, _), (198, 18...19, _): false
+    default: true
+    }
+  }
+
+  private static func perform(_ request: URLRequest, redirect: String, localNetwork: Bool) async throws -> [String: Any]
   {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.httpCookieStorage = nil
@@ -83,7 +138,7 @@ import NoodletFormat
     configuration.timeoutIntervalForResource = 120
     let session = URLSession(configuration: configuration)
     defer { session.invalidateAndCancel() }
-    let delegate = RedirectPolicy(mode: redirect)
+    let delegate = RedirectPolicy(mode: redirect, localNetwork: localNetwork)
     let (bytes, response) = try await session.bytes(for: request, delegate: delegate)
     guard let response = response as? HTTPURLResponse else {
       throw AppletError("The server did not return an HTTP response.")
@@ -114,9 +169,13 @@ import NoodletFormat
   }
 }
 
-private final class RedirectPolicy: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+final class RedirectPolicy: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
   let mode: String
-  init(mode: String) { self.mode = mode }
+  let localNetwork: Bool
+  init(mode: String, localNetwork: Bool) {
+    self.mode = mode
+    self.localNetwork = localNetwork
+  }
   func urlSession(
     _ session: URLSession, task: URLSessionTask,
     willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
@@ -124,7 +183,7 @@ private final class RedirectPolicy: NSObject, URLSessionTaskDelegate, @unchecked
   ) {
     guard mode == "follow", let url = request.url,
       ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.user == nil,
-      url.password == nil
+      url.password == nil, localNetwork || url.host.flatMap(WebNetwork.isPublic(host:)) == true
     else {
       completionHandler(nil)
       return

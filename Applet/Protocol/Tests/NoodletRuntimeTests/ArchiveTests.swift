@@ -6,7 +6,8 @@ final class ArchiveTests: XCTestCase {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: url) }
-        return url
+        // As a package gives its folder: already resolved.
+        return url.resolvingSymlinksInPath()
     }
 
     /// A noodlet travels to a device as one compressed file and comes out as the same files.
@@ -39,6 +40,24 @@ final class ArchiveTests: XCTestCase {
         XCTAssertThrowsError(try NoodletArchive.extract(archive, to: destination))
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.deletingLastPathComponent()
             .appendingPathComponent("escaped.txt").path))
+    }
+
+    /// The folder is named as it was when its owner was checked. Swapped for a link since, or
+    /// moved under one, it no longer leads to the files that were checked, and nothing is read.
+    func testAFolderSwappedForALinkIsNotFollowed() throws {
+        let elsewhere = try folder()
+        try Data("secret".utf8).write(to: elsewhere.appendingPathComponent("index.html"))
+        let base = try folder()
+        let package = base.appendingPathComponent("Game.noodlet")
+        try FileManager.default.createSymbolicLink(at: package, withDestinationURL: elsewhere)
+        XCTAssertThrowsError(try NoodletArchive.write(["index.html"], from: package,
+                                                      to: try folder().appendingPathComponent("a.noodletarchive")))
+
+        let parent = base.appendingPathComponent("Games")
+        try FileManager.default.createSymbolicLink(at: parent, withDestinationURL: base.deletingLastPathComponent())
+        let moved = parent.appendingPathComponent(elsewhere.lastPathComponent)
+        XCTAssertThrowsError(try NoodletArchive.write(["index.html"], from: moved,
+                                                      to: try folder().appendingPathComponent("b.noodletarchive")))
     }
 
     func testSomethingElseIsNotReadAsAnArchive() throws {

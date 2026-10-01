@@ -44,7 +44,10 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
       store: AppletDataStore(
         dataRoot: dataRoot, account: AppletSecrets.account(package, dataRoot: dataRoot), secrets: secrets),
       dataStore: WKWebsiteDataStore(forIdentifier: storeID), frame: CGRect(origin: .zero, size: size),
-      features: ["files", "window"], log: { [log] in log.append($0, $1) }
+      features: ["files", "window"],
+      // The person agreed to what the manifest declares before this page loaded.
+      localNetwork: package.manifest.permissions?.contains("local-network") == true,
+      log: { [log] in log.append($0, $1) }
     ) { configuration in
       configuration.preferences.inactiveSchedulingPolicy = .none
       configuration.userContentController.addUserScript(WKUserScript(

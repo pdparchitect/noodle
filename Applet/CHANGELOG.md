@@ -5,6 +5,11 @@
 ### Changed
 
 - Retire the clean-up of noodlet copies from before 0.12.0 and of Swift noodlet builds from before 0.19.0. Updates already pass through both releases.
+- Any noodlet reaches the internet; `network` in noodlet.json is no longer needed. Reaching this Mac or devices on the local network, such as a TV, is the `local-network` permission, asked once like the camera and listed in Settings > Permissions. A noodlet that reached the local network with `network` declares `local-network` instead.
+
+### Fixed
+
+- A noodlet sent to a Noodle Hub device includes only the files inside it: a folder swapped for a link while it is read is refused, and its data and secrets are those of the noodlet that was checked.
 
 ## [0.20.0] - 2026-10-01
 

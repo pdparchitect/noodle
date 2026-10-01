@@ -79,6 +79,8 @@ struct NoodletDeviceScreen: View {
     @State private var failure: String?
     @State private var showsControls = true
     @State private var hardware = HardwareGamepad()
+    /// What the noodlet declares, while the person is asked about it.
+    @State private var asking: (manifest: NoodletManifest, answer: CheckedContinuation<Bool, Never>)?
 
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "NoodleMobile", category: "Noodlets")
 
@@ -135,9 +137,19 @@ struct NoodletDeviceScreen: View {
             }
         }
         .background(manifest.backgroundColor.flatMap(NoodletPage.colour).map(Color.init) ?? Color(.systemBackground))
+        .alert(asking.map { NoodletGrants.question($0.manifest) } ?? "", isPresented: .constant(asking != nil)) {
+            Button("Allow") { answer(true) }
+            Button("Don’t Allow", role: .cancel) { answer(false) }
+        }
         .task { await start() }
         .onAppear { ScreenOrientation.hold(manifest.orientation) }
-        .onDisappear { hardware.detach(); page?.stop(); ScreenOrientation.hold(nil) }
+        .onDisappear { answer(false); hardware.detach(); page?.stop(); ScreenOrientation.hold(nil) }
+    }
+
+    private func answer(_ allowed: Bool) {
+        let pending = asking
+        asking = nil
+        pending?.answer.resume(returning: allowed)
     }
 
     private func start() async {
@@ -149,12 +161,20 @@ struct NoodletDeviceScreen: View {
             // The files it came with say how it runs; the Hub's copy of the manifest only chose where.
             let manifest = try JSONDecoder().decode(NoodletManifest.self, from: Data(contentsOf: root.appendingPathComponent("noodlet.json")))
             try manifest.validate()
+            // What it declares is asked once on this phone, and kept until taken back in Settings.
+            let grants = NoodletGrants()
+            if grants.needsAsking(manifest, id: noodlet.noodletID) {
+                guard await withCheckedContinuation({ asking = (manifest, $0) }) else { return failure = NoodletGrants.refusal(manifest) }
+                grants.allow(manifest, id: noodlet.noodletID)
+            }
             let store = RemoteNoodletStore(send: { try await session.call(id: $0, offset: $1, total: $2, data: $3) },
                                            renew: { try await session.renew(after: $0) })
             let page = NoodletPage(root: root, manifest: manifest, store: store, dataStore: .nonPersistent(),
-                                   features: NoodletDeviceHost.features, log: { Self.log.notice("\($0, privacy: .public): \($1, privacy: .private)") }) {
+                                   features: NoodletDeviceHost.features,
+                                   localNetwork: manifest.permissions?.contains("local-network") == true, log: { Self.log.notice("\($0, privacy: .public): \($1, privacy: .private)") }) {
                 $0.defaultWebpagePreferences.preferredContentMode = Self.contentMode(for: manifest)
             }
+            page.declaredCapture = .grant
             host = NoodletDeviceHost(page)
             page.failed = { failure = $0; self.page = nil }
             self.page = page

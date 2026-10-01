@@ -239,15 +239,18 @@ import os
                     let computers = try hubComputers()
                     open = { (try await computers.openSurface(computer: computer, terminal: terminal, bot: bot, for: user), nil) }
                 case .noodlet(let noodlet):
-                    let applets = try hubBots().applets
+                    // Asked for the bot that shared it, Applet checks it is the bot's as it starts it.
+                    let applets = try hubBots().applets, owner = bot.uuidString.lowercased()
                     var info = AppletRequest(.info)
                     info.noodletID = noodlet
+                    info.owner = owner
                     guard try await applets.companion(info).permissions?.isEmpty != false else {
                         throw LinkError("This noodlet uses the camera, microphone or screen, so it runs on your device. Update Noodle to open it.")
                     }
                     open = {
                         var start = AppletRequest(.open)
                         start.noodletID = noodlet
+                        start.owner = owner
                         start.mode = "background"
                         let started = try await applets.companion(start)
                         guard let session = started.sessionID else {
@@ -587,10 +590,10 @@ import os
         case .noodlet(let conversationID, let attachmentID):
             let user = try user(key)
             // The same rule as watching it live: a noodlet from the folder of the bot that shared it.
-            guard case (.noodlet(let noodlet), _) = try await hubBots().companionLink(attachmentID, in: conversationID, for: user) else {
+            guard case (.noodlet(let noodlet), let bot) = try await hubBots().companionLink(attachmentID, in: conversationID, for: user) else {
                 throw LinkError("That is not a noodlet.")
             }
-            return .noodlet(try await hubNoodlets().open(noodlet, for: user.id))
+            return .noodlet(try await hubNoodlets().open(noodlet, of: bot, for: user.id))
         case .noodletArchive(let grant, let offset):
             let (data, total) = try await hubNoodlets().archive(grant, from: offset, for: try user(key).id)
             return .chunk(data: data, total: total)

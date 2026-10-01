@@ -13,6 +13,8 @@
 - Pair with a Hub whose Mac is asleep, or with Wi-Fi off: tap Help Me Connect under the message and check that Your Hub shows which ways answer and the suggestions fit, then wake the Mac or turn Wi-Fi on and tap Try Again.
 - Pair with a Hub whose Mac is asleep: the Pair button shows which Hub it is connecting to, says Still trying after a few seconds, and Cancel stops at once. Do the same from Add Hub in Profiles.
 - Turn off Local Network for Noodle in Settings and pair again: Help Me Connect asks you to turn it on, and Open Settings goes straight there.
+- Open a Hub noodlet that uses the camera or your local network: it asks once, then not again. Settings lists it; swipe it away and it asks the next time.
+- Ask a bot to share a web page as a link: it shows the page's picture, title and site, like a link in a message, and tapping it opens the page.
 
 ### Added
 
@@ -25,6 +27,8 @@
 - New Session and Kick moved from … to the bot's settings, opened by tapping its name.
 - Reactions sit on a message's top right corner, on your messages too, as on the Mac.
 - New Bot in More shows a person with a plus instead of a bare plus.
+- A web link a bot attaches shows the page's picture, title and site, like a link in a message, instead of a .webloc file.
+- A noodlet from a Hub asks once before it uses the camera, microphone or devices on your local network, such as a TV, and Settings lists what each was allowed; swipe to take it back. Any noodlet reaches the internet without asking.
 
 ### Fixed
 

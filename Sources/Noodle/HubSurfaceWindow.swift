@@ -253,11 +253,23 @@ struct HubNoodletPage: View {
             // The files it came with say how it runs; the Hub's copy of the manifest only chose where.
             let manifest = try JSONDecoder().decode(NoodletManifest.self, from: Data(contentsOf: root.appendingPathComponent("noodlet.json")))
             try manifest.validate()
+            // What it declares is asked once on this Mac, as Noodle Applet asks for its own.
+            let grants = NoodletGrants()
+            if grants.needsAsking(manifest, id: noodlet.noodletID) {
+                let alert = NSAlert()
+                alert.messageText = NoodletGrants.question(manifest)
+                alert.addButton(withTitle: "Allow")
+                alert.addButton(withTitle: "Don’t Allow")
+                guard alert.runModal() == .alertFirstButtonReturn else { return failure = NoodletGrants.refusal(manifest) }
+                grants.allow(manifest, id: noodlet.noodletID)
+            }
             let store = RemoteNoodletStore(send: { try await session.call(id: $0, offset: $1, total: $2, data: $3) },
                                            renew: { try await session.renew(after: $0) })
             let page = NoodletPage(root: root, manifest: manifest, store: store, dataStore: .nonPersistent(),
                                    features: NoodletDeviceHost.features,
+                                   localNetwork: manifest.permissions?.contains("local-network") == true,
                                    log: { Self.log.notice("\($0, privacy: .public): \($1, privacy: .private)") })
+            page.declaredCapture = .grant
             host = NoodletDeviceHost(page)
             page.failed = { failure = $0; self.page = nil }
             self.page = page

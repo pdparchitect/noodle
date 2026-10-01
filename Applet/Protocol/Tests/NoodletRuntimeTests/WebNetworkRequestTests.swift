@@ -129,21 +129,11 @@ import XCTest
 
     // MARK: - Concurrency guards
 
-    func testNetworkMustBeEnabledForTheNoodlet() async {
-        let network = WebNetwork()
-        do {
-            _ = try await network.fetch(["id": "a", "url": "https://example.com"], enabled: false)
-            XCTFail("Disabled network performed a request")
-        } catch {
-            XCTAssertTrue(error.localizedDescription.contains("network: true"), error.localizedDescription)
-        }
-    }
-
     func testAnOverlongRequestIDIsRejected() async {
         let network = WebNetwork()
         do {
             _ = try await network.fetch(
-                ["id": String(repeating: "i", count: 101), "url": "https://example.com"], enabled: true)
+                ["id": String(repeating: "i", count: 101), "url": "https://example.com"])
             XCTFail("Accepted an overlong request id")
         } catch {
             XCTAssertTrue(error.localizedDescription.contains("eight concurrent"), error.localizedDescription)
@@ -153,7 +143,7 @@ import XCTest
     func testAMissingRequestIDIsRejected() async {
         let network = WebNetwork()
         do {
-            _ = try await network.fetch(["url": "https://example.com"], enabled: true)
+            _ = try await network.fetch(["url": "https://example.com"])
             XCTFail("Accepted a request without an id")
         } catch {
             XCTAssertTrue(error.localizedDescription.contains("eight concurrent"), error.localizedDescription)

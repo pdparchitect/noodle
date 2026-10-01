@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 public struct AppletError: Error, LocalizedError, Sendable {
@@ -34,5 +35,37 @@ public enum NoodletPath {
             }
         }
         return current
+    }
+
+    /// Opens `relative` inside `root` to read it. `root` is the folder as it was when someone
+    /// checked whose it is, already resolved: one swapped for a link since, or moved under one,
+    /// opens nothing, and no link below it is followed either. Only a regular file opens.
+    public static func open(_ relative: String, in root: URL) throws -> FileHandle {
+        try validate(relative)
+        let refused = AppletError("\(relative.prefix(100)) is not a file inside the noodlet.")
+        var folder = Darwin.open(root.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard folder >= 0 else { throw refused }
+        var path = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+        // Resolving a path drops the /private that /var and /tmp lead to; the system's own links.
+        let expected = root.standardizedFileURL.path
+        guard fcntl(folder, F_GETPATH, &path) == 0, [expected, "/private" + expected].contains(String(cString: path)) else {
+            close(folder)
+            throw refused
+        }
+        let parts = relative.split(separator: "/").map(String.init)
+        for part in parts.dropLast() {
+            let next = openat(folder, part, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            close(folder)
+            guard next >= 0 else { throw refused }
+            folder = next
+        }
+        let file = openat(folder, parts.last!, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        close(folder)
+        var info = stat()
+        guard file >= 0, fstat(file, &info) == 0, info.st_mode & S_IFMT == S_IFREG else {
+            if file >= 0 { close(file) }
+            throw refused
+        }
+        return FileHandle(fileDescriptor: file, closeOnDealloc: true)
     }
 }

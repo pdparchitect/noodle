@@ -1,6 +1,7 @@
 import HubLink
 import Network
 import NoodleBrand
+import NoodletRuntime
 import PhotosUI
 import SwiftUI
 import Synchronization
@@ -815,6 +816,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(AttachmentLayout.key) private var attachmentLayout = AttachmentLayout.standard.rawValue
     @AppStorage(WebLinkPreview.key) private var previewsLinks = true
+    @State private var noodlets = NoodletGrants().all
 
     var body: some View {
         NavigationStack {
@@ -833,6 +835,21 @@ struct SettingsView: View {
                     Toggle("Preview Web Links", isOn: $previewsLinks)
                 } footer: {
                     Text("Web links open in a preview first, with a button to continue in Safari. When off, they open in Safari.")
+                }
+                if !noodlets.isEmpty {
+                    Section("Noodlet Permissions") {
+                        ForEach(noodlets) { grant in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(grant.title)
+                                Text(grant.permissions.compactMap { NoodletManifest.permissionTitles[$0] }.joined(separator: ", "))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .onDelete { rows in
+                            rows.forEach { NoodletGrants().revoke(noodlets[$0].id) }
+                            noodlets = NoodletGrants().all
+                        }
+                    }
                 }
             }
             .navigationTitle("Settings")

@@ -132,7 +132,7 @@ public enum AppletGuidance {
         Closing the running noodlet window stops its session; the conversation keeps its link.
 
         Manifest:
-        {"version":1,"title":"My creation","runtime":"html","entry":"index.html","summary":"What it does","symbol":"sparkles","network":false}
+        {"version":1,"title":"My creation","runtime":"html","entry":"index.html","summary":"What it does","symbol":"sparkles"}
         HTML can use CSS, JS, Canvas, WebGL and bundled assets. No build system is required.
         `await noodle.storage.set(key, JSON_value)` / `await noodle.storage.get(key)` persist
         small values. `noodle.data.writeText(relativePath, text)` / `readText(relativePath)`
@@ -144,8 +144,10 @@ public enum AppletGuidance {
         API keys and tokens in Applet's Keychain, separately for each noodlet; never put
         them in storage, data files or source. Missing secrets return null.
         `noodle.files.openText()` returns {name,text} or null; `saveText(name,text)` returns
-        a boolean. File dialogs require a visible window. Set network:true to enable
-        remote resources and HTTP(S) `fetch()` / `noodle.fetch()`. Requests use the native
+        a boolean. File dialogs require a visible window. The public web is always open:
+        remote resources and HTTP(S) `fetch()` / `noodle.fetch()`. This device, localhost and
+        the network it is on (a TV, a router, a home server) need the local-network permission
+        below. Requests use the native
         host outside browser CORS, return a standard Response, support AbortSignal,
         methods, headers and binary bodies (16 MiB request/response, eight concurrent,
         120-second total timeout). Supply API credentials explicitly; browser cookies
@@ -174,14 +176,14 @@ public enum AppletGuidance {
         suits it. "layout" is "desktop" (the default: a window with a pointer, which a phone
         shows at desktop width), "phone" (touch on a small screen) or "adaptive" (any size;
         prefer it). "runs" is "device" when it needs the device's own files or quick touch,
-        and "hub" when it needs the Hub's network or localhost or heavy work; leave it out
+        and "hub" when it does heavy work; leave it out
         when either works. The person can still choose. A noodlet that declares any
-        permission (camera, microphone, speech recognition, screen capture) always runs on
+        permission (camera, microphone, speech recognition, screen capture, local network) always runs on
         the device it is opened on, where those belong; the Hub never streams it. Wherever it runs, storage, data and secrets are the same, kept where the
         noodlet lives. On a phone or another Mac each storage, data and secrets call goes to
         the Hub and back, so it takes a little longer than on the Hub; batch frequent saves
         where that is natural. `noodle.features` lists what the page can use where it runs: storage,
-        data, secrets, network (with network:true), files and window. Check it before
+        data, secrets, network, local-network (once allowed), files and window. Check it before
         relying on files or window.
 
         Games played with keys declare them in an optional manifest controls object, so
@@ -219,10 +221,11 @@ public enum AppletGuidance {
         Finder Quick Look renders the noodlet with temporary preview data. Open the noodlet
         for full interaction.
 
-        To use the microphone, camera, speech recognition or screen recording, declare
-        "permissions":["microphone","camera","speech-recognition","screen-capture"]
-        (only those needed) in noodlet.json. The user is
-        asked once per noodlet before it starts, then macOS asks for Noodle Applet.
+        To use the microphone, camera, speech recognition, screen recording or the local
+        network, declare
+        "permissions":["microphone","camera","speech-recognition","screen-capture","local-network"]
+        (only those needed) in noodlet.json. The user is asked once per noodlet on the
+        device that runs it, before it starts, then macOS asks for Noodle Applet.
         A refusal fails open with permission-denied; tell the user what to allow.
         Use getUserMedia, getDisplayMedia and MediaRecorder. A new screen recording grant
         applies after Applet restarts. getDisplayMedia needs a visible, focused window and

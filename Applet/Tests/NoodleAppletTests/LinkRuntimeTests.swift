@@ -164,6 +164,31 @@ import XCTest
         status.noodletID = other.noodletID
         do { let response = await restored.handle(status, identity: identity); XCTAssertEqual(response.errorCode, "session-unavailable") }
     }
+    /// A bot's noodlet open on this Mac is the bot's session, so the Hub opening it live for that
+    /// bot joins it rather than being turned away; asked for another bot, it is refused.
+    func testTheHubOpeningABotsNoodletForTheBotJoinsItsOpenSession() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let suite = "HubOpen." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        let library = botLibrary(root: root, defaults: defaults)
+        let runtime = AppletRuntime(library: library, defaults: defaults)
+        defer { runtime.shutdown(); try? FileManager.default.removeItem(at: root); defaults.removePersistentDomain(forName: suite) }
+        var validate = AppletRequest(.validate)
+        validate.path = try botNoodlet(htmlNoodlet("Game"), named: "Game", owner: "author", root: root)
+        let registered = try await runtime.handle(validate, identity: AppletBuildIdentity.current.cliID).checked()
+        let package = try NoodletPackage(url: URL(fileURLWithPath: XCTUnwrap(registered.path)))
+        let session = try AppletSession(package: package, owner: try XCTUnwrap(library.owner(of: package.url)), mode: "background",
+                                        size: CGSize(width: 320, height: 240), root: root)
+        session.state = "running"
+        runtime.sessions[session.id] = session
+        var open = AppletRequest(.open)
+        open.noodletID = registered.noodletID; open.mode = "background"; open.owner = "author"
+        let joined = try await runtime.handle(open, identity: AppletBuildIdentity.current.hubID).checked()
+        XCTAssertEqual(joined.sessionID, session.id)
+        open.owner = "stranger"
+        let refused = await runtime.handle(open, identity: AppletBuildIdentity.current.hubID)
+        XCTAssertEqual(refused.errorCode, "session-unavailable")
+    }
     func testValidateRegistersWithoutRunningAndInfoEnforcesOwnership() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let suite = "NoodletLinkTests." + UUID().uuidString

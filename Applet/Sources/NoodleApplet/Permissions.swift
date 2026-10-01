@@ -1,20 +1,13 @@
 import AVFoundation
 import AppKit
 import AppletCore
+import NoodletRuntime
 import Speech
 
 /// Asks once per noodlet for the permissions its manifest declares, then lets
 /// macOS ask for Applet as a whole.
 @MainActor enum AppletPermissions {
-  private static let names = [
-    "microphone": "the microphone", "camera": "the camera", "speech-recognition": "speech recognition",
-    "screen-capture": "screen recording",
-  ]
-
-  static let titles = [
-    "microphone": "Microphone", "camera": "Camera", "speech-recognition": "Speech Recognition",
-    "screen-capture": "Screen Recording",
-  ]
+  static let titles = NoodletManifest.permissionTitles
   private static func key(_ package: NoodletPackage) -> String { "permissions.\(package.key)" }
 
   /// granted needs both the user's answer for this noodlet and macOS's for Applet.
@@ -32,6 +25,8 @@ import Speech
           case .notDetermined: nil
           default: false
           }
+        // macOS asks about the local network itself when a page first reaches it.
+        case "local-network": true
         // macOS does not say whether screen recording was refused or never asked.
         default: CGPreflightScreenCaptureAccess() ? true : nil
         }
@@ -67,13 +62,12 @@ import Speech
     let key = key(package)
     if !wanted.isSubset(of: Set(defaults.stringArray(forKey: key) ?? [])) {
       let alert = NSAlert()
-      alert.messageText =
-        "“\(package.manifest.title)” would like to use \(wanted.sorted().compactMap { names[$0] }.joined(separator: " and "))."
+      alert.messageText = NoodletGrants.question(package.manifest)
       alert.addButton(withTitle: "Allow")
       alert.addButton(withTitle: "Don’t Allow")
       NSApp.activate(ignoringOtherApps: true)
       guard alert.runModal() == .alertFirstButtonReturn else {
-        return "Permission was not given to use \(wanted.sorted().joined(separator: ", "))."
+        return NoodletGrants.refusal(package.manifest)
       }
       defaults.set(wanted.sorted(), forKey: key)
     }

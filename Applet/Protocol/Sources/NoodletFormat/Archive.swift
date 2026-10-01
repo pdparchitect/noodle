@@ -7,12 +7,12 @@ public enum NoodletArchive {
     static let magic = Data("NOODLET1".utf8)
     private static let piece = 1_048_576
 
-    /// Archives `names`, relative to `root`, into a new file at `destination`.
+    /// Archives `names`, relative to `root`, into a new file at `destination`. `root` is resolved
+    /// already, as `NoodletPath.open` takes it.
     public static func write(_ names: [String], from root: URL, to destination: URL) throws {
         try write(to: destination) { add in
             for name in names {
-                let url = try NoodletPath.child(name, in: root)
-                let handle = try FileHandle(forReadingFrom: url)
+                let handle = try NoodletPath.open(name, in: root)
                 defer { try? handle.close() }
                 let size = try handle.seekToEnd()
                 try handle.seek(toOffset: 0)

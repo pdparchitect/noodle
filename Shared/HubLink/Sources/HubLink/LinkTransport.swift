@@ -125,6 +125,8 @@ public final class LinkStream: @unchecked Sendable {
     public static let keepAliveInterval: TimeInterval = 10
     /// How long a closed stream waits for the device to end its side.
     static let closeGrace: TimeInterval = 5
+    /// How much a channel's client may send before anyone listens.
+    static let unreadLimit = LinkQUIC.requestLimit
 
     public let peer: LinkPublicKey
     private let connection: NWConnection
@@ -177,9 +179,17 @@ public final class LinkStream: @unchecked Sendable {
                 // Empty frames only keep the stream alive.
                 guard length > 0 else { continue }
                 guard let payload = try? await LinkQUIC.read(length, from: connection) else { break }
-                let handler = lock.withLock { () -> (@Sendable (Data) -> Void)? in
-                    if frameHandler == nil { received.append(payload) }
-                    return frameHandler
+                let (handler, overflowing) = lock.withLock { () -> ((@Sendable (Data) -> Void)?, Bool) in
+                    if frameHandler == nil {
+                        received.append(payload)
+                        return (nil, received.reduce(0) { $0 + $1.count } > Self.unreadLimit)
+                    }
+                    return (frameHandler, false)
+                }
+                if overflowing {
+                    lock.withLock { received = [] }
+                    connection.cancel()
+                    break
                 }
                 handler?(payload)
             }

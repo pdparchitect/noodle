@@ -269,6 +269,28 @@ final class LinkStreamTests: XCTestCase {
         channel.cancel()
     }
 
+    /// Nothing listening on a channel, as on a subscription, keeps what the device sends only so
+    /// far: past that the Hub ends the stream rather than hold more.
+    func testTheHubEndsAChannelWhoseUnreadFramesPileUp() async throws {
+        let hub = LinkIdentity()
+        let opened = expectation(description: "channel opened")
+        let ended = expectation(description: "channel ended")
+        let server = try LinkServer(identity: hub, port: 0, admits: { _ in true }, handler: { _, _ in
+            .stream({ stream in
+                stream.onClose { ended.fulfill() }
+                opened.fulfill()
+            })
+        })
+        try await server.start()
+        addTeardownBlock { server.stop() }
+        let channel = try await LinkClient.channel(Data(#"{"open":1}"#.utf8), identity: LinkIdentity(), hubKey: hub.publicKey,
+                                                   endpoints: [LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))])
+        defer { channel.cancel() }
+        await fulfillment(of: [opened], timeout: 5)
+        for _ in 0..<(LinkStream.unreadLimit / 100_000 + 2) { channel.send(Data(repeating: 7, count: 100_000)) }
+        await fulfillment(of: [ended], timeout: 5)
+    }
+
     /// A Hub that refuses answers once instead of opening a stream; the device hears why.
     func testARefusedChannelSaysWhy() async throws {
         let hub = LinkIdentity()

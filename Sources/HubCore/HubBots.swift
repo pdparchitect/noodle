@@ -585,9 +585,11 @@ import NoodleRuntime
             throw LinkError("That is not something this bot shared.")
         }
         if case .noodlet(let noodlet) = link {
-            // A noodlet is the bot's whose folder it came from; Applet says which folder.
+            // A noodlet is the bot's whose folder it came from; Applet says which folder, and asked
+            // for the bot, checks that too.
             var info = AppletRequest(.info)
             info.noodletID = noodlet
+            info.owner = bot.id.uuidString.lowercased()
             let workspace = repository.directory(for: bot).resolvingSymlinksInPath().standardizedFileURL.pathComponents
             let source = try await applets.companion(info).sourcePath.map {
                 URL(fileURLWithPath: $0).resolvingSymlinksInPath().standardizedFileURL.pathComponents

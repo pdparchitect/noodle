@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import CoreGraphics
 import Observation
+import NoodletRuntime
 import SwiftUI
 import UserNotifications
 import NoodleRuntimeSettings
@@ -145,6 +146,7 @@ enum ScreenRecordingAccess {
 
 struct PermissionsSettingsView: View {
     @State private var requesting: AppPermission?
+    @State private var noodlets: [NoodletGrants.Grant] = []
     private let checker: AppPermissionChecker
     private let openSettings: @MainActor (URL) -> Void
 
@@ -161,9 +163,31 @@ struct PermissionsSettingsView: View {
                     permissionRow(permission)
                 }
             }
+            if !noodlets.isEmpty {
+                Section("Hub Noodlets") {
+                    ForEach(noodlets) { grant in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(grant.title)
+                                Text(grant.permissions.compactMap { NoodletManifest.permissionTitles[$0] }.joined(separator: ", "))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Remove") {
+                                NoodletGrants().revoke(grant.id)
+                                noodlets = NoodletGrants().all
+                            }
+                            .buttonStyle(.link)
+                        }
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
-        .onAppear { checker.refresh() }
+        .onAppear {
+            checker.refresh()
+            noodlets = NoodletGrants().all
+        }
         // Returning from System Settings is when a permission most likely changed.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             checker.refresh()

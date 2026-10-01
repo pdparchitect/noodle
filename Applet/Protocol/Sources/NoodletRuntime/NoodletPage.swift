@@ -22,15 +22,15 @@ public typealias NoodletColor = UIColor
 }
 
 /// A noodlet's page in a web view confined to it: only its own folder loads, only its main page
-/// reaches the bridge, the web is closed unless its manifest opens it, and a camera or microphone
-/// is offered only when declared. Its data and secrets go to a `NoodletStore`; what depends on
+/// reaches the bridge, the public web is open but this device and its network only when allowed,
+/// and a camera or microphone is offered only when declared. Its data and secrets go to a `NoodletStore`; what depends on
 /// the app goes to its `host`.
 @MainActor public final class NoodletPage: NSObject, WKNavigationDelegate, WKUIDelegate,
     WKScriptMessageHandlerWithReply
 {
     public static let unknownOperation = AppletError("Unknown bridge operation.")
     /// What every page may use; an app adds its own, such as "files" or "window".
-    public static let commonFeatures = ["storage", "data", "secrets"]
+    public static let commonFeatures = ["storage", "data", "secrets", "network"]
 
     public let root: URL
     public let manifest: NoodletManifest
@@ -44,21 +44,25 @@ public typealias NoodletColor = UIColor
     public var failed: ((String) -> Void)?
     private let store: any NoodletStore
     private let log: (String, String) -> Void
-    private let network = WebNetwork()
+    private let network: WebNetwork
+    private let localNetwork: Bool
     private var loadContinuation: CheckedContinuation<Void, Error>?
     private var loadTimer: Task<Void, Never>?
     private var cancellations: [UUID: () -> Void] = [:]
     public private(set) var stopped = false
 
-    /// `configure` adds the app's own scripts ahead of the bridge.
+    /// `configure` adds the app's own scripts ahead of the bridge. `localNetwork` is whether the
+    /// person allowed the noodlet this device and the network it is on, as it declared.
     public init(root: URL, manifest: NoodletManifest, store: any NoodletStore, dataStore: WKWebsiteDataStore,
-                frame: CGRect = .zero, features: [String] = [], log: @escaping (String, String) -> Void,
-                configure: (WKWebViewConfiguration) -> Void = { _ in }) {
+                frame: CGRect = .zero, features: [String] = [], localNetwork: Bool = false,
+                log: @escaping (String, String) -> Void, configure: (WKWebViewConfiguration) -> Void = { _ in }) {
         self.root = root.standardizedFileURL
         self.manifest = manifest
         self.store = store
+        network = WebNetwork(localNetwork: localNetwork)
+        self.localNetwork = localNetwork
         self.log = log
-        self.features = Self.commonFeatures + (manifest.network ? ["network"] : []) + features
+        self.features = Self.commonFeatures + (localNetwork ? ["local-network"] : []) + features
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = dataStore
         configure(configuration)
@@ -150,14 +154,11 @@ public typealias NoodletColor = UIColor
         return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     }()
 
-    static let closedWebRules =
-        "[{\"trigger\":{\"url-filter\":\"^https?://\"},\"action\":{\"type\":\"block\"}},{\"trigger\":{\"url-filter\":\"^wss?://\"},\"action\":{\"type\":\"block\"}}]"
-
     /// Loads the entry page, returning once it has.
     public func load() async throws {
-        if !manifest.network {
+        if !localNetwork {
             let list = try await WKContentRuleListStore.default().compileContentRuleList(
-                forIdentifier: "noodlet-local-v1", encodedContentRuleList: Self.closedWebRules)
+                forIdentifier: "noodlet-local-network-v1", encodedContentRuleList: NoodletManifest.localNetworkRules)
             if let list { web.configuration.userContentController.add(list) }
         }
         let entry = try NoodletPath.child(manifest.entry, in: root)
@@ -270,7 +271,7 @@ public typealias NoodletColor = UIColor
         do {
             switch operation {
             case "fetch":
-                return (try await network.fetch(body, enabled: manifest.network), nil)
+                return (try await network.fetch(body), nil)
             case "cancelFetch":
                 if let id = body["id"] as? String { network.cancel(id) }
                 return (true, nil)

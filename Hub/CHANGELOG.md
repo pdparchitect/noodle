@@ -11,6 +11,12 @@
 
 - Network is laid out like This Mac in Noodle's Hub settings, with Add Remote Address in the list instead of at the bottom of the window.
 - Retire naming each bot's owner in its files when the Hub opens, which bots from before 0.6.0 needed. Updates already pass through 0.6.0.
+- A noodlet that asks for the local network runs on the device that opens it, which asks the person first; the Hub never streams it.
+
+### Fixed
+
+- A paired device can no longer fill the Hub's memory by sending on a live view or update stream: the Hub closes a stream that sends more than it reads.
+- A noodlet a device opens or watches live is checked by Noodle Applet too as the sharing bot's own, as it reads its files, data and secrets, so a bot cannot swap in another bot's noodlet after the Hub's check. Update Noodle Applet as well.
 
 ## [0.12.0] - 2026-10-01
 

@@ -21,9 +21,12 @@ import XCTest
         /// What a noodlet's files archive to, larger than one piece.
         let archive = Data((0..<1_500_000).map { UInt8(truncatingIfNeeded: $0) })
         private(set) var calls: [(UUID?, NoodletStoreCall)] = []
+        /// Whom each request was made for, in order.
+        private(set) var asked: [(AppletOperation, String?)] = []
 
         func call(_ request: AppletRequest) -> AppletResponse {
             lock.withLock {
+                asked.append((request.operation, request.owner))
                 var response = AppletResponse()
                 switch request.operation {
                 case .archive:
@@ -244,6 +247,34 @@ import XCTest
         XCTAssertEqual(try JSONDecoder().decode(NoodletValue.self, from: answer), .text("kept"))
         XCTAssertEqual(f.applet.calls.map(\.0), [noodlet])
         XCTAssertEqual(f.applet.calls.map(\.1), [NoodletStoreCall(operation: "write", path: "a.txt", text: String(repeating: "x", count: 10))])
+    }
+
+    /// Watching live, too, Applet checks the noodlet is the bot's as it starts it.
+    func testTheHubStartsALiveNoodletAsTheBotThatSharedIt() async throws {
+        let f = try await fixture()
+        let bot = try f.hub.bots.create(LinkBotDraft(name: "Alfred", provider: "claude-code"), for: f.ada)
+        let link = try post(made(in: folder(of: bot, f), f), in: bot, byBot: true, hub: f.hub)
+        let (channel, _) = try await f.device.firstSurfacePackets(.openSurface(conversationID: bot.conversationID, attachmentID: link))
+        channel.cancel()
+        let asked = f.applet.asked.filter { [.info, .open].contains($0.0) }
+        XCTAssertEqual(asked.map(\.0), [.info, .info, .open])
+        XCTAssertEqual(asked.map(\.1), Array(repeating: bot.id.uuidString.lowercased(), count: 3))
+    }
+
+    /// Applet checks too that the noodlet is the bot's, as it reads it: the Hub asks for its files
+    /// and data as the bot that shared it, never as the Mac's own person.
+    func testTheHubAsksForANoodletAsTheBotThatSharedIt() async throws {
+        let f = try await fixture()
+        let bot = try f.hub.bots.create(LinkBotDraft(name: "Alfred", provider: "claude-code"), for: f.ada)
+        let link = try post(made(in: folder(of: bot, f), f), in: bot, byBot: true, hub: f.hub)
+        guard case .noodlet(let readied) = try await f.device.request(.noodlet(conversationID: bot.conversationID, attachmentID: link))
+        else { return XCTFail("no noodlet") }
+        _ = try await f.device.request(.noodletArchive(grant: readied.grant, offset: 0))
+        let call = try JSONEncoder().encode(NoodletStoreCall(operation: "read", path: "a.txt"))
+        _ = try await f.device.request(.noodletCall(LinkNoodletCall(grant: readied.grant, id: UUID(), offset: 0, total: call.count, data: call)))
+        let asked = f.applet.asked.filter { [.info, .archive, .artifact, .store].contains($0.0) }
+        XCTAssertEqual(asked.map(\.0), [.info, .archive, .artifact, .store])
+        XCTAssertEqual(asked.map(\.1), Array(repeating: bot.id.uuidString.lowercased(), count: 4))
     }
 
     /// What one person's device readied is theirs alone; another user's device holding its grant gets nothing.

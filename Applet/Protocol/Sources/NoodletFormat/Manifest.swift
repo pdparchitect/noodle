@@ -8,7 +8,6 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
   public var entry: String
   public var summary: String?
   public var symbol: String?
-  public var network: Bool
   public var window: NoodletWindowOptions?
   /// Protected resources the user is asked about before the noodlet starts.
   public var permissions: [String]?
@@ -55,17 +54,40 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
   public enum Placement: String, Codable, Sendable, CaseIterable {
     /// On the device it is opened on, such as a noodlet that picks the phone's files or uses its camera.
     case device
-    /// On the Hub that keeps it, shown live, such as one that reaches the Hub's own network.
+    /// On the Hub that keeps it, shown live, such as one that does heavy work.
     case hub
   }
   public static let knownCategories = [
     "games", "productivity", "utilities", "developer", "data",
     "creativity", "media", "writing", "learning", "lifestyle",
   ]
-  public static let knownPermissions = ["microphone", "camera", "speech-recognition", "screen-capture"]
+  public static let knownPermissions = ["microphone", "camera", "speech-recognition", "screen-capture", "local-network"]
+  /// Each permission as a question names it.
+  public static let permissionNames = [
+    "microphone": "the microphone", "camera": "the camera", "speech-recognition": "speech recognition",
+    "screen-capture": "screen recording", "local-network": "devices on your local network",
+  ]
+  /// Each permission as a list of them shows it.
+  public static let permissionTitles = [
+    "microphone": "Microphone", "camera": "Camera", "speech-recognition": "Speech Recognition",
+    "screen-capture": "Screen Recording", "local-network": "Local Network",
+  ]
+  /// Content rules that keep a page's own loads off the device it runs on and the network it is
+  /// on, for one not allowed local-network. They match the address as written, after WebKit
+  /// writes an IPv4 address the usual way; a name for a local address gets past them.
+  public static let localNetworkRules: String = {
+    let hosts = [
+      "localhost[:/]", "[^/]*\\.localhost[:/]", "[^/]*\\.local[:/]", "[^/]*@", "\\[",
+      "127\\.", "10\\.", "0\\.", "192\\.168\\.", "169\\.254\\.", "172\\.1[6-9]\\.", "172\\.2[0-9]\\.", "172\\.3[01]\\.",
+      "100\\.6[4-9]\\.", "100\\.[7-9][0-9]\\.", "100\\.1[01][0-9]\\.", "100\\.12[0-7]\\.", "198\\.1[89]\\.",
+      "22[4-9]\\.", "2[3-5][0-9]\\.",
+    ]
+    let rules = hosts.map { ["trigger": ["url-filter": "^[a-z]+://" + $0], "action": ["type": "block"]] }
+    return String(decoding: try! JSONSerialization.data(withJSONObject: rules), as: UTF8.self)
+  }()
   public init(
     title: String, runtime: String = "html", entry: String = "index.html",
-    summary: String? = nil, symbol: String? = nil, network: Bool = false
+    summary: String? = nil, symbol: String? = nil
   ) {
     version = 1
     self.title = title
@@ -73,10 +95,9 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
     self.entry = entry
     self.summary = summary
     self.symbol = symbol
-    self.network = network
   }
   enum CodingKeys: String, CodingKey {
-    case version, title, runtime, entry, summary, symbol, network, window, permissions, category, controls, layout, runs, theme
+    case version, title, runtime, entry, summary, symbol, window, permissions, category, controls, layout, runs, theme
     case display, orientation, backgroundColor
   }
   public init(from decoder: Decoder) throws {
@@ -87,7 +108,6 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
     entry = try c.decode(String.self, forKey: .entry)
     summary = try c.decodeIfPresent(String.self, forKey: .summary)
     symbol = try c.decodeIfPresent(String.self, forKey: .symbol)
-    network = try c.decodeIfPresent(Bool.self, forKey: .network) ?? false
     window = try c.decodeIfPresent(NoodletWindowOptions.self, forKey: .window)
     permissions = try c.decodeIfPresent([String].self, forKey: .permissions)
     category = try c.decodeIfPresent(String.self, forKey: .category)

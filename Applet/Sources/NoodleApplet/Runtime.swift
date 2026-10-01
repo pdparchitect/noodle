@@ -165,8 +165,10 @@ import NoodletRuntime
         [AppletBuildIdentity.current.noodleID, AppletBuildIdentity.current.hubID].contains(identity)
         ? (request.owner ?? "local") : "local"
       request.owner = owner
+      var named: NoodletPackage?
       if let id = request.noodletID {
         let package = try library.package(for: id)
+        named = package
         guard owner == "local" || belongs(package, owner: owner) else {
           throw AppletError("This noodlet is unavailable to this caller.", code: "session-unavailable")
         }
@@ -182,8 +184,9 @@ import NoodletRuntime
         request.path = package.url.path
         request.noodletID = nil
       }
-      if [.archive, .store].contains(request.operation), let path = request.path {
-        let package = try NoodletPackage(url: URL(fileURLWithPath: path))
+      // The package whose owner was just checked, not its path resolved again: a link swapped in
+      // since would lead to another's files, data and secrets.
+      if [.archive, .store].contains(request.operation), let package = named {
         var response = AppletResponse()
         if let call = request.store {
           let data = try AppletSession.dataRoot(of: package, test: false, root: library.root)

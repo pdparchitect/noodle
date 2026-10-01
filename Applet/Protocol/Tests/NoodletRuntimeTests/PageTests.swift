@@ -31,7 +31,7 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
 }
 
 @MainActor final class PageTests: XCTestCase {
-    private func page(network: Bool = false, theme: NoodletManifest.Theme? = nil, features: [String] = [],
+    private func page(localNetwork: Bool = false, theme: NoodletManifest.Theme? = nil, features: [String] = [],
                       files: [String: String] = [:], shape: (inout NoodletManifest) -> Void = { _ in }) throws -> (NoodletPage, MemoryStore, URL) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".noodlet")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -39,11 +39,11 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
         let store = MemoryStore()
         var manifest = NoodletManifest(title: "Page")
-        manifest.network = network
         manifest.theme = theme
         shape(&manifest)
         let page = NoodletPage(root: root, manifest: manifest, store: store, dataStore: .nonPersistent(),
-                               frame: CGRect(x: 0, y: 0, width: 320, height: 240), features: features) { _, _ in }
+                               frame: CGRect(x: 0, y: 0, width: 320, height: 240), features: features,
+                               localNetwork: localNetwork) { _, _ in }
         addTeardownBlock { await MainActor.run { page.stop() } }
         return (page, store, root)
     }
@@ -101,8 +101,9 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
     }
 
     func testFeaturesSayWhatThePageCanUse() throws {
-        XCTAssertEqual(try page().0.features, ["storage", "data", "secrets"])
-        XCTAssertEqual(try page(network: true, features: ["files"]).0.features, ["storage", "data", "secrets", "network", "files"])
+        XCTAssertEqual(try page().0.features, ["storage", "data", "secrets", "network"])
+        XCTAssertEqual(try page(localNetwork: true, features: ["files"]).0.features,
+                       ["storage", "data", "secrets", "network", "local-network", "files"])
     }
 
     /// The page itself: the bridge script installs `noodle`, which lists its features and keeps data in the store.
@@ -110,17 +111,10 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         let (page, store, _) = try page(features: ["files"], files: ["index.html": "<title>Page</title>"])
         try await page.load()
         let features = try await page.evaluate("return noodle.features")
-        XCTAssertEqual(features, #"["storage","data","secrets","files"]"#)
+        XCTAssertEqual(features, #"["storage","data","secrets","network","files"]"#)
         let score = try await page.evaluate("await noodle.storage.set('score', {best: 3}); return await noodle.storage.get('score')")
         XCTAssertEqual(score, #"{"best":3}"#)
         XCTAssertEqual(store.calls.map(\.operation), ["write", "read"])
-    }
-
-    func testTheWebStaysClosedUnlessTheManifestOpensIt() async throws {
-        let (page, _, _) = try page(files: ["index.html": "<title>Page</title>"])
-        try await page.load()
-        let answer = await page.handleBridge(operation: "fetch", body: ["id": "one", "url": "https://example.com"])
-        XCTAssertEqual(answer.1, "Set network: true in noodlet.json to make web requests.")
     }
 
     /// A noodlet made for one look keeps it whatever the device's appearance; without a theme it

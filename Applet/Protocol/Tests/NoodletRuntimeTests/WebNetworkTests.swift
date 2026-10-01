@@ -14,9 +14,5 @@ final class WebNetworkTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField:"Authorization"), "Bearer test")
         XCTAssertNil(request.value(forHTTPHeaderField:"Content-Length"))
         XCTAssertFalse(request.httpShouldHandleCookies)
-        do {
-            _ = try await WebNetwork().fetch(["url":"http://127.0.0.1", "id":"test"], enabled:false)
-            XCTFail("Network-disabled noodlets must fail before making a request")
-        } catch { XCTAssertTrue(error.localizedDescription.contains("network: true")) }
     }
 }

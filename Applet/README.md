@@ -57,8 +57,9 @@ Bots and terminal users can run `noodlet --help` to list the commands.
 
 ## Permissions and privacy
 
-A noodlet that needs the microphone, camera, speech recognition or screen capture
-asks you once before it starts, and then macOS asks for Noodle Applet as a whole.
+Any noodlet can reach the internet. One that needs the microphone, camera, speech
+recognition, screen capture or devices on your local network, such as a TV or a
+router, asks you once before it starts, and then macOS asks for Noodle Applet as a whole.
 If you decline, the noodlet does not open. A new screen recording grant takes
 effect after Applet restarts.
 

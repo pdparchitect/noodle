@@ -46,13 +46,10 @@ final class NoodletPreviewController: NSViewController, @preconcurrency QLPrevie
       }
       Task { [weak self, weak web] in
         do {
-          if !package.manifest.network {
-            let rules =
-              "[{\"trigger\":{\"url-filter\":\"^https?://\"},\"action\":{\"type\":\"block\"}},{\"trigger\":{\"url-filter\":\"^wss?://\"},\"action\":{\"type\":\"block\"}}]"
-            let list = try await WKContentRuleListStore.default().compileContentRuleList(
-              forIdentifier: "noodlet-preview-local-v1", encodedContentRuleList: rules)
-            if let list { web?.configuration.userContentController.add(list) }
-          }
+          // A preview asks for nothing, so it never reaches this Mac or the network it is on.
+          let list = try await WKContentRuleListStore.default().compileContentRuleList(
+            forIdentifier: "noodlet-preview-local-network-v1", encodedContentRuleList: NoodletManifest.localNetworkRules)
+          if let list { web?.configuration.userContentController.add(list) }
           web?.loadFileURL(
             try NoodletPath.child(package.manifest.entry, in: package.url),
             allowingReadAccessTo: package.url)

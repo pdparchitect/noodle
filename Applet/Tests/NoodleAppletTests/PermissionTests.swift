@@ -18,6 +18,23 @@ import XCTest
         XCTAssertThrowsError(try manifest(#"["contacts"]"#))
     }
 
+    /// The network a Mac is on is asked for once per noodlet like the camera, kept, and listed in
+    /// Settings to take back; macOS has nothing of its own to say about it.
+    func testLocalNetworkIsGrantedOnceAllowedAndListedByName() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let suite = "AppletPermissions." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { try? FileManager.default.removeItem(at: root); defaults.removePersistentDomain(forName: suite) }
+        let package = try NoodletPackage.install([
+            "noodlet.json": Data(#"{"title":"Remote","runtime":"html","entry":"index.html","permissions":["local-network"]}"#.utf8),
+            "index.html": Data("fixture".utf8),
+        ], to: root.appendingPathComponent("Remote.noodlet"))
+        XCTAssertEqual(AppletPermissions.status(package, defaults: defaults), ["local-network": "not-requested"])
+        defaults.set(["local-network"], forKey: "permissions.\(package.key)")
+        XCTAssertEqual(AppletPermissions.status(package, defaults: defaults), ["local-network": "granted"])
+        XCTAssertEqual(AppletPermissions.titles["local-network"], "Local Network")
+    }
+
     func testManifestAcceptsKnownCategoriesOnly() throws {
         func manifest(_ category: String) throws -> NoodletManifest {
             let manifest = try JSONDecoder().decode(NoodletManifest.self, from: Data(
