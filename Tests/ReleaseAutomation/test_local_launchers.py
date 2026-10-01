@@ -67,16 +67,20 @@ print(os.environ['FIXTURE_INSTALLED_APP'])
                 self.assertEqual((fields[container], fields[5]), ('development', app_name))
                 self.assertEqual(result.returncode, 0 if expected_id == produced_id else 1, result.stderr)
             self.assertEqual(open_log.exists(), not refused and expected_id == produced_id)
-            # What was opened is brought forward, whoever started the launcher.
-            self.assertEqual(activate_log.exists(), open_log.exists())
-            if activate_log.exists():
-                self.assertEqual(activate_log.read_text().strip(), f'-e tell application id "{expected_id}" to activate')
+            if open_log.exists():
+                # AppKit opens any argument that is not a flag as a file, and then no window.
+                self.assertTrue(all(word.startswith('-') for word in open_log.read_text().split()[2:]))
             installs = app_name == 'Computer' and not refused and expected_id == produced_id
             self.assertEqual(install_log.exists(), installs)
+            # What was opened is brought forward, by its path, whoever started the launcher.
+            self.assertEqual(activate_log.exists(), open_log.exists())
+            if activate_log.exists():
+                self.assertEqual(activate_log.read_text().strip(),
+                                 f'-e tell application "{installed if installs else app}" to activate')
             if open_log.exists():
                 opened = str(installed if installs else app)
                 if '--rehearse' in arguments:
-                    opened += ' --args --rehearse -Noodle.firstBotSetup.dismissed NO -ApplePersistenceIgnoreState YES'
+                    opened += ' --args --rehearse'
                 self.assertEqual(open_log.read_text().strip(), opened)
             return result
 

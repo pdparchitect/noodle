@@ -29,12 +29,12 @@ app="$(zsh "$project_root/scripts/xcode-build.sh" "$app_name")"
 }
 if [[ "$app_name" == Computer ]]; then app="$(python3 "$project_root/scripts/install-computer-dev.py" "$app")"; fi
 if [[ "$rehearse" == true ]]; then
-    # Set up afresh even if you chose Not Now in your own data, and open windows as on a first launch
-    # rather than as your last session left them.
-    open "$app" --args --rehearse -Noodle.firstBotSetup.dismissed NO -ApplePersistenceIgnoreState YES
+    # Only flags: AppKit takes any other argument as a file to open, and then opens no window.
+    open "$app" --args --rehearse
 else
     open "$app"
 fi
 # Started from a menu bar launcher, which is not the active app, macOS opens it behind the others.
-osascript -e "tell application id \"$bundle\" to activate" >/dev/null 2>&1 || true
+# Named by path: by bundle identifier, AppleScript can pick the released Noodle instead.
+osascript -e "tell application \"$app\" to activate" >/dev/null 2>&1 || true
 print "Built and launched $app"

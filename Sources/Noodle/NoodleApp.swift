@@ -81,6 +81,17 @@ struct NoodleApp: App {
         let applicationSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         if LaunchChecks.current.contains(DevelopmentHook.rehearse) {
             do { try Rehearsal.begin(in: applicationSupport) } catch { fatalError("Could not start the rehearsal: \(error)") }
+            // As on a first launch: the welcome is offered even after Not Now, and windows open
+            // where a first launch puts them, not where the last session left them.
+            UserDefaults.standard.removeObject(forKey: FirstBotSetup.dismissedKey)
+            // Set here, for this run only: as a launch argument its value would be opened as a file.
+            UserDefaults.standard.setVolatileDomain(
+                UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
+                    .merging(["ApplePersistenceIgnoreState": true]) { $1 },
+                forName: UserDefaults.argumentDomain)
+            for key in UserDefaults.standard.dictionaryRepresentation().keys where key.hasPrefix("NSWindow Frame ") {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
         } else {
             Rehearsal.end(in: applicationSupport)
         }
@@ -102,6 +113,8 @@ struct NoodleApp: App {
         .defaultSize(width: 1160, height: 810)
         // Until the person moves it, which macOS then restores.
         .defaultWindowPlacement { _, _ in WindowPlacement(.center) }
+        // Even when the last session ended with it closed, or Noodle would open to nothing but its Dock icon.
+        .defaultLaunchBehavior(.presented)
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {

@@ -18,6 +18,7 @@ All notable changes to Noodle are documented here, following
 
 - Cancelling a sign-in while setting up a first bot, or a sign-in check that failed, no longer leaves the account on Checking… with Continue disabled.
 - Checking a ChatGPT sign-in on a Mac that has never run Codex no longer fails with "The harness stopped before setup completed."
+- Noodle opens its window at launch even when it was closed when you last quit, instead of showing only its Dock icon until clicked.
 
 ## [0.39.0] - 2026-10-01
 
