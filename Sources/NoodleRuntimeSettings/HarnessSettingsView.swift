@@ -199,12 +199,13 @@ public struct HarnessInstallationRow: View {
                             Text(guide.instructions).font(.caption).foregroundStyle(.secondary)
                             if let command = guide.command {
                                 HarnessCommandView(command: command)
-                                Button("Open Terminal") { openTerminal() }
-                                    .buttonStyle(.link)
                             }
                             HStack {
+                                if guide.command != nil {
+                                    Button("Open Terminal") { openTerminal() }
+                                        .buttonStyle(.link)
+                                }
                                 Link("Installation Guide", destination: guide.documentationURL)
-                                Spacer()
                                 Button("Check Installation") {
                                     hasCheckedInstallation = true
                                     install()
