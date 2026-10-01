@@ -1060,6 +1060,10 @@ struct ConversationScrolling: ViewModifier {
 struct ChatView: View {
     /// The height of a one-line message field, which the buttons beside it match.
     static let controlHeight: CGFloat = 48
+
+    /// How far the composer's bottom sits above the screen's, given the home bar's room under it, none
+    /// with the keyboard up: as low as the system's search field, partly over the home bar.
+    static func composerGap(homeBar: CGFloat) -> CGFloat { max(8, homeBar - 6) }
     let chats: HubChats
     let threadID: UUID
     @AppStorage(WebLinkPreview.key) private var previewsLinks = true
@@ -1087,6 +1091,8 @@ struct ChatView: View {
     @State private var attaching = false
     @Namespace private var attachGlass
     @State private var recorder: VoiceRecorder
+    /// The home bar's room under the composer, none with the keyboard up.
+    @State private var homeBar: CGFloat = 0
     @Environment(\.dismiss) private var dismiss
 
     init(chats: HubChats, threadID: UUID) {
@@ -1150,8 +1156,13 @@ struct ChatView: View {
         }
         // The conversation keeps room for a one-line composer at its end. A longer message grows the
         // composer over the conversation, as in Messages, instead of moving it.
-        .safeAreaInset(edge: .bottom) { Color.clear.frame(height: Self.controlHeight + 16) }
-        .overlay(alignment: .bottom) { composer }
+        .safeAreaInset(edge: .bottom) { Color.clear.frame(height: Self.controlHeight + 8 + Self.composerGap(homeBar: homeBar) - homeBar) }
+        .overlay(alignment: .bottom) {
+            composer
+                .padding(.bottom, Self.composerGap(homeBar: homeBar))
+                .ignoresSafeArea(.container, edges: .bottom)
+                .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { homeBar = $0 }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -1260,7 +1271,7 @@ struct ChatView: View {
                 messageComposer
             }
         }
-        .padding(.horizontal, 12).padding(.vertical, 8)
+        .padding(.horizontal, 12).padding(.top, 8)
         // No bar behind the composer: the conversation's background runs to the bottom, as in Messages.
         .onDisappear { Task { await recorder.discard() } }
     }

@@ -1028,6 +1028,43 @@ private actor RecordedSubscriptions: PushSubscriptions {
         #expect(conversation.contentOffset.y == offset)
     }
 
+    /// The message field sits as low as the bots list's search field, and the conversation still ends
+    /// 16 points above it.
+    @Test func theComposerSitsAsLowAsSearch() async throws {
+        let hub = FakeHub()
+        for index in 1..<40 { await hub.botSays(String(repeating: "Message \(index) says something. ", count: 1 + index % 4)) }
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+        let scene = try #require(UIApplication.shared.connectedScenes.lazy.compactMap { $0 as? UIWindowScene }.first)
+
+        let list = UIWindow(windowScene: scene)
+        list.rootViewController = UIHostingController(rootView: NavigationStack {
+            List { Text("Bot") }.listStyle(.plain).searchable(text: .constant(""), prompt: "Search")
+        })
+        list.isHidden = false
+        try await Task.sleep(for: .seconds(1))
+        let search = try #require(Self.view(UISearchTextField.self, in: list) { _ in true })
+        let capsule = try #require(sequence(first: search as UIView, next: \.superview).first { $0.bounds.height > search.bounds.height })
+        let searchBottom = capsule.convert(capsule.bounds, to: list).maxY
+        list.isHidden = true
+
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = UIHostingController(rootView: NavigationStack { ChatView(chats: chats, threadID: scout.id) })
+        window.isHidden = false
+        defer { window.isHidden = true }
+        try await Task.sleep(for: .seconds(1))
+        let conversation = try #require(Self.view(UIScrollView.self, in: window) { !($0 is UITextView) && $0.contentSize.height > window.bounds.height })
+        let field = try #require(Self.view(PastingTextView.self, in: window) { _ in true })
+        // The text sits 13 points inside the glass around it.
+        let fieldBottom = field.convert(field.bounds, to: window).maxY + 13
+        let end = conversation.convert(conversation.bounds, to: window).maxY - conversation.adjustedContentInset.bottom
+
+        #expect(abs(fieldBottom - searchBottom) < 1)
+        #expect(abs(fieldBottom - ChatView.controlHeight - end - 16) < 1)
+    }
+
     private static func view<V: UIView>(_ type: V.Type, in view: UIView, where test: (V) -> Bool) -> V? {
         if let match = view as? V, test(match) { return match }
         for subview in view.subviews { if let match = self.view(type, in: subview, where: test) { return match } }
