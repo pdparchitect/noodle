@@ -64,18 +64,33 @@ import XCTest
     /// A device's page keeps the same data and secrets as the noodlet has on this Mac.
     func testTheHubReachesTheNoodletsOwnDataAndSecrets() async throws {
         let (id, package) = try await noodlet(try htmlNoodlet("Pocket"))
-        let wrote = try await store(id, NoodletStoreCall(operation: "write", path: "notes/a.txt", text: "hello"))
+        let hello = Data("hello".utf8).base64EncodedString()
+        let wrote = try await store(id, NoodletStoreCall(operation: "write", path: "notes/a.txt", data: hello))
         XCTAssertEqual(wrote, .bool(true))
         let data = root.appendingPathComponent("Data/\(package.key)/User/notes/a.txt")
         XCTAssertEqual(try String(contentsOf: data, encoding: .utf8), "hello")
         let read = try await store(id, NoodletStoreCall(operation: "read", path: "notes/a.txt"))
-        XCTAssertEqual(read, .text("hello"))
+        XCTAssertEqual(read, .text(hello))
+        // Bytes come back as they went, not as text.
+        let bytes = Data([0, 255, 10, 13, 128]).base64EncodedString()
+        _ = try await store(id, NoodletStoreCall(operation: "write", path: "blob.bin", data: bytes))
+        let readBytes = try await store(id, NoodletStoreCall(operation: "read", path: "blob.bin"))
+        XCTAssertEqual(readBytes, .text(bytes))
+        guard case .entries(let listed)? = try await store(id, NoodletStoreCall(operation: "list", path: "notes/")) else {
+            return XCTFail("list did not answer entries")
+        }
+        XCTAssertEqual(listed.map(\.path), ["notes/a.txt"])
+        XCTAssertEqual(listed.map(\.size), [5])
+        guard case .entries(let all)? = try await store(id, NoodletStoreCall(operation: "list")) else {
+            return XCTFail("list did not answer entries")
+        }
+        XCTAssertEqual(all.map(\.path), ["blob.bin", "notes/a.txt"])
         let set = try await store(id, NoodletStoreCall(operation: "secret", action: "set", name: "token", value: "t"))
         XCTAssertEqual(set, .bool(true))
         XCTAssertEqual(secrets.names(), ["\(package.key).user": ["token"]])
         var escape = AppletRequest(.store)
         escape.noodletID = id
-        escape.store = NoodletStoreCall(operation: "write", path: "../../x.txt", text: "x")
+        escape.store = NoodletStoreCall(operation: "write", path: "../../x.txt", data: "eA==")
         let escaped = await runtime.handle(escape, identity: hub)
         XCTAssertNotNil(escaped.error)
     }

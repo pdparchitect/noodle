@@ -236,7 +236,7 @@ import XCTest
         }
         XCTAssertEqual(files, f.applet.archive)
 
-        let call = try JSONEncoder().encode(NoodletStoreCall(operation: "write", path: "a.txt", text: String(repeating: "x", count: 10)))
+        let call = try JSONEncoder().encode(NoodletStoreCall(operation: "write", path: "a.txt", data: String(repeating: "x", count: 10)))
         let id = UUID(), half = call.count / 2
         let first = try await f.device.request(.noodletCall(LinkNoodletCall(grant: readied.grant, id: id, offset: 0, total: call.count,
                                                                             data: call.prefix(half))))
@@ -246,7 +246,7 @@ import XCTest
         guard case .noodletAnswer(let answer) = last else { return XCTFail("no answer") }
         XCTAssertEqual(try JSONDecoder().decode(NoodletValue.self, from: answer), .text("kept"))
         XCTAssertEqual(f.applet.calls.map(\.0), [noodlet])
-        XCTAssertEqual(f.applet.calls.map(\.1), [NoodletStoreCall(operation: "write", path: "a.txt", text: String(repeating: "x", count: 10))])
+        XCTAssertEqual(f.applet.calls.map(\.1), [NoodletStoreCall(operation: "write", path: "a.txt", data: String(repeating: "x", count: 10))])
     }
 
     /// Watching live, too, Applet checks the noodlet is the bot's as it starts it.

@@ -10,7 +10,7 @@ final class RemoteTests: XCTestCase {
             pieces.append((id, offset, total, piece))
             let whole = pieces.filter { $0.0 == id }.reduce(Data()) { $0 + $1.3 }
             guard whole.count == total, let call = try? JSONDecoder().decode(NoodletStoreCall.self, from: whole) else { return nil }
-            return try? JSONEncoder().encode(NoodletValue.text(call.text ?? call.operation))
+            return try? JSONEncoder().encode(NoodletValue.text(call.data ?? call.operation))
         }
     }
 
@@ -19,7 +19,7 @@ final class RemoteTests: XCTestCase {
         let wire = Wire()
         let store = RemoteNoodletStore { await wire.take($0, $1, $2, $3) }
         let text = String(repeating: "é", count: 700_000)
-        let answer = try await store.perform(NoodletStoreCall(operation: "write", path: "a.txt", text: text))
+        let answer = try await store.perform(NoodletStoreCall(operation: "write", path: "a.txt", data: text))
         XCTAssertEqual(answer, .text(text))
         let pieces = await wire.pieces
         XCTAssertEqual(pieces.count, 3)
@@ -39,7 +39,7 @@ final class RemoteTests: XCTestCase {
             return await wire.take(id, offset, total, piece)
         }, renew: { ($0 as? AppletError)?.message == "forgotten" })
         let text = String(repeating: "a", count: RemoteNoodletStore.pieceSize + 10)
-        let answer = try await store.perform(NoodletStoreCall(operation: "write", path: "a.txt", text: text))
+        let answer = try await store.perform(NoodletStoreCall(operation: "write", path: "a.txt", data: text))
         XCTAssertEqual(answer, .text(text))
         let pieces = await wire.pieces
         XCTAssertEqual(pieces.map(\.1), [0, 0, RemoteNoodletStore.pieceSize])

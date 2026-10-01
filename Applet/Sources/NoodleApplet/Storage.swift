@@ -46,18 +46,48 @@ struct AppletDataStore: NoodletStore {
     if call.operation == "secret" {
       return try secrets.perform(call.action ?? "", name: call.name, value: call.value, account: account)
     }
+    if call.operation == "list" { return .entries(list(prefix: call.path ?? "")) }
     guard let path = call.path else { throw AppletError("A relative data path is required.") }
     let file = try NoodletPath.child(path, in: dataRoot)
+    let limit = NoodletStoreCall.fileLimit
     if call.operation == "read" {
       guard FileManager.default.fileExists(atPath: file.path) else { return .null }
-      guard try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0 <= 4 * 1_048_576 else {
-        throw AppletError("Data file exceeds 4 MiB.")
+      guard try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0 <= limit else {
+        throw AppletError("Data file exceeds 16 MiB.")
       }
-      return .text(try String(contentsOf: file, encoding: .utf8))
+      return .text(try Data(contentsOf: file).base64EncodedString())
     }
-    guard let text = call.text, text.utf8.count <= 4 * 1_048_576 else { throw AppletError("Text must fit in 4 MiB.") }
+    guard call.operation == "write" else { throw AppletError("Unknown data operation.") }
+    // Base64 is a third larger than the bytes it carries.
+    guard let encoded = call.data, encoded.utf8.count <= (limit / 3 + 1) * 4, let bytes = Data(base64Encoded: encoded)
+    else { throw AppletError("Data must be base64 within 16 MiB.") }
+    guard bytes.count <= limit else { throw AppletError("Data must fit in 16 MiB.") }
     try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try text.write(to: file, atomically: true, encoding: .utf8)
+    try bytes.write(to: file, options: .atomic)
     return .bool(true)
+  }
+
+  /// The regular files in the data folder whose path starts with `prefix`, sorted by path.
+  /// Links are skipped and never followed.
+  func list(prefix: String) -> [NoodletEntry] {
+    let root = dataRoot.standardizedFileURL
+    let base = root.path.hasSuffix("/") ? root.path : root.path + "/"
+    let keys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey, .contentModificationDateKey]
+    guard let walk = FileManager.default.enumerator(at: root, includingPropertiesForKeys: keys) else { return [] }
+    let dates = ISO8601DateFormatter()
+    var entries: [NoodletEntry] = []
+    while let file = walk.nextObject() as? URL {
+      guard let values = try? file.resourceValues(forKeys: Set(keys)), values.isSymbolicLink != true,
+        values.isRegularFile == true
+      else { continue }
+      let full = file.standardizedFileURL.path
+      guard full.hasPrefix(base) else { continue }
+      let path = String(full.dropFirst(base.count))
+      guard path.hasPrefix(prefix) else { continue }
+      entries.append(NoodletEntry(
+        path: path, size: values.fileSize ?? 0,
+        modified: dates.string(from: values.contentModificationDate ?? .distantPast)))
+    }
+    return entries.sorted { $0.path < $1.path }
   }
 }

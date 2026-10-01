@@ -62,15 +62,36 @@
     } finally { request.signal.removeEventListener('abort', abort); }
   };
   window.fetch = nativeFetch;
-  const key = key => 'storage/' + encodeURIComponent(String(key)) + '.json';
+  // Data files are bytes: a string, Blob, ArrayBuffer or typed array goes over the bridge as base64.
+  const STORAGE = 'storage/';
+  const key = key => STORAGE + encodeURIComponent(String(key)) + '.json';
+  const encode = async data => {
+    const bytes = new Uint8Array(await (data instanceof Blob ? data : new Blob([data])).arrayBuffer());
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 32768) binary += String.fromCharCode(...bytes.subarray(i, i + 32768));
+    return btoa(binary);
+  };
+  const decode = encoded => Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+  const readBytes = async path => { const value = await send({operation:'read', path}); return value === null ? null : decode(value); };
+  const writeBytes = async (path, data) => send({operation:'write', path, data:await encode(data)});
+  const list = prefix => send({operation:'list', path:prefix});
   Object.defineProperty(window, 'noodle', {value:Object.freeze({
     version:1,
     features:Object.freeze([...features]),
     fetch:nativeFetch,
-    data:Object.freeze({readText:path=>send({operation:'read',path}),writeText:(path,text)=>send({operation:'write',path,text})}),
-    storage:Object.freeze({get:async name=>{const value=await send({operation:'read',path:key(name)});return value===null?null:JSON.parse(value);},set:(name,value)=>send({operation:'write',path:key(name),text:JSON.stringify(value)})}),
+    data:Object.freeze({
+      read:async path => { const bytes = await readBytes(path); return bytes === null ? null : new Blob([bytes]); },
+      write:writeBytes,
+      // What noodle.storage keeps is its own, so a listing of data files leaves it out.
+      list:async (prefix = '') => (await list(String(prefix))).filter(entry => !entry.path.startsWith(STORAGE))
+    }),
+    storage:Object.freeze({
+      get:async name => { const bytes = await readBytes(key(name)); return bytes === null ? null : JSON.parse(new TextDecoder().decode(bytes)); },
+      set:(name, value) => writeBytes(key(name), JSON.stringify(value)),
+      list:async () => (await list(STORAGE)).map(entry => entry.path.slice(STORAGE.length))
+        .filter(name => name.endsWith('.json') && !name.includes('/')).map(name => decodeURIComponent(name.slice(0, -5)))
+    }),
     secrets:Object.freeze({get:name=>send({operation:'secret',action:'get',name}),set:(name,value)=>send({operation:'secret',action:'set',name,value}),delete:name=>send({operation:'secret',action:'delete',name}),names:()=>send({operation:'secret',action:'names'})}),
-    files:Object.freeze({openText:()=>send({operation:'openFile'}),saveText:(name,text)=>send({operation:'saveFile',name,text})}),
     window:Object.freeze(Object.fromEntries(['close','minimize','zoom','toggleFullScreen'].map(action=>[action,()=>send({operation:'window',action})])))
   }), writable:false});
   window.__noodletControl = async r => {

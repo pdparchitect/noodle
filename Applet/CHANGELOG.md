@@ -6,6 +6,15 @@
 
 - Noodlets can save and open files the standard web way: a download link, including one to a file the page makes itself, asks where to save it, and a file field opens the file picker. On iPhone, a download goes to the Files picker.
 - Web links in a noodlet, including ones that open a new window, open in the browser instead of doing nothing.
+- `noodle.storage.list()` names what a noodlet has stored, and `noodle.data.list(prefix)` lists its data files with their size and when they changed.
+
+### Changed
+
+- `noodle.data` keeps any kind of file, not only text: `write(path, data)` takes a string, Blob, ArrayBuffer or typed array, and `read(path)` returns a Blob. Each file can be up to 16 MiB. It replaces `readText` and `writeText`.
+
+### Removed
+
+- `noodle.files.openText()` and `saveText()`. A noodlet opens and saves the person's files with a standard file field and download link instead.
 
 ## [0.21.0] - 2026-10-01
 

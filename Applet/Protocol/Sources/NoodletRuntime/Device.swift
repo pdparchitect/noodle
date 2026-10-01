@@ -5,27 +5,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
-/// The file dialogs a page opens with `noodle.files`, over the window it is shown in.
+/// The file dialogs a page's standard downloads, file inputs and links open, over the window it is
+/// shown in, and only one the person can see.
 @MainActor public enum NoodletFiles {
-    public static let limit = 4 * 1_048_576
-
-    /// Asks for a text file: its name and text, or null when the person chose none.
-    public static func open(over web: WKWebView) async throws -> Any {
-        guard let file = try await choose(over: web) else { return NSNull() }
-        let access = file.startAccessingSecurityScopedResource()
-        defer { if access { file.stopAccessingSecurityScopedResource() } }
-        guard try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0 <= limit else {
-            throw AppletError("Text file exceeds 4 MiB.")
-        }
-        return ["name": file.lastPathComponent, "text": try String(contentsOf: file, encoding: .utf8)]
-    }
-
-    /// Saves `text` where the person chooses: whether they did.
-    public static func save(_ text: String, named name: String, over web: WKWebView) async throws -> Bool {
-        guard text.utf8.count <= limit else { throw AppletError("Text must fit in 4 MiB.") }
-        return try await save(text, as: URL(fileURLWithPath: name).lastPathComponent, over: web)
-    }
-
     /// A download's suggested name as a plain file name, never a path.
     nonisolated static func safeName(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -103,43 +85,7 @@ import WebKit
     }
     #endif
 
-    #if os(macOS)
-    private static func choose(over web: WKWebView) async throws -> URL? {
-        guard let window = seenWindow(of: web) else {
-            throw AppletError("File dialogs require foreground mode. Use noodle.data in background mode.")
-        }
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = false
-        guard await panel.beginSheetModal(for: window) == .OK else { return nil }
-        return panel.url
-    }
-
-    private static func save(_ text: String, as name: String, over web: WKWebView) async throws -> Bool {
-        guard let window = seenWindow(of: web) else { throw AppletError("File dialogs require foreground mode.") }
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = name
-        guard await panel.beginSheetModal(for: window) == .OK, let file = panel.url else { return false }
-        let access = file.startAccessingSecurityScopedResource()
-        defer { if access { file.stopAccessingSecurityScopedResource() } }
-        try text.write(to: file, atomically: true, encoding: .utf8)
-        return true
-    }
-    #else
-    private static func choose(over web: WKWebView) async throws -> URL? {
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.text, .data], asCopy: true)
-        return try await Picker.present(picker, over: web).first
-    }
-
-    private static func save(_ text: String, as name: String, over web: WKWebView) async throws -> Bool {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: folder) }
-        let file = folder.appendingPathComponent(name.isEmpty ? "Untitled.txt" : name)
-        try text.write(to: file, atomically: true, encoding: .utf8)
-        let picker = UIDocumentPickerViewController(forExporting: [file], asCopy: true)
-        return try await !Picker.present(picker, over: web).isEmpty
-    }
-
+    #if os(iOS)
     /// Waits for the document picker to finish, with what the person picked.
     private final class Picker: NSObject, UIDocumentPickerDelegate {
         private var finish: CheckedContinuation<[URL], Never>?
@@ -203,15 +149,11 @@ import WebKit
     }
     #endif
 
+    /// A device adds no bridge operations of its own: its files come through the page's standard
+    /// downloads and file inputs.
     public func perform(_ operation: String, body: [String: Any]) async throws -> Any {
-        guard let web = page?.web else { throw AppletError("Noodlet stopped.") }
-        switch operation {
-        case "openFile": return try await NoodletFiles.open(over: web)
-        case "saveFile":
-            guard let text = body["text"] as? String else { throw AppletError("Text must fit in 4 MiB.") }
-            return try await NoodletFiles.save(text, named: body["name"] as? String ?? "Untitled.txt", over: web)
-        default: throw NoodletPage.unknownOperation
-        }
+        guard page != nil else { throw AppletError("Noodlet stopped.") }
+        throw NoodletPage.unknownOperation
     }
 }
 

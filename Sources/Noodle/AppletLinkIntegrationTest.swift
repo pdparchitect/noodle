@@ -136,7 +136,8 @@ import QuickLookUI
             request.store = call
             return try await controller.companion(request).stored ?? .null
         }
-        _ = try await stored(NoodletStoreCall(operation: "write", path: "storage/link-test.json", text: #""saved""#))
+        _ = try await stored(NoodletStoreCall(operation: "write", path: "storage/link-test.json",
+                                             data: Data(#""saved""#.utf8).base64EncodedString()))
 
         var archive = AppletRequest(.archive)
         archive.noodletID = id
@@ -171,7 +172,7 @@ import QuickLookUI
         let secret = try await page.evaluate("return await noodle.secrets.get('device-secret');")
         guard secret.contains("kept") else { throw AppletError("A secret set from Noodle did not come back: \(secret)") }
         _ = try await page.evaluate("await noodle.secrets.delete('device-secret');")
-        guard try await stored(NoodletStoreCall(operation: "read", path: "storage/device-test.json")) == .text(#""from Noodle""#) else {
+        guard try await stored(NoodletStoreCall(operation: "read", path: "storage/device-test.json")) == .text(Data(#""from Noodle""#.utf8).base64EncodedString()) else {
             throw AppletError("Applet did not keep what Noodle saved.")
         }
         print("PASS: noodlet runs in Noodle from Applet's files, and shares its storage and secrets with Applet's copy")

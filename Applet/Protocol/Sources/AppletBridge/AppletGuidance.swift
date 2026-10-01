@@ -134,17 +134,18 @@ public enum AppletGuidance {
         Manifest:
         {"version":1,"title":"My creation","runtime":"html","entry":"index.html","summary":"What it does","symbol":"sparkles"}
         HTML can use CSS, JS, Canvas, WebGL and bundled assets. No build system is required.
-        `await noodle.storage.set(key, JSON_value)` / `await noodle.storage.get(key)` persist
-        small values. `noodle.data.writeText(relativePath, text)` / `readText(relativePath)`
-        use its data directory (4 MiB per file). Missing values/files return null.
+        `await noodle.storage.set(key, JSON_value)` / `get(key)` / `list()` persist small values
+        and name them. `await noodle.data.write(relativePath, data)` takes a string, Blob,
+        ArrayBuffer or typed array; `read(relativePath)` returns a Blob; `list(prefix)` returns
+        [{path,size,modified}]. They use its own data folder, kept with the noodlet wherever it
+        runs (16 MiB per file). Missing values/files return null.
         The browser's own localStorage and IndexedDB are local to wherever the page runs:
         they do not follow the noodlet to other devices, and on a phone or another Mac they
-        last only while it is open. Keep anything that matters in noodle.storage.
+        last only while it is open. Keep anything that matters in noodle.storage or noodle.data.
         `await noodle.secrets.set(name, value)` / `get(name)` / `delete(name)` / `names()` keep
         API keys and tokens in Applet's Keychain, separately for each noodlet; never put
         them in storage, data files or source. Missing secrets return null.
-        `noodle.files.openText()` returns {name,text} or null; `saveText(name,text)` returns
-        a boolean. Standard web file handling works too: `<a download>` to a package file, a
+        The person's own files use standard web file handling: `<a download>` to a package file, a
         blob or a data URL asks where to save it, `<input type=file>` opens the file picker,
         and http(s) links, including target=_blank, open in the person's browser. The page
         itself never leaves its package. File dialogs, downloads and opened links need a

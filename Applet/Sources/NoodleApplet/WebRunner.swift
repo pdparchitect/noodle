@@ -249,7 +249,7 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
   func handleBridge(operation: String, body: [String: Any]) async -> (Any?, String?) {
     await page.handleBridge(operation: operation, body: body)
   }
-  /// What the page asks of its window, its recording and the Mac's file dialogs.
+  /// What the page asks of its window and its recording.
   func perform(_ operation: String, body: [String: Any]) async throws -> Any {
     switch operation {
     case "rendering":
@@ -272,10 +272,6 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
       else { throw AppletError("Sound must be base64 16-bit stereo within 2 MiB.") }
       sink(samples, at)
       return true
-    case "openFile": return try await NoodletFiles.open(over: web)
-    case "saveFile":
-      guard let text = body["text"] as? String else { throw AppletError("Text must fit in 4 MiB.") }
-      return try await NoodletFiles.save(text, named: body["name"] as? String ?? "Untitled.txt", over: web)
     default: throw NoodletPage.unknownOperation
     }
   }

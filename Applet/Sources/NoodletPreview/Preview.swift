@@ -29,10 +29,10 @@ final class NoodletPreviewController: NSViewController, @preconcurrency QLPrevie
       configuration.userContentController.addUserScript(
         WKUserScript(
           source: """
-            (()=>{const memory=new Map(),fail=async()=>{throw Error('Open in Noodle Applet to save data or choose files.')};
+            (()=>{const memory=new Map(),fail=async()=>{throw Error('Open in Noodle Applet to save data.')};
             Object.defineProperty(window,'noodle',{value:Object.freeze({version:1,preview:true,fetch:window.fetch.bind(window),
-            storage:{get:async k=>memory.get(k)??null,set:async(k,v)=>{memory.set(k,v)}},
-            data:{readText:async()=>null,writeText:fail},files:{openText:fail,saveText:fail}})});})();
+            storage:{get:async k=>memory.get(k)??null,set:async(k,v)=>{memory.set(k,v)},list:async()=>[...memory.keys()]},
+            data:{read:async()=>null,write:fail,list:async()=>[]}})});})();
             """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
       let web = WKWebView(frame: view.bounds, configuration: configuration)
       web.autoresizingMask = [.width, .height]

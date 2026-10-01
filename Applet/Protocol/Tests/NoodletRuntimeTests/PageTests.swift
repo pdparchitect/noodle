@@ -16,7 +16,11 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
             calls.append(call)
             switch call.operation {
             case "read": return files[call.path ?? ""].map(NoodletValue.text) ?? .null
-            case "write": files[call.path ?? ""] = call.text; return .bool(true)
+            case "write": files[call.path ?? ""] = call.data; return .bool(true)
+            case "list":
+                return .entries(files.filter { $0.key.hasPrefix(call.path ?? "") }.keys.sorted().map {
+                    NoodletEntry(path: $0, size: Data(base64Encoded: files[$0] ?? "")?.count ?? 0, modified: "2026-10-01T00:00:00Z")
+                })
             default: return .names(["key"])
             }
         }
@@ -113,15 +117,18 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
 
     func testDataAndSecretsGoToTheStoreAsThePageAsked() async throws {
         let (page, store, _) = try page()
-        let wrote = await page.handleBridge(operation: "write", body: ["operation": "write", "path": "a.txt", "text": "hi"])
+        let wrote = await page.handleBridge(operation: "write", body: ["operation": "write", "path": "a.txt", "data": "aGk="])
         XCTAssertEqual(wrote.0 as? Bool, true)
         let read = await page.handleBridge(operation: "read", body: ["operation": "read", "path": "a.txt"])
-        XCTAssertEqual(read.0 as? String, "hi")
+        XCTAssertEqual(read.0 as? String, "aGk=")
+        let listed = await page.handleBridge(operation: "list", body: ["operation": "list", "path": ""])
+        XCTAssertEqual((listed.0 as? [[String: Any]])?.map { $0["path"] as? String }, ["a.txt"])
         let names = await page.handleBridge(operation: "secret", body: ["operation": "secret", "action": "names"])
         XCTAssertEqual(names.0 as? [String], ["key"])
         XCTAssertEqual(store.calls, [
-            NoodletStoreCall(operation: "write", path: "a.txt", text: "hi"),
+            NoodletStoreCall(operation: "write", path: "a.txt", data: "aGk="),
             NoodletStoreCall(operation: "read", path: "a.txt"),
+            NoodletStoreCall(operation: "list", path: ""),
             NoodletStoreCall(operation: "secret", action: "names"),
         ])
     }
@@ -154,6 +161,19 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         let score = try await page.evaluate("await noodle.storage.set('score', {best: 3}); return await noodle.storage.get('score')")
         XCTAssertEqual(score, #"{"best":3}"#)
         XCTAssertEqual(store.calls.map(\.operation), ["write", "read"])
+        // Storage lists its own names; data files are bytes, and their listing leaves storage out.
+        let keys = try await page.evaluate("return await noodle.storage.list()")
+        XCTAssertEqual(keys, #"["score"]"#)
+        let bytes = try await page.evaluate("""
+            await noodle.data.write('img/a.bin', new Uint8Array([0, 255, 128]));
+            const blob = await noodle.data.read('img/a.bin');
+            return [...new Uint8Array(await blob.arrayBuffer())]
+            """)
+        XCTAssertEqual(bytes, "[0,255,128]")
+        let files = try await page.evaluate("return (await noodle.data.list()).map(entry => entry.path)")
+        XCTAssertEqual(files, #"["img/a.bin"]"#)
+        let gone = try await page.evaluate("return [typeof noodle.files, await noodle.data.read('missing')]")
+        XCTAssertEqual(gone, #"["undefined",null]"#)
     }
 
     /// A noodlet made for one look keeps it whatever the device's appearance; without a theme it

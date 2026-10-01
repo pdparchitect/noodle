@@ -124,14 +124,14 @@ final class BridgeDispatchTests: XCTestCase {
         XCTAssertEqual(runner.rendering?.readyState, "complete")
     }
 
-    @MainActor func testFileDialogsRequireAVisibleWindow() async throws {
+    @MainActor func testTheOldFileDialogOperationsAreGone() async throws {
         let (runner, root, _) = try makeRunner()
         defer { try? FileManager.default.removeItem(at: root) }
         for operation in ["openFile", "saveFile"] {
             let (value, error) = await runner.handleBridge(
                 operation: operation, body: ["operation": operation, "text": "x", "name": "a.txt"])
             XCTAssertNil(value, operation)
-            XCTAssertNotNil(error, operation)
+            XCTAssertEqual(error, "Unknown bridge operation.", operation)
         }
     }
 
