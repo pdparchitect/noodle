@@ -455,9 +455,9 @@ public enum LinkClient {
             for endpoint in Set(endpoints) {
                 group.addTask { (endpoint, await answers(endpoint, using: parameters, timeout: timeout)) }
             }
-            var answers: [LinkEndpoint: Bool] = [:]
-            for await (endpoint, answered) in group { answers[endpoint] = answered }
-            return answers
+            var reached: [LinkEndpoint: Bool] = [:]
+            for await (endpoint, answered) in group { reached[endpoint] = answered }
+            return reached
         }
     }
 
