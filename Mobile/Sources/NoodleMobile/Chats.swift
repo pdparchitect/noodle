@@ -1592,7 +1592,7 @@ private struct Bubble: View {
                 .onLongPressGesture(minimumDuration: 0.35) { lift() } onPressingChanged: { pressing = $0 }
                 .accessibilityAction(named: "React") { lift() }
                 .accessibilityAction(named: "Copy") { UIPasteboard.general.string = message.body }
-                .modifier(Reactions(badges: reactions, shown: !message.reactions.isEmpty, trailing: message.author == .you))
+                .modifier(Reactions(badges: reactions, shown: !message.reactions.isEmpty))
         }
         if let url = LinkPreview.firstURL(in: message.body) {
             LinkPreviewCard(url: url, previews: chats.linkPreviews, conversationID: thread.conversationID)
@@ -1602,20 +1602,19 @@ private struct Bubble: View {
                                trailing: message.author == .you) { attachment, compact in
                 AttachmentView(chats: chats, thread: thread, attachment: attachment, group: message.attachments, compact: compact)
             }
-            .modifier(Reactions(badges: reactions, shown: !showsText && !message.reactions.isEmpty, trailing: message.author == .you))
+            .modifier(Reactions(badges: reactions, shown: !showsText && !message.reactions.isEmpty))
         }
     }
 
-    /// Hangs the badges over the top corner away from the conversation's edge, into the room every
-    /// message keeps above it.
+    /// Hangs the badges over the top right corner, whoever wrote the message, as on the Mac, into the
+    /// room every message keeps above it.
     private struct Reactions<Badges: View>: ViewModifier {
         let badges: Badges
         let shown: Bool
-        let trailing: Bool
 
         func body(content: Content) -> some View {
-            content.overlay(alignment: trailing ? .topLeading : .topTrailing) {
-                if shown { badges.offset(x: trailing ? -10 : 10, y: -Bubble.reactionOverhang) }
+            content.overlay(alignment: .topTrailing) {
+                if shown { badges.offset(x: 10, y: -Bubble.reactionOverhang) }
             }
         }
     }

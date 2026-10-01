@@ -9,6 +9,7 @@
 - In a conversation where a bot shared a computer, browser or noodlet, tap … at the top: each one shows once, newest first, and opens live from there.
 - Tap a bot's name at the top of its conversation: New Session is near the bottom of its settings, and Kick too when the bot has failed.
 - Touch and hold each pinned bot or group in turn: each shows its own menu, Edit Bot for a bot and Edit Group for a group.
+- React to one of your own messages and to a bot's: the reaction sits on the top right corner of both.
 
 ### Added
 
@@ -17,6 +18,7 @@
 ### Changed
 
 - New Session and Kick moved from … to the bot's settings, opened by tapping its name.
+- Reactions sit on a message's top right corner, on your messages too, as on the Mac.
 - New Bot in More shows a person with a plus instead of a bare plus.
 
 ### Fixed
