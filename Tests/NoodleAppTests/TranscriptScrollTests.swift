@@ -84,6 +84,25 @@ import NoodleCore
         assertLastMessageShows(model, root, "After the earlier page loaded")
     }
 
+    /// An earlier page loading above the row being read leaves that row where it was on screen.
+    func testAnEarlierPageLoadingAboveKeepsTheReadRowInPlace() async throws {
+        let ids = (0..<160).map { _ in UUID() }
+        let reading = ids[125]
+        let model = StartupModel(initialViewport: TranscriptViewport(offset: 1, isAtBottom: false, messageID: reading))
+        let root = mount(StartupFixture(model: model))
+        model.ids = Array(ids.suffix(40))
+        model.overlay = 75
+        let opened = await eventually { model.tops[reading] != nil }
+        XCTAssertTrue(opened, "The read message was not rendered")
+        _ = await eventually(seconds: 1) { false }
+        let before = try XCTUnwrap(model.tops[reading])
+        model.ids = ids
+        _ = await eventually(seconds: 1) { false }
+        let after = try XCTUnwrap(model.tops[reading], "The read message scrolled out of view")
+        XCTAssertEqual(after, before, accuracy: 2, "The read message moved \(after - before)pt when an earlier page loaded")
+        _ = root
+    }
+
     /// Switching to another conversation opens that one on its own last message.
     func testSwitchingConversationsOpensTheNextOnItsLastMessage() async throws {
         let model = StartupModel()

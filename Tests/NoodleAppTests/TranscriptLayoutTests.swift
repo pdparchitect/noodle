@@ -250,7 +250,8 @@ import NoodleCore
     }
 
     /// A mounted chat of linked messages; `body` runs once the first layout has settled.
-    private func withLinkedChat(messages count: Int = 12, _ body: (NoodleStore, WorkspaceRepository, (agent: AgentRecord, conversation: BotConversation), NSWindow) async throws -> Void) async throws {
+    private func withLinkedChat(messages count: Int = 12, beforeOpening prepare: (NoodleStore, BotConversation) -> Void = { _, _ in },
+                                _ body: (NoodleStore, WorkspaceRepository, (agent: AgentRecord, conversation: BotConversation), NSWindow) async throws -> Void) async throws {
         let timeout = watchdog()
         defer { timeout.cancel() }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("transcript-typing-\(UUID())")
@@ -272,10 +273,65 @@ import NoodleCore
         defer { store.stopMonitoring() }
         XCTAssertTrue(store.storageReady, store.errorMessage ?? "Storage failed")
         store.selectedConversationID = bot.conversation.id
+        prepare(store, bot.conversation)
         let window = window(FullTranscriptLayoutFixture(store: store))
         defer { window.close(); window.contentView = nil }
         try await settle()
         try await body(store, repository, (bot.agent, bot.conversation), window)
+    }
+
+    /// Where the transcript's first row sits in the conversation, or nil when it holds none.
+    private func firstRowIndex(_ store: NoodleStore, _ conversation: BotConversation) -> Int? {
+        store.messages(for: conversation).firstIndex { $0.id == TranscriptRenderProbe.firstTranscriptRow }
+    }
+
+    func testALongConversationHoldsOnlyItsNewestMessagesAsItGrows() async throws {
+        try await withLinkedChat(messages: 400) { store, repository, bot, _ in
+            XCTAssertLessThanOrEqual(TranscriptRenderProbe.transcriptRows, 100,
+                "Opening a 400-message conversation handed the transcript \(TranscriptRenderProbe.transcriptRows) messages")
+            try repository.append(ChatMessage(conversationID: bot.conversation.id, author: .agent(bot.agent.id),
+                body: "A new reply", delivery: .delivered))
+            store.refreshTranscripts()
+            try await settle()
+            XCTAssertLessThanOrEqual(TranscriptRenderProbe.transcriptRows, 101,
+                "A new reply handed the transcript \(TranscriptRenderProbe.transcriptRows) messages")
+        }
+    }
+
+    func testScrollingToTheTopReachesTheFirstMessage() async throws {
+        try await withLinkedChat(messages: 400) { store, _, bot, window in
+            let scroll = try XCTUnwrap(findScroll(window.contentView!))
+            for _ in 0..<20 where firstRowIndex(store, bot.conversation) != 0 {
+                scroll.contentView.scroll(to: .zero)
+                scroll.reflectScrolledClipView(scroll.contentView)
+                try await settle()
+            }
+            XCTAssertEqual(firstRowIndex(store, bot.conversation), 0, "Scrolling up never reached the first message")
+        }
+    }
+
+    func testAReadingPositionBeforeTheNewestMessagesOpensThere() async throws {
+        try await withLinkedChat(messages: 400, beforeOpening: { store, conversation in
+            let reading = store.messages(for: conversation)[20].id
+            store.saveTranscriptViewport(TranscriptViewport(offset: 1, isAtBottom: false, messageID: reading), for: conversation.id)
+        }) { store, _, bot, window in
+            let first = try XCTUnwrap(firstRowIndex(store, bot.conversation))
+            XCTAssertLessThanOrEqual(first, 20, "The transcript starts at message \(first), after the one being read")
+            XCTAssertFalse(atBottom(try XCTUnwrap(findScroll(window.contentView!))), "It opened at the end, not where the reading was")
+        }
+    }
+
+    func testRevealingAMessageBeforeTheNewestMessagesShowsIt() async throws {
+        try await withLinkedChat(messages: 400) { store, _, bot, window in
+            let target = store.messages(for: bot.conversation)[30].id
+            // As opening its notification does.
+            store.saveTranscriptViewport(TranscriptViewport(isAtBottom: false, messageID: target), for: bot.conversation.id)
+            NotificationCenter.default.post(name: .revealTranscriptMessage, object: target)
+            try await settle()
+            let first = try XCTUnwrap(firstRowIndex(store, bot.conversation))
+            XCTAssertLessThanOrEqual(first, 30, "The transcript starts at message \(first), after the revealed one")
+            XCTAssertFalse(atBottom(try XCTUnwrap(findScroll(window.contentView!))), "It stayed at the end instead of showing the message")
+        }
     }
 
     func testOpeningALongConversationBuildsOnlyTheRowsNearTheViewport() async throws {

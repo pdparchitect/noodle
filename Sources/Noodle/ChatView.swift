@@ -474,9 +474,24 @@ private struct ConversationTranscript: View {
     let bottomOverlayHeight: CGFloat
     let showAgentProfile: (AgentRecord) -> Void
     let saveViewport: (TranscriptViewport) -> Void
+    /// The oldest message shown. Until set, the newest page and the opening reading position show.
+    @State private var firstShownID: UUID?
+
+    /// Messages shown when a conversation opens, and added each time the top is reached.
+    /// Layout work for every update grows with the rows a transcript holds, not with what is on screen.
+    static let pageSize = 100
+
+    private func firstShown(in messages: [ChatMessage]) -> Int {
+        if let firstShownID, let index = messages.firstIndex(where: { $0.id == firstShownID }) { return index }
+        let reading = initialViewport.messageID.flatMap { id in messages.firstIndex { $0.id == id } }
+        return min(max(messages.count - Self.pageSize, 0), reading ?? .max)
+    }
 
     var body: some View {
-        let messages = store.messages(for: conversation)
+        let all = store.messages(for: conversation)
+        let first = firstShown(in: all)
+        let messages = all[first...]
+        let _ = TranscriptRenderProbe.transcript(messages)
         TranscriptScrollView(
             initialViewport: initialViewport,
             lastMessageID: messages.last?.id,
@@ -484,11 +499,21 @@ private struct ConversationTranscript: View {
             bottomOverlayHeight: bottomOverlayHeight,
             saveViewport: saveViewport,
             onInteraction: { store.markConversationRead(conversation.id) },
-            containsMessage: { id in messages.contains { $0.id == id } }
+            containsMessage: { id in all.contains { $0.id == id } }
         ) {
-            ConversationStartView(conversation: conversation, showAgentProfile: showAgentProfile)
-                .padding(.bottom, 14)
-                .id(TranscriptScrollTarget.start)
+            if first == 0 {
+                ConversationStartView(conversation: conversation, showAgentProfile: showAgentProfile)
+                    .padding(.bottom, 14)
+                    .id(TranscriptScrollTarget.start)
+            } else {
+                // Reaching the top shows the page before. Rows keep their place by ID.
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    // Keyed by the first row, so a page too short to push it off screen still loads the next.
+                    .task(id: first) { firstShownID = all[max(first - Self.pageSize, 0)].id }
+            }
 
             ForEach(messages) { message in
                 MessageBubble(
@@ -501,6 +526,14 @@ private struct ConversationTranscript: View {
                 .transition(MessageBubble.insertion(for: message))
                 .id(TranscriptScrollTarget.message(message.id))
             }
+        }
+        // Later replies add to what shows rather than pushing the oldest rows out from under the reader.
+        .onAppear { firstShownID = firstShownID ?? messages.first?.id }
+        .onChange(of: messages.first?.id) { _, id in firstShownID = firstShownID ?? id }
+        .onReceive(NotificationCenter.default.publisher(for: .revealTranscriptMessage)) { notification in
+            guard let id = notification.object as? UUID, let index = all.firstIndex(where: { $0.id == id }),
+                  index < first else { return }
+            firstShownID = id
         }
     }
 }

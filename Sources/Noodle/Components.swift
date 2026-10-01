@@ -128,14 +128,22 @@ struct ConversationStatusAvatar: View {
     }
 }
 
-/// Counts message row work so tests can prove that typing leaves the transcript alone
-/// and that re-evaluated rows do not detect their links again.
+/// Counts message row work so tests can prove that typing leaves the transcript alone,
+/// that re-evaluated rows do not detect their links again, and which messages the transcript holds.
 @MainActor enum TranscriptRenderProbe {
     private(set) static var bubbleBodies = 0
     private(set) static var linkScans = 0
+    private(set) static var transcriptRows = 0
+    private(set) static var firstTranscriptRow: UUID?
     static func bubbleBody() {
         #if DEBUG
         bubbleBodies += 1
+        #endif
+    }
+    static func transcript(_ messages: some Collection<ChatMessage>) {
+        #if DEBUG
+        transcriptRows = messages.count
+        firstTranscriptRow = messages.first?.id
         #endif
     }
     static func linkScan() {

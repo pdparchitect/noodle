@@ -16,6 +16,7 @@ All notable changes to Noodle are documented here, following
 - A harness's manual installation steps keep Open Terminal, Installation Guide and Check Installation on one line.
 - Bots that run on a Hub no longer offer folders from this Mac, which they could never use.
 - Settings > Hub tags Tailscale addresses as tailscale, lowercase like home and internet.
+- Long conversations open on their latest 100 messages and show earlier ones as you scroll up, so new replies no longer slow down as a conversation grows.
 
 ### Fixed
 
