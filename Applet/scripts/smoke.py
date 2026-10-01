@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the signed app through its shipped CLI. Run in a logged-in desktop."""
 import json
+import hashlib
 import http.server
 import threading
 import pathlib
@@ -12,7 +13,8 @@ import time
 
 root = pathlib.Path(__file__).resolve().parents[2]
 app = (pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else root / '.build/Noodle Applet Dev.app').resolve()
-bundle_id = plistlib.loads((app / 'Contents/Info.plist').read_bytes())['CFBundleIdentifier']
+info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
+bundle_id = info['CFBundleIdentifier']
 assert bundle_id in ['com.pdparchitect.noodle.applet', 'com.pdparchitect.noodle.applet.local']
 extension = '.noodlet-dev' if bundle_id.endswith('.local') else '.noodlet'
 cli = app / 'Contents/Helpers/noodlet'
@@ -41,7 +43,7 @@ def call(*args, success=True):
 def package(directory, name, source):
     path = directory / (name + extension)
     path.mkdir()
-    (path / 'noodlet.json').write_text(json.dumps(dict(version=1, title='Applet smoke ' + name, runtime='html', entry='index.html', network=False)))
+    (path / 'noodlet.json').write_text(json.dumps(dict(version=1, title='Applet smoke ' + name, runtime='html', entry='index.html')))
     (path / 'index.html').write_text(source)
     # Applet uses only noodlets it lists, so open this one in the app as a person would, then
     # close what that opened so the checks start from a headless session of their own.
@@ -56,6 +58,24 @@ def package(directory, name, source):
     raise AssertionError(('not listed after opening in the app', path))
 
 
+def launch(directory):
+    # Agrees to local-network for the Network noodlet as the person would, without the question
+    # that would hold a headless run: arguments take precedence over the app's saved settings.
+    # Applet keys a noodlet by its resolved path, less the /private that /var leads to.
+    resolved = str(directory.resolve() / ('Network' + extension))
+    if resolved.startswith('/private/') and pathlib.Path(resolved[len('/private'):]).parent.exists():
+        resolved = resolved[len('/private'):]
+    executable = str(app / 'Contents/MacOS' / info['CFBundleExecutable'])
+    subprocess.run(['pkill', '-f', executable], timeout=30)
+    for _ in range(150):
+        if subprocess.run(['pgrep', '-f', executable], capture_output=True).returncode: break
+        time.sleep(.2)
+    else:
+        raise AssertionError(('still running', executable))
+    granted = '-permissions.' + hashlib.sha256(resolved.encode()).hexdigest()
+    subprocess.run(['open', '-g', '-a', app, '--args', granted, '(local-network)'], check=True, timeout=30)
+
+
 def track(reply):
     if reply.get('sessionID'):
         sessions.append(reply['sessionID'])
@@ -65,6 +85,7 @@ def track(reply):
 try:
     with tempfile.TemporaryDirectory(prefix='noodlet-smoke-') as temporary:
         directory = pathlib.Path(temporary)
+        launch(directory)
         html = package(directory, 'HTML', '''<!doctype html><title>Smoke</title>
         <style>body{background:#123456;color:white;font:30px system-ui}button{padding:25px}</style>
         <button id="go" onclick="this.textContent='Clicked';console.log('clicked')">Start</button>
@@ -113,7 +134,7 @@ try:
         address = 'http://127.0.0.1:' + str(server.server_port)
         try:
             api = package(directory, 'Network', '<title>Network test</title><h1>API</h1>')
-            manifest = json.loads((api/'noodlet.json').read_text()); manifest['network'] = True
+            manifest = json.loads((api/'noodlet.json').read_text()); manifest['permissions'] = ['local-network']
             manifest['window'] = dict(type='floating', background='translucent', width=320, height=350, minWidth=260, minHeight=300, maxWidth=480, maxHeight=520, resizable=False, rememberFrame=True)
             (api/'noodlet.json').write_text(json.dumps(manifest))
             network = track(call('open', api, '--mode', 'headless'))
@@ -126,7 +147,7 @@ try:
             assert json.loads(call('eval', '--session', network, '--text', source)['value']) == 'AbortError'
             local = track(call('open', html, '--mode', 'headless'))
             denied = call('eval', '--session', local, '--text', 'return await fetch('+json.dumps(address+'/data')+');', success=False)
-            assert 'network: true' in denied['error'], denied
+            assert 'local-network' in denied['error'], denied
             call('terminate', '--session', local)
             viewport = json.loads(call('inspect', '--session', network)['value'])['viewport']
             assert viewport == dict(width=320,height=350), viewport
