@@ -144,7 +144,7 @@
     "background": "black",
     "intro": { "title": "Five companies, one workspace",
       "subtitle": "Each company has its own team of agents. Moving between them takes one click." },
-    "outro": { "tagline": "A workspace for you and your AI agents." }
+    "outro": { "tagline": "A workspace for your AI agents." }
   },
   "timeline": [
     { "capture": "01-fieldnote" },

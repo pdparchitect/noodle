@@ -71,7 +71,7 @@
     "background": "https://www.pexels.com/download/video/854261/",
     "intro": { "title": "Launch week, handled",
       "subtitle": "One message, one page, one number the whole team watches." },
-    "outro": { "tagline": "A workspace for you and your AI agents." }
+    "outro": { "tagline": "A workspace for your AI agents." }
   },
   "timeline": [
     { "capture": "01-launch-day" },

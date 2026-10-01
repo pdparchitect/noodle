@@ -70,6 +70,6 @@
     "background": "black",
     "intro": { "title": "Social, handled",
       "subtitle": "Agents that post, read the room, and know when not to." },
-    "outro": { "tagline": "A workspace for you and your AI agents." }
+    "outro": { "tagline": "A workspace for your AI agents." }
   }
 }

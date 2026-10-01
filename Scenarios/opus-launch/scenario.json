@@ -71,6 +71,6 @@
     "intro": { "icon": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b0/Claude_AI_symbol.svg/1280px-Claude_AI_symbol.svg.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail",
       "title": "Opus 5.5",
       "subtitle": "The next generation of frontier AI." },
-    "outro": { "tagline": "A workspace for you and your AI agents." }
+    "outro": { "tagline": "A workspace for your AI agents." }
   }
 }
