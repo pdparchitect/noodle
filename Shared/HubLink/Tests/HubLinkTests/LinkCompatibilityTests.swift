@@ -8,6 +8,19 @@ final class LinkCompatibilityTests: XCTestCase {
         try LinkProtocol.decoder.decode(type, from: Data(json.utf8))
     }
 
+    func testLiveCardMetadataReadsWirePayloads() throws {
+        let b = UUID(uuidString: "00000000-0000-0000-0000-00000000000B")!
+        let c = UUID(uuidString: "00000000-0000-0000-0000-00000000000C")!
+        let request = try decode(LinkRequest.self,
+            #"{"linkCard":{"conversationID":"00000000-0000-0000-0000-00000000000B","attachmentID":"00000000-0000-0000-0000-00000000000C"}}"#)
+        XCTAssertEqual(request, .linkCard(conversationID: b, attachmentID: c))
+        let response = try decode(LinkResponse.self,
+            #"{"linkCard":{"_0":{"title":"Counter","image":"AQID","symbol":"square.grid.2x2"}}}"#)
+        XCTAssertEqual(response, .linkCard(LinkCardInfo(title: "Counter", image: Data([1, 2, 3]), symbol: "square.grid.2x2")))
+        let encoded = try LinkProtocol.encoder.encode(response)
+        XCTAssertEqual(try LinkProtocol.decoder.decode(LinkResponse.self, from: encoded), response)
+    }
+
     func testFieldsAddedLaterMayBeMissing() throws {
         let id = UUID(), conversation = UUID()
         let message = try decode(LinkMessage.self,

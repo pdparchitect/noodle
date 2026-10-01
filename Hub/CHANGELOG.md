@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Mobile can show the titles and previews of shared noodlets without opening them. Update Mobile too.
+
 ## [0.13.0] - 2026-10-01
 
 ### Added

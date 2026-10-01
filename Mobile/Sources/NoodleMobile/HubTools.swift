@@ -139,6 +139,23 @@ extension HubChats {
         }
     }
 
+    /// Shared links use the same metadata as their cards, without starting their live views.
+    func sharedAttachment(_ attachment: LinkAttachment, in conversation: some HubConversation) async -> LinkAttachment {
+        if let known = cards[attachment.id] {
+            var resolved = attachment
+            resolved.card = known
+            return resolved
+        }
+        let pairing = pairing
+        var resolved = await attachment.resolvingCard(in: conversation.conversationID) { try await pairing.request($0) }
+        if resolved.card?.image == nil, let image = try? await picture(for: attachment, in: conversation) {
+            if resolved.card == nil { resolved.card = LinkCardInfo(title: attachment.liveTitle) }
+            resolved.card?.image = image
+        }
+        if let card = resolved.card { cards[attachment.id] = card }
+        return resolved
+    }
+
     /// Where this Hub's noodlets are kept on this phone; the system clears it when space runs low.
     var noodletCache: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -774,6 +791,15 @@ extension LinkAttachment {
     static func shared(newestFirst attachments: [LinkAttachment]) -> [LinkAttachment] {
         var seen = Set<String>()
         return attachments.filter { $0.liveKey.map { seen.insert($0).inserted } ?? false }
+    }
+
+    /// Resolves metadata for a live link whose share did not include its card.
+    func resolvingCard(in conversationID: UUID, request: @Sendable (LinkRequest) async throws -> LinkResponse) async -> LinkAttachment {
+        guard isLive, card == nil else { return self }
+        guard case .linkCard(let card?) = try? await request(.linkCard(conversationID: conversationID, attachmentID: id)) else { return self }
+        var resolved = self
+        resolved.card = card
+        return resolved
     }
 
     var liveTitle: String { card?.title ?? URL(fileURLWithPath: filename).deletingPathExtension().lastPathComponent }

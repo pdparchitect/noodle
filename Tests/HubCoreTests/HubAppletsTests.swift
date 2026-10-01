@@ -48,6 +48,7 @@ import XCTest
                 case .list:
                     response.features = [SurfaceSocket.feature]
                 case .info:
+                    response.title = "Counter"
                     response.sourcePath = request.noodletID.flatMap { sources[$0] }
                     response.permissions = request.noodletID.flatMap { permissions[$0] }
                     if request.includePreview == true { response.data = Data("picture".utf8); response.mediaType = "image/png" }
@@ -212,6 +213,31 @@ import XCTest
         do {
             _ = try await f.device.request(.linkPreview(conversationID: kai.conversationID, attachmentID: borrowed))
             XCTFail("another bot's noodlet showed its picture")
+        } catch { XCTAssertEqual(error.localizedDescription, "That noodlet is not this bot's.") }
+    }
+
+    func testSharedNoodletCardResolvesTitleAndPreviewWithoutOpening() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let applet = FakeApplet()
+        let hub = Hub(root: root, messenger: nil, applet: { applet.call($0) })
+        try hub.repository.prepare()
+        let plan = try hub.access.addPlan(named: "Family")
+        hub.access.set(HubHarness(provider: .claudeCode, profile: nil), included: true, in: plan)
+        let user = try hub.access.addUser(named: "Ada")
+        hub.access.move(user, to: plan)
+        let bot = try hub.bots.create(LinkBotDraft(name: "Kai", provider: "claude-code"), for: user)
+        let noodlet = UUID()
+        applet.sources[noodlet] = hub.repository.directory(forAgentID: bot.id).appendingPathComponent("Counter.noodlet").path
+        let attachment = try post(noodlet, in: bot, byBot: true, hub: hub)
+        let card = try await hub.bots.card(of: attachment, in: bot.conversationID, for: user)
+        XCTAssertEqual(card?.title, "Counter")
+        XCTAssertEqual(card?.image, Data("picture".utf8))
+        XCTAssertTrue(applet.opened.isEmpty)
+        applet.sources[noodlet] = root.appendingPathComponent("SomeoneElse/Counter.noodlet").path
+        do {
+            _ = try await hub.bots.card(of: attachment, in: bot.conversationID, for: user)
+            XCTFail("another bot's noodlet exposed its card")
         } catch { XCTAssertEqual(error.localizedDescription, "That noodlet is not this bot's.") }
     }
 

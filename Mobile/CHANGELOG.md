@@ -4,17 +4,22 @@
 
 ### Changed
 
+- … in a conversation opens a Shared sheet with titles and previews for choosing a computer, browser tab or noodlet.
 - Create Image in a bot's picture starts from an avatar portrait with the bot's name and description, instead of an empty Image Playground.
 - Create Image in a bot's picture opens on Illustration and no longer suggests people from Photos, as on the Mac.
 - Create Image for a background opens on Illustration, starts from the photo in use, no longer suggests people from Photos and makes an image the shape of the screen instead of a square, as on the Mac.
 
 ### What to Test
 
+- In a conversation with shared noodlets, tap …: Shared shows their titles and previews; tap one to open it. Update the Hub too to get noodlet titles.
 - Open a conversation and tap the message field: the field sits a little above the keyboard, not on it, and drops back level with Search when the keyboard goes.
+- Scroll a long conversation to the end, go back to the list and open it again: it opens at the end, the last message just above the message field.
 
 ### Fixed
 
+- Shared noodlets showed only “Noodlet”, making them impossible to tell apart.
 - With the keyboard up, the message field sat right on the keyboard.
+- A conversation could open short of its end or past it, even when you had left it at the end.
 
 ## [0.13.0] - 2026-10-01
 

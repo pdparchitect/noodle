@@ -613,6 +613,24 @@ import NoodleRuntime
         return response.mediaType == "image/png" ? response.data : nil
     }
 
+    /// The title and preview of a live attachment, without opening it.
+    public func card(of attachmentID: UUID, in conversationID: UUID, for user: HubUser) async throws -> LinkCardInfo? {
+        let (link, bot) = try await companionLink(attachmentID, in: conversationID, for: user)
+        if case .noodlet(let noodlet) = link {
+            var info = AppletRequest(.info)
+            info.noodletID = noodlet
+            info.owner = bot.uuidString.lowercased()
+            info.includePreview = true
+            let response = try await applets.companion(info)
+            guard let title = response.title else { return nil }
+            return LinkCardInfo(title: title, image: response.mediaType == "image/png" ? response.data : nil,
+                                symbol: "square.grid.2x2")
+        }
+        guard let card = try attachments(in: conversationID)[attachmentID]?.card else { return nil }
+        return LinkCardInfo(title: card.title, detail: card.detail, image: card.image, symbol: card.symbol,
+                            colour: card.colour, icon: card.icon, capturedAt: card.capturedAt)
+    }
+
     /// A conversation the user owns and its bots: one bot's own, or a group of theirs.
     private func ownedConversation(_ id: UUID, by user: HubUser) throws -> (conversation: BotConversation, bots: [AgentRecord]) {
         let agents = try repository.loadAgents()

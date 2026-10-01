@@ -177,6 +177,8 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     /// The latest picture of what a link a bot shared points at, for its card, when the link
     /// itself carries none, as a noodlet's does not. Answered with `picture`.
     case linkPreview(conversationID: UUID, attachmentID: UUID)
+    /// A live attachment’s title and preview, without opening it.
+    case linkCard(conversationID: UUID, attachmentID: UUID)
     /// A picture a list left out, answered with `picture`.
     case picture(LinkPictureOwner)
     /// A one-time invitation for another device of this user, when the Hub lets them pair
@@ -341,6 +343,7 @@ public enum LinkResponse: Codable, Equatable, Sendable {
     case chunk(data: Data, total: Int)
     /// A picture, or none when there is nothing to show yet.
     case picture(Data?)
+    case linkCard(LinkCardInfo?)
     case invitation(LinkInvitation)
     case kickConfirmation(LinkKickConfirmation)
     case noodlet(LinkNoodlet)

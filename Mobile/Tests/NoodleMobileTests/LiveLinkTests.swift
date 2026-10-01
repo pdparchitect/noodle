@@ -22,6 +22,22 @@ struct LiveLinkTests {
         }
     }
 
+    @Test func sharedNoodletResolvesItsTitleAndPreviewWithoutOpening() async {
+        let link = LinkAttachment(id: UUID(), filename: "Noodlet.webloc", mediaType: "application/x-webloc",
+                                  byteCount: 1, url: URL(string: "noodlet://\(UUID())"))
+        let conversation = UUID()
+        let card = LinkCardInfo(title: "Counter", image: Data([1, 2, 3]))
+        let resolved = await link.resolvingCard(in: conversation) { request in
+            #expect(request == .linkCard(conversationID: conversation, attachmentID: link.id))
+            return .linkCard(card)
+        }
+        #expect(resolved.liveTitle == "Counter")
+        #expect(resolved.card?.image == card.image)
+        #expect(resolved.id == link.id)
+        let unavailable = await link.resolvingCard(in: conversation) { _ in throw LinkError("Unsupported request.") }
+        #expect(unavailable == link)
+    }
+
     @Test func sharedListsEachComputerBrowserTabAndNoodletOnceNewestFirst() {
         let computer = UUID().uuidString, browser = UUID().uuidString, tab = UUID().uuidString, other = UUID().uuidString
         let noodlet = UUID().uuidString

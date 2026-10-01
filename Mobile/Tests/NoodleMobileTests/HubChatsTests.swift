@@ -1065,6 +1065,51 @@ private actor RecordedSubscriptions: PushSubscriptions {
         #expect(abs(fieldBottom - ChatView.controlHeight - end - 16) < 1)
     }
 
+    /// Left at its end and opened again, a conversation shows its end again.
+    @Test func aConversationLeftAtItsEndReopensThere() async throws {
+        let hub = FakeHub()
+        for index in 1..<30 {
+            let points = (1...(2 + index % 14)).map { "• Point \($0) of reply \(index), which runs long enough to wrap over more than one line." }
+            await hub.botSays("Reply \(index):\n\n" + points.joined(separator: "\n"))
+            await hub.botSays(String(repeating: "Message \(index) says something. ", count: 1 + index % 4))
+        }
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+        let scene = try #require(UIApplication.shared.connectedScenes.lazy.compactMap { $0 as? UIWindowScene }.first)
+
+        let path = OpenChats()
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = UIHostingController(rootView: ReopenedChat(chats: chats, path: path))
+        window.isHidden = false
+        defer { window.isHidden = true }
+        func conversation() throws -> UIScrollView {
+            try #require(Self.view(UIScrollView.self, in: window) { !($0 is UITextView) && $0.contentSize.height > window.bounds.height })
+        }
+        func end(of view: UIScrollView) -> CGFloat { view.contentSize.height + view.adjustedContentInset.bottom - view.bounds.height }
+
+        path.threads = [scout.id]
+        try await Task.sleep(for: .seconds(1))
+        // Scrolled up and back down to the end, as a person reading does.
+        let opened = try conversation()
+        opened.setContentOffset(CGPoint(x: opened.contentOffset.x, y: opened.contentOffset.y - 2000), animated: false)
+        try await Task.sleep(for: .milliseconds(300))
+        for _ in 0..<5 {
+            opened.setContentOffset(CGPoint(x: opened.contentOffset.x, y: end(of: opened)), animated: false)
+            try await Task.sleep(for: .milliseconds(200))
+        }
+        #expect(abs(opened.contentOffset.y - end(of: opened)) <= 1)
+
+        path.threads = []
+        try await Task.sleep(for: .seconds(1))
+        path.threads = [scout.id]
+        try await Task.sleep(for: .seconds(1))
+
+        let reopened = try conversation()
+        #expect(abs(reopened.contentOffset.y - end(of: reopened)) <= 1)
+    }
+
     /// With the keyboard up, the message field keeps 8 points clear of it, and the conversation still
     /// ends 16 points above the field.
     @Test func theComposerSitsClearOfTheKeyboard() async throws {
@@ -1101,5 +1146,22 @@ private actor RecordedSubscriptions: PushSubscriptions {
         if let match = view as? V, test(match) { return match }
         for subview in view.subviews { if let match = self.view(type, in: subview, where: test) { return match } }
         return nil
+    }
+}
+
+@MainActor @Observable final class OpenChats {
+    var threads: [UUID] = []
+}
+
+/// A list a conversation is opened from and left for, as the bots list does.
+private struct ReopenedChat: View {
+    let chats: HubChats
+    @Bindable var path: OpenChats
+
+    var body: some View {
+        NavigationStack(path: $path.threads) {
+            List { Text("Bots") }
+                .navigationDestination(for: UUID.self) { ChatView(chats: chats, threadID: $0) }
+        }
     }
 }

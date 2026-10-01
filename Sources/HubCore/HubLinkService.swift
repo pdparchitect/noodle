@@ -471,6 +471,8 @@ import os
             }
             try hubBots().receive(data, at: offset, of: attachment, in: conversationID, for: try user(key))
             return .done
+        case .linkCard(let conversationID, let attachmentID):
+            return .linkCard(try await hubBots().card(of: attachmentID, in: conversationID, for: try user(key)))
         case .linkPreview(let conversationID, let attachmentID):
             return .picture(try await hubBots().picture(of: attachmentID, in: conversationID, for: try user(key)))
         case .download(let conversationID, let attachmentID, let offset):

@@ -85,6 +85,7 @@ enum HubThread: HubConversation {
     private var start: [UUID: Int] = [:]
     /// Card pictures, fetched as their cards come into view.
     @ObservationIgnored var pictures: [UUID: Data] = [:]
+    @ObservationIgnored var cards: [UUID: LinkCardInfo] = [:]
     /// Messages in one page: small enough to come quickly, however long the conversation.
     private static let pageSize = 50
 
@@ -1040,16 +1041,25 @@ struct ConversationScrolling: ViewModifier {
     @State private var position = ScrollPosition(idType: UUID.self)
     /// Whether the end of the conversation shows. Only then does it keep to the end as it grows.
     @State private var atBottom = true
+    /// Whether the person is scrolling. Only they move it off the end: rows measured as they come
+    /// into view change the conversation's height for a moment, which must not.
+    @State private var scrolling = false
 
     func body(content: Content) -> some View {
         content
             .scrollPosition($position, anchor: .top)
             .defaultScrollAnchor(.bottom, for: .initialOffset)
             .defaultScrollAnchor(atBottom ? .bottom : .top, for: .sizeChanges)
+            .onScrollPhaseChange { _, phase in scrolling = phase != .idle }
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 ConversationScroll.isAtBottom(contentOffset: geometry.contentOffset.y, contentHeight: geometry.contentSize.height,
                                               viewportHeight: geometry.containerSize.height, bottomInset: geometry.contentInsets.bottom)
-            } action: { _, bottom in atBottom = bottom }
+            } action: { _, bottom in if scrolling || bottom { atBottom = bottom } }
+            // The bars and the composer's room settle as the conversation is pushed, which moves its end
+            // without changing its size.
+            .onScrollGeometryChange(for: [CGFloat].self) { [$0.containerSize.height, $0.contentInsets.bottom] } action: { _, _ in
+                if atBottom { position.scrollTo(edge: .bottom) }
+            }
             // Read before the new row is laid out, so atBottom still says where the person was.
             .onChange(of: latest?.id) { _, _ in
                 guard let latest, let anchor = ConversationScroll.target(for: latest, wasAtBottom: atBottom) else { return }
@@ -1075,6 +1085,8 @@ struct ChatView: View {
     @State private var files: [OutgoingFile] = []
     @State private var problem: String?
     @State private var editing = false
+    @State private var showingShared = false
+    @State private var openingShared: LinkAttachment?
     @State private var pickingPhotos = false
     @State private var photos: [PhotosPickerItem] = []
     @State private var takingPhoto = false
@@ -1185,19 +1197,24 @@ struct ChatView: View {
             let shared = LinkAttachment.shared(newestFirst: messages.reversed().flatMap(\.attachments))
             if !shared.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        ForEach(shared) { attachment in
-                            Button { watchingAt = nil; watching = attachment } label: {
-                                Text(attachment.liveTitle)
-                                Text(attachment.liveKindName)
-                                Image(systemName: attachment.liveSymbol)
-                            }
-                        }
-                    } label: {
+                    Button { showingShared = true } label: {
                         Image(systemName: "ellipsis")
                     }
                     .accessibilityLabel("Shared")
                 }
+            }
+        }
+        .sheet(isPresented: $showingShared, onDismiss: {
+            if let attachment = openingShared {
+                openingShared = nil
+                watchingAt = nil
+                watching = attachment
+            }
+        }) {
+            SharedAttachments(chats: chats, thread: thread,
+                              attachments: LinkAttachment.shared(newestFirst: messages.reversed().flatMap(\.attachments))) {
+                openingShared = $0
+                showingShared = false
             }
         }
         .sheet(isPresented: $editing) { ThreadEditor(chats: chats, thread: thread) }

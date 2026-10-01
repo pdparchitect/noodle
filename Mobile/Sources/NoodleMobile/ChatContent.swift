@@ -781,3 +781,58 @@ enum BotPicture {
         return jpeg
     }
 }
+
+/// The things shared in a conversation, with enough of each to choose it before opening live.
+struct SharedAttachments: View {
+    let chats: HubChats
+    let thread: HubThread
+    let attachments: [LinkAttachment]
+    let open: (LinkAttachment) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List(attachments) { attachment in
+                SharedAttachmentRow(chats: chats, thread: thread, attachment: attachment, open: open)
+            }
+            .navigationTitle("Shared")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+        }
+    }
+}
+
+private struct SharedAttachmentRow: View {
+    let chats: HubChats
+    let thread: HubThread
+    let attachment: LinkAttachment
+    let open: (LinkAttachment) -> Void
+    @State private var resolved: LinkAttachment?
+
+    var body: some View {
+        let shown = resolved ?? attachment
+        Button { open(shown) } label: {
+            HStack(spacing: 12) {
+                Group {
+                    if let data = shown.card?.image, let image = UIImage(data: data) {
+                        Image(uiImage: image).resizable().scaledToFit()
+                    } else {
+                        Image(systemName: shown.liveSymbol).font(.title2).foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: 96, height: 64)
+                .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(shown.liveTitle).foregroundStyle(.primary).lineLimit(2)
+                    Text(shown.liveKindName).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .buttonStyle(.plain)
+        .task(id: attachment.id) { resolved = await chats.sharedAttachment(attachment, in: thread) }
+    }
+}
