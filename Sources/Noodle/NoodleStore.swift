@@ -85,7 +85,6 @@ final class NoodleStore {
         drafts.clear(conversationID)
     }
     var creationSheet: CreationSheet?
-    var showsFirstBotSetup = false
     /// The first launch's full-window welcome, which ends in setting up the first bot.
     var showsWelcome = false
     var selectedSettingsTab: NoodleSettingsTab = .general
@@ -160,17 +159,14 @@ final class NoodleStore {
 
     init(repository: WorkspaceRepository? = nil, runtime: AgentRuntimeCoordinator? = nil, connectsServices: Bool = true) {
         self.connectsServices = connectsServices
+        let applicationSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         if let repository {
             self.repository = repository
         } else {
-            let applicationSupport = FileManager.default.urls(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask
-            ).first!
             let bundledMessenger = Bundle.main.bundleURL
                 .appendingPathComponent("Contents/Helpers/messenger")
             self.repository = WorkspaceRepository(
-                rootURL: applicationSupport.appendingPathComponent("Noodle", isDirectory: true),
+                rootURL: HarnessStorage.dataRoot(applicationSupport: applicationSupport),
                 launcherExecutableURL: FileManager.default.isExecutableFile(atPath: bundledMessenger.path)
                     ? bundledMessenger
                     : Bundle.main.executableURL
@@ -180,8 +176,16 @@ final class NoodleStore {
         if let runtime {
             self.runtime = runtime
         } else {
+            var environment = ProcessInfo.processInfo.environment
+            #if NOODLE_DEV_HOOKS
+            // A rehearsal also hides harnesses installed outside the home it gives them.
+            if Rehearsal.folder(in: applicationSupport) != nil {
+                environment["NOODLE_SIMULATE_NO_HARNESSES"] = "1"
+            }
+            #endif
             // Only the app's own storage holds harnesses the Agent Host will trust.
-            let discovery = HarnessDiscovery(managedHarnesses: repository == nil ? self.repository.managedHarnesses : nil)
+            let discovery = HarnessDiscovery(managedHarnesses: repository == nil ? self.repository.managedHarnesses : nil,
+                                             environment: environment)
             discovery.removeSupersededManagedHarnesses()
             self.runtime = AgentRuntimeCoordinator(discovery: discovery)
         }
@@ -260,21 +264,19 @@ final class NoodleStore {
         storageReady && (!runtime.availableInstallations.isEmpty || hubs.hubs.contains { $0.status?.harnesses.isEmpty == false })
     }
 
-    /// The welcome, once, for someone with no bots yet. Afterwards the empty window offers the sheet.
+    /// The welcome, once, for someone with no bots yet. Afterwards the empty window and Help > Welcome offer it.
     func offerFirstBotSetup(defaults: UserDefaults = .standard) {
         guard storageReady, agents.isEmpty, !defaults.bool(forKey: FirstBotSetup.dismissedKey) else { return }
         showsWelcome = true
     }
 
-    /// Help > Set Up a Bot…: the welcome again, bots or not.
+    /// Help > Welcome: the welcome again, bots or not.
     func showWelcome() {
-        showsFirstBotSetup = false
         showsWelcome = true
     }
 
     func finishFirstBotSetup(defaults: UserDefaults = .standard) {
         defaults.set(true, forKey: FirstBotSetup.dismissedKey)
-        showsFirstBotSetup = false
         showsWelcome = false
     }
 

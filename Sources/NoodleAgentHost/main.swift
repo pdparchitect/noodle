@@ -10,12 +10,10 @@ private enum HostPaths {
     }
     static var apple: URL { application.appendingPathComponent("Contents/Helpers/NoodleAppleAgent") }
     static var appleModels: URL {
-        home.appendingPathComponent("Library/Containers/\(AgentHostIdentity.application)/Data/Library/Application Support/Noodle/AppleModels", isDirectory: true)
+        storage.appendingPathComponent("AppleModels", isDirectory: true)
     }
-    static let home: URL = {
-        guard let entry = getpwuid(getuid()), let path = entry.pointee.pw_dir else { fatalError("No user home") }
-        return URL(fileURLWithPath: String(cString: path), isDirectory: true)
-    }()
+    /// Where harnesses are installed and keep their logins, as the app's own storage decides.
+    static let home: URL = HarnessStorage.accountHome(applicationSupport: applicationSupport)
 
     static func executable(_ path: String, provider: HarnessProvider) throws -> URL {
         // A harness Noodle installed is held to the same vendor signature, in Noodle's storage.
@@ -37,8 +35,15 @@ private enum HostPaths {
     }
 
     static var container: URL {
-        home.appendingPathComponent("Library/Containers/\(AgentHostIdentity.application)", isDirectory: true)
+        HarnessStorage.systemHome.appendingPathComponent("Library/Containers/\(AgentHostIdentity.application)", isDirectory: true)
     }
+
+    static var applicationSupport: URL {
+        container.appendingPathComponent("Data/Library/Application Support", isDirectory: true)
+    }
+
+    /// The app's storage: its bots, the harnesses it installed and their profiles.
+    static let storage: URL = HarnessStorage.dataRoot(applicationSupport: applicationSupport)
 
     static var accountEnvironment: [String: String] {
         [
@@ -50,11 +55,11 @@ private enum HostPaths {
     }
 
     static var profiles: HarnessProfileStore {
-        HarnessProfileStore(root: container.appendingPathComponent("Data/Library/Application Support/Noodle", isDirectory: true))
+        HarnessProfileStore(root: storage)
     }
 
     static var managedHarnesses: ManagedHarnessStore {
-        ManagedHarnessStore(root: container.appendingPathComponent("Data/Library/Application Support/Noodle", isDirectory: true))
+        ManagedHarnessStore(root: storage)
     }
 
     /// The copy Noodle installed, verified, for inspections that otherwise look
@@ -66,7 +71,7 @@ private enum HostPaths {
 
     static func workspace(_ id: String) throws -> URL {
         guard let uuid = UUID(uuidString: id) else { throw HostError("Invalid bot identifier.") }
-        let root = home.appendingPathComponent("Library/Containers/\(AgentHostIdentity.application)/Data/Library/Application Support/Noodle/Agents", isDirectory: true).resolvingSymlinksInPath()
+        let root = storage.appendingPathComponent("Agents", isDirectory: true).resolvingSymlinksInPath()
         let layout = AgentStorageLayout(package: root.appendingPathComponent(uuid.uuidString.lowercased(), isDirectory: true))
         try layout.validate()
         return layout.workspace
@@ -183,8 +188,11 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
                 // The user's Keychain items belong to the system profile and must never stand in for a profile's login.
                 try RestrictedHarnessStorage.prepare(provider: provider, workspace: workspace, loginHome: loginHome,
                                                      secret: profiles.loginSecret(harnessProfile))
-            } else {
+            } else if HostPaths.home == HarnessStorage.systemHome {
                 try RestrictedHarnessStorage.prepare(provider: provider, workspace: workspace, loginHome: loginHome)
+            } else {
+                // The login Keychain belongs to the person's own home, not to one the app's storage gives harnesses.
+                try RestrictedHarnessStorage.prepare(provider: provider, workspace: workspace, loginHome: loginHome, secret: { _, _ in nil })
             }
             let privateHome = RestrictedHarnessStorage.home(workspace: workspace)
             let codexHome = privateHome.appendingPathComponent(".codex", isDirectory: true)

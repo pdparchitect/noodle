@@ -197,7 +197,6 @@ struct Scenario: Codable {
         struct Sheet: Codable {
             var newBot: Bool?
             var newGroup: Bool?
-            var firstBotSetup: Bool?
             var editBot: String?
             var groupInfo: String?
             var background: String?
@@ -566,7 +565,7 @@ extension Scenario {
                 try require(agents.contains { $0.key == key }, "present names the bot \"\(key)\", which does not exist.")
             }
             if let sheet = present.sheet {
-                let open = [sheet.newBot == true, sheet.newGroup == true, sheet.firstBotSetup == true, sheet.editBot != nil,
+                let open = [sheet.newBot == true, sheet.newGroup == true, sheet.editBot != nil,
                             sheet.groupInfo != nil, sheet.background != nil].filter { $0 }.count
                 try require(open <= 1, "Only one sheet can be open.")
             }
@@ -1270,7 +1269,6 @@ extension Scenario {
         }
         guard let sheet = present.sheet else { return }
         store.creationSheet = sheet.newBot == true ? .bot : (sheet.newGroup == true ? .group : nil)
-        store.showsFirstBotSetup = sheet.firstBotSetup == true
         store.agentBeingEdited = sheet.editBot.flatMap { seeded.agents[$0] }
         store.groupBeingEdited = sheet.groupInfo.flatMap { seeded.conversations[$0] }
         store.backgroundBeingEdited = sheet.background.flatMap { seeded.conversations[$0] }

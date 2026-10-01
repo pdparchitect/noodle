@@ -76,6 +76,15 @@ struct NoodleApp: App {
             Self.write(result.standardError, to: .standardError)
             Darwin.exit(result.exitCode)
         }
+        #if NOODLE_DEV_HOOKS
+        // Only the app itself decides: a messenger call from a rehearsal's bot must not end it.
+        let applicationSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        if LaunchChecks.current.contains(DevelopmentHook.rehearse) {
+            do { try Rehearsal.begin(in: applicationSupport) } catch { fatalError("Could not start the rehearsal: \(error)") }
+        } else {
+            Rehearsal.end(in: applicationSupport)
+        }
+        #endif
         let store = NoodleStore()
         store.startMonitoring()
         _store = State(initialValue: store)
@@ -91,6 +100,8 @@ struct NoodleApp: App {
             if !store.receiveHubInvitation($0) { store.mcp.receiveAuthorizationCallback($0) }
         }
         .defaultSize(width: 1160, height: 810)
+        // Until the person moves it, which macOS then restores.
+        .defaultWindowPlacement { _, _ in WindowPlacement(.center) }
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
@@ -98,6 +109,7 @@ struct NoodleApp: App {
                 Button("\(NoodleAppIdentity.name) Help") {
                     NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle")!)
                 }
+                Divider()
                 BotSetupCommand(store: store)
             }
             CommandGroup(after: .appSettings) {
@@ -381,7 +393,7 @@ struct RootView: View {
                     Color(nsColor: .textBackgroundColor).opacity(0.28)
                         .accessibilityHidden(true)
                     if store.agents.isEmpty {
-                        FirstBotPrompt { store.showsFirstBotSetup = true }
+                        FirstBotPrompt { store.showWelcome() }
                     }
                 }
             }
@@ -464,11 +476,6 @@ struct RootView: View {
                     .noodleSheetSizing()
             }
         }
-        .sheet(isPresented: $store.showsFirstBotSetup) {
-            FirstBotSetupSheet(setup: store.harnessSetup, runtime: store.runtime)
-                .environment(store)
-                .noodleSheetSizing(animated: true)
-        }
         .sheet(item: $store.agentBeingEdited) { agent in
             EditBotSheet(agent: agent)
                 .environment(store)
@@ -516,5 +523,6 @@ enum DevelopmentHook {
     static let scenarioShots = "f3e02727157d7ee04aee89ffe9c56c9f6790cd3294e3a21443d0962f2ed639ff"  // --scenario-shots
     static let scenarioPicker = "41998b9aaaa37cb4b3f6a1fc5666714235669efe3190d47bf71511e4f57cc517"  // --scenario-picker
     static let scenarioSize = "3ab6e0e84b864576e7107a1f8502d0fa37e639c8ed3c973b201b159604655a6f"  // --scenario-size
+    static let rehearse = "b7fc62f920a65a10598dc42ced62403ec5a4ddaea3b2f75aaee52d07b713629a"  // --rehearse
 }
 #endif

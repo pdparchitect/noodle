@@ -5,13 +5,18 @@ Code, Vercel FX, Grok Build, Muse Code, OpenCode v2, and Google Antigravity,
 using your existing account, plus the experimental Apple Intelligence harness,
 which comes with Noodle and runs on your Mac.
 
-The first time you open Noodle with no bots, **Set Up Your First Bot** offers
-OpenAI, Anthropic, Meta and xAI, each with its harness and its state on this Mac;
-**Other** lists the rest. Choose one and **Continue**: Noodle installs it if
-needed, signs you in, and asks for the bot's name. **Not Now** closes it; the
-empty window keeps a **Set Up Your First Bot** button, and **Help → Set Up a
-Bot…** opens it at any time. Everything it does is also available in Settings,
-as described below.
+The first time you open Noodle with no bots, the welcome offers Codex by
+OpenAI, Claude by Anthropic, Muse by Meta and Grok by xAI; the other harnesses
+are set up in Settings. Choose one: Noodle downloads the
+harness if needed and opens sign-in; **Back** returns to the accounts. Once
+you are signed in, Noodle makes a team on that account, a personal assistant,
+a full-stack developer and a researcher, each with a name, avatar and role.
+**Continue** opens their **Team** group and sends them a welcome, so they
+introduce themselves. **Not Now** closes it; the empty window keeps a **Set Up Your First
+Bot** button, and **Help → Welcome** opens it at any time. Once you have bots,
+the welcome only sets up the account you choose and returns you to your
+conversations. Everything it does is also available in Settings, as described
+below.
 
 To let Noodle install a harness:
 

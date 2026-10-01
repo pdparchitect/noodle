@@ -144,7 +144,9 @@ struct NewBotSheet: View {
                         selectedEffort: $selectedEffort,
                         selectedProfileID: $selectedProfileID
                     )
-                    BotFolderPicker(folders: $folders)
+                    if HubHarnessChoice(identifier: selectedHarnessIdentifier) == nil {
+                        BotFolderPicker(folders: $folders)
+                    }
                 case .mcp:
                     if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
                         HubConnectionPicker(mirror: mirror, selectedIDs: $mcpConnectionIDs)
@@ -365,7 +367,9 @@ struct EditBotSheet: View {
                         selectedEffort: $selectedEffort,
                         selectedProfileID: $selectedProfileID
                     )
-                    BotFolderPicker(folders: $folders)
+                    if HubHarnessChoice(identifier: selectedHarnessIdentifier) == nil {
+                        BotFolderPicker(folders: $folders)
+                    }
                     Text("Saving restarts the bot. Its workspace and history stay unchanged.")
                         .font(.caption).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)

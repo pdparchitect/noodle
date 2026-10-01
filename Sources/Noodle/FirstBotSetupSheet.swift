@@ -3,22 +3,17 @@ import NoodleCore
 import NoodleRuntime
 import NoodleRuntimeSettings
 
+/// The steps the welcome brings up under the wordmark.
 struct FirstBotSetupSheet: View {
-    /// A sheet over the window, or the steps the welcome brings up under the wordmark.
-    enum Placement { case sheet, welcome }
-
     @Environment(NoodleStore.self) private var store
     @AppStorage(BotNameStyle.defaultsKey) private var botNameStyle = BotNameStyle.real.rawValue
     @State private var model: FirstBotSetup
-    @State private var name = ""
-    @State private var avatarColorIndex = Int.random(in: BotAvatarPalette.gradients.indices)
-    @FocusState private var nameFocused: Bool
+    /// The bots made once the account is ready, shown for a moment before the group opens.
+    @State private var team: [AgentRecord] = []
+    @State private var teamGroupID: UUID?
 
-    private let placement: Placement
-
-    init(setup: HarnessSetupController, runtime: AgentRuntimeCoordinator, placement: Placement = .sheet) {
+    init(setup: HarnessSetupController, runtime: AgentRuntimeCoordinator) {
         _model = State(initialValue: FirstBotSetup(setup: setup, runtime: runtime))
-        self.placement = placement
     }
 
     private var setup: HarnessSetupController { store.harnessSetup }
@@ -26,167 +21,101 @@ struct FirstBotSetupSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if placement == .sheet {
-                header
-                Divider()
-            }
             VStack(alignment: .leading, spacing: 16) {
                 switch model.step {
                 case .harness: harnessStep
-                case .prepare: prepareStep
-                case .bot: botStep
+                // Its actions follow the step's progress, so they read as links beside it.
+                case .prepare: prepareStep.buttonStyle(.link)
+                case .team: teamStep
                 }
+                if model.step == .prepare { navigation }
             }
             .padding(20)
-            if placement == .welcome { footer }
         }
         .frame(width: 640)
         .task { await setup.refreshAll(store.runtime) }
         .onChange(of: model.readiness(id)) { _, _ in model.advanceIfReady() }
+        // A download reports the sign-in it needs before it stops being busy.
+        .onChange(of: model.isBusy) { _, _ in model.advanceIfReady() }
         .onChange(of: model.step) { _, step in
-            guard step == .bot else { return }
-            if name.isEmpty { name = BotNameGenerator.random(style: nameStyle) }
-            nameFocused = true
+            guard step == .team else { return }
+            // Someone with bots came back through Help > Welcome to set up an account, and is done.
+            guard let made = store.createStarterTeamIfFirst(on: id, style: nameStyle) else {
+                store.finishFirstBotSetup()
+                return
+            }
+            team = made
+            // Nothing was made, and the reason is already shown; let the person try again.
+            guard !team.isEmpty else { model.back(); return }
+            teamGroupID = store.selectedConversation?.kind == .group ? store.selectedConversationID : nil
         }
     }
 
-    private var header: some View {
+    /// Choosing an account moves on by itself; what is left is trying again after a stop, and the way back.
+    private var navigation: some View {
         HStack {
-            Button(model.step == .harness ? "Not Now" : "Back") {
-                if model.step == .harness { store.finishFirstBotSetup() } else { model.back() }
+            if setup.activity[id] == nil, setup.challenges[id] == nil {
+                switch model.readiness(id) {
+                case .install: Button("Install") { model.install() }
+                case .signIn: Button("Sign In…") { model.signIn() }
+                case .checking, .ready, .unavailable: EmptyView()
+                }
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.blue)
             Spacer()
-            Text(store.agents.isEmpty ? "Set Up Your First Bot" : "Set Up a Bot").font(.headline)
-            Spacer()
-            Button(model.step == .bot ? "Create" : "Continue") {
-                if model.step == .bot { create() } else { model.proceed() }
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(canAct ? Color.blue : .secondary)
-            .disabled(!canAct)
-            .keyboardShortcut(.defaultAction)
+            Button("Back") { model.back() }
+                .keyboardShortcut(.cancelAction)
         }
-        .padding(16)
-    }
-
-    /// The welcome's own title is the wordmark above, so only the actions are left.
-    private var footer: some View {
-        HStack {
-            Button(model.step == .harness ? "Not Now" : "Back") {
-                if model.step == .harness { store.finishFirstBotSetup() } else { model.back() }
-            }
-            Spacer()
-            Button(model.step == .bot ? "Create" : "Continue") {
-                if model.step == .bot { create() } else { model.proceed() }
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!canAct)
-            .keyboardShortcut(.defaultAction)
-        }
-        .controlSize(.large)
-        .padding([.horizontal, .bottom], 20)
-    }
-
-    private var canAct: Bool {
-        model.step == .bot ? ConversationName.error(for: name) == nil : model.canContinue
+        .buttonStyle(.link)
     }
 
     private var harnessStep: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(spacing: 16) {
             HStack(spacing: 10) {
                 ForEach(FirstBotSetup.featured) { provider in
                     tile(for: provider)
                 }
             }
-            Button { model.othersRevealed.toggle() } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(model.showsOthers ? 90 : 0))
-                        .accessibilityHidden(true)
-                    Text("Other").font(.subheadline.weight(.medium))
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityAddTraits(model.showsOthers ? .isSelected : [])
-            .animation(.easeInOut(duration: 0.15), value: model.showsOthers)
-            if model.showsOthers { harnessList }
+            Button("Not Now") { store.finishFirstBotSetup() }
+                .buttonStyle(.link)
+                .keyboardShortcut(.cancelAction)
         }
     }
 
     private func tile(for provider: HarnessProvider) -> some View {
-        Button { model.chosen = provider } label: {
+        Button { model.choose(provider) } label: {
             VStack(spacing: 8) {
                 HarnessProviderIcon(provider: provider)
-                    .foregroundStyle(provider == id ? Color.accentColor : .secondary)
+                    .foregroundStyle(.secondary)
                     .frame(width: 36, height: 36)
                     .accessibilityHidden(true)
                 VStack(spacing: 2) {
-                    Text(vendorName(provider)).font(.headline)
-                    Text(provider.displayName).font(.caption).foregroundStyle(.secondary)
+                    Text(name(provider)).font(.headline)
+                    if let maker = FirstBotSetup.maker(provider) {
+                        Text("by \(maker)").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 status(for: provider)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 18)
             .contentShape(Rectangle())
-            .background(provider == id ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.04),
-                        in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(provider == id ? Color.accentColor.opacity(0.6) : .clear, lineWidth: 1))
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(vendorName(provider)), \(provider.displayName)")
-        .accessibilityAddTraits(provider == id ? .isSelected : [])
+        .disabled(![.install, .signIn, .ready].contains(model.readiness(provider)))
+        .accessibilityLabel(FirstBotSetup.maker(provider).map { "\(name(provider)) by \($0)" } ?? name(provider))
     }
 
-    private func vendorName(_ provider: HarnessProvider) -> String {
-        switch provider {
-        case .codex: "OpenAI"
-        case .claudeCode: "Anthropic"
-        case .muse: "Meta"
-        case .grokBuild: "xAI"
-        case .fx, .openCode, .antigravity, .apple: provider.displayName
-        }
+    private func name(_ provider: HarnessProvider) -> String {
+        FirstBotSetup.accountName(provider) ?? provider.displayName
     }
 
-    private var harnessList: some View {
-        VStack(spacing: 2) {
-            ForEach(FirstBotSetup.others) { provider in
-                Button { model.chosen = provider } label: {
-                    HStack(spacing: 12) {
-                        HarnessProviderIcon(provider: provider)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 24, height: 24)
-                            .accessibilityHidden(true)
-                        Text(provider.displayName)
-                        if provider.isExperimental {
-                            Text("Experimental").font(.caption).foregroundStyle(.orange)
-                        }
-                        Spacer()
-                        status(for: provider)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
-                    .contentShape(Rectangle())
-                    .background(provider == id ? Color.accentColor.opacity(0.18) : .clear, in: RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(provider == id ? .isSelected : [])
-            }
-        }
-    }
-
+    /// The download is part of signing in, so a harness that is not installed asks for sign-in too.
     private func status(for provider: HarnessProvider) -> SettingsStatusLabel {
         switch model.readiness(provider) {
         case .checking: SettingsStatusLabel(title: "Checking…", systemImage: "ellipsis.circle", color: .secondary)
         case .ready: SettingsStatusLabel(title: "Ready", systemImage: "checkmark.circle.fill", color: .green)
-        case .signIn: SettingsStatusLabel(title: "Sign-in required", systemImage: "person.crop.circle.badge.questionmark", color: .secondary)
-        case .install: SettingsStatusLabel(title: "Not installed", systemImage: "arrow.down.circle", color: .secondary)
+        case .signIn, .install: SettingsStatusLabel(title: "Sign-in required", systemImage: "person.crop.circle.badge.questionmark", color: .secondary)
         case .unavailable: SettingsStatusLabel(title: "Unavailable", systemImage: "minus.circle", color: .secondary)
         }
     }
@@ -197,20 +126,17 @@ struct FirstBotSetupSheet: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 28, height: 28)
                 .accessibilityHidden(true)
-            Text(id.displayName).fontWeight(.semibold)
+            Text(name(id)).fontWeight(.semibold)
             Spacer()
             status(for: id)
         }
         if let activity = setup.activity[id] {
-            HStack {
-                if let fraction = setup.installProgress[id] {
-                    ProgressView(value: fraction).frame(width: 160)
-                } else {
-                    ProgressView().controlSize(.small)
-                }
-                Text(activity).font(.caption)
-                Spacer()
-                Button("Cancel") { setup.cancel(id) }
+            VStack(alignment: .leading, spacing: 6) {
+                // One bar throughout, so nothing moves: it fills for a download of known size and
+                // runs indeterminate otherwise, as while waiting for sign-in.
+                ProgressView(value: setup.installProgress[id])
+                    .progressViewStyle(.linear)
+                Text(activity).font(.caption).foregroundStyle(.secondary)
             }
         }
         if let challenge = setup.challenges[id] {
@@ -226,55 +152,32 @@ struct FirstBotSetupSheet: View {
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        if setup.activity[id] == nil, setup.challenges[id] == nil {
-            switch model.readiness(id) {
-            case .install: Button("Install") { model.install() }
-            case .signIn: Button("Sign In…") { model.signIn() }
-            case .checking, .ready, .unavailable: EmptyView()
-            }
-        }
     }
 
-    private var botStep: some View {
-        HStack(spacing: 14) {
-            BotAvatar(agent: AgentRecord(displayName: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Bot" : name,
-                                         accentSeed: avatarColorIndex, avatarSymbolName: "sparkles",
-                                         avatarColorIndex: avatarColorIndex, avatarImageData: nil), size: 64)
-            VStack(alignment: .leading, spacing: 5) {
-                ZStack(alignment: .trailing) {
-                    TextField("Bot name", text: $name, axis: .horizontal)
-                        .lineLimit(1)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 14))
-                        .focused($nameFocused)
-                        .onSubmit { if canAct { create() } }
-                    Button {
-                        name = BotNameGenerator.random(style: nameStyle, excluding: name)
-                        nameFocused = true
-                    } label: {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 22, height: 22)
-                            .contentShape(Rectangle())
+    private var teamStep: some View {
+        VStack(spacing: 24) {
+            HStack(alignment: .top, spacing: 16) {
+                ForEach(Array(team.enumerated()), id: \.element.id) { index, bot in
+                    VStack(spacing: 6) {
+                        BotAvatar(agent: bot, size: 64)
+                        Text(bot.displayName).font(.headline)
+                        Text(StarterTeam.members[index].role).font(.caption).foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
-                    .padding(.trailing, 4)
-                    .help("Try Another Name")
-                    .accessibilityLabel("Generate Another Name")
+                    // Equal columns, so the middle one sits under the wordmark whatever the roles say.
+                    .frame(width: 140)
+                    .accessibilityElement(children: .combine)
                 }
-                NameValidationMessage(name: name)
             }
+            Button("Continue") {
+                if let teamGroupID { store.greetStarterTeam(in: teamGroupID) }
+                store.finishFirstBotSetup()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .keyboardShortcut(.defaultAction)
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var nameStyle: BotNameStyle { BotNameStyle(rawValue: botNameStyle) ?? .real }
-
-    private func create() {
-        guard store.createAgent(named: name, harnessIdentifier: id.rawValue, modelIdentifier: nil, reasoningEffort: nil,
-                                avatarSymbolName: "sparkles", avatarColorIndex: avatarColorIndex, avatarImageData: nil,
-                                publicDescription: "", backstory: "", mcpConnectionIDs: [], computerIDs: [], browserIDs: [],
-                                folders: [], harnessProfile: nil) else { return }
-        store.finishFirstBotSetup()
-    }
 }

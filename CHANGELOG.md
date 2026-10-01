@@ -6,6 +6,19 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- Setting up a first bot offers only Codex by OpenAI, Claude by Anthropic, Muse by Meta and Grok by xAI, centred on a plain background; the other harnesses are set up in Settings. The welcome moves on to them by itself once the wordmark is written. Choosing one downloads what it needs and opens sign-in by itself, with no Continue, Install or Sign In click in between, and Back returns to the accounts. Once you are signed in, Noodle makes a team on that account, a personal assistant, a full-stack developer and a researcher, and introduces them; Continue opens their Team group and sends them a welcome to answer, instead of asking for a bot's name.
+- Help > Set Up a Bot… is now Help > Welcome and plays the welcome from the start. Once you have bots, it only sets up the account you choose and returns you to your conversations. The empty window's Set Up Your First Bot opens the welcome too, instead of a sheet.
+- Noodle's window opens in the middle of the screen the first time; after that it opens where you left it.
+- Closing the window during the welcome asks first; leaving counts as Not Now.
+- Bots that run on a Hub no longer offer folders from this Mac, which they could never use.
+
+### Fixed
+
+- Cancelling a sign-in while setting up a first bot, or a sign-in check that failed, no longer leaves the account on Checking… with Continue disabled.
+- Checking a ChatGPT sign-in on a Mac that has never run Codex no longer fails with "The harness stopped before setup completed."
+
 ## [0.39.0] - 2026-10-01
 
 ### Added

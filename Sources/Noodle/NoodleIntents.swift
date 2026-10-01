@@ -129,7 +129,7 @@ private enum NoodleIntentEnvironment {
         let bundledMessenger = Bundle.main.bundleURL
             .appendingPathComponent("Contents/Helpers/messenger")
         return WorkspaceRepository(
-            rootURL: applicationSupport.appendingPathComponent("Noodle", isDirectory: true),
+            rootURL: HarnessStorage.dataRoot(applicationSupport: applicationSupport),
             launcherExecutableURL: FileManager.default.isExecutableFile(atPath: bundledMessenger.path)
                 ? bundledMessenger
                 : Bundle.main.executableURL

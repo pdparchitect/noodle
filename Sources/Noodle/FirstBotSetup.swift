@@ -8,20 +8,41 @@ import NoodleRuntime
 /// are the same operations Settings and New Bot use.
 @MainActor @Observable
 final class FirstBotSetup {
-    enum Step { case harness, prepare, bot }
+    enum Step { case harness, prepare, team }
     enum Readiness: Equatable { case checking, ready, signIn, install, unavailable }
 
     static let dismissedKey = "Noodle.firstBotSetup.dismissed"
 
-    /// The vendors offered as tiles; every other harness waits under Other.
+    /// The accounts offered for a quick start; every other harness is set up in Settings.
     static let featured: [HarnessProvider] = [.codex, .claudeCode, .muse, .grokBuild]
-    static let others = HarnessProvider.allCases.filter { !featured.contains($0) }
+
+    /// A tile names the product by its short name, with its maker beneath.
+    static func accountName(_ provider: HarnessProvider) -> String? {
+        switch provider {
+        case .codex: "Codex"
+        case .claudeCode: "Claude"
+        case .muse: "Muse"
+        case .grokBuild: "Grok"
+        case .fx, .openCode, .antigravity, .apple: nil
+        }
+    }
+
+    static func maker(_ provider: HarnessProvider) -> String? {
+        switch provider {
+        case .codex: "OpenAI"
+        case .claudeCode: "Anthropic"
+        case .muse: "Meta"
+        case .grokBuild: "xAI"
+        case .fx, .openCode, .antigravity, .apple: nil
+        }
+    }
 
     private(set) var step = Step.harness
     /// The user's own choice; until then the best candidate is shown selected.
     var chosen: HarnessProvider?
-    /// Other opened by hand; it also opens on its own to show a selection it holds.
-    var othersRevealed = false
+    /// Sign-in opens on its own once each time a harness is prepared. After that it waits
+    /// for Sign In, so a browser page the person closed does not open again.
+    private var signInStarted = false
     private let setup: HarnessSetupController
     private let runtime: AgentRuntimeCoordinator
 
@@ -31,8 +52,6 @@ final class FirstBotSetup {
     }
 
     var selection: HarnessProvider { chosen ?? preferred }
-
-    var showsOthers: Bool { othersRevealed || Self.others.contains(selection) }
 
     func installation(_ id: HarnessProvider) -> HarnessInstallation? {
         runtime.installations.first { $0.provider == id && $0.isAvailable }
@@ -45,15 +64,15 @@ final class FirstBotSetup {
         switch setup.authentication[id] {
         case .authenticated, .notRequired: return .ready
         case .unauthenticated, .managedExternally: return .signIn
-        case nil: return setup.errors[id] == nil ? .checking : .signIn
+        // Unknown and not being looked at, as after a failed check or a cancelled sign-in, it needs a sign-in.
+        case nil: return setup.checking.contains(id) ? .checking : .signIn
         }
     }
 
-    /// Whatever needs the least from the user, leaving the experimental harness for last.
+    /// Whatever needs the least from the user.
     var preferred: HarnessProvider {
-        let order = HarnessProvider.allCases.filter { !$0.isExperimental } + HarnessProvider.allCases.filter(\.isExperimental)
         for wanted in [Readiness.ready, .signIn, .checking, .install] {
-            if let match = order.first(where: { readiness($0) == wanted }) { return match }
+            if let match = Self.featured.first(where: { readiness($0) == wanted }) { return match }
         }
         return .codex
     }
@@ -62,7 +81,7 @@ final class FirstBotSetup {
         switch step {
         case .harness: return readiness(selection) != .unavailable && readiness(selection) != .checking
         case .prepare: return false
-        case .bot: return true
+        case .team: return true
         }
     }
 
@@ -71,12 +90,25 @@ final class FirstBotSetup {
     func proceed() {
         guard step == .harness, canContinue else { return }
         chosen = selection
-        if readiness(selection) == .ready { step = .bot; return }
+        if readiness(selection) == .ready { step = .team; return }
         step = .prepare
-        // Choosing a harness that is not installed is the request to install it.
-        if readiness(selection) == .install { install() }
+        signInStarted = false
+        // Choosing a harness is the request to install it and sign in.
+        switch readiness(selection) {
+        case .install: install()
+        case .signIn: startSignIn()
+        case .checking, .ready, .unavailable: break
+        }
     }
 
+    /// Choosing an account is the request to set it up.
+    func choose(_ provider: HarnessProvider) {
+        guard step == .harness else { return }
+        chosen = provider
+        proceed()
+    }
+
+    /// Stops whatever is under way and returns to the accounts.
     func back() {
         guard step != .harness else { return }
         setup.cancel(selection)
@@ -92,6 +124,16 @@ final class FirstBotSetup {
 
     /// Called as the harness's state changes while it is being prepared.
     func advanceIfReady() {
-        if step == .prepare, readiness(selection) == .ready { step = .bot }
+        guard step == .prepare else { return }
+        switch readiness(selection) {
+        case .ready: step = .team
+        case .signIn where !isBusy && !signInStarted: startSignIn()
+        case .signIn, .checking, .install, .unavailable: break
+        }
+    }
+
+    private func startSignIn() {
+        signInStarted = true
+        signIn()
     }
 }

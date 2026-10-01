@@ -98,6 +98,36 @@ final class HarnessSetupTests: XCTestCase {
         XCTAssertEqual(status, .unauthenticated)
     }
 
+    @MainActor func testStatusOnAMacThatNeverRanCodexReportsSignedOut() async throws {
+        let executable = root.appendingPathComponent("fake-codex")
+        // As Codex does, refuse an account folder that does not exist.
+        let script = """
+        #!/bin/sh
+        [ -d "$CODEX_HOME" ] || exit 1
+        IFS= read -r line
+        printf '%s\\n' '{"id":1,"result":{}}'
+        IFS= read -r line
+        IFS= read -r line
+        printf '%s\\n' '{"id":2,"result":{"account":null,"requiresOpenaiAuth":true}}'
+        while IFS= read -r line; do :; done
+        """
+        try Data(script.utf8).write(to: executable)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        let provider = CodexSetupProvider(codexHome: root.appendingPathComponent("home/.codex"))
+        let status = try await provider.status(for: HarnessInstallation(provider: .codex, executablePath: executable.path))
+        XCTAssertEqual(status, .unauthenticated)
+    }
+
+    @MainActor func testRealCodexReportsSignedOutOnAMacThatNeverRanItWhenFixtureProvided() async throws {
+        guard let path = ProcessInfo.processInfo.environment["NOODLE_TEST_CODEX_EXECUTABLE"] else {
+            throw XCTSkip("Set NOODLE_TEST_CODEX_EXECUTABLE to a verified Codex binary to check real account RPC.")
+        }
+        try CodexExecutableTrust.verifySignature(URL(fileURLWithPath: path), identifier: "codex")
+        let provider = CodexSetupProvider(codexHome: root.appendingPathComponent("home/.codex"))
+        let status = try await provider.status(for: HarnessInstallation(provider: .codex, executablePath: path))
+        XCTAssertEqual(status, .unauthenticated)
+    }
+
     @MainActor func testMissingInstallationDoesNotStartAccountProcess() async {
         let provider = CodexSetupProvider(codexHome: root)
         do {

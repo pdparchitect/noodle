@@ -42,13 +42,35 @@ public extension HarnessSetupProviding {
 }
 
 public enum HarnessStorage {
+    /// Where harnesses are installed and keep their logins, as this process sees it.
     public static var userHome: URL {
+        accountHome(applicationSupport: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0])
+    }
+    public static var codexHome: URL { userHome.appendingPathComponent(".codex") }
+
+    /// The person's home as the user database has it, outside any sandbox container.
+    public static var systemHome: URL {
         if let entry = getpwuid(getuid()), let path = entry.pointee.pw_dir {
             return URL(fileURLWithPath: String(cString: path))
         }
         return FileManager.default.homeDirectoryForCurrentUser
     }
-    public static var codexHome: URL { userHome.appendingPathComponent(".codex") }
+
+    /// The home harnesses use for an app that keeps its data in this Application Support folder.
+    public static func accountHome(applicationSupport: URL) -> URL {
+        #if NOODLE_DEV_HOOKS
+        if let rehearsal = Rehearsal.folder(in: applicationSupport) { return Rehearsal.home(rehearsal) }
+        #endif
+        return systemHome
+    }
+
+    /// Noodle's storage in its Application Support folder: bots, harnesses it installed, profiles.
+    public static func dataRoot(applicationSupport: URL) -> URL {
+        #if NOODLE_DEV_HOOKS
+        if let rehearsal = Rehearsal.folder(in: applicationSupport) { return Rehearsal.dataRoot(rehearsal) }
+        #endif
+        return applicationSupport.appendingPathComponent("Noodle", isDirectory: true)
+    }
 }
 
 @MainActor public final class CodexSetupProvider: HarnessSetupProviding {
@@ -172,6 +194,8 @@ enum CodexAccountResponse {
                     child.arguments = CodexLaunch.appServerArguments()
                     child.currentDirectoryURL = FileManager.default.temporaryDirectory
                     var environment = baseEnvironment ?? ProcessInfo.processInfo.environment
+                    // Codex refuses a home that does not exist, as on a Mac that never ran it.
+                    try? FileManager.default.createDirectory(at: codexHome, withIntermediateDirectories: true)
                     environment["CODEX_HOME"] = codexHome.path
                     child.environment = environment
                     child.standardInput = stdinPipe

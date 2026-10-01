@@ -12,7 +12,7 @@ APPS = ['Noodle', 'Computer', 'Applet', 'Browser', 'Hub']
 
 
 class LocalLauncherTests(unittest.TestCase):
-    def run_fixture(self, app_name, expected_id, produced_id, arguments=()):
+    def run_fixture(self, app_name, expected_id, produced_id, arguments=(), running=False, refused=None):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             scripts, tools = root / 'scripts', root / 'tools'
@@ -35,7 +35,14 @@ print(os.environ['FIXTURE_INSTALLED_APP'])
 ''')
             (tools / 'open').write_text('#!/bin/zsh\nprint -r -- "$*" > "$FIXTURE_OPEN_LOG"\n')
             (tools / 'open').chmod(0o700)
+            # Asked to bring the app forward; never the real one.
+            (tools / 'osascript').write_text('#!/bin/zsh\nprint -r -- "$*" > "$FIXTURE_ACTIVATE_LOG"\n')
+            (tools / 'osascript').chmod(0o700)
+            # Whether a copy of the app is already running.
+            (tools / 'pgrep').write_text(f'#!/bin/zsh\nexit {0 if running else 1}\n')
+            (tools / 'pgrep').chmod(0o700)
             build_log, open_log, install_log = root / 'build.log', root / 'open.log', root / 'install.log'
+            activate_log = root / 'activate.log'
             installed = root / 'Applications/Fixture.app'
             launch = [] if app_name == 'Noodle' else [app_name]
             result = subprocess.run(['/bin/zsh', str(scripts / 'build-and-launch.sh'), *launch, *arguments],
@@ -45,9 +52,11 @@ print(os.environ['FIXTURE_INSTALLED_APP'])
                          NOODLE_BROWSER_DATA_CONTAINER='production',
                          NOODLE_HUB_DATA_CONTAINER='production', FIXTURE_APP=str(app),
                          FIXTURE_INSTALLED_APP=str(installed), FIXTURE_INSTALL_LOG=str(install_log),
-                         FIXTURE_BUILD_LOG=str(build_log), FIXTURE_OPEN_LOG=str(open_log)),
+                         FIXTURE_BUILD_LOG=str(build_log), FIXTURE_OPEN_LOG=str(open_log),
+                         FIXTURE_ACTIVATE_LOG=str(activate_log)),
                 capture_output=True, text=True)
-            refused = bool(arguments) or app_name not in APPS
+            if refused is None:
+                refused = bool(arguments) or app_name not in APPS
             if refused:
                 self.assertNotEqual(result.returncode, 0)
                 self.assertFalse(build_log.exists())
@@ -58,10 +67,18 @@ print(os.environ['FIXTURE_INSTALLED_APP'])
                 self.assertEqual((fields[container], fields[5]), ('development', app_name))
                 self.assertEqual(result.returncode, 0 if expected_id == produced_id else 1, result.stderr)
             self.assertEqual(open_log.exists(), not refused and expected_id == produced_id)
+            # What was opened is brought forward, whoever started the launcher.
+            self.assertEqual(activate_log.exists(), open_log.exists())
+            if activate_log.exists():
+                self.assertEqual(activate_log.read_text().strip(), f'-e tell application id "{expected_id}" to activate')
             installs = app_name == 'Computer' and not refused and expected_id == produced_id
             self.assertEqual(install_log.exists(), installs)
             if open_log.exists():
-                self.assertEqual(open_log.read_text().strip(), str(installed if installs else app))
+                opened = str(installed if installs else app)
+                if '--rehearse' in arguments:
+                    opened += ' --args --rehearse -Noodle.firstBotSetup.dismissed NO -ApplePersistenceIgnoreState YES'
+                self.assertEqual(open_log.read_text().strip(), opened)
+            return result
 
     def test_launcher_forces_local_and_refuses_production_output_or_arguments(self):
         for app_name, local in [('Noodle', 'com.pdparchitect.noodle.local'),
@@ -73,6 +90,15 @@ print(os.environ['FIXTURE_INSTALLED_APP'])
                 self.run_fixture(app_name, local, local)
                 self.run_fixture(app_name, local, local.removesuffix('.local'))
                 self.run_fixture(app_name, local, local, ['--production-data'])
+
+    def test_a_rehearsal_opens_noodle_dev_afresh_and_only_noodle_dev(self):
+        local = 'com.pdparchitect.noodle.local'
+        self.run_fixture('Noodle', local, local, ['--rehearse'], refused=False)
+        self.run_fixture('Noodle', local, local.removesuffix('.local'), ['--rehearse'], refused=False)
+        # A running copy would only come forward, still showing its own data.
+        self.run_fixture('Noodle', local, local, ['--rehearse'], running=True, refused=True)
+        self.run_fixture('Computer', 'com.pdparchitect.noodle.computer.local', 'com.pdparchitect.noodle.computer.local',
+                         ['--rehearse'])
 
     def test_launcher_refuses_an_unknown_app(self):
         self.run_fixture('Website', 'com.pdparchitect.noodle.website.local', 'com.pdparchitect.noodle.website.local')

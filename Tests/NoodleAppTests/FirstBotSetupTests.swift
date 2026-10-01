@@ -24,9 +24,22 @@ import XCTest
 @MainActor private final class SetupAccount: HarnessSetupProviding {
     let installationGuide = HarnessInstallationGuide(command: nil, instructions: "", documentationURL: URL(string: "https://example.invalid")!)
     var signedIn = false
-    func status(for installation: HarnessInstallation) async throws -> HarnessAuthenticationStatus { signedIn ? .authenticated : .unauthenticated }
+    var signIns = 0
+    /// Why the next sign-in fails, as when the person closes the browser page.
+    var failure: String?
+    /// Why checking the sign-in fails, leaving it unknown.
+    var statusFailure: String?
+    /// Holds a sign-in open until the test cancels it, as a browser page left waiting does.
+    var waits = false
+    func status(for installation: HarnessInstallation) async throws -> HarnessAuthenticationStatus {
+        if let statusFailure { throw HarnessSetupError(statusFailure) }
+        return signedIn ? .authenticated : .unauthenticated
+    }
     func signIn(for installation: HarnessInstallation,
                 onChallenge: @escaping @MainActor (HarnessSignInChallenge) -> Void) async throws -> HarnessAuthenticationStatus {
+        signIns += 1
+        if waits { try await Task.sleep(for: .seconds(60)) }
+        if let failure { throw HarnessSetupError(failure) }
         signedIn = true
         return .authenticated
     }
@@ -37,7 +50,7 @@ import XCTest
     private var suite: String!
     private var defaults: UserDefaults!
     private var installer: SetupInstaller!
-    private let claude = SetupAccount(), fx = SetupAccount()
+    private let claude = SetupAccount(), codex = SetupAccount(), fx = SetupAccount()
     private var controller: HarnessSetupController!
     private var runtime: AgentRuntimeCoordinator!
 
@@ -48,7 +61,7 @@ import XCTest
         defaults = UserDefaults(suiteName: suite)!
         let store = ManagedHarnessStore(root: root)
         installer = SetupInstaller(store: store)
-        controller = HarnessSetupController(providers: [.claudeCode: claude, .fx: fx], defaults: defaults, installer: installer)
+        controller = HarnessSetupController(providers: [.claudeCode: claude, .codex: codex, .fx: fx], defaults: defaults, installer: installer)
         // Simulation keeps the test away from this Mac's harnesses and the Agent Host.
         runtime = AgentRuntimeCoordinator(discovery: HarnessDiscovery(homeDirectory: root, applicationsDirectory: root,
             executableSearchDirectories: [], applicationBundleURL: root, managedHarnesses: store,
@@ -61,56 +74,42 @@ import XCTest
         try? FileManager.default.removeItem(at: root)
     }
 
-    func testAFreshMacIsOfferedAnInstallAndTheBuiltInHarnessIsNotPushed() {
+    func testAFreshMacIsOfferedTheFirstAccount() {
         let setup = FirstBotSetup(setup: controller, runtime: runtime)
         XCTAssertEqual(setup.readiness(.codex), .install)
-        XCTAssertEqual(setup.readiness(.apple), .unavailable, "Not bundled here, and Noodle cannot download it.")
         XCTAssertEqual(setup.preferred, .codex)
         XCTAssertTrue(setup.canContinue)
-        setup.chosen = .apple
-        XCTAssertFalse(setup.canContinue)
     }
 
-    func testFourVendorsAreFeaturedAndTheRestWaitUnderOther() {
+    func testOnlyTheFourAccountsAreOffered() async throws {
         XCTAssertEqual(FirstBotSetup.featured, [.codex, .claudeCode, .muse, .grokBuild])
-        XCTAssertEqual(FirstBotSetup.others, [.fx, .openCode, .antigravity, .apple])
-        XCTAssertEqual(Set(FirstBotSetup.featured + FirstBotSetup.others), Set(HarnessProvider.allCases), "Every harness is offered.")
-    }
-
-    func testOtherOpensWhenTheBestCandidateOrTheChoiceIsNotFeatured() async throws {
-        let fresh = FirstBotSetup(setup: controller, runtime: runtime)
-        XCTAssertFalse(fresh.showsOthers, "Codex is featured.")
-        fresh.chosen = .fx
-        XCTAssertTrue(fresh.showsOthers)
-        fresh.chosen = .codex
-        XCTAssertFalse(fresh.showsOthers)
-        fresh.othersRevealed = true
-        XCTAssertTrue(fresh.showsOthers, "Opened by hand, it stays open with a featured choice.")
-        fresh.othersRevealed = false
-        fresh.chosen = .apple
-        XCTAssertTrue(fresh.showsOthers, "Closing it cannot hide the selection.")
-
+        // A harness set up outside the four is left to Settings, even when it is the one ready.
         fx.signedIn = true
         try await installer.install(.fx) { _ in }
         await controller.refreshAll(runtime)
-        let ready = FirstBotSetup(setup: controller, runtime: runtime)
-        XCTAssertEqual(ready.preferred, .fx)
-        XCTAssertTrue(ready.showsOthers, "The ready harness is shown selected, so its section is open.")
+        let setup = FirstBotSetup(setup: controller, runtime: runtime)
+        XCTAssertEqual(setup.preferred, .codex)
     }
 
     func testAHarnessThatIsReadyGoesStraightToNamingTheBot() async throws {
-        fx.signedIn = true
-        try await installer.install(.fx) { _ in }
+        claude.signedIn = true
+        try await installer.install(.claudeCode) { _ in }
         await controller.refreshAll(runtime)
         let setup = FirstBotSetup(setup: controller, runtime: runtime)
-        XCTAssertEqual(setup.readiness(.fx), .ready)
-        XCTAssertEqual(setup.preferred, .fx, "Ready beats the harnesses listed before it.")
+        XCTAssertEqual(setup.readiness(.claudeCode), .ready)
+        XCTAssertEqual(setup.preferred, .claudeCode, "Ready beats the accounts listed before it.")
         setup.proceed()
-        XCTAssertEqual(setup.step, .bot)
+        XCTAssertEqual(setup.step, .team)
         XCTAssertEqual(installer.calls, 1, "Nothing more is installed.")
     }
 
-    func testChoosingAMissingHarnessInstallsItThenAsksForSignIn() async throws {
+    func testEachAccountIsNamedWithItsMaker() {
+        XCTAssertEqual(FirstBotSetup.featured.map(FirstBotSetup.accountName), ["Codex", "Claude", "Muse", "Grok"])
+        XCTAssertEqual(FirstBotSetup.featured.map(FirstBotSetup.maker), ["OpenAI", "Anthropic", "Meta", "xAI"])
+        XCTAssertNil(FirstBotSetup.accountName(.antigravity), "Only the featured accounts are offered by name.")
+    }
+
+    func testChoosingAMissingHarnessInstallsItThenSignsInWithoutAnotherClick() async throws {
         let setup = FirstBotSetup(setup: controller, runtime: runtime)
         setup.chosen = .claudeCode
         setup.proceed()
@@ -119,28 +118,111 @@ import XCTest
         await controller.operations[.claudeCode]?.value
         XCTAssertEqual(installer.calls, 1)
         XCTAssertEqual(setup.readiness(.claudeCode), .signIn)
+        // The sheet calls this as the download finishes.
         setup.advanceIfReady()
         XCTAssertEqual(setup.step, .prepare, "Installed is not yet usable.")
-
-        setup.signIn()
+        XCTAssertTrue(setup.isBusy, "Sign-in starts on its own.")
         await controller.operations[.claudeCode]?.value
+        XCTAssertEqual(claude.signIns, 1)
         XCTAssertEqual(setup.readiness(.claudeCode), .ready)
         setup.advanceIfReady()
-        XCTAssertEqual(setup.step, .bot)
+        XCTAssertEqual(setup.step, .team)
         XCTAssertEqual(setup.selection, .claudeCode)
     }
 
-    func testBackReturnsToTheListAndStopsWhatWasRunning() async throws {
+    func testChoosingAnInstalledHarnessThatIsSignedOutStartsSignIn() async throws {
+        try await installer.install(.claudeCode) { _ in }
+        await controller.refreshAll(runtime)
         let setup = FirstBotSetup(setup: controller, runtime: runtime)
-        setup.chosen = .fx
+        setup.chosen = .claudeCode
+        XCTAssertEqual(setup.readiness(.claudeCode), .signIn)
         setup.proceed()
-        let operation = controller.operations[.fx]
+        XCTAssertEqual(setup.step, .prepare)
+        await controller.operations[.claudeCode]?.value
+        XCTAssertEqual(claude.signIns, 1)
+        XCTAssertEqual(installer.calls, 1, "Nothing more is installed.")
+        setup.advanceIfReady()
+        XCTAssertEqual(setup.step, .team)
+    }
+
+    func testAFailedSignInIsNotRetriedUntilThePersonAsks() async throws {
+        claude.failure = "Sign-in was cancelled."
+        try await installer.install(.claudeCode) { _ in }
+        await controller.refreshAll(runtime)
+        let setup = FirstBotSetup(setup: controller, runtime: runtime)
+        setup.chosen = .claudeCode
+        setup.proceed()
+        await controller.operations[.claudeCode]?.value
+        setup.advanceIfReady()
+        XCTAssertFalse(setup.isBusy)
+        XCTAssertEqual(claude.signIns, 1, "A browser page closed on purpose does not reopen.")
+        XCTAssertEqual(controller.errors[.claudeCode], "Sign-in was cancelled.")
+
+        claude.failure = nil
+        setup.signIn()
+        await controller.operations[.claudeCode]?.value
+        XCTAssertEqual(claude.signIns, 2)
+        setup.advanceIfReady()
+        XCTAssertEqual(setup.step, .team)
+    }
+
+    func testContinuingAgainAfterBackStartsSignInAgain() async throws {
+        claude.failure = "Sign-in was cancelled."
+        try await installer.install(.claudeCode) { _ in }
+        await controller.refreshAll(runtime)
+        let setup = FirstBotSetup(setup: controller, runtime: runtime)
+        setup.chosen = .claudeCode
+        setup.proceed()
+        await controller.operations[.claudeCode]?.value
+        setup.back()
+        claude.failure = nil
+        setup.proceed()
+        await controller.operations[.claudeCode]?.value
+        XCTAssertEqual(claude.signIns, 2)
+        setup.advanceIfReady()
+        XCTAssertEqual(setup.step, .team)
+    }
+
+    func testCancellingASignInWhoseStateIsUnknownLeavesItReadyToTryAgain() async throws {
+        codex.statusFailure = "Codex did not answer."
+        codex.waits = true
+        try await installer.install(.codex) { _ in }
+        await controller.refreshAll(runtime)
+        let setup = FirstBotSetup(setup: controller, runtime: runtime)
+        setup.chosen = .codex
+        XCTAssertEqual(setup.readiness(.codex), .signIn)
+        setup.proceed()
+        XCTAssertTrue(setup.isBusy)
+        XCTAssertNotEqual(setup.readiness(.codex), .checking, "Signing in is not checking.")
+        setup.back()
+        XCTAssertEqual(setup.readiness(.codex), .signIn, "Nothing is being checked once it is cancelled.")
+        XCTAssertTrue(setup.canContinue)
+    }
+
+    func testChoosingAnAccountStartsItWithNoOtherClick() async throws {
+        let setup = FirstBotSetup(setup: controller, runtime: runtime)
+        setup.choose(.claudeCode)
+        XCTAssertEqual(setup.selection, .claudeCode)
+        XCTAssertEqual(setup.step, .prepare)
+        XCTAssertTrue(setup.isBusy, "The download starts at once.")
+        await controller.operations[.claudeCode]?.value
+        setup.advanceIfReady()
+        await controller.operations[.claudeCode]?.value
+        setup.advanceIfReady()
+        XCTAssertEqual(setup.step, .team)
+    }
+
+    func testBackReturnsToTheAccountsAndChoosingAgainStartsOver() async throws {
+        let setup = FirstBotSetup(setup: controller, runtime: runtime)
+        setup.choose(.codex)
+        XCTAssertTrue(setup.isBusy)
         setup.back()
         XCTAssertEqual(setup.step, .harness)
-        XCTAssertNil(controller.activity[.fx])
-        await operation?.value
-        setup.back()
-        XCTAssertEqual(setup.step, .harness)
+        XCTAssertFalse(setup.isBusy)
+        XCTAssertNil(controller.operations[.codex])
+        setup.choose(.codex)
+        XCTAssertEqual(setup.step, .prepare)
+        XCTAssertTrue(setup.isBusy)
     }
 
     func testTheWelcomeIsOfferedOnceToSomeoneWithNoBots() throws {
@@ -150,7 +232,6 @@ import XCTest
         addTeardownBlock { @MainActor in store.stopMonitoring() }
         store.offerFirstBotSetup(defaults: defaults)
         XCTAssertTrue(store.showsWelcome)
-        XCTAssertFalse(store.showsFirstBotSetup, "The welcome fills the window; the sheet is not stacked on it.")
         store.finishFirstBotSetup(defaults: defaults)
         XCTAssertFalse(store.showsWelcome)
         store.offerFirstBotSetup(defaults: defaults)
@@ -166,7 +247,6 @@ import XCTest
         store.finishFirstBotSetup(defaults: defaults)
         store.showWelcome()
         XCTAssertTrue(store.showsWelcome)
-        XCTAssertFalse(store.showsFirstBotSetup)
     }
 
     func testSomeoneWithABotIsNotInterrupted() throws {
@@ -177,6 +257,5 @@ import XCTest
         addTeardownBlock { @MainActor in store.stopMonitoring() }
         store.offerFirstBotSetup(defaults: defaults)
         XCTAssertFalse(store.showsWelcome)
-        XCTAssertFalse(store.showsFirstBotSetup)
     }
 }

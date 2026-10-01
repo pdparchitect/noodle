@@ -9,6 +9,13 @@
             "command": "scripts/build-and-launch.sh"
         },
         {
+            "name": "Noodle: Build & Launch Rehearsal",
+            "type": "node-terminal",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "command": "scripts/build-and-launch.sh --rehearse"
+        },
+        {
             "name": "Noodle: Build & Launch Scenarios",
             "type": "node-terminal",
             "request": "launch",

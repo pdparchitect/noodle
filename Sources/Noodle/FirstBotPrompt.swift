@@ -6,7 +6,7 @@ struct BotSetupCommand: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Button("Set Up a Bot…") {
+        Button("Welcome") {
             // The welcome fills the main window, which may be closed.
             openWindow(id: "main")
             store.showWelcome()

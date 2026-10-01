@@ -656,7 +656,7 @@ public final class CodexCapabilityProbe {
             child.standardOutput = outputPipe
             child.standardError = errorPipe
             var environment = ProcessInfo.processInfo.environment
-            environment["CODEX_HOME"] = HostEnvironment.codexHome.path
+            environment["CODEX_HOME"] = HarnessStorage.codexHome.path
             child.environment = environment
 
             let reader = outputReader
@@ -782,13 +782,3 @@ public final class CodexCapabilityProbe {
     }
 }
 
-private enum HostEnvironment {
-    static var codexHome: URL {
-        if let entry = getpwuid(getuid()), let pointer = entry.pointee.pw_dir {
-            return URL(fileURLWithPath: String(cString: pointer), isDirectory: true)
-                .appendingPathComponent(".codex", isDirectory: true)
-        }
-        return URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
-            .appendingPathComponent(".codex", isDirectory: true)
-    }
-}
